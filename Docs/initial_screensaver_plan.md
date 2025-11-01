@@ -1,35 +1,6 @@
-# Comprehensive Development Plan: Multi-Feature Photo Screensaver
+# Comprehensive Development Plan: Multi-Feature Photo Screensaver (Pyside6)
 
-## PyQt6 vs PySide6 Decision
-
-### **PyQt6**
-**Pros:**
-- More mature documentation and community resources
-- Historically better performance (marginal)
-- Larger ecosystem of tutorials and examples
-- Better Stack Overflow support
-
-**Cons:**
-- **Commercial license required** for commercial applications (GPL otherwise)
-- Riverbank Computing's licensing can be restrictive
-- Must comply with GPL if not paying for commercial license
-
-### **PySide6 (Recommended)**
-**Pros:**
-- **LGPL license** - more permissive, can use in commercial/proprietary apps
-- Official Qt Company bindings
-- Free for commercial use without restrictions
-- Better alignment with Qt's long-term roadmap
-- Increasingly better documentation
-- Same API as PyQt6 (mostly identical)
-
-**Cons:**
-- Slightly smaller community (but growing rapidly)
-- Some niche features may lag behind PyQt6
-
-### **Recommendation: PySide6**
-For a screensaver you might distribute or sell, PySide6's LGPL license is safer and more flexible. The API is 95% identical to PyQt6, so switching later is trivial. Unless you need a specific PyQt6-only feature (rare), go with **PySide6**.
-
+Name: "ShittyRandomPhotoScreenSaver"
 ---
 
 ## Phase 0: Foundation & Architecture Review
@@ -43,6 +14,7 @@ For a screensaver you might distribute or sell, PySide6's LGPL license is safer 
 - Check for existing image processing utilities
 - Look for configuration/settings management
 - Identify logging/error handling systems
+- Use/Integrate/Replace any parts of the plan below with existing modules if they meet standards.
 
 ### 2. Architecture Design
 ```

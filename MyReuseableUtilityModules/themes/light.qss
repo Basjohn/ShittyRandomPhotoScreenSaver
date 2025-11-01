@@ -1,0 +1,1086 @@
+/* ============================================
+   DARK THEME - SPQ Modular Application
+   ============================================ */
+
+/* ===== BASE STYLES ===== */
+/* These styles apply globally across the application */
+
+/* Main window base styling */
+QMainWindow {
+    /* color-picker: background-color: #ffffff; */
+    background-color: rgba(255, 255, 255, 0);
+    /* color-picker: border: #141414; */
+    border: 2px solid rgba(26, 26, 26, 0.95);
+    border-radius: 10px;
+    padding: 0;
+    margin: 0;
+}
+
+QMainWindow::separator {
+    background: rgba(255, 255, 255, 0);
+    width: 0;
+    height: 0;
+    margin: 0;
+    padding: 0;
+}
+
+/* ===== MAIN WINDOW ===== */
+/* Root window container - transparent background with shadow effect */
+QMainWindow {
+    background-color: rgba(255, 255, 255, 0);
+    /* Preserve outer border defined above */
+    border: 2px solid rgba(26, 26, 26, 0.95);
+    padding: 0;
+    margin: 0;
+}
+
+/* ===== OVERLAY STYLING ===== */
+/* Border frame with precise 5px border */
+QFrame#borderOverlay {
+    background-color: rgba(212, 212, 212, 0.8);
+    border: 5px solid rgba(26, 26, 26, 1.0);
+    border-radius: 6px;
+    margin: 0;
+    padding: 0;
+}
+
+/* Border frame in DWM mode - only show the border, not the background */
+QFrame#borderOverlay[dwm="true"] {
+    background-color: transparent;
+    border: 5px solid rgba(26, 26, 26, 1.0);
+    border-radius: 6px;
+}
+
+/* Backdrop frame with matching radius to border's inner area */
+QFrame#overlayBackdrop {
+    background-color: rgba(212, 212, 212, 1.0);
+    border: none;
+    /* Match border radius exactly to the border frame's inner radius */
+    border-radius: 1px;
+    margin: 0;
+    padding: 0;
+}
+
+/* Overlay host window */
+QWidget#overlayHostWindow {
+    background-color: transparent;
+    border: none;
+}
+
+/* Main content area - this is the visible frame with 80% opacity */
+QFrame#main_frame {
+    /* Base color with 80% opacity */
+    /* color-picker: background-color: #d4d4d4; */
+    background-color: rgba(212, 212, 212, 0.8);
+    
+    /* Primary visible border (also duplicated by QFrame#borderOverlay for top layering) */
+    border: 2px solid rgba(26, 26, 26, 1.0);
+    border-radius: 8px;
+    
+    /* Layout */
+    padding: 0;
+    margin: 0;
+}
+
+/* Overlay that draws the same border above children for proper underlap of the badge */
+/* REMOVED DUPLICATE - See unified overlay styling section above */
+
+/* Overlay backdrop: solid dark grey fill inside the border; opacity applied via windowOpacity */
+/* REMOVED DUPLICATE - See unified overlay styling section above */
+
+/* In DWM overlay mode, the backdrop must be fully transparent so the DWM host shows through */
+QFrame#overlayBackdrop[dwm="true"] {
+    background-color: rgba(255, 255, 255, 0);
+    border: none;
+    border-radius: 1px;
+    margin: 0;
+    padding: 0;
+}
+
+/* Duplicate QFrame#borderOverlay[dwm="true"] block removed - canonical definition above */
+
+/* DWM host backdrop: provides pillar/letterbox bar color under the border host */
+QWidget#overlayBackdropHost {
+    /* color-picker: background-color: #d4d4d4 */
+    background-color: transparent;
+    border-radius: 1px;
+}
+
+/* ===== TITLE BAR ===== */
+
+/* ===== RESIZE INDICATOR ===== */
+ResizeIndicator#resizeIndicator {
+    /* color-picker: indicator-color: #000000; */
+    qproperty-indicatorColor: rgba(0, 0, 0, 1.0);
+    background: transparent;
+}
+
+/* Main title bar frame */
+QFrame#titleBar {
+    /* color-picker: background-color: #e5e5e5 */
+    background-color: rgba(229, 229, 229, 0.9);
+    /* color-picker: border-top-left-radius: #000000 */
+    border-top-left-radius: 10px;
+    /* color-picker: border-top-right-radius: #000000 */
+    border-top-right-radius: 10px;
+    /* color-picker: border: #ffffff */
+    border: none;
+    /* color-picker: border-bottom: #000000 */
+    border-bottom: 2px solid rgba(0, 0, 0, 1.0);
+    /* color-picker: margin: #ffffff */
+    margin: 0;
+    /* color-picker: padding: #ffffff */
+    padding: 0;
+    /* Slightly taller to avoid icon clipping */
+    /* color-picker: height: #000000 */
+    height: 60px;
+    /* color-picker: min-height: #000000 */
+    min-height: 60px;
+    /* color-picker: max-height: #000000 */
+    max-height: 60px;
+}
+
+/* Title bar icon (clean, single definition) */
+QFrame#titleBar QLabel#titleIcon {
+    /* Force 55px icon box; positioned on far left by layout */
+    /* color-picker: width: #000000 */
+    width: 55px;
+    /* color-picker: height: #000000 */
+    height: 55px;
+    /* color-picker: min-width: #000000 */
+    min-width: 55px;
+    /* color-picker: min-height: #000000 */
+    min-height: 55px;
+    /* color-picker: max-width: #000000 */
+    max-width: 55px;
+    /* color-picker: max-height: #000000 */
+    max-height: 55px;
+    /* color-picker: margin: #ffffff */
+    margin: 0 8px 0 12px;  /* small left inset and spacing to title */
+    /* color-picker: padding: #ffffff */
+    padding: 0;
+    qproperty-alignment: 'AlignVCenter | AlignLeft';
+}
+
+/* Title bar label (single definition) */
+QFrame#titleBar QLabel#titleLabel {
+    /* color-picker: color: #000000 */
+    color: rgba(0, 0, 0, 1.0);
+    font-weight: bold;
+    /* color-picker: font-size: #000000 */
+    font-size: 24px;
+    /* color-picker: padding: #ffffff */
+    padding: 0 12px;
+    /* color-picker: margin: #ffffff */
+    margin: 0;
+    /* color-picker: background-color: #ffffff */
+    background-color: rgba(255, 255, 255, 0);
+    qproperty-alignment: 'AlignVCenter | AlignLeft';
+}
+
+/* Close button styling */
+QFrame#titleBar QPushButton#closeButton {
+    /* color-picker: background-color: #ffffff */
+    background-color: rgba(255, 255, 255, 0);
+    /* color-picker: color: #000000 */
+    color: rgba(0, 0, 0, 1.0);
+    /* color-picker: border: #ffffff */
+    border: 1px solid rgba(255, 255, 255, 0);
+    /* color-picker: border-radius: #000000 */
+    border-radius: 2px;
+    font-family: "Segoe UI Symbol";  /* Better symbol support */
+    font-size: 20px;
+    font-weight: bold;
+    /* color-picker: margin: #ffffff */
+    margin: 3px 6px 3px 0;
+    /* color-picker: padding: #ffffff */
+    padding: 0;
+    /* color-picker: min-width: #000000 */
+    min-width: 24px;
+    /* color-picker: min-height: #000000 */
+    min-height: 24px;
+    /* color-picker: max-width: #000000 */
+    max-width: 24px;
+    /* color-picker: max-height: #000000 */
+    max-height: 24px;
+    text-align: center;
+    qproperty-text: "✕";  /* Explicitly set the X character */
+}
+
+/* Close button hover/pressed states */
+QFrame#titleBar QPushButton#closeButton:hover {
+    /* color-picker: background-color: #17eedc */
+    background-color: rgba(23, 238, 220, 0.0);  /* Keep transparent */
+    /* color-picker: border: #0e8f85 */
+    border: 1px solid rgba(14, 143, 133, 0.0);
+    /* Invert text color on hover to match About dialog */
+    color: rgba(255, 255, 255, 1.0);
+}
+
+QFrame#titleBar QPushButton#closeButton:pressed {
+    /* color-picker: background-color: #0e8f85 */
+    background-color: rgba(14, 143, 133, 0.0);
+    /* color-picker: border: #17eedc */
+    border: 0px solid rgba(23, 238, 220, 0.0);
+    /* Keep hover inversion while pressed */
+    color: rgba(255, 255, 255, 1.0);
+}
+
+/* Note: Qt Style Sheets do not style layouts; removed ineffective QHBoxLayout selector. */
+
+/* Ensure all child widgets are fully opaque */
+QFrame#main_frame > * {
+    background: rgba(255, 255, 255, 0);
+}
+
+/* Re-assert title bar background after generic child transparency rule
+   (the rule above made the title bar appear same as main content). */
+QFrame#titleBar {
+    /* color-picker: background-color: #e5e5e5 */
+    background-color: rgba(229, 229, 229, 0.9);
+}
+
+/* ===== SUBSETTINGS DIALOG ===== */
+QDialog#subsettingsDialog,
+QDialog#aboutDialog {
+    background-color: transparent; /* inner frame paints bg and border */
+    border: none;
+    border-radius: 4px;
+    padding: 0;
+    margin: 0;
+}
+
+#subsettingsDialog > #titleFrame,
+#aboutDialog QWidget#titleFrame {
+    background-color: rgba(229, 229, 229, 0.92);
+    border: none;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    border-bottom: 2px solid rgba(0, 0, 0, 1.0);
+    margin: 2px 2px 0 2px; /* remove bottom margin to avoid gap with content */
+    padding: 0;
+    min-width: 250px;
+}
+
+#subsettingsDialog QFrame#settingsContentFrame,
+#aboutDialog QFrame#aboutContentFrame {
+    background-color: rgba(212, 212, 212, 0.8);
+    border: none;
+    border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
+    margin: 0 2px 2px 2px; /* sit flush under title frame */
+}
+
+/* SubSettings title label */
+#subsettingsDialog QLabel#titleLabel,
+#aboutDialog QLabel#titleLabel {
+    color: rgba(0, 0, 0, 1.0);
+    font-size: 16px;
+    font-weight: bold;
+    padding: 0 8px;
+    margin: 0;
+    background: transparent;
+}
+
+/* About dialog close button: simple X, no background/border, invert color on hover */
+#aboutDialog QPushButton#closeButton {
+    background: transparent;
+    border: none;
+    color: rgba(0, 0, 0, 1.0); /* black by default on light */
+    font-family: "Segoe UI Symbol";
+    font-size: 22px; /* slightly larger */
+    font-weight: bold;
+    min-width: 24px;
+    min-height: 24px;
+    max-width: 24px;
+    max-height: 24px;
+    padding: 0;
+    margin: 3px 6px 3px 0;
+    qproperty-text: "✕";
+}
+
+#aboutDialog QPushButton#closeButton:hover {
+    color: rgba(255, 255, 255, 1.0); /* invert to white on hover */
+    background: transparent; /* keep transparent */
+}
+
+/* Main dialog close button: match About dialog behavior */
+QMainWindow QPushButton#closeButton {
+    background: transparent;
+    border: none;
+    color: rgba(0, 0, 0, 1.0);
+    font-family: "Segoe UI Symbol";
+    font-size: 22px;
+    font-weight: bold;
+    min-width: 24px;
+    min-height: 24px;
+    max-width: 24px;
+    max-height: 24px;
+    padding: 0;
+    margin: 3px 6px 3px 0;
+    qproperty-text: "✕";
+}
+
+QMainWindow QPushButton#closeButton:hover {
+    color: rgba(255, 255, 255, 1.0);
+    background: transparent;
+}
+
+/* Subsettings dialog close label: match About dialog behavior (no bg/border, invert on hover) */
+#subsettingsDialog QLabel#closeButton {
+    background: transparent;
+    border: none;
+    color: rgba(0, 0, 0, 1.0);
+    font-family: "Segoe UI Symbol";
+    font-size: 22px;
+    font-weight: bold;
+    min-width: 24px;
+    min-height: 24px;
+    max-width: 24px;
+    max-height: 24px;
+    padding: 0;
+    margin: 3px 6px 3px 0;
+}
+
+#subsettingsDialog QLabel#closeButton:hover {
+    color: rgba(255, 255, 255, 1.0);
+    background: transparent;
+}
+
+/* SubSettings section labels */
+QLabel#SubSettingsSectionLabel {
+    color: rgba(0, 0, 0, 0.95);
+    font-size: 13px;
+    font-weight: 600;
+    margin-top: 6px;
+    margin-bottom: 2px;
+}
+
+/* Key sequence edit fields (unified selector) */
+QKeySequenceEdit#SettingsKeySequenceEdit {
+    background-color: rgba(235, 235, 235, 1.0);
+    color: rgba(0, 0, 0, 1.0);
+    border: 2px solid rgba(0, 0, 0, 1.0);
+    border-radius: 6px;
+    padding: 6px 10px;
+}
+QKeySequenceEdit#SettingsKeySequenceEdit:focus {
+    border-color: rgba(102, 102, 102, 1.0);
+}
+
+/* ===== COMMON COMPONENTS ===== */
+
+/* Standard checkboxes - programmatic CircleCheckBox handles its own styling */
+QCheckBox {
+    spacing: 8px;
+    font-family: 'Segoe UI';
+    font-size: 13px;
+    color: rgba(0, 0, 0, 0.8);
+    background: transparent;
+}
+/* Reusable components used across dialogs */
+
+/* ===== COMBO BOX ===== */
+/* Base combobox styling */
+QComboBox {
+    /* color-picker: background-color: rgba(213, 213, 213, 1.0); */
+    background-color: rgba(213, 213, 213, 1.0);
+    /* color-picker: color: rgba(0, 0, 0, 1.0); */
+    color: rgba(0, 0, 0, 1.0);
+    /* color-picker: border-color: rgba(0, 0, 0, 1.0); */
+    border: 2px solid rgba(0, 0, 0, 1.0);
+    border-radius: 16px;
+    padding: 6px 15px 6px 30px;
+    font-family: 'Segoe UI';
+    font-size: 12px;
+    font-weight: bold;
+    text-transform: uppercase;
+    min-height: 32px;
+    min-width: 200px;
+    text-align: left;
+    /* color-picker: selection-background-color: rgba(197, 197, 197, 1.0); */
+    selection-background-color: rgba(197, 197, 197, 1.0);
+    /* color-picker: selection-color: rgba(0, 0, 0, 1.0); */
+    selection-color: rgba(0, 0, 0, 1.0);
+}
+
+/* Hover state */
+QComboBox:hover {
+    /* color-picker: hover-background-color: rgba(197, 197, 197, 1.0); */
+    background-color: rgba(197, 197, 197, 1.0);
+    /* color-picker: hover-border-color: rgba(102, 102, 102, 1.0); */
+    border-color: rgba(102, 102, 102, 1.0);
+}
+
+/* Dropdown button */
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: right center;
+    width: 24px;
+    border: none;
+    background: transparent;
+    padding-right: 4px;
+}
+
+QComboBox::down-arrow {
+    width: 6px;
+    height: 6px;
+    /* color-picker: arrow-color: #000000; */
+    background: rgba(0, 0, 0, 1.0);
+    border-radius: 3px;
+    margin-right: 8px;
+    image: none;
+    border: none;
+}
+
+/* Dropdown menu */
+QComboBox QAbstractItemView {
+    /* color-picker: menu-background: #d5d5d5; */
+    background-color: rgba(213, 213, 213, 1.0);
+    /* color-picker: menu-text: #000000; */
+    color: rgba(0, 0, 0, 1.0);
+    /* color-picker: menu-border: #999999; */
+    border: 2px solid rgba(153, 153, 153, 1.0);
+    border-radius: 8px;
+    padding: 4px;
+    /* color-picker: menu-selection-background: rgba(197, 197, 197, 1.0); */
+    background-color: rgba(213, 213, 213, 1.0);
+    /* color-picker: menu-selection-text: rgba(0, 0, 0, 1.0); */
+    color: rgba(0, 0, 0, 1.0);
+    selection-background-color: rgba(197, 197, 197, 1.0);
+    selection-color: rgba(0, 0, 0, 1.0);
+    outline: none;
+    margin: 2px 0;
+}
+
+/* Dropdown items */
+QComboBox QAbstractItemView::item {
+    /* color-picker: item-background: #d5d5d5; */
+    background-color: rgba(213, 213, 213, 1.0);
+    /* color-picker: item-text: #000000; */
+    color: rgba(0, 0, 0, 1.0);
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin: 2px 0;
+}
+
+QComboBox QAbstractItemView::item:hover {
+    /* color-picker: item-hover-background: #c5c5c5; */
+    background-color: rgba(197, 197, 197, 1.0);
+}
+
+QComboBox QAbstractItemView::item:selected {
+    /* color-picker: item-selected-background: #c5c5c5; */
+    background-color: rgba(197, 197, 197, 1.0);
+    /* color-picker: item-selected-border: #999999; */
+    border: 1px solid rgba(153, 153, 153, 1.0);
+}
+
+/* Disabled state */
+QComboBox:disabled {
+    /* color-picker: disabled-text: #999999; */
+    color: rgba(153, 153, 153, 1.0);
+    /* color-picker: disabled-border: #bbbbbb; */
+    border-color: rgba(187, 187, 187, 1.0);
+    /* color-picker: disabled-background: #dddddd; */
+    background-color: rgba(221, 221, 221, 1.0);
+}
+
+/* Focus state - explicitly set to match normal state to prevent system focus styling */
+QComboBox:focus {
+    border: 2px solid rgba(153, 153, 153, 1.0);
+    outline: none;
+}
+
+/* ===== MAIN DIALOG TITLE BAR (Legacy rules removed) ===== */
+/* Cleanup: Removed generic #titleBar/#titleFrame/#titleLabel/#appTitle and
+   QPushButton#closeButton blocks below to avoid conflicting with the scoped
+   MainDialog QFrame#titleBar rules above. Single source of truth retained. */
+
+/* ===== SETTINGS DIALOG ===== */
+/* Styles specific to the settings dialog */
+
+/* Settings dialog container */
+QDialog#settingsDialog {
+    background-color: rgba(235, 235, 235, 1.0);
+    border: 2px solid rgba(187, 187, 187, 1.0);
+    border-radius: 8px;
+}
+
+/* ===== SUBSETTINGS DIALOG ===== */
+QDialog#subsettingsDialog {
+    background-color: transparent; /* let inner frame paint background and border */
+    border: none; /* outer border drawn by inner frame to avoid double-borders */
+    border-radius: 4px; /* keep for hit testing consistency */
+    padding: 0;
+    margin: 0;
+}
+
+#subsettingsDialog > #titleFrame {
+    background-color: rgba(229, 229, 229, 1.0); /* match #titleFrame in main_dialog */
+    border: none; /* outer border frame draws the outline */
+    border-top-left-radius: 6px;  /* 8px outer radius - 2px padding */
+    border-top-right-radius: 6px; /* keep inside the outer rounded clip */
+    border-bottom: 2px solid rgba(0, 0, 0, 1.0); /* Straight separator line only */
+    margin: 2px 2px 0 2px; /* remove bottom margin to avoid gap with content */
+    padding: 0;
+    min-width: 250px;
+}
+
+/* Inner content frame should also respect rounded corners at the bottom */
+#subsettingsDialog QFrame#settingsContentFrame {
+    background-color: rgba(212, 212, 212, 0.8);
+    border: none;
+    border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
+    margin: 0 2px 2px 2px; /* remove top margin to sit flush under title frame */
+}
+
+/* Custom outer border frame for SubSettingsDialog */
+QFrame#settingsDialogBorder,
+QFrame#aboutDialogBorder {
+    /* Outer visual container: paints both background and rounded outline */
+    background-color: rgba(212, 212, 212, 0.8); /* match dialog base */
+    border: 3px solid rgba(0, 0, 0, 1.0);
+    border-radius: 8px;
+    padding: 2px; /* inset equals border thickness to avoid corner bleed */
+    margin: 0;
+}
+
+
+/* Settings dialog title */
+QLabel#settingsTitle {
+    color: rgba(0, 0, 0, 1.0);
+    font-size: 18px;
+    font-weight: bold;
+    padding: 10px 15px;
+}
+
+/* Settings dialog buttons */
+QDialogButtonBox {
+    button-layout: 1; /* WinLayout */
+    margin: 10px;
+}
+
+/* ===== OVERLAYS ===== */
+/* Styles for overlay elements (tooltips, popovers, etc.) */
+
+/* Tooltip styling */
+QToolTip {
+    background-color: rgba(204, 204, 204, 1.0);
+    color: rgba(0, 0, 0, 1.0);
+    border: 1px solid rgba(170, 170, 170, 1.0);
+    border-radius: 4px;
+    padding: 5px 10px;
+    opacity: 240;
+}
+
+/* Loading overlay */
+#loadingOverlay {
+    /* color-picker: background-color: #ffffff; */
+    background-color: rgba(255, 255, 255, 0.7);
+}
+
+/* Line edits */
+QLineEdit {
+    /* color-picker: background-color: #e1e1e1; */
+    background-color: rgba(225, 225, 225, 1.0);
+    /* color-picker: color: #000000; */
+    color: rgba(0, 0, 0, 1.0);
+    /* color-picker: border: #bbbbbb; */
+    border: 1px solid rgba(187, 187, 187, 1.0);
+    border-radius: 4px;
+    padding: 4px 8px;
+    /* color-picker: selection-background-color:rgb(0, 0, 0); */
+    selection-background-color: rgba(255, 135, 40, 1.0);
+}
+
+/* ===== SMOL SELECT BUTTON ===== */
+/* Combo Box */
+QComboBox {
+    /* color-picker: background-color: #d5d5d5; */
+    background-color: rgba(220, 220, 220, 1.0);
+    /* color-picker: color: #000000; */
+    color: rgba(0, 0, 0, 1.0);
+    /* color-picker: border: #000000; */
+    border: 2px solid rgba(0, 0, 0, 0.95);
+    border-radius: 4px;
+    padding: 5px 10px;
+    font-family: 'Segoe UI';
+    font-size: 12px;
+    font-weight: bold;
+    min-height: 28px;
+    min-width: 220px;
+    max-width: 220px;
+    text-align: left;
+    padding-right: 25px;
+}
+
+QComboBox:hover {
+    /* color-picker: hover-background:rgba(255, 255, 255, 1.0); */
+    background-color: rgba(255, 255, 255, 1.0);
+    /* color-picker: border-color:rgb(0, 0, 0); */
+    border-color: rgba(102, 102, 102, 1.0);
+}
+
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: right center;
+    width: 24px;
+    border: none;
+    background: transparent;
+}
+
+QComboBox::down-arrow {
+    width: 6px;
+    height: 6px;
+    background: rgba(0, 0, 0, 1.0);
+    border-radius: 3px;
+    margin-right: 8px;
+    image: none;
+    border: none;
+}
+
+QComboBox QAbstractItemView {
+    /* color-picker: background-color: #d5d5d5; */
+    background-color: rgba(220, 220, 220, 1.0);
+    /* color-picker: color: #000000; */
+    color: rgba(0, 0, 0, 1.0);
+    /* color-picker: border: #000000; */
+    border: 1px solid rgba(0, 0, 0, 0.95);
+    border-radius: 12px;
+    padding: 4px;
+    selection-background-color: rgba(197, 197, 197, 1.0);
+    outline: none;
+}
+
+QComboBox QAbstractItemView::item {
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+QComboBox QAbstractItemView::item:selected {
+    /* color-picker: selection-background: #c5c5c5; */
+    background-color: rgba(197, 197, 197, 1.0);
+}
+
+QComboBox:disabled {
+    /* color-picker: disabled-color: #999999; */
+    color: rgba(153, 153, 153, 1.0);
+}
+
+/* Combo Arrow Button - Matches combobox styling but narrow with >> */
+QPushButton#QComboArrow {
+    background-color: rgba(220, 220, 220, 1.0);
+    color: rgba(0, 0, 0, 1.0);
+    border: 2px solid rgba(0, 0, 0, 0.95);
+    border-radius: 4px;
+    font-family: 'Segoe UI';
+    font-size: 14px;
+    font-weight: bold;
+    min-height: 28px;
+    min-width: 36px;
+    max-height: 28px;
+    max-width: 36px;
+    margin: 0; /* restore original spacing */
+    padding: 0 6px; /* tighter horizontal padding to fit '>>' at various DPIs */
+    text-align: center;
+    line-height: 1.2;
+}
+
+QPushButton#QComboArrow:hover {
+    background-color: rgba(255, 255, 255, 1.0);
+    border-color: rgba(102, 102, 102, 1.0);
+}
+
+QPushButton#QComboArrow:pressed {
+    background-color: rgba(235, 235, 235, 1.0);
+}
+
+/* Basic Bitch Button - For general use, smaller than combobox */
+QPushButton#QBasicBitchButton {
+    background-color: rgba(220, 220, 220, 1.0);
+    color: rgba(0, 0, 0, 1.0);
+    border: 2px solid rgba(0, 0, 0, 0.95);
+    border-radius: 4px;
+    font-family: 'Segoe UI';
+    font-size: 12px;
+    font-weight: bold;
+    min-height: 24px;
+    min-width: 100px;
+    padding: 2px 10px;
+    text-align: center;
+}
+
+QPushButton#QBasicBitchButton:hover {
+    background-color: rgba(255, 255, 255, 1.0);
+    border-color: rgba(102, 102, 102, 1.0);
+}
+
+QPushButton#QBasicBitchButton:pressed {
+    background-color: rgba(235, 235, 235, 1.0);
+}
+
+
+QPushButton#QSmolselect {
+    /* color-picker: background-color: #d5d5d5; */
+    background-color: rgba(220, 220, 220, 1.0);
+    /* color-picker: color: #000000; */
+    color: rgba(0, 0, 0, 1.0);
+    /* color-picker: border: #000000; */
+    border: 1px solid rgba(0, 0, 0, 1.0);
+    border-radius: 10px;
+    padding: 6px 12px;
+    min-width: 100px;
+    max-width: 200px;
+    font-family: 'Segoe UI';
+    font-size: 12px;
+    font-weight: bold;
+    text-transform: uppercase;
+    text-align: center;
+    margin: 8px;
+}
+
+QPushButton#QSmolselect:hover {
+    /* color-picker: hover-background: #ffffff; */
+    background-color: rgba(255, 255, 255, 1.0);
+}
+
+QPushButton#QSmolselect:pressed {
+    /* color-picker: pressed-background: #e5e5e5; */
+    background-color: rgba(229, 229, 229, 1.0);
+}
+
+/* Checked state (active toggle) */
+QPushButton#QSmolselect:checked {
+    /* color-picker: checked-background: #ffffff; */
+    background-color: rgba(255, 255, 255, 1.0);
+}
+
+/* Checked hover state */
+QPushButton#QSmolselect:checked:hover {
+    /* color-picker: checked-hover-background: #ffffff; */
+    background-color: rgba(255, 255, 255, 1.0);
+}
+
+/* Compact variant for small numeric toggle buttons (same height, narrower width) */
+QPushButton#QSmolselectMini {
+    /* base consistent with QSmolselect */
+    background-color: rgba(220, 220, 220, 1.0);
+    color: rgba(0, 0, 0, 1.0);
+    border: 1px solid rgba(0, 0, 0, 1.0);
+    border-radius: 10px;
+    /* keep vertical padding to preserve height; trim horizontal padding */
+    padding: 6px 6px; /* v h */
+    /* force compact width */
+    min-width: 38px;
+    max-width: 48px;
+    font-family: 'Segoe UI';
+    font-size: 12px;
+    font-weight: bold;
+    text-transform: uppercase;
+    text-align: center;
+    margin: 6px; /* slightly tighter spacing */
+}
+
+QPushButton#QSmolselectMini:hover {
+    background-color: rgba(255, 255, 255, 1.0);
+}
+
+QPushButton#QSmolselectMini:pressed {
+    background-color: rgba(229, 229, 229, 1.0);
+}
+
+QPushButton#QSmolselectMini:checked {
+    background-color: rgba(255, 255, 255, 1.0);
+}
+
+QPushButton#QSmolselectMini:checked:hover {
+    background-color: rgba(255, 255, 255, 1.0);
+}
+
+/* ===== CONTEXT MENUS ===== */
+/* Styles for all context menus */
+
+/* Context Menu Styling */
+QMenu {
+    /* color-picker: background-color: #d5d5d5; */
+    background-color: rgba(213, 213, 213, 1.0);
+    /* color-picker: color: #000000; */
+    color: rgba(0, 0, 0, 1.0);
+    /* color-picker: border: #bbbbbb; */
+    border: 1px solid rgba(187, 187, 187, 1.0);
+    padding: 4px;
+    border-radius: 4px;
+}
+
+QMenu::item {
+    padding: 6px 25px 6px 20px;
+    border-radius: 2px;
+}
+
+QMenu::item:selected {
+    /* color-picker: background-color: #c5c5c5; */
+    background-color: rgba(197, 197, 197, 1.0);
+}
+
+QMenu::item:disabled {
+    /* color-picker: color: #7f7f7f; */
+    color: rgba(127, 127, 127, 1.0);
+}
+
+QMenu::separator {
+    height: 1px;
+    /* color-picker: background-color: #bbbbbb; */
+    background-color: rgba(187, 187, 187, 1.0);
+    margin: 4px 0;
+}
+
+/* Group boxes */
+QGroupBox {
+    /* color-picker: border: #bbbbbb; */
+    border: 1px solid rgba(187, 187, 187, 1.0);
+    border-radius: 4px;
+    margin-top: 1em;
+    padding: 0.5em 0.5em 0.5em 0.5em;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 5px;
+    /* color-picker: color: #000000; */
+    color: rgba(0, 0, 0, 1.0);
+}
+
+/* Action buttons */
+QPushButton#actionButton {
+    background-color: rgba(213, 213, 213, 1.0);
+    color: rgba(0, 0, 0, 1.0);
+    border: 2px solid rgba(0, 0, 0, 1.0);
+    border-radius: 20px;
+    padding: 5px 15px;
+    font-weight: bold;
+    font-size: 12px;
+    text-transform: uppercase;
+    min-height: 32px;
+}
+
+QPushButton#actionButton:hover {
+    background-color: rgba(197, 197, 197, 1.0);
+    border-color: rgba(153, 153, 153, 1.0);
+}
+
+QPushButton#actionButton:pressed {
+    background-color: rgba(229, 229, 229, 1.0);
+    border-color: rgba(204, 204, 204, 1.0);
+}
+
+/* Select buttons */
+QPushButton#selectButton {
+    /* color-picker: background-color: #d5d5d5; */
+    background-color: rgba(213, 213, 213, 1.0);
+    color: rgba(0, 0, 0, 1.0);
+    /* color-picker: border: #bbbbbb; */
+    border: 2px solid rgba(187, 187, 187, 1.0);
+    border-radius: 16px;
+    padding: 5px 15px;
+    font-weight: bold;
+    font-size: 12px;
+    text-transform: uppercase;
+    min-width: 108px;
+    min-height: 32px;
+}
+
+QPushButton#selectButton:hover {
+    /* color-picker: background-color: #c5c5c5; */
+    background-color: rgba(197, 197, 197, 1.0);
+    /* color-picker: border-color: #999999; */
+    border-color: rgba(153, 153, 153, 1.0);
+}
+
+QPushButton#selectButton:pressed {
+    /* color-picker: background-color: #e5e5e5; */
+    background-color: rgba(229, 229, 229, 1.0);
+    /* color-picker: border-color: #666666; */
+    border-color: rgba(102, 102, 102, 1.0);
+}
+
+/* Start buttons */
+QPushButton#startButton {
+    /* color-picker: background-color: #d5d5d5; */
+    background-color: rgba(213, 213, 213, 1.0);
+    /* color-picker: color: #000000; */
+    color: rgba(0, 0, 0, 1.0);
+    /* color-picker: border: #000000; */
+    border: 2px solid rgba(0, 0, 0, 1.0);
+    border-radius: 16px;
+    padding: 5px 15px;
+    font-weight: bold;
+    font-size: 12px;
+    text-transform: uppercase;
+    min-width: 56px;
+    min-height: 32px;
+}
+
+QPushButton#startButton:hover {
+    /* color-picker: background-color: #c5c5c5; */
+    background-color: rgba(197, 197, 197, 1.0);
+    /* color-picker: border-color: #999999; */
+    border-color: rgba(153, 153, 153, 1.0);
+}
+
+QPushButton#startButton:pressed {
+    /* color-picker: background-color: #e5e5e5; */
+    background-color: rgba(229, 229, 229, 1.0);
+    /* color-picker: border-color: #cccccc; */
+    border-color: rgba(204, 204, 204, 1.0);
+}
+
+/* Settings button */
+QPushButton#settingsButton {
+    /* color-picker: background-color: #d5d5d5; */
+    background-color: rgba(213, 213, 213, 1.0);
+    /* color-picker: color: #000000; */
+    color: rgba(0, 0, 0, 1.0);
+    /* color-picker: border: #bbbbbb; */
+    border: 1px solid rgba(187, 187, 187, 1.0);
+    border-radius: 20px;
+    padding: 5px 10px;
+    font-weight: bold;
+    font-size: 12px;
+    text-transform: uppercase;
+    min-width: 90px;
+    min-height: 32px;
+}
+
+QPushButton#settingsButton:hover {
+    /* color-picker: background-color: #c5c5c5; */
+    background-color: rgba(197, 197, 197, 1.0);
+    /* color-picker: border-color: #999999; */
+    border-color: rgba(153, 153, 153, 1.0);
+}
+
+QPushButton#settingsButton:pressed {
+    /* color-picker: background-color: #e5e5e5; */
+    background-color: rgba(229, 229, 229, 1.0);
+    /* color-picker: border-color: #666666; */
+    border-color: rgba(102, 102, 102, 1.0);
+}
+
+/* About button (?) - Lowered by 2px for better centering */
+QPushButton#aboutButton {
+    /* color-picker: background-color: #d5d5d5; */
+    background-color: rgba(213, 213, 213, 1.0);
+    /* color-picker: color: #000000; */
+    color: rgba(0, 0, 0, 1.0);
+    /* color-picker: border: #bbbbbb; */
+    border: 2px solid rgba(187, 187, 187, 1.0);
+    border-radius: 20px;
+    padding: 5px 10px;
+    min-width: 40px;
+    max-width: 40px;
+    min-height: 40px;
+    max-height: 40px;
+    font-size: 18px;
+    margin-top: 2px;  /* Lowered by 2px */
+}
+
+QPushButton#aboutButton:hover {
+    /* color-picker: background-color: #c5c5c5; */
+    background-color: rgba(197, 197, 197, 1.0);
+    /* color-picker: border-color: #999999; */
+    border-color: rgba(153, 153, 153, 1.0);
+}
+
+QPushButton#aboutButton:pressed {
+    /* color-picker: background-color: #e5e5e5; */
+    background-color: rgba(229, 229, 229, 1.0);
+    /* color-picker: border-color: #666666; */
+    border-color: rgba(102, 102, 102, 1.0);
+}
+
+/* ===== OPACITY CONTROL ===== */
+QFrame#opacityControlFrame {
+    background-color: transparent;
+    border: none;
+    margin: 10px 0 5px 0;
+}
+
+QFrame#opacityControlContainer {
+    background-color: rgba(213, 213, 213, 1.0);
+    border: 2px solid rgba(0, 0, 0, 1.0);
+    border-radius: 7px;
+    min-height: 14px;
+    max-height: 14px;
+    min-width: 264px;
+    max-width: 286px;
+    padding: 1px;
+}
+
+QFrame#opacityFill {
+    background-color: rgba(0, 0, 0, 1.0);
+    border-radius: 5px;
+    min-height: 10px;
+    max-height: 10px;
+    min-width: 0px;
+    max-width: 282px;
+    padding: 0;
+}
+
+QLabel#opacityLabel {
+    /* color-picker: background-color: #dcdcdc; */
+    background-color: rgba(220, 220, 220, 1.0);
+    /* color-picker: color: #000000; */
+    color: rgba(0, 0, 0, 1.0);
+    /* color-picker: border: #000000; */
+    border: 2px solid rgba(0, 0, 0, 0.95);
+    border-radius: 4px;
+    font-family: 'Segoe UI';
+    font-size: 12px;
+    font-weight: bold;
+    min-height: 24px;
+    padding: 2px 6px;
+    text-align: center;
+    margin: 2px 0 0 2px;
+}
+
+
+/* Duplicate QMenu block removed; canonical QMenu rules defined earlier */
+
+/* Labels */
+QLabel {
+    /* color-picker: color: #000000; */
+    color: rgba(0, 0, 0, 1.0);
+}
+
+/* Disabled text */
+QLabel:disabled {
+    /* color-picker: color: #7f7f7f; */
+    color: rgba(127, 127, 127, 1.0);
+}
+
+/* Error text */
+QLabel#errorLabel {
+    /* color-picker: color: #00a8a8; */
+    color: rgba(0, 168, 168, 1.0);
+    font-weight: bold;
+}
+
+/* Badge display - Flush with bottom border and no clipping */
+QLabel#badgeLabel {
+    /* color-picker: background-color: #ffffff; */
+    background-color: rgba(255, 255, 255, 0); /* Blends with window background */
+    /* color-picker: color: #000000; */
+    color: rgba(0, 0, 0, 1.0);
+    font-weight: bold;
+    font-size: 11px;
+    padding: 2px 8px 0px 8px; /* Top padding reduced to 2px, bottom padding removed */
+    margin: 0;
+    border: none;
+    border-radius: 0 0 4px 4px; /* Rounded bottom corners only */
+    text-align: center;
+    min-height: 16px;
+    max-height: 16px;
+    margin-top: -1px; /* Pull up slightly to eliminate gap */
+}
