@@ -1,0 +1,284 @@
+"""
+Widgets configuration tab for settings dialog.
+
+Allows users to configure overlay widgets:
+- Clock widget (enable, position, format, size, font, style)
+- Weather widget (enable, position, location, API key, size, font, style)
+"""
+from typing import Optional
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
+    QSpinBox, QGroupBox, QCheckBox, QLineEdit, QColorDialog, QPushButton
+)
+from PySide6.QtCore import Signal
+from PySide6.QtGui import QColor
+
+from core.settings.settings_manager import SettingsManager
+from core.logging.logger import get_logger
+
+logger = get_logger(__name__)
+
+
+class WidgetsTab(QWidget):
+    """Widgets configuration tab."""
+    
+    # Signals
+    widgets_changed = Signal()
+    
+    def __init__(self, settings: SettingsManager, parent: Optional[QWidget] = None):
+        """
+        Initialize widgets tab.
+        
+        Args:
+            settings: Settings manager
+            parent: Parent widget
+        """
+        super().__init__(parent)
+        
+        self._settings = settings
+        self._clock_color = QColor(255, 255, 255, 230)
+        self._weather_color = QColor(255, 255, 255, 230)
+        self._setup_ui()
+        self._load_settings()
+        
+        logger.debug("WidgetsTab created")
+    
+    def _setup_ui(self) -> None:
+        """Setup tab UI."""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+        
+        # Title
+        title = QLabel("Overlay Widgets")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
+        layout.addWidget(title)
+        
+        # Clock widget group
+        clock_group = QGroupBox("Clock Widget")
+        clock_layout = QVBoxLayout(clock_group)
+        
+        # Enable clock
+        self.clock_enabled = QCheckBox("Enable Clock")
+        self.clock_enabled.stateChanged.connect(self._save_settings)
+        clock_layout.addWidget(self.clock_enabled)
+        
+        # Time format
+        format_row = QHBoxLayout()
+        format_row.addWidget(QLabel("Format:"))
+        self.clock_format = QComboBox()
+        self.clock_format.addItems(["12 Hour", "24 Hour"])
+        self.clock_format.currentTextChanged.connect(self._save_settings)
+        format_row.addWidget(self.clock_format)
+        format_row.addStretch()
+        clock_layout.addLayout(format_row)
+        
+        # Show seconds
+        self.clock_seconds = QCheckBox("Show Seconds")
+        self.clock_seconds.stateChanged.connect(self._save_settings)
+        clock_layout.addWidget(self.clock_seconds)
+        
+        # Position
+        position_row = QHBoxLayout()
+        position_row.addWidget(QLabel("Position:"))
+        self.clock_position = QComboBox()
+        self.clock_position.addItems([
+            "Top Left", "Top Center", "Top Right",
+            "Bottom Left", "Bottom Center", "Bottom Right"
+        ])
+        self.clock_position.currentTextChanged.connect(self._save_settings)
+        position_row.addWidget(self.clock_position)
+        position_row.addStretch()
+        clock_layout.addLayout(position_row)
+        
+        # Font size
+        font_row = QHBoxLayout()
+        font_row.addWidget(QLabel("Font Size:"))
+        self.clock_font_size = QSpinBox()
+        self.clock_font_size.setRange(12, 144)
+        self.clock_font_size.setValue(48)
+        self.clock_font_size.valueChanged.connect(self._save_settings)
+        font_row.addWidget(self.clock_font_size)
+        font_row.addWidget(QLabel("px"))
+        font_row.addStretch()
+        clock_layout.addLayout(font_row)
+        
+        # Text color
+        color_row = QHBoxLayout()
+        color_row.addWidget(QLabel("Text Color:"))
+        self.clock_color_btn = QPushButton("Choose Color...")
+        self.clock_color_btn.clicked.connect(self._choose_clock_color)
+        color_row.addWidget(self.clock_color_btn)
+        color_row.addStretch()
+        clock_layout.addLayout(color_row)
+        
+        # Margin
+        margin_row = QHBoxLayout()
+        margin_row.addWidget(QLabel("Margin:"))
+        self.clock_margin = QSpinBox()
+        self.clock_margin.setRange(0, 100)
+        self.clock_margin.setValue(20)
+        self.clock_margin.valueChanged.connect(self._save_settings)
+        margin_row.addWidget(self.clock_margin)
+        margin_row.addWidget(QLabel("px"))
+        margin_row.addStretch()
+        clock_layout.addLayout(margin_row)
+        
+        layout.addWidget(clock_group)
+        
+        # Weather widget group
+        weather_group = QGroupBox("Weather Widget")
+        weather_layout = QVBoxLayout(weather_group)
+        
+        # Enable weather
+        self.weather_enabled = QCheckBox("Enable Weather")
+        self.weather_enabled.stateChanged.connect(self._save_settings)
+        weather_layout.addWidget(self.weather_enabled)
+        
+        # API key
+        api_row = QHBoxLayout()
+        api_row.addWidget(QLabel("API Key:"))
+        self.weather_api_key = QLineEdit()
+        self.weather_api_key.setPlaceholderText("OpenWeatherMap API key...")
+        self.weather_api_key.textChanged.connect(self._save_settings)
+        api_row.addWidget(self.weather_api_key)
+        weather_layout.addLayout(api_row)
+        
+        # Location
+        location_row = QHBoxLayout()
+        location_row.addWidget(QLabel("Location:"))
+        self.weather_location = QLineEdit()
+        self.weather_location.setPlaceholderText("City name...")
+        self.weather_location.textChanged.connect(self._save_settings)
+        location_row.addWidget(self.weather_location)
+        weather_layout.addLayout(location_row)
+        
+        # Position
+        weather_pos_row = QHBoxLayout()
+        weather_pos_row.addWidget(QLabel("Position:"))
+        self.weather_position = QComboBox()
+        self.weather_position.addItems([
+            "Top Left", "Top Right",
+            "Bottom Left", "Bottom Right"
+        ])
+        self.weather_position.currentTextChanged.connect(self._save_settings)
+        weather_pos_row.addWidget(self.weather_position)
+        weather_pos_row.addStretch()
+        weather_layout.addLayout(weather_pos_row)
+        
+        # Font size
+        weather_font_row = QHBoxLayout()
+        weather_font_row.addWidget(QLabel("Font Size:"))
+        self.weather_font_size = QSpinBox()
+        self.weather_font_size.setRange(12, 72)
+        self.weather_font_size.setValue(24)
+        self.weather_font_size.valueChanged.connect(self._save_settings)
+        weather_font_row.addWidget(self.weather_font_size)
+        weather_font_row.addWidget(QLabel("px"))
+        weather_font_row.addStretch()
+        weather_layout.addLayout(weather_font_row)
+        
+        # Text color
+        weather_color_row = QHBoxLayout()
+        weather_color_row.addWidget(QLabel("Text Color:"))
+        self.weather_color_btn = QPushButton("Choose Color...")
+        self.weather_color_btn.clicked.connect(self._choose_weather_color)
+        weather_color_row.addWidget(self.weather_color_btn)
+        weather_color_row.addStretch()
+        weather_layout.addLayout(weather_color_row)
+        
+        layout.addWidget(weather_group)
+        
+        layout.addStretch()
+    
+    def _load_settings(self) -> None:
+        """Load settings from settings manager."""
+        # Load clock settings
+        clock_config = self._settings.get('widgets', {}).get('clock', {})
+        self.clock_enabled.setChecked(clock_config.get('enabled', False))
+        
+        format_text = "12 Hour" if clock_config.get('format', '12h') == '12h' else "24 Hour"
+        index = self.clock_format.findText(format_text)
+        if index >= 0:
+            self.clock_format.setCurrentIndex(index)
+        
+        self.clock_seconds.setChecked(clock_config.get('show_seconds', True))
+        
+        position = clock_config.get('position', 'Top Right')
+        index = self.clock_position.findText(position)
+        if index >= 0:
+            self.clock_position.setCurrentIndex(index)
+        
+        self.clock_font_size.setValue(clock_config.get('font_size', 48))
+        self.clock_margin.setValue(clock_config.get('margin', 20))
+        
+        # Load clock color
+        color_data = clock_config.get('color', [255, 255, 255, 230])
+        self._clock_color = QColor(*color_data)
+        
+        # Load weather settings
+        weather_config = self._settings.get('widgets', {}).get('weather', {})
+        self.weather_enabled.setChecked(weather_config.get('enabled', False))
+        self.weather_api_key.setText(weather_config.get('api_key', ''))
+        self.weather_location.setText(weather_config.get('location', 'London'))
+        
+        weather_pos = weather_config.get('position', 'Bottom Left')
+        index = self.weather_position.findText(weather_pos)
+        if index >= 0:
+            self.weather_position.setCurrentIndex(index)
+        
+        self.weather_font_size.setValue(weather_config.get('font_size', 24))
+        
+        # Load weather color
+        weather_color_data = weather_config.get('color', [255, 255, 255, 230])
+        self._weather_color = QColor(*weather_color_data)
+        
+        logger.debug("Loaded widget settings")
+    
+    def _choose_clock_color(self) -> None:
+        """Choose clock text color."""
+        color = QColorDialog.getColor(self._clock_color, self, "Choose Clock Color")
+        if color.isValid():
+            self._clock_color = color
+            self._save_settings()
+    
+    def _choose_weather_color(self) -> None:
+        """Choose weather text color."""
+        color = QColorDialog.getColor(self._weather_color, self, "Choose Weather Color")
+        if color.isValid():
+            self._weather_color = color
+            self._save_settings()
+    
+    def _save_settings(self) -> None:
+        """Save current settings."""
+        clock_config = {
+            'enabled': self.clock_enabled.isChecked(),
+            'format': '12h' if self.clock_format.currentText() == "12 Hour" else '24h',
+            'show_seconds': self.clock_seconds.isChecked(),
+            'position': self.clock_position.currentText(),
+            'font_size': self.clock_font_size.value(),
+            'margin': self.clock_margin.value(),
+            'color': [self._clock_color.red(), self._clock_color.green(), 
+                     self._clock_color.blue(), self._clock_color.alpha()]
+        }
+        
+        weather_config = {
+            'enabled': self.weather_enabled.isChecked(),
+            'api_key': self.weather_api_key.text(),
+            'location': self.weather_location.text(),
+            'position': self.weather_position.currentText(),
+            'font_size': self.weather_font_size.value(),
+            'color': [self._weather_color.red(), self._weather_color.green(), 
+                     self._weather_color.blue(), self._weather_color.alpha()]
+        }
+        
+        widgets_config = {
+            'clock': clock_config,
+            'weather': weather_config
+        }
+        
+        self._settings.set('widgets', widgets_config)
+        self._settings.save()
+        self.widgets_changed.emit()
+        
+        logger.debug("Saved widget settings")
