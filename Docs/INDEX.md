@@ -1,8 +1,8 @@
 # ShittyRandomPhotoScreenSaver - Module Index
 
 **Purpose**: Living file map of all modules, their purposes, and key classes/functions.  
-**Last Updated**: Day 6 Complete (Core + Infrastructure + Sources + Animation + Display)  
-**Implementation Status**: 🟢 Core Framework | 🟢 Animation | 🟢 Entry Point & Monitors | 🟢 Image Sources | 🟢 RSS Feeds | 🟢 Display & Rendering | ⚪ Engine | ⚪ UI  
+**Last Updated**: Day 10 Complete (Slide & Diffuse Transitions)  
+**Implementation Status**: 🟢 Core Framework | 🟢 Animation | 🟢 Entry Point & Monitors | 🟢 Image Sources | 🟢 RSS Feeds | 🟢 Display & Rendering | 🟢 Engine | 🟡 Transitions (75%) | ⚪ Widgets | ⚪ UI  
 **Note**: Update this file after any major structural changes.
 
 ---
@@ -399,33 +399,249 @@ SETTINGS_CHANGED = "settings.changed"
 
 ---
 
-### `engine/screensaver_engine.py` ⚪ NOT IMPLEMENTED
-**Purpose**: Main screensaver controller  
+### `engine/screensaver_engine.py` 🟢 COMPLETE
+**Purpose**: Main screensaver controller and orchestrator  
+**Status**: ✅ Implemented, ✅ Tested (Day 8)  
 **Key Classes**:
-- `ScreensaverEngine` - Central orchestrator
-  - `start()` - Start screensaver
+- `ScreensaverEngine(QObject)` - Central orchestrator for entire screensaver
+  - `initialize()` - Initialize all subsystems
+  - `start()` - Start screensaver (show first image, start timer)
   - `stop()` - Stop screensaver
-  - `_initialize_sources()` - Setup image sources
-  - `_build_image_queue()` - Build image queue
-  - `_display_current_image()` - Display current image
-  - `_next_image()` - Advance to next image
+  - `cleanup()` - Clean up all resources
+  - `is_running()` - Check if engine running
+  - `get_stats()` - Get comprehensive statistics
+  
+**Private Methods**:
+  - `_initialize_core_systems()` - Setup Events, Resources, Threading, Settings
+  - `_load_settings()` - Load configuration
+  - `_initialize_sources()` - Setup Folder and RSS sources
+  - `_build_image_queue()` - Populate queue from sources
+  - `_initialize_display()` - Create and configure display manager
+  - `_setup_rotation_timer()` - Configure QTimer for rotation
+  - `_subscribe_to_events()` - Wire up event handlers
+  - `_show_next_image()` - Load and display next image
+  - `_load_image_task()` - Image loading (thread pool ready)
+  - `_load_and_display_image()` - Load and show image
+  - `_on_rotation_timer()` - Handle timer tick
+  - `_on_exit_requested()` - Handle user exit
+  - `_on_settings_changed()` - Handle settings updates
+  - `_on_monitors_changed()` - Handle monitor hotplug
+  - `_update_rotation_interval()` - Apply interval changes
+  - `_update_display_mode()` - Apply display mode changes
+  - `_update_shuffle_mode()` - Apply shuffle changes
 
-**Dependencies**: All core systems, DisplayManager, image sources
+**Signals**:
+- `started` - Engine started
+- `stopped` - Engine stopped
+- `image_changed(str)` - New image displayed
+- `error_occurred(str)` - Error occurred
+
+**Features**:
+- Automatic core system initialization
+- Default RSS sources if none configured
+- Settings-driven configuration
+- Hot-reloadable settings
+- Monitor hotplug support
+- Image rotation with configurable interval
+- Async-ready image loading
+- Comprehensive error handling with [FALLBACK] logging
+- Full lifecycle management (init → start → stop → cleanup)
+
+**Tested**: 15 integration tests + system tests
+
+**Implemented**: Day 8
+
+**Dependencies**: All core systems, DisplayManager, ImageQueue, FolderSource, RSSSource
 
 ---
 
-### `engine/image_queue.py`
-**Purpose**: Image queue management  
+### `engine/image_queue.py` 🟢 COMPLETE
+**Purpose**: Image queue management with shuffle and history  
+**Status**: ✅ Implemented, ✅ Tested (Day 7)  
 **Key Classes**:
-- `ImageQueue` - Queue of images
+- `ImageQueue` - Queue manager for screensaver images
   - `add_images(images)` - Add images to queue
-  - `next()` - Get next image
-  - `current()` - Get current image
-  - `size()` - Queue size
-  - `clear()` - Clear queue
+  - `set_images(images)` - Replace all images
+  - `next()` - Get next image (auto-wraparound)
+  - `previous()` - Go back to previous image
+  - `current()` - Get current image without advancing
+  - `peek()` - Look ahead at next image
+  - `shuffle()` - Manually shuffle queue
+  - `set_shuffle_enabled(enabled)` - Toggle shuffle mode
+  - `clear()` - Clear all images
+  - `remove_image(path)` - Remove specific image
+  - `size()` - Remaining images in queue
+  - `total_images()` - Total images available
+  - `is_empty()` - Check if queue empty
+  - `get_history(count)` - Get recent image history
+  - `is_in_recent_history(path, lookback)` - Check if recently shown
+  - `get_wrap_count()` - Number of queue wraparounds
+  - `get_stats()` - Full queue statistics
 
-**Key Dataclasses**:
-- `ImageMetadata` - Image metadata (path, width, height, aspect_ratio, file_size, modified_time, source)
+**Features**:
+- Configurable shuffle (on/off toggle)
+- History tracking with configurable size (default 50)
+- Automatic queue wraparound when exhausted
+- Previous image navigation
+- Image removal by path
+- Prevents recent repeats
+- __len__ and __bool__ support
+
+**Tested**: 24 tests covering all operations and edge cases
+
+**Implemented**: Day 7
+
+---
+
+## Transitions (`transitions/`) 🟡 PARTIAL
+
+### `transitions/base_transition.py` 🟢 COMPLETE
+**Purpose**: Abstract base class for all image transitions  
+**Status**: ✅ Implemented, ✅ Tested (Day 9)  
+**Key Classes**:
+- `TransitionState(Enum)` - Transition states
+  - `IDLE` - Not started
+  - `RUNNING` - Currently transitioning
+  - `PAUSED` - Paused (not used yet)
+  - `FINISHED` - Successfully completed
+  - `CANCELLED` - Stopped early
+
+- `QABCMeta` - Combined metaclass for QObject + ABC
+  - Resolves metaclass conflict
+
+- `BaseTransition(QObject, metaclass=QABCMeta)` - Abstract base
+  - `start(old_pixmap, new_pixmap, widget)` - Begin transition
+  - `stop()` - Stop immediately
+  - `cleanup()` - Clean up resources
+  - `get_state()` - Get current state
+  - `is_running()` - Check if running
+  - `set_duration(ms)` - Set transition duration
+  - `get_duration()` - Get duration
+
+**Signals**:
+- `started` - Transition started
+- `finished` - Transition completed
+- `progress(float)` - Progress update (0.0-1.0)
+- `error(str)` - Error occurred
+
+**Features**:
+- Abstract interface for all transitions
+- Signal-based progress tracking
+- State management
+- Duration validation
+- Progress clamping (0.0-1.0)
+
+**Implemented**: Day 9
+
+---
+
+### `transitions/crossfade_transition.py` 🟢 COMPLETE
+**Purpose**: Smooth opacity-based crossfade transition  
+**Status**: ✅ Implemented, ✅ Tested (Day 9)  
+**Key Classes**:
+- `CrossfadeTransition(BaseTransition)` - Crossfade effect
+  - `start(old_pixmap, new_pixmap, widget)` - Begin fade
+  - `stop()` - Stop immediately
+  - `cleanup()` - Clean up effect and animation
+  - `set_easing(name)` - Set easing curve
+
+**Private Methods**:
+- `_show_image_immediately()` - Skip transition (first image)
+- `_on_animation_value_changed(value)` - Track progress
+- `_on_animation_finished()` - Handle completion
+- `_get_easing_curve(name)` - Convert easing name to Qt curve
+
+**Features**:
+- QGraphicsOpacityEffect-based fading
+- 21 easing curves supported:
+  - Linear
+  - Quad (In, Out, InOut)
+  - Cubic (In, Out, InOut)
+  - Quart (In, Out, InOut)
+  - Quint (In, Out, InOut)
+  - Sine (In, Out, InOut)
+  - Expo (In, Out, InOut)
+  - Circ (In, Out, InOut)
+- Handles null old_pixmap (first image)
+- Robust cleanup (try/catch for Qt deletions)
+- Progress = inverse of opacity
+
+**Tested**: 16 tests covering all functionality
+
+**Implemented**: Day 9
+
+---
+
+### `transitions/slide_transition.py` 🟢 COMPLETE
+**Purpose**: Directional slide transition effect  
+**Status**: ✅ Implemented, ✅ Tested (Day 10)  
+**Key Classes**:
+- `SlideDirection(Enum)` - Slide directions
+  - `LEFT` - New slides in from right
+  - `RIGHT` - New slides in from left
+  - `UP` - New slides in from bottom
+  - `DOWN` - New slides in from top
+
+- `SlideTransition(BaseTransition)` - Slide effect
+  - `start(old_pixmap, new_pixmap, widget)` - Begin slide
+  - `stop()` - Stop immediately
+  - `cleanup()` - Clean up labels and animations
+  - `set_direction(direction)` - Set slide direction
+  - `set_easing(name)` - Set easing curve
+
+**Private Methods**:
+- `_calculate_positions(width, height)` - Calculate start/end positions for direction
+- `_show_image_immediately()` - Skip transition (first image)
+- `_on_animation_value_changed(value)` - Track progress by distance
+- `_on_animation_finished()` - Handle completion (wait for both animations)
+- `_get_easing_curve(name)` - Convert easing name to Qt curve
+
+**Features**:
+- Dual QPropertyAnimation (old out, new in)
+- QLabel widgets for display
+- 4 directional slides
+- Position calculation per direction
+- 21 easing curves supported
+- Progress = distance traveled / total distance
+- Synchronized dual animations
+- Handles null old_pixmap
+
+**Tested**: 13 tests covering all directions and functionality
+
+**Implemented**: Day 10
+
+---
+
+### `transitions/diffuse_transition.py` 🟢 COMPLETE
+**Purpose**: Random block reveal transition effect  
+**Status**: ✅ Implemented, ✅ Tested (Day 10)  
+**Key Classes**:
+- `DiffuseTransition(BaseTransition)` - Diffuse effect
+  - `start(old_pixmap, new_pixmap, widget)` - Begin diffuse
+  - `stop()` - Stop immediately
+  - `cleanup()` - Clean up label and timer
+  - `set_block_size(size)` - Set block size
+
+**Private Methods**:
+- `_create_block_grid(width, height)` - Generate grid of blocks
+- `_reveal_next_block()` - Reveal one block (timer callback)
+- `_update_display()` - Composite pixmap with revealed blocks
+- `_finish_transition()` - Complete transition
+- `_show_image_immediately()` - Skip transition (first image)
+
+**Features**:
+- QTimer-based progressive reveal
+- Block grid covering entire widget
+- Random shuffle of reveal order
+- Configurable block size (default: 50px)
+- QPainter composite rendering
+- Edge block size handling
+- Progress = revealed blocks / total blocks
+- Handles null old_pixmap
+
+**Tested**: 14 tests covering block sizes, randomization, and functionality
+
+**Implemented**: Day 10
 
 ---
 

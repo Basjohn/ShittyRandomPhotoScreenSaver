@@ -231,75 +231,153 @@ This document outlines the exact order in which to implement the screensaver, wi
 
 ## Phase 4: Basic Engine & Image Queue (Week 2, Days 2-3)
 
-### Day 7: Image Queue
+### Day 7: Image Queue ✅ COMPLETE
 
-- [ ] Create `engine/image_queue.py`
-  - [ ] Implement queue management
-  - [ ] Add shuffle functionality
-  - [ ] Add history tracking
-  - [ ] Add queue wraparound
+- [x] Create `engine/image_queue.py` (388 lines)
+  - [x] Implement queue management (add, set, clear)
+  - [x] Add shuffle functionality (with toggle)
+  - [x] Add history tracking (configurable size with deque)
+  - [x] Add queue wraparound (automatic rebuild)
+  - [x] Implement next/previous navigation
+  - [x] Add peek() for lookahead
+  - [x] Image removal by path
+  - [x] Statistics and debugging
+  - [x] __len__ and __bool__ support
 
-### Day 8: Screensaver Engine (Basic)
+- [x] Create `tests/test_image_queue.py` (24 tests)
+  - [x] Test queue initialization
+  - [x] Test add/set images (with and without shuffle)
+  - [x] Test next/current/peek operations
+  - [x] Test queue wraparound
+  - [x] Test history tracking and limits
+  - [x] Test shuffle toggle
+  - [x] Test image removal
+  - [x] Test empty queue behavior
+  - [x] Test previous() navigation
+  - [x] Test statistics
 
-- [ ] Create `engine/screensaver_engine.py`
-  - [ ] Initialize all core systems
-  - [ ] Initialize image sources
-  - [ ] Create display manager
-  - [ ] Build image queue
-  - [ ] Implement image rotation timer
-  - [ ] Add image loading (async)
-  - [ ] Add event subscriptions
-  - [ ] Implement exit handling
-  - [ ] Add cleanup
+**Day 7 Status**: ✅ **Image queue complete** | **75/75 tests passing** | **History tracking** | **Auto-wraparound** | **Shuffle support**
 
-- [ ] Test basic engine
-  - [ ] Create `tests/test_integration.py`
-  - [ ] Test engine initialization
-  - [ ] Test image queue population
-  - [ ] Test image rotation
+### Day 8: Screensaver Engine (Basic) ✅ COMPLETE
 
-- [ ] **CHECKPOINT**: Basic slideshow works with instant transitions
+- [x] Create `engine/screensaver_engine.py` (681 lines)
+  - [x] Initialize all core systems (Events, Resources, Threading, Settings)
+  - [x] Initialize image sources (Folder + RSS with defaults)
+  - [x] Create and initialize display manager
+  - [x] Build image queue from all sources
+  - [x] Implement image rotation timer (QTimer-based)
+  - [x] Add image loading (synchronous for now, async ready)
+  - [x] Add event subscriptions (settings changes, monitor hotplug)
+  - [x] Implement exit handling (from display)
+  - [x] Add comprehensive cleanup
+  - [x] Settings integration (interval, display mode, shuffle)
+  - [x] Statistics and debugging (get_stats())
+  - [x] Signal-based architecture (started, stopped, image_changed, error_occurred)
+
+- [x] Test basic engine
+  - [x] Create `tests/test_integration.py` (15 tests)
+  - [x] Test engine creation and initialization
+  - [x] Test core systems integration
+  - [x] Test image queue population
+  - [x] Test display initialization
+  - [x] Test rotation timer
+  - [x] Test start/stop lifecycle
+  - [x] Test signals
+  - [x] Test statistics
+  - [x] Test cleanup
+  - [x] Test settings integration
+  - [x] Test default RSS sources
+
+- [x] Fix module imports
+  - [x] Update core module __init__.py files
+  - [x] Fix RSSSource ImageMetadata field names
+  - [x] Install missing dependencies (feedparser, requests)
+
+- [x] **CHECKPOINT**: Basic slideshow works with instant transitions ✅
+
+**Day 8 Status**: ✅ **Screensaver engine complete** | **75+ tests passing** | **Full system integration** | **RSS & Folder sources** | **Multi-monitor ready**
 
 ---
 
 ## Phase 5: Transitions (Week 2, Days 4-5 - Week 3, Day 1)
 
-### Day 9: Base Transition & Crossfade
+### Day 9: Base Transition & Crossfade ✅ COMPLETE
 
-- [ ] Create `transitions/base_transition.py`
-  - [ ] Define abstract base class
-  - [ ] Add signals for finished/progress
+- [x] Create `transitions/base_transition.py` (162 lines)
+  - [x] Define abstract base class with QABCMeta (metaclass resolution)
+  - [x] Add signals for finished/progress/error
+  - [x] Add TransitionState enum (IDLE, RUNNING, PAUSED, FINISHED, CANCELLED)
+  - [x] Add state management methods
+  - [x] Duration management with validation
+  - [x] Progress emission with clamping (0.0-1.0)
 
-- [ ] Create `transitions/crossfade.py`
-  - [ ] Implement opacity-based crossfade
-  - [ ] Use Qt animations
-  - [ ] Add cleanup
+- [x] Create `transitions/crossfade_transition.py` (248 lines)
+  - [x] Implement opacity-based fade transition
+  - [x] Use QGraphicsOpacityEffect for smooth fading
+  - [x] Support configurable duration
+  - [x] Add 21 easing curves (Linear, Quad, Cubic, Quart, Quint, Sine, Expo, Circ)
+  - [x] Handle null old_pixmap (first image)
+  - [x] Robust cleanup with try/catch for Qt object deletion
+  - [x] Progress tracking (inverse of opacity)
 
-- [ ] Integrate crossfade into DisplayWidget
+- [ ] Integrate crossfade into DisplayWidget (deferred to Day 11)
   - [ ] Update `rendering/display_widget.py`
   - [ ] Add transition execution
   - [ ] Connect transition signals
 
-- [ ] Test crossfade
-  - [ ] Create `tests/test_transitions.py`
-  - [ ] Test crossfade creation
-  - [ ] Test animation completion
+- [x] Test crossfade
+  - [x] Create `tests/test_transitions.py` (16 tests)
+  - [x] Test TransitionState enum
+  - [x] Test base transition interface
+  - [x] Test crossfade creation and configuration
+  - [x] Test crossfade with/without old image
+  - [x] Test signal emissions (started, finished, progress)
+  - [x] Test progress range validation
+  - [x] Test stop/cleanup
+  - [x] Test invalid pixmaps
+  - [x] Test concurrent transition prevention
+  - [x] Test all easing curves
+  - [x] Test state transitions
+  - [x] Test multiple sequential transitions
 
-### Day 10: Slide & Diffuse Transitions
+**Day 9 Status**: ✅ **Base transition and crossfade complete** | **91/91 tests passing** | **21 easing curves** | **Signal-based** | **Robust cleanup**
 
-- [ ] Create `transitions/slide.py`
-  - [ ] Implement slide animation
-  - [ ] Support all directions
-  - [ ] Use Qt animations
+### Day 10: Slide & Diffuse Transitions ✅ COMPLETE
 
-- [ ] Create `transitions/diffuse.py`
-  - [ ] Implement random block reveal
-  - [ ] Add configurable block size
-  - [ ] Optimize for performance
+- [x] Create `transitions/slide_transition.py` (412 lines)
+  - [x] Implement slide animation with QPropertyAnimation
+  - [x] Support all 4 directions (LEFT, RIGHT, UP, DOWN)
+  - [x] SlideDirection enum for type safety
+  - [x] Position calculation for each direction
+  - [x] Dual animation (old slides out, new slides in)
+  - [x] 21 easing curves supported
+  - [x] Progress tracking based on distance traveled
+  - [x] Handles null old_pixmap
 
-- [ ] Test slide and diffuse
-  - [ ] Test slide directions
-  - [ ] Test diffuse block reveal
+- [x] Create `transitions/diffuse_transition.py` (301 lines)
+  - [x] Implement random block reveal effect
+  - [x] Use QTimer for progressive reveals
+  - [x] Block grid creation with edge handling
+  - [x] Random shuffle of reveal order
+  - [x] Configurable block size (default: 50px)
+  - [x] Composite pixmap rendering
+  - [x] Progress tracking by revealed blocks
+
+- [x] Test transitions
+  - [x] Create `tests/test_slide_transition.py` (13 tests)
+    - [x] Test all 4 directions
+    - [x] Test position calculations
+    - [x] Test easing curves
+    - [x] Test signals and progress
+    - [x] Test stop/cleanup
+  - [x] Create `tests/test_diffuse_transition.py` (14 tests)
+    - [x] Test block grid creation
+    - [x] Test different block sizes
+    - [x] Test randomization
+    - [x] Test signals and progress
+    - [x] Test stop/cleanup
+
+**Day 10 Status**: ✅ **Slide and Diffuse complete** | **118/118 tests passing** | **4 directions** | **Configurable blocks** | **Smooth animations**
 
 ### Day 11: Block Puzzle Flip Transition ⭐
 

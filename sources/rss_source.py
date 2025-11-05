@@ -182,16 +182,17 @@ class RSSSource(ImageProvider):
             cached_path = self._download_image(image_url, entry)
             
             if cached_path:
-                # Create metadata
+                # Create metadata with new field names
                 metadata = ImageMetadata(
                     source_type=ImageSourceType.RSS,
-                    source_identifier=feed_url,
-                    path=str(cached_path),
+                    source_id=feed_url,
+                    image_id=image_url.split('/')[-1],  # Use filename as ID
+                    local_path=cached_path,
                     url=image_url,
                     title=entry.get('title', 'Untitled'),
                     description=entry.get('summary', '')[:500],  # Limit description length
                     author=entry.get('author', feed_title),
-                    published_date=self._parse_date(entry),
+                    created_date=self._parse_date(entry),
                     file_size=cached_path.stat().st_size if cached_path.exists() else 0,
                     format=cached_path.suffix[1:].upper() if cached_path.suffix else 'UNKNOWN'
                 )

@@ -29,10 +29,19 @@ A modern, feature-rich Windows screensaver built with PySide6 that displays phot
 - **FR-2.4**: Pan & scan - animated movement across zoomed images
 
 #### 3. Transitions
-- **FR-3.1**: Crossfade - opacity-based smooth transition
-- **FR-3.2**: Slide - directional slide (left/right/up/down)
-- **FR-3.3**: Diffuse - random block reveal
-- **FR-3.4**: Block Puzzle Flip - 3D flip effect with configurable grid (STAR FEATURE)
+- **FR-3.1**: Crossfade - opacity-based smooth transition ✅ IMPLEMENTED (Day 9)
+  - 21 easing curves supported
+  - Configurable duration
+  - Signal-based progress tracking
+- **FR-3.2**: Slide - directional slide (left/right/up/down) ✅ IMPLEMENTED (Day 10)
+  - 4 directions: LEFT, RIGHT, UP, DOWN
+  - Dual animation (old out, new in)
+  - 21 easing curves
+- **FR-3.3**: Diffuse - random block reveal ✅ IMPLEMENTED (Day 10)
+  - Random block reveal order
+  - Configurable block size
+  - Timer-based progressive reveal
+- **FR-3.4**: Block Puzzle Flip - 3D flip effect with configurable grid (STAR FEATURE) ⚪ PENDING
 
 #### 4. Multi-Monitor Support
 - **FR-4.1**: Detect all connected monitors
@@ -140,9 +149,18 @@ A modern, feature-rich Windows screensaver built with PySide6 that displays phot
   - Capture input for exit
 
 #### 5. Transitions
-- **Base**: BaseTransition (abstract)
-- **Types**: Crossfade, Slide, Diffuse, BlockPuzzleFlip
-- **Interface**: start(), stop(), finished signal
+- **Base**: BaseTransition (abstract) ✅ IMPLEMENTED
+  - QABCMeta metaclass (QObject + ABC)
+  - TransitionState enum
+  - Signals: started, finished, progress, error
+  - Methods: start(), stop(), cleanup()
+- **Types**:
+  - Crossfade ✅ IMPLEMENTED (Day 9) - QGraphicsOpacityEffect
+  - Slide ✅ IMPLEMENTED (Day 10) - QPropertyAnimation with 4 directions
+  - Diffuse ✅ IMPLEMENTED (Day 10) - QTimer with random block reveal
+  - BlockPuzzleFlip ⚪ PENDING (Day 11) - 3D flip effect
+- **Interface**: start(old, new, widget), stop(), finished signal
+- **Features**: Progress tracking (0.0-1.0), configurable duration, easing curves
 
 #### 6. Overlay Widgets
 - **Types**: ClockWidget, WeatherWidget
