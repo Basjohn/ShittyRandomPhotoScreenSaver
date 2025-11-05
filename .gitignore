@@ -1,0 +1,47 @@
+# Ignore system files
+.DS_Store
+Thumbs.db
+
+# Node.js / frontend build files
+node_modules/
+dist/
+build/
+.cache/
+.tmp/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg
+*.egg-info/
+.env/
+
+# Logs and runtime data
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS-specific junk
+ehthumbs.db
+Desktop.ini
+
+# Git-specific
+.gitignore~
+*.orig
+
+# Custom: reusable utility modules you don’t want tracked
+MyReuseableUtilityModules/
+
+# Optional: ignore environment or credentials files
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
