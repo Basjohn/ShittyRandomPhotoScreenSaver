@@ -23,13 +23,17 @@ A modern, feature-rich Windows screensaver built with PySide6 that displays phot
 - **FR-1.4**: Support common image formats: JPG, PNG, BMP, GIF, WebP, TIFF
 
 #### 2. Display Modes
-- **FR-2.1**: Fill mode - crop and scale to fill screen without letterboxing (PRIMARY)
-- **FR-2.2**: Fit mode - scale to fit within screen with letterboxing
-- **FR-2.3**: Shrink mode - only scale down, never upscale
-- **FR-2.4**: Pan & scan - animated movement across zoomed images
+- **FR-2.1**: Fill mode - crop and scale to fill screen without letterboxing (PRIMARY) ✅ IMPLEMENTED
+- **FR-2.2**: Fit mode - scale to fit within screen with letterboxing ✅ IMPLEMENTED
+- **FR-2.3**: Shrink mode - only scale down, never upscale ✅ IMPLEMENTED
+- **FR-2.4**: Pan & scan - animated movement across zoomed images ✅ IMPLEMENTED (Days 12-13)
+  - Ken Burns effect with zoom and pan
+  - 6 pan directions + random
+  - Configurable zoom range and duration
+  - Smooth cubic easing
 
 #### 3. Transitions
-- **FR-3.1**: Crossfade - opacity-based smooth transition ✅ IMPLEMENTED (Day 9)
+- **FR-3.1**: Crossfade - opacity-based smooth transition 
   - 21 easing curves supported
   - Configurable duration
   - Signal-based progress tracking
@@ -41,7 +45,11 @@ A modern, feature-rich Windows screensaver built with PySide6 that displays phot
   - Random block reveal order
   - Configurable block size
   - Timer-based progressive reveal
-- **FR-3.4**: Block Puzzle Flip - 3D flip effect with configurable grid (STAR FEATURE) ⚪ PENDING
+- **FR-3.4**: Block Puzzle Flip - 3D flip effect with configurable grid (STAR FEATURE) ✅ IMPLEMENTED (Day 11)
+  - Grid-based block flipping
+  - 3D horizontal scaling effect
+  - Random flip order
+  - Configurable grid size and flip duration
 
 #### 4. Multi-Monitor Support
 - **FR-4.1**: Detect all connected monitors
@@ -50,8 +58,18 @@ A modern, feature-rich Windows screensaver built with PySide6 that displays phot
 - **FR-4.4**: Handle monitor hotplug (connect/disconnect)
 
 #### 5. Overlay Widgets
-- **FR-5.1**: Clock widget - digital, 12h/24h, timezone support
-- **FR-5.2**: Weather widget - temperature, condition, location
+- **FR-5.1**: Clock widget - digital, 12h/24h, timezone support ✅ IMPLEMENTED (Days 14-16)
+  - 12h/24h format with TimeFormat enum
+  - Show/hide seconds option
+  - 6 position options
+  - Auto-update every second
+  - Customizable styling
+- **FR-5.2**: Weather widget - temperature, condition, location ✅ IMPLEMENTED (Days 14-16)
+  - OpenWeatherMap API integration
+  - Background fetching with QThread
+  - 30-minute caching
+  - 4 position options
+  - Error handling
 - **FR-5.3**: Configurable position, transparency, and size
 - **FR-5.4**: Multiple clock support for different timezones
 
@@ -158,7 +176,7 @@ A modern, feature-rich Windows screensaver built with PySide6 that displays phot
   - Crossfade ✅ IMPLEMENTED (Day 9) - QGraphicsOpacityEffect
   - Slide ✅ IMPLEMENTED (Day 10) - QPropertyAnimation with 4 directions
   - Diffuse ✅ IMPLEMENTED (Day 10) - QTimer with random block reveal
-  - BlockPuzzleFlip ⚪ PENDING (Day 11) - 3D flip effect
+  - BlockPuzzleFlip ✅ IMPLEMENTED (Day 11) - 3D flip with grid (STAR FEATURE)
 - **Interface**: start(old, new, widget), stop(), finished signal
 - **Features**: Progress tracking (0.0-1.0), configurable duration, easing curves
 

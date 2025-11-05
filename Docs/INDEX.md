@@ -1,8 +1,8 @@
 # ShittyRandomPhotoScreenSaver - Module Index
 
 **Purpose**: Living file map of all modules, their purposes, and key classes/functions.  
-**Last Updated**: Day 10 Complete (Slide & Diffuse Transitions)  
-**Implementation Status**: 🟢 Core Framework | 🟢 Animation | 🟢 Entry Point & Monitors | 🟢 Image Sources | 🟢 RSS Feeds | 🟢 Display & Rendering | 🟢 Engine | 🟡 Transitions (75%) | ⚪ Widgets | ⚪ UI  
+**Last Updated**: Days 14-16 Complete (Overlay Widgets)  
+**Implementation Status**: 🟢 Core Framework | 🟢 Animation | 🟢 Entry Point & Monitors | 🟢 Image Sources | 🟢 RSS Feeds | 🟢 Display & Rendering | 🟢 Engine | 🟢 Transitions | 🟢 Pan & Scan | 🟢 Widgets | ⚪ UI  
 **Note**: Update this file after any major structural changes.
 
 ---
@@ -365,6 +365,53 @@ SETTINGS_CHANGED = "settings.changed"
 
 ---
 
+### `rendering/pan_scan_animator.py` 🟢 COMPLETE
+**Purpose**: Ken Burns effect animator for pan & scan  
+**Status**: ✅ Implemented, ✅ Tested (Days 12-13)  
+**Key Classes**:
+- `PanDirection(Enum)` - Pan movement directions
+  - `LEFT_TO_RIGHT` - Pan from left to right
+  - `RIGHT_TO_LEFT` - Pan from right to left
+  - `TOP_TO_BOTTOM` - Pan from top to bottom
+  - `BOTTOM_TO_TOP` - Pan from bottom to top
+  - `DIAGONAL_TL_BR` - Diagonal top-left to bottom-right
+  - `DIAGONAL_TR_BL` - Diagonal top-right to bottom-left
+  - `RANDOM` - Randomly select direction
+
+- `PanScanAnimator(QObject)` - Ken Burns effect animator
+  - `start(image_size, viewport_size, direction)` - Start animation
+  - `stop()` - Stop animation
+  - `is_active()` - Check if active
+  - `set_zoom_range(min, max)` - Configure zoom levels
+  - `set_duration(ms)` - Set animation duration
+  - `set_fps(fps)` - Set frame rate
+
+**Private Methods**:
+- `_calculate_animation_params()` - Calculate start/end zoom and positions
+- `_update_frame()` - Update animation frame (timer callback)
+- `_calculate_viewport(progress)` - Get viewport rectangle for progress
+- `_ease_in_out_cubic(t)` - Cubic easing function
+
+**Signals**:
+- `frame_updated(QRectF)` - Emits current viewport rectangle
+- `animation_finished()` - Animation completed
+
+**Features**:
+- Configurable zoom range (default: 1.2-1.5x)
+- 6 directional pans + random selection
+- Smooth cubic ease in-out
+- Timer-based updates (configurable FPS, default: 30)
+- Configurable duration (default: 10 seconds)
+- Automatic viewport bounds checking
+- Position interpolation
+- QRectF viewport for image cropping
+
+**Tested**: 16 tests covering all directions, zoom levels, easing, and configuration
+
+**Implemented**: Days 12-13
+
+---
+
 ## Engine (`engine/`) 🟡 PARTIAL
 
 ### `engine/display_manager.py` 🟢 COMPLETE
@@ -642,6 +689,156 @@ SETTINGS_CHANGED = "settings.changed"
 **Tested**: 14 tests covering block sizes, randomization, and functionality
 
 **Implemented**: Day 10
+
+---
+
+### `transitions/block_puzzle_flip_transition.py` 🟢 COMPLETE ⭐ STAR FEATURE
+**Purpose**: 3D block flip transition effect with grid  
+**Status**: ✅ Implemented, ✅ Tested (Day 11)  
+**Key Classes**:
+- `FlipBlock` - Individual flipping block
+  - `get_current_pixmap()` - Get current frame based on flip progress
+  - `_scale_horizontal(pixmap, scale)` - Create horizontal scaling effect
+  - Properties: `rect`, `old_piece`, `new_piece`, `flip_progress`, `is_flipping`, `is_complete`
+
+- `BlockPuzzleFlipTransition(BaseTransition)` - Block puzzle flip effect
+  - `start(old_pixmap, new_pixmap, widget)` - Begin flip
+  - `stop()` - Stop immediately
+  - `cleanup()` - Clean up label and timers
+  - `set_grid_size(rows, cols)` - Set grid dimensions
+  - `set_flip_duration(ms)` - Set single block flip duration
+
+**Private Methods**:
+- `_create_block_grid(width, height)` - Generate grid of FlipBlocks
+- `_start_next_flip()` - Initiate next block flip (timer callback)
+- `_update_flips()` - Update all flipping blocks (60 FPS)
+- `_render_scene()` - Composite all blocks with QPainter
+- `_finish_transition()` - Complete transition
+- `_show_image_immediately()` - Skip transition (first image)
+
+**Features**:
+- Grid-based block system (default: 4x6 = 24 blocks)
+- FlipBlock class for individual blocks
+- 3D flip effect using horizontal scaling
+- Two-phase animation:
+  - Phase 1 (0.0-0.5): Old image squeezed horizontally
+  - Phase 2 (0.5-1.0): New image expanded horizontally
+- Random shuffle of flip order
+- Two timers:
+  - Main timer: Initiates flips progressively
+  - Flip timer: Updates all animations at 60 FPS
+- QLabel + QPainter composite rendering
+- Two-phase progress tracking:
+  - First half: Flip initiation progress
+  - Second half: Completion progress
+- Configurable grid size
+- Configurable single-flip duration (default: 500ms)
+- Handles null old_pixmap
+- Immediate cleanup on finish
+
+**Tested**: 18 tests covering grid creation, flip animation, randomization, and all functionality
+
+**Implemented**: Day 11 ⭐ STAR FEATURE
+
+---
+
+## Overlay Widgets (`widgets/`) 🟢 COMPLETE
+
+### `widgets/clock_widget.py` 🟢 COMPLETE
+**Purpose**: Digital clock overlay widget  
+**Status**: ✅ Implemented, ✅ Tested (Days 14-16)  
+**Key Classes**:
+- `TimeFormat(Enum)` - Time display format
+  - `TWELVE_HOUR` - 12-hour format with AM/PM
+  - `TWENTY_FOUR_HOUR` - 24-hour format
+
+- `ClockPosition(Enum)` - Clock position on screen
+  - `TOP_LEFT`, `TOP_RIGHT`, `TOP_CENTER`
+  - `BOTTOM_LEFT`, `BOTTOM_RIGHT`, `BOTTOM_CENTER`
+
+- `ClockWidget(QLabel)` - Digital clock overlay
+  - `start()` - Start clock updates
+  - `stop()` - Stop clock updates
+  - `is_running()` - Check if running
+  - `set_time_format(format)` - Set 12h/24h
+  - `set_position(position)` - Set screen position
+  - `set_show_seconds(show)` - Show/hide seconds
+  - `set_font_size(size)` - Set font size
+  - `set_text_color(color)` - Set text color
+  - `set_margin(margin)` - Set edge margin
+  - `cleanup()` - Clean up resources
+
+**Signals**:
+- `time_updated(str)` - Emits formatted time string
+
+**Features**:
+- QTimer updates every second
+- 12h/24h format support
+- Show/hide seconds
+- 6 position options
+- Customizable font (family, size)
+- Customizable color with transparency
+- Configurable margin from edges
+- Auto-positioning on parent resize
+- Leading zero removal for 12h format
+
+**Tested**: 19 tests covering formats, positions, signals, and configuration
+
+**Implemented**: Days 14-16
+
+---
+
+### `widgets/weather_widget.py` 🟢 COMPLETE
+**Purpose**: Weather information overlay widget  
+**Status**: ✅ Implemented, ✅ Tested (Days 14-16)  
+**Key Classes**:
+- `WeatherPosition(Enum)` - Weather widget position
+  - `TOP_LEFT`, `TOP_RIGHT`
+  - `BOTTOM_LEFT`, `BOTTOM_RIGHT`
+
+- `WeatherFetcher(QObject)` - Background weather fetcher
+  - `fetch()` - Fetch weather from API
+  - Signals: `data_fetched(dict)`, `error_occurred(str)`
+
+- `WeatherWidget(QLabel)` - Weather display overlay
+  - `start()` - Start weather updates
+  - `stop()` - Stop weather updates
+  - `is_running()` - Check if running
+  - `set_api_key(key)` - Set OpenWeatherMap API key
+  - `set_location(location)` - Set location (city name)
+  - `set_position(position)` - Set screen position
+  - `set_font_size(size)` - Set font size
+  - `set_text_color(color)` - Set text color
+  - `cleanup()` - Clean up resources
+
+**Private Methods**:
+- `_fetch_weather()` - Fetch weather (uses cache if valid)
+- `_on_weather_fetched(data)` - Handle fetched data
+  - `_on_fetch_error(error)` - Handle fetch error
+- `_is_cache_valid()` - Check cache validity
+- `_update_display(data)` - Update widget display
+- `_update_position()` - Update widget position
+
+**Signals**:
+- `weather_updated(dict)` - Emits weather data
+- `error_occurred(str)` - Emits error message
+
+**Features**:
+- OpenWeatherMap API integration
+- Background fetching with QThread
+- 30-minute caching to reduce API calls
+- Temperature in Celsius
+- Weather condition display
+- Location display
+- 4 position options
+- QTimer updates every 30 minutes
+- Error handling with fallback to cache
+- Customizable font and color
+- Auto-positioning on parent resize
+
+**Tested**: 21 tests covering API integration, caching, errors, and display
+
+**Implemented**: Days 14-16
 
 ---
 
