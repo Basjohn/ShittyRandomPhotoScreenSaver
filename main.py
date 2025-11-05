@@ -4,7 +4,10 @@ ShittyRandomPhotoScreenSaver - Main Entry Point
 Windows screensaver application that displays photos with transitions.
 """
 import sys
+import os
 import logging
+import shutil
+from pathlib import Path
 from enum import Enum
 from PySide6.QtWidgets import QApplication
 from core.logging.logger import setup_logging, get_logger
@@ -73,6 +76,49 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
         return ScreensaverMode.RUN, None
 
 
+def is_script_mode() -> bool:
+    """
+    Check if running as a script (not compiled executable).
+    
+    Returns:
+        True if running as .py script, False if compiled .exe/.scr
+    """
+    # Check if running from a .py file or if __file__ exists
+    return hasattr(sys, 'ps1') or (
+        hasattr(sys.modules['__main__'], '__file__') and
+        sys.modules['__main__'].__file__.endswith('.py')
+    )
+
+
+def cleanup_pycache(root_path: Path) -> int:
+    """
+    Recursively delete all __pycache__ directories.
+    
+    Args:
+        root_path: Root directory to start cleanup from
+    
+    Returns:
+        Number of directories removed
+    """
+    removed_count = 0
+    
+    try:
+        for dirpath, dirnames, _ in os.walk(root_path):
+            # Look for __pycache__ directories
+            if '__pycache__' in dirnames:
+                pycache_path = Path(dirpath) / '__pycache__'
+                try:
+                    shutil.rmtree(pycache_path)
+                    removed_count += 1
+                    logger.debug(f"Removed pycache: {pycache_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to remove pycache {pycache_path}: {e}")
+    except Exception as e:
+        logger.warning(f"Error during pycache cleanup: {e}")
+    
+    return removed_count
+
+
 def main():
     """Main entry point for the screensaver application."""
     # Setup logging first
@@ -82,6 +128,16 @@ def main():
     logger.info("=" * 60)
     logger.info("ShittyRandomPhotoScreenSaver Starting")
     logger.info("=" * 60)
+    
+    # Cleanup pycache on startup (script mode only)
+    if is_script_mode():
+        logger.info("Running in script mode - cleaning pycache on startup")
+        project_root = Path(__file__).parent
+        removed = cleanup_pycache(project_root)
+        if removed > 0:
+            logger.info(f"Removed {removed} __pycache__ directories")
+        else:
+            logger.debug("No __pycache__ directories found")
     
     # Parse command-line arguments
     mode, preview_hwnd = parse_screensaver_args()
@@ -118,6 +174,14 @@ def main():
     except Exception as e:
         logger.exception(f"Fatal error in main: {e}")
         exit_code = 1
+    
+    # Cleanup pycache on exit (script mode only)
+    if is_script_mode():
+        logger.info("Cleaning pycache on exit")
+        project_root = Path(__file__).parent
+        removed = cleanup_pycache(project_root)
+        if removed > 0:
+            logger.info(f"Removed {removed} __pycache__ directories")
     
     logger.info("=" * 60)
     logger.info(f"ShittyRandomPhotoScreenSaver Exiting (code={exit_code})")

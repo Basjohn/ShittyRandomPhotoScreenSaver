@@ -22,28 +22,40 @@ class ColoredFormatter(logging.Formatter):
         'ERROR': '\033[31m',      # Red
         'CRITICAL': '\033[35m',   # Magenta
     }
+    FALLBACK_COLOR = '\033[38;5;208m'  # Orange for fallback warnings
     RESET = '\033[0m'
     BOLD = '\033[1m'
     
     def format(self, record):
         # Save original levelname
         original_levelname = record.levelname
+        original_msg = record.msg
+        
+        # Check if this is a fallback message
+        is_fallback = '[FALLBACK]' in str(record.msg)
         
         # Color the entire line
         if record.levelname in self.COLORS:
-            color = self.COLORS[record.levelname]
+            # Use orange for fallback warnings instead of regular yellow
+            if is_fallback and record.levelname == 'WARNING':
+                color = self.FALLBACK_COLOR
+            else:
+                color = self.COLORS[record.levelname]
+            
             # Color the level name in bold
             record.levelname = f"{self.BOLD}{color}{record.levelname}{self.RESET}"
             # Format the message
             message = super().format(record)
             # Color the entire formatted message
             colored_message = f"{color}{message}{self.RESET}"
-            # Restore original levelname
+            # Restore original values
             record.levelname = original_levelname
+            record.msg = original_msg
             return colored_message
         
-        # Restore original levelname for non-colored output
+        # Restore original values for non-colored output
         record.levelname = original_levelname
+        record.msg = original_msg
         return super().format(record)
 
 

@@ -1,8 +1,8 @@
 # ShittyRandomPhotoScreenSaver - Module Index
 
 **Purpose**: Living file map of all modules, their purposes, and key classes/functions.  
-**Last Updated**: Day 4 Complete (Core + Infrastructure + Image Sources + Animation)  
-**Implementation Status**: 🟢 Core Framework | 🟢 Animation | 🟢 Entry Point & Monitors | 🟢 Image Sources | ⚪ Engine | ⚪ Display | ⚪ UI  
+**Last Updated**: Day 6 Complete (Core + Infrastructure + Sources + Animation + Display)  
+**Implementation Status**: 🟢 Core Framework | 🟢 Animation | 🟢 Entry Point & Monitors | 🟢 Image Sources | 🟢 RSS Feeds | 🟢 Display & Rendering | ⚪ Engine | ⚪ UI  
 **Note**: Update this file after any major structural changes.
 
 ---
@@ -260,21 +260,146 @@ SETTINGS_CHANGED = "settings.changed"
 
 ---
 
-### `sources/rss_source.py` ⚪ NOT IMPLEMENTED
-**Purpose**: RSS feed image source  
+### `sources/rss_source.py` 🟢 COMPLETE
+**Purpose**: RSS feed image source with automatic caching  
+**Status**: ✅ Implemented (Day 5)  
 **Key Classes**:
 - `RSSSource(ImageProvider)` - RSS feed-based provider
-  - Parse RSS feeds for images
-  - Download and cache images
-  - Handle feed errors
+  - `get_images()` - Get all cached images from feeds
+  - `refresh()` - Refresh all feeds and download new images
+  - `add_feed(url)` - Add new RSS feed
+  - `remove_feed(url)` - Remove feed
+  - `clear_cache()` - Clear cached images
+  - `_parse_feed(url)` - Parse single RSS/Atom feed
+  - `_download_image(url)` - Download and cache image
+  - `_cleanup_cache()` - LRU cleanup when cache exceeds limit
 
-**Planned**: Optional (Day 4 or later)
+**Features**:
+- Parses RSS/Atom feeds with feedparser
+- Extracts images from media:content, enclosures, img tags
+- Downloads with streaming (8KB chunks)
+- MD5-based cache filenames
+- Automatic LRU cache cleanup
+- Feed metadata tracking
+- Network timeout handling (30s default)
+- [FALLBACK] logging for failed feeds
+
+**Default Feeds**:
+- NASA Image of the Day
+- NASA Breaking News  
+- Wikimedia Picture of the Day
+
+**Implemented**: Day 5
 
 ---
 
-## Engine (`engine/`) ⚪ NOT IMPLEMENTED
+## Rendering (`rendering/`) 🟢 COMPLETE
 
-### `engine/screensaver_engine.py`
+### `rendering/display_modes.py` 🟢 COMPLETE
+**Purpose**: Display mode enumeration  
+**Status**: ✅ Implemented (Day 6)  
+**Key Classes**:
+- `DisplayMode` enum - How images are scaled/positioned
+  - `FILL` - Scale and crop to fill screen (no letterboxing) - PRIMARY MODE
+  - `FIT` - Scale to fit within screen (with letterboxing)
+  - `SHRINK` - Only scale down, never upscale (with letterboxing)
+  - `from_string(value)` - Create from string ('fill', 'fit', 'shrink')
+  - `__str__()` - Convert to string
+
+**Implemented**: Day 6
+
+---
+
+### `rendering/image_processor.py` 🟢 COMPLETE
+**Purpose**: Image scaling and positioning for display  
+**Status**: ✅ Implemented, ✅ Tested (Day 6)  
+**Key Classes**:
+- `ImageProcessor` - Static methods for image processing
+  - `process_image(image, screen_size, mode)` - Process image for display
+  - `_process_fill(image, screen_size)` - FILL mode implementation
+  - `_process_fit(image, screen_size)` - FIT mode implementation
+  - `_process_shrink(image, screen_size)` - SHRINK mode implementation
+  - `calculate_scale_factors(source, target, mode)` - Get scale factors
+  - `get_crop_rect(source_size, target_size)` - Calculate crop rectangle
+
+**Features**:
+- Aspect ratio preservation
+- Center alignment for all modes
+- QPainter-based rendering
+- Black backgrounds
+- SmoothTransformation for quality
+
+**Tested**: 18 tests covering all modes and edge cases
+
+**Implemented**: Day 6
+
+---
+
+### `rendering/display_widget.py` 🟢 COMPLETE
+**Purpose**: Fullscreen display widget  
+**Status**: ✅ Implemented (Day 6)  
+**Key Classes**:
+- `DisplayWidget(QWidget)` - Fullscreen image display
+  - `show_on_screen()` - Position and show fullscreen on assigned screen
+  - `set_image(pixmap, path)` - Display processed image
+  - `set_display_mode(mode)` - Change display mode
+  - `clear()` - Clear displayed image
+  - `show_error(message)` - Display error message
+  - `get_screen_info()` - Get display information
+  - `paintEvent()` - Render current image or error
+  - `keyPressEvent()` - Exit on any key
+  - `mousePressEvent()` - Exit on any click
+
+**Signals**:
+- `exit_requested` - User wants to exit
+- `image_displayed(str)` - Image displayed with path
+
+**Features**:
+- Frameless fullscreen window
+- Blank cursor
+- Black background
+- Centered error messages
+- Per-screen positioning
+
+**Implemented**: Day 6
+
+---
+
+## Engine (`engine/`) 🟡 PARTIAL
+
+### `engine/display_manager.py` 🟢 COMPLETE
+**Purpose**: Multi-monitor coordination  
+**Status**: ✅ Implemented (Day 6)  
+**Key Classes**:
+- `DisplayManager(QObject)` - Manage multiple displays
+  - `initialize_displays()` - Create DisplayWidget for each screen
+  - `show_image(pixmap, path, screen_index)` - Show image on display(s)
+  - `show_image_on_screen(index, pixmap, path)` - Show on specific screen
+  - `show_error(message, screen_index)` - Display error
+  - `clear_all()` - Clear all displays
+  - `set_display_mode(mode)` - Change mode for all displays
+  - `set_same_image_mode(enabled)` - Same/different image modes
+  - `get_display_count()` - Number of active displays
+  - `get_screen_count()` - Number of detected screens
+  - `cleanup()` - Clean up all displays
+
+**Signals**:
+- `exit_requested` - Any display requested exit
+- `monitors_changed(int)` - Monitor count changed
+
+**Features**:
+- Multi-monitor detection via QGuiApplication.screens()
+- Monitor hotplug handling (screenAdded/screenRemoved signals)
+- Same image mode (all screens show same image)
+- Different image mode (per-screen images)
+- Coordinated exit (any display triggers all)
+- Dynamic display creation/cleanup
+
+**Implemented**: Day 6
+
+---
+
+### `engine/screensaver_engine.py` ⚪ NOT IMPLEMENTED
 **Purpose**: Main screensaver controller  
 **Key Classes**:
 - `ScreensaverEngine` - Central orchestrator
@@ -286,21 +411,6 @@ SETTINGS_CHANGED = "settings.changed"
   - `_next_image()` - Advance to next image
 
 **Dependencies**: All core systems, DisplayManager, image sources
-
----
-
-### `engine/display_manager.py`
-**Purpose**: Multi-monitor coordination  
-**Key Classes**:
-- `DisplayManager` - Manage multiple displays
-  - `initialize()` - Detect and setup displays
-  - `_create_display_widget(screen)` - Create widget for screen
-  - `_on_image_ready(event)` - Handle image ready event
-  - `_on_screen_added(screen)` - Handle monitor connected
-  - `_on_screen_removed(screen)` - Handle monitor disconnected
-  - `show_error(message)` - Display error on all screens
-
-**Dependencies**: DisplayWidget, EventSystem, SettingsManager
 
 ---
 

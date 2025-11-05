@@ -77,6 +77,9 @@ A modern, feature-rich Windows screensaver built with PySide6 that displays phot
 - **NFR-3.2**: Logging-first debugging policy
 - **NFR-3.3**: No silent fallbacks
 - **NFR-3.4**: Professional UI with dark theme
+- **NFR-3.5**: Root cause fixes over mitigation/workarounds
+- **NFR-3.6**: Main functionality prioritized over fallbacks
+- **NFR-3.7**: Fallbacks must log distinctly with colored/styled warnings
 
 ---
 
@@ -399,31 +402,55 @@ ShittyRandomPhotoScreenSaver/
 
 ---
 
-## Error Handling
+## Error Handling Philosophy
 
-### Image Loading
-- Log error with full path
-- Skip to next image
+### Root Cause Policy
+**CRITICAL**: Always address root causes over mitigation or workarounds.
+- Investigate and fix the underlying problem
+- Avoid band-aid solutions that hide issues
+- Document why root cause fix wasn't possible if mitigation is used
+- Schedule root cause fix if temporary mitigation is necessary
+
+### Fallback Policy
+**Main functionality is prioritized over fallbacks.**
+- Fallbacks are allowed but not prioritized
+- Fallbacks MUST log with distinct styling:
+  - Console: Yellow/Orange colored warnings
+  - Log file: `[FALLBACK]` prefix with WARNING level
+  - Include reason why fallback triggered
+  - Include what main functionality failed
+- Never use silent fallbacks
+- Fallbacks should be temporary states, not permanent solutions
+
+### Error Handling Implementation
+
+#### Image Loading
+- Log error with full path and detailed reason
+- Skip to next image (fallback - log with `[FALLBACK]` prefix)
 - Display error message if all fail
 - Never crash
+- **Root Cause**: Investigate why image failed to load (corrupt, permissions, format)
 
-### RSS Feeds
-- Log error with URL and status
-- Fall back to cached images
-- Continue with folder sources
+#### RSS Feeds
+- Log error with URL, status code, and full traceback
+- Fall back to cached images (log as `[FALLBACK]`)
+- Continue with folder sources (log as `[FALLBACK]`)
 - Retry on next scheduled update
+- **Root Cause**: Fix feed parsing, network handling, or URL validation
 
-### Weather API
-- Log error
-- Display last known weather
+#### Weather API
+- Log error with API response details
+- Display last known weather (log as `[FALLBACK]`)
 - Retry on next scheduled update
 - Never block screensaver start
+- **Root Cause**: Fix API integration, key validation, or network handling
 
-### Monitor Hotplug
+#### Monitor Hotplug
 - Detect via Qt screen change events
 - Create/destroy widgets dynamically
 - Preserve settings per monitor
-- Log all changes
+- Log all changes with full details
+- **Root Cause**: Ensure proper Qt event handling and widget lifecycle
 
 ---
 
