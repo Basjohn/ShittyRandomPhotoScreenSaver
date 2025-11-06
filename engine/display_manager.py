@@ -32,20 +32,27 @@ class DisplayManager(QObject):
     
     exit_requested = Signal()
     monitors_changed = Signal(int)  # new monitor count
+    previous_requested = Signal()  # Z key - go to previous image
+    next_requested = Signal()  # X key - go to next image
+    cycle_transition_requested = Signal()  # C key - cycle transition mode
+    settings_requested = Signal()  # S key - open settings
     
     def __init__(self, display_mode: DisplayMode = DisplayMode.FILL,
-                 same_image_mode: bool = True):
+                 same_image_mode: bool = True,
+                 settings_manager=None):
         """
         Initialize display manager.
         
         Args:
             display_mode: Display mode for all screens
             same_image_mode: True = same image on all screens, False = different images
+            settings_manager: SettingsManager for widget configuration
         """
         super().__init__()
         
         self.display_mode = display_mode
         self.same_image_mode = same_image_mode
+        self.settings_manager = settings_manager
         self.displays: List[DisplayWidget] = []
         self.current_images: Dict[int, str] = {}  # screen_index -> image_path
         
@@ -127,7 +134,8 @@ class DisplayManager(QObject):
         try:
             display = DisplayWidget(
                 screen_index=screen_index,
-                display_mode=self.display_mode
+                display_mode=self.display_mode,
+                settings_manager=self.settings_manager
             )
             
             # Connect signals
@@ -135,6 +143,12 @@ class DisplayManager(QObject):
             display.image_displayed.connect(
                 lambda path: self._on_image_displayed(screen_index, path)
             )
+            
+            # Connect hotkey signals
+            display.previous_requested.connect(self.previous_requested.emit)
+            display.next_requested.connect(self.next_requested.emit)
+            display.cycle_transition_requested.connect(self.cycle_transition_requested.emit)
+            display.settings_requested.connect(self.settings_requested.emit)
             
             # Show fullscreen
             display.show_on_screen()
@@ -220,11 +234,23 @@ class DisplayManager(QObject):
             logger.warning(f"[FALLBACK] Error shown on all displays: {message}")
     
     def clear_all(self) -> None:
-        """Clear all displays."""
+        """Clear all displays (removes image but keeps windows visible)."""
         for display in self.displays:
             display.clear()
         self.current_images.clear()
         logger.info("All displays cleared")
+    
+    def hide_all(self) -> None:
+        """Hide all display widgets (for showing dialogs on top)."""
+        for display in self.displays:
+            display.hide()
+        logger.info("All displays hidden")
+    
+    def show_all(self) -> None:
+        """Show all display widgets (after dialogs close)."""
+        for display in self.displays:
+            display.showFullScreen()
+        logger.info("All displays shown")
     
     def set_display_mode(self, mode: DisplayMode) -> None:
         """

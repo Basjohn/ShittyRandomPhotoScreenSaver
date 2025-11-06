@@ -4,9 +4,9 @@ Crossfade transition - smooth opacity blend between images.
 Uses opacity animation to fade out old image while fading in new image.
 """
 from typing import Optional
-from PySide6.QtCore import QPropertyAnimation, QEasingCurve
-from PySide6.QtGui import QPixmap
-from PySide6.QtWidgets import QWidget, QGraphicsOpacityEffect
+from PySide6.QtCore import QTimer, Qt, QEasingCurve
+from PySide6.QtWidgets import QWidget, QLabel
+from PySide6.QtGui import QPixmap, QPainter
 
 from transitions.base_transition import BaseTransition, TransitionState
 from core.logging.logger import get_logger
@@ -33,9 +33,11 @@ class CrossfadeTransition(BaseTransition):
         super().__init__(duration_ms)
         
         self._widget: Optional[QWidget] = None
-        self._opacity_effect: Optional[QGraphicsOpacityEffect] = None
-        self._animation: Optional[QPropertyAnimation] = None
-        self._new_pixmap: Optional[QPixmap] = None
+        self._old_label: Optional[QLabel] = None
+        self._new_label: Optional[QLabel] = None
+        self._timer: Optional[QTimer] = None
+        self._elapsed_ms: int = 0
+        self._fps: int = 60
         self._easing = easing
         
         logger.debug(f"CrossfadeTransition created (duration={duration_ms}ms, easing={easing})")
@@ -64,7 +66,7 @@ class CrossfadeTransition(BaseTransition):
         
         try:
             self._widget = widget
-            self._new_pixmap = new_pixmap
+            self._elapsed_ms = 0
             
             # If no old image, just show new one immediately
             if not old_pixmap or old_pixmap.isNull():
@@ -72,28 +74,30 @@ class CrossfadeTransition(BaseTransition):
                 self._show_image_immediately()
                 return True
             
-            # Create opacity effect
-            self._opacity_effect = QGraphicsOpacityEffect(widget)
-            self._opacity_effect.setOpacity(1.0)
-            widget.setGraphicsEffect(self._opacity_effect)
+            # Create labels for old and new images
+            self._old_label = QLabel(widget)
+            self._old_label.setPixmap(old_pixmap)
+            self._old_label.setGeometry(0, 0, widget.width(), widget.height())
+            self._old_label.setScaledContents(False)
+            self._old_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._old_label.show()
             
-            # Create animation
-            self._animation = QPropertyAnimation(self._opacity_effect, b"opacity")
-            self._animation.setDuration(self.duration_ms)
-            self._animation.setStartValue(1.0)
-            self._animation.setEndValue(0.0)
+            self._new_label = QLabel(widget)
+            self._new_label.setPixmap(new_pixmap)
+            self._new_label.setGeometry(0, 0, widget.width(), widget.height())
+            self._new_label.setScaledContents(False)
+            self._new_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._new_label.setWindowOpacity(0.0)
+            self._new_label.show()
             
-            # Set easing curve
-            easing_curve = self._get_easing_curve(self._easing)
-            self._animation.setEasingCurve(easing_curve)
+            # Create timer for animation
+            self._timer = QTimer()
+            self._timer.timeout.connect(self._update)
+            interval_ms = 1000 // self._fps
+            self._timer.start(interval_ms)
             
-            # Connect signals
-            self._animation.valueChanged.connect(self._on_animation_value_changed)
-            self._animation.finished.connect(self._on_animation_finished)
-            
-            # Start animation
+            # Start transition
             self._set_state(TransitionState.RUNNING)
-            self._animation.start()
             self.started.emit()
             
             logger.info(f"Crossfade transition started ({self.duration_ms}ms)")
@@ -112,19 +116,12 @@ class CrossfadeTransition(BaseTransition):
         
         logger.debug("Stopping crossfade transition")
         
-        # Stop animation first
-        if self._animation:
-            try:
-                self._animation.stop()
-            except RuntimeError:
-                pass  # Already deleted
+        # Stop timer
+        if self._timer:
+            self._timer.stop()
         
         # Set cancelled state before cleanup
         self._set_state(TransitionState.CANCELLED)
-        
-        # Clean up and show image
-        if self._widget and self._new_pixmap:
-            self._widget.setGraphicsEffect(None)
         
         self._emit_progress(1.0)
         self.finished.emit()
@@ -133,82 +130,101 @@ class CrossfadeTransition(BaseTransition):
         """Clean up transition resources."""
         logger.debug("Cleaning up crossfade transition")
         
-        # Stop animation
-        if self._animation:
+        # Stop timer
+        if self._timer:
             try:
-                self._animation.stop()
-                self._animation.deleteLater()
+                self._timer.stop()
+                self._timer.deleteLater()
             except RuntimeError:
-                pass  # Already deleted
-            self._animation = None
+                pass
+            self._timer = None
         
-        # Remove opacity effect
-        if self._widget:
+        # Remove labels
+        if self._old_label:
             try:
-                self._widget.setGraphicsEffect(None)
+                self._old_label.deleteLater()
             except RuntimeError:
-                pass  # Widget already deleted
+                pass
+            self._old_label = None
         
-        if self._opacity_effect:
+        if self._new_label:
             try:
-                self._opacity_effect.deleteLater()
+                self._new_label.deleteLater()
             except RuntimeError:
-                pass  # Already deleted
-            self._opacity_effect = None
+                pass
+            self._new_label = None
         
         self._widget = None
-        self._new_pixmap = None
         
         if self._state not in [TransitionState.FINISHED, TransitionState.CANCELLED]:
             self._set_state(TransitionState.IDLE)
     
     def _show_image_immediately(self) -> None:
         """Show new image immediately without transition."""
-        if self._widget and self._new_pixmap:
-            # Remove any opacity effect
-            self._widget.setGraphicsEffect(None)
-            
-            # Update widget (assumes widget has an update_image method or similar)
-            # For now, just emit finished
-            self._set_state(TransitionState.FINISHED)
-            self._emit_progress(1.0)
-            self.finished.emit()
-            logger.debug("Image shown immediately")
+        self._set_state(TransitionState.FINISHED)
+        self._emit_progress(1.0)
+        self.finished.emit()
+        logger.debug("Image shown immediately")
     
-    def _on_animation_value_changed(self, value: float) -> None:
-        """
-        Handle animation value change.
-        
-        Args:
-            value: Current opacity value (1.0 to 0.0)
-        """
-        # Progress is inverse of opacity (0.0 opacity = 1.0 progress)
-        progress = 1.0 - value
-        self._emit_progress(progress)
-    
-    def _on_animation_finished(self) -> None:
-        """Handle animation completion."""
+    def _update(self) -> None:
+        """Update animation frame."""
         if self._state != TransitionState.RUNNING:
-            return  # Already stopped/cancelled
+            return
         
-        logger.debug("Crossfade animation finished")
+        # Update elapsed time
+        interval_ms = 1000 // self._fps
+        self._elapsed_ms += interval_ms
         
-        # Show new image
-        if self._widget:
+        # Calculate progress (0.0 to 1.0)
+        progress = min(1.0, self._elapsed_ms / self.duration_ms)
+        
+        # Apply easing
+        eased_progress = self._apply_easing(progress)
+        
+        # Update new label opacity (with safety check for deleted Qt objects)
+        if self._new_label:
             try:
-                self._widget.setGraphicsEffect(None)
+                self._new_label.setWindowOpacity(eased_progress)
             except RuntimeError:
-                pass  # Widget deleted
+                # Label was deleted (cleanup called), stop the timer
+                if self._timer:
+                    self._timer.stop()
+                return
+        
+        # Emit progress
+        self._emit_progress(progress)
+        
+        # Check if finished
+        if progress >= 1.0:
+            self._on_transition_finished()
+    
+    def _on_transition_finished(self) -> None:
+        """Handle transition completion."""
+        if self._state != TransitionState.RUNNING:
+            return
+        
+        logger.debug("Crossfade transition finished")
+        
+        # Stop timer
+        if self._timer:
+            self._timer.stop()
         
         self._set_state(TransitionState.FINISHED)
         self._emit_progress(1.0)
         self.finished.emit()
+    
+    def _apply_easing(self, progress: float) -> float:
+        """
+        Apply easing curve to progress.
         
-        # Cleanup resources
-        self._animation = None
-        self._opacity_effect = None
-        self._widget = None
-        self._new_pixmap = None
+        Args:
+            progress: Linear progress (0.0 to 1.0)
+        
+        Returns:
+            Eased progress value
+        """
+        easing_curve = self._get_easing_curve(self._easing)
+        return easing_curve.valueForProgress(progress)
     
     def _get_easing_curve(self, easing_name: str) -> QEasingCurve:
         """

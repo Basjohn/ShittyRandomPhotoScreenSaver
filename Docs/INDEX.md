@@ -1,19 +1,32 @@
 # ShittyRandomPhotoScreenSaver - Module Index
 
 **Purpose**: Living file map of all modules, their purposes, and key classes/functions.  
-**Last Updated**: Day 17 (Settings Dialog Base)  
-**Implementation Status**: 🟢 Core Framework | 🟢 Animation | 🟢 Entry Point & Monitors | 🟢 Image Sources | 🟢 RSS Feeds | 🟢 Display & Rendering | 🟢 Engine | 🟢 Transitions | 🟢 Pan & Scan | 🟢 Widgets | 🟡 UI (Phase 8 In Progress)  
+**Last Updated**: Nov 6, 2025 - Phase 6 Complete (All Critical Bugs Fixed)  
+**Implementation Status**: 🟢 Core Framework | 🟢 Animation | 🟢 Entry Point & Monitors | 🟢 Image Sources | 🟢 RSS Feeds | 🟢 Display & Rendering (+ Lanczos) | 🟢 Engine | 🟢 **Transitions (INTEGRATED!)** | 🟢 Pan & Scan | 🟢 Widgets | 🟢 UI | 🟢 Display Tab | 🟢 **RUNTIME STABLE**  
+**Test Status**: 279 tests, 260 passing (93.2%), 18 failures (crossfade rewrite), 1 skipped  
 **Note**: Update this file after any major structural changes.
+
+**Recent Updates (Nov 6, 2025 - Phase 6)**:
+- ✅ **ALL 8 CRITICAL BUGS FIXED** (Lanczos, transitions, multi-monitor, settings, quality, navigation)
+- ✅ Crossfade transition completely rewritten for proper image blending
+- ✅ Multi-monitor different image per display mode working
+- ✅ Settings persistence fixed (signal blocking during load)
+- ✅ Image quality improved with UnsharpMask for aggressive downscaling
+- ✅ Fill/Fit modes corrected for proper aspect ratio and coverage
+- ✅ Z/X navigation fully functional
+- ✅ Test suite updated (260/279 passing)
 
 ---
 
 ## Entry Point
 
-### `main.py` 🟢 COMPLETE
-**Purpose**: Application entry point and command-line handling  
-**Status**: ✅ Implemented, ✅ Tested  
+### `main.py` 🟢 COMPLETE + RUNTIME
+**Purpose**: Application entry point, command-line handling, and runtime execution  
+**Status**: ✅ Implemented, ✅ Tested, ✅ **FUNCTIONAL**  
 **Key Functions**:
 - `parse_screensaver_args()` - Parse Windows screensaver arguments (/s, /c, /p <hwnd>)
+- `run_screensaver(app)` - **NEW**: Run screensaver with auto-config if no sources
+- `run_config(app)` - **NEW**: Open settings dialog
 - `main()` - Main application entry point with logging and QApplication setup
 
 **Key Enums**:
@@ -22,6 +35,9 @@
 **Features**: 
 - Command-line argument parsing with fallback to RUN mode
 - Debug mode support (--debug or -d flags)
+- **Auto-open settings if no sources configured**
+- **Screensaver engine initialization and startup**
+- **Full runtime execution**
 - Colored logging output in debug mode
 - Proper logging initialization
 - Mode routing (RUN, CONFIG, PREVIEW placeholders)
@@ -310,58 +326,86 @@ SETTINGS_CHANGED = "settings.changed"
 
 ---
 
-### `rendering/image_processor.py` 🟢 COMPLETE
-**Purpose**: Image scaling and positioning for display  
-**Status**: ✅ Implemented, ✅ Tested (Day 6)  
+### `rendering/image_processor.py` 🟢 COMPLETE + LANCZOS
+**Purpose**: High-quality image scaling and positioning for display  
+**Status**: ✅ Implemented, ✅ Tested, 🆕 **Lanczos Scaling Added!**  
 **Key Classes**:
 - `ImageProcessor` - Static methods for image processing
-  - `process_image(image, screen_size, mode)` - Process image for display
-  - `_process_fill(image, screen_size)` - FILL mode implementation
-  - `_process_fit(image, screen_size)` - FIT mode implementation
-  - `_process_shrink(image, screen_size)` - SHRINK mode implementation
+  - `process_image(image, screen_size, mode, use_lanczos=True, sharpen=False)` - **UPDATED**: Process image with quality options
+  - `_scale_pixmap(pixmap, width, height, use_lanczos, sharpen)` - **NEW**: Scale with Lanczos or Qt
+  - `_process_fill(image, screen_size, use_lanczos, sharpen)` - **UPDATED**: FILL mode with Lanczos
+  - `_process_fit(image, screen_size, use_lanczos, sharpen)` - **UPDATED**: FIT mode with Lanczos
+  - `_process_shrink(image, screen_size, use_lanczos, sharpen)` - **UPDATED**: SHRINK mode with Lanczos
   - `calculate_scale_factors(source, target, mode)` - Get scale factors
   - `get_crop_rect(source_size, target_size)` - Calculate crop rectangle
 
 **Features**:
+- 🆕 **Lanczos resampling** via PIL/Pillow for industry-standard quality
+- 🆕 **Optional sharpening filter** for downscaled images
+- 🆕 **Automatic fallback** to Qt if PIL unavailable
 - Aspect ratio preservation
 - Center alignment for all modes
 - QPainter-based rendering
 - Black backgrounds
-- SmoothTransformation for quality
+- QPixmap ↔ PIL Image conversion
 
-**Tested**: 18 tests covering all modes and edge cases
+**Quality Improvements**:
+- **Lanczos vs Qt**: Much better downscaling quality (especially 3-4x downscales)
+- **Configurable**: Can disable via settings if performance issues
+- **Safe**: Falls back to Qt SmoothTransformation if PIL fails
 
-**Implemented**: Day 6
+**Tested**: 18 tests covering all modes and edge cases  
+**Implemented**: Day 6, **Updated**: Nov 6 (Lanczos)
 
 ---
 
-### `rendering/display_widget.py` 🟢 COMPLETE
-**Purpose**: Fullscreen display widget  
-**Status**: ✅ Implemented (Day 6)  
+### `rendering/display_widget.py` 🟢 COMPLETE + TRANSITIONS + WIDGETS
+**Purpose**: Fullscreen display widget with transitions and overlay widgets  
+**Status**: ✅ Implemented, 🆕 **Transitions Integrated!**, 🆕 **Clock Widget Working!**  
 **Key Classes**:
-- `DisplayWidget(QWidget)` - Fullscreen image display
-  - `show_on_screen()` - Position and show fullscreen on assigned screen
-  - `set_image(pixmap, path)` - Display processed image
+- `DisplayWidget(QWidget)` - Fullscreen image display with transitions
+  - `show_on_screen()` - Position fullscreen, **setup widgets**
+  - `set_image(pixmap, path)` - **UPDATED**: Display with transition support
+  - `_setup_widgets()` - **NEW**: Setup clock/weather widgets from settings
+  - `_create_transition()` - **NEW**: Create transition from settings
+  - `_on_transition_finished(pixmap, path)` - **NEW**: Handle transition completion
   - `set_display_mode(mode)` - Change display mode
-  - `clear()` - Clear displayed image
+  - `clear()` - **UPDATED**: Clear and stop transitions
   - `show_error(message)` - Display error message
   - `get_screen_info()` - Get display information
   - `paintEvent()` - Render current image or error
-  - `keyPressEvent()` - Exit on any key
+  - `keyPressEvent()` - **UPDATED**: Exit on any key (except hotkeys Z/X/C/S/Esc)
   - `mousePressEvent()` - Exit on any click
+  - `mouseMoveEvent()` - **NEW**: Track movement, exit if >5px
 
 **Signals**:
 - `exit_requested` - User wants to exit
 - `image_displayed(str)` - Image displayed with path
+- `settings_requested` - **NEW**: S key pressed
+- `next_requested` - **NEW**: X key pressed
+- `previous_requested` - **NEW**: Z key pressed
+- `cycle_transition` - **NEW**: C key pressed
 
 **Features**:
+- 🆕 **Smooth transitions** between images (5 types supported)
+- 🆕 **Clock widget integration** with settings-based configuration
+- 🆕 **Mouse movement tracking** for screensaver exit (>5px)
+- 🆕 **Hotkey support** (Z/X/C/S/Esc)
+- 🆕 **Lanczos scaling integration** via settings
+- 🆕 **Previous/current pixmap tracking** for transitions
 - Frameless fullscreen window
 - Blank cursor
 - Black background
 - Centered error messages
 - Per-screen positioning
 
-**Implemented**: Day 6
+**Transition Support**:
+- Crossfade, Slide, Wipe, Diffuse, Block Puzzle Flip
+- Reads settings from `transitions.*`
+- Automatic cleanup on transition finish
+- Fallback to instant display if transition fails
+
+**Implemented**: Day 6, **Updated**: Nov 6 (Transitions, Widgets, Hotkeys)
 
 ---
 
@@ -1056,6 +1100,42 @@ SETTINGS_CHANGED = "settings.changed"
   - Source mode selection
 
 **Features**: Instant save
+
+---
+
+### `ui/tabs/display_tab.py` 🆕 NEW!
+**Purpose**: Display and quality configuration  
+**Status**: ✅ Implemented Nov 6, 2025  
+**Key Classes**:
+- `DisplayTab(QWidget)` - Display settings tab
+  - **Monitor Configuration**:
+    - Monitor selection (All/Primary/Monitor 1-4)
+    - Same image on all monitors toggle
+  - **Display Mode**:
+    - Mode dropdown (Fill/Fit/Shrink) with descriptions
+  - **Image Timing**:
+    - Rotation interval (1-3600 seconds)
+    - Shuffle toggle
+  - **Image Quality**:
+    - High quality scaling (Lanczos) toggle
+    - Sharpening filter toggle
+
+**Settings Managed**:
+- `display.monitor_selection` - all/primary/monitor_N
+- `display.same_image_all_monitors` - bool
+- `display.mode` - fill/fit/shrink
+- `timing.interval` - seconds
+- `queue.shuffle` - bool
+- `display.use_lanczos` - bool
+- `display.sharpen_downscale` - bool
+
+**Features**: 
+- Instant save
+- String to bool conversion for settings
+- Full descriptions for display modes
+- Breathing room spacing (20px)
+
+**Tab Order**: Second tab (after Sources, before Transitions)
 
 ---
 

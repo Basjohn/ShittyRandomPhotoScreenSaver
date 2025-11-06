@@ -94,11 +94,12 @@ def test_settings_dialog_has_tabs(qapp, settings_manager, animation_manager):
     dialog = SettingsDialog(settings_manager, animation_manager)
     
     assert hasattr(dialog, 'sources_tab_btn')
+    assert hasattr(dialog, 'display_tab_btn')
     assert hasattr(dialog, 'transitions_tab_btn')
     assert hasattr(dialog, 'widgets_tab_btn')
     assert hasattr(dialog, 'about_tab_btn')
     
-    assert len(dialog.tab_buttons) == 4
+    assert len(dialog.tab_buttons) == 5
 
 
 def test_settings_dialog_has_content_stack(qapp, settings_manager, animation_manager):
@@ -106,7 +107,7 @@ def test_settings_dialog_has_content_stack(qapp, settings_manager, animation_man
     dialog = SettingsDialog(settings_manager, animation_manager)
     
     assert hasattr(dialog, 'content_stack')
-    assert dialog.content_stack.count() == 4
+    assert dialog.content_stack.count() == 5
 
 
 def test_settings_dialog_default_tab(qapp, settings_manager, animation_manager):
@@ -121,18 +122,23 @@ def test_settings_dialog_tab_switching(qapp, settings_manager, animation_manager
     """Test tab switching functionality."""
     dialog = SettingsDialog(settings_manager, animation_manager)
     
-    # Switch to transitions tab
+    # Switch to display tab
     dialog._switch_tab(1)
-    assert dialog.transitions_tab_btn.isChecked() is True
+    assert dialog.display_tab_btn.isChecked() is True
     assert dialog.sources_tab_btn.isChecked() is False
     
-    # Switch to widgets tab
+    # Switch to transitions tab
     dialog._switch_tab(2)
+    assert dialog.transitions_tab_btn.isChecked() is True
+    assert dialog.display_tab_btn.isChecked() is False
+    
+    # Switch to widgets tab
+    dialog._switch_tab(3)
     assert dialog.widgets_tab_btn.isChecked() is True
     assert dialog.transitions_tab_btn.isChecked() is False
     
     # Switch to about tab
-    dialog._switch_tab(3)
+    dialog._switch_tab(4)
     assert dialog.about_tab_btn.isChecked() is True
     assert dialog.widgets_tab_btn.isChecked() is False
 

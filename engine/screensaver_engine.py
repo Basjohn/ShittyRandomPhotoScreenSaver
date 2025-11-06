@@ -12,12 +12,14 @@ from typing import List, Optional, Dict
 from pathlib import Path
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtGui import QPixmap
+from PySide6.QtWidgets import QApplication
 
 from core.events import EventSystem
 from core.resources import ResourceManager
 from core.threading import ThreadManager
 from core.settings import SettingsManager
 from core.logging.logger import get_logger
+from core.animation import AnimationManager
 
 from engine.display_manager import DisplayManager
 from engine.image_queue import ImageQueue
@@ -25,6 +27,7 @@ from sources.folder_source import FolderSource
 from sources.rss_source import RSSSource
 from sources.base_provider import ImageMetadata
 from rendering.display_modes import DisplayMode
+from ui.settings_dialog import SettingsDialog
 
 logger = get_logger(__name__)
 
@@ -75,9 +78,13 @@ class ScreensaverEngine(QObject):
         
         # State
         self._running: bool = False
+        self._initialized: bool = False
+        self._display_initialized: bool = False
         self._rotation_timer: Optional[QTimer] = None
         self._current_image: Optional[ImageMetadata] = None
         self._loading_in_progress: bool = False
+        self._current_transition_index: int = 0
+        self._transition_types: List[str] = ["Crossfade", "Slide", "Wipe", "Diffuse", "Block Puzzle Flip"]
         
         logger.info("ScreensaverEngine created")
     
@@ -190,7 +197,7 @@ class ScreensaverEngine(QObject):
             
             sources_initialized = 0
             
-            # Get folder sources from settings
+            # Get folder sources from settings (using dot notation)
             folder_paths = self.settings_manager.get('sources.folders', [])
             for folder_path in folder_paths:
                 try:
@@ -204,21 +211,15 @@ class ScreensaverEngine(QObject):
             # Get RSS sources from settings
             rss_feeds = self.settings_manager.get('sources.rss_feeds', [])
             
-            # If no custom RSS feeds, use defaults
-            if not rss_feeds:
-                logger.info("No custom RSS feeds, using defaults")
-                rss_source = RSSSource()  # Uses default feeds
-                self.rss_sources.append(rss_source)
-                sources_initialized += 1
-            else:
-                for feed_url in rss_feeds:
-                    try:
-                        rss_source = RSSSource(custom_feeds=[feed_url])
-                        self.rss_sources.append(rss_source)
-                        logger.info(f"RSS source added: {feed_url}")
-                        sources_initialized += 1
-                    except Exception as e:
-                        logger.warning(f"[FALLBACK] Failed to add RSS source {feed_url}: {e}")
+            # Only use RSS feeds if explicitly configured by user
+            for feed_url in rss_feeds:
+                try:
+                    rss_source = RSSSource(feed_urls=[feed_url])
+                    self.rss_sources.append(rss_source)
+                    logger.info(f"RSS source added: {feed_url}")
+                    sources_initialized += 1
+                except Exception as e:
+                    logger.warning(f"[FALLBACK] Failed to add RSS source {feed_url}: {e}")
             
             logger.info(f"Initialized {sources_initialized} image sources "
                        f"({len(self.folder_sources)} folder, {len(self.rss_sources)} RSS)")
@@ -295,20 +296,33 @@ class ScreensaverEngine(QObject):
             # Create display manager
             self.display_manager = DisplayManager(
                 display_mode=display_mode,
-                same_image_mode=same_image
+                same_image_mode=same_image,
+                settings_manager=self.settings_manager
             )
             
             # Connect exit signal
             self.display_manager.exit_requested.connect(self._on_exit_requested)
             
+            # Connect hotkey signals
+            self.display_manager.previous_requested.connect(self._on_previous_requested)
+            self.display_manager.next_requested.connect(self._on_next_requested)
+            self.display_manager.cycle_transition_requested.connect(self._on_cycle_transition)
+            self.display_manager.settings_requested.connect(self._on_settings_requested)
+            
             # Initialize displays
             display_count = self.display_manager.initialize_displays()
             logger.info(f"Display initialized with {display_count} screens")
             
-            return display_count > 0
+            # Set flag on success
+            if display_count > 0:
+                self._display_initialized = True
+                return True
+            
+            return False
         
         except Exception as e:
             logger.exception(f"Display initialization failed: {e}")
+            self._display_initialized = False
             return False
     
     def _setup_rotation_timer(self) -> None:
@@ -371,8 +385,13 @@ class ScreensaverEngine(QObject):
             self.error_occurred.emit(f"Start failed: {e}")
             return False
     
-    def stop(self) -> None:
-        """Stop the screensaver engine."""
+    def stop(self, exit_app: bool = True) -> None:
+        """
+        Stop the screensaver engine.
+        
+        Args:
+            exit_app: If True, quit the application. If False, just stop the engine.
+        """
         if not self._running:
             logger.debug("Engine not running")
             return
@@ -380,22 +399,48 @@ class ScreensaverEngine(QObject):
         try:
             logger.info("Stopping screensaver engine...")
             
+            # Mark as not running immediately to prevent re-entry
+            self._running = False
+            
             # Stop rotation timer
             if self._rotation_timer:
                 self._rotation_timer.stop()
+                self._rotation_timer.deleteLater()
+                self._rotation_timer = None
                 logger.debug("Rotation timer stopped")
             
-            # Clear displays
+            # Clear and hide/cleanup displays
             if self.display_manager:
                 self.display_manager.clear_all()
-                logger.debug("Displays cleared")
+                if exit_app:
+                    # Exiting app - full cleanup
+                    self.display_manager.cleanup()
+                    logger.debug("Displays cleared and cleaned up")
+                else:
+                    # Just pausing (e.g., for settings) - hide windows
+                    self.display_manager.hide_all()
+                    logger.debug("Displays cleared and hidden")
             
-            self._running = False
+            # Stop any pending image loads
+            self._loading_in_progress = False
+            
             self.stopped.emit()
             logger.info("Screensaver engine stopped")
+            
+            # Only exit the Qt event loop if requested
+            if exit_app:
+                from PySide6.QtWidgets import QApplication
+                QApplication.quit()
         
         except Exception as e:
             logger.exception(f"Engine stop failed: {e}")
+            # Force quit on error only if exit_app was requested
+            if exit_app:
+                try:
+                    from PySide6.QtWidgets import QApplication
+                    QApplication.quit()
+                except:
+                    pass
     
     def cleanup(self) -> None:
         """Clean up all resources."""
@@ -511,12 +556,13 @@ class ScreensaverEngine(QObject):
             logger.exception(f"Image load task failed: {e}")
             return None
     
-    def _load_and_display_image(self, image_meta: ImageMetadata) -> bool:
+    def _load_and_display_image(self, image_meta: ImageMetadata, retry_count: int = 0) -> bool:
         """
-        Load and display image synchronously.
+        Load and display image synchronously. Auto-retries with next image on failure.
         
         Args:
             image_meta: Image metadata
+            retry_count: Number of retries attempted (max 10)
         
         Returns:
             True if successful, False otherwise
@@ -526,16 +572,47 @@ class ScreensaverEngine(QObject):
             pixmap = self._load_image_task(image_meta)
             
             if not pixmap:
-                logger.warning("[FALLBACK] Image load failed")
-                self.display_manager.show_error("Failed to load image")
+                logger.warning(f"[FALLBACK] Image load failed, attempting next image (retry {retry_count + 1}/10)")
                 self._loading_in_progress = False
+                
+                # Try next image automatically (up to 10 times)
+                if retry_count < 10 and self.image_queue:
+                    next_image = self.image_queue.get_next()
+                    if next_image:
+                        return self._load_and_display_image(next_image, retry_count + 1)
+                
+                # All retries exhausted
+                logger.error("[FALLBACK] Failed to load any images after 10 attempts")
+                self.display_manager.show_error("No valid images available")
                 return False
             
             # Display image
             image_path = str(image_meta.local_path) if image_meta.local_path else image_meta.url or "unknown"
-            self.display_manager.show_image(pixmap, image_path)
             
-            logger.info(f"Image displayed: {image_path}")
+            # Check if we should show same image on all displays or different images
+            same_image = self.settings_manager.get('display.same_image_all_monitors', True)
+            
+            if same_image:
+                # Show same image on all displays
+                self.display_manager.show_image(pixmap, image_path)
+                logger.info(f"Image displayed: {image_path}")
+            else:
+                # Show different image on each display
+                display_count = len(self.display_manager.displays)
+                for i in range(display_count):
+                    if i == 0:
+                        # First display gets the current image
+                        self.display_manager.show_image_on_screen(i, pixmap, image_path)
+                    else:
+                        # Other displays get next images from queue
+                        next_meta = self.image_queue.get_next() if self.image_queue else None
+                        if next_meta:
+                            next_pixmap = self._load_image_task(next_meta)
+                            if next_pixmap:
+                                next_path = str(next_meta.local_path) if next_meta.local_path else next_meta.url or "unknown"
+                                self.display_manager.show_image_on_screen(i, next_pixmap, next_path)
+                logger.info(f"Different images displayed on {display_count} displays")
+            
             self.image_changed.emit(image_path)
             
             self._loading_in_progress = False
@@ -555,6 +632,91 @@ class ScreensaverEngine(QObject):
         """Handle exit request from display."""
         logger.info("Exit requested from display")
         self.stop()
+    
+    def _on_previous_requested(self) -> None:
+        """Handle previous image request (Z key)."""
+        logger.info("Previous image requested")
+        if self.image_queue:
+            self.image_queue.previous()
+            self._show_current_image()
+    
+    def _on_next_requested(self) -> None:
+        """Handle next image request (X key)."""
+        logger.info("Next image requested")
+        self._show_next_image()
+    
+    def _on_cycle_transition(self) -> None:
+        """Handle cycle transition request (C key)."""
+        logger.info("Cycle transition requested")
+        
+        # Cycle to next transition
+        self._current_transition_index = (self._current_transition_index + 1) % len(self._transition_types)
+        new_transition = self._transition_types[self._current_transition_index]
+        
+        # Update settings
+        transitions_config = self.settings_manager.get('transitions', {})
+        transitions_config['type'] = new_transition
+        self.settings_manager.set('transitions', transitions_config)
+        self.settings_manager.save()
+        
+        logger.info(f"Transition cycled to: {new_transition}")
+        
+        # Show visual feedback by immediately transitioning to current image
+        # WITHOUT changing the multi-monitor setup (preserve current state)
+        if self._current_image and self.display_manager:
+            # Load image without changing display configuration
+            pixmap = self._load_image_task(self._current_image)
+            if pixmap:
+                image_path = str(self._current_image.local_path) if self._current_image.local_path else self._current_image.url or "unknown"
+                # Show on all displays using current per-display state
+                # Just update the transition, don't reload different images
+                for display in self.display_manager.displays:
+                    display.set_image(pixmap, image_path)
+    
+    def _on_settings_requested(self) -> None:
+        """Handle settings request (S key)."""
+        logger.info("Settings requested - pausing screensaver and opening config")
+        
+        # Stop the engine but DON'T exit the app
+        self.stop(exit_app=False)
+        
+        try:
+            app = QApplication.instance()
+            if app:
+                animations = AnimationManager()
+                dialog = SettingsDialog(self.settings_manager, animations)
+                result = dialog.exec()
+                
+                # After dialog closes, show displays again and restart
+                logger.info("Settings dialog closed, restarting screensaver...")
+                
+                # Show displays again
+                if self.display_manager:
+                    self.display_manager.show_all()
+                
+                if self._display_initialized:
+                    self.start()
+                else:
+                    # If displays weren't initialized, try to initialize them
+                    if self.initialize():
+                        self.start()
+                    else:
+                        # Initialization failed, exit
+                        logger.error("Failed to restart screensaver")
+                        QApplication.quit()
+        except Exception as e:
+            logger.exception(f"Failed to open settings dialog: {e}")
+            QApplication.quit()
+    
+    def _show_current_image(self) -> bool:
+        """Show the current image from queue without advancing."""
+        if not self.image_queue:
+            return False
+        
+        current = self.image_queue.current()
+        if current:
+            return self._load_and_display_image(current)
+        return False
     
     def _on_settings_changed(self, event: Dict) -> None:
         """Handle settings changed event."""

@@ -6,9 +6,16 @@ Handles image display, input events, and error messages.
 from typing import Optional
 from PySide6.QtWidgets import QWidget, QLabel
 from PySide6.QtCore import Qt, Signal, QTimer, QSize
-from PySide6.QtGui import QPixmap, QPainter, QKeyEvent, QMouseEvent, QPaintEvent, QFont
+from PySide6.QtGui import QPixmap, QPainter, QKeyEvent, QMouseEvent, QPaintEvent, QFont, QScreen
 from rendering.display_modes import DisplayMode
 from rendering.image_processor import ImageProcessor
+from rendering.pan_and_scan import PanAndScan
+from transitions.crossfade_transition import CrossfadeTransition
+from transitions.slide_transition import SlideTransition
+from transitions.wipe_transition import WipeTransition
+from transitions.diffuse_transition import DiffuseTransition
+from transitions.block_puzzle_flip_transition import BlockPuzzleFlipTransition
+from widgets.clock_widget import ClockWidget, TimeFormat, ClockPosition
 from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
@@ -32,9 +39,14 @@ class DisplayWidget(QWidget):
     
     exit_requested = Signal()
     image_displayed = Signal(str)  # image path
+    previous_requested = Signal()  # Z key - go to previous image
+    next_requested = Signal()  # X key - go to next image
+    cycle_transition_requested = Signal()  # C key - cycle transition mode
+    settings_requested = Signal()  # S key - open settings
     
     def __init__(self, screen_index: int = 0, 
                  display_mode: DisplayMode = DisplayMode.FILL,
+                 settings_manager=None,
                  parent: Optional[QWidget] = None):
         """
         Initialize display widget.
@@ -42,14 +54,25 @@ class DisplayWidget(QWidget):
         Args:
             screen_index: Index of screen to display on
             display_mode: Image display mode
+            settings_manager: SettingsManager instance for widget configuration
             parent: Parent widget
         """
         super().__init__(parent)
         
         self.screen_index = screen_index
         self.display_mode = display_mode
+        self.settings_manager = settings_manager
         self.current_pixmap: Optional[QPixmap] = None
+        self.previous_pixmap: Optional[QPixmap] = None
         self.error_message: Optional[str] = None
+        self.clock_widget: Optional[ClockWidget] = None
+        self._current_transition: Optional['BaseTransition'] = None
+        self._initial_mouse_pos = None
+        self._mouse_move_threshold = 5  # pixels
+        
+        # Pan and scan
+        self._pan_and_scan = PanAndScan(self)
+        self._image_label: Optional[QLabel] = None  # For pan and scan
         
         # Setup widget
         self.setWindowFlags(
@@ -86,10 +109,155 @@ class DisplayWidget(QWidget):
         # Position and size window
         self.setGeometry(geometry)
         self.showFullScreen()
+        
+        # Setup overlay widgets AFTER geometry is set
+        if self.settings_manager:
+            self._setup_widgets()
+    
+    def _setup_widgets(self) -> None:
+        """Setup overlay widgets (clock, weather) based on settings."""
+        if not self.settings_manager:
+            logger.warning("No settings_manager provided - widgets will not be created")
+            return
+        
+        logger.debug(f"Setting up overlay widgets for screen {self.screen_index}")
+        
+        # Clock widget - get widgets dict, then clock sub-dict
+        widgets = self.settings_manager.get('widgets', {})
+        clock_settings = widgets.get('clock', {}) if isinstance(widgets, dict) else {}
+        logger.debug(f"Widgets config: {widgets}")
+        logger.debug(f"Clock settings retrieved: {clock_settings}")
+        if clock_settings.get('enabled', False):
+            # Parse settings
+            time_format = TimeFormat.TWELVE_HOUR if clock_settings.get('format', '12h') == '12h' else TimeFormat.TWENTY_FOUR_HOUR
+            position_str = clock_settings.get('position', 'Top Right')
+            show_seconds = clock_settings.get('show_seconds', False)
+            font_size = clock_settings.get('font_size', 48)
+            margin = clock_settings.get('margin', 20)
+            color = clock_settings.get('color', [255, 255, 255, 230])
+            
+            # Map position string to enum
+            position_map = {
+                'Top Left': ClockPosition.TOP_LEFT,
+                'Top Right': ClockPosition.TOP_RIGHT,
+                'Top Center': ClockPosition.TOP_CENTER,
+                'Bottom Left': ClockPosition.BOTTOM_LEFT,
+                'Bottom Right': ClockPosition.BOTTOM_RIGHT,
+                'Bottom Center': ClockPosition.BOTTOM_CENTER,
+            }
+            position = position_map.get(position_str, ClockPosition.TOP_RIGHT)
+            
+            # Create clock widget
+            logger.debug(f"Creating ClockWidget: format={time_format.value}, position={position_str}, "
+                        f"show_seconds={show_seconds}, font_size={font_size}")
+            
+            try:
+                self.clock_widget = ClockWidget(self, time_format, position, show_seconds)
+                logger.debug(f"ClockWidget created successfully")
+                
+                self.clock_widget.set_font_size(font_size)
+                logger.debug(f"Font size set to {font_size}")
+                
+                self.clock_widget.set_margin(margin)
+                logger.debug(f"Margin set to {margin}")
+                
+                # Convert color array to QColor
+                from PySide6.QtGui import QColor
+                qcolor = QColor(color[0], color[1], color[2], color[3])
+                self.clock_widget.set_text_color(qcolor)
+                logger.debug(f"Color set to RGBA({color[0]}, {color[1]}, {color[2]}, {color[3]})")
+                
+                # Ensure clock is on top of image
+                self.clock_widget.raise_()
+                
+                self.clock_widget.start()
+                logger.info(f"✅ Clock widget started: {position_str}, {time_format.value}, "
+                           f"font={font_size}px, seconds={show_seconds}")
+                
+                # Verify widget is visible
+                logger.debug(f"Clock widget visible: {self.clock_widget.isVisible()}, "
+                            f"size: {self.clock_widget.width()}x{self.clock_widget.height()}, "
+                            f"pos: ({self.clock_widget.x()}, {self.clock_widget.y()})")
+                logger.debug(f"Clock widget Z-order raised to top")
+                
+            except Exception as e:
+                logger.error(f"Failed to create/configure clock widget: {e}", exc_info=True)
+        else:
+            logger.debug(f"Clock widget disabled in settings")
+    
+    def _create_transition(self) -> Optional['BaseTransition']:
+        """
+        Create a transition based on settings.
+        
+        Returns:
+            Transition instance or None if transitions disabled
+        """
+        if not self.settings_manager:
+            return None
+        
+        # Support both nested dict and dot notation for settings
+        transitions_settings = self.settings_manager.get('transitions', {})
+        transition_type = transitions_settings.get('type', self.settings_manager.get('transitions.type', 'Crossfade'))
+        duration_ms = transitions_settings.get('duration_ms', self.settings_manager.get('transitions.duration_ms', 1000))
+        
+        try:
+            from transitions import (
+                CrossfadeTransition, SlideTransition, DiffuseTransition,
+                BlockPuzzleFlipTransition, WipeTransition,
+                SlideDirection, WipeDirection
+            )
+            
+            if transition_type == 'Crossfade':
+                return CrossfadeTransition(duration_ms)
+            
+            elif transition_type == 'Slide':
+                import random
+                direction_str = transitions_settings.get('direction', self.settings_manager.get('transitions.direction', 'Random'))
+                direction_map = {
+                    'Left to Right': SlideDirection.LEFT,
+                    'Right to Left': SlideDirection.RIGHT,
+                    'Top to Bottom': SlideDirection.DOWN,
+                    'Bottom to Top': SlideDirection.UP
+                }
+                
+                if direction_str == 'Random':
+                    # Pick a random direction
+                    direction = random.choice([SlideDirection.LEFT, SlideDirection.RIGHT, 
+                                              SlideDirection.UP, SlideDirection.DOWN])
+                else:
+                    direction = direction_map.get(direction_str, SlideDirection.LEFT)
+                
+                return SlideTransition(duration_ms, direction)
+            
+            elif transition_type == 'Wipe':
+                import random
+                # Pick a random wipe direction
+                direction = random.choice([WipeDirection.LEFT_TO_RIGHT, WipeDirection.RIGHT_TO_LEFT,
+                                          WipeDirection.TOP_TO_BOTTOM, WipeDirection.BOTTOM_TO_TOP])
+                return WipeTransition(duration_ms, direction)
+            
+            elif transition_type == 'Diffuse':
+                block_size = transitions_settings.get('diffuse', {}).get('block_size', 
+                    self.settings_manager.get('transitions.diffuse.block_size', 50))
+                return DiffuseTransition(duration_ms, block_size)
+            
+            elif transition_type == 'Block Puzzle Flip':
+                block_flip = transitions_settings.get('block_flip', {})
+                rows = block_flip.get('rows', self.settings_manager.get('transitions.block_flip.rows', 4))
+                cols = block_flip.get('cols', self.settings_manager.get('transitions.block_flip.cols', 6))
+                return BlockPuzzleFlipTransition(duration_ms, rows, cols)
+            
+            else:
+                logger.warning(f"Unknown transition type: {transition_type}, using Crossfade")
+                return CrossfadeTransition(duration_ms)
+        
+        except Exception as e:
+            logger.error(f"Failed to create transition: {e}", exc_info=True)
+            return None
     
     def set_image(self, pixmap: QPixmap, image_path: str = "") -> None:
         """
-        Display a new image.
+        Display a new image with transition.
         
         Args:
             pixmap: Image to display
@@ -106,14 +274,91 @@ class DisplayWidget(QWidget):
         screen_size = self.size()
         
         try:
-            self.current_pixmap = ImageProcessor.process_image(
-                pixmap,
-                screen_size,
-                self.display_mode
-            )
+            # Get quality settings
+            use_lanczos = True
+            sharpen = False
+            pan_and_scan_enabled = False
+            if self.settings_manager:
+                use_lanczos = self.settings_manager.get('display.use_lanczos', True)
+                if isinstance(use_lanczos, str):
+                    use_lanczos = use_lanczos.lower() == 'true'
+                sharpen = self.settings_manager.get('display.sharpen_downscale', False)
+                if isinstance(sharpen, str):
+                    sharpen = sharpen.lower() == 'true'
+                pan_and_scan_enabled = self.settings_manager.get('display.pan_and_scan', False)
+                if isinstance(pan_and_scan_enabled, str):
+                    pan_and_scan_enabled = pan_and_scan_enabled.lower() == 'true'
+            
+            # Process image (skip processing if pan and scan enabled - it handles scaling)
+            if pan_and_scan_enabled:
+                new_pixmap = pixmap  # Use original for pan and scan
+            else:
+                new_pixmap = ImageProcessor.process_image(
+                    pixmap,
+                    screen_size,
+                    self.display_mode,
+                    use_lanczos,
+                    sharpen
+                )
             
             self.error_message = None
-            self.update()
+            
+            # Stop any running transition
+            if self._current_transition:
+                transition_to_stop = self._current_transition
+                self._current_transition = None  # Clear reference first
+                try:
+                    transition_to_stop.stop()
+                    transition_to_stop.cleanup()
+                except Exception as e:
+                    logger.warning(f"Error stopping transition: {e}")
+            
+            # If we have a previous image, use transition
+            if self.current_pixmap and self.settings_manager:
+                transition = self._create_transition()
+                if transition:
+                    self._current_transition = transition
+                    self.previous_pixmap = self.current_pixmap
+                    
+                    # Connect transition finished signal
+                    transition.finished.connect(lambda: self._on_transition_finished(new_pixmap, image_path))
+                    
+                    # Start transition
+                    success = transition.start(self.previous_pixmap, new_pixmap, self)
+                    if success:
+                        logger.debug(f"Transition started: {transition.__class__.__name__}")
+                        return  # Transition will update display
+                    else:
+                        logger.warning("Transition failed to start, displaying immediately")
+                        transition.cleanup()
+                        self._current_transition = None
+            
+            # No transition or first image - display immediately
+            self.current_pixmap = new_pixmap
+            
+            # Start pan and scan if enabled
+            if pan_and_scan_enabled:
+                if not self._image_label:
+                    self._image_label = QLabel(self)
+                self._pan_and_scan.enable(True)
+                
+                # Get pan and scan settings
+                transition_interval = self.settings_manager.get('timing.interval', 10)
+                auto_speed = self.settings_manager.get('display.pan_auto_speed', True)
+                manual_speed = self.settings_manager.get('display.pan_speed', 20.0)
+                
+                if isinstance(auto_speed, str):
+                    auto_speed = auto_speed.lower() == 'true'
+                
+                self._pan_and_scan.set_auto_speed(auto_speed, float(transition_interval))
+                if not auto_speed:
+                    self._pan_and_scan.set_speed(float(manual_speed))
+                
+                self._pan_and_scan.set_image(new_pixmap, self._image_label, self.size())
+                self._pan_and_scan.start()
+            else:
+                self._pan_and_scan.enable(False)
+                self.update()
             
             logger.debug(f"Image displayed: {image_path} ({pixmap.width()}x{pixmap.height()})")
             self.image_displayed.emit(image_path)
@@ -123,6 +368,37 @@ class DisplayWidget(QWidget):
             self.error_message = f"Error processing image: {e}"
             self.current_pixmap = None
             self.update()
+    
+    def _on_transition_finished(self, new_pixmap: QPixmap, image_path: str) -> None:
+        """
+        Handle transition completion.
+        
+        Args:
+            new_pixmap: The new pixmap to display
+            image_path: Path to the image
+        """
+        if self._current_transition:
+            transition_to_clean = self._current_transition
+            self._current_transition = None  # Clear reference first
+            try:
+                transition_to_clean.cleanup()
+            except Exception as e:
+                logger.warning(f"Error cleaning up transition: {e}")
+        
+        self.current_pixmap = new_pixmap
+        self.previous_pixmap = None
+        
+        # Start pan and scan if enabled
+        if self._pan_and_scan.is_enabled():
+            if not self._image_label:
+                self._image_label = QLabel(self)
+            self._pan_and_scan.set_image(new_pixmap, self._image_label, self.size())
+            self._pan_and_scan.start()
+        else:
+            self.update()
+        
+        logger.debug(f"Transition completed, image displayed: {image_path}")
+        self.image_displayed.emit(image_path)
     
     def set_display_mode(self, mode: DisplayMode) -> None:
         """
@@ -143,8 +419,21 @@ class DisplayWidget(QWidget):
                 self.update()
     
     def clear(self) -> None:
-        """Clear displayed image."""
+        """Clear displayed image and stop any transitions."""
+        # Stop pan and scan
+        self._pan_and_scan.stop()
+        # Stop any running transition
+        if self._current_transition:
+            transition_to_stop = self._current_transition
+            self._current_transition = None  # Clear reference first
+            try:
+                transition_to_stop.stop()
+                transition_to_stop.cleanup()
+            except Exception as e:
+                logger.warning(f"Error stopping transition in clear(): {e}")
+        
         self.current_pixmap = None
+        self.previous_pixmap = None
         self.error_message = None
         self.update()
         logger.debug("Display cleared")
@@ -186,10 +475,37 @@ class DisplayWidget(QWidget):
         painter.end()
     
     def keyPressEvent(self, event: QKeyEvent) -> None:
-        """Handle key press - exit on any key."""
-        logger.info(f"Key pressed: {event.key()}, requesting exit")
-        self.exit_requested.emit()
-        event.accept()
+        """Handle key press - hotkeys and exit."""
+        key = event.key()
+        key_text = event.text().lower()
+        
+        # Hotkeys
+        if key_text == 'z':
+            logger.info("Z key pressed - previous image requested")
+            self.previous_requested.emit()
+            event.accept()
+        elif key_text == 'x':
+            logger.info("X key pressed - next image requested")
+            self.next_requested.emit()
+            event.accept()
+        elif key_text == 'c':
+            logger.info("C key pressed - cycle transition requested")
+            self.cycle_transition_requested.emit()
+            event.accept()
+        elif key_text == 's':
+            logger.info("S key pressed - settings requested")
+            self.settings_requested.emit()
+            event.accept()
+        # Exit keys
+        elif key == Qt.Key.Key_Escape or key == Qt.Key.Key_Q:
+            logger.info(f"Exit key pressed: {key}, requesting exit")
+            self.exit_requested.emit()
+            event.accept()
+        # Any other key also exits (traditional screensaver behavior)
+        else:
+            logger.info(f"Key pressed: {key}, requesting exit")
+            self.exit_requested.emit()
+            event.accept()
     
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """Handle mouse press - exit on any click."""
@@ -198,9 +514,23 @@ class DisplayWidget(QWidget):
         event.accept()
     
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
-        """Handle mouse move - could trigger exit after threshold."""
-        # For now, just track movement
-        # In future, could implement "move distance threshold" before exit
+        """Handle mouse move - exit if moved beyond threshold."""
+        # Store initial position on first move
+        if self._initial_mouse_pos is None:
+            self._initial_mouse_pos = event.pos()
+            event.accept()
+            return
+        
+        # Calculate distance from initial position
+        dx = event.pos().x() - self._initial_mouse_pos.x()
+        dy = event.pos().y() - self._initial_mouse_pos.y()
+        distance = (dx * dx + dy * dy) ** 0.5
+        
+        # Exit if moved beyond threshold
+        if distance > self._mouse_move_threshold:
+            logger.info(f"Mouse moved {distance:.1f} pixels, requesting exit")
+            self.exit_requested.emit()
+        
         event.accept()
     
     def get_screen_info(self) -> dict:

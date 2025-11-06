@@ -78,6 +78,15 @@ class SourcesTab(QWidget):
         rss_group = QGroupBox("RSS Feed Sources")
         rss_layout = QVBoxLayout(rss_group)
         
+        # Suggestion label
+        suggestion_label = QLabel(
+            "<i>Suggested: NASA Image of the Day - "
+            "https://www.nasa.gov/feeds/iotd-feed</i>"
+        )
+        suggestion_label.setWordWrap(True)
+        suggestion_label.setStyleSheet("color: #888888; padding: 5px;")
+        rss_layout.addWidget(suggestion_label)
+        
         # RSS list
         self.rss_list = QListWidget()
         self.rss_list.setMinimumHeight(150)
@@ -86,7 +95,7 @@ class SourcesTab(QWidget):
         # RSS input
         rss_input = QHBoxLayout()
         self.rss_input = QLineEdit()
-        self.rss_input.setPlaceholderText("Enter RSS feed URL...")
+        self.rss_input.setPlaceholderText("Enter RSS feed URL (e.g., https://www.nasa.gov/feeds/iotd-feed)...")
         self.add_rss_btn = QPushButton("Add Feed")
         self.add_rss_btn.clicked.connect(self._add_rss)
         rss_input.addWidget(self.rss_input)
@@ -107,14 +116,14 @@ class SourcesTab(QWidget):
     
     def _load_sources(self) -> None:
         """Load sources from settings."""
-        # Load folders
-        folders = self._settings.get('sources', {}).get('folders', [])
+        # Load folders using dot notation
+        folders = self._settings.get('sources.folders', [])
         self.folder_list.clear()
         for folder in folders:
             self.folder_list.addItem(folder)
         
-        # Load RSS feeds
-        rss_feeds = self._settings.get('sources', {}).get('rss_feeds', [])
+        # Load RSS feeds using dot notation
+        rss_feeds = self._settings.get('sources.rss_feeds', [])
         self.rss_list.clear()
         for feed in rss_feeds:
             self.rss_list.addItem(feed)
@@ -130,12 +139,12 @@ class SourcesTab(QWidget):
         )
         
         if folder:
-            # Get current folders
-            folders = self._settings.get('sources', {}).get('folders', [])
+            # Get current folders using dot notation
+            folders = self._settings.get('sources.folders', [])
             
             if folder not in folders:
                 folders.append(folder)
-                self._settings.set('sources', {'folders': folders})
+                self._settings.set('sources.folders', folders)
                 self._settings.save()
                 self.folder_list.addItem(folder)
                 self.sources_changed.emit()
@@ -149,11 +158,12 @@ class SourcesTab(QWidget):
         if current_item:
             folder = current_item.text()
             
-            # Remove from settings
-            folders = self._settings.get('sources', {}).get('folders', [])
+            # Get current folders using dot notation
+            folders = self._settings.get('sources.folders', [])
+            
             if folder in folders:
                 folders.remove(folder)
-                self._settings.set('sources', {'folders': folders})
+                self._settings.set('sources.folders', folders)
                 self._settings.save()
                 self.folder_list.takeItem(self.folder_list.currentRow())
                 self.sources_changed.emit()
@@ -169,12 +179,12 @@ class SourcesTab(QWidget):
                 QMessageBox.warning(self, "Invalid URL", "RSS feed URL must start with http:// or https://")
                 return
             
-            # Get current RSS feeds
-            rss_feeds = self._settings.get('sources', {}).get('rss_feeds', [])
+            # Get current RSS feeds using dot notation
+            rss_feeds = self._settings.get('sources.rss_feeds', [])
             
             if url not in rss_feeds:
                 rss_feeds.append(url)
-                self._settings.set('sources', {'rss_feeds': rss_feeds})
+                self._settings.set('sources.rss_feeds', rss_feeds)
                 self._settings.save()
                 self.rss_list.addItem(url)
                 self.rss_input.clear()
@@ -189,11 +199,12 @@ class SourcesTab(QWidget):
         if current_item:
             url = current_item.text()
             
-            # Remove from settings
-            rss_feeds = self._settings.get('sources', {}).get('rss_feeds', [])
+            # Get current RSS feeds using dot notation
+            rss_feeds = self._settings.get('sources.rss_feeds', [])
+            
             if url in rss_feeds:
                 rss_feeds.remove(url)
-                self._settings.set('sources', {'rss_feeds': rss_feeds})
+                self._settings.set('sources.rss_feeds', rss_feeds)
                 self._settings.save()
                 self.rss_list.takeItem(self.rss_list.currentRow())
                 self.sources_changed.emit()

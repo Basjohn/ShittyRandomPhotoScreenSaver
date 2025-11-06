@@ -33,7 +33,11 @@ class ImageQueue:
             shuffle: Whether to shuffle images
             history_size: Number of recent images to track
         """
-        self.shuffle_enabled = shuffle
+        # Ensure shuffle is boolean (settings may return strings)
+        if isinstance(shuffle, str):
+            self.shuffle_enabled = shuffle.lower() == 'true'
+        else:
+            self.shuffle_enabled = bool(shuffle)
         self.history_size = history_size
         
         self._images: List[ImageMetadata] = []

@@ -3,11 +3,18 @@ Image processing for screensaver display.
 
 Handles scaling, cropping, and positioning of images for different display modes.
 """
-from typing import Tuple
+from typing import Tuple, Optional
 from PySide6.QtCore import Qt, QSize, QRect, QPoint
 from PySide6.QtGui import QPixmap, QPainter, QImage
 from rendering.display_modes import DisplayMode
 from core.logging.logger import get_logger
+
+try:
+    from PIL import Image, ImageFilter
+    PILLOW_AVAILABLE = True
+except ImportError:
+    PILLOW_AVAILABLE = False
+    logger.warning("PIL/Pillow not available, using Qt scaling only")
 
 logger = get_logger(__name__)
 
@@ -21,7 +28,9 @@ class ImageProcessor:
     
     @staticmethod
     def process_image(image: QPixmap, screen_size: QSize, 
-                     mode: DisplayMode = DisplayMode.FILL) -> QPixmap:
+                     mode: DisplayMode = DisplayMode.FILL,
+                     use_lanczos: bool = True,
+                     sharpen: bool = False) -> QPixmap:
         """
         Process image for display.
         
@@ -29,6 +38,8 @@ class ImageProcessor:
             image: Source image (QPixmap)
             screen_size: Target screen size
             mode: Display mode (FILL, FIT, or SHRINK)
+            use_lanczos: Use PIL Lanczos resampling for better quality (default: True)
+            sharpen: Apply sharpening filter after downscaling (default: False)
         
         Returns:
             Processed QPixmap ready for display
@@ -38,17 +49,106 @@ class ImageProcessor:
             return QPixmap(screen_size)
         
         if mode == DisplayMode.FILL:
-            return ImageProcessor._process_fill(image, screen_size)
+            return ImageProcessor._process_fill(image, screen_size, use_lanczos, sharpen)
         elif mode == DisplayMode.FIT:
-            return ImageProcessor._process_fit(image, screen_size)
+            return ImageProcessor._process_fit(image, screen_size, use_lanczos, sharpen)
         elif mode == DisplayMode.SHRINK:
-            return ImageProcessor._process_shrink(image, screen_size)
+            return ImageProcessor._process_shrink(image, screen_size, use_lanczos, sharpen)
         else:
             logger.error(f"Unknown display mode: {mode}, defaulting to FILL")
-            return ImageProcessor._process_fill(image, screen_size)
+            return ImageProcessor._process_fill(image, screen_size, use_lanczos, sharpen)
     
     @staticmethod
-    def _process_fill(image: QPixmap, screen_size: QSize) -> QPixmap:
+    def _scale_pixmap(pixmap: QPixmap, width: int, height: int, use_lanczos: bool = True, sharpen: bool = False) -> QPixmap:
+        """
+        Scale a pixmap using PIL Lanczos (if available) or Qt.
+        
+        Args:
+            pixmap: Source pixmap
+            width: Target width
+            height: Target height
+            use_lanczos: Use PIL Lanczos resampling
+            sharpen: Apply sharpening filter
+        
+        Returns:
+            Scaled pixmap
+        """
+        # If PIL not available or Lanczos disabled, use Qt
+        if not PILLOW_AVAILABLE or not use_lanczos:
+            return pixmap.scaled(
+                width, height,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            )
+        
+        try:
+            # Convert QPixmap to PIL Image
+            qimage = pixmap.toImage()
+            
+            # Convert to RGB888 or RGBA8888 format for PIL
+            if qimage.hasAlphaChannel():
+                qimage = qimage.convertToFormat(QImage.Format.Format_RGBA8888)
+                mode = 'RGBA'
+                bytes_per_pixel = 4
+            else:
+                qimage = qimage.convertToFormat(QImage.Format.Format_RGB888)
+                mode = 'RGB'
+                bytes_per_pixel = 3
+            
+            # Get image data - handle both sip.voidptr and memoryview
+            ptr = qimage.constBits()
+            if hasattr(ptr, 'setsize'):
+                # sip.voidptr (older PySide6 versions)
+                ptr.setsize(qimage.sizeInBytes())
+                img_data = bytes(ptr)
+            else:
+                # memoryview (newer PySide6 versions)
+                img_data = ptr.tobytes()
+            
+            # Create PIL Image from buffer
+            pil_image = Image.frombytes(
+                mode,
+                (qimage.width(), qimage.height()),
+                img_data
+            )
+            
+            # Scale with Lanczos
+            scaled_pil = pil_image.resize((width, height), Image.Resampling.LANCZOS)
+            
+            # Apply sharpening if requested and downscaling
+            # Use stronger sharpening for aggressive downscaling
+            if sharpen and (width < qimage.width() or height < qimage.height()):
+                scale_factor = min(width / qimage.width(), height / qimage.height())
+                if scale_factor < 0.5:  # Aggressive downscaling (>2x)
+                    # Use UnsharpMask for better quality on aggressive downscaling
+                    from PIL import ImageEnhance
+                    scaled_pil = scaled_pil.filter(ImageFilter.UnsharpMask(radius=2, percent=150, threshold=3))
+                else:
+                    # Regular sharpening for moderate downscaling
+                    scaled_pil = scaled_pil.filter(ImageFilter.SHARPEN)
+            
+            # Convert back to QPixmap
+            if scaled_pil.mode == 'RGBA':
+                data = scaled_pil.tobytes('raw', 'RGBA')
+                qimg = QImage(data, scaled_pil.width, scaled_pil.height, scaled_pil.width * 4, QImage.Format.Format_RGBA8888)
+            else:
+                data = scaled_pil.tobytes('raw', 'RGB')
+                qimg = QImage(data, scaled_pil.width, scaled_pil.height, scaled_pil.width * 3, QImage.Format.Format_RGB888)
+            
+            result = QPixmap.fromImage(qimg)
+            logger.debug(f"Scaled with Lanczos: {pixmap.width()}x{pixmap.height()} → {width}x{height}")
+            return result
+        
+        except Exception as e:
+            logger.warning(f"Lanczos scaling failed, falling back to Qt: {e}")
+            return pixmap.scaled(
+                width, height,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            )
+    
+    @staticmethod
+    def _process_fill(image: QPixmap, screen_size: QSize, use_lanczos: bool = True, sharpen: bool = False) -> QPixmap:
         """
         FILL mode: Scale and crop to fill screen completely (no letterboxing).
         
@@ -73,7 +173,8 @@ class ImageProcessor:
         screen_ratio = screen_size.width() / screen_size.height()
         img_ratio = img_size.width() / img_size.height()
         
-        # Determine scaling to fill screen
+        # Determine scaling to fill screen completely
+        # Always scale to ensure full coverage with no black bars
         if img_ratio > screen_ratio:
             # Image is wider - scale to height, crop width
             scale_height = screen_size.height()
@@ -83,13 +184,28 @@ class ImageProcessor:
             scale_width = screen_size.width()
             scale_height = int(scale_width / img_ratio)
         
-        # Scale image
-        scaled = image.scaled(
-            scale_width,
-            scale_height,
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation
-        )
+        # Optimization: If image is already larger and scaling would downsample,
+        # use original size to preserve quality (we'll crop to screen size anyway)
+        if (img_size.width() >= scale_width and img_size.height() >= scale_height and
+            img_size.width() >= screen_size.width() and img_size.height() >= screen_size.height()):
+            logger.debug(f"Fill: Using original size {img_size.width()}x{img_size.height()} (avoiding downsample)")
+            scale_width = img_size.width()
+            scale_height = img_size.height()
+        
+        # Ensure we always have at least screen size (never smaller)
+        scale_width = max(scale_width, screen_size.width())
+        scale_height = max(scale_height, screen_size.height())
+        
+        # Scale image only if needed (with Lanczos if enabled)
+        if scale_width == img_size.width() and scale_height == img_size.height():
+            # No scaling needed - use original
+            scaled = image
+            logger.debug("Fill: No scaling needed, using original image")
+        else:
+            # Scale required
+            scaled = ImageProcessor._scale_pixmap(
+                image, scale_width, scale_height, use_lanczos, sharpen
+            )
         
         # If scaled image is larger than screen, crop it
         if scaled.width() > screen_size.width() or scaled.height() > screen_size.height():
@@ -111,16 +227,18 @@ class ImageProcessor:
             )
             painter.end()
             
-            logger.debug(f"FILL: Scaled to {scaled.width()}x{scaled.height()}, "
-                        f"cropped from ({x_offset},{y_offset})")
+            logger.info(f"FILL: Image {img_size.width()}x{img_size.height()} → "
+                       f"scaled {scaled.width()}x{scaled.height()} → "
+                       f"cropped to {screen_size.width()}x{screen_size.height()}")
             return result
         else:
             # Scaled image fits exactly
-            logger.debug(f"FILL: Scaled to {scaled.width()}x{scaled.height()} (perfect fit)")
+            logger.info(f"FILL: Image {img_size.width()}x{img_size.height()} → "
+                       f"{scaled.width()}x{scaled.height()} (perfect fit)")
             return scaled
     
     @staticmethod
-    def _process_fit(image: QPixmap, screen_size: QSize) -> QPixmap:
+    def _process_fit(image: QPixmap, screen_size: QSize, use_lanczos: bool = True, sharpen: bool = False) -> QPixmap:
         """
         FIT mode: Scale to fit within screen (may have letterboxing/pillarboxing).
         
@@ -136,11 +254,32 @@ class ImageProcessor:
         Returns:
             Processed pixmap with letterboxing if needed
         """
-        # Scale to fit within screen
-        scaled = image.scaled(
-            screen_size,
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation
+        # Calculate target size maintaining aspect ratio
+        # FIT mode: Image fits entirely within screen with black bars (letterbox/pillarbox)
+        img_ratio = image.width() / image.height()
+        screen_ratio = screen_size.width() / screen_size.height()
+        
+        if img_ratio > screen_ratio:
+            # Image is wider - fit to width, add letterbox (black bars top/bottom)
+            target_width = screen_size.width()
+            target_height = int(target_width / img_ratio)
+        else:
+            # Image is taller - fit to height, add pillarbox (black bars left/right)
+            target_height = screen_size.height()
+            target_width = int(target_height * img_ratio)
+        
+        # Ensure we maintain exact aspect ratio
+        # This prevents any distortion
+        actual_ratio = target_width / target_height
+        if abs(actual_ratio - img_ratio) > 0.01:  # Check for rounding errors
+            if img_ratio > screen_ratio:
+                target_height = int(target_width / img_ratio)
+            else:
+                target_width = int(target_height * img_ratio)
+        
+        # Scale to fit within screen (with Lanczos if enabled)
+        scaled = ImageProcessor._scale_pixmap(
+            image, target_width, target_height, use_lanczos, sharpen
         )
         
         # Create output with black background
@@ -160,7 +299,7 @@ class ImageProcessor:
         return result
     
     @staticmethod
-    def _process_shrink(image: QPixmap, screen_size: QSize) -> QPixmap:
+    def _process_shrink(image: QPixmap, screen_size: QSize, use_lanczos: bool = True, sharpen: bool = False) -> QPixmap:
         """
         SHRINK mode: Only scale down if larger than screen, never upscale.
         
@@ -197,10 +336,19 @@ class ImageProcessor:
             return result
         else:
             # Image is larger - scale down to fit
-            scaled = image.scaled(
-                screen_size,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation
+            # Calculate target size maintaining aspect ratio
+            img_ratio = img_size.width() / img_size.height()
+            screen_ratio = screen_size.width() / screen_size.height()
+            
+            if img_ratio > screen_ratio:
+                target_width = screen_size.width()
+                target_height = int(target_width / img_ratio)
+            else:
+                target_height = screen_size.height()
+                target_width = int(target_height * img_ratio)
+            
+            scaled = ImageProcessor._scale_pixmap(
+                image, target_width, target_height, use_lanczos, sharpen
             )
             
             # Create output with black background

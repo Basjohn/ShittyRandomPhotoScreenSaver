@@ -59,8 +59,8 @@ def test_diffuse_start_no_old_image(qapp, test_widget, test_pixmap, qtbot):
 
 
 def test_diffuse_start_with_images(qapp, test_widget, test_pixmap, test_pixmap2, qtbot):
-    """Test diffuse between two images."""
-    transition = DiffuseTransition(duration_ms=200, block_size=50)
+    """Test diffuse transition with images."""
+    transition = DiffuseTransition(duration_ms=200, block_size=8)
     
     with qtbot.waitSignal(transition.finished, timeout=2000):
         result = transition.start(test_pixmap, test_pixmap2, test_widget)
@@ -68,8 +68,8 @@ def test_diffuse_start_with_images(qapp, test_widget, test_pixmap, test_pixmap2,
 
 
 def test_diffuse_signals(qapp, test_widget, test_pixmap, test_pixmap2, qtbot):
-    """Test diffuse signals."""
-    transition = DiffuseTransition(duration_ms=200, block_size=50)
+    """Test diffuse signals are emitted."""
+    transition = DiffuseTransition(duration_ms=100, block_size=8)
     
     started_called = []
     finished_called = []
@@ -88,8 +88,8 @@ def test_diffuse_signals(qapp, test_widget, test_pixmap, test_pixmap2, qtbot):
 
 
 def test_diffuse_progress_range(qapp, test_widget, test_pixmap, test_pixmap2, qtbot):
-    """Test progress values are in valid range."""
-    transition = DiffuseTransition(duration_ms=200, block_size=50)
+    """Test diffuse progress values are in valid range."""
+    transition = DiffuseTransition(duration_ms=100, block_size=8)
     
     progress_values = []
     transition.progress.connect(lambda p: progress_values.append(p))
@@ -104,94 +104,78 @@ def test_diffuse_progress_range(qapp, test_widget, test_pixmap, test_pixmap2, qt
     assert progress_values[-1] == 1.0
 
 
-def test_diffuse_stop(qapp, test_widget, test_pixmap, test_pixmap2):
-    """Test stopping diffuse."""
-    transition = DiffuseTransition(duration_ms=2000, block_size=50)
+def test_diffuse_stop(qapp, test_widget, test_pixmap, test_pixmap2, qtbot):
+    """Test stopping diffuse transition."""
+    transition = DiffuseTransition(duration_ms=1000, block_size=8)
     
-    transition.start(test_pixmap, test_pixmap2, test_widget)
+    # Start transition
+    result = transition.start(test_pixmap, test_pixmap2, test_widget)
+    assert result is True
+    
+    # Let it run briefly
+    qtbot.wait(50)
+    
     assert transition.is_running() is True
     
     transition.stop()
     assert transition.get_state().value in ['cancelled', 'finished']
 
 
+def test_diffuse_grid_creation(qapp, test_widget, test_pixmap, test_pixmap2):
+    """Test pixel grid creation for diffuse effect."""
+    transition = DiffuseTransition(duration_ms=100, block_size=8)
+    
+    transition.start(test_pixmap, test_pixmap2, test_widget)
+    assert len(transition._pixel_grid) > 0
+    transition.cleanup()
+
+
 def test_diffuse_cleanup(qapp, test_widget, test_pixmap, test_pixmap2):
-    """Test diffuse cleanup."""
-    transition = DiffuseTransition(duration_ms=200, block_size=50)
+    """Test diffuse transition cleanup."""
+    transition = DiffuseTransition(duration_ms=200, block_size=8)
     
     transition.start(test_pixmap, test_pixmap2, test_widget)
     transition.stop()
     transition.cleanup()
     
-    assert transition._display_label is None
+    assert transition._old_label is None
+    assert transition._new_label is None
     assert transition._timer is None
-    assert len(transition._blocks) == 0
+    assert len(transition._pixel_grid) == 0
 
 
 def test_diffuse_invalid_pixmap(qapp, test_widget):
     """Test diffuse with invalid pixmap."""
-    transition = DiffuseTransition(duration_ms=100, block_size=50)
+    transition = DiffuseTransition(duration_ms=100, block_size=8)
     
     null_pixmap = QPixmap()
     result = transition.start(None, null_pixmap, test_widget)
     assert result is False
 
 
-def test_diffuse_already_running(qapp, test_widget, test_pixmap, test_pixmap2):
+def test_diffuse_already_running(qapp, test_widget, test_pixmap, test_pixmap2, qtbot):
     """Test starting diffuse when already running."""
-    transition = DiffuseTransition(duration_ms=2000, block_size=50)
+    transition = DiffuseTransition(duration_ms=1000, block_size=8)
     
+    # Start first transition
     result1 = transition.start(test_pixmap, test_pixmap2, test_widget)
     assert result1 is True
-    assert transition.is_running() is True
     
-    result2 = transition.start(test_pixmap2, test_pixmap, test_widget)
-    assert result2 is False
+    # Let it start
+    qtbot.wait(10)
+    
+    result2 = transition.start(test_pixmap, test_pixmap2, test_widget)
+    assert result2 is False  # Should fail because already running
+    assert transition.is_running() is True
     
     transition.cleanup()
 
 
-def test_diffuse_block_grid():
-    """Test block grid creation."""
-    transition = DiffuseTransition(duration_ms=100, block_size=50)
-    
-    # Test 400x300 with 50px blocks
-    blocks = transition._create_block_grid(400, 300)
-    
-    # Should have 8 cols x 6 rows = 48 blocks
-    assert len(blocks) == 48
-    
-    # First block should start at 0,0
-    assert blocks[0].x() == 0
-    assert blocks[0].y() == 0
-    assert blocks[0].width() == 50
-    assert blocks[0].height() == 50
-    
-    # Last block should be at edge
-    last_block = blocks[-1]
-    assert last_block.x() == 350
-    assert last_block.y() == 250
-
-
-def test_diffuse_different_block_sizes(qapp, test_widget, test_pixmap, test_pixmap2, qtbot):
-    """Test diffuse with different block sizes."""
-    block_sizes = [25, 50, 100]
-    
-    for size in block_sizes:
-        transition = DiffuseTransition(duration_ms=200, block_size=size)
-        
-        with qtbot.waitSignal(transition.finished, timeout=2000):
-            result = transition.start(test_pixmap, test_pixmap2, test_widget)
-            assert result is True
-        
-        transition.cleanup()
-
-
-def test_diffuse_set_block_size():
+def test_diffuse_block_size(qapp):
     """Test setting block size."""
-    transition = DiffuseTransition(duration_ms=100, block_size=50)
+    transition = DiffuseTransition(duration_ms=100, block_size=8)
     
-    assert transition._block_size == 50
+    assert transition._block_size == 8
     
     transition.set_block_size(100)
     assert transition._block_size == 100
@@ -213,23 +197,24 @@ def test_diffuse_small_widget(qapp, test_widget, test_pixmap, test_pixmap2, qtbo
 
 
 def test_diffuse_randomization(qapp, test_widget, test_pixmap, test_pixmap2):
-    """Test that blocks are revealed in random order."""
-    transition = DiffuseTransition(duration_ms=2000, block_size=50)
+    """Test that pixels are revealed in random order."""
+    transition = DiffuseTransition(duration_ms=2000, block_size=8)
     
     # Start transition
     transition.start(test_pixmap, test_pixmap2, test_widget)
     
-    # Blocks should be shuffled (not in original order)
+    # Pixel grid should be shuffled (not in original order)
     # Note: This test might rarely fail due to random chance
-    if len(transition._blocks) > 5:
-        # Check if first 5 blocks are in sequential order
+    if len(transition._pixel_grid) > 5:
+        # Check if first 5 pixels are in sequential order
         first_five_sequential = True
         for i in range(4):
-            if transition._blocks[i].x() >= transition._blocks[i+1].x():
+            # _pixel_grid is list of (x, y) tuples
+            if transition._pixel_grid[i][0] >= transition._pixel_grid[i+1][0]:
                 first_five_sequential = False
                 break
         
         # Should be shuffled (not sequential)
-        assert first_five_sequential is False or len(transition._blocks) < 10
+        assert first_five_sequential is False or len(transition._pixel_grid) < 10
     
     transition.cleanup()

@@ -9,8 +9,13 @@ import logging
 import shutil
 from pathlib import Path
 from enum import Enum
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtCore import Qt
 from core.logging.logger import setup_logging, get_logger
+from core.settings.settings_manager import SettingsManager
+from core.animation import AnimationManager
+from engine.screensaver_engine import ScreensaverEngine
+from ui.settings_dialog import SettingsDialog
 
 logger = get_logger(__name__)
 
@@ -31,14 +36,19 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     - /c - Show configuration dialog
     - /p <hwnd> - Preview mode (show in window with handle <hwnd>)
     
+    Debug flags (ignored here, handled earlier):
+    - --debug, -d - Enable debug logging
+    
     Returns:
         tuple: (ScreensaverMode, preview_window_handle)
     """
-    args = sys.argv
+    # Filter out debug flags
+    args = [arg for arg in sys.argv if arg not in ('--debug', '-d')]
     
-    logger.debug(f"Command-line arguments: {args}")
+    logger.debug(f"Command-line arguments: {sys.argv}")
+    logger.debug(f"Filtered arguments: {args}")
     
-    # Default to run mode if no arguments
+    # Default to run mode if no arguments (besides program name)
     if len(args) == 1:
         logger.info("No arguments provided, defaulting to RUN mode")
         return ScreensaverMode.RUN, None
@@ -119,6 +129,109 @@ def cleanup_pycache(root_path: Path) -> int:
     return removed_count
 
 
+def run_screensaver(app: QApplication) -> int:
+    """
+    Run the screensaver.
+    
+    Args:
+        app: Qt application instance
+    
+    Returns:
+        Exit code
+    """
+    logger.info("Initializing screensaver engine")
+    
+    # Create settings manager
+    settings = SettingsManager()
+    
+    # Check if sources are configured (using dot notation)
+    folders = settings.get('sources.folders', [])
+    rss_feeds = settings.get('sources.rss_feeds', [])
+    
+    if not folders and not rss_feeds:
+        logger.warning("No image sources configured - opening settings dialog")
+        QMessageBox.information(
+            None,
+            "No Sources Configured",
+            "No image sources have been configured.\n\n"
+            "Please add folders or RSS feeds in the settings dialog."
+        )
+        return run_config(app)
+    
+    # Create and start screensaver engine
+    try:
+        engine = ScreensaverEngine()
+        if not engine.initialize():
+            logger.error("Failed to initialize screensaver engine")
+            logger.warning("Opening settings dialog to configure sources")
+            QMessageBox.warning(
+                None,
+                "Configuration Required",
+                "Failed to initialize screensaver.\n\n"
+                "Please configure image sources in the settings dialog."
+            )
+            return run_config(app)
+        
+        if not engine.start():
+            logger.error("Failed to start screensaver engine")
+            logger.warning("Opening settings dialog")
+            QMessageBox.warning(
+                None,
+                "Startup Failed",
+                "Failed to start screensaver.\n\n"
+                "Please check your configuration."
+            )
+            return run_config(app)
+        
+        logger.info("Screensaver engine started - entering event loop")
+        return app.exec()
+        
+    except Exception as e:
+        logger.exception(f"Failed to start screensaver engine: {e}")
+        QMessageBox.critical(
+            None,
+            "Screensaver Error",
+            f"Failed to start screensaver:\n{e}"
+        )
+        return 1
+
+
+def run_config(app: QApplication) -> int:
+    """
+    Run configuration dialog.
+    
+    Args:
+        app: Qt application instance
+    
+    Returns:
+        Exit code
+    """
+    logger.info("Opening configuration dialog")
+    
+    # Create settings manager
+    settings = SettingsManager()
+    
+    # Create animation manager
+    animations = AnimationManager()
+    
+    # Create and show settings dialog
+    try:
+        dialog = SettingsDialog(settings, animations)
+        dialog.show()
+        
+        logger.info("Configuration dialog opened - entering event loop")
+        return app.exec()
+        
+    except Exception as e:
+        logger.exception(f"Failed to open configuration dialog: {e}")
+        QMessageBox.critical(
+            None,
+            "Configuration Error",
+            f"Failed to open settings:\n{e}"
+        )
+        return 1
+
+
 def main():
     """Main entry point for the screensaver application."""
     # Setup logging first
@@ -142,12 +255,18 @@ def main():
     # Parse command-line arguments
     mode, preview_hwnd = parse_screensaver_args()
     
+    # Enable High DPI scaling BEFORE creating QApplication
+    QApplication.setHighDpiScaleFactorRoundingPolicy(
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+    )
+    
     # Create Qt application
     app = QApplication(sys.argv)
     app.setApplicationName("ShittyRandomPhotoScreenSaver")
     app.setOrganizationName("ShittyRandomPhotoScreenSaver")
     
     logger.info(f"Qt Application created: {app.applicationName()}")
+    logger.debug(f"High DPI scaling enabled")
     
     # Route to appropriate mode
     exit_code = 0
@@ -155,21 +274,17 @@ def main():
     try:
         if mode == ScreensaverMode.RUN:
             logger.info("Starting screensaver in RUN mode")
-            # TODO: Start screensaver engine
-            logger.warning("RUN mode not yet implemented")
+            exit_code = run_screensaver(app)
             
         elif mode == ScreensaverMode.CONFIG:
             logger.info("Starting configuration dialog")
-            # TODO: Show settings dialog
-            logger.warning("CONFIG mode not yet implemented")
+            exit_code = run_config(app)
             
         elif mode == ScreensaverMode.PREVIEW:
             logger.info(f"Starting preview mode (hwnd={preview_hwnd})")
             # TODO: Show preview in parent window
             logger.warning("PREVIEW mode not yet implemented")
-        
-        # For now, just exit
-        logger.info("Exiting (implementation pending)")
+            logger.info("Exiting (preview not yet implemented)")
         
     except Exception as e:
         logger.exception(f"Fatal error in main: {e}")

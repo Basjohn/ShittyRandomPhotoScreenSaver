@@ -21,7 +21,7 @@ from PySide6.QtGui import QIcon, QFont, QColor, QPalette
 from core.logging.logger import get_logger
 from core.settings.settings_manager import SettingsManager
 from core.animation import AnimationManager
-from ui.tabs import SourcesTab, TransitionsTab, WidgetsTab
+from ui.tabs import SourcesTab, TransitionsTab, WidgetsTab, DisplayTab
 
 logger = get_logger(__name__)
 
@@ -193,12 +193,19 @@ class SettingsDialog(QDialog):
                     custom_styles = """
                     /* Settings Dialog Custom Styles */
                     QDialog {
-                        background-color: #2b2b2b;
+                        background-color: rgba(43, 43, 43, 0.8);
+                        border: 3px solid #ffffff;
+                        border-radius: 12px;
+                    }
+                    
+                    #dialogContainer {
+                        background-color: rgba(43, 43, 43, 0.8);
+                        border: 2px solid #5a5a5a;
                         border-radius: 10px;
                     }
                     
                     #customTitleBar {
-                        background-color: #1e1e1e;
+                        background-color: rgba(30, 30, 30, 0.8);
                         border-top-left-radius: 10px;
                         border-top-right-radius: 10px;
                     }
@@ -217,7 +224,7 @@ class SettingsDialog(QDialog):
                     }
                     
                     #titleBarButton:hover {
-                        background-color: #3e3e3e;
+                        background-color: rgba(62, 62, 62, 0.8);
                         border-radius: 4px;
                     }
                     
@@ -230,12 +237,17 @@ class SettingsDialog(QDialog):
                     }
                     
                     #titleBarCloseButton:hover {
-                        background-color: #e81123;
+                        background-color: rgba(232, 17, 35, 0.8);
                         border-radius: 4px;
                     }
                     
+                    #sidebar {
+                        background-color: rgba(35, 35, 35, 0.8);
+                        border-radius: 8px;
+                    }
+                    
                     #tabButton {
-                        background-color: #2b2b2b;
+                        background-color: rgba(43, 43, 43, 0.8);
                         color: #cccccc;
                         border: none;
                         text-align: left;
@@ -245,20 +257,144 @@ class SettingsDialog(QDialog):
                     }
                     
                     #tabButton:hover {
-                        background-color: #3e3e3e;
+                        background-color: rgba(62, 62, 62, 0.8);
                         color: #ffffff;
                     }
                     
                     #tabButton:checked {
-                        background-color: #0078d4;
+                        background-color: rgba(0, 120, 212, 0.8);
                         color: #ffffff;
                         font-weight: bold;
                     }
                     
                     #contentArea {
-                        background-color: #1e1e1e;
+                        background-color: rgba(30, 30, 30, 0.8);
                         border-radius: 8px;
                         padding: 20px;
+                    }
+                    
+                    /* Input fields and controls - dark theme, no bright white */
+                    QLineEdit {
+                        background-color: rgba(45, 45, 45, 0.8);
+                        color: #ffffff;
+                        border: 1px solid rgba(90, 90, 90, 0.8);
+                        border-radius: 4px;
+                        padding: 6px;
+                    }
+                    
+                    QLineEdit:focus {
+                        border: 1px solid rgba(0, 120, 212, 0.8);
+                    }
+                    
+                    QComboBox {
+                        background-color: rgba(45, 45, 45, 0.8);
+                        color: #ffffff;
+                        border: 1px solid rgba(90, 90, 90, 0.8);
+                        border-radius: 4px;
+                        padding: 6px;
+                    }
+                    
+                    QComboBox:hover {
+                        border: 1px solid rgba(0, 120, 212, 0.8);
+                    }
+                    
+                    QComboBox::drop-down {
+                        border: none;
+                        background-color: rgba(62, 62, 62, 0.8);
+                        border-radius: 2px;
+                    }
+                    
+                    QComboBox QAbstractItemView {
+                        background-color: rgba(45, 45, 45, 0.95);
+                        color: #ffffff;
+                        border: 1px solid rgba(90, 90, 90, 0.8);
+                        selection-background-color: rgba(0, 120, 212, 0.8);
+                    }
+                    
+                    QSpinBox {
+                        background-color: rgba(45, 45, 45, 0.8);
+                        color: #ffffff;
+                        border: 1px solid rgba(90, 90, 90, 0.8);
+                        border-radius: 4px;
+                        padding: 4px;
+                    }
+                    
+                    QSpinBox:focus {
+                        border: 1px solid rgba(0, 120, 212, 0.8);
+                    }
+                    
+                    QListWidget {
+                        background-color: rgba(35, 35, 35, 0.8);
+                        color: #ffffff;
+                        border: 1px solid rgba(90, 90, 90, 0.8);
+                        border-radius: 4px;
+                    }
+                    
+                    QListWidget::item:selected {
+                        background-color: rgba(70, 70, 70, 0.8);
+                        border-left: 3px solid rgba(120, 120, 120, 0.9);
+                    }
+                    
+                    QListWidget::item:hover {
+                        background-color: rgba(62, 62, 62, 0.8);
+                    }
+                    
+                    QPushButton {
+                        background-color: rgba(60, 60, 60, 0.8);
+                        color: #ffffff;
+                        border: 1px solid rgba(90, 90, 90, 0.8);
+                        border-radius: 4px;
+                        padding: 8px 16px;
+                    }
+                    
+                    QPushButton:hover {
+                        background-color: rgba(75, 75, 75, 0.8);
+                        border: 1px solid rgba(110, 110, 110, 0.8);
+                    }
+                    
+                    QPushButton:pressed {
+                        background-color: rgba(50, 50, 50, 0.8);
+                        border: 1px solid rgba(70, 70, 70, 0.8);
+                    }
+                    
+                    QGroupBox {
+                        background-color: rgba(40, 40, 40, 0.8);
+                        border: 1px solid rgba(90, 90, 90, 0.8);
+                        border-radius: 6px;
+                        margin-top: 15px;
+                        margin-bottom: 10px;
+                        padding: 15px 10px 10px 10px;
+                        color: #ffffff;
+                    }
+                    
+                    QGroupBox::title {
+                        subcontrol-origin: margin;
+                        subcontrol-position: top left;
+                        padding: 2px 8px;
+                        margin-top: 5px;
+                        color: #ffffff;
+                    }
+                    
+                    QCheckBox {
+                        color: #ffffff;
+                        spacing: 8px;
+                    }
+                    
+                    QCheckBox::indicator {
+                        width: 18px;
+                        height: 18px;
+                        background-color: rgba(45, 45, 45, 0.8);
+                        border: 1px solid rgba(90, 90, 90, 0.8);
+                        border-radius: 3px;
+                    }
+                    
+                    QCheckBox::indicator:checked {
+                        background-color: rgba(0, 120, 212, 0.8);
+                        border: 1px solid rgba(0, 120, 212, 0.8);
+                    }
+                    
+                    QLabel {
+                        color: #ffffff;
                     }
                     """
                     
@@ -299,18 +435,21 @@ class SettingsDialog(QDialog):
         
         # Tab buttons
         self.sources_tab_btn = TabButton("Sources", "📁")
+        self.display_tab_btn = TabButton("Display", "🖥")
         self.transitions_tab_btn = TabButton("Transitions", "✨")
         self.widgets_tab_btn = TabButton("Widgets", "🕐")
         self.about_tab_btn = TabButton("About", "ℹ")
         
         self.tab_buttons = [
             self.sources_tab_btn,
+            self.display_tab_btn,
             self.transitions_tab_btn,
             self.widgets_tab_btn,
             self.about_tab_btn
         ]
         
         sidebar_layout.addWidget(self.sources_tab_btn)
+        sidebar_layout.addWidget(self.display_tab_btn)
         sidebar_layout.addWidget(self.transitions_tab_btn)
         sidebar_layout.addWidget(self.widgets_tab_btn)
         sidebar_layout.addWidget(self.about_tab_btn)
@@ -322,11 +461,13 @@ class SettingsDialog(QDialog):
         
         # Create actual tabs
         self.sources_tab = SourcesTab(self._settings)
+        self.display_tab = DisplayTab(self._settings)
         self.transitions_tab = TransitionsTab(self._settings)
         self.widgets_tab = WidgetsTab(self._settings)
         self.about_tab = self._create_about_tab()
         
         self.content_stack.addWidget(self.sources_tab)
+        self.content_stack.addWidget(self.display_tab)
         self.content_stack.addWidget(self.transitions_tab)
         self.content_stack.addWidget(self.widgets_tab)
         self.content_stack.addWidget(self.about_tab)
@@ -369,7 +510,7 @@ class SettingsDialog(QDialog):
             "<br>"
             "<p><b>Features:</b></p>"
             "<ul>"
-            "<li>4 Professional transitions (Crossfade, Slide, Diffuse, Block Flip)</li>"
+            "<li>5 Professional transitions (Crossfade, Slide, Wipe, Diffuse, Block Flip)</li>"
             "<li>Pan & Scan (Ken Burns effect)</li>"
             "<li>Clock and Weather widgets</li>"
             "<li>Multiple image sources (Folders, RSS feeds)</li>"
@@ -381,9 +522,10 @@ class SettingsDialog(QDialog):
             "<ul>"
             "<li><b>Z</b> - Go back to previous image</li>"
             "<li><b>X</b> - Go forward to next image</li>"
-            "<li><b>C</b> - Cycle through transition modes</li>"
+            "<li><b>C</b> - Cycle transition modes (Crossfade → Slide → Wipe → Diffuse → Block Flip)</li>"
             "<li><b>S</b> - Stop screensaver and open Settings</li>"
-            "<li><b>ESC/Click/Any Key</b> - Exit screensaver</li>"
+            "<li><b>ESC</b> - Exit screensaver</li>"
+            "<li><b>Mouse Click/Any Other Key</b> - Exit screensaver</li>"
             "</ul>"
         )
         about_text.setWordWrap(True)
@@ -403,9 +545,10 @@ class SettingsDialog(QDialog):
         
         # Tab buttons
         self.sources_tab_btn.clicked.connect(lambda: self._switch_tab(0))
-        self.transitions_tab_btn.clicked.connect(lambda: self._switch_tab(1))
-        self.widgets_tab_btn.clicked.connect(lambda: self._switch_tab(2))
-        self.about_tab_btn.clicked.connect(lambda: self._switch_tab(3))
+        self.display_tab_btn.clicked.connect(lambda: self._switch_tab(1))
+        self.transitions_tab_btn.clicked.connect(lambda: self._switch_tab(2))
+        self.widgets_tab_btn.clicked.connect(lambda: self._switch_tab(3))
+        self.about_tab_btn.clicked.connect(lambda: self._switch_tab(4))
     
     def _switch_tab(self, index: int) -> None:
         """

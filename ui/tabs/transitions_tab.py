@@ -63,6 +63,7 @@ class TransitionsTab(QWidget):
         self.transition_combo.addItems([
             "Crossfade",
             "Slide",
+            "Wipe",
             "Diffuse",
             "Block Puzzle Flip"
         ])
@@ -228,7 +229,7 @@ class TransitionsTab(QWidget):
         transition = self.transition_combo.currentText()
         
         # Show/hide direction for directional transitions
-        show_direction = transition in ["Slide", "Diffuse"]
+        show_direction = transition in ["Slide", "Wipe", "Diffuse"]
         self.direction_group.setVisible(show_direction)
         
         # Show/hide block flip settings
