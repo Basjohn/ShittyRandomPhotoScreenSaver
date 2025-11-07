@@ -1,16 +1,16 @@
 """
 Wipe transition effect.
 
-Reveals new image progressively as a line moves across the screen.
-Supports multiple directions and configurable speed.
+Reveals new image progressively using a widget mask on the new image label.
+No per-frame pixmap compositing to avoid DPR/size mismatches.
 """
 from typing import Optional
 from enum import Enum
 from PySide6.QtWidgets import QLabel, QWidget
-from PySide6.QtCore import QTimer, Qt
-from PySide6.QtGui import QPixmap, QPainter
-
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QPixmap, QRegion
 from transitions.base_transition import BaseTransition, TransitionState
+from core.animation.types import EasingCurve
 from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
@@ -40,16 +40,25 @@ class WipeTransition(BaseTransition):
             duration_ms: Duration in milliseconds
             direction: Wipe direction
         """
-        super().__init__()
+        super().__init__(duration_ms)
         
         self._duration_ms = duration_ms
         self._direction = direction
-        self._display_label: Optional[QLabel] = None
-        self._timer: Optional[QTimer] = None
+        self._old_label: Optional[QLabel] = None
+        self._new_label: Optional[QLabel] = None
+        self._animation_id: Optional[str] = None
+        self._widget: Optional[QWidget] = None
         self._old_pixmap: Optional[QPixmap] = None
         self._new_pixmap: Optional[QPixmap] = None
         self._elapsed_ms = 0
         self._fps = 60
+        
+        # FIX: Use ResourceManager for Qt object lifecycle
+        try:
+            from core.resources.manager import ResourceManager
+            self._resource_manager = ResourceManager()
+        except Exception:
+            self._resource_manager = None
         
         logger.debug(f"WipeTransition created (duration={duration_ms}ms, direction={direction.value})")
     
@@ -78,26 +87,39 @@ class WipeTransition(BaseTransition):
         self._old_pixmap = old_pixmap
         self._new_pixmap = new_pixmap
         self._elapsed_ms = 0
+        self._widget = widget
         
         # If no old image, show immediately
         if not old_pixmap or old_pixmap.isNull():
             self._show_image_immediately(widget)
             return True
         
-        # Create display label
-        self._display_label = QLabel(widget)
-        self._display_label.setGeometry(widget.rect())
-        self._display_label.setScaledContents(False)
-        self._display_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._display_label.show()
+        # Two-label pattern (like Crossfade): old below, new above with mask
+        self._old_label = QLabel(widget)
+        self._old_label.setGeometry(0, 0, widget.width(), widget.height())
+        self._old_label.setScaledContents(False)
+        self._old_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._old_label.setPixmap(old_pixmap)
+        self._old_label.show()
+
+        self._new_label = QLabel(widget)
+        self._new_label.setGeometry(0, 0, widget.width(), widget.height())
+        self._new_label.setScaledContents(False)
+        self._new_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._new_label.setPixmap(new_pixmap)
+        # Start fully hidden
+        self._new_label.setMask(QRegion())
+        self._new_label.show()
         
-        # Start at old image
-        self._display_label.setPixmap(old_pixmap)
-        
-        # Start timer
-        self._timer = QTimer()
-        self._timer.timeout.connect(self._update_frame)
-        self._timer.start(1000 // self._fps)  # 60 FPS
+        # Drive animation via centralized AnimationManager
+        am = self._get_animation_manager(widget)
+        duration_sec = max(0.001, self._duration_ms / 1000.0)
+        self._animation_id = am.animate_custom(
+            duration=duration_sec,
+            easing=EasingCurve.QUAD_IN_OUT,
+            update_callback=lambda p: self._on_anim_update(p),
+            on_complete=lambda: self._finish_transition(),
+        )
         
         self._set_state(TransitionState.RUNNING)
         self.started.emit()
@@ -112,13 +134,13 @@ class WipeTransition(BaseTransition):
         
         logger.debug("Stopping wipe transition")
         
-        if self._timer:
+        if self._animation_id and self._widget:
             try:
-                self._timer.stop()
-                self._timer.deleteLater()
-            except RuntimeError:
+                am = self._get_animation_manager(self._widget)
+                am.cancel_animation(self._animation_id)
+            except Exception:
                 pass
-            self._timer = None
+            self._animation_id = None
         
         self._set_state(TransitionState.CANCELLED)
     
@@ -128,95 +150,52 @@ class WipeTransition(BaseTransition):
         
         self.stop()
         
-        if self._display_label:
+        if self._new_label:
             try:
-                self._display_label.deleteLater()
+                self._new_label.deleteLater()
             except RuntimeError:
                 pass
-            self._display_label = None
+            self._new_label = None
+
+        if self._old_label:
+            try:
+                self._old_label.deleteLater()
+            except RuntimeError:
+                pass
+            self._old_label = None
         
         self._old_pixmap = None
         self._new_pixmap = None
     
-    def _update_frame(self) -> None:
-        """Update animation frame."""
-        if not self._display_label or not self._old_pixmap or not self._new_pixmap:
+    def _on_anim_update(self, progress: float) -> None:
+        if not self._new_label or not self._widget:
             return
-        
-        self._elapsed_ms += 1000 // self._fps
-        
-        # Calculate progress (0.0 to 1.0)
-        progress = min(self._elapsed_ms / self._duration_ms, 1.0)
-        
-        # Create composite image with wipe effect
-        composite = self._create_wipe_frame(progress)
-        
-        try:
-            self._display_label.setPixmap(composite)
-        except RuntimeError:
-            pass
-        
-        # Emit progress
-        self._emit_progress(progress)
-        
-        # Check if complete
-        if progress >= 1.0:
-            self._finish_transition()
-    
-    def _create_wipe_frame(self, progress: float) -> QPixmap:
-        """
-        Create a frame with wipe effect.
-        
-        Args:
-            progress: Animation progress (0.0 to 1.0)
-        
-        Returns:
-            Composite pixmap with wipe applied
-        """
-        width = self._old_pixmap.width()
-        height = self._old_pixmap.height()
-        
-        # Create result pixmap
-        result = QPixmap(width, height)
-        result.fill(Qt.GlobalColor.black)
-        
-        painter = QPainter(result)
-        
-        # Calculate wipe position based on direction
+        progress = max(0.0, min(1.0, progress))
+        w = self._widget.width()
+        h = self._widget.height()
+
         if self._direction == WipeDirection.LEFT_TO_RIGHT:
-            # Draw old image
-            painter.drawPixmap(0, 0, self._old_pixmap)
-            # Draw new image with clipping
-            wipe_x = int(width * progress)
-            painter.setClipRect(0, 0, wipe_x, height)
-            painter.drawPixmap(0, 0, self._new_pixmap)
-        
+            rw = int(w * progress)
+            region = QRegion(0, 0, rw, h)
         elif self._direction == WipeDirection.RIGHT_TO_LEFT:
-            # Draw old image
-            painter.drawPixmap(0, 0, self._old_pixmap)
-            # Draw new image with clipping
-            wipe_x = int(width * (1.0 - progress))
-            painter.setClipRect(wipe_x, 0, width - wipe_x, height)
-            painter.drawPixmap(0, 0, self._new_pixmap)
-        
+            x = int(w * (1.0 - progress))
+            region = QRegion(x, 0, w - x, h)
         elif self._direction == WipeDirection.TOP_TO_BOTTOM:
-            # Draw old image
-            painter.drawPixmap(0, 0, self._old_pixmap)
-            # Draw new image with clipping
-            wipe_y = int(height * progress)
-            painter.setClipRect(0, 0, width, wipe_y)
-            painter.drawPixmap(0, 0, self._new_pixmap)
-        
-        elif self._direction == WipeDirection.BOTTOM_TO_TOP:
-            # Draw old image
-            painter.drawPixmap(0, 0, self._old_pixmap)
-            # Draw new image with clipping
-            wipe_y = int(height * (1.0 - progress))
-            painter.setClipRect(0, wipe_y, width, height - wipe_y)
-            painter.drawPixmap(0, 0, self._new_pixmap)
-        
-        painter.end()
-        return result
+            rh = int(h * progress)
+            region = QRegion(0, 0, w, rh)
+        else:  # BOTTOM_TO_TOP
+            y = int(h * (1.0 - progress))
+            region = QRegion(0, y, w, h - y)
+
+        try:
+            self._new_label.setMask(region)
+        except RuntimeError:
+            return
+        self._emit_progress(progress)
+    
+    def _compose_wipe_frame(self, progress: float, fitted_old: QPixmap, fitted_new: QPixmap) -> QPixmap:
+        # Deprecated path retained for compatibility; not used in new implementation
+        return fitted_new
     
     def _finish_transition(self) -> None:
         """Finish the transition."""
@@ -225,19 +204,19 @@ class WipeTransition(BaseTransition):
         
         logger.debug("Wipe transition finished")
         
-        # Stop timer
-        if self._timer:
+        # Cancel central animation if active
+        if self._animation_id and self._widget:
             try:
-                self._timer.stop()
-                self._timer.deleteLater()
-            except RuntimeError:
+                am = self._get_animation_manager(self._widget)
+                am.cancel_animation(self._animation_id)
+            except Exception:
                 pass
-            self._timer = None
+            self._animation_id = None
         
-        # Show final image
-        if self._display_label and self._new_pixmap:
+        # Clear mask and ensure new label fully visible before finishing
+        if self._new_label:
             try:
-                self._display_label.setPixmap(self._new_pixmap)
+                self._new_label.clearMask()
             except RuntimeError:
                 pass
         

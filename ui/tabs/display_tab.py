@@ -11,7 +11,7 @@ Allows users to configure display settings:
 from typing import Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QSpinBox, QGroupBox, QCheckBox
+    QSpinBox, QGroupBox, QCheckBox, QScrollArea
 )
 from PySide6.QtCore import Signal
 
@@ -45,8 +45,23 @@ class DisplayTab(QWidget):
         logger.debug("DisplayTab created")
     
     def _setup_ui(self) -> None:
-        """Setup tab UI."""
-        layout = QVBoxLayout(self)
+        """Setup tab UI with scroll area."""
+        # Create scroll area
+        from PySide6.QtCore import Qt
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        scroll.setStyleSheet("""
+            QScrollArea { border: none; background: transparent; }
+            QScrollArea > QWidget > QWidget { background: transparent; }
+            QScrollArea QWidget { background: transparent; }
+        """)
+        
+        # Create content widget
+        content = QWidget()
+        layout = QVBoxLayout(content)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(20)  # Increased from 15 to 20 for better breathing room
         
@@ -182,10 +197,10 @@ class DisplayTab(QWidget):
         manual_speed_row = QHBoxLayout()
         manual_speed_row.addWidget(QLabel("Manual speed:"))
         self.pan_speed_spin = QSpinBox()
-        self.pan_speed_spin.setRange(1, 100)
-        self.pan_speed_spin.setSingleStep(5)
+        self.pan_speed_spin.setRange(1, 50)
+        self.pan_speed_spin.setSingleStep(1)
         self.pan_speed_spin.setSuffix(" px/s")
-        self.pan_speed_spin.setValue(20)
+        self.pan_speed_spin.setValue(5)
         self.pan_speed_spin.setEnabled(False)  # Disabled by default (auto mode)
         self.pan_speed_spin.valueChanged.connect(self._save_settings)
         manual_speed_row.addWidget(self.pan_speed_spin)
@@ -196,6 +211,13 @@ class DisplayTab(QWidget):
         
         # Add stretch at bottom
         layout.addStretch()
+        
+        # Set scroll area widget and add to main layout
+        scroll.setWidget(content)
+        
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll)
     
     def _load_settings(self) -> None:
         """Load settings from settings manager."""
@@ -269,7 +291,7 @@ class DisplayTab(QWidget):
                 pan_auto = pan_auto.lower() == 'true'
             self.pan_auto_check.setChecked(pan_auto)
             
-            pan_speed = self._settings.get('display.pan_speed', 20.0)
+            pan_speed = self._settings.get('display.pan_speed', 3.0)
             self.pan_speed_spin.setValue(int(pan_speed))
             self.pan_speed_spin.setEnabled(not pan_auto)
             

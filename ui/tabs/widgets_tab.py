@@ -8,13 +8,15 @@ Allows users to configure overlay widgets:
 from typing import Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QSpinBox, QGroupBox, QCheckBox, QLineEdit, QColorDialog, QPushButton
+    QSpinBox, QGroupBox, QCheckBox, QLineEdit, QColorDialog, QPushButton,
+    QScrollArea
 )
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QColor
 
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger
+from widgets.timezone_utils import get_local_timezone, get_common_timezones, get_all_pytz_timezones, PYTZ_AVAILABLE
 
 logger = get_logger(__name__)
 
@@ -44,8 +46,29 @@ class WidgetsTab(QWidget):
         logger.debug("WidgetsTab created")
     
     def _setup_ui(self) -> None:
-        """Setup tab UI."""
-        layout = QVBoxLayout(self)
+        """Setup tab UI with scroll area."""
+        # Create scroll area
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        scroll.setStyleSheet("""
+            QScrollArea { 
+                border: none; 
+                background: transparent; 
+            }
+            QScrollArea > QWidget > QWidget {
+                background: transparent;
+            }
+            QScrollArea QWidget {
+                background: transparent;
+            }
+        """)
+        
+        # Create content widget
+        content = QWidget()
+        layout = QVBoxLayout(content)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
         
@@ -78,12 +101,37 @@ class WidgetsTab(QWidget):
         self.clock_seconds.stateChanged.connect(self._save_settings)
         clock_layout.addWidget(self.clock_seconds)
         
+        # Timezone
+        tz_row = QHBoxLayout()
+        tz_row.addWidget(QLabel("Timezone:"))
+        self.clock_timezone = QComboBox()
+        self.clock_timezone.setMinimumWidth(200)
+        
+        # Populate timezone dropdown
+        self._populate_timezones()
+        
+        self.clock_timezone.currentTextChanged.connect(self._save_settings)
+        tz_row.addWidget(self.clock_timezone)
+        
+        # Auto-detect button
+        self.tz_auto_btn = QPushButton("Auto-Detect")
+        self.tz_auto_btn.clicked.connect(self._auto_detect_timezone)
+        tz_row.addWidget(self.tz_auto_btn)
+        tz_row.addStretch()
+        clock_layout.addLayout(tz_row)
+        
+        # Show timezone abbreviation
+        self.clock_show_tz = QCheckBox("Show Timezone Abbreviation")
+        self.clock_show_tz.stateChanged.connect(self._save_settings)
+        clock_layout.addWidget(self.clock_show_tz)
+        
         # Position
         position_row = QHBoxLayout()
         position_row.addWidget(QLabel("Position:"))
         self.clock_position = QComboBox()
         self.clock_position.addItems([
             "Top Left", "Top Center", "Top Right",
+            "Center",
             "Bottom Left", "Bottom Center", "Bottom Right"
         ])
         self.clock_position.currentTextChanged.connect(self._save_settings)
@@ -135,14 +183,10 @@ class WidgetsTab(QWidget):
         self.weather_enabled.stateChanged.connect(self._save_settings)
         weather_layout.addWidget(self.weather_enabled)
         
-        # API key
-        api_row = QHBoxLayout()
-        api_row.addWidget(QLabel("API Key:"))
-        self.weather_api_key = QLineEdit()
-        self.weather_api_key.setPlaceholderText("OpenWeatherMap API key...")
-        self.weather_api_key.textChanged.connect(self._save_settings)
-        api_row.addWidget(self.weather_api_key)
-        weather_layout.addLayout(api_row)
+        # Info label - no API key needed!
+        info_label = QLabel("✓ Uses Open-Meteo API (free, no API key required)")
+        info_label.setStyleSheet("color: #4CAF50; font-size: 11px;")
+        weather_layout.addWidget(info_label)
         
         # Location
         location_row = QHBoxLayout()
@@ -190,6 +234,13 @@ class WidgetsTab(QWidget):
         layout.addWidget(weather_group)
         
         layout.addStretch()
+        
+        # Set scroll area widget and add to main layout
+        scroll.setWidget(content)
+        
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll)
     
     def _load_settings(self) -> None:
         """Load settings from settings manager."""
@@ -203,6 +254,14 @@ class WidgetsTab(QWidget):
             self.clock_format.setCurrentIndex(index)
         
         self.clock_seconds.setChecked(clock_config.get('show_seconds', True))
+        
+        # Load timezone settings
+        timezone_str = clock_config.get('timezone', 'local')
+        tz_index = self.clock_timezone.findData(timezone_str)
+        if tz_index >= 0:
+            self.clock_timezone.setCurrentIndex(tz_index)
+        
+        self.clock_show_tz.setChecked(clock_config.get('show_timezone', False))
         
         position = clock_config.get('position', 'Top Right')
         index = self.clock_position.findText(position)
@@ -219,7 +278,7 @@ class WidgetsTab(QWidget):
         # Load weather settings
         weather_config = self._settings.get('widgets', {}).get('weather', {})
         self.weather_enabled.setChecked(weather_config.get('enabled', False))
-        self.weather_api_key.setText(weather_config.get('api_key', ''))
+        # No API key needed with Open-Meteo!
         self.weather_location.setText(weather_config.get('location', 'London'))
         
         weather_pos = weather_config.get('position', 'Bottom Left')
@@ -251,10 +310,16 @@ class WidgetsTab(QWidget):
     
     def _save_settings(self) -> None:
         """Save current settings."""
+        # Get timezone from current selection
+        tz_data = self.clock_timezone.currentData()
+        timezone_str = tz_data if tz_data else 'local'
+        
         clock_config = {
             'enabled': self.clock_enabled.isChecked(),
             'format': '12h' if self.clock_format.currentText() == "12 Hour" else '24h',
             'show_seconds': self.clock_seconds.isChecked(),
+            'timezone': timezone_str,
+            'show_timezone': self.clock_show_tz.isChecked(),
             'position': self.clock_position.currentText(),
             'font_size': self.clock_font_size.value(),
             'margin': self.clock_margin.value(),
@@ -264,7 +329,7 @@ class WidgetsTab(QWidget):
         
         weather_config = {
             'enabled': self.weather_enabled.isChecked(),
-            'api_key': self.weather_api_key.text(),
+            # No api_key needed with Open-Meteo!
             'location': self.weather_location.text(),
             'position': self.weather_position.currentText(),
             'font_size': self.weather_font_size.value(),
@@ -282,3 +347,31 @@ class WidgetsTab(QWidget):
         self.widgets_changed.emit()
         
         logger.debug("Saved widget settings")
+    
+    def _populate_timezones(self) -> None:
+        """Populate timezone dropdown with common timezones and UTC offsets."""
+        # Get common timezones
+        timezones = get_common_timezones()
+        
+        for display_name, tz_str in timezones:
+            self.clock_timezone.addItem(display_name, tz_str)
+        
+        logger.debug(f"Populated {len(timezones)} timezones")
+    
+    def _auto_detect_timezone(self) -> None:
+        """Auto-detect user's local timezone."""
+        detected_tz = get_local_timezone()
+        
+        # Find the timezone in the dropdown
+        tz_index = self.clock_timezone.findData(detected_tz)
+        if tz_index >= 0:
+            self.clock_timezone.setCurrentIndex(tz_index)
+            logger.info(f"Auto-detected timezone: {detected_tz}")
+        else:
+            # Try to add it if not found
+            self.clock_timezone.addItem(f"Detected: {detected_tz}", detected_tz)
+            self.clock_timezone.setCurrentIndex(self.clock_timezone.count() - 1)
+            logger.info(f"Added detected timezone: {detected_tz}")
+        
+        # Save settings with new timezone
+        self._save_settings()

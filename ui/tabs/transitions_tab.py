@@ -10,9 +10,9 @@ Allows users to configure transition settings:
 from typing import Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QSpinBox, QGroupBox, QCheckBox
+    QSpinBox, QGroupBox, QScrollArea
 )
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Signal, Qt
 
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger
@@ -43,8 +43,22 @@ class TransitionsTab(QWidget):
         logger.debug("TransitionsTab created")
     
     def _setup_ui(self) -> None:
-        """Setup tab UI."""
-        layout = QVBoxLayout(self)
+        """Setup tab UI with scroll area."""
+        # Create scroll area
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        scroll.setStyleSheet("""
+            QScrollArea { border: none; background: transparent; }
+            QScrollArea > QWidget > QWidget { background: transparent; }
+            QScrollArea QWidget { background: transparent; }
+        """)
+        
+        # Create content widget
+        content = QWidget()
+        layout = QVBoxLayout(content)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
         
@@ -83,7 +97,7 @@ class TransitionsTab(QWidget):
         self.duration_spin = QSpinBox()
         self.duration_spin.setRange(100, 10000)
         self.duration_spin.setSingleStep(100)
-        self.duration_spin.setValue(1000)
+        self.duration_spin.setValue(1300)  # BUG FIX #5: Increased from 1000ms (30% slower)
         self.duration_spin.valueChanged.connect(self._save_settings)
         duration_row.addWidget(self.duration_spin)
         duration_row.addStretch()
@@ -175,9 +189,25 @@ class TransitionsTab(QWidget):
         block_size_row.addStretch()
         diffuse_layout.addLayout(block_size_row)
         
+        shape_row = QHBoxLayout()
+        shape_row.addWidget(QLabel("Shape:"))
+        self.diffuse_shape_combo = QComboBox()
+        self.diffuse_shape_combo.addItems(["Rectangle", "Circle", "Triangle"])
+        self.diffuse_shape_combo.currentTextChanged.connect(self._save_settings)
+        shape_row.addWidget(self.diffuse_shape_combo)
+        shape_row.addStretch()
+        diffuse_layout.addLayout(shape_row)
+        
         layout.addWidget(self.diffuse_group)
         
         layout.addStretch()
+        
+        # Set scroll area widget and add to main layout
+        scroll.setWidget(content)
+        
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll)
         
         # Update visibility based on default transition
         self._update_specific_settings()
@@ -192,8 +222,8 @@ class TransitionsTab(QWidget):
         if index >= 0:
             self.transition_combo.setCurrentIndex(index)
         
-        # Load duration
-        duration = transitions_config.get('duration_ms', 1000)
+        # Load duration (default 1300ms - Bug Fix #5)
+        duration = transitions_config.get('duration_ms', 1300)
         self.duration_spin.setValue(duration)
         
         # Load direction
@@ -216,6 +246,10 @@ class TransitionsTab(QWidget):
         # Load diffuse settings
         diffuse = transitions_config.get('diffuse', {})
         self.block_size_spin.setValue(diffuse.get('block_size', 50))
+        shape = diffuse.get('shape', 'Rectangle')
+        index = self.diffuse_shape_combo.findText(shape)
+        if index >= 0:
+            self.diffuse_shape_combo.setCurrentIndex(index)
         
         logger.debug("Loaded transition settings")
     
@@ -250,7 +284,8 @@ class TransitionsTab(QWidget):
                 'cols': self.grid_cols_spin.value()
             },
             'diffuse': {
-                'block_size': self.block_size_spin.value()
+                'block_size': self.block_size_spin.value(),
+                'shape': self.diffuse_shape_combo.currentText()
             }
         }
         

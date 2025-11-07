@@ -5,16 +5,12 @@ Handles image display, input events, and error messages.
 """
 from typing import Optional
 from PySide6.QtWidgets import QWidget, QLabel
-from PySide6.QtCore import Qt, Signal, QTimer, QSize
-from PySide6.QtGui import QPixmap, QPainter, QKeyEvent, QMouseEvent, QPaintEvent, QFont, QScreen
+from PySide6.QtCore import Qt, Signal, QSize
+from PySide6.QtGui import QPixmap, QPainter, QKeyEvent, QMouseEvent, QPaintEvent, QFont
 from rendering.display_modes import DisplayMode
 from rendering.image_processor import ImageProcessor
 from rendering.pan_and_scan import PanAndScan
-from transitions.crossfade_transition import CrossfadeTransition
-from transitions.slide_transition import SlideTransition
-from transitions.wipe_transition import WipeTransition
-from transitions.diffuse_transition import DiffuseTransition
-from transitions.block_puzzle_flip_transition import BlockPuzzleFlipTransition
+from transitions.base_transition import BaseTransition
 from widgets.clock_widget import ClockWidget, TimeFormat, ClockPosition
 from core.logging.logger import get_logger
 
@@ -66,13 +62,20 @@ class DisplayWidget(QWidget):
         self.previous_pixmap: Optional[QPixmap] = None
         self.error_message: Optional[str] = None
         self.clock_widget: Optional[ClockWidget] = None
-        self._current_transition: Optional['BaseTransition'] = None
-        self._initial_mouse_pos = None
-        self._mouse_move_threshold = 5  # pixels
-        
-        # Pan and scan
-        self._pan_and_scan = PanAndScan(self)
+        self._current_transition: Optional[BaseTransition] = None
         self._image_label: Optional[QLabel] = None  # For pan and scan
+        self._pan_and_scan = PanAndScan(self)
+        self._screen = None  # Store screen reference for DPI
+        self._device_pixel_ratio = 1.0  # DPI scaling factor
+        self._initial_mouse_pos = None  # Track mouse movement for exit
+        self._mouse_move_threshold = 10  # Pixels of movement before exit
+        
+        # FIX: Use ResourceManager for Qt object lifecycle
+        try:
+            from core.resources.manager import ResourceManager
+            self._resource_manager = ResourceManager()
+        except Exception:
+            self._resource_manager = None
         
         # Setup widget
         self.setWindowFlags(
@@ -102,9 +105,14 @@ class DisplayWidget(QWidget):
         else:
             screen = screens[self.screen_index]
         
+        # Store screen reference and DPI ratio for high-quality rendering
+        self._screen = screen
+        self._device_pixel_ratio = screen.devicePixelRatio()
+        
         geometry = screen.geometry()
         logger.info(f"Showing on screen {self.screen_index}: "
-                   f"{geometry.width()}x{geometry.height()} at ({geometry.x()}, {geometry.y()})")
+                   f"{geometry.width()}x{geometry.height()} at ({geometry.x()}, {geometry.y()}) "
+                   f"DPR={self._device_pixel_ratio}")
         
         # Position and size window
         self.setGeometry(geometry)
@@ -132,6 +140,8 @@ class DisplayWidget(QWidget):
             time_format = TimeFormat.TWELVE_HOUR if clock_settings.get('format', '12h') == '12h' else TimeFormat.TWENTY_FOUR_HOUR
             position_str = clock_settings.get('position', 'Top Right')
             show_seconds = clock_settings.get('show_seconds', False)
+            timezone_str = clock_settings.get('timezone', 'local')
+            show_timezone = clock_settings.get('show_timezone', False)
             font_size = clock_settings.get('font_size', 48)
             margin = clock_settings.get('margin', 20)
             color = clock_settings.get('color', [255, 255, 255, 230])
@@ -141,6 +151,7 @@ class DisplayWidget(QWidget):
                 'Top Left': ClockPosition.TOP_LEFT,
                 'Top Right': ClockPosition.TOP_RIGHT,
                 'Top Center': ClockPosition.TOP_CENTER,
+                'Center': ClockPosition.CENTER,
                 'Bottom Left': ClockPosition.BOTTOM_LEFT,
                 'Bottom Right': ClockPosition.BOTTOM_RIGHT,
                 'Bottom Center': ClockPosition.BOTTOM_CENTER,
@@ -149,11 +160,13 @@ class DisplayWidget(QWidget):
             
             # Create clock widget
             logger.debug(f"Creating ClockWidget: format={time_format.value}, position={position_str}, "
-                        f"show_seconds={show_seconds}, font_size={font_size}")
+                        f"show_seconds={show_seconds}, timezone={timezone_str}, show_tz={show_timezone}, "
+                        f"font_size={font_size}")
             
             try:
-                self.clock_widget = ClockWidget(self, time_format, position, show_seconds)
-                logger.debug(f"ClockWidget created successfully")
+                self.clock_widget = ClockWidget(self, time_format, position, show_seconds, 
+                                               timezone_str, show_timezone)
+                logger.debug("ClockWidget created successfully")
                 
                 self.clock_widget.set_font_size(font_size)
                 logger.debug(f"Font size set to {font_size}")
@@ -178,14 +191,14 @@ class DisplayWidget(QWidget):
                 logger.debug(f"Clock widget visible: {self.clock_widget.isVisible()}, "
                             f"size: {self.clock_widget.width()}x{self.clock_widget.height()}, "
                             f"pos: ({self.clock_widget.x()}, {self.clock_widget.y()})")
-                logger.debug(f"Clock widget Z-order raised to top")
+                logger.debug("Clock widget Z-order raised to top")
                 
             except Exception as e:
                 logger.error(f"Failed to create/configure clock widget: {e}", exc_info=True)
         else:
-            logger.debug(f"Clock widget disabled in settings")
+            logger.debug("Clock widget disabled in settings")
     
-    def _create_transition(self) -> Optional['BaseTransition']:
+    def _create_transition(self) -> Optional[BaseTransition]:
         """
         Create a transition based on settings.
         
@@ -198,7 +211,8 @@ class DisplayWidget(QWidget):
         # Support both nested dict and dot notation for settings
         transitions_settings = self.settings_manager.get('transitions', {})
         transition_type = transitions_settings.get('type', self.settings_manager.get('transitions.type', 'Crossfade'))
-        duration_ms = transitions_settings.get('duration_ms', self.settings_manager.get('transitions.duration_ms', 1000))
+        # BUG FIX #5: Increased default from 1000ms to 1300ms (30% slower) for smoother crossfades
+        duration_ms = transitions_settings.get('duration_ms', self.settings_manager.get('transitions.duration_ms', 1300))
         
         try:
             from transitions import (
@@ -217,7 +231,9 @@ class DisplayWidget(QWidget):
                     'Left to Right': SlideDirection.LEFT,
                     'Right to Left': SlideDirection.RIGHT,
                     'Top to Bottom': SlideDirection.DOWN,
-                    'Bottom to Top': SlideDirection.UP
+                    'Bottom to Top': SlideDirection.UP,
+                    'Diagonal TL-BR': SlideDirection.DIAG_TL_BR,
+                    'Diagonal TR-BL': SlideDirection.DIAG_TR_BL
                 }
                 
                 if direction_str == 'Random':
@@ -237,9 +253,12 @@ class DisplayWidget(QWidget):
                 return WipeTransition(duration_ms, direction)
             
             elif transition_type == 'Diffuse':
-                block_size = transitions_settings.get('diffuse', {}).get('block_size', 
+                diffuse_settings = transitions_settings.get('diffuse', {})
+                block_size = diffuse_settings.get('block_size', 
                     self.settings_manager.get('transitions.diffuse.block_size', 50))
-                return DiffuseTransition(duration_ms, block_size)
+                shape = diffuse_settings.get('shape', 
+                    self.settings_manager.get('transitions.diffuse.shape', 'Rectangle'))
+                return DiffuseTransition(duration_ms, block_size, shape)
             
             elif transition_type == 'Block Puzzle Flip':
                 block_flip = transitions_settings.get('block_flip', {})
@@ -263,6 +282,11 @@ class DisplayWidget(QWidget):
             pixmap: Image to display
             image_path: Path to image (for logging/events)
         """
+        # If a transition is already running, skip this call (single-skip policy)
+        if getattr(self, "_current_transition", None) is not None and self._current_transition.is_running():
+            logger.info("Transition in progress - skipping this image request per policy")
+            return
+
         if pixmap.isNull():
             logger.warning("[FALLBACK] Received null pixmap")
             self.error_message = "Failed to load image"
@@ -270,16 +294,23 @@ class DisplayWidget(QWidget):
             self.update()
             return
         
-        # Process image for display
-        screen_size = self.size()
+        # Process image for display at physical resolution for quality
+        # Use physical pixels (logical size * DPI ratio) to avoid double-scaling quality loss
+        logical_size = self.size()
+        screen_size = QSize(
+            int(logical_size.width() * self._device_pixel_ratio),
+            int(logical_size.height() * self._device_pixel_ratio)
+        )
+        logger.debug(f"[IMAGE QUALITY] Logical: {logical_size.width()}x{logical_size.height()}, "
+                    f"Physical: {screen_size.width()}x{screen_size.height()} (DPR={self._device_pixel_ratio})")
         
         try:
             # Get quality settings
-            use_lanczos = True
+            use_lanczos = False
             sharpen = False
             pan_and_scan_enabled = False
             if self.settings_manager:
-                use_lanczos = self.settings_manager.get('display.use_lanczos', True)
+                use_lanczos = self.settings_manager.get('display.use_lanczos', False)
                 if isinstance(use_lanczos, str):
                     use_lanczos = use_lanczos.lower() == 'true'
                 sharpen = self.settings_manager.get('display.sharpen_downscale', False)
@@ -289,19 +320,24 @@ class DisplayWidget(QWidget):
                 if isinstance(pan_and_scan_enabled, str):
                     pan_and_scan_enabled = pan_and_scan_enabled.lower() == 'true'
             
-            # Process image (skip processing if pan and scan enabled - it handles scaling)
-            if pan_and_scan_enabled:
-                new_pixmap = pixmap  # Use original for pan and scan
-            else:
-                new_pixmap = ImageProcessor.process_image(
-                    pixmap,
-                    screen_size,
-                    self.display_mode,
-                    use_lanczos,
-                    sharpen
-                )
+            # CRITICAL FIX: Transitions ALWAYS use screen-fitted pixmaps
+            # Pan & scan scaling happens AFTER transition finishes
+            # This fixes block puzzle, wipe, and diffuse distortions
+            new_pixmap = ImageProcessor.process_image(
+                pixmap,
+                screen_size,
+                self.display_mode,
+                use_lanczos,
+                sharpen
+            )
+            
+            # Keep original pixmap for pan & scan (will be used after transition)
+            original_pixmap = pixmap
             
             self.error_message = None
+            
+            # Set DPR on the processed pixmap for proper display scaling
+            new_pixmap.setDevicePixelRatio(self._device_pixel_ratio)
             
             # Stop any running transition
             if self._current_transition:
@@ -313,6 +349,13 @@ class DisplayWidget(QWidget):
                 except Exception as e:
                     logger.warning(f"Error stopping transition: {e}")
             
+            # CRITICAL: ALWAYS stop pan & scan and hide label before ANY transition
+            # This prevents visual artifacts from previous image's pan & scan overlapping new transition
+            self._pan_and_scan.stop()
+            if self._image_label:
+                self._image_label.hide()
+                logger.debug("[BUG FIX #2] Pan & scan label hidden before transition")
+            
             # If we have a previous image, use transition
             if self.current_pixmap and self.settings_manager:
                 transition = self._create_transition()
@@ -321,7 +364,11 @@ class DisplayWidget(QWidget):
                     self.previous_pixmap = self.current_pixmap
                     
                     # Connect transition finished signal
-                    transition.finished.connect(lambda: self._on_transition_finished(new_pixmap, image_path))
+                    # Pass both processed pixmap (for display) and original (for pan & scan)
+                    # FIX: Use default args to capture by value (not by reference)
+                    transition.finished.connect(lambda np=new_pixmap, op=original_pixmap, 
+                        ip=image_path, pse=pan_and_scan_enabled: 
+                        self._on_transition_finished(np, op, ip, pse))
                     
                     # Start transition
                     success = transition.start(self.previous_pixmap, new_pixmap, self)
@@ -335,17 +382,21 @@ class DisplayWidget(QWidget):
             
             # No transition or first image - display immediately
             self.current_pixmap = new_pixmap
+            # Ensure DPR is set
+            if self.current_pixmap:
+                self.current_pixmap.setDevicePixelRatio(self._device_pixel_ratio)
             
             # Start pan and scan if enabled
             if pan_and_scan_enabled:
                 if not self._image_label:
                     self._image_label = QLabel(self)
+                    self._image_label.setScaledContents(False)
                 self._pan_and_scan.enable(True)
                 
                 # Get pan and scan settings
                 transition_interval = self.settings_manager.get('timing.interval', 10)
                 auto_speed = self.settings_manager.get('display.pan_auto_speed', True)
-                manual_speed = self.settings_manager.get('display.pan_speed', 20.0)
+                manual_speed = self.settings_manager.get('display.pan_speed', 3.0)
                 
                 if isinstance(auto_speed, str):
                     auto_speed = auto_speed.lower() == 'true'
@@ -354,10 +405,22 @@ class DisplayWidget(QWidget):
                 if not auto_speed:
                     self._pan_and_scan.set_speed(float(manual_speed))
                 
-                self._pan_and_scan.set_image(new_pixmap, self._image_label, self.size())
+                # Use original uncropped pixmap for pan & scan
+                self._pan_and_scan.set_image(original_pixmap, self._image_label, self.size())
+                
+                # Ensure label is visible and on top
+                self._image_label.show()
+                self._image_label.raise_()
+                
+                # Lower clock widget to be above pan & scan
+                if self.clock_widget:
+                    self.clock_widget.raise_()
+                
                 self._pan_and_scan.start()
             else:
                 self._pan_and_scan.enable(False)
+                if self._image_label:
+                    self._image_label.hide()
                 self.update()
             
             logger.debug(f"Image displayed: {image_path} ({pixmap.width()}x{pixmap.height()})")
@@ -369,13 +432,16 @@ class DisplayWidget(QWidget):
             self.current_pixmap = None
             self.update()
     
-    def _on_transition_finished(self, new_pixmap: QPixmap, image_path: str) -> None:
+    def _on_transition_finished(self, new_pixmap: QPixmap, original_pixmap: QPixmap, 
+                                  image_path: str, pan_enabled: bool) -> None:
         """
         Handle transition completion.
         
         Args:
-            new_pixmap: The new pixmap to display
+            new_pixmap: The processed pixmap (cropped/filled) for display
+            original_pixmap: The original uncropped pixmap for pan & scan
             image_path: Path to the image
+            pan_enabled: Whether pan & scan should be enabled
         """
         if self._current_transition:
             transition_to_clean = self._current_transition
@@ -388,13 +454,42 @@ class DisplayWidget(QWidget):
         self.current_pixmap = new_pixmap
         self.previous_pixmap = None
         
-        # Start pan and scan if enabled
-        if self._pan_and_scan.is_enabled():
+        # Start pan and scan if enabled (use original uncropped pixmap)
+        if pan_enabled:
             if not self._image_label:
                 self._image_label = QLabel(self)
-            self._pan_and_scan.set_image(new_pixmap, self._image_label, self.size())
+                self._image_label.setScaledContents(False)
+            self._pan_and_scan.enable(True)
+            
+            # Get pan and scan settings
+            transition_interval = self.settings_manager.get('timing.interval', 10)
+            auto_speed = self.settings_manager.get('display.pan_auto_speed', True)
+            manual_speed = self.settings_manager.get('display.pan_speed', 3.0)
+            
+            if isinstance(auto_speed, str):
+                auto_speed = auto_speed.lower() == 'true'
+            
+            self._pan_and_scan.set_auto_speed(auto_speed, float(transition_interval))
+            if not auto_speed:
+                self._pan_and_scan.set_speed(float(manual_speed))
+            
+            # CRITICAL: Use original_pixmap for pan & scan, not the processed one
+            # This prevents the zoom effect where the image suddenly changes size
+            self._pan_and_scan.set_image(original_pixmap, self._image_label, self.size())
+            
+            # Ensure label is visible and on top
+            self._image_label.show()
+            self._image_label.raise_()
+            
+            # Keep clock above pan & scan
+            if self.clock_widget:
+                self.clock_widget.raise_()
+            
             self._pan_and_scan.start()
         else:
+            self._pan_and_scan.enable(False)
+            if self._image_label:
+                self._image_label.hide()
             self.update()
         
         logger.debug(f"Transition completed, image displayed: {image_path}")
@@ -411,9 +506,11 @@ class DisplayWidget(QWidget):
             self.display_mode = mode
             logger.info(f"Display mode changed to {mode}")
             
+            # FIX: Need to store original pixmap to reprocess properly
             # Reprocess current image if available
             if self.current_pixmap:
-                # Note: This reprocesses the already-processed pixmap
+                # WARNING: This reprocesses the already-processed pixmap - will degrade quality
+                logger.warning("Reprocessing already-processed pixmap - quality may degrade. Store original pixmap for proper reprocessing.")
                 # In production, we'd want to store the original and reprocess from that
                 logger.debug("Reprocessing current image with new mode")
                 self.update()
@@ -501,11 +598,10 @@ class DisplayWidget(QWidget):
             logger.info(f"Exit key pressed: {key}, requesting exit")
             self.exit_requested.emit()
             event.accept()
-        # Any other key also exits (traditional screensaver behavior)
+        # FIX: Don't exit on any key - only specific hotkeys and exit keys
         else:
-            logger.info(f"Key pressed: {key}, requesting exit")
-            self.exit_requested.emit()
-            event.accept()
+            logger.debug(f"Unknown key pressed: {key} - ignoring")
+            event.ignore()
     
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """Handle mouse press - exit on any click."""

@@ -6,7 +6,7 @@ Slides new image in from a direction while old image slides out.
 from enum import Enum
 from typing import Optional
 from PySide6.QtCore import QPropertyAnimation, QEasingCurve, QPoint
-from PySide6.QtGui import QPixmap, QPainter
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QWidget, QLabel
 
 from transitions.base_transition import BaseTransition, TransitionState
@@ -21,6 +21,8 @@ class SlideDirection(Enum):
     RIGHT = "right"    # New image slides in from left
     UP = "up"          # New image slides in from bottom
     DOWN = "down"      # New image slides in from top
+    DIAG_TL_BR = "diag_tl_br"  # Diagonal: top-left to bottom-right
+    DIAG_TR_BL = "diag_tr_bl"  # Diagonal: top-right to bottom-left
 
 
 class SlideTransition(BaseTransition):
@@ -51,6 +53,13 @@ class SlideTransition(BaseTransition):
         self._old_animation: Optional[QPropertyAnimation] = None
         self._new_animation: Optional[QPropertyAnimation] = None
         self._finished_count = 0
+        
+        # FIX: Use ResourceManager for Qt object lifecycle
+        try:
+            from core.resources.manager import ResourceManager
+            self._resource_manager = ResourceManager()
+        except Exception:
+            self._resource_manager = None
         
         logger.debug(f"SlideTransition created (duration={duration_ms}ms, direction={direction.value}, easing={easing})")
     
@@ -170,13 +179,13 @@ class SlideTransition(BaseTransition):
         logger.debug("Cleaning up slide transition")
         
         # Stop and delete animations
+        # FIX: Don't set to None after deleteLater - prevents memory leak
         if self._old_animation:
             try:
                 self._old_animation.stop()
                 self._old_animation.deleteLater()
             except RuntimeError:
                 pass
-            self._old_animation = None
         
         if self._new_animation:
             try:
@@ -184,7 +193,6 @@ class SlideTransition(BaseTransition):
                 self._new_animation.deleteLater()
             except RuntimeError:
                 pass
-            self._new_animation = None
         
         # Delete labels
         if self._old_label:
@@ -192,14 +200,12 @@ class SlideTransition(BaseTransition):
                 self._old_label.deleteLater()
             except RuntimeError:
                 pass
-            self._old_label = None
         
         if self._new_label:
             try:
                 self._new_label.deleteLater()
             except RuntimeError:
                 pass
-            self._new_label = None
         
         self._widget = None
         self._finished_count = 0
@@ -239,11 +245,23 @@ class SlideTransition(BaseTransition):
             new_start = QPoint(0, height)
             new_end = QPoint(0, 0)
         
-        else:  # DOWN
+        elif self._direction == SlideDirection.DOWN:
             # Old slides down (out), new slides in from top
             old_start = QPoint(0, 0)
             old_end = QPoint(0, height)
             new_start = QPoint(0, -height)
+            new_end = QPoint(0, 0)
+        elif self._direction == SlideDirection.DIAG_TL_BR:
+            # Old moves towards top-left, new comes from bottom-right
+            old_start = QPoint(0, 0)
+            old_end = QPoint(-width, -height)
+            new_start = QPoint(width, height)
+            new_end = QPoint(0, 0)
+        elif self._direction == SlideDirection.DIAG_TR_BL:
+            # Old moves towards top-right, new comes from bottom-left
+            old_start = QPoint(0, 0)
+            old_end = QPoint(width, -height)
+            new_start = QPoint(-width, height)
             new_end = QPoint(0, 0)
         
         return old_start, old_end, new_start, new_end
@@ -299,19 +317,18 @@ class SlideTransition(BaseTransition):
             self._new_animation = None
             
             # Clean up labels
+            # FIX: Don't set to None after deleteLater - prevents memory leak
             if self._old_label:
                 try:
                     self._old_label.deleteLater()
                 except RuntimeError:
                     pass
-                self._old_label = None
             
             if self._new_label:
                 try:
                     self._new_label.deleteLater()
                 except RuntimeError:
                     pass
-                self._new_label = None
             
             self._widget = None
     

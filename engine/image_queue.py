@@ -4,7 +4,8 @@ Image queue management for screensaver.
 Handles image queue with shuffle, history, and wraparound.
 """
 import random
-from typing import List, Optional, Set
+import threading
+from typing import List, Optional
 from collections import deque
 from sources.base_provider import ImageMetadata
 from core.logging.logger import get_logger
@@ -42,16 +43,20 @@ class ImageQueue:
         
         self._images: List[ImageMetadata] = []
         self._queue: deque[ImageMetadata] = deque()
-        self._history: deque[str] = deque(maxlen=history_size)
+        # FIX: Store ImageMetadata objects directly instead of string paths (fixes RSS None path issue)
+        self._history: deque[ImageMetadata] = deque(maxlen=history_size)
         self._current_image: Optional[ImageMetadata] = None
         self._current_index: int = -1
         self._wrap_count: int = 0
+        
+        # FIX: Add thread safety with RLock (reentrant for same thread)
+        self._lock = threading.RLock()
         
         logger.info(f"ImageQueue initialized (shuffle={shuffle}, history_size={history_size})")
     
     def add_images(self, images: List[ImageMetadata]) -> int:
         """
-        Add images to the queue.
+        Add images to the queue (thread-safe).
         
         Args:
             images: List of image metadata to add
@@ -63,26 +68,28 @@ class ImageQueue:
             logger.warning("No images provided to add_images()")
             return 0
         
-        # Store original list
-        self._images.extend(images)
-        
-        # Add to queue
-        if self.shuffle_enabled:
-            # Shuffle new images before adding
-            shuffled = images.copy()
-            random.shuffle(shuffled)
-            self._queue.extend(shuffled)
-            logger.debug(f"Added {len(images)} shuffled images to queue")
-        else:
-            self._queue.extend(images)
-            logger.debug(f"Added {len(images)} images to queue (no shuffle)")
-        
-        logger.info(f"Queue now has {len(self._queue)} images ({len(self._images)} total)")
-        return len(images)
+        # FIX: Thread-safe queue modification
+        with self._lock:
+            # Store original list
+            self._images.extend(images)
+            
+            # Add to queue
+            if self.shuffle_enabled:
+                # Shuffle new images before adding
+                shuffled = images.copy()
+                random.shuffle(shuffled)
+                self._queue.extend(shuffled)
+                logger.debug(f"Added {len(images)} shuffled images to queue")
+            else:
+                self._queue.extend(images)
+                logger.debug(f"Added {len(images)} images to queue (no shuffle)")
+            
+            logger.info(f"Queue now has {len(self._queue)} images ({len(self._images)} total)")
+            return len(images)
     
     def set_images(self, images: List[ImageMetadata]) -> int:
         """
-        Replace all images in the queue.
+        Replace all images in the queue (thread-safe).
         
         Args:
             images: New list of images
@@ -90,68 +97,68 @@ class ImageQueue:
         Returns:
             Number of images set
         """
-        self.clear()
-        return self.add_images(images)
+        # FIX: Lock both operations atomically
+        with self._lock:
+            self.clear()
+            return self.add_images(images)
     
     def next(self) -> Optional[ImageMetadata]:
         """
-        Get next image from queue.
+        Get next image from queue (thread-safe).
         
         Returns:
             Next image metadata, or None if queue is empty
         """
-        if not self._queue:
-            # Queue is empty
-            if self._images:
-                # Rebuild queue from original list
-                logger.info(f"Queue empty, rebuilding from {len(self._images)} images (wrap #{self._wrap_count + 1})")
-                self._rebuild_queue()
-                self._wrap_count += 1
-            else:
-                logger.warning("[FALLBACK] No images available in queue")
+        # FIX: Thread-safe queue access
+        with self._lock:
+            if not self._queue:
+                # Queue is empty
+                if self._images:
+                    # Rebuild queue from original list
+                    logger.info(f"Queue empty, rebuilding from {len(self._images)} images (wrap #{self._wrap_count + 1})")
+                    self._rebuild_queue()
+                    self._wrap_count += 1
+                else:
+                    logger.warning("[FALLBACK] No images available in queue")
+                    return None
+            
+            if not self._queue:
+                logger.warning("[FALLBACK] Queue still empty after rebuild")
                 return None
-        
-        if not self._queue:
-            logger.warning("[FALLBACK] Queue still empty after rebuild")
-            return None
-        
-        # Get next image
-        self._current_image = self._queue.popleft()
-        self._current_index += 1
-        
-        # Add to history
-        self._history.append(str(self._current_image.local_path))
-        
-        logger.debug(f"Next image: {self._current_image.local_path} (index {self._current_index})")
-        return self._current_image
+            
+            # Get next image
+            self._current_image = self._queue.popleft()
+            self._current_index += 1
+            
+            # FIX: Add ImageMetadata object to history directly (not string path)
+            self._history.append(self._current_image)
+            
+            logger.debug(f"Next image: {self._current_image.local_path} (index {self._current_index})")
+            return self._current_image
     
     def previous(self) -> Optional[ImageMetadata]:
         """
-        Go back to previous image in history.
+        Go back to previous image in history (thread-safe).
         
         Returns:
             Previous image metadata, or None if no history
         """
-        if len(self._history) < 2:
-            logger.warning("[FALLBACK] No previous image in history")
-            return self._current_image
-        
-        # Remove current from history
-        self._history.pop()
-        
-        # Get previous path
-        prev_path = self._history[-1]
-        
-        # Find image by path
-        for img in self._images:
-            if str(img.local_path) == prev_path:
-                self._current_image = img
-                self._current_index = max(0, self._current_index - 1)
-                logger.debug(f"Previous image: {img.local_path}")
-                return img
-        
-        logger.warning(f"[FALLBACK] Previous image not found: {prev_path}")
-        return self._current_image
+        # FIX: Thread-safe access and use ImageMetadata objects directly from history
+        with self._lock:
+            if len(self._history) < 2:
+                logger.warning("[FALLBACK] No previous image in history")
+                return self._current_image
+            
+            # Remove current from history
+            self._history.pop()
+            
+            # FIX: Get previous ImageMetadata directly (O(1) instead of O(n) search)
+            prev_image = self._history[-1]
+            self._current_image = prev_image
+            self._current_index = max(0, self._current_index - 1)
+            
+            logger.debug(f"Previous image: {prev_image.local_path}")
+            return prev_image
     
     def current(self) -> Optional[ImageMetadata]:
         """
@@ -169,16 +176,18 @@ class ImageQueue:
         Returns:
             Next image metadata, or None if queue is empty
         """
-        if self._queue:
-            return self._queue[0]
-        
-        if self._images:
-            # Would rebuild, return first from rebuild
-            if self.shuffle_enabled:
-                # Can't predict shuffle, return None
-                return None
-            else:
-                return self._images[0]
+        # FIX: Direct access instead of unnecessary copy
+        with self._lock:
+            if self._queue:
+                return self._queue[0]
+            
+            if self._images:
+                # Would rebuild, return first from rebuild
+                if self.shuffle_enabled:
+                    # Can't predict shuffle, return None
+                    return None
+                else:
+                    return self._images[0]
         
         return None
     
@@ -200,54 +209,60 @@ class ImageQueue:
         logger.debug(f"Queue rebuilt with {len(self._queue)} images")
     
     def shuffle(self) -> None:
-        """Shuffle current queue."""
-        if not self._queue:
-            logger.debug("Queue empty, nothing to shuffle")
-            return
-        
-        # Convert to list, shuffle, rebuild deque
-        queue_list = list(self._queue)
-        random.shuffle(queue_list)
-        self._queue = deque(queue_list)
-        
-        logger.info(f"Queue shuffled ({len(self._queue)} images)")
+        """Shuffle current queue (thread-safe)."""
+        # FIX: Thread-safe shuffle
+        with self._lock:
+            if not self._queue:
+                logger.debug("Queue empty, nothing to shuffle")
+                return
+            
+            # Convert to list, shuffle, rebuild deque
+            queue_list = list(self._queue)
+            random.shuffle(queue_list)
+            self._queue = deque(queue_list)
+            
+            logger.info(f"Queue shuffled ({len(self._queue)} images)")
     
     def set_shuffle_enabled(self, enabled: bool) -> None:
         """
-        Enable or disable shuffle mode.
+        Enable or disable shuffle mode (thread-safe).
         
         Args:
             enabled: True to enable shuffle
         """
-        if enabled == self.shuffle_enabled:
-            return
-        
-        self.shuffle_enabled = enabled
-        logger.info(f"Shuffle {'enabled' if enabled else 'disabled'}")
-        
-        # Rebuild queue with new shuffle setting
-        if self._images:
-            remaining = list(self._queue)
-            self._queue.clear()
+        # FIX: Thread-safe mode change
+        with self._lock:
+            if enabled == self.shuffle_enabled:
+                return
             
-            if enabled:
-                random.shuffle(remaining)
+            self.shuffle_enabled = enabled
+            logger.info(f"Shuffle {'enabled' if enabled else 'disabled'}")
             
-            self._queue.extend(remaining)
-            logger.debug(f"Queue rebuilt with new shuffle setting")
+            # Rebuild queue with new shuffle setting
+            if self._images:
+                remaining = list(self._queue)
+                self._queue.clear()
+                
+                if enabled:
+                    random.shuffle(remaining)
+                
+                self._queue.extend(remaining)
+                logger.debug("Queue rebuilt with new shuffle setting")
     
     def clear(self) -> None:
-        """Clear all images and reset queue."""
-        count = len(self._images)
-        
-        self._images.clear()
-        self._queue.clear()
-        self._history.clear()
-        self._current_image = None
-        self._current_index = -1
-        self._wrap_count = 0
-        
-        logger.info(f"Queue cleared ({count} images removed)")
+        """Clear all images and reset queue (thread-safe)."""
+        # FIX: Thread-safe clear
+        with self._lock:
+            count = len(self._images)
+            
+            self._images.clear()
+            self._queue.clear()
+            self._history.clear()
+            self._current_image = None
+            self._current_index = -1
+            self._wrap_count = 0
+            
+            logger.info(f"Queue cleared ({count} images removed)")
     
     def size(self) -> int:
         """
@@ -340,7 +355,7 @@ class ImageQueue:
     
     def remove_image(self, image_path: str) -> bool:
         """
-        Remove specific image from queue by path.
+        Remove specific image from queue by path (thread-safe).
         
         Args:
             image_path: Path of image to remove
@@ -348,22 +363,24 @@ class ImageQueue:
         Returns:
             True if image was found and removed
         """
-        # Remove from main list
-        removed_from_list = False
-        for i, img in enumerate(self._images):
-            if str(img.local_path) == image_path:
-                self._images.pop(i)
-                removed_from_list = True
-                break
-        
-        # Remove from queue
-        removed_from_queue = False
-        queue_list = list(self._queue)
-        new_queue = [img for img in queue_list if str(img.local_path) != image_path]
-        
-        if len(new_queue) < len(queue_list):
-            self._queue = deque(new_queue)
-            removed_from_queue = True
+        # FIX: Thread-safe removal
+        with self._lock:
+            # Remove from main list
+            removed_from_list = False
+            for i, img in enumerate(self._images):
+                if str(img.local_path) == image_path:
+                    self._images.pop(i)
+                    removed_from_list = True
+                    break
+            
+            # Remove from queue
+            removed_from_queue = False
+            queue_list = list(self._queue)
+            new_queue = [img for img in queue_list if str(img.local_path) != image_path]
+            
+            if len(new_queue) < len(queue_list):
+                self._queue = deque(new_queue)
+                removed_from_queue = True
         
         if removed_from_list or removed_from_queue:
             logger.info(f"Removed image from queue: {image_path}")

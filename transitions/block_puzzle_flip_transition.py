@@ -6,90 +6,29 @@ with 3D rotation effect. This is the STAR FEATURE transition.
 """
 import random
 from typing import Optional, List
-from PySide6.QtCore import QTimer, QRect
-from PySide6.QtGui import QPixmap, QPainter, QColor
+from PySide6.QtCore import QTimer, QRect, Qt
+from PySide6.QtGui import QPixmap, QRegion
 from PySide6.QtWidgets import QWidget, QLabel
 
 from transitions.base_transition import BaseTransition, TransitionState
+from core.animation.types import EasingCurve
 from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
 
 
 class FlipBlock:
-    """Represents a single flipping block in the grid."""
+    """Represents a single flipping block in the grid (rect + flip state only)."""
     
-    def __init__(self, rect: QRect, old_pixmap: QPixmap, new_pixmap: QPixmap):
-        """
-        Initialize flip block.
-        
-        Args:
-            rect: Block rectangle
-            old_pixmap: Old image pixmap
-            new_pixmap: New image pixmap
-        """
+    def __init__(self, rect: QRect):
+        """Initialize flip block with its logical rectangle only."""
         self.rect = rect
-        self.old_piece = old_pixmap.copy(rect)
-        self.new_piece = new_pixmap.copy(rect)
         self.flip_progress = 0.0  # 0.0 = old, 1.0 = new
         self.is_flipping = False
         self.is_complete = False
-    
-    def get_current_pixmap(self) -> QPixmap:
-        """
-        Get current pixmap based on flip progress.
-        
-        Returns:
-            Pixmap to display
-        """
-        if self.flip_progress < 0.5:
-            # First half: show old image with horizontal squeeze
-            scale_x = 1.0 - (self.flip_progress * 2.0)
-            return self._scale_horizontal(self.old_piece, scale_x)
-        else:
-            # Second half: show new image with horizontal expand
-            scale_x = (self.flip_progress - 0.5) * 2.0
-            return self._scale_horizontal(self.new_piece, scale_x)
-    
-    def _scale_horizontal(self, pixmap: QPixmap, scale: float) -> QPixmap:
-        """
-        Scale pixmap horizontally (for flip effect).
-        
-        Args:
-            pixmap: Source pixmap
-            scale: Horizontal scale (0.0 to 1.0)
-        
-        Returns:
-            Scaled pixmap
-        """
-        if scale <= 0.0:
-            # Return transparent pixmap
-            result = QPixmap(pixmap.size())
-            result.fill(QColor(0, 0, 0, 0))
-            return result
-        
-        width = int(pixmap.width() * scale)
-        if width <= 0:
-            width = 1
-        
-        # Scale horizontally
-        from PySide6.QtCore import Qt
-        scaled = pixmap.scaled(
-            width, pixmap.height(),
-            Qt.AspectRatioMode.IgnoreAspectRatio,
-            Qt.TransformationMode.SmoothTransformation
-        )
-        
-        # Center the scaled image
-        result = QPixmap(pixmap.width(), pixmap.height())
-        result.fill(QColor(0, 0, 0, 0))
-        
-        painter = QPainter(result)
-        x_offset = (pixmap.width() - scaled.width()) // 2
-        painter.drawPixmap(x_offset, 0, scaled)
-        painter.end()
-        
-        return result
+        # Randomized start threshold in [0, 1) to stagger starts over the global timeline
+        self.start_threshold: float = random.random()
+        self.started: bool = False
 
 
 class BlockPuzzleFlipTransition(BaseTransition):
@@ -122,9 +61,17 @@ class BlockPuzzleFlipTransition(BaseTransition):
         self._blocks: List[FlipBlock] = []
         self._flip_order: List[int] = []
         self._current_flip_index = 0
-        self._timer: Optional[QTimer] = None
-        self._flip_timer: Optional[QTimer] = None
+        self._timer: Optional[QTimer] = None  # legacy
+        self._flip_timer: Optional[QTimer] = None  # legacy
+        self._animation_id: Optional[str] = None
         self._display_label: Optional[QLabel] = None
+        
+        # FIX: Use ResourceManager for Qt object lifecycle
+        try:
+            from core.resources.manager import ResourceManager
+            self._resource_manager = ResourceManager()
+        except Exception:
+            self._resource_manager = None
         
         logger.debug(f"BlockPuzzleFlipTransition created (duration={duration_ms}ms, "
                     f"grid={grid_rows}x{grid_cols}, flip_duration={flip_duration_ms}ms)")
@@ -167,35 +114,53 @@ class BlockPuzzleFlipTransition(BaseTransition):
             width = widget.width()
             height = widget.height()
             
-            # Create grid of blocks
-            self._create_block_grid(width, height)
+            # Use fitted pixmaps DIRECTLY from DisplayWidget (Crossfade pattern)
+            # DO NOT re-fit! They are already processed by ImageProcessor
+            self._fitted_old = old_pixmap
+            self._fitted_new = new_pixmap
+            
+            # Create grid of blocks based on the widget logical size
+            # (pixmaps are already fitted to widget by ImageProcessor)
+            self._create_block_grid(width, height, old_pixmap, new_pixmap)
             
             # Create random flip order
             total_blocks = len(self._blocks)
             self._flip_order = list(range(total_blocks))
             random.shuffle(self._flip_order)
             
-            # Calculate interval between block flips
-            if total_blocks > 0:
-                interval_ms = max(50, self.duration_ms // total_blocks)
-            else:
-                interval_ms = 50
+            # Note: interval logic handled by AnimationManager progression
             
-            # Create display label for rendering
-            self._display_label = QLabel(widget)
-            self._display_label.setGeometry(0, 0, width, height)
-            self._display_label.setPixmap(old_pixmap)
-            self._display_label.show()
+            # Two-label pattern (old below, new above with evolving mask)
+            self._old_label = QLabel(widget)
+            self._old_label.setGeometry(0, 0, width, height)
+            self._old_label.setScaledContents(False)
+            self._old_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._old_label.setPixmap(old_pixmap)
+            self._old_label.show()
+
+            self._new_label = QLabel(widget)
+            self._new_label.setGeometry(0, 0, width, height)
+            self._new_label.setScaledContents(False)
+            self._new_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._new_label.setPixmap(new_pixmap)
+            # Start fully hidden via empty mask
+            self._new_label.setMask(QRegion())
+            self._new_label.show()
             
-            # Start main timer for initiating flips
-            self._timer = QTimer()
-            self._timer.timeout.connect(self._start_next_flip)
-            self._timer.start(interval_ms)
-            
-            # Start flip animation timer (60 FPS)
-            self._flip_timer = QTimer()
-            self._flip_timer.timeout.connect(self._update_flips)
-            self._flip_timer.start(16)  # ~60 FPS
+            # Drive via centralized AnimationManager
+            am = self._get_animation_manager(widget)
+            # Two-phase timeline: start all blocks over duration_ms, then allow
+            # an extra flip_duration_ms for the last-started blocks to finish.
+            self._total_duration_ms = max(1, int(self.duration_ms + self._flip_duration_ms))
+            duration_sec = max(0.001, self._total_duration_ms / 1000.0)
+            self._total_dur_sec = duration_sec
+            self._last_progress = 0.0
+            self._animation_id = am.animate_custom(
+                duration=duration_sec,
+                easing=EasingCurve.LINEAR,
+                update_callback=lambda p, total=total_blocks: self._on_anim_update(p, total),
+                on_complete=lambda: self._finish_transition(),
+            )
             
             self._set_state(TransitionState.RUNNING)
             self.started.emit()
@@ -216,17 +181,12 @@ class BlockPuzzleFlipTransition(BaseTransition):
         
         logger.debug("Stopping block puzzle flip")
         
-        # Stop timers
-        if self._timer:
+        # Cancel central animation
+        if self._animation_id and self._widget:
             try:
-                self._timer.stop()
-            except RuntimeError:
-                pass
-        
-        if self._flip_timer:
-            try:
-                self._flip_timer.stop()
-            except RuntimeError:
+                am = self._get_animation_manager(self._widget)
+                am.cancel_animation(self._animation_id)
+            except Exception:
                 pass
         
         self._set_state(TransitionState.CANCELLED)
@@ -237,22 +197,14 @@ class BlockPuzzleFlipTransition(BaseTransition):
         """Clean up transition resources."""
         logger.debug("Cleaning up block puzzle flip")
         
-        # Stop and delete timers
-        if self._timer:
+        # Cancel animation
+        if self._animation_id and self._widget:
             try:
-                self._timer.stop()
-                self._timer.deleteLater()
-            except RuntimeError:
+                am = self._get_animation_manager(self._widget)
+                am.cancel_animation(self._animation_id)
+            except Exception:
                 pass
-            self._timer = None
-        
-        if self._flip_timer:
-            try:
-                self._flip_timer.stop()
-                self._flip_timer.deleteLater()
-            except RuntimeError:
-                pass
-            self._flip_timer = None
+            self._animation_id = None
         
         # Delete display label
         if self._display_label:
@@ -260,7 +212,6 @@ class BlockPuzzleFlipTransition(BaseTransition):
                 self._display_label.deleteLater()
             except RuntimeError:
                 pass
-            self._display_label = None
         
         self._widget = None
         self._old_pixmap = None
@@ -272,7 +223,7 @@ class BlockPuzzleFlipTransition(BaseTransition):
         if self._state not in [TransitionState.FINISHED, TransitionState.CANCELLED]:
             self._set_state(TransitionState.IDLE)
     
-    def _create_block_grid(self, width: int, height: int) -> None:
+    def _create_block_grid(self, width: int, height: int, fitted_old: QPixmap, fitted_new: QPixmap) -> None:
         """
         Create grid of flip blocks.
         
@@ -282,8 +233,8 @@ class BlockPuzzleFlipTransition(BaseTransition):
         """
         self._blocks = []
         
-        block_width = width // self._grid_cols
-        block_height = height // self._grid_rows
+        block_width = max(1, width // self._grid_cols)
+        block_height = max(1, height // self._grid_rows)
         
         for row in range(self._grid_rows):
             for col in range(self._grid_cols):
@@ -300,8 +251,10 @@ class BlockPuzzleFlipTransition(BaseTransition):
                     h = height - y
                 
                 rect = QRect(x, y, w, h)
-                block = FlipBlock(rect, self._old_pixmap, self._new_pixmap)
+                block = FlipBlock(rect)
                 self._blocks.append(block)
+
+        # Ensure full coverage (edges clamped in creation)
     
     def _start_next_flip(self) -> None:
         """Start flipping the next block."""
@@ -329,66 +282,87 @@ class BlockPuzzleFlipTransition(BaseTransition):
             progress = self._current_flip_index / len(self._flip_order)
             self._emit_progress(progress * 0.5)  # First half of progress
     
-    def _update_flips(self) -> None:
-        """Update all flipping blocks (animation step)."""
+    def _on_anim_update(self, progress: float, total_blocks: int) -> None:
+        """AnimationManager update callback to drive block initiation and flip progress."""
         if self._state != TransitionState.RUNNING:
             return
+        progress = max(0.0, min(1.0, progress))
+        # Map total progress [0..1] over total_duration to a start-phase progress
+        # that reaches 1.0 at t = duration_ms, ensuring all blocks start early.
+        total_ms = max(1, getattr(self, "_total_duration_ms", self.duration_ms))
+        t_ms = progress * total_ms
+        start_phase_progress = min(1.0, t_ms / max(1, self.duration_ms))
+        # Initiate flips based on each block's randomized start threshold
+        for block in self._blocks:
+            if (not getattr(block, 'started', False)) and start_phase_progress >= getattr(block, 'start_threshold', 0.0):
+                block.is_flipping = True
+                block.started = True
         
-        # Update flip progress for all flipping blocks
-        flip_increment = 1.0 / (self._flip_duration_ms / 16.0)  # Per frame
+        # Advance flipping blocks based on delta progress
+        delta = progress - getattr(self, "_last_progress", 0.0)
+        self._last_progress = progress
+        if delta < 0:
+            delta = 0
+        # Convert delta to seconds over TOTAL duration (includes drain for last blocks)
+        total_dur_sec = max(0.001, getattr(self, "_total_dur_sec", self.duration_ms / 1000.0))
+        delta_sec = delta * total_dur_sec
+        flip_dur_sec = max(0.001, self._flip_duration_ms / 1000.0)
+        flip_increment = delta_sec / flip_dur_sec
         
         all_complete = True
         completed_count = 0
-        
         for block in self._blocks:
             if block.is_flipping and not block.is_complete:
                 block.flip_progress += flip_increment
-                
                 if block.flip_progress >= 1.0:
                     block.flip_progress = 1.0
                     block.is_complete = True
                     block.is_flipping = False
-                else:
-                    all_complete = False
-            
-            if block.is_complete:
+            # Any block not complete means we are not done yet, regardless of flip state
+            if not block.is_complete:
+                all_complete = False
+            else:
                 completed_count += 1
         
-        # Render current state
-        self._render_scene()
+        # If we've reached the end of the global timeline, force-complete any stragglers
+        if progress >= 1.0:
+            for block in self._blocks:
+                if not block.is_complete:
+                    block.flip_progress = 1.0
+                    block.is_complete = True
+                    block.is_flipping = False
+            self._render_scene(widget_sized=True)
+            self._emit_progress(1.0)
+            self._finish_transition()
+            return
         
-        # Update second half of progress
+        self._render_scene(widget_sized=True)
         if len(self._blocks) > 0:
             completion_progress = completed_count / len(self._blocks)
             self._emit_progress(0.5 + (completion_progress * 0.5))
-        
-        # Check if all complete
-        if all_complete and self._current_flip_index >= len(self._flip_order):
+        if all_complete:
             self._finish_transition()
     
-    def _render_scene(self) -> None:
-        """Render current state of all blocks."""
-        if not self._display_label or not self._old_pixmap:
+    def _render_scene(self, widget_sized: bool = False) -> None:
+        """Update mask on the new label based on block flip progress."""
+        if not hasattr(self, "_new_label") or self._new_label is None:
             return
-        
-        # Create composite pixmap
-        composite = QPixmap(self._old_pixmap.size())
-        composite.fill(QColor(0, 0, 0, 0))
-        
-        painter = QPainter(composite)
-        
-        # Render each block
+        # Build union region of revealed areas for the new image
+        region = QRegion()
         for block in self._blocks:
-            pixmap = block.get_current_pixmap()
-            painter.drawPixmap(block.rect.topLeft(), pixmap)
-        
-        painter.end()
-        
-        # Update label
+            p = max(0.0, min(1.0, block.flip_progress))
+            if p <= 0.0:
+                continue
+            # Simulate horizontal center flip: reveal rectangle growing from center
+            r = block.rect
+            reveal_w = max(1, int(r.width() * p))
+            dx = r.x() + (r.width() - reveal_w) // 2
+            reveal_rect = QRect(dx, r.y(), reveal_w, r.height())
+            region = region.united(QRegion(reveal_rect))
         try:
-            self._display_label.setPixmap(composite)
+            self._new_label.setMask(region)
         except RuntimeError:
-            pass  # Label deleted
+            return
     
     def _finish_transition(self) -> None:
         """Finish the transition."""
@@ -410,10 +384,10 @@ class BlockPuzzleFlipTransition(BaseTransition):
             except RuntimeError:
                 pass
         
-        # Show final image
-        if self._display_label and self._new_pixmap:
+        # Ensure new image fully visible and clean up labels
+        if hasattr(self, "_new_label") and self._new_label:
             try:
-                self._display_label.setPixmap(self._new_pixmap)
+                self._new_label.clearMask()
             except RuntimeError:
                 pass
         
@@ -422,16 +396,20 @@ class BlockPuzzleFlipTransition(BaseTransition):
         self.finished.emit()
         
         # Clean up resources immediately
-        self._timer = None
-        self._flip_timer = None
         self._blocks = []
         
-        if self._display_label:
+        if hasattr(self, "_old_label") and self._old_label:
             try:
-                self._display_label.deleteLater()
+                self._old_label.deleteLater()
             except RuntimeError:
                 pass
-            self._display_label = None
+            self._old_label = None
+        if hasattr(self, "_new_label") and self._new_label:
+            try:
+                self._new_label.deleteLater()
+            except RuntimeError:
+                pass
+            self._new_label = None
     
     def _show_image_immediately(self) -> None:
         """Show new image immediately without transition."""

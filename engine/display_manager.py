@@ -140,8 +140,9 @@ class DisplayManager(QObject):
             
             # Connect signals
             display.exit_requested.connect(self._on_exit_requested)
+            # FIX: Use default args to capture screen_index by value (not by reference)
             display.image_displayed.connect(
-                lambda path: self._on_image_displayed(screen_index, path)
+                lambda path, idx=screen_index: self._on_image_displayed(idx, path)
             )
             
             # Connect hotkey signals

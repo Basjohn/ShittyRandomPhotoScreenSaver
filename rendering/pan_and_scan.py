@@ -1,13 +1,12 @@
 """
-Pan and scan effect for screensaver images.
+Pan and scan effect for images - slow drift/movement across image.
 
-Implements slow, random image drift within bounds to add movement to static images.
-The image is always larger than the display (maintains aspect ratio) and drifts
-slowly across the screen without ever reaching empty space.
+Scales image larger than display and slowly pans across it for dynamic effect.
 """
+import math
 import random
-from typing import Optional, Tuple
-from PySide6.QtCore import QTimer, QPoint, QSize, QRect
+from typing import Optional
+from PySide6.QtCore import QTimer, QPoint, QSize
 from PySide6.QtWidgets import QLabel, QWidget
 from PySide6.QtGui import QPixmap
 
@@ -41,19 +40,29 @@ class PanAndScan:
         
         # Pan state
         self._current_offset = QPoint(0, 0)
-        self._target_direction = QPoint(0, 0)
+        self._current_offset_x_float = 0.0  # Accumulate fractional pixels
+        self._current_offset_y_float = 0.0  # Accumulate fractional pixels
+        self._target_direction_x = 0.0  # Normalized direction vector X
+        self._target_direction_y = 0.0  # Normalized direction vector Y
         self._image_size = QSize(0, 0)
         self._display_size = QSize(0, 0)
         self._scaled_pixmap: Optional[QPixmap] = None
         
         # Settings
-        self._speed_pixels_per_second = 20.0  # Default speed
+        self._speed_pixels_per_second = 2.5  # Default speed (reduced from 20.0)
         self._auto_speed = True
         self._transition_interval_sec = 10.0  # Default
         
         # Timer interval (60 FPS)
         self._fps = 60
         self._timer_interval_ms = 1000 // self._fps
+        
+        # FIX: Use ResourceManager for Qt object lifecycle
+        try:
+            from core.resources.manager import ResourceManager
+            self._resource_manager = ResourceManager()
+        except Exception:
+            self._resource_manager = None
         
         logger.debug("PanAndScan initialized")
     
@@ -88,6 +97,8 @@ class PanAndScan:
         start_y = random.randint(0, max_offset_y) if max_offset_y > 0 else 0
         
         self._current_offset = QPoint(start_x, start_y)
+        self._current_offset_x_float = float(start_x)
+        self._current_offset_y_float = float(start_y)
         self._label.move(-start_x, -start_y)
         
         # Pick random drift direction
@@ -114,11 +125,11 @@ class PanAndScan:
                    f"auto_speed={self._auto_speed}")
     
     def stop(self) -> None:
-        """Stop pan and scan animation."""
+        """Stop pan and scan effect."""
+        # FIX: Don't set to None after deleteLater - prevents memory leak
         if self._timer:
             self._timer.stop()
             self._timer.deleteLater()
-            self._timer = None
         
         logger.debug("Pan and scan stopped")
     
@@ -142,11 +153,12 @@ class PanAndScan:
         Set pan speed in pixels per second.
         
         Args:
-            pixels_per_second: Speed in pixels per second
+            pixels_per_second: Speed in pixels per second (clamped 1-100)
         """
+        # Clamp to reasonable range: 1-100 px/s for manual
         self._speed_pixels_per_second = max(1.0, min(100.0, pixels_per_second))
         self._auto_speed = False
-        logger.debug(f"Pan speed set to {self._speed_pixels_per_second:.1f} px/s (manual)")
+        logger.debug(f"Pan speed set to {self._speed_pixels_per_second:.1f} px/s (manual, clamped from {pixels_per_second:.1f})")
     
     def set_auto_speed(self, auto: bool, transition_interval_sec: float = 10.0) -> None:
         """
@@ -168,6 +180,25 @@ class PanAndScan:
         """Check if pan and scan is enabled."""
         return self._enabled
     
+    def preview_scale(self, pixmap: QPixmap, display_size: QSize) -> Optional[QPixmap]:
+        """
+        Preview what the scaled image will look like for pan & scan.
+        
+        This is used to provide seamless handoff from transitions to pan & scan
+        by ensuring the transition uses the same scale that pan & scan will use.
+        
+        Args:
+            pixmap: Original image
+            display_size: Display size
+        
+        Returns:
+            Scaled pixmap (130% of display), or None if not enabled
+        """
+        if not self._enabled:
+            return None
+        
+        return self._scale_image_for_pan(pixmap, display_size)
+    
     def _scale_image_for_pan(self, pixmap: QPixmap, display_size: QSize) -> QPixmap:
         """
         Scale image to be larger than display for panning.
@@ -181,6 +212,11 @@ class PanAndScan:
         Returns:
             Scaled pixmap
         """
+        # FIX: Validate dimensions to prevent division by zero
+        if pixmap.height() == 0 or display_size.height() == 0:
+            logger.error(f"Invalid dimensions for pan: display={display_size.width()}x{display_size.height()}, img={pixmap.width()}x{pixmap.height()}")
+            return pixmap  # Return original
+        
         img_ratio = pixmap.width() / pixmap.height()
         screen_ratio = display_size.width() / display_size.height()
         
@@ -219,7 +255,9 @@ class PanAndScan:
         Speed should ensure image drifts across available space during interval,
         but not too fast to be distracting.
         """
+        # FIX: Add error logging for invalid sizes
         if not self._display_size.isValid() or not self._image_size.isValid():
+            logger.error(f"Invalid sizes for pan auto-speed: display={self._display_size.width()}x{self._display_size.height()}, image={self._image_size.width()}x{self._image_size.height()}")
             self._speed_pixels_per_second = 20.0
             return
         
@@ -230,18 +268,18 @@ class PanAndScan:
         )
         
         if drift_space <= 0:
-            self._speed_pixels_per_second = 10.0
+            self._speed_pixels_per_second = 8.0  # Minimum fallback
             return
         
         # Cover 30-50% of drift space during transition interval
         coverage_ratio = 0.4
         distance_to_cover = drift_space * coverage_ratio
         
-        # Calculate speed (pixels per second)
-        self._speed_pixels_per_second = distance_to_cover / self._transition_interval_sec
+        # Calculate speed (pixels per second) - gentle visible movement
+        self._speed_pixels_per_second = (distance_to_cover / self._transition_interval_sec) / 4.0
         
-        # Clamp to reasonable range
-        self._speed_pixels_per_second = max(5.0, min(50.0, self._speed_pixels_per_second))
+        # Clamp to reasonable range: 8-25 px/s for auto
+        self._speed_pixels_per_second = max(8.0, min(25.0, self._speed_pixels_per_second))
         
         logger.debug(f"Auto speed calculated: {self._speed_pixels_per_second:.1f} px/s "
                     f"(drift_space={drift_space}, interval={self._transition_interval_sec}s)")
@@ -251,13 +289,17 @@ class PanAndScan:
         if not self._label or not self._scaled_pixmap:
             return
         
-        # Calculate movement delta
+        # Calculate movement delta (pixels per frame)
         delta_per_frame = self._speed_pixels_per_second / self._fps
         
-        # Update offset
+        # Update offset using normalized direction vector (accumulate fractional pixels)
+        self._current_offset_x_float += self._target_direction_x * delta_per_frame
+        self._current_offset_y_float += self._target_direction_y * delta_per_frame
+        
+        # Convert to integer for actual positioning
         new_offset = QPoint(
-            self._current_offset.x() + int(self._target_direction.x() * delta_per_frame),
-            self._current_offset.y() + int(self._target_direction.y() * delta_per_frame)
+            int(self._current_offset_x_float),
+            int(self._current_offset_y_float)
         )
         
         # Check bounds and reverse direction if needed
@@ -267,18 +309,22 @@ class PanAndScan:
         # X bounds check
         if new_offset.x() < 0:
             new_offset.setX(0)
-            self._target_direction.setX(abs(self._target_direction.x()))
+            self._current_offset_x_float = 0.0
+            self._target_direction_x = abs(self._target_direction_x)
         elif new_offset.x() > max_offset_x:
             new_offset.setX(max_offset_x)
-            self._target_direction.setX(-abs(self._target_direction.x()))
+            self._current_offset_x_float = float(max_offset_x)
+            self._target_direction_x = -abs(self._target_direction_x)
         
         # Y bounds check
         if new_offset.y() < 0:
             new_offset.setY(0)
-            self._target_direction.setY(abs(self._target_direction.y()))
+            self._current_offset_y_float = 0.0
+            self._target_direction_y = abs(self._target_direction_y)
         elif new_offset.y() > max_offset_y:
             new_offset.setY(max_offset_y)
-            self._target_direction.setY(-abs(self._target_direction.y()))
+            self._current_offset_y_float = float(max_offset_y)
+            self._target_direction_y = -abs(self._target_direction_y)
         
         # Update position
         self._current_offset = new_offset
@@ -289,21 +335,25 @@ class PanAndScan:
             self._adjust_direction()
     
     def _choose_new_direction(self) -> None:
-        """Choose a new random drift direction."""
+        """Choose a new random drift direction (normalized to 1.0)."""
         # Random direction with slight bias toward diagonal movement
         angle = random.uniform(0, 360)
-        import math
-        self._target_direction = QPoint(
-            int(math.cos(math.radians(angle)) * 100),
-            int(math.sin(math.radians(angle)) * 100)
-        )
+        # Direction vector normalized to magnitude 1.0 for correct speed calculation
+        self._target_direction_x = math.cos(math.radians(angle))
+        self._target_direction_y = math.sin(math.radians(angle))
         
-        logger.debug(f"New pan direction: ({self._target_direction.x()}, {self._target_direction.y()})")
+        logger.debug(f"New pan direction: ({self._target_direction_x:.3f}, {self._target_direction_y:.3f})")
     
     def _adjust_direction(self) -> None:
         """Slightly adjust current direction for natural movement."""
         # Small random adjustment (-10% to +10%)
         adjustment = random.uniform(-0.1, 0.1)
         
-        self._target_direction.setX(int(self._target_direction.x() * (1 + adjustment)))
-        self._target_direction.setY(int(self._target_direction.y() * (1 + adjustment)))
+        self._target_direction_x *= (1 + adjustment)
+        self._target_direction_y *= (1 + adjustment)
+        
+        # Re-normalize to maintain magnitude 1.0
+        magnitude = math.sqrt(self._target_direction_x**2 + self._target_direction_y**2)
+        if magnitude > 0:
+            self._target_direction_x /= magnitude
+            self._target_direction_y /= magnitude

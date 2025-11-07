@@ -3,11 +3,13 @@ Image processing for screensaver display.
 
 Handles scaling, cropping, and positioning of images for different display modes.
 """
-from typing import Tuple, Optional
-from PySide6.QtCore import Qt, QSize, QRect, QPoint
+from typing import Tuple
+from PySide6.QtCore import Qt, QSize, QRect
 from PySide6.QtGui import QPixmap, QPainter, QImage
 from rendering.display_modes import DisplayMode
 from core.logging.logger import get_logger
+
+logger = get_logger(__name__)
 
 try:
     from PIL import Image, ImageFilter
@@ -15,8 +17,6 @@ try:
 except ImportError:
     PILLOW_AVAILABLE = False
     logger.warning("PIL/Pillow not available, using Qt scaling only")
-
-logger = get_logger(__name__)
 
 
 class ImageProcessor:
@@ -29,7 +29,7 @@ class ImageProcessor:
     @staticmethod
     def process_image(image: QPixmap, screen_size: QSize, 
                      mode: DisplayMode = DisplayMode.FILL,
-                     use_lanczos: bool = True,
+                     use_lanczos: bool = False,
                      sharpen: bool = False) -> QPixmap:
         """
         Process image for display.
@@ -38,7 +38,7 @@ class ImageProcessor:
             image: Source image (QPixmap)
             screen_size: Target screen size
             mode: Display mode (FILL, FIT, or SHRINK)
-            use_lanczos: Use PIL Lanczos resampling for better quality (default: True)
+            use_lanczos: Use PIL Lanczos resampling for better quality (default: False)
             sharpen: Apply sharpening filter after downscaling (default: False)
         
         Returns:
@@ -59,7 +59,7 @@ class ImageProcessor:
             return ImageProcessor._process_fill(image, screen_size, use_lanczos, sharpen)
     
     @staticmethod
-    def _scale_pixmap(pixmap: QPixmap, width: int, height: int, use_lanczos: bool = True, sharpen: bool = False) -> QPixmap:
+    def _scale_pixmap(pixmap: QPixmap, width: int, height: int, use_lanczos: bool = False, sharpen: bool = False) -> QPixmap:
         """
         Scale a pixmap using PIL Lanczos (if available) or Qt.
         
@@ -89,12 +89,9 @@ class ImageProcessor:
             if qimage.hasAlphaChannel():
                 qimage = qimage.convertToFormat(QImage.Format.Format_RGBA8888)
                 mode = 'RGBA'
-                bytes_per_pixel = 4
             else:
                 qimage = qimage.convertToFormat(QImage.Format.Format_RGB888)
                 mode = 'RGB'
-                bytes_per_pixel = 3
-            
             # Get image data - handle both sip.voidptr and memoryview
             ptr = qimage.constBits()
             if hasattr(ptr, 'setsize'):
@@ -121,7 +118,7 @@ class ImageProcessor:
                 scale_factor = min(width / qimage.width(), height / qimage.height())
                 if scale_factor < 0.5:  # Aggressive downscaling (>2x)
                     # Use UnsharpMask for better quality on aggressive downscaling
-                    from PIL import ImageEnhance
+                    # FIX: Import moved to top of file
                     scaled_pil = scaled_pil.filter(ImageFilter.UnsharpMask(radius=2, percent=150, threshold=3))
                 else:
                     # Regular sharpening for moderate downscaling
@@ -130,10 +127,24 @@ class ImageProcessor:
             # Convert back to QPixmap
             if scaled_pil.mode == 'RGBA':
                 data = scaled_pil.tobytes('raw', 'RGBA')
-                qimg = QImage(data, scaled_pil.width, scaled_pil.height, scaled_pil.width * 4, QImage.Format.Format_RGBA8888)
+                qimg = QImage(
+                    data,
+                    scaled_pil.width,
+                    scaled_pil.height,
+                    scaled_pil.width * 4,
+                    QImage.Format.Format_RGBA8888,
+                )
+                # Critical: convert to premultiplied for correct blending in Qt
+                qimg = qimg.convertToFormat(QImage.Format.Format_ARGB32_Premultiplied)
             else:
                 data = scaled_pil.tobytes('raw', 'RGB')
-                qimg = QImage(data, scaled_pil.width, scaled_pil.height, scaled_pil.width * 3, QImage.Format.Format_RGB888)
+                qimg = QImage(
+                    data,
+                    scaled_pil.width,
+                    scaled_pil.height,
+                    scaled_pil.width * 3,
+                    QImage.Format.Format_RGB888,
+                )
             
             result = QPixmap.fromImage(qimg)
             logger.debug(f"Scaled with Lanczos: {pixmap.width()}x{pixmap.height()} → {width}x{height}")
@@ -169,6 +180,11 @@ class ImageProcessor:
         """
         img_size = image.size()
         
+        # FIX: Validate dimensions to prevent division by zero
+        if screen_size.height() == 0 or img_size.height() == 0:
+            logger.error(f"Invalid dimensions: screen={screen_size.width()}x{screen_size.height()}, img={img_size.width()}x{img_size.height()}")
+            return QPixmap(screen_size)
+        
         # Calculate aspect ratios
         screen_ratio = screen_size.width() / screen_size.height()
         img_ratio = img_size.width() / img_size.height()
@@ -184,28 +200,22 @@ class ImageProcessor:
             scale_width = screen_size.width()
             scale_height = int(scale_width / img_ratio)
         
-        # Optimization: If image is already larger and scaling would downsample,
-        # use original size to preserve quality (we'll crop to screen size anyway)
-        if (img_size.width() >= scale_width and img_size.height() >= scale_height and
-            img_size.width() >= screen_size.width() and img_size.height() >= screen_size.height()):
-            logger.debug(f"Fill: Using original size {img_size.width()}x{img_size.height()} (avoiding downsample)")
-            scale_width = img_size.width()
-            scale_height = img_size.height()
-        
         # Ensure we always have at least screen size (never smaller)
         scale_width = max(scale_width, screen_size.width())
         scale_height = max(scale_height, screen_size.height())
         
-        # Scale image only if needed (with Lanczos if enabled)
+        # ALWAYS scale with Lanczos when needed for best quality
+        # Even when downsampling - Lanczos provides superior quality
         if scale_width == img_size.width() and scale_height == img_size.height():
-            # No scaling needed - use original
+            # Exact size match - no scaling needed
             scaled = image
-            logger.debug("Fill: No scaling needed, using original image")
+            logger.debug(f"Fill: Exact size match {img_size.width()}x{img_size.height()}, no scaling")
         else:
-            # Scale required
+            # Scale required (up or down) - use Lanczos for quality
             scaled = ImageProcessor._scale_pixmap(
                 image, scale_width, scale_height, use_lanczos, sharpen
             )
+            logger.debug(f"Fill: Scaled {img_size.width()}x{img_size.height()} → {scale_width}x{scale_height} (Lanczos={use_lanczos})")
         
         # If scaled image is larger than screen, crop it
         if scaled.width() > screen_size.width() or scaled.height() > screen_size.height():
@@ -254,8 +264,12 @@ class ImageProcessor:
         Returns:
             Processed pixmap with letterboxing if needed
         """
-        # Calculate target size maintaining aspect ratio
-        # FIT mode: Image fits entirely within screen with black bars (letterbox/pillarbox)
+        # Get image dimensions
+        # FIX: Validate dimensions to prevent division by zero
+        if image.height() == 0 or screen_size.height() == 0:
+            logger.error(f"Invalid dimensions for fit: screen={screen_size.width()}x{screen_size.height()}, img={image.width()}x{image.height()}")
+            return QPixmap(screen_size)
+        
         img_ratio = image.width() / image.height()
         screen_ratio = screen_size.width() / screen_size.height()
         
@@ -316,6 +330,11 @@ class ImageProcessor:
             Processed pixmap (never upscaled)
         """
         img_size = image.size()
+        
+        # FIX: Validate dimensions to prevent division by zero
+        if img_size.height() == 0 or screen_size.height() == 0:
+            logger.error(f"Invalid dimensions for shrink: screen={screen_size.width()}x{screen_size.height()}, img={img_size.width()}x{img_size.height()}")
+            return QPixmap(screen_size)
         
         # Check if scaling is needed
         if img_size.width() <= screen_size.width() and img_size.height() <= screen_size.height():

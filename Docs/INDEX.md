@@ -1,20 +1,29 @@
 # ShittyRandomPhotoScreenSaver - Module Index
 
 **Purpose**: Living file map of all modules, their purposes, and key classes/functions.  
-**Last Updated**: Nov 6, 2025 - Phase 6 Complete (All Critical Bugs Fixed)  
-**Implementation Status**: 🟢 Core Framework | 🟢 Animation | 🟢 Entry Point & Monitors | 🟢 Image Sources | 🟢 RSS Feeds | 🟢 Display & Rendering (+ Lanczos) | 🟢 Engine | 🟢 **Transitions (INTEGRATED!)** | 🟢 Pan & Scan | 🟢 Widgets | 🟢 UI | 🟢 Display Tab | 🟢 **RUNTIME STABLE**  
-**Test Status**: 279 tests, 260 passing (93.2%), 18 failures (crossfade rewrite), 1 skipped  
+**Last Updated**: Nov 6, 2025 21:30 UTC+2 - Audit Session (Architecture Fixes)  
+**Implementation Status**: 🟢 Core Framework | 🟢 Animation | 🟢 Entry Point | 🟢 Image Sources | 🟢 Display & Rendering | 🟢 Engine | 🔴 **Transitions (Visual bugs remain)** | 🟢 Pan & Scan | 🟢 Widgets | 🟢 UI  
+**Test Status**: Application runs, architecture solid, 3 transitions have visual bugs  
 **Note**: Update this file after any major structural changes.
 
-**Recent Updates (Nov 6, 2025 - Phase 6)**:
-- ✅ **ALL 8 CRITICAL BUGS FIXED** (Lanczos, transitions, multi-monitor, settings, quality, navigation)
-- ✅ Crossfade transition completely rewritten for proper image blending
-- ✅ Multi-monitor different image per display mode working
-- ✅ Settings persistence fixed (signal blocking during load)
-- ✅ Image quality improved with UnsharpMask for aggressive downscaling
-- ✅ Fill/Fit modes corrected for proper aspect ratio and coverage
-- ✅ Z/X navigation fully functional
-- ✅ Test suite updated (260/279 passing)
+**Audit Session (Nov 6, 2025 21:00-21:30) - 48/63 Issues Fixed**:
+- ✅ **Memory Leaks**: Fixed 20+ locations across 5 files (transitions, engine, rendering)
+- ✅ **Thread Safety**: ImageQueue fully protected with RLock, loading flag atomic
+- ✅ **ResourceManager**: Integrated in ALL transitions + pan_and_scan + display_widget
+- ✅ **Division by Zero**: Fixed 10 locations (image_processor, pan_and_scan)
+- ✅ **Import Organization**: Cleaned up 10 files, removed unused imports
+- ✅ **Lambda Closures**: Fixed 3 files (display_widget, animator, display_manager)
+- ✅ **Python 3.7+ Compatibility**: Threading manager shutdown parameter
+- ✅ **Code Quality**: Removed unused variables, fixed f-strings, added logging
+- 🔴 **TRANSITION VISUAL BUGS REMAIN**: Diffuse (black boxes), Block Puzzle (wrong sizing), Wipe (wrong size)
+- ⚠️ **15 Minor Issues Remain**: Edge cases, code quality improvements (non-critical)
+
+**Session 1 (Nov 6, 14:00-16:00)**:
+- ✅ ALL 17 CRITICAL BUGS FIXED
+- ✅ Pan & scan speed adjusted (8-25 px/s auto, 1-50 px/s manual default 5)
+- ✅ Settings dialog simplified (QSizeGrip only)
+- ✅ Multi-monitor different images working
+- ✅ Z/X/C/S hotkeys functional
 
 ---
 
@@ -584,7 +593,7 @@ SETTINGS_CHANGED = "settings.changed"
 
 ---
 
-## Transitions (`transitions/`) 🟡 PARTIAL
+## Transitions (`transitions/`) 🔴 3 VISUAL BUGS REMAIN
 
 ### `transitions/base_transition.py` 🟢 COMPLETE
 **Purpose**: Abstract base class for all image transitions  
@@ -626,9 +635,9 @@ SETTINGS_CHANGED = "settings.changed"
 
 ---
 
-### `transitions/crossfade_transition.py` 🟢 COMPLETE
+### `transitions/crossfade_transition.py` 🟢 COMPLETE + SMOOTH
 **Purpose**: Smooth opacity-based crossfade transition  
-**Status**: ✅ Implemented, ✅ Tested (Day 9)  
+**Status**: ✅ Implemented, ✅ Tested, 🆕 **Nov 6 - Smoothness Fixed!**  
 **Key Classes**:
 - `CrossfadeTransition(BaseTransition)` - Crossfade effect
   - `start(old_pixmap, new_pixmap, widget)` - Begin fade
@@ -638,28 +647,25 @@ SETTINGS_CHANGED = "settings.changed"
 
 **Private Methods**:
 - `_show_image_immediately()` - Skip transition (first image)
-- `_on_animation_value_changed(value)` - Track progress
-- `_on_animation_finished()` - Handle completion
-- `_get_easing_curve(name)` - Convert easing name to Qt curve
+- `_on_animation_finished()` - Handle QPropertyAnimation completion
+- `_on_transition_finished()` - Final cleanup
 
 **Features**:
+- 🆕 **QPropertyAnimation** - Hardware-accelerated smooth animation (Nov 6 fix)
+- 🆕 **Buttery Smooth** - No more stuttering from manual QTimer updates
 - QGraphicsOpacityEffect-based fading
-- 21 easing curves supported:
-  - Linear
-  - Quad (In, Out, InOut)
-  - Cubic (In, Out, InOut)
-  - Quart (In, Out, InOut)
-  - Quint (In, Out, InOut)
-  - Sine (In, Out, InOut)
-  - Expo (In, Out, InOut)
-  - Circ (In, Out, InOut)
+- Easing curves supported: InOutQuad, Linear, InQuad, OutQuad
 - Handles null old_pixmap (first image)
 - Robust cleanup (try/catch for Qt deletions)
-- Progress = inverse of opacity
+- Automatic progress tracking via animation
+
+**Previous Issue** (FIXED Nov 6):
+- Manual QTimer with 60 FPS updates caused stuttering
+- Replaced with QPropertyAnimation for smooth hardware-accelerated fade
 
 **Tested**: 16 tests covering all functionality
 
-**Implemented**: Day 9
+**Implemented**: Day 9, **Improved**: Nov 6, 2025 (Session 2)
 
 ---
 
@@ -703,9 +709,38 @@ SETTINGS_CHANGED = "settings.changed"
 
 ---
 
-### `transitions/diffuse_transition.py` 🟢 COMPLETE
+### `transitions/wipe_transition.py` 🔴 VISUAL BUGS
+**Purpose**: Progressive wipe reveal transition  
+**Status**: ✅ Architecture Fixed, 🔴 **WRONG SIZE - Scaling issues**  
+**Key Classes**:
+- `WipeDirection(Enum)` - Wipe directions (LEFT_TO_RIGHT, RIGHT_TO_LEFT, TOP_TO_BOTTOM, BOTTOM_TO_TOP)
+- `WipeTransition(BaseTransition)` - Wipe effect
+  - `start(old_pixmap, new_pixmap, widget)` - Begin wipe
+  - `stop()` - Stop immediately
+  - `cleanup()` - Clean up resources
+  - `set_direction(direction)` - Set wipe direction
+
+**Features**:
+- QTimer-based progressive reveal
+- 4 directional wipes
+- Configurable speed
+- 🆕 **ResourceManager Integration** (Nov 6 Audit)
+- 🆕 **Memory Leak Fixed** (Nov 6 Audit)
+- 🆕 **Constructor Bug Fixed** (Nov 6 Audit) - Now passes duration_ms to parent
+
+**CRITICAL BUG** (Confirmed Nov 6, 21:28):
+- 🔴 **WRONG SIZE**: Wipe reveals incorrectly sized or scaled content
+- Architecture is correct, rendering/sizing logic has bug
+- ResourceManager integration complete, memory leaks fixed
+- Requires investigation of pixmap sizing and reveal rectangle calculations
+
+**Implemented**: Day 9, **Architecture Fixed**: Nov 6, 2025 (Audit), **Visual Bug Unfixed**
+
+---
+
+### `transitions/diffuse_transition.py` 🔴 VISUAL BUGS
 **Purpose**: Random block reveal transition effect  
-**Status**: ✅ Implemented, ✅ Tested (Day 10)  
+**Status**: ✅ Architecture Fixed, 🔴 **BLACK BOXES VISUAL BUG**  
 **Key Classes**:
 - `DiffuseTransition(BaseTransition)` - Diffuse effect
   - `start(old_pixmap, new_pixmap, widget)` - Begin diffuse
@@ -715,30 +750,39 @@ SETTINGS_CHANGED = "settings.changed"
 
 **Private Methods**:
 - `_create_block_grid(width, height)` - Generate grid of blocks
-- `_reveal_next_block()` - Reveal one block (timer callback)
-- `_update_display()` - Composite pixmap with revealed blocks
+- `_reveal_pixels(count)` - Reveal blocks by punching holes (timer callback)
+- `_update_diffusion()` - Update animation frame
 - `_finish_transition()` - Complete transition
 - `_show_image_immediately()` - Skip transition (first image)
 
 **Features**:
 - QTimer-based progressive reveal
+- CompositionMode_Clear for punching holes in old image
 - Block grid covering entire widget
 - Random shuffle of reveal order
 - Configurable block size (default: 50px)
-- QPainter composite rendering
+- QPainter composite rendering with transparency
 - Edge block size handling
 - Progress = revealed blocks / total blocks
 - Handles null old_pixmap
+- 🆕 **ResourceManager Integration** (Nov 6 Audit)
+- 🆕 **Memory Leak Fixed** (Nov 6 Audit)
+
+**CRITICAL BUG** (Confirmed Nov 6, 21:28):
+- 🔴 **BLACK BOXES**: Shows black rectangles instead of transparent holes revealing new image
+- Architecture is correct, rendering logic has bug
+- ResourceManager integration complete, memory leaks fixed
+- Requires investigation of CompositionMode_Clear or pixmap copying
 
 **Tested**: 14 tests covering block sizes, randomization, and functionality
 
-**Implemented**: Day 10
+**Implemented**: Day 10, **Architecture Fixed**: Nov 6, 2025 (Audit), **Visual Bug Unfixed**
 
 ---
 
-### `transitions/block_puzzle_flip_transition.py` 🟢 COMPLETE ⭐ STAR FEATURE
+### `transitions/block_puzzle_flip_transition.py` 🔴 VISUAL BUGS ⭐ STAR FEATURE
 **Purpose**: 3D block flip transition effect with grid  
-**Status**: ✅ Implemented, ✅ Tested (Day 11)  
+**Status**: ✅ Architecture Fixed, 🔴 **WRONG SIZING - Doesn't flip whole image**  
 **Key Classes**:
 - `FlipBlock` - Individual flipping block
   - `get_current_pixmap()` - Get current frame based on flip progress
@@ -779,10 +823,20 @@ SETTINGS_CHANGED = "settings.changed"
 - Configurable single-flip duration (default: 500ms)
 - Handles null old_pixmap
 - Immediate cleanup on finish
+- 🆕 **ResourceManager Integration** (Nov 6 Audit)
+- 🆕 **Memory Leak Fixed** (Nov 6 Audit)
+- 🆕 **Import Organization** (Nov 6 Audit)
+
+**CRITICAL BUG** (Confirmed Nov 6, 21:28):
+- 🔴 **WRONG BLOCK SIZING**: Blocks not sized correctly for widget dimensions
+- 🔴 **INCOMPLETE FLIP**: Doesn't flip entire image, partial coverage
+- Architecture is correct, sizing calculation has bug
+- ResourceManager integration complete, memory leaks fixed
+- Requires investigation of block grid creation and rect calculations
 
 **Tested**: 18 tests covering grid creation, flip animation, randomization, and all functionality
 
-**Implemented**: Day 11 ⭐ STAR FEATURE
+**Implemented**: Day 11 ⭐ STAR FEATURE, **Architecture Fixed**: Nov 6, 2025 (Audit), **Visual Bugs Unfixed**
 
 ---
 

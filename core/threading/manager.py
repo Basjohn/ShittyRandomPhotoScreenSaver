@@ -5,12 +5,11 @@ Centralized thread management with specialized pools for IO and compute operatio
 Adapted from SPQDocker reusable modules for screensaver use.
 """
 import os
-import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, Future
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional
 from utils.lockfree import SPSCQueue, TripleBuffer
 from PySide6.QtCore import QTimer, QObject, QThread, QCoreApplication, Signal
 from core.logging.logger import get_logger
@@ -327,7 +326,13 @@ class ThreadManager:
         for pool_type, executor in self._executors.items():
             try:
                 logger.debug(f"Shutting down {pool_type.value} pool...")
-                executor.shutdown(wait=wait, cancel_futures=not wait)
+                # FIX: cancel_futures added in Python 3.9, handle older versions
+                try:
+                    executor.shutdown(wait=wait, cancel_futures=not wait)
+                except TypeError:
+                    # Python < 3.9 doesn't support cancel_futures parameter
+                    executor.shutdown(wait=wait)
+                    logger.debug("Using Python < 3.9 shutdown (no cancel_futures)")
             except Exception as e:
                 logger.error(f"Error shutting down {pool_type.value} pool: {e}")
         
@@ -339,7 +344,9 @@ class ThreadManager:
             return
         try:
             self._mut_q.push_drop_oldest(ev)
-        except Exception:
+        except Exception as e:
+            # FIX: Log silent failure instead of ignoring
+            logger.debug(f"Failed to push mutation to queue: {e}")
             return
         
         if isinstance(ev, tuple) and ev and ev[0] == 'register_active':

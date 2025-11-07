@@ -7,6 +7,7 @@ import feedparser
 import requests
 import hashlib
 import tempfile
+import re
 from pathlib import Path
 from datetime import datetime
 from typing import List, Optional
@@ -164,7 +165,6 @@ class RSSSource(ImageProvider):
             content = entry.get('content', [{}])[0].get('value', '') or entry.get('summary', '')
             if content:
                 # Simple img src extraction
-                import re
                 img_match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', content)
                 if img_match:
                     image_url = img_match.group(1)

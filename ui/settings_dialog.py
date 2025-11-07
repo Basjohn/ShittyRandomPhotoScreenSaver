@@ -149,11 +149,14 @@ class SettingsDialog(QDialog):
         self._settings = settings_manager
         self._animations = animation_manager
         self._is_maximized = False
+        self._drag_pos = QPoint()
+        self._dragging = False
         
         self._setup_window()
         self._load_theme()
         self._setup_ui()
         self._connect_signals()
+        self._restore_geometry()
         
         logger.info("Settings dialog created")
     
@@ -169,9 +172,29 @@ class SettingsDialog(QDialog):
         # Enable transparency for drop shadow
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         
-        # Size
-        self.setMinimumSize(900, 600)
-        self.resize(1000, 700)
+        # Minimum size
+        self.setMinimumSize(800, 500)
+        
+        # Check if we have saved geometry first
+        saved_geometry = self._settings.get('ui.dialog_geometry', {})
+        
+        if saved_geometry and 'width' in saved_geometry and 'height' in saved_geometry:
+            # Use saved geometry (will be applied in _restore_geometry())
+            pass
+        else:
+            # No saved geometry - default to 60% of primary screen
+            from PySide6.QtWidgets import QApplication
+            screen = QApplication.primaryScreen()
+            if screen:
+                geometry = screen.geometry()
+                default_width = int(geometry.width() * 0.6)
+                default_height = int(geometry.height() * 0.6)
+            else:
+                default_width = 1000
+                default_height = 700
+            
+            self.resize(default_width, default_height)
+            logger.debug(f"No saved geometry - defaulting to 60% of screen: {default_width}x{default_height}")
         
         # Drop shadow effect
         shadow = QGraphicsDropShadowEffect(self)
@@ -606,7 +629,7 @@ class SettingsDialog(QDialog):
             self._is_maximized = True
     
     def resizeEvent(self, event):
-        """Handle resize event to position size grip."""
+        """Handle resize event to position size grip and save geometry."""
         super().resizeEvent(event)
         
         # Position size grip in bottom-right corner
@@ -615,3 +638,71 @@ class SettingsDialog(QDialog):
                 self.width() - self.size_grip.width() - 10,
                 self.height() - self.size_grip.height() - 10
             )
+        
+        # Save geometry on resize (debounced to avoid excessive saves)
+        if hasattr(self, '_resize_timer'):
+            self._resize_timer.stop()
+        else:
+            from PySide6.QtCore import QTimer
+            self._resize_timer = QTimer()
+            self._resize_timer.setSingleShot(True)
+            self._resize_timer.timeout.connect(self._save_geometry)
+        self._resize_timer.start(500)  # Save 500ms after resize stops
+    
+    def moveEvent(self, event):
+        """Handle move event to save geometry."""
+        super().moveEvent(event)
+        # Save geometry on move (debounced to avoid excessive saves)
+        if hasattr(self, '_move_timer'):
+            self._move_timer.stop()
+        else:
+            from PySide6.QtCore import QTimer
+            self._move_timer = QTimer()
+            self._move_timer.setSingleShot(True)
+            self._move_timer.timeout.connect(self._save_geometry)
+        self._move_timer.start(500)  # Save 500ms after move stops
+    
+    def mousePressEvent(self, event):
+        """Handle mouse press for window dragging."""
+        if event.button() == Qt.MouseButton.LeftButton:
+            # Don't interfere with size grip
+            size_grip_rect = self.size_grip.geometry() if hasattr(self, 'size_grip') else None
+            if size_grip_rect and size_grip_rect.contains(event.pos()):
+                super().mousePressEvent(event)
+                return
+            
+            # Otherwise, dragging
+            self._dragging = True
+            self._drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+    
+    def mouseMoveEvent(self, event):
+        """Handle mouse move for window dragging."""
+        if self._dragging and event.buttons() == Qt.MouseButton.LeftButton:
+            self.move(event.globalPosition().toPoint() - self._drag_pos)
+            event.accept()
+    
+    def mouseReleaseEvent(self, event):
+        """Handle mouse release to stop dragging."""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._dragging = False
+            event.accept()
+    
+    def _save_geometry(self):
+        """Save window geometry to settings."""
+        if not self._is_maximized:
+            self._settings.set('ui.dialog_geometry', {
+                'x': self.x(),
+                'y': self.y(),
+                'width': self.width(),
+                'height': self.height()
+            })
+            self._settings.save()
+    
+    def _restore_geometry(self):
+        """Restore window geometry from settings."""
+        geometry = self._settings.get('ui.dialog_geometry', {})
+        if geometry:
+            self.move(geometry.get('x', 100), geometry.get('y', 100))
+            self.resize(geometry.get('width', 1000), geometry.get('height', 700))
+            logger.debug(f"Restored dialog geometry: {geometry}")

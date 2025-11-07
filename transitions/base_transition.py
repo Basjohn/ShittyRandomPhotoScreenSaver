@@ -6,8 +6,8 @@ Defines the abstract interface that all transitions must implement.
 from abc import ABCMeta, abstractmethod
 from enum import Enum
 from typing import Optional
-from PySide6.QtCore import QObject, Signal
-from PySide6.QtGui import QPixmap
+from PySide6.QtCore import QObject, Signal, Qt
+from PySide6.QtGui import QPixmap, QPainter
 from PySide6.QtWidgets import QWidget
 
 from core.logging.logger import get_logger
@@ -159,6 +159,69 @@ class BaseTransition(QObject, metaclass=QABCMeta):
         # Clamp to valid range
         progress = max(0.0, min(1.0, progress))
         self.progress.emit(progress)
+
+    # --- Centralized helpers for transitions ---------------------------------
+    def _fit_pixmap_to_widget(self, pixmap: QPixmap, widget: QWidget) -> QPixmap:
+        """
+        Create a widget-sized pixmap by scaling/cropping the source while
+        preserving aspect ratio (equivalent to DisplayMode.FILL).
+        The result is ARGB32 with transparent background.
+        """
+        w, h = widget.width(), widget.height()
+        if not pixmap or pixmap.isNull() or w <= 0 or h <= 0:
+            return QPixmap()
+        # Use device pixels for backing store then set DPR so logical size is w x h
+        try:
+            dpr = getattr(widget, "_device_pixel_ratio", widget.devicePixelRatioF())
+        except Exception:
+            dpr = 1.0
+        tw = max(1, int(round(w * dpr)))
+        th = max(1, int(round(h * dpr)))
+        # Scale to cover in device pixels, then center-crop
+        fitted = pixmap.scaled(
+            tw, th,
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        cx = max(0, (fitted.width() - tw) // 2)
+        cy = max(0, (fitted.height() - th) // 2)
+        # Compose onto transparent canvas (device pixels) and assign DPR
+        canvas = QPixmap(tw, th)
+        canvas.fill(Qt.GlobalColor.transparent)
+        canvas.setDevicePixelRatio(dpr)
+        p = QPainter(canvas)
+        try:
+            p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+            p.drawPixmap(-cx, -cy, fitted)
+        finally:
+            p.end()
+        return canvas
+
+    def _create_transparent_canvas(self, widget: QWidget) -> QPixmap:
+        """Create an ARGB32 transparent canvas exactly widget-sized."""
+        w, h = widget.width(), widget.height()
+        try:
+            dpr = getattr(widget, "_device_pixel_ratio", widget.devicePixelRatioF())
+        except Exception:
+            dpr = 1.0
+        tw = max(1, int(round(w * dpr)))
+        th = max(1, int(round(h * dpr)))
+        canvas = QPixmap(tw, th)
+        canvas.fill(Qt.GlobalColor.transparent)
+        canvas.setDevicePixelRatio(dpr)
+        return canvas
+
+    def _get_animation_manager(self, widget: QWidget):
+        """
+        Retrieve or attach a per-widget AnimationManager instance.
+        Avoids raw QTimer usage inside transitions.
+        """
+        am = getattr(widget, "_animation_manager", None)
+        if am is None:
+            from core.animation.animator import AnimationManager
+            am = AnimationManager()
+            setattr(widget, "_animation_manager", am)
+        return am
     
     def __repr__(self) -> str:
         """String representation."""

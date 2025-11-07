@@ -285,6 +285,28 @@ class AnimationManager(QObject):
             self._timer.stop()
             logger.debug("AnimationManager stopped")
     
+    def cleanup(self) -> None:
+        """Clean up animation manager resources."""
+        # FIX: Add proper cleanup method for timer and animations
+        logger.debug("Cleaning up AnimationManager")
+        
+        # Stop timer
+        self.stop()
+        
+        # Cancel all animations
+        animation_ids = list(self._animations.keys())
+        for anim_id in animation_ids:
+            self.cancel_animation(anim_id)
+        
+        # Clean up timer
+        if self._timer:
+            try:
+                self._timer.deleteLater()
+            except RuntimeError:
+                pass
+        
+        logger.info("AnimationManager cleanup complete")
+    
     def animate_property(self, target: Any, property_name: str, start_value: Any, 
                         end_value: Any, duration: float, 
                         easing: EasingCurve = EasingCurve.LINEAR,
@@ -443,8 +465,9 @@ class AnimationManager(QObject):
         self._animations[animation_id] = animator
         
         # Connect completion/cancellation to cleanup
-        animator.completed.connect(lambda: self._on_animation_complete(animation_id))
-        animator.cancelled.connect(lambda: self._on_animation_cancelled(animation_id))
+        # FIX: Use default args to capture animation_id by value (not by reference)
+        animator.completed.connect(lambda aid=animation_id: self._on_animation_complete(aid))
+        animator.cancelled.connect(lambda aid=animation_id: self._on_animation_cancelled(aid))
         
         # Start update loop if not running
         if not self._timer.isActive():

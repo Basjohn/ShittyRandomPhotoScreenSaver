@@ -5,8 +5,9 @@ Reveals new image by randomly fading in blocks over time.
 """
 import random
 from typing import Optional, List
-from PySide6.QtCore import QTimer, QRect
-from PySide6.QtGui import QPixmap, QPainter, QColor
+from PySide6.QtCore import QTimer, QPointF, QRectF, Qt
+from core.animation.types import EasingCurve
+from PySide6.QtGui import QPixmap, QPainter, QColor, QPolygonF
 from PySide6.QtWidgets import QWidget, QLabel
 
 from transitions.base_transition import BaseTransition, TransitionState
@@ -25,29 +26,43 @@ class DiffuseTransition(BaseTransition):
     Speed slows down proportionally with duration for optimal timing.
     """
     
-    def __init__(self, duration_ms: int = 2000, block_size: int = 8):
+    def __init__(self, duration_ms: int = 2000, block_size: int = 8, shape: str = 'Rectangle'):
         """
         Initialize diffuse transition.
         
         Args:
             duration_ms: Total duration in milliseconds
             block_size: Size of each block in pixels
+            shape: Shape type ('Rectangle', 'Circle', 'Triangle')
         """
         super().__init__(duration_ms)
         
         self._block_size = block_size
+        self._shape = shape
         self._widget: Optional[QWidget] = None
         self._old_label: Optional[QLabel] = None
         self._new_label: Optional[QLabel] = None
-        self._timer: Optional[QTimer] = None
+        self._timer: Optional[QTimer] = None  # legacy fallback (should be unused)
+        self._animation_id: Optional[str] = None
         self._elapsed_ms = 0
         self._fps = 60
+        
+        # FIX: Initialize pixmap attributes to prevent AttributeError
+        self._old_pixmap: Optional[QPixmap] = None
+        self._new_pixmap: Optional[QPixmap] = None
         
         # Diffusion state
         self._pixel_grid: List[tuple] = []  # (x, y, revealed)
         self._reveal_rate = 0.0  # Pixels to reveal per frame
         
-        logger.debug(f"DiffuseTransition created (duration={duration_ms}ms, block_size={block_size})")
+        # FIX: Use ResourceManager for Qt object lifecycle
+        try:
+            from core.resources.manager import ResourceManager
+            self._resource_manager = ResourceManager()
+        except Exception:
+            self._resource_manager = None
+        
+        logger.debug(f"DiffuseTransition created (duration={duration_ms}ms, block_size={block_size}, shape={shape})")
     
     def start(self, old_pixmap: Optional[QPixmap], new_pixmap: QPixmap,
               widget: QWidget) -> bool:
@@ -75,7 +90,7 @@ class DiffuseTransition(BaseTransition):
             self._widget = widget
             self._new_pixmap = new_pixmap
             self._old_pixmap = old_pixmap
-            self._revealed_blocks = []
+            # FIX: Removed unused _revealed_blocks variable - _pixel_grid is used instead
             
             # If no old image, just show new one immediately
             if not old_pixmap or old_pixmap.isNull():
@@ -83,27 +98,48 @@ class DiffuseTransition(BaseTransition):
                 self._show_image_immediately()
                 return True
             
+            # DEBUG: Verify pixmaps have valid content
+            logger.debug(f"[DIFFUSE] OLD PIXMAP: {old_pixmap.width()}x{old_pixmap.height()}, isNull={old_pixmap.isNull()}, depth={old_pixmap.depth()}")
+            logger.debug(f"[DIFFUSE] NEW PIXMAP: {new_pixmap.width()}x{new_pixmap.height()}, isNull={new_pixmap.isNull()}, depth={new_pixmap.depth()}")
+            
             # Get widget dimensions
             width = widget.width()
             height = widget.height()
             
-            # Create labels for old and new images
+            # Pre-fit pixmaps to widget to ensure 1:1 geometry and alpha pipeline
+            fitted_old = self._fit_pixmap_to_widget(old_pixmap, widget)
+            fitted_new = self._fit_pixmap_to_widget(new_pixmap, widget)
+            
+            # Labels sized to widget; use fitted pixmaps (no scaledContents to avoid artifacts)
             self._old_label = QLabel(widget)
-            self._old_label.setPixmap(old_pixmap)
+            self._old_label.setPixmap(fitted_old)
             self._old_label.setGeometry(0, 0, width, height)
             self._old_label.setScaledContents(False)
+            self._old_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._old_label.setStyleSheet("background: transparent;")
             self._old_label.show()
             
             self._new_label = QLabel(widget)
-            self._new_label.setPixmap(new_pixmap)
+            self._new_label.setPixmap(fitted_new)
             self._new_label.setGeometry(0, 0, width, height)
             self._new_label.setScaledContents(False)
+            self._new_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._new_label.setStyleSheet("background: transparent;")
             self._new_label.show()
             self._new_label.lower()  # Behind old label initially
+            
+            # DEBUG: Verify labels were created correctly
+            logger.debug(f"[DIFFUSE] OLD LABEL: geometry={self._old_label.geometry()}, visible={self._old_label.isVisible()}, hasPixmap={self._old_label.pixmap() is not None}")
+            logger.debug(f"[DIFFUSE] NEW LABEL: geometry={self._new_label.geometry()}, visible={self._new_label.isVisible()}, hasPixmap={self._new_label.pixmap() is not None}")
+            if self._old_label.pixmap():
+                logger.debug(f"[DIFFUSE] OLD LABEL pixmap size: {self._old_label.pixmap().size()}")
+            if self._new_label.pixmap():
+                logger.debug(f"[DIFFUSE] NEW LABEL pixmap size: {self._new_label.pixmap().size()}")
             
             # Create pixel grid for granular diffusion
             self._pixel_grid = self._create_pixel_grid(width, height)
             total_pixels = len(self._pixel_grid)
+            self._total_pixels = total_pixels
             
             # Calculate reveal rate (pixels per frame) based on duration
             # Slows down for longer durations to always finish on time
@@ -115,11 +151,17 @@ class DiffuseTransition(BaseTransition):
             
             self._elapsed_ms = 0
             
-            # Create timer for animation
-            self._timer = QTimer()
-            self._timer.timeout.connect(self._update_diffusion)
-            interval_ms = 1000 // self._fps
-            self._timer.start(interval_ms)
+            # Drive via centralized AnimationManager (no raw QTimer)
+            am = self._get_animation_manager(widget)
+            duration_sec = max(0.001, self.duration_ms / 1000.0)
+            # Derive per-frame reveal based on 60fps
+            self._last_progress = 0.0
+            self._animation_id = am.animate_custom(
+                duration=duration_sec,
+                easing=EasingCurve.LINEAR,
+                update_callback=lambda p: self._on_anim_update(p),
+                on_complete=lambda: self._on_anim_complete(),
+            )
             
             self._set_state(TransitionState.RUNNING)
             self.started.emit()
@@ -140,11 +182,12 @@ class DiffuseTransition(BaseTransition):
         
         logger.debug("Stopping diffuse transition")
         
-        # Stop timer
-        if self._timer:
+        # Cancel animation
+        if self._animation_id and self._widget:
             try:
-                self._timer.stop()
-            except RuntimeError:
+                am = self._get_animation_manager(self._widget)
+                am.cancel_animation(self._animation_id)
+            except Exception:
                 pass
         
         self._set_state(TransitionState.CANCELLED)
@@ -155,14 +198,14 @@ class DiffuseTransition(BaseTransition):
         """Clean up transition resources."""
         logger.debug("Cleaning up diffuse transition")
         
-        # Stop and delete timer
-        if self._timer:
+        # Cancel animation
+        if self._animation_id and self._widget:
             try:
-                self._timer.stop()
-                self._timer.deleteLater()
-            except RuntimeError:
+                am = self._get_animation_manager(self._widget)
+                am.cancel_animation(self._animation_id)
+            except Exception:
                 pass
-            self._timer = None
+            self._animation_id = None
         
         # Delete labels
         if self._old_label:
@@ -215,32 +258,26 @@ class DiffuseTransition(BaseTransition):
         
         return pixels
     
-    def _update_diffusion(self) -> None:
-        """Update diffusion animation (called by timer)."""
+    def _on_anim_update(self, progress: float) -> None:
+        """AnimationManager update callback for diffusion progress."""
         if self._state != TransitionState.RUNNING:
             return
-        
-        # Update elapsed time
-        interval_ms = 1000 // self._fps
-        self._elapsed_ms += interval_ms
-        
-        # Calculate progress
-        progress = min(1.0, self._elapsed_ms / self.duration_ms)
-        
-        # Reveal pixels for this frame
-        pixels_to_reveal = int(self._reveal_rate)
-        if random.random() < (self._reveal_rate - pixels_to_reveal):
-            pixels_to_reveal += 1  # Fractional part
-        
-        # Check if finished
-        if progress >= 1.0 or not self._pixel_grid:
+        # Reveal proportionally to progress so we don't dump the remainder at the end
+        progress = max(0.0, min(1.0, progress))
+        total = getattr(self, "_total_pixels", 0)
+        remaining = len(self._pixel_grid)
+        if total == 0 or remaining == 0:
             self._finish_transition()
             return
-        
-        # Reveal pixels by making them transparent in old label
-        self._reveal_pixels(pixels_to_reveal)
-        
-        # Emit progress
+        revealed_so_far = total - remaining
+        target_revealed = int(round(total * progress))
+        to_reveal = max(0, target_revealed - revealed_so_far)
+        if to_reveal > 0:
+            self._reveal_pixels(to_reveal)
+        # If we've reached the end and nothing remains, finish; otherwise continue until grid empties
+        if progress >= 1.0 and len(self._pixel_grid) == 0:
+            self._finish_transition()
+            return
         self._emit_progress(progress)
     
     def _reveal_pixels(self, count: int) -> None:
@@ -251,24 +288,39 @@ class DiffuseTransition(BaseTransition):
             count: Number of pixels to reveal
         """
         if not self._old_label or not self._old_pixmap:
+            logger.warning("[DIFFUSE] _reveal_pixels called but label or pixmap is None")
             return
         
         # Get current pixmap from old label
         current = self._old_label.pixmap()
         if not current or current.isNull():
+            logger.debug("[DIFFUSE] Old label pixmap is null, using stored copy")
             current = self._old_pixmap.copy()
         else:
             current = current.copy()
         
+        logger.debug(f"[DIFFUSE] Revealing {count} blocks, grid remaining: {len(self._pixel_grid)}, pixmap: {current.width()}x{current.height()}")
+        
         painter = QPainter(current)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Set up for transparent filled shapes
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
         
         # Reveal pixels (punch holes)
         revealed = 0
         while revealed < count and self._pixel_grid:
             x, y = self._pixel_grid.pop(0)
-            # Draw transparent block
-            painter.fillRect(x, y, self._block_size, self._block_size, QColor(0, 0, 0, 0))
+            
+            # Draw transparent shape based on selected type
+            if self._shape == 'Circle':
+                self._draw_circle_hole(painter, x, y)
+            elif self._shape == 'Triangle':
+                self._draw_triangle_hole(painter, x, y)
+            else:  # Rectangle (default)
+                # fillRect works with CompositionMode_Clear to create transparency
+                painter.fillRect(x, y, self._block_size, self._block_size, QColor(0, 0, 0, 0))
+            
             revealed += 1
         
         painter.end()
@@ -276,7 +328,12 @@ class DiffuseTransition(BaseTransition):
         # Update old label
         try:
             self._old_label.setPixmap(current)
+            # Verify the pixmap was set
+            if revealed > 0 and revealed % 50 == 0:  # Log every 50 blocks
+                updated_pixmap = self._old_label.pixmap()
+                logger.debug(f"[DIFFUSE] Updated old label, blocks revealed: {revealed}, pixmap size: {updated_pixmap.size() if updated_pixmap else 'None'}")
         except RuntimeError:
+            logger.warning("[DIFFUSE] RuntimeError updating old label pixmap")
             pass
     
     def _finish_transition(self) -> None:
@@ -306,12 +363,53 @@ class DiffuseTransition(BaseTransition):
         
         # Note: Labels cleaned up in cleanup() method
     
+    def _on_anim_complete(self) -> None:
+        """Animator completion hook: drain remaining pixels, then finish."""
+        if self._state != TransitionState.RUNNING:
+            return
+        # Reveal any remaining grid in one pass
+        if self._pixel_grid:
+            self._reveal_pixels(len(self._pixel_grid))
+        # Now finish
+        self._finish_transition()
+    
     def _show_image_immediately(self) -> None:
         """Show new image immediately without transition."""
         self._set_state(TransitionState.FINISHED)
         self._emit_progress(1.0)
         self.finished.emit()
         logger.debug("Image shown immediately")
+    
+    def _draw_circle_hole(self, painter: QPainter, x: int, y: int) -> None:
+        """
+        Draw a circular transparent hole (FILLED, not outline).
+        
+        Args:
+            painter: QPainter instance
+            x: X coordinate
+            y: Y coordinate
+        """
+        # Create filled circle using QRectF for proper ellipse
+        rect = QRectF(x, y, self._block_size, self._block_size)
+        painter.drawEllipse(rect)
+    
+    def _draw_triangle_hole(self, painter: QPainter, x: int, y: int) -> None:
+        """
+        Draw a triangular transparent hole (FILLED, not outline).
+        
+        Args:
+            painter: QPainter instance
+            x: X coordinate
+            y: Y coordinate
+        """
+        # Create triangle with top vertex centered, bottom vertices at corners
+        top = QPointF(x + self._block_size / 2, y)
+        bottom_left = QPointF(x, y + self._block_size)
+        bottom_right = QPointF(x + self._block_size, y + self._block_size)
+        
+        # drawPolygon with CompositionMode_Clear should create transparent fill
+        triangle = QPolygonF([top, bottom_left, bottom_right])
+        painter.drawPolygon(triangle)
     
     def set_block_size(self, size: int) -> None:
         """
@@ -326,3 +424,17 @@ class DiffuseTransition(BaseTransition):
         
         self._block_size = size
         logger.debug(f"Block size set to {size}px")
+    
+    def set_shape(self, shape: str) -> None:
+        """
+        Set shape type for diffuse effect.
+        
+        Args:
+            shape: Shape type ('Rectangle', 'Circle', 'Triangle')
+        """
+        if shape not in ['Rectangle', 'Circle', 'Triangle']:
+            logger.warning(f"[FALLBACK] Invalid shape {shape}, using Rectangle")
+            shape = 'Rectangle'
+        
+        self._shape = shape
+        logger.debug(f"Diffuse shape set to {shape}")

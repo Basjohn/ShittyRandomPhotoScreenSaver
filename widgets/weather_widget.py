@@ -1,7 +1,7 @@
 """
 Weather widget for screensaver overlay.
 
-Displays current weather information with API integration and caching.
+Displays current weather information using Open-Meteo API (no API key needed).
 """
 from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
@@ -9,10 +9,9 @@ from enum import Enum
 from PySide6.QtWidgets import QLabel, QWidget
 from PySide6.QtCore import QTimer, Qt, Signal, QThread, QObject
 from PySide6.QtGui import QFont, QColor
-import requests
-import json
 
 from core.logging.logger import get_logger
+from weather.open_meteo_provider import OpenMeteoProvider
 
 logger = get_logger(__name__)
 
@@ -26,47 +25,39 @@ class WeatherPosition(Enum):
 
 
 class WeatherFetcher(QObject):
-    """Worker for fetching weather data in background thread."""
+    """Worker for fetching weather data in background thread using Open-Meteo API."""
     
     # Signals
     data_fetched = Signal(dict)
     error_occurred = Signal(str)
     
-    def __init__(self, api_key: str, location: str):
+    def __init__(self, location: str):
         """
         Initialize weather fetcher.
         
         Args:
-            api_key: OpenWeatherMap API key
-            location: City name or coordinates
+            location: City name
         """
         super().__init__()
-        self._api_key = api_key
         self._location = location
+        self._provider = OpenMeteoProvider(timeout=10)
     
     def fetch(self) -> None:
-        """Fetch weather data from API."""
+        """Fetch weather data from Open-Meteo API."""
         try:
-            # OpenWeatherMap API endpoint
-            url = "https://api.openweathermap.org/data/2.5/weather"
-            params = {
-                'q': self._location,
-                'appid': self._api_key,
-                'units': 'metric'  # Celsius
-            }
-            
             logger.debug(f"Fetching weather for {self._location}")
-            response = requests.get(url, params=params, timeout=10)
-            response.raise_for_status()
             
-            data = response.json()
-            self.data_fetched.emit(data)
-            logger.info(f"Weather data fetched successfully for {self._location}")
+            # Fetch weather using Open-Meteo (no API key needed!)
+            data = self._provider.get_current_weather(self._location)
             
-        except requests.exceptions.RequestException as e:
-            error_msg = f"Failed to fetch weather: {e}"
-            logger.error(error_msg)
-            self.error_occurred.emit(error_msg)
+            if data:
+                self.data_fetched.emit(data)
+                logger.info(f"Weather data fetched successfully for {self._location}")
+            else:
+                error_msg = f"No weather data returned for {self._location}"
+                logger.error(error_msg)
+                self.error_occurred.emit(error_msg)
+            
         except Exception as e:
             error_msg = f"Unexpected error fetching weather: {e}"
             logger.exception(error_msg)
@@ -83,6 +74,7 @@ class WeatherWidget(QLabel):
     - Auto-update every 30 minutes
     - Caching to reduce API calls
     - Background fetching
+    - No API key required (uses Open-Meteo)
     - Error handling
     """
     
@@ -91,7 +83,6 @@ class WeatherWidget(QLabel):
     error_occurred = Signal(str)
     
     def __init__(self, parent: Optional[QWidget] = None,
-                 api_key: str = "",
                  location: str = "London",
                  position: WeatherPosition = WeatherPosition.BOTTOM_LEFT):
         """
@@ -99,13 +90,11 @@ class WeatherWidget(QLabel):
         
         Args:
             parent: Parent widget
-            api_key: OpenWeatherMap API key
-            location: City name or coordinates
+            location: City name
             position: Screen position
         """
         super().__init__(parent)
         
-        self._api_key = api_key
         self._location = location
         self._position = position
         self._update_timer: Optional[QTimer] = None
@@ -155,10 +144,10 @@ class WeatherWidget(QLabel):
             logger.warning("[FALLBACK] Weather widget already running")
             return
         
-        if not self._api_key:
-            error_msg = "No API key configured for weather widget"
+        if not self._location:
+            error_msg = "No location configured for weather widget"
             logger.error(error_msg)
-            self.setText("Weather: No API Key")
+            self.setText("Weather: No Location")
             self.error_occurred.emit(error_msg)
             return
         
@@ -215,7 +204,7 @@ class WeatherWidget(QLabel):
         
         # Create worker thread
         self._fetch_thread = QThread()
-        self._fetcher = WeatherFetcher(self._api_key, self._location)
+        self._fetcher = WeatherFetcher(self._location)
         self._fetcher.moveToThread(self._fetch_thread)
         
         # Connect signals
@@ -282,10 +271,10 @@ class WeatherWidget(QLabel):
             return
         
         try:
-            # Extract data
-            temp = data.get('main', {}).get('temp', 0)
-            condition = data.get('weather', [{}])[0].get('main', 'Unknown')
-            location = data.get('name', self._location)
+            # Extract data from Open-Meteo format
+            temp = data.get('temperature', 0)
+            condition = data.get('condition', 'Unknown')
+            location = data.get('location', self._location)
             
             # Format display
             text = f"{location}\n{temp:.0f}°C - {condition}"
@@ -330,20 +319,6 @@ class WeatherWidget(QLabel):
             y = parent_height - widget_height - self._margin
         
         self.move(x, y)
-    
-    def set_api_key(self, api_key: str) -> None:
-        """
-        Set API key.
-        
-        Args:
-            api_key: OpenWeatherMap API key
-        """
-        self._api_key = api_key
-        logger.debug("API key updated")
-        
-        # Clear cache
-        self._cached_data = None
-        self._cache_time = None
     
     def set_location(self, location: str) -> None:
         """
