@@ -267,14 +267,28 @@ class GLBlockPuzzleFlipTransition(BaseTransition):
     # Internals
     def _create_block_grid(self, width: int, height: int) -> None:
         self._blocks = []
-        block_width = max(1, width // self._grid_cols)
-        block_height = max(1, height // self._grid_rows)
-        for row in range(self._grid_rows):
-            for col in range(self._grid_cols):
+        
+        # Calculate square blocks based on aspect ratio
+        # Use cols as base (doubled for more blocks), calculate rows to maintain square aspect
+        base_cols = self._grid_cols * 2  # Double the blocks
+        aspect_ratio = height / max(1, width)
+        calculated_rows = max(2, int(round(base_cols * aspect_ratio)))
+        
+        # Use calculated rows for square blocks
+        effective_rows = calculated_rows
+        effective_cols = base_cols
+        
+        logger.debug(f"[GL BLOCK] Grid: {effective_cols}x{effective_rows} (aspect={aspect_ratio:.2f}, square blocks)")
+        
+        block_width = max(1, width // effective_cols)
+        block_height = max(1, height // effective_rows)
+        
+        for row in range(effective_rows):
+            for col in range(effective_cols):
                 x = col * block_width
                 y = row * block_height
-                w = block_width if col < self._grid_cols - 1 else (width - x)
-                h = block_height if row < self._grid_rows - 1 else (height - y)
+                w = block_width if col < effective_cols - 1 else (width - x)
+                h = block_height if row < effective_rows - 1 else (height - y)
                 self._blocks.append(_GLFlipBlock(QRect(x, y, w, h)))
 
     def _on_anim_update(self, progress: float, total_blocks: int) -> None:

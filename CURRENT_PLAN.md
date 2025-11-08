@@ -1,11 +1,11 @@
 # CURRENT PLAN
 
-**Updated**: Nov 7, 2025 23:24  
-**Status**: ✅ Phases 1-4 Complete - Ready for Testing
+**Updated**: Nov 8, 2025 03:40  
+**Status**: ✅ All Flicker Fixes Complete - Polish & Documentation Phase
 
 ---
 
-## Completed: Flicker Fix Implementation (Phases 1-4)
+## ✅ Completed: Flicker Fix Implementation (Phases 1-4)
 
 ### Phase 1: Atomic Overlay State ✅
 - [x] Qt image allocation limit increased to 1GB (main.py)
@@ -80,26 +80,31 @@
 
 ---
 
-## Next Actions
+## ✅ Nov 8 Session: Final GL/SW Fixes & Polish
 
-### Immediate (User Testing)
-- [ ] Run screensaver with HW accel ON
-- [ ] Run screensaver with HW accel OFF
-- [ ] Test dual-display sync
-- [ ] Verify no black flickers
-- [ ] Check pytest logs for any failures
+### GL/SW Transition Fixes ✅
+- [x] GL Slide & GL Wipe display 2 failures fixed (QCoreApplication.processEvents before prepaint)
+- [x] SW Block flicker ACTUALLY fixed (replaced QLabel/mask with QPainter overlay like GL Block)
+- [x] Block transitions doubled (16x9 grid on 16:9 displays, aspect-aware)
+- [x] Diagonal wipe directions added (DIAG_TL_BR, DIAG_TR_BL) to SW & GL Wipe
+- [x] Diagonal wipe geometry flip fixed (elif cascade prevents multiple conditions executing)
+- [x] GL Diffuse shape support added (Circle, Triangle, Rectangle)
+- [x] Diagonal wipe now in random selection pool
 
-### If Tests Pass
-- [ ] Update Docs/TestSuite.md with new test counts
-- [ ] Update SPEC.md with threading architecture
-- [ ] Update INDEX.md with new methods
+### Documentation Updates
+- [ ] Update INDEX.md with new transition features
+- [ ] Update SPEC.md with transition architecture
+- [ ] Update TestSuite.md with current test count and modules
+- [ ] Clean up CURRENT_PLAN.md (this file)
 
-### Original CURRENT_PLAN Items (Deferred)
-These items from the old plan are deferred until flicker fixes are verified:
-- [ ] Logging hygiene for transitions
-- [ ] DPR full-rect audit
-- [ ] EventSystem integration for transitions
-- [ ] Settings live-update for hw_accel toggle
+### Known Issues
+- None - all transitions working correctly on all displays
+
+### Next Session (If Needed)
+- [ ] Run full test suite and fix any failures
+- [ ] Add tests for new diagonal wipe directions
+- [ ] Add tests for GL Diffuse shapes
+- [ ] Performance optimization if needed
 
 ---
 

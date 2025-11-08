@@ -7,8 +7,8 @@ with 3D rotation effect. This is the STAR FEATURE transition.
 import random
 from typing import Optional, List
 from PySide6.QtCore import QTimer, QRect, Qt
-from PySide6.QtGui import QPixmap, QRegion
-from PySide6.QtWidgets import QWidget, QLabel
+from PySide6.QtGui import QPixmap, QPainter
+from PySide6.QtWidgets import QWidget
 
 from transitions.base_transition import BaseTransition, TransitionState
 from core.animation.types import EasingCurve
@@ -29,6 +29,63 @@ class FlipBlock:
         # Randomized start threshold in [0, 1) to stagger starts over the global timeline
         self.start_threshold: float = random.random()
         self.started: bool = False
+
+
+class _BlockFlipWidget(QWidget):
+    """Custom widget that paints block flip using QPainter (no OpenGL, no masks)."""
+    
+    def __init__(self, parent: QWidget, old_pixmap: QPixmap, new_pixmap: QPixmap, blocks: List[FlipBlock]):
+        super().__init__(parent)
+        self.setAutoFillBackground(False)
+        try:
+            self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+            self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
+            self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        except Exception:
+            pass
+        
+        self._old = old_pixmap
+        self._new = new_pixmap
+        self._blocks = blocks
+    
+    def set_blocks(self, blocks: List[FlipBlock]) -> None:
+        """Update blocks and trigger repaint."""
+        self._blocks = blocks
+        self.update()
+    
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        """Paint old pixmap fully, then draw new pixmap blocks based on flip progress."""
+        p = QPainter(self)
+        try:
+            p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+            target = self.rect()
+            
+            # Draw old image fully
+            if self._old and not self._old.isNull():
+                p.setOpacity(1.0)
+                p.drawPixmap(target, self._old)
+            
+            # Draw new image for each flipped block
+            if self._new and not self._new.isNull():
+                for block in self._blocks:
+                    progress = max(0.0, min(1.0, block.flip_progress))
+                    if progress <= 0.0:
+                        continue
+                    
+                    # Create clip region for this block's reveal
+                    r = block.rect
+                    reveal_w = max(1, int(r.width() * progress))
+                    dx = r.x() + (r.width() - reveal_w) // 2
+                    reveal_rect = QRect(dx, r.y(), reveal_w, r.height())
+                    
+                    # Clip to this block's reveal area
+                    p.save()
+                    p.setClipRect(reveal_rect)
+                    p.setOpacity(1.0)
+                    p.drawPixmap(target, self._new)
+                    p.restore()
+        finally:
+            p.end()
 
 
 class BlockPuzzleFlipTransition(BaseTransition):
@@ -64,7 +121,7 @@ class BlockPuzzleFlipTransition(BaseTransition):
         self._timer: Optional[QTimer] = None  # legacy
         self._flip_timer: Optional[QTimer] = None  # legacy
         self._animation_id: Optional[str] = None
-        self._display_label: Optional[QLabel] = None
+        self._overlay: Optional[_BlockFlipWidget] = None
         
         # FIX: Use ResourceManager for Qt object lifecycle
         try:
@@ -130,78 +187,43 @@ class BlockPuzzleFlipTransition(BaseTransition):
             
             # Note: interval logic handled by AnimationManager progression
             
-            # Persistent label pattern (like GL transitions) - reuse or create
-            old_label = getattr(widget, "_srpss_sw_blockflip_old", None)
-            new_label = getattr(widget, "_srpss_sw_blockflip_new", None)
-            
-            if old_label is None or not isinstance(old_label, QLabel):
-                logger.debug("[SW BLOCK] Creating persistent old label")
-                old_label = QLabel(widget)
-                old_label.setGeometry(0, 0, width, height)
-                old_label.setScaledContents(False)
-                old_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                old_label.setStyleSheet("background: transparent;")
-                old_label.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
-                old_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-                try:
-                    old_label.setAutoFillBackground(False)
-                except Exception:
-                    pass
-                setattr(widget, "_srpss_sw_blockflip_old", old_label)
+            # CRITICAL: Create/reuse QPainter overlay widget (replaces old label approach)
+            overlay = getattr(widget, "_srpss_sw_blockflip_overlay", None)
+            if overlay is None or not isinstance(overlay, _BlockFlipWidget):
+                logger.debug("[SW BLOCK] Creating persistent QPainter overlay")
+                overlay = _BlockFlipWidget(widget, old_pixmap, new_pixmap, self._blocks)
+                overlay.setGeometry(0, 0, width, height)
+                setattr(widget, "_srpss_sw_blockflip_overlay", overlay)
                 if self._resource_manager:
                     try:
-                        self._resource_manager.register_qt(old_label, description="SW Block old label")
+                        self._resource_manager.register_qt(overlay, description="SW Block QPainter overlay")
                     except Exception:
                         pass
             else:
-                logger.debug("[SW BLOCK] Reusing persistent old label")
+                logger.debug("[SW BLOCK] Reusing persistent QPainter overlay")
+                # Update pixmaps and blocks
+                overlay._old = old_pixmap
+                overlay._new = new_pixmap
+                overlay.set_blocks(self._blocks)
+                overlay.setGeometry(0, 0, width, height)
             
-            old_label.setPixmap(old_pixmap)
-            old_label.setGeometry(0, 0, width, height)
-            old_label.show()
-            
-            if new_label is None or not isinstance(new_label, QLabel):
-                logger.debug("[SW BLOCK] Creating persistent new label")
-                new_label = QLabel(widget)
-                new_label.setGeometry(0, 0, width, height)
-                new_label.setScaledContents(False)
-                new_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                new_label.setStyleSheet("background: transparent;")
-                new_label.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
-                new_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-                try:
-                    new_label.setAutoFillBackground(False)
-                except Exception:
-                    pass
-                setattr(widget, "_srpss_sw_blockflip_new", new_label)
-                if self._resource_manager:
-                    try:
-                        self._resource_manager.register_qt(new_label, description="SW Block new label")
-                    except Exception:
-                        pass
-            else:
-                logger.debug("[SW BLOCK] Reusing persistent new label")
-            
-            new_label.setPixmap(new_pixmap)
-            new_label.setGeometry(0, 0, width, height)
-            # Start fully hidden via empty mask - set BEFORE showing
-            new_label.setMask(QRegion())
-            new_label.show()  # Now showing won't flash - mask already empty
+            # Show overlay
+            if not overlay.isVisible():
+                overlay.show()
             try:
-                new_label.raise_()
+                overlay.raise_()
             except Exception:
                 pass
             
-            # Store references
-            self._old_label = old_label
-            self._new_label = new_label
-            
-            # Keep clock widget above labels if present
+            # Keep clock widget above overlay if present
             try:
                 if hasattr(widget, "clock_widget") and getattr(widget, "clock_widget"):
                     widget.clock_widget.raise_()
             except Exception:
                 pass
+            
+            # Store reference
+            self._overlay = overlay
 
             # Present initial frame synchronously to avoid a one-frame flash
             try:
@@ -268,12 +290,7 @@ class BlockPuzzleFlipTransition(BaseTransition):
                 pass
             self._animation_id = None
         
-        # Delete display label
-        if self._display_label:
-            try:
-                self._display_label.deleteLater()
-            except RuntimeError:
-                pass
+        # Note: overlay is persistent and managed by parent widget
         
         self._widget = None
         self._old_pixmap = None
@@ -295,11 +312,23 @@ class BlockPuzzleFlipTransition(BaseTransition):
         """
         self._blocks = []
         
-        block_width = max(1, width // self._grid_cols)
-        block_height = max(1, height // self._grid_rows)
+        # Calculate square blocks based on aspect ratio
+        # Use cols as base (doubled for more blocks), calculate rows to maintain square aspect
+        base_cols = self._grid_cols * 2  # Double the blocks
+        aspect_ratio = height / max(1, width)
+        calculated_rows = max(2, int(round(base_cols * aspect_ratio)))
         
-        for row in range(self._grid_rows):
-            for col in range(self._grid_cols):
+        # Use calculated rows for square blocks
+        effective_rows = calculated_rows
+        effective_cols = base_cols
+        
+        logger.debug(f"[SW BLOCK] Grid: {effective_cols}x{effective_rows} (aspect={aspect_ratio:.2f}, square blocks)")
+        
+        block_width = max(1, width // effective_cols)
+        block_height = max(1, height // effective_rows)
+        
+        for row in range(effective_rows):
+            for col in range(effective_cols):
                 x = col * block_width
                 y = row * block_height
                 
@@ -307,9 +336,9 @@ class BlockPuzzleFlipTransition(BaseTransition):
                 w = block_width
                 h = block_height
                 
-                if col == self._grid_cols - 1:
+                if col == effective_cols - 1:
                     w = width - x
-                if row == self._grid_rows - 1:
+                if row == effective_rows - 1:
                     h = height - y
                 
                 rect = QRect(x, y, w, h)
@@ -406,23 +435,12 @@ class BlockPuzzleFlipTransition(BaseTransition):
             self._finish_transition()
     
     def _render_scene(self, widget_sized: bool = False) -> None:
-        """Update mask on the new label based on block flip progress."""
-        if not hasattr(self, "_new_label") or self._new_label is None:
+        """Update QPainter overlay based on block flip progress."""
+        if not self._overlay:
             return
-        # Build union region of revealed areas for the new image
-        region = QRegion()
-        for block in self._blocks:
-            p = max(0.0, min(1.0, block.flip_progress))
-            if p <= 0.0:
-                continue
-            # Simulate horizontal center flip: reveal rectangle growing from center
-            r = block.rect
-            reveal_w = max(1, int(r.width() * p))
-            dx = r.x() + (r.width() - reveal_w) // 2
-            reveal_rect = QRect(dx, r.y(), reveal_w, r.height())
-            region = region.united(QRegion(reveal_rect))
+        # Just trigger repaint - overlay will read block states in paintEvent
         try:
-            self._new_label.setMask(region)
+            self._overlay.update()
         except RuntimeError:
             return
     
@@ -446,10 +464,14 @@ class BlockPuzzleFlipTransition(BaseTransition):
             except RuntimeError:
                 pass
         
-        # Ensure new image fully visible and clean up labels
-        if hasattr(self, "_new_label") and self._new_label:
+        # Ensure new image fully visible - set all blocks to complete
+        for block in self._blocks:
+            block.flip_progress = 1.0
+            block.is_complete = True
+        # Trigger final paint
+        if self._overlay:
             try:
-                self._new_label.clearMask()
+                self._overlay.update()
             except RuntimeError:
                 pass
         
@@ -460,19 +482,13 @@ class BlockPuzzleFlipTransition(BaseTransition):
         # Clean up resources immediately
         self._blocks = []
         
-        # Hide persistent labels (don't delete - they'll be reused)
-        if hasattr(self, "_old_label") and self._old_label:
+        # Hide persistent overlay (don't delete - it'll be reused)
+        if self._overlay:
             try:
-                self._old_label.hide()
+                self._overlay.hide()
             except RuntimeError:
                 pass
-            self._old_label = None
-        if hasattr(self, "_new_label") and self._new_label:
-            try:
-                self._new_label.hide()
-            except RuntimeError:
-                pass
-            self._new_label = None
+            self._overlay = None
     
     def _show_image_immediately(self) -> None:
         """Show new image immediately without transition."""

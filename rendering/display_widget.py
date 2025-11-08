@@ -402,9 +402,12 @@ class DisplayWidget(QWidget):
             
             elif transition_type == 'Wipe':
                 import random
-                # Pick a random wipe direction
-                direction = random.choice([WipeDirection.LEFT_TO_RIGHT, WipeDirection.RIGHT_TO_LEFT,
-                                          WipeDirection.TOP_TO_BOTTOM, WipeDirection.BOTTOM_TO_TOP])
+                # Pick a random wipe direction (includes diagonals)
+                direction = random.choice([
+                    WipeDirection.LEFT_TO_RIGHT, WipeDirection.RIGHT_TO_LEFT,
+                    WipeDirection.TOP_TO_BOTTOM, WipeDirection.BOTTOM_TO_TOP,
+                    WipeDirection.DIAG_TL_BR, WipeDirection.DIAG_TR_BL
+                ])
                 if hw_accel:
                     return GLWipeTransition(duration_ms, direction, easing_str)
                 return WipeTransition(duration_ms, direction, easing_str)

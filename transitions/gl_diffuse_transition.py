@@ -30,7 +30,7 @@ class _Cell:
 
 
 class _GLDiffuseWidget(QOpenGLWidget):
-    def __init__(self, parent: QWidget, old_pixmap: QPixmap, new_pixmap: QPixmap, cells: List[_Cell]):
+    def __init__(self, parent: QWidget, old_pixmap: QPixmap, new_pixmap: QPixmap, cells: List[_Cell], shape: str = 'Rectangle'):
         super().__init__(parent)
         self.setAutoFillBackground(False)
         try:
@@ -44,6 +44,7 @@ class _GLDiffuseWidget(QOpenGLWidget):
         self._new = new_pixmap
         self._cells: List[_Cell] = cells
         self._region = QRegion()
+        self._shape = shape or 'Rectangle'
         
         # Atomic state flags with lock protection
         self._state_lock = threading.Lock()
@@ -55,6 +56,10 @@ class _GLDiffuseWidget(QOpenGLWidget):
         self._old = old_pixmap
         self._new = new_pixmap
         self._region = QRegion()
+        self.update()
+    
+    def set_shape(self, shape: str) -> None:
+        self._shape = shape or 'Rectangle'
         self.update()
 
     def set_region(self, region: QRegion) -> None:
@@ -152,7 +157,7 @@ class GLDiffuseTransition(BaseTransition):
             overlay = getattr(widget, "_srpss_gl_diffuse_overlay", None)
             if overlay is None or not isinstance(overlay, _GLDiffuseWidget):
                 logger.debug("[GL DIFFUSE] Creating persistent GL overlay")
-                overlay = _GLDiffuseWidget(widget, old_pixmap, new_pixmap, self._cells)
+                overlay = _GLDiffuseWidget(widget, old_pixmap, new_pixmap, self._cells, self._shape)
                 overlay.setGeometry(0, 0, w, h)
                 setattr(widget, "_srpss_gl_diffuse_overlay", overlay)
                 if getattr(self, "_resources", None):
@@ -163,6 +168,7 @@ class GLDiffuseTransition(BaseTransition):
             else:
                 logger.debug("[GL DIFFUSE] Reusing persistent GL overlay")
                 overlay.set_images(old_pixmap, new_pixmap)
+                overlay.set_shape(self._shape)
                 overlay.set_region(QRegion())
 
             self._gl = overlay
@@ -276,7 +282,23 @@ class GLDiffuseTransition(BaseTransition):
                 cell.revealed = True
             if cell.revealed:
                 revealed += 1
-                region = region.united(QRegion(cell.rect))
+                # Build region based on shape
+                if self._shape == 'Circle':
+                    from PySide6.QtGui import QPainterPath
+                    from PySide6.QtCore import QRectF
+                    path = QPainterPath()
+                    path.addEllipse(QRectF(cell.rect))
+                    region = region.united(QRegion(path.toFillPolygon().toPolygon()))
+                elif self._shape == 'Triangle':
+                    from PySide6.QtGui import QPolygon
+                    from PySide6.QtCore import QPoint
+                    r = cell.rect
+                    top = QPoint(r.x() + r.width() // 2, r.y())
+                    bottom_left = QPoint(r.x(), r.y() + r.height())
+                    bottom_right = QPoint(r.x() + r.width(), r.y() + r.height())
+                    region = region.united(QRegion(QPolygon([top, bottom_left, bottom_right])))
+                else:  # Rectangle
+                    region = region.united(QRegion(cell.rect))
         try:
             self._gl.set_region(region)
             self._gl.repaint()

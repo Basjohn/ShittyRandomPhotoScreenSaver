@@ -92,20 +92,90 @@ class _GLWipeWidget(QOpenGLWidget):
             if self._new and not self._new.isNull():
                 w = target.width()
                 h = target.height()
+                from PySide6.QtGui import QRegion, QPolygon
+                from PySide6.QtCore import QPoint
+                
                 if self._direction == WipeDirection.LEFT_TO_RIGHT:
                     rw = int(w * self._progress)
-                    clip = target.adjusted(0, 0, -(w - rw), 0)
+                    clip_region = QRegion(0, 0, rw, h)
                 elif self._direction == WipeDirection.RIGHT_TO_LEFT:
                     x = int(w * (1.0 - self._progress))
-                    clip = target.adjusted(x, 0, 0, 0)
+                    clip_region = QRegion(x, 0, w - x, h)
                 elif self._direction == WipeDirection.TOP_TO_BOTTOM:
                     rh = int(h * self._progress)
-                    clip = target.adjusted(0, 0, 0, -(h - rh))
-                else:  # BOTTOM_TO_TOP
+                    clip_region = QRegion(0, 0, w, rh)
+                elif self._direction == WipeDirection.BOTTOM_TO_TOP:
                     y = int(h * (1.0 - self._progress))
-                    clip = target.adjusted(0, y, 0, 0)
+                    clip_region = QRegion(0, y, w, h - y)
+                elif self._direction == WipeDirection.DIAG_TL_BR:
+                    # Top-left to bottom-right diagonal
+                    diag = int((w + h) * self._progress)
+                    if diag <= 0:
+                        clip_region = QRegion()
+                    elif diag >= w + h:
+                        # Complete
+                        clip_region = QRegion(0, 0, w, h)
+                    elif diag > max(w, h):
+                        # Both edges reached - pentagon shape
+                        points = [
+                            QPoint(0, 0),
+                            QPoint(w, 0),
+                            QPoint(w, diag - w),
+                            QPoint(diag - h, h),
+                            QPoint(0, h)
+                        ]
+                        clip_region = QRegion(QPolygon(points))
+                    elif diag > min(w, h):
+                        # One edge reached - quadrilateral
+                        if w < h:
+                            # Right edge reached first
+                            points = [QPoint(0, 0), QPoint(w, 0), QPoint(w, diag - w), QPoint(0, diag)]
+                        else:
+                            # Bottom edge reached first
+                            points = [QPoint(0, 0), QPoint(diag, 0), QPoint(diag - h, h), QPoint(0, h)]
+                        clip_region = QRegion(QPolygon(points))
+                    else:
+                        # Initial triangle from corner
+                        points = [QPoint(0, 0), QPoint(diag, 0), QPoint(0, diag)]
+                        clip_region = QRegion(QPolygon(points))
+                elif self._direction == WipeDirection.DIAG_TR_BL:
+                    # Top-right to bottom-left diagonal
+                    diag = int((w + h) * self._progress)
+                    if diag <= 0:
+                        clip_region = QRegion()
+                    elif diag >= w + h:
+                        # Complete
+                        clip_region = QRegion(0, 0, w, h)
+                    elif diag > max(w, h):
+                        # Both edges reached - pentagon shape
+                        points = [
+                            QPoint(w, 0),
+                            QPoint(0, 0),
+                            QPoint(0, diag - w),
+                            QPoint(w - (diag - h), h),
+                            QPoint(w, h)
+                        ]
+                        clip_region = QRegion(QPolygon(points))
+                    elif diag > min(w, h):
+                        # One edge reached - quadrilateral
+                        if w < h:
+                            # Left edge reached first
+                            points = [QPoint(w, 0), QPoint(0, 0), QPoint(0, diag - w), QPoint(w, diag)]
+                        else:
+                            # Bottom edge reached first
+                            points = [QPoint(w, 0), QPoint(w - diag, 0), QPoint(w - (diag - h), h), QPoint(w, h)]
+                        clip_region = QRegion(QPolygon(points))
+                    else:
+                        # Initial triangle from corner
+                        points = [QPoint(w, 0), QPoint(w - diag, 0), QPoint(w, diag)]
+                        clip_region = QRegion(QPolygon(points))
+                else:
+                    # Fallback
+                    rw = int(w * self._progress)
+                    clip_region = QRegion(0, 0, rw, h)
+                
                 p.save()
-                p.setClipRect(clip)
+                p.setClipRegion(clip_region)
                 p.setOpacity(1.0)
                 p.drawPixmap(target, self._new)
                 p.restore()
