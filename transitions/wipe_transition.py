@@ -32,7 +32,7 @@ class WipeTransition(BaseTransition):
     moves across the screen. The reveal speed is determined by duration.
     """
     
-    def __init__(self, duration_ms: int = 1000, direction: WipeDirection = WipeDirection.LEFT_TO_RIGHT):
+    def __init__(self, duration_ms: int = 1000, direction: WipeDirection = WipeDirection.LEFT_TO_RIGHT, easing: str = 'Auto'):
         """
         Initialize wipe transition.
         
@@ -44,6 +44,7 @@ class WipeTransition(BaseTransition):
         
         self._duration_ms = duration_ms
         self._direction = direction
+        self._easing_str = easing
         self._old_label: Optional[QLabel] = None
         self._new_label: Optional[QLabel] = None
         self._animation_id: Optional[str] = None
@@ -99,6 +100,8 @@ class WipeTransition(BaseTransition):
         self._old_label.setGeometry(0, 0, widget.width(), widget.height())
         self._old_label.setScaledContents(False)
         self._old_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._old_label.setStyleSheet("background: transparent;")
+        self._old_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self._old_label.setPixmap(old_pixmap)
         self._old_label.show()
 
@@ -106,17 +109,22 @@ class WipeTransition(BaseTransition):
         self._new_label.setGeometry(0, 0, widget.width(), widget.height())
         self._new_label.setScaledContents(False)
         self._new_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._new_label.setStyleSheet("background: transparent;")
+        self._new_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self._new_label.setPixmap(new_pixmap)
-        # Start fully hidden
+        # Start fully hidden (no show yet); apply empty mask
         self._new_label.setMask(QRegion())
-        self._new_label.show()
+        try:
+            self._new_label.raise_()
+        except Exception:
+            pass
         
         # Drive animation via centralized AnimationManager
         am = self._get_animation_manager(widget)
         duration_sec = max(0.001, self._duration_ms / 1000.0)
         self._animation_id = am.animate_custom(
             duration=duration_sec,
-            easing=EasingCurve.QUAD_IN_OUT,
+            easing=self._resolve_easing(),
             update_callback=lambda p: self._on_anim_update(p),
             on_complete=lambda: self._finish_transition(),
         )
@@ -188,6 +196,9 @@ class WipeTransition(BaseTransition):
             region = QRegion(0, y, w, h - y)
 
         try:
+            # Show only when region is non-empty to avoid pre-mask flash
+            if (not self._new_label.isVisible()) and (not region.isEmpty()):
+                self._new_label.show()
             self._new_label.setMask(region)
         except RuntimeError:
             return
@@ -223,14 +234,6 @@ class WipeTransition(BaseTransition):
         self._set_state(TransitionState.FINISHED)
         self._emit_progress(1.0)
         self.finished.emit()
-        
-        # Clean up immediately
-        if self._display_label:
-            try:
-                self._display_label.deleteLater()
-            except RuntimeError:
-                pass
-            self._display_label = None
     
     def _show_image_immediately(self, widget: QWidget) -> None:
         """Show new image immediately without transition."""
@@ -248,6 +251,37 @@ class WipeTransition(BaseTransition):
         """
         self._direction = direction
         logger.debug(f"Wipe direction set to {direction.value}")
+    
+    def _resolve_easing(self) -> EasingCurve:
+        """Map UI easing string to core EasingCurve with 'Auto' default."""
+        name = (self._easing_str or 'Auto').strip()
+        if name == 'Auto':
+            return EasingCurve.QUAD_IN_OUT
+        mapping = {
+            'Linear': EasingCurve.LINEAR,
+            'InQuad': EasingCurve.QUAD_IN,
+            'OutQuad': EasingCurve.QUAD_OUT,
+            'InOutQuad': EasingCurve.QUAD_IN_OUT,
+            'InCubic': EasingCurve.CUBIC_IN,
+            'OutCubic': EasingCurve.CUBIC_OUT,
+            'InOutCubic': EasingCurve.CUBIC_IN_OUT,
+            'InQuart': EasingCurve.QUART_IN,
+            'OutQuart': EasingCurve.QUART_OUT,
+            'InOutQuart': EasingCurve.QUART_IN_OUT,
+            'InExpo': EasingCurve.EXPO_IN,
+            'OutExpo': EasingCurve.EXPO_OUT,
+            'InOutExpo': EasingCurve.EXPO_IN_OUT,
+            'InSine': EasingCurve.SINE_IN,
+            'OutSine': EasingCurve.SINE_OUT,
+            'InOutSine': EasingCurve.SINE_IN_OUT,
+            'InCirc': EasingCurve.CIRC_IN,
+            'OutCirc': EasingCurve.CIRC_OUT,
+            'InOutCirc': EasingCurve.CIRC_IN_OUT,
+            'InBack': EasingCurve.BACK_IN,
+            'OutBack': EasingCurve.BACK_OUT,
+            'InOutBack': EasingCurve.BACK_IN_OUT,
+        }
+        return mapping.get(name, EasingCurve.QUAD_IN_OUT)
     
     def set_duration(self, duration_ms: int) -> None:
         """

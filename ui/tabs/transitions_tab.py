@@ -10,7 +10,7 @@ Allows users to configure transition settings:
 from typing import Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QSpinBox, QGroupBox, QScrollArea
+    QSpinBox, QGroupBox, QScrollArea, QSlider
 )
 from PySide6.QtCore import Signal, Qt
 
@@ -88,21 +88,22 @@ class TransitionsTab(QWidget):
         
         layout.addWidget(type_group)
         
-        # Duration group
+        # Duration group (slider: short → long)
         duration_group = QGroupBox("Timing")
         duration_layout = QVBoxLayout(duration_group)
-        
         duration_row = QHBoxLayout()
-        duration_row.addWidget(QLabel("Duration (ms):"))
-        self.duration_spin = QSpinBox()
-        self.duration_spin.setRange(100, 10000)
-        self.duration_spin.setSingleStep(100)
-        self.duration_spin.setValue(1300)  # BUG FIX #5: Increased from 1000ms (30% slower)
-        self.duration_spin.valueChanged.connect(self._save_settings)
-        duration_row.addWidget(self.duration_spin)
+        duration_row.addWidget(QLabel("Duration (short → long):"))
+        self.duration_slider = QSlider(Qt.Orientation.Horizontal)
+        self.duration_slider.setRange(100, 10000)  # store milliseconds directly
+        self.duration_slider.setSingleStep(100)
+        self.duration_slider.setPageStep(500)
+        self.duration_slider.setValue(1300)  # BUG FIX #5: Increased from 1000ms (30% slower)
+        self.duration_slider.valueChanged.connect(self._on_duration_changed)
+        duration_row.addWidget(self.duration_slider, 1)
+        self.duration_value_label = QLabel("1300 ms")
+        duration_row.addWidget(self.duration_value_label)
         duration_row.addStretch()
         duration_layout.addLayout(duration_row)
-        
         layout.addWidget(duration_group)
         
         # Direction group (for directional transitions)
@@ -117,8 +118,6 @@ class TransitionsTab(QWidget):
             "Right to Left",
             "Top to Bottom",
             "Bottom to Top",
-            "Diagonal TL-BR",
-            "Diagonal TR-BL",
             "Random"
         ])
         self.direction_combo.currentTextChanged.connect(self._save_settings)
@@ -136,6 +135,7 @@ class TransitionsTab(QWidget):
         easing_row.addWidget(QLabel("Easing:"))
         self.easing_combo = QComboBox()
         self.easing_combo.addItems([
+            "Auto",
             "Linear",
             "InQuad", "OutQuad", "InOutQuad",
             "InCubic", "OutCubic", "InOutCubic",
@@ -211,6 +211,35 @@ class TransitionsTab(QWidget):
         
         # Update visibility based on default transition
         self._update_specific_settings()
+        
+        # Improve +/- button clarity and feedback on spin boxes
+        self.setStyleSheet(
+            self.styleSheet() + """
+            QSpinBox, QDoubleSpinBox {
+                background-color: #1e1e1e;
+                color: #ffffff;
+                border: 1px solid #3a3a3a;
+                border-radius: 4px;
+                padding-right: 24px; /* space for buttons */
+            }
+            QSpinBox::up-button, QDoubleSpinBox::up-button,
+            QSpinBox::down-button, QDoubleSpinBox::down-button {
+                subcontrol-origin: border;
+                width: 18px;
+                background: #2a2a2a;
+                border-left: 1px solid #3a3a3a;
+                margin: 0px;
+            }
+            QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
+            QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {
+                background: #3a3a3a;
+            }
+            QSpinBox::up-button:pressed, QDoubleSpinBox::up-button:pressed,
+            QSpinBox::down-button:pressed, QDoubleSpinBox::down-button:pressed {
+                background: #505050;
+            }
+            """
+        )
     
     def _load_settings(self) -> None:
         """Load settings from settings manager."""
@@ -224,7 +253,8 @@ class TransitionsTab(QWidget):
         
         # Load duration (default 1300ms - Bug Fix #5)
         duration = transitions_config.get('duration_ms', 1300)
-        self.duration_spin.setValue(duration)
+        self.duration_slider.setValue(duration)
+        self.duration_value_label.setText(f"{duration} ms")
         
         # Load direction
         direction = transitions_config.get('direction', 'Left to Right')
@@ -233,10 +263,12 @@ class TransitionsTab(QWidget):
             self.direction_combo.setCurrentIndex(index)
         
         # Load easing
-        easing = transitions_config.get('easing', 'InOutQuad')
+        easing = transitions_config.get('easing', 'Auto')
         index = self.easing_combo.findText(easing)
         if index >= 0:
             self.easing_combo.setCurrentIndex(index)
+
+        # Note: GPU acceleration is controlled globally in Display tab
         
         # Load block flip settings
         block_flip = transitions_config.get('block_flip', {})
@@ -276,7 +308,7 @@ class TransitionsTab(QWidget):
         """Save current settings."""
         config = {
             'type': self.transition_combo.currentText(),
-            'duration_ms': self.duration_spin.value(),
+            'duration_ms': self.duration_slider.value(),
             'direction': self.direction_combo.currentText(),
             'easing': self.easing_combo.currentText(),
             'block_flip': {
@@ -294,3 +326,8 @@ class TransitionsTab(QWidget):
         self.transitions_changed.emit()
         
         logger.debug(f"Saved transition settings: {config['type']}")
+
+    def _on_duration_changed(self, value: int) -> None:
+        """Update label and persist duration to settings."""
+        self.duration_value_label.setText(f"{value} ms")
+        self._save_settings()

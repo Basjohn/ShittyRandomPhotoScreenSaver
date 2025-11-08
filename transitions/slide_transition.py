@@ -5,11 +5,12 @@ Slides new image in from a direction while old image slides out.
 """
 from enum import Enum
 from typing import Optional
-from PySide6.QtCore import QPropertyAnimation, QEasingCurve, QPoint
+from PySide6.QtCore import Qt, QPoint
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QWidget, QLabel
 
 from transitions.base_transition import BaseTransition, TransitionState
+from core.animation.types import EasingCurve
 from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
@@ -50,8 +51,7 @@ class SlideTransition(BaseTransition):
         self._widget: Optional[QWidget] = None
         self._old_label: Optional[QLabel] = None
         self._new_label: Optional[QLabel] = None
-        self._old_animation: Optional[QPropertyAnimation] = None
-        self._new_animation: Optional[QPropertyAnimation] = None
+        self._animation_id: Optional[str] = None
         self._finished_count = 0
         
         # FIX: Use ResourceManager for Qt object lifecycle
@@ -99,16 +99,26 @@ class SlideTransition(BaseTransition):
             width = widget.width()
             height = widget.height()
             
+            # Pre-fit pixmaps to widget to ensure DPR-correct full-rect painting
+            fitted_old = self._fit_pixmap_to_widget(old_pixmap, widget)
+            fitted_new = self._fit_pixmap_to_widget(new_pixmap, widget)
+
             # Create labels for old and new images
             self._old_label = QLabel(widget)
-            self._old_label.setPixmap(old_pixmap)
+            self._old_label.setPixmap(fitted_old)
             self._old_label.setGeometry(0, 0, width, height)
+            self._old_label.setScaledContents(False)
+            self._old_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._old_label.setStyleSheet("background: transparent;")
             self._old_label.show()
-            
+
             self._new_label = QLabel(widget)
-            self._new_label.setPixmap(new_pixmap)
+            self._new_label.setPixmap(fitted_new)
             self._new_label.setGeometry(0, 0, width, height)
-            
+            self._new_label.setScaledContents(False)
+            self._new_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._new_label.setStyleSheet("background: transparent;")
+
             # Calculate start and end positions based on direction
             old_start, old_end, new_start, new_end = self._calculate_positions(width, height)
             
@@ -117,30 +127,19 @@ class SlideTransition(BaseTransition):
             self._new_label.move(new_start)
             self._new_label.show()
             
-            # Create animations
-            self._old_animation = QPropertyAnimation(self._old_label, b"pos")
-            self._old_animation.setDuration(self.duration_ms)
-            self._old_animation.setStartValue(old_start)
-            self._old_animation.setEndValue(old_end)
-            self._old_animation.setEasingCurve(self._get_easing_curve(self._easing))
-            
-            self._new_animation = QPropertyAnimation(self._new_label, b"pos")
-            self._new_animation.setDuration(self.duration_ms)
-            self._new_animation.setStartValue(new_start)
-            self._new_animation.setEndValue(new_end)
-            self._new_animation.setEasingCurve(self._get_easing_curve(self._easing))
-            
-            # Connect signals
-            self._old_animation.valueChanged.connect(self._on_animation_value_changed)
-            self._old_animation.finished.connect(self._on_animation_finished)
-            self._new_animation.finished.connect(self._on_animation_finished)
-            
-            # Start animations
+            # Drive via centralized AnimationManager (no QPropertyAnimation)
+            am = self._get_animation_manager(widget)
+            duration_sec = max(0.001, self.duration_ms / 1000.0)
+            self._animation_id = am.animate_custom(
+                duration=duration_sec,
+                easing=self._resolve_easing(),
+                update_callback=lambda p, os=old_start, oe=old_end, ns=new_start, ne=new_end: self._on_anim_update(p, os, oe, ns, ne),
+                on_complete=lambda: self._on_anim_complete(old_end, new_end),
+            )
+
             self._set_state(TransitionState.RUNNING)
-            self._old_animation.start()
-            self._new_animation.start()
             self.started.emit()
-            
+
             logger.info(f"Slide transition started ({self.duration_ms}ms, direction={self._direction.value})")
             return True
         
@@ -157,18 +156,14 @@ class SlideTransition(BaseTransition):
         
         logger.debug("Stopping slide transition")
         
-        # Stop animations
-        if self._old_animation:
+        # Cancel centralized animation
+        if self._animation_id and self._widget:
             try:
-                self._old_animation.stop()
-            except RuntimeError:
+                am = self._get_animation_manager(self._widget)
+                am.cancel_animation(self._animation_id)
+            except Exception:
                 pass
-        
-        if self._new_animation:
-            try:
-                self._new_animation.stop()
-            except RuntimeError:
-                pass
+            self._animation_id = None
         
         self._set_state(TransitionState.CANCELLED)
         self._emit_progress(1.0)
@@ -178,21 +173,14 @@ class SlideTransition(BaseTransition):
         """Clean up transition resources."""
         logger.debug("Cleaning up slide transition")
         
-        # Stop and delete animations
-        # FIX: Don't set to None after deleteLater - prevents memory leak
-        if self._old_animation:
+        # Cancel centralized animation if active
+        if self._animation_id and self._widget:
             try:
-                self._old_animation.stop()
-                self._old_animation.deleteLater()
-            except RuntimeError:
+                am = self._get_animation_manager(self._widget)
+                am.cancel_animation(self._animation_id)
+            except Exception:
                 pass
-        
-        if self._new_animation:
-            try:
-                self._new_animation.stop()
-                self._new_animation.deleteLater()
-            except RuntimeError:
-                pass
+            self._animation_id = None
         
         # Delete labels
         if self._old_label:
@@ -273,106 +261,79 @@ class SlideTransition(BaseTransition):
         self.finished.emit()
         logger.debug("Image shown immediately")
     
-    def _on_animation_value_changed(self, value: QPoint) -> None:
-        """
-        Handle animation value change.
-        
-        Args:
-            value: Current position value
-        """
-        # Calculate progress based on distance traveled
-        if self._old_animation:
-            start = self._old_animation.startValue()
-            end = self._old_animation.endValue()
-            current = value
-            
-            if self._direction in [SlideDirection.LEFT, SlideDirection.RIGHT]:
-                total_distance = abs(end.x() - start.x())
-                current_distance = abs(current.x() - start.x())
-            else:
-                total_distance = abs(end.y() - start.y())
-                current_distance = abs(current.y() - start.y())
-            
-            if total_distance > 0:
-                progress = current_distance / total_distance
-                self._emit_progress(progress)
-    
-    def _on_animation_finished(self) -> None:
-        """Handle animation completion."""
+    def _on_anim_update(self, progress: float, old_start: QPoint, old_end: QPoint, new_start: QPoint, new_end: QPoint) -> None:
+        """AnimationManager update: move labels according to eased progress."""
         if self._state != TransitionState.RUNNING:
             return
-        
-        self._finished_count += 1
-        
-        # Wait for both animations to finish
-        if self._finished_count >= 2:
-            logger.debug("Slide animation finished")
-            
-            self._set_state(TransitionState.FINISHED)
-            self._emit_progress(1.0)
-            self.finished.emit()
-            
-            # Cleanup resources
-            self._old_animation = None
-            self._new_animation = None
-            
-            # Clean up labels
-            # FIX: Don't set to None after deleteLater - prevents memory leak
+        try:
+            t = max(0.0, min(1.0, progress))
+            def lerp(a: QPoint, b: QPoint, t: float) -> QPoint:
+                return QPoint(int(a.x() + (b.x() - a.x()) * t), int(a.y() + (b.y() - a.y()) * t))
             if self._old_label:
-                try:
-                    self._old_label.deleteLater()
-                except RuntimeError:
-                    pass
-            
+                self._old_label.move(lerp(old_start, old_end, t))
             if self._new_label:
-                try:
-                    self._new_label.deleteLater()
-                except RuntimeError:
-                    pass
-            
-            self._widget = None
+                self._new_label.move(lerp(new_start, new_end, t))
+        except Exception:
+            pass
+        self._emit_progress(t)
+
+    def _on_anim_complete(self, old_end: QPoint, new_end: QPoint) -> None:
+        """Animation completion: finalize positions and cleanup."""
+        if self._state != TransitionState.RUNNING:
+            return
+        try:
+            if self._old_label:
+                self._old_label.move(old_end)
+            if self._new_label:
+                self._new_label.move(new_end)
+        except Exception:
+            pass
+        logger.debug("Slide animation finished")
+        self._set_state(TransitionState.FINISHED)
+        self._emit_progress(1.0)
+        self.finished.emit()
+        # Clean up labels
+        if self._old_label:
+            try:
+                self._old_label.deleteLater()
+            except RuntimeError:
+                pass
+            self._old_label = None
+        if self._new_label:
+            try:
+                self._new_label.deleteLater()
+            except RuntimeError:
+                pass
+            self._new_label = None
+        self._widget = None
     
-    def _get_easing_curve(self, easing_name: str) -> QEasingCurve:
-        """
-        Get Qt easing curve from name.
-        
-        Args:
-            easing_name: Name of easing curve
-        
-        Returns:
-            QEasingCurve
-        """
-        easing_map = {
-            'Linear': QEasingCurve.Type.Linear,
-            'InQuad': QEasingCurve.Type.InQuad,
-            'OutQuad': QEasingCurve.Type.OutQuad,
-            'InOutQuad': QEasingCurve.Type.InOutQuad,
-            'InCubic': QEasingCurve.Type.InCubic,
-            'OutCubic': QEasingCurve.Type.OutCubic,
-            'InOutCubic': QEasingCurve.Type.InOutCubic,
-            'InQuart': QEasingCurve.Type.InQuart,
-            'OutQuart': QEasingCurve.Type.OutQuart,
-            'InOutQuart': QEasingCurve.Type.InOutQuart,
-            'InQuint': QEasingCurve.Type.InQuint,
-            'OutQuint': QEasingCurve.Type.OutQuint,
-            'InOutQuint': QEasingCurve.Type.InOutQuint,
-            'InSine': QEasingCurve.Type.InSine,
-            'OutSine': QEasingCurve.Type.OutSine,
-            'InOutSine': QEasingCurve.Type.InOutSine,
-            'InExpo': QEasingCurve.Type.InExpo,
-            'OutExpo': QEasingCurve.Type.OutExpo,
-            'InOutExpo': QEasingCurve.Type.InOutExpo,
-            'InCirc': QEasingCurve.Type.InCirc,
-            'OutCirc': QEasingCurve.Type.OutCirc,
-            'InOutCirc': QEasingCurve.Type.InOutCirc,
+    def _resolve_easing(self) -> EasingCurve:
+        """Map UI easing string to core EasingCurve with 'Auto' default."""
+        name = (self._easing or 'Auto').strip()
+        if name == 'Auto':
+            return EasingCurve.QUAD_IN_OUT
+        mapping = {
+            'Linear': EasingCurve.LINEAR,
+            'InQuad': EasingCurve.QUAD_IN,
+            'OutQuad': EasingCurve.QUAD_OUT,
+            'InOutQuad': EasingCurve.QUAD_IN_OUT,
+            'InCubic': EasingCurve.CUBIC_IN,
+            'OutCubic': EasingCurve.CUBIC_OUT,
+            'InOutCubic': EasingCurve.CUBIC_IN_OUT,
+            'InQuart': EasingCurve.QUART_IN,
+            'OutQuart': EasingCurve.QUART_OUT,
+            'InOutQuart': EasingCurve.QUART_IN_OUT,
+            'InSine': EasingCurve.SINE_IN,
+            'OutSine': EasingCurve.SINE_OUT,
+            'InOutSine': EasingCurve.SINE_IN_OUT,
+            'InExpo': EasingCurve.EXPO_IN,
+            'OutExpo': EasingCurve.EXPO_OUT,
+            'InOutExpo': EasingCurve.EXPO_IN_OUT,
+            'InCirc': EasingCurve.CIRC_IN,
+            'OutCirc': EasingCurve.CIRC_OUT,
+            'InOutCirc': EasingCurve.CIRC_IN_OUT,
         }
-        
-        easing_type = easing_map.get(easing_name, QEasingCurve.Type.InOutQuad)
-        
-        if easing_name not in easing_map:
-            logger.warning(f"[FALLBACK] Unknown easing '{easing_name}', using InOutQuad")
-        
-        return QEasingCurve(easing_type)
+        return mapping.get(name, EasingCurve.QUAD_IN_OUT)
     
     def set_direction(self, direction: SlideDirection) -> None:
         """

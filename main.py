@@ -10,7 +10,8 @@ import shutil
 from pathlib import Path
 from enum import Enum
 from PySide6.QtWidgets import QApplication, QMessageBox
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QCoreApplication
+from PySide6.QtGui import QSurfaceFormat, QImageReader
 from core.logging.logger import setup_logging, get_logger
 from core.settings.settings_manager import SettingsManager
 from core.animation import AnimationManager
@@ -259,11 +260,33 @@ def main():
     QApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
     )
+
+    # Configure OpenGL globally BEFORE creating QApplication
+    try:
+        # Prefer desktop OpenGL and share contexts across widgets
+        QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_UseDesktopOpenGL, True)
+        QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts, True)
+
+        fmt = QSurfaceFormat()
+        fmt.setSwapBehavior(QSurfaceFormat.SwapBehavior.DoubleBuffer)
+        fmt.setSwapInterval(1)  # vsync
+        fmt.setDepthBufferSize(24)
+        fmt.setStencilBufferSize(8)
+        QSurfaceFormat.setDefaultFormat(fmt)
+        logger.debug("Global QSurfaceFormat configured (double buffer, vsync, depth=24, stencil=8)")
+    except Exception as e:
+        logger.warning(f"Failed to configure global OpenGL format: {e}")
     
     # Create Qt application
     app = QApplication(sys.argv)
     app.setApplicationName("ShittyRandomPhotoScreenSaver")
     app.setOrganizationName("ShittyRandomPhotoScreenSaver")
+    
+    # Increase Qt image allocation limit from 256MB to 1GB for high-res images
+    # This is per-image when loaded, not total memory for all images
+    # Images are loaded on-demand, not all at startup (ImageQueue stores metadata only)
+    QImageReader.setAllocationLimit(1024)  # 1GB in MB
+    logger.info("Qt image allocation limit: 1GB (supports 8K+ images, per-image on-demand)")
     
     logger.info(f"Qt Application created: {app.applicationName()}")
     logger.debug(f"High DPI scaling enabled")

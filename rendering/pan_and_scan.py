@@ -121,15 +121,27 @@ class PanAndScan:
         self._timer.timeout.connect(self._update_pan)
         self._timer.start(self._timer_interval_ms)
         
+        # Register with ResourceManager for proper lifecycle tracking
+        if self._resource_manager:
+            try:
+                self._resource_manager.register_qt(self._timer, description="PanAndScan timer")
+            except Exception:
+                pass
+        
         logger.info(f"Pan and scan started: speed={self._speed_pixels_per_second:.1f} px/s, "
                    f"auto_speed={self._auto_speed}")
     
     def stop(self) -> None:
         """Stop pan and scan effect."""
-        # FIX: Don't set to None after deleteLater - prevents memory leak
         if self._timer:
-            self._timer.stop()
-            self._timer.deleteLater()
+            try:
+                self._timer.stop()
+                self._timer.deleteLater()
+            except RuntimeError:
+                # Already deleted
+                pass
+            finally:
+                self._timer = None
         
         logger.debug("Pan and scan stopped")
     

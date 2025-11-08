@@ -1,17 +1,87 @@
 """
-Crossfade transition - smooth opacity blend between images.
+Crossfade transition - smooth opacity blend between images (CPU path).
 
-Uses opacity animation to fade out old image while fading in new image.
+Uses a dedicated overlay widget that composes old and new pixmaps per-frame
+with QPainter. Animation timing is driven by the centralized AnimationManager.
 """
+import threading
 from typing import Optional
-from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation
-from PySide6.QtWidgets import QWidget, QLabel, QGraphicsOpacityEffect
-from PySide6.QtGui import QPixmap
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QWidget
+from PySide6.QtGui import QPixmap, QPainter
 
 from transitions.base_transition import BaseTransition, TransitionState
+from core.animation.types import EasingCurve
 from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class _SWFadeOverlay(QWidget):
+    """CPU overlay that blends two pixmaps using QPainter opacity."""
+
+    def __init__(self, parent: QWidget, old_pixmap: QPixmap, new_pixmap: QPixmap) -> None:
+        super().__init__(parent)
+        self.setAutoFillBackground(False)
+        try:
+            self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+            self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
+            self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        except Exception:
+            pass
+        self._old = old_pixmap
+        self._new = new_pixmap
+        self._alpha: float = 0.0
+        
+        # Atomic state flags with lock protection (for consistency with GL overlays)
+        self._state_lock = threading.Lock()
+        self._first_frame_drawn: bool = False
+        self._has_drawn: bool = False
+
+    def set_images(self, old_pixmap: QPixmap, new_pixmap: QPixmap) -> None:
+        self._old = old_pixmap
+        self._new = new_pixmap
+        with self._state_lock:
+            self._first_frame_drawn = False
+            self._has_drawn = False
+        self.update()
+
+    def set_alpha(self, a: float) -> None:
+        self._alpha = max(0.0, min(1.0, a))
+        self.update()
+
+    def has_drawn(self) -> bool:
+        return self._has_drawn
+    
+    def is_ready_for_display(self) -> bool:
+        """Thread-safe check if overlay is ready to display."""
+        try:
+            with self._state_lock:
+                return self._first_frame_drawn
+        except Exception:
+            return False
+
+    def paintEvent(self, _event) -> None:  # type: ignore[override]
+        p = QPainter(self)
+        try:
+            p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+            # Full coverage: draw old fully, then new with alpha
+            target = self.rect()
+            if self._old and not self._old.isNull():
+                p.setOpacity(1.0)
+                p.drawPixmap(target, self._old)
+            if self._new and not self._new.isNull():
+                p.setOpacity(self._alpha)
+                p.drawPixmap(target, self._new)
+        finally:
+            p.end()
+        
+        # Mark as drawn atomically
+        with self._state_lock:
+            if not self._first_frame_drawn:
+                self._first_frame_drawn = True
+                logger.debug("[SW XFADE] First frame drawn, overlay ready")
+            self._has_drawn = True
 
 
 class CrossfadeTransition(BaseTransition):
@@ -33,10 +103,8 @@ class CrossfadeTransition(BaseTransition):
         super().__init__(duration_ms)
         
         self._widget: Optional[QWidget] = None
-        self._old_label: Optional[QLabel] = None
-        self._new_label: Optional[QLabel] = None
-        self._opacity_effect = None
-        self._animation: Optional[QPropertyAnimation] = None
+        self._overlay: Optional[_SWFadeOverlay] = None
+        self._animation_id: Optional[str] = None
         self._easing = easing
         self._elapsed_ms = 0  # FIX: Initialize to prevent AttributeError
         
@@ -81,55 +149,55 @@ class CrossfadeTransition(BaseTransition):
                 self._show_image_immediately()
                 return True
             
-            # Create labels for old and new images
-            # FIX: Import moved to top of file
-            
-            self._old_label = QLabel(widget)
-            self._old_label.setPixmap(old_pixmap)
-            self._old_label.setGeometry(0, 0, widget.width(), widget.height())
-            self._old_label.setScaledContents(False)
-            self._old_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self._old_label.setStyleSheet("background: transparent;")
-            self._old_label.show()
-            
-            self._new_label = QLabel(widget)
-            self._new_label.setPixmap(new_pixmap)
-            self._new_label.setGeometry(0, 0, widget.width(), widget.height())
-            self._new_label.setScaledContents(False)
-            self._new_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self._new_label.setStyleSheet("background: transparent;")
-            
-            # Use QGraphicsOpacityEffect for fade
-            self._opacity_effect = QGraphicsOpacityEffect()
-            self._opacity_effect.setOpacity(0.0)
-            self._new_label.setGraphicsEffect(self._opacity_effect)
-            
-            self._new_label.show()
-            
-            # Create smooth property animation
-            self._animation = QPropertyAnimation(self._opacity_effect, b"opacity")
-            self._animation.setDuration(self.duration_ms)
-            self._animation.setStartValue(0.0)
-            self._animation.setEndValue(1.0)
-            
-            # Apply easing curve
-            easing_map = {
-                'InOutQuad': QEasingCurve.Type.InOutQuad,
-                'Linear': QEasingCurve.Type.Linear,
-                'InQuad': QEasingCurve.Type.InQuad,
-                'OutQuad': QEasingCurve.Type.OutQuad
-            }
-            easing_type = easing_map.get(self._easing, QEasingCurve.Type.InOutQuad)
-            self._animation.setEasingCurve(easing_type)
-            
-            # Connect finished signal
-            self._animation.finished.connect(self._on_animation_finished)
-            self._animation.start()
-            
-            # Start transition
+            # Reuse or create persistent CPU overlay on the widget
+            w, h = widget.width(), widget.height()
+            overlay = getattr(widget, "_srpss_sw_xfade_overlay", None)
+            if overlay is None or not isinstance(overlay, _SWFadeOverlay):
+                logger.debug("[SW XFADE] Creating persistent CPU overlay")
+                overlay = _SWFadeOverlay(widget, old_pixmap, new_pixmap)
+                overlay.setGeometry(0, 0, w, h)
+                setattr(widget, "_srpss_sw_xfade_overlay", overlay)
+                if self._resource_manager:
+                    try:
+                        self._resource_manager.register_qt(overlay, description="SW Crossfade persistent overlay")
+                    except Exception:
+                        pass
+            else:
+                logger.debug("[SW XFADE] Reusing persistent CPU overlay")
+                overlay.set_images(old_pixmap, new_pixmap)
+                overlay.set_alpha(0.0)
+
+            self._overlay = overlay
+            # Show overlay and force a first paint before animation to avoid black frame
+            self._overlay.setVisible(True)
+            self._overlay.setGeometry(0, 0, w, h)
+            try:
+                self._overlay.raise_()
+            except Exception:
+                pass
+            # Keep clock above overlay if present
+            try:
+                if hasattr(widget, "clock_widget") and getattr(widget, "clock_widget"):
+                    widget.clock_widget.raise_()
+            except Exception:
+                pass
+            try:
+                self._overlay.repaint()
+            except Exception:
+                pass
+
+            # Drive via centralized AnimationManager
+            am = self._get_animation_manager(widget)
+            duration_sec = max(0.001, self.duration_ms / 1000.0)
+            self._animation_id = am.animate_custom(
+                duration=duration_sec,
+                easing=self._resolve_easing(),
+                update_callback=lambda p: self._on_anim_update(p),
+                on_complete=lambda: self._on_anim_complete(),
+            )
+
             self._set_state(TransitionState.RUNNING)
             self.started.emit()
-            
             logger.info(f"Crossfade transition started ({self.duration_ms}ms)")
             return True
         
@@ -145,11 +213,14 @@ class CrossfadeTransition(BaseTransition):
             return
         
         logger.debug("Stopping crossfade transition")
-        
-        # Stop animation
-        if self._animation:
-            self._animation.stop()
-        
+        # Cancel central animation
+        if self._animation_id and self._widget:
+            try:
+                am = self._get_animation_manager(self._widget)
+                am.cancel_animation(self._animation_id)
+            except Exception:
+                pass
+            self._animation_id = None
         # Set cancelled state before cleanup
         self._set_state(TransitionState.CANCELLED)
         
@@ -159,35 +230,21 @@ class CrossfadeTransition(BaseTransition):
     def cleanup(self) -> None:
         """Clean up transition resources using ResourceManager."""
         logger.debug("Cleaning up crossfade transition")
-        
-        # Stop animation and let ResourceManager handle cleanup
-        if self._animation:
+        # Cancel animation if active
+        if self._animation_id and self._widget:
             try:
-                self._animation.stop()
-                self._animation.deleteLater()
-            except RuntimeError:
+                am = self._get_animation_manager(self._widget)
+                am.cancel_animation(self._animation_id)
+            except Exception:
                 pass
-            # FIX: Don't set to None - let deleteLater process first
-        
-        # Remove labels via deleteLater (ResourceManager tracks these)
-        if self._old_label:
+            self._animation_id = None
+        # Hide persistent overlay (do not delete)
+        if self._overlay:
             try:
-                self._old_label.deleteLater()
-            except RuntimeError:
+                self._overlay.hide()
+            except Exception:
                 pass
-        
-        if self._new_label:
-            try:
-                self._new_label.deleteLater()
-            except RuntimeError:
-                pass
-        
-        if self._opacity_effect:
-            try:
-                self._opacity_effect.deleteLater()
-            except RuntimeError:
-                pass
-        
+            self._overlay = None
         # Only clear widget reference
         self._widget = None
         
@@ -201,84 +258,57 @@ class CrossfadeTransition(BaseTransition):
         self.finished.emit()
         logger.debug("Image shown immediately")
     
-    def _on_animation_finished(self) -> None:
-        """Handle animation completion from QPropertyAnimation."""
+    def _on_anim_update(self, progress: float) -> None:
+        if self._state != TransitionState.RUNNING or not self._overlay:
+            return
+        progress = max(0.0, min(1.0, progress))
+        try:
+            self._overlay.set_alpha(progress)
+            self._overlay.repaint()
+        except Exception:
+            pass
+        self._emit_progress(progress)
+
+    def _on_anim_complete(self) -> None:
         if self._state != TransitionState.RUNNING:
             return
-        
-        logger.debug("Crossfade animation finished (QPropertyAnimation)")
-        self._emit_progress(1.0)
-        self._on_transition_finished()
-    
-    def _on_transition_finished(self) -> None:
-        """Handle transition completion."""
-        if self._state != TransitionState.RUNNING:
-            return
-        
         logger.debug("Crossfade transition finished")
-        
-        # Stop animation
-        if self._animation:
-            self._animation.stop()
-        
+        if self._overlay:
+            try:
+                self._overlay.set_alpha(1.0)
+                self._overlay.repaint()
+            except Exception:
+                pass
         self._set_state(TransitionState.FINISHED)
         self._emit_progress(1.0)
         self.finished.emit()
     
-    def _apply_easing(self, progress: float) -> float:
-        """
-        Apply easing curve to progress.
-        
-        Args:
-            progress: Linear progress (0.0 to 1.0)
-        
-        Returns:
-            Eased progress value
-        """
-        easing_curve = self._get_easing_curve(self._easing)
-        return easing_curve.valueForProgress(progress)
-    
-    def _get_easing_curve(self, easing_name: str) -> QEasingCurve:
-        """
-        Get Qt easing curve from name.
-        
-        Args:
-            easing_name: Name of easing curve
-        
-        Returns:
-            QEasingCurve
-        """
-        easing_map = {
-            'Linear': QEasingCurve.Type.Linear,
-            'InQuad': QEasingCurve.Type.InQuad,
-            'OutQuad': QEasingCurve.Type.OutQuad,
-            'InOutQuad': QEasingCurve.Type.InOutQuad,
-            'InCubic': QEasingCurve.Type.InCubic,
-            'OutCubic': QEasingCurve.Type.OutCubic,
-            'InOutCubic': QEasingCurve.Type.InOutCubic,
-            'InQuart': QEasingCurve.Type.InQuart,
-            'OutQuart': QEasingCurve.Type.OutQuart,
-            'InOutQuart': QEasingCurve.Type.InOutQuart,
-            'InQuint': QEasingCurve.Type.InQuint,
-            'OutQuint': QEasingCurve.Type.OutQuint,
-            'InOutQuint': QEasingCurve.Type.InOutQuint,
-            'InSine': QEasingCurve.Type.InSine,
-            'OutSine': QEasingCurve.Type.OutSine,
-            'InOutSine': QEasingCurve.Type.InOutSine,
-            'InExpo': QEasingCurve.Type.InExpo,
-            'OutExpo': QEasingCurve.Type.OutExpo,
-            'InOutExpo': QEasingCurve.Type.InOutExpo,
-            'InCirc': QEasingCurve.Type.InCirc,
-            'OutCirc': QEasingCurve.Type.OutCirc,
-            'InOutCirc': QEasingCurve.Type.InOutCirc,
+    def _resolve_easing(self) -> EasingCurve:
+        name = (self._easing or 'Auto').strip()
+        if name == 'Auto':
+            return EasingCurve.QUAD_IN_OUT
+        mapping = {
+            'Linear': EasingCurve.LINEAR,
+            'InQuad': EasingCurve.QUAD_IN,
+            'OutQuad': EasingCurve.QUAD_OUT,
+            'InOutQuad': EasingCurve.QUAD_IN_OUT,
+            'InCubic': EasingCurve.CUBIC_IN,
+            'OutCubic': EasingCurve.CUBIC_OUT,
+            'InOutCubic': EasingCurve.CUBIC_IN_OUT,
+            'InQuart': EasingCurve.QUART_IN,
+            'OutQuart': EasingCurve.QUART_OUT,
+            'InOutQuart': EasingCurve.QUART_IN_OUT,
+            'InSine': EasingCurve.SINE_IN,
+            'OutSine': EasingCurve.SINE_OUT,
+            'InOutSine': EasingCurve.SINE_IN_OUT,
+            'InExpo': EasingCurve.EXPO_IN,
+            'OutExpo': EasingCurve.EXPO_OUT,
+            'InOutExpo': EasingCurve.EXPO_IN_OUT,
+            'InCirc': EasingCurve.CIRC_IN,
+            'OutCirc': EasingCurve.CIRC_OUT,
+            'InOutCirc': EasingCurve.CIRC_IN_OUT,
         }
-        
-        easing_type = easing_map.get(easing_name, QEasingCurve.Type.InOutQuad)
-        
-        if easing_name not in easing_map:
-            logger.warning(f"[FALLBACK] Unknown easing '{easing_name}', using InOutQuad")
-        
-        return QEasingCurve(easing_type)
+        return mapping.get(name, EasingCurve.QUAD_IN_OUT)
     
     def set_easing(self, easing: str) -> None:
         """

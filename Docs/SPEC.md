@@ -1,8 +1,8 @@
 # ShittyRandomPhotoScreenSaver - Technical Specification
 
 **Version**: 1.0  
-**Last Updated**: Nov 6, 2025 21:30 - Audit Session  
-**Status**: Architecture Solid, 3 Transition Visual Bugs Remain
+**Last Updated**: Nov 7, 2025 21:58 - Post‑audit implementation (AM/GL overlays)  
+**Status**: Architecture Solid, ⚠️ Transition stack refactored (NOT TESTED)
 
 ---
 
@@ -32,36 +32,22 @@ A modern, feature-rich Windows screensaver built with PySide6 that displays phot
   - Configurable zoom range and duration
   - Smooth cubic easing
 
-#### 3. Transitions
-- **FR-3.1**: Crossfade - opacity-based smooth transition ✅ WORKING
-  - 21 easing curves supported
-  - Configurable duration
-  - Signal-based progress tracking
-  - ResourceManager integration (Nov 6 Audit)
-  - Memory leaks fixed (Nov 6 Audit)
-- **FR-3.2**: Slide - directional slide (left/right/up/down) ✅ WORKING (Day 10)
-  - 4 directions: LEFT, RIGHT, UP, DOWN
-  - Dual animation (old out, new in)
-  - 21 easing curves
-  - ResourceManager integration (Nov 6 Audit)
-  - Memory leaks fixed (Nov 6 Audit)
-- **FR-3.3**: Wipe - progressive reveal transition 🔴 VISUAL BUG (Day 9)
-  - 4 directions: LEFT_TO_RIGHT, RIGHT_TO_LEFT, TOP_TO_BOTTOM, BOTTOM_TO_TOP
-  - Architecture fixed (constructor, memory leaks, ResourceManager)
-  - 🔴 **BUG**: Wrong size/scaling in reveal
-- **FR-3.4**: Diffuse - random block reveal 🔴 VISUAL BUG (Day 10)
-  - Random block reveal order
-  - Configurable block size
-  - Timer-based progressive reveal
-  - Architecture fixed (memory leaks, ResourceManager)
-  - 🔴 **BUG**: Black boxes instead of transparent holes
-- **FR-3.5**: Block Puzzle Flip - 3D flip effect with configurable grid 🔴 VISUAL BUG ⭐ STAR FEATURE (Day 11)
-  - Grid-based block flipping
-  - 3D horizontal scaling effect
-  - Architecture fixed (memory leaks, ResourceManager, imports)
-  - 🔴 **BUG**: Wrong block sizing, doesn't flip whole image
-  - Random flip order
-  - Configurable grid size and flip duration
+#### 3. Transitions (CPU + GL variants)
+- **FR-3.1**: Crossfade - opacity-based smooth transition ⚠️ CODE CHANGED - NOT TESTED
+  - Centralized AnimationManager (no QPropertyAnimation)
+  - Persistent CPU overlay paints old/new pixmaps with opacity
+  - Easing via `core.animation.types.EasingCurve`
+- **FR-3.2**: Slide - directional slide (left/right/up/down) ⚠️ CODE CHANGED - NOT TESTED
+  - AnimationManager‑driven label movement (old out, new in)
+  - Directions: LEFT, RIGHT, UP, DOWN (diag optional)
+- **FR-3.3**: Wipe - progressive reveal transition ⚠️ CODE CHANGED - NOT TESTED
+  - Mask‑based reveal on new label; full‑rect DPR alignment
+- **FR-3.4**: Diffuse - random block reveal ⚠️ CODE CHANGED - NOT TESTED
+  - CompositionMode_Clear punching holes in old label; AM timing
+- **FR-3.5**: Block Puzzle Flip - grid flip ⭐ STAR FEATURE ⚠️ CODE CHANGED - NOT TESTED
+  - Mask union on new label; DPR‑aligned grid; AM timing
+
+GL Path: Optional GL overlays (QOpenGLWidget + QPainter) for Crossfade/Slide/Wipe/Diffuse/BlockFlip; reuse per‑display where available; base paint gated when GL overlay has drawn.
 
 #### 4. Multi-Monitor Support
 - **FR-4.1**: Detect all connected monitors
@@ -245,48 +231,44 @@ A modern, feature-rich Windows screensaver built with PySide6 that displays phot
 
 ```python
 {
-    'sources': {
-        'folders': [],                    # List[str] - folder paths
-        'rss_feeds': [],                  # List[str] - RSS URLs
-        'mode': 'folders',                # 'folders' | 'rss' | 'both'
-    },
-    
     'display': {
-        'mode': 'fill',                   # 'fill' | 'fit' | 'shrink'
-        'pan_scan_enabled': False,        # bool
-        'pan_scan_speed': 1.0,            # float
-        'pan_scan_zoom': 1.3,             # float (1.0 = no zoom)
+        'mode': 'fill',                    # 'fill' | 'fit' | 'shrink'
+        'pan_and_scan': False,             # bool
+        'sharpen_downscale': False,        # bool
+        'hw_accel': False,                 # bool - GL overlays enabled when True
     },
-    
+
     'transitions': {
-        'type': 'crossfade',              # 'crossfade' | 'slide' | 'diffuse' | 'block_puzzle'
-        'duration': 1.0,                  # float (seconds)
-        'block_puzzle_grid': (6, 6),      # tuple (rows, cols)
-        'slide_direction': 'left',        # 'left' | 'right' | 'up' | 'down'
-        'diffuse_block_size': 10,         # int (pixels)
+        'type': 'Crossfade',               # 'Crossfade' | 'Slide' | 'Wipe' | 'Diffuse' | 'Block Puzzle Flip'
+        'duration_ms': 1300,               # int milliseconds
+        'easing': 'Auto',                  # 'Auto' | 'Linear' | 'InQuad' | 'OutQuad' | ...
+        'direction': 'Random',             # Slide only: 'Random' | 'Left to Right' | 'Right to Left' | 'Top to Bottom' | 'Bottom to Top'
+        'diffuse': {
+            'block_size': 50,             # int pixels
+            'shape': 'Rectangle',         # 'Rectangle' | 'Circle' | 'Triangle'
+        },
+        'block_flip': {
+            'rows': 4,
+            'cols': 6,
+        },
     },
-    
+
     'timing': {
-        'image_duration': 5.0,            # float (seconds)
+        'image_duration_sec': 5.0,         # float seconds between images
     },
-    
+
     'widgets': {
-        'clock_enabled': True,            # bool
-        'clock_format': '24h',            # '12h' | '24h'
-        'clock_timezone': 'local',        # str (timezone name)
-        'clock_position': 'top-right',    # 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
-        'clock_transparency': 0.8,        # float (0.0 to 1.0)
-        'clock_multiple': False,          # bool
-        'clock_timezones': [],            # List[str] - for multiple clocks
-        
-        'weather_enabled': False,         # bool
-        'weather_location': '',           # str
-        'weather_position': 'top-left',   # same as clock_position
-        'weather_transparency': 0.8,      # float (0.0 to 1.0)
-    },
-    
-    'multi_monitor': {
-        'mode': 'same',                   # 'same' | 'different'
+        'clock': {
+            'enabled': True,
+            'format': '12h',               # '12h' | '24h'
+            'position': 'Top Right',       # placement label
+            'show_seconds': False,
+            'timezone': 'local',
+            'show_timezone': False,
+            'font_size': 48,
+            'margin': 20,
+            'color': [255, 255, 255, 230],
+        }
     },
 }
 ```

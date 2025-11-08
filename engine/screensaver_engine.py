@@ -413,14 +413,14 @@ class ScreensaverEngine(QObject):
             # Mark as not running immediately to prevent re-entry
             self._running = False
             
-            # Stop rotation timer (check if not already deleted)
+            # Stop rotation timer (do not delete here to avoid double-delete on repeated stops)
             if self._rotation_timer:
                 try:
-                    self._rotation_timer.stop()
-                    self._rotation_timer.deleteLater()
+                    if self._rotation_timer.isActive():
+                        self._rotation_timer.stop()
                     logger.debug("Rotation timer stopped")
                 except RuntimeError as e:
-                    logger.debug(f"Timer already deleted during cleanup: {e}")
+                    logger.debug(f"Timer stop during cleanup raised: {e}")
             
             # Clear and hide/cleanup displays
             if self.display_manager:

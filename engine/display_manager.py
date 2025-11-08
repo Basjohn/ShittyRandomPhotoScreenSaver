@@ -3,13 +3,15 @@ Display manager for multi-monitor support.
 
 Manages DisplayWidget instances across multiple screens.
 """
-from typing import List, Dict, Optional
+import time
+from typing import List, Dict, Optional, Set
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QObject, Signal, QTimer
 from PySide6.QtGui import QGuiApplication, QScreen, QPixmap
 from rendering.display_widget import DisplayWidget
 from rendering.display_modes import DisplayMode
 from core.logging.logger import get_logger
+from utils.lockfree.spsc_queue import SPSCQueue
 
 logger = get_logger(__name__)
 
@@ -55,6 +57,10 @@ class DisplayManager(QObject):
         self.settings_manager = settings_manager
         self.displays: List[DisplayWidget] = []
         self.current_images: Dict[int, str] = {}  # screen_index -> image_path
+        
+        # Phase 3: Multi-display synchronization (lock-free)
+        self._transition_ready_queue: Optional[SPSCQueue] = None
+        self._sync_enabled = False
         
         # Monitor hotplug detection
         self.screen_count = 0
@@ -291,6 +297,127 @@ class DisplayManager(QObject):
             List of display info dicts
         """
         return [display.get_screen_info() for display in self.displays]
+    
+    # --- Phase 3: Multi-Display Synchronization (Lock-Free) ---
+    
+    def enable_transition_sync(self, enabled: bool = True) -> None:
+        """
+        Enable synchronized transitions across displays using lock-free SPSC queue.
+        
+        Args:
+            enabled: True to enable sync, False to disable
+        """
+        self._sync_enabled = enabled
+        if enabled and len(self.displays) > 1:
+            # Create SPSC queue for transition ready signals (capacity 20 pending signals)
+            self._transition_ready_queue = SPSCQueue(capacity=20)
+            logger.info(f"[SYNC] Multi-display transition synchronization enabled for {len(self.displays)} displays")
+        else:
+            self._transition_ready_queue = None
+            if enabled:
+                logger.debug("[SYNC] Sync requested but only 1 display, disabling")
+            else:
+                logger.debug("[SYNC] Multi-display transition synchronization disabled")
+    
+    def _on_display_transition_ready(self, display_index: int) -> None:
+        """
+        Called when a display's transition overlay is ready.
+        
+        Producer method for SPSC queue (called from display widgets).
+        
+        Args:
+            display_index: Index of display that's ready
+        """
+        if self._transition_ready_queue is not None:
+            success = self._transition_ready_queue.try_push(display_index)
+            if success:
+                logger.debug(f"[SYNC] Display {display_index} transition ready signal queued")
+            else:
+                logger.warning(f"[SYNC] Failed to queue ready signal for display {display_index} (queue full)")
+    
+    def wait_for_all_displays_ready(self, timeout_sec: float = 1.0) -> bool:
+        """
+        Wait for all displays to signal transition ready (consumer method).
+        
+        Uses lock-free SPSC queue to collect ready signals from each display.
+        Returns early if all displays signal ready before timeout.
+        
+        Args:
+            timeout_sec: Maximum time to wait in seconds
+        
+        Returns:
+            True if all displays ready, False if timeout or sync disabled
+        """
+        if not self._sync_enabled or self._transition_ready_queue is None:
+            return True  # Sync disabled, proceed immediately
+        
+        if len(self.displays) <= 1:
+            return True  # Single display, no sync needed
+        
+        expected_count = len(self.displays)
+        ready_set: Set[int] = set()
+        start_time = time.time()
+        
+        logger.debug(f"[SYNC] Waiting for {expected_count} displays to be ready (timeout={timeout_sec:.2f}s)")
+        
+        while len(ready_set) < expected_count:
+            # Try to pop ready signal from queue
+            success, display_idx = self._transition_ready_queue.try_pop()
+            
+            if success and display_idx is not None:
+                ready_set.add(display_idx)
+                logger.debug(f"[SYNC] Display {display_idx} ready ({len(ready_set)}/{expected_count})")
+            else:
+                # Queue empty, check timeout
+                elapsed = time.time() - start_time
+                if elapsed > timeout_sec:
+                    logger.warning(f"[SYNC] Timeout waiting for displays: {len(ready_set)}/{expected_count} ready after {elapsed:.2f}s")
+                    return False
+                
+                # Small sleep to avoid busy-wait
+                time.sleep(0.001)
+        
+        elapsed_ms = (time.time() - start_time) * 1000
+        logger.info(f"[SYNC] All {expected_count} displays ready in {elapsed_ms:.1f}ms")
+        return True
+    
+    def show_image_synchronized(self, pixmap: QPixmap, image_path: str = "") -> None:
+        """
+        Show image on all displays with synchronized transitions.
+        
+        If sync is enabled, waits for all displays to signal transition ready
+        before starting animations. Uses lock-free SPSC queue.
+        
+        Args:
+            pixmap: Image to display
+            image_path: Path to image file
+        """
+        if not self.displays:
+            logger.warning("[FALLBACK] No displays available")
+            return
+        
+        # If sync disabled or single display, use standard method
+        if not self._sync_enabled or len(self.displays) <= 1:
+            self.show_image(pixmap, image_path)
+            return
+        
+        # Clear ready queue before starting
+        if self._transition_ready_queue:
+            while self._transition_ready_queue.try_pop()[0]:
+                pass
+        
+        # Start transitions on all displays
+        logger.debug(f"[SYNC] Starting synchronized transition on {len(self.displays)} displays")
+        for display in self.displays:
+            display.set_image(pixmap, image_path)
+        
+        # Wait for all to be ready (with timeout)
+        all_ready = self.wait_for_all_displays_ready(timeout_sec=1.0)
+        
+        if not all_ready:
+            logger.warning("[SYNC] Not all displays ready, transitions may desync")
+        else:
+            logger.debug("[SYNC] Synchronized transition started successfully")
     
     def cleanup(self) -> None:
         """Clean up all display widgets."""

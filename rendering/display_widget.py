@@ -13,6 +13,8 @@ from rendering.pan_and_scan import PanAndScan
 from transitions.base_transition import BaseTransition
 from widgets.clock_widget import ClockWidget, TimeFormat, ClockPosition
 from core.logging.logger import get_logger
+from transitions.gl_crossfade_transition import _GLFadeWidget
+from transitions.overlay_manager import hide_all_overlays, any_overlay_ready_for_display
 
 logger = get_logger(__name__)
 
@@ -118,6 +120,15 @@ class DisplayWidget(QWidget):
         self.setGeometry(geometry)
         self.showFullScreen()
         
+        # Pre-warm GL contexts if hardware acceleration enabled
+        if self.settings_manager:
+            hw_accel = self.settings_manager.get('display.hw_accel', False)
+            # Handle string boolean values from settings file
+            if isinstance(hw_accel, str):
+                hw_accel = hw_accel.lower() in ('true', '1', 'yes')
+            if hw_accel:
+                self._prewarm_gl_contexts()
+        
         # Setup overlay widgets AFTER geometry is set
         if self.settings_manager:
             self._setup_widgets()
@@ -197,6 +208,136 @@ class DisplayWidget(QWidget):
                 logger.error(f"Failed to create/configure clock widget: {e}", exc_info=True)
         else:
             logger.debug("Clock widget disabled in settings")
+
+    def _warm_up_gl_overlay(self, base_pixmap: QPixmap) -> None:
+        """Warm up the persistent GL overlay once to avoid first-run flicker."""
+        if not self.settings_manager:
+            return
+        hw_accel = self.settings_manager.get('display.hw_accel', False)
+        if isinstance(hw_accel, str):
+            hw_accel = hw_accel.lower() == 'true'
+        if not hw_accel:
+            return
+        overlay = getattr(self, "_srpss_gl_xfade_overlay", None)
+        if overlay is None or not isinstance(overlay, _GLFadeWidget):
+            w, h = self.width(), self.height()
+            if w <= 0 or h <= 0 or base_pixmap is None or base_pixmap.isNull():
+                return
+            overlay = _GLFadeWidget(self, base_pixmap, base_pixmap)
+            overlay.setGeometry(0, 0, w, h)
+            setattr(self, "_srpss_gl_xfade_overlay", overlay)
+            if getattr(self, "_resource_manager", None):
+                try:
+                    self._resource_manager.register_qt(overlay, description="GL Crossfade persistent overlay (warm-up)")
+                except Exception:
+                    pass
+        # Present once with the current image to ensure context/FBO are ready
+        try:
+            overlay.set_alpha(1.0)
+            overlay.setVisible(True)
+            try:
+                overlay.raise_()
+            except Exception:
+                pass
+            # Keep clock above overlay
+            if self.clock_widget:
+                try:
+                    self.clock_widget.raise_()
+                except Exception:
+                    pass
+            try:
+                overlay.makeCurrent()
+            except Exception:
+                pass
+            try:
+                _ = overlay.grabFramebuffer()
+            except Exception:
+                pass
+            try:
+                overlay.repaint()
+            except Exception:
+                pass
+        finally:
+            try:
+                overlay.hide()
+            except Exception:
+                pass
+    
+    def _prewarm_gl_contexts(self) -> None:
+        """
+        Pre-warm all GL contexts by creating and immediately destroying dummy overlays.
+        
+        This eliminates first-run GL initialization overhead that can cause flicker.
+        Called once during DisplayWidget initialization if HW acceleration is enabled.
+        """
+        import time
+        from PySide6.QtWidgets import QApplication
+        from PySide6.QtCore import Qt
+        
+        start_time = time.time()
+        logger.debug(f"[PREWARM] Starting GL context pre-warming for screen {self.screen_index}")
+        
+        # Create tiny dummy pixmap
+        dummy = QPixmap(10, 10)
+        dummy.fill(Qt.GlobalColor.black)
+        dummy.setDevicePixelRatio(self._device_pixel_ratio)
+        
+        # Import all GL overlay widget classes
+        try:
+            from transitions.gl_crossfade_transition import _GLFadeWidget
+            from transitions.gl_slide_transition import _GLSlideWidget
+            from transitions.slide_transition import SlideDirection
+            from transitions.gl_wipe_transition import _GLWipeWidget
+            from transitions.wipe_transition import WipeDirection
+            from transitions.gl_diffuse_transition import _GLDiffuseWidget, _Cell
+            from transitions.gl_block_puzzle_flip_transition import _GLBlockFlipWidget, _GLFlipBlock
+            from PySide6.QtCore import QRect
+        except ImportError as e:
+            logger.warning(f"[PREWARM] Failed to import GL overlay classes: {e}")
+            return
+        
+        overlays_to_prewarm = [
+            ("Crossfade", "_srpss_gl_xfade_overlay", lambda: _GLFadeWidget(self, dummy, dummy)),
+            ("Slide", "_srpss_gl_slide_overlay", lambda: _GLSlideWidget(self, dummy, dummy, SlideDirection.LEFT)),
+            ("Wipe", "_srpss_gl_wipe_overlay", lambda: _GLWipeWidget(self, dummy, dummy, WipeDirection.LEFT_TO_RIGHT)),
+            ("Diffuse", "_srpss_gl_diffuse_overlay", lambda: _GLDiffuseWidget(self, dummy, dummy, [_Cell(QRect(0, 0, 10, 10))])),
+            ("Block", "_srpss_gl_blockflip_overlay", lambda: _GLBlockFlipWidget(self, dummy, dummy, [_GLFlipBlock(QRect(0, 0, 10, 10))])),
+        ]
+        
+        prewarmed_count = 0
+        for name, attr_name, create_fn in overlays_to_prewarm:
+            try:
+                # Create overlay
+                overlay = create_fn()
+                overlay.setGeometry(0, 0, 10, 10)
+                overlay.show()
+                
+                # Force GL initialization
+                overlay.makeCurrent()
+                overlay.repaint()
+                
+                # Wait briefly for GL init (with timeout)
+                timeout_ms = 100
+                start = time.time()
+                while not overlay.is_ready_for_display():
+                    QApplication.processEvents()
+                    if (time.time() - start) * 1000 > timeout_ms:
+                        logger.debug(f"[PREWARM] {name} timeout, continuing")
+                        break
+                    time.sleep(0.001)
+                
+                # STORE as persistent overlay instead of deleting
+                overlay.hide()
+                setattr(self, attr_name, overlay)
+                prewarmed_count += 1
+                
+            except Exception as e:
+                logger.warning(f"[PREWARM] Failed to pre-warm {name}: {e}")
+                continue
+        
+        elapsed_ms = (time.time() - start_time) * 1000
+        logger.info(f"[PREWARM] GL context pre-warming complete for screen {self.screen_index}: "
+                   f"{prewarmed_count}/{len(overlays_to_prewarm)} overlays in {elapsed_ms:.1f}ms")
     
     def _create_transition(self) -> Optional[BaseTransition]:
         """
@@ -216,13 +357,24 @@ class DisplayWidget(QWidget):
         
         try:
             from transitions import (
-                CrossfadeTransition, SlideTransition, DiffuseTransition,
-                BlockPuzzleFlipTransition, WipeTransition,
-                SlideDirection, WipeDirection
+                CrossfadeTransition, GLCrossfadeTransition,
+                SlideTransition, GLSlideTransition, SlideDirection,
+                DiffuseTransition, GLDiffuseTransition,
+                BlockPuzzleFlipTransition, GLBlockPuzzleFlipTransition,
+                WipeTransition, GLWipeTransition, WipeDirection
             )
             
+            # Read common options
+            easing_str = transitions_settings.get('easing', self.settings_manager.get('transitions.easing', 'Auto'))
+            hw_accel = self.settings_manager.get('display.hw_accel', False)
+            # Handle string boolean values from settings file
+            if isinstance(hw_accel, str):
+                hw_accel = hw_accel.lower() in ('true', '1', 'yes')
+
             if transition_type == 'Crossfade':
-                return CrossfadeTransition(duration_ms)
+                if hw_accel:
+                    return GLCrossfadeTransition(duration_ms, easing_str)
+                return CrossfadeTransition(duration_ms, easing_str)
             
             elif transition_type == 'Slide':
                 import random
@@ -237,20 +389,25 @@ class DisplayWidget(QWidget):
                 }
                 
                 if direction_str == 'Random':
-                    # Pick a random direction
-                    direction = random.choice([SlideDirection.LEFT, SlideDirection.RIGHT, 
-                                              SlideDirection.UP, SlideDirection.DOWN])
+                    direction = random.choice([
+                        SlideDirection.LEFT, SlideDirection.RIGHT,
+                        SlideDirection.UP, SlideDirection.DOWN
+                    ])
                 else:
                     direction = direction_map.get(direction_str, SlideDirection.LEFT)
                 
-                return SlideTransition(duration_ms, direction)
+                if hw_accel:
+                    return GLSlideTransition(duration_ms, direction, easing_str)
+                return SlideTransition(duration_ms, direction, easing_str)
             
             elif transition_type == 'Wipe':
                 import random
                 # Pick a random wipe direction
                 direction = random.choice([WipeDirection.LEFT_TO_RIGHT, WipeDirection.RIGHT_TO_LEFT,
                                           WipeDirection.TOP_TO_BOTTOM, WipeDirection.BOTTOM_TO_TOP])
-                return WipeTransition(duration_ms, direction)
+                if hw_accel:
+                    return GLWipeTransition(duration_ms, direction, easing_str)
+                return WipeTransition(duration_ms, direction, easing_str)
             
             elif transition_type == 'Diffuse':
                 diffuse_settings = transitions_settings.get('diffuse', {})
@@ -258,12 +415,16 @@ class DisplayWidget(QWidget):
                     self.settings_manager.get('transitions.diffuse.block_size', 50))
                 shape = diffuse_settings.get('shape', 
                     self.settings_manager.get('transitions.diffuse.shape', 'Rectangle'))
+                if hw_accel:
+                    return GLDiffuseTransition(duration_ms, block_size, shape)
                 return DiffuseTransition(duration_ms, block_size, shape)
             
             elif transition_type == 'Block Puzzle Flip':
                 block_flip = transitions_settings.get('block_flip', {})
                 rows = block_flip.get('rows', self.settings_manager.get('transitions.block_flip.rows', 4))
                 cols = block_flip.get('cols', self.settings_manager.get('transitions.block_flip.cols', 6))
+                if hw_accel:
+                    return GLBlockPuzzleFlipTransition(duration_ms, rows, cols)
                 return BlockPuzzleFlipTransition(duration_ms, rows, cols)
             
             else:
@@ -305,14 +466,12 @@ class DisplayWidget(QWidget):
                     f"Physical: {screen_size.width()}x{screen_size.height()} (DPR={self._device_pixel_ratio})")
         
         try:
-            # Get quality settings
+            # Get quality settings (force-disable Lanczos; keep sharpen)
             use_lanczos = False
             sharpen = False
             pan_and_scan_enabled = False
             if self.settings_manager:
-                use_lanczos = self.settings_manager.get('display.use_lanczos', False)
-                if isinstance(use_lanczos, str):
-                    use_lanczos = use_lanczos.lower() == 'true'
+                # Lanczos intentionally ignored due to distortion; keep False
                 sharpen = self.settings_manager.get('display.sharpen_downscale', False)
                 if isinstance(sharpen, str):
                     sharpen = sharpen.lower() == 'true'
@@ -356,12 +515,21 @@ class DisplayWidget(QWidget):
                 self._image_label.hide()
                 logger.debug("[BUG FIX #2] Pan & scan label hidden before transition")
             
-            # If we have a previous image, use transition
-            if self.current_pixmap and self.settings_manager:
+            # Use transition for all images (including first)
+            if self.settings_manager:
                 transition = self._create_transition()
                 if transition:
                     self._current_transition = transition
-                    self.previous_pixmap = self.current_pixmap
+                    
+                    # For first image, create black pixmap as "previous"
+                    if not self.current_pixmap:
+                        # Create black pixmap matching display size
+                        black_pixmap = QPixmap(new_pixmap.size())
+                        black_pixmap.fill(Qt.GlobalColor.black)
+                        self.previous_pixmap = black_pixmap
+                        logger.debug("[INIT] Created black pixmap for first transition (eliminates init flicker)")
+                    else:
+                        self.previous_pixmap = self.current_pixmap
                     
                     # Connect transition finished signal
                     # Pass both processed pixmap (for display) and original (for pan & scan)
@@ -373,6 +541,12 @@ class DisplayWidget(QWidget):
                     # Start transition
                     success = transition.start(self.previous_pixmap, new_pixmap, self)
                     if success:
+                        # Keep clock above any overlay/labels created by the transition
+                        if self.clock_widget:
+                            try:
+                                self.clock_widget.raise_()
+                            except Exception:
+                                pass
                         logger.debug(f"Transition started: {transition.__class__.__name__}")
                         return  # Transition will update display
                     else:
@@ -380,7 +554,7 @@ class DisplayWidget(QWidget):
                         transition.cleanup()
                         self._current_transition = None
             
-            # No transition or first image - display immediately
+            # No transition - display immediately
             self.current_pixmap = new_pixmap
             # Ensure DPR is set
             if self.current_pixmap:
@@ -422,6 +596,11 @@ class DisplayWidget(QWidget):
                 if self._image_label:
                     self._image_label.hide()
                 self.update()
+                # Warm-up GL overlay now that the first image is presented
+                try:
+                    self._warm_up_gl_overlay(self.current_pixmap)
+                except Exception:
+                    pass
             
             logger.debug(f"Image displayed: {image_path} ({pixmap.width()}x{pixmap.height()})")
             self.image_displayed.emit(image_path)
@@ -443,14 +622,11 @@ class DisplayWidget(QWidget):
             image_path: Path to the image
             pan_enabled: Whether pan & scan should be enabled
         """
+        transition_to_clean = None
         if self._current_transition:
             transition_to_clean = self._current_transition
             self._current_transition = None  # Clear reference first
-            try:
-                transition_to_clean.cleanup()
-            except Exception as e:
-                logger.warning(f"Error cleaning up transition: {e}")
-        
+
         self.current_pixmap = new_pixmap
         self.previous_pixmap = None
         
@@ -492,6 +668,18 @@ class DisplayWidget(QWidget):
                 self._image_label.hide()
             self.update()
         
+        # After the display reflects the new pixmap (and optional pan), clean up
+        # Ensure base repaint is flushed before we remove any overlay to avoid flicker
+        try:
+            self.repaint()
+        except Exception:
+            pass
+        if transition_to_clean:
+            try:
+                transition_to_clean.cleanup()
+            except Exception as e:
+                logger.warning(f"Error cleaning up transition: {e}")
+        
         logger.debug(f"Transition completed, image displayed: {image_path}")
         self.image_displayed.emit(image_path)
     
@@ -528,35 +716,44 @@ class DisplayWidget(QWidget):
                 transition_to_stop.cleanup()
             except Exception as e:
                 logger.warning(f"Error stopping transition in clear(): {e}")
-        
+        # Ensure overlays are hidden to prevent residual frames during exit
+        try:
+            hide_all_overlays(self)
+        except Exception:
+            pass
+
         self.current_pixmap = None
         self.previous_pixmap = None
         self.error_message = None
         self.update()
-        logger.debug("Display cleared")
-    
+
     def show_error(self, message: str) -> None:
-        """
-        Show error message.
-        
-        Args:
-            message: Error message to display
-        """
+        """Show error message on the display widget."""
         self.error_message = message
         self.current_pixmap = None
         self.update()
         logger.warning(f"[FALLBACK] Showing error: {message}")
-    
+
     def paintEvent(self, event: QPaintEvent) -> None:
         """Paint event - draw current image or error message."""
+        # Thread-safe check: if any overlay is ready (GL initialized + first frame drawn), let it handle painting
+        try:
+            if any_overlay_ready_for_display(self):
+                # Overlay is ready and will handle the paint
+                return
+        except Exception:
+            pass
+
         painter = QPainter(self)
-        
         # Fill with black background
         painter.fillRect(self.rect(), Qt.GlobalColor.black)
         
         # Draw image if available
         if self.current_pixmap and not self.current_pixmap.isNull():
-            painter.drawPixmap(0, 0, self.current_pixmap)
+            try:
+                painter.drawPixmap(self.rect(), self.current_pixmap)
+            except Exception:
+                painter.drawPixmap(0, 0, self.current_pixmap)
         
         # Draw error message if present
         elif self.error_message:

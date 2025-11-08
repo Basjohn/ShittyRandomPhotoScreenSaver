@@ -5,6 +5,7 @@ Defines the abstract interface that all transitions must implement.
 """
 from abc import ABCMeta, abstractmethod
 from enum import Enum
+import time
 from typing import Optional
 from PySide6.QtCore import QObject, Signal, Qt
 from PySide6.QtGui import QPixmap, QPainter
@@ -68,6 +69,10 @@ class BaseTransition(QObject, metaclass=QABCMeta):
         
         self.duration_ms = duration_ms
         self._state = TransitionState.IDLE
+        
+        # Telemetry tracking
+        self._start_time: Optional[float] = None
+        self._end_time: Optional[float] = None
         
         logger.debug(f"{self.__class__.__name__} created with duration {duration_ms}ms")
     
@@ -159,6 +164,36 @@ class BaseTransition(QObject, metaclass=QABCMeta):
         # Clamp to valid range
         progress = max(0.0, min(1.0, progress))
         self.progress.emit(progress)
+    
+    # --- Telemetry helpers (Phase 2.2) ---------------------------------------
+    def _mark_start(self) -> None:
+        """Mark transition start time for telemetry."""
+        self._start_time = time.time()
+        logger.debug(f"[PERF] {self.__class__.__name__} started")
+    
+    def _mark_end(self) -> None:
+        """Mark transition end time and log performance metrics."""
+        if self._start_time is not None:
+            self._end_time = time.time()
+            elapsed_ms = (self._end_time - self._start_time) * 1000
+            expected_ms = self.duration_ms
+            delta_ms = elapsed_ms - expected_ms
+            
+            # Log performance with delta from expected
+            if abs(delta_ms) < 50:  # Within 50ms tolerance
+                logger.info(f"[PERF] {self.__class__.__name__} completed in {elapsed_ms:.1f}ms "
+                          f"(expected {expected_ms}ms, Δ{delta_ms:+.1f}ms)")
+            else:
+                logger.warning(f"[PERF] {self.__class__.__name__} completed in {elapsed_ms:.1f}ms "
+                             f"(expected {expected_ms}ms, Δ{delta_ms:+.1f}ms) - TIMING DRIFT")
+        else:
+            logger.warning(f"[PERF] {self.__class__.__name__} completed without start time")
+    
+    def get_elapsed_ms(self) -> Optional[float]:
+        """Get elapsed time since transition start in milliseconds."""
+        if self._start_time is None:
+            return None
+        return (time.time() - self._start_time) * 1000
 
     # --- Centralized helpers for transitions ---------------------------------
     def _fit_pixmap_to_widget(self, pixmap: QPixmap, widget: QWidget) -> QPixmap:

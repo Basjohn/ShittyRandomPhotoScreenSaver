@@ -1,9 +1,9 @@
 # ShittyRandomPhotoScreenSaver - Module Index
 
 **Purpose**: Living file map of all modules, their purposes, and key classes/functions.  
-**Last Updated**: Nov 6, 2025 21:30 UTC+2 - Audit Session (Architecture Fixes)  
-**Implementation Status**: 🟢 Core Framework | 🟢 Animation | 🟢 Entry Point | 🟢 Image Sources | 🟢 Display & Rendering | 🟢 Engine | 🔴 **Transitions (Visual bugs remain)** | 🟢 Pan & Scan | 🟢 Widgets | 🟢 UI  
-**Test Status**: Application runs, architecture solid, 3 transitions have visual bugs  
+**Last Updated**: Nov 7, 2025 21:58 UTC+2 - Post‑audit implementation (AM/GL overlays)  
+**Implementation Status**: 🟢 Core Framework | 🟢 Animation | 🟢 Entry Point | 🟢 Image Sources | 🟢 Display & Rendering | 🟢 Engine | ⚠️ **Transitions (AM‑driven, GL overlays) – NOT TESTED** | 🟢 Pan & Scan | 🟢 Widgets | 🟢 UI  
+**Test Status**: Runs locally; transition stack refactored and pending manual verification  
 **Note**: Update this file after any major structural changes.
 
 **Audit Session (Nov 6, 2025 21:00-21:30) - 48/63 Issues Fixed**:
@@ -229,7 +229,7 @@ SETTINGS_CHANGED = "settings.changed"
 - No raw QPropertyAnimation or QTimer allowed anywhere else
 
 **Used By**:
-- All transition effects (crossfade, slide, diffuse, block puzzle)
+- All transition effects (crossfade, slide, wipe, diffuse, block puzzle) CPU/GL
 - Settings dialog transitions
 - Widget animations (clock fade, weather updates)
 - Any custom animations
@@ -335,7 +335,7 @@ SETTINGS_CHANGED = "settings.changed"
 
 ---
 
-### `rendering/image_processor.py` 🟢 COMPLETE + LANCZOS
+### `rendering/image_processor.py` 🟢 COMPLETE
 **Purpose**: High-quality image scaling and positioning for display  
 **Status**: ✅ Implemented, ✅ Tested, 🆕 **Lanczos Scaling Added!**  
 **Key Classes**:
@@ -349,9 +349,7 @@ SETTINGS_CHANGED = "settings.changed"
   - `get_crop_rect(source_size, target_size)` - Calculate crop rectangle
 
 **Features**:
-- 🆕 **Lanczos resampling** via PIL/Pillow for industry-standard quality
-- 🆕 **Optional sharpening filter** for downscaled images
-- 🆕 **Automatic fallback** to Qt if PIL unavailable
+- High‑quality scaling with Qt SmoothTransformation by default (Lanczos optional)
 - Aspect ratio preservation
 - Center alignment for all modes
 - QPainter-based rendering
@@ -409,9 +407,9 @@ SETTINGS_CHANGED = "settings.changed"
 - Per-screen positioning
 
 **Transition Support**:
-- Crossfade, Slide, Wipe, Diffuse, Block Puzzle Flip
-- Reads settings from `transitions.*`
-- Automatic cleanup on transition finish
+- Crossfade, Slide, Wipe, Diffuse, Block Puzzle Flip (CPU + GL variants)
+- AnimationManager‑driven; persistent overlays; overlay_manager for hide/gating
+- Base paint gated when GL overlay has drawn; clock always above overlays
 - Fallback to instant display if transition fails
 
 **Implemented**: Day 6, **Updated**: Nov 6 (Transitions, Widgets, Hotkeys)
@@ -546,6 +544,7 @@ SETTINGS_CHANGED = "settings.changed"
 - Async-ready image loading
 - Comprehensive error handling with [FALLBACK] logging
 - Full lifecycle management (init → start → stop → cleanup)
+- Stop is idempotent; rotation timer only stopped (no double‑delete)
 
 **Tested**: 15 integration tests + system tests
 
@@ -593,7 +592,7 @@ SETTINGS_CHANGED = "settings.changed"
 
 ---
 
-## Transitions (`transitions/`) 🔴 3 VISUAL BUGS REMAIN
+## Transitions (`transitions/`) ⚠️ CODE CHANGED - NOT TESTED
 
 ### `transitions/base_transition.py` 🟢 COMPLETE
 **Purpose**: Abstract base class for all image transitions  
@@ -635,9 +634,9 @@ SETTINGS_CHANGED = "settings.changed"
 
 ---
 
-### `transitions/crossfade_transition.py` 🟢 COMPLETE + SMOOTH
+### `transitions/crossfade_transition.py` 🟢 COMPLETE (AM‑driven overlay)
 **Purpose**: Smooth opacity-based crossfade transition  
-**Status**: ✅ Implemented, ✅ Tested, 🆕 **Nov 6 - Smoothness Fixed!**  
+**Status**: ⚠️ CODE CHANGED - NOT TESTED (AnimationManager + persistent CPU overlay)  
 **Key Classes**:
 - `CrossfadeTransition(BaseTransition)` - Crossfade effect
   - `start(old_pixmap, new_pixmap, widget)` - Begin fade
@@ -651,17 +650,13 @@ SETTINGS_CHANGED = "settings.changed"
 - `_on_transition_finished()` - Final cleanup
 
 **Features**:
-- 🆕 **QPropertyAnimation** - Hardware-accelerated smooth animation (Nov 6 fix)
-- 🆕 **Buttery Smooth** - No more stuttering from manual QTimer updates
-- QGraphicsOpacityEffect-based fading
+- AnimationManager‑driven timing (no QPropertyAnimation)
+- Persistent CPU overlay paints old/new pixmaps with opacity
+- First‑frame prepaint; clock overlay raised above
 - Easing curves supported: InOutQuad, Linear, InQuad, OutQuad
 - Handles null old_pixmap (first image)
 - Robust cleanup (try/catch for Qt deletions)
 - Automatic progress tracking via animation
-
-**Previous Issue** (FIXED Nov 6):
-- Manual QTimer with 60 FPS updates caused stuttering
-- Replaced with QPropertyAnimation for smooth hardware-accelerated fade
 
 **Tested**: 16 tests covering all functionality
 
@@ -669,9 +664,9 @@ SETTINGS_CHANGED = "settings.changed"
 
 ---
 
-### `transitions/slide_transition.py` 🟢 COMPLETE
+### `transitions/slide_transition.py` 🟢 COMPLETE (migrated to AM)
 **Purpose**: Directional slide transition effect  
-**Status**: ✅ Implemented, ✅ Tested (Day 10)  
+**Status**: ⚠️ CODE CHANGED - NOT TESTED (AnimationManager)
 **Key Classes**:
 - `SlideDirection(Enum)` - Slide directions
   - `LEFT` - New slides in from right
@@ -694,8 +689,8 @@ SETTINGS_CHANGED = "settings.changed"
 - `_get_easing_curve(name)` - Convert easing name to Qt curve
 
 **Features**:
-- Dual QPropertyAnimation (old out, new in)
-- QLabel widgets for display
+- AnimationManager‑driven label movement (old out, new in)
+- Fitted pixmaps (DPR‑aware), QLabel display, easing via core EasingCurve
 - 4 directional slides
 - Position calculation per direction
 - 21 easing curves supported
@@ -709,9 +704,9 @@ SETTINGS_CHANGED = "settings.changed"
 
 ---
 
-### `transitions/wipe_transition.py` 🔴 VISUAL BUGS
+### `transitions/wipe_transition.py` ⚠️ UPDATED – NEEDS TESTING
 **Purpose**: Progressive wipe reveal transition  
-**Status**: ✅ Architecture Fixed, 🔴 **WRONG SIZE - Scaling issues**  
+**Status**: ⚠️ CODE CHANGED - NOT TESTED (mask‑based reveal; full‑rect DPR)
 **Key Classes**:
 - `WipeDirection(Enum)` - Wipe directions (LEFT_TO_RIGHT, RIGHT_TO_LEFT, TOP_TO_BOTTOM, BOTTOM_TO_TOP)
 - `WipeTransition(BaseTransition)` - Wipe effect
@@ -721,7 +716,7 @@ SETTINGS_CHANGED = "settings.changed"
   - `set_direction(direction)` - Set wipe direction
 
 **Features**:
-- QTimer-based progressive reveal
+- AnimationManager-driven mask reveal
 - 4 directional wipes
 - Configurable speed
 - 🆕 **ResourceManager Integration** (Nov 6 Audit)
@@ -738,9 +733,9 @@ SETTINGS_CHANGED = "settings.changed"
 
 ---
 
-### `transitions/diffuse_transition.py` 🔴 VISUAL BUGS
+### `transitions/diffuse_transition.py` ⚠️ UPDATED – NEEDS TESTING
 **Purpose**: Random block reveal transition effect  
-**Status**: ✅ Architecture Fixed, 🔴 **BLACK BOXES VISUAL BUG**  
+**Status**: ⚠️ CODE CHANGED - NOT TESTED (CompositionMode_Clear; AM‑driven)
 **Key Classes**:
 - `DiffuseTransition(BaseTransition)` - Diffuse effect
   - `start(old_pixmap, new_pixmap, widget)` - Begin diffuse
@@ -780,9 +775,9 @@ SETTINGS_CHANGED = "settings.changed"
 
 ---
 
-### `transitions/block_puzzle_flip_transition.py` 🔴 VISUAL BUGS ⭐ STAR FEATURE
+### `transitions/block_puzzle_flip_transition.py` ⚠️ UPDATED – NEEDS TESTING ⭐ STAR FEATURE
 **Purpose**: 3D block flip transition effect with grid  
-**Status**: ✅ Architecture Fixed, 🔴 **WRONG SIZING - Doesn't flip whole image**  
+**Status**: ⚠️ CODE CHANGED - NOT TESTED (mask union; AM‑driven; grid DPR‑aligned)  
 **Key Classes**:
 - `FlipBlock` - Individual flipping block
   - `get_current_pixmap()` - Get current frame based on flip progress
@@ -945,493 +940,6 @@ SETTINGS_CHANGED = "settings.changed"
 ### `sources/base_provider.py`
 **Purpose**: Abstract base for image providers  
 **Key Classes**:
-- `ImageProvider` (ABC) - Interface for image sources
-  - `get_images()` - Get list of available images
-  - `refresh()` - Refresh image list
-
-**Key Dataclasses**:
-- `ImageMetadata` - Image metadata structure
-
----
-
-### `sources/folder_source.py`
-**Purpose**: Local folder scanning  
-**Key Classes**:
-- `FolderSource(ImageProvider)` - Scan local folders
-  - `get_images()` - Get images from folders
-  - `refresh()` - Rescan folders
-  - `_scan_folder(folder)` - Recursively scan folder
-  - `_get_image_metadata(path)` - Extract image metadata
-
-**Key Constants**:
-- `SUPPORTED_EXTENSIONS` - Set of supported image extensions
-
----
-
-### `sources/rss_source.py`
-**Purpose**: RSS feed parsing and image download  
-**Key Classes**:
-- `RSSSource(ImageProvider)` - Parse RSS feeds
-  - `get_images()` - Get images from RSS
-  - `refresh()` - Refresh feeds
-  - `_fetch_feed(url)` - Fetch RSS feed
-  - `_parse_feed(content)` - Parse feed XML
-  - `_download_image(url)` - Download image
-
-**Dependencies**: requests, xml.etree
-
----
-
-## Rendering (`rendering/`)
-
-### `rendering/display_widget.py`
-**Purpose**: Fullscreen display on single monitor  
-**Key Classes**:
-- `DisplayWidget(QWidget)` - Display widget
-  - `set_image(pixmap, metadata)` - Set new image
-  - `show_error(message)` - Display error
-  - `_execute_transition()` - Execute transition
-  - `_setup_widgets()` - Setup clock/weather widgets
-  - Input handlers: `mouseMoveEvent()`, `mousePressEvent()`, `keyPressEvent()`
-
-**Dependencies**: ImageProcessor, Transitions, ClockWidget, WeatherWidget
-
----
-
-### `rendering/image_processor.py`
-**Purpose**: Image scaling and processing  
-**Key Classes**:
-- `ImageProcessor` - Process images for display
-  - `process_image(pixmap, target_size, mode)` - Main processing function
-  - `_fill_mode(pixmap, target_size)` - Fill mode (crop to fit)
-  - `_fit_mode(pixmap, target_size)` - Fit mode (letterbox)
-  - `_shrink_mode(pixmap, target_size)` - Shrink mode (no upscale)
-
----
-
-### `rendering/display_modes.py`
-**Purpose**: Display mode definitions  
-**Key Enums**:
-- `DisplayMode` - FILL, FIT, SHRINK
-
----
-
-### `rendering/pan_scan_animator.py`
-**Purpose**: Pan & scan animation  
-**Key Classes**:
-- `PanScanAnimator(QObject)` - Animate pan & scan
-  - `start()` - Start animation
-  - `stop()` - Stop animation
-  - `get_visible_region()` - Get current visible region
-
-**Signals**:
-- `position_updated` - Emitted on position change
-- `animation_complete` - Emitted on completion
-
----
-
-## Transitions (`transitions/`)
-
-### `transitions/base_transition.py`
-**Purpose**: Abstract base for transitions  
-**Key Classes**:
-- `BaseTransition(QObject, ABC)` - Transition base
-  - `start()` - Start transition
-  - `stop()` - Stop transition
-  - `update(delta_time)` - Update transition state
-
-**Signals**:
-- `finished` - Emitted on completion
-- `progress` - Emitted with progress (0.0 to 1.0)
-
----
-
-### `transitions/crossfade.py`
-**Purpose**: Opacity-based crossfade  
-**Key Classes**:
-- `CrossfadeTransition(BaseTransition)` - Crossfade effect
-  - Uses QGraphicsOpacityEffect and QPropertyAnimation
-
----
-
-### `transitions/slide.py`
-**Purpose**: Slide transition  
-**Key Classes**:
-- `SlideTransition(BaseTransition)` - Slide effect
-  - Supports left, right, up, down directions
-  - Uses QPropertyAnimation on position
-
----
-
-### `transitions/diffuse.py`
-**Purpose**: Random block reveal  
-**Key Classes**:
-- `DiffuseTransition(BaseTransition)` - Diffuse effect
-  - Configurable block size
-  - Random reveal order
-
----
-
-### `transitions/block_puzzle_flip.py`
-**Purpose**: 3D block flip effect (STAR FEATURE)  
-**Key Classes**:
-- `BlockPuzzleFlipTransition(BaseTransition)` - Block puzzle flip
-  - Configurable grid size
-  - 3D flip animation per block
-  - Random flip order
-  - Uses QGraphicsScene/QGraphicsView
-
----
-
-### `transitions/__init__.py`
-**Purpose**: Transition factory  
-**Key Functions**:
-- `create_transition(type, target_widget, old_pixmap, new_pixmap, settings)` - Create transition instance
-
-**Key Constants**:
-- `TRANSITION_TYPES` - Dict of transition type to class
-
----
-
-## Widgets (`widgets/`)
-
-### `widgets/clock_widget.py`
-**Purpose**: Clock overlay  
-**Key Classes**:
-- `ClockWidget(QLabel)` - Display time
-  - 12h/24h format support
-  - Timezone support
-  - Auto-update every second
-  - Configurable position and transparency
-
-**Key Constants**:
-- `POSITIONS` - Dict of position names to offsets
-
----
-
-### `widgets/weather_widget.py`
-**Purpose**: Weather overlay  
-**Key Classes**:
-- `WeatherWidget(QWidget)` - Display weather
-  - Temperature, condition, location display
-  - Auto-update every 30 minutes
-  - Configurable position and transparency
-
-**Dependencies**: WeatherProvider
-
----
-
-### `widgets/weather_provider.py`
-**Purpose**: Weather API integration  
-**Key Classes**:
-- `WeatherProvider` - Fetch weather data
-  - `get_weather(location)` - Get weather for location
-  - Uses wttr.in API
-  - Caches results
-
----
-
-## UI (`ui/`)
-
-### `ui/settings_dialog.py`
-**Purpose**: Main settings window  
-**Key Classes**:
-- `SettingsDialog(QDialog)` - Settings dialog
-  - Side-tab navigation
-  - Dark theme
-  - 1080x720 minimum size
-
-**Dependencies**: All tab widgets, SettingsManager
-
----
-
-### `ui/sources_tab.py`
-**Purpose**: Sources configuration  
-**Key Classes**:
-- `SourcesTab(QWidget)` - Sources tab
-  - Folder list and management
-  - RSS feed list and management
-  - Source mode selection
-
-**Features**: Instant save
-
----
-
-### `ui/tabs/display_tab.py` 🆕 NEW!
-**Purpose**: Display and quality configuration  
-**Status**: ✅ Implemented Nov 6, 2025  
-**Key Classes**:
-- `DisplayTab(QWidget)` - Display settings tab
-  - **Monitor Configuration**:
-    - Monitor selection (All/Primary/Monitor 1-4)
-    - Same image on all monitors toggle
-  - **Display Mode**:
-    - Mode dropdown (Fill/Fit/Shrink) with descriptions
-  - **Image Timing**:
-    - Rotation interval (1-3600 seconds)
-    - Shuffle toggle
-  - **Image Quality**:
-    - High quality scaling (Lanczos) toggle
-    - Sharpening filter toggle
-
-**Settings Managed**:
-- `display.monitor_selection` - all/primary/monitor_N
-- `display.same_image_all_monitors` - bool
-- `display.mode` - fill/fit/shrink
-- `timing.interval` - seconds
-- `queue.shuffle` - bool
-- `display.use_lanczos` - bool
-- `display.sharpen_downscale` - bool
-
-**Features**: 
-- Instant save
-- String to bool conversion for settings
-- Full descriptions for display modes
-- Breathing room spacing (20px)
-
-**Tab Order**: Second tab (after Sources, before Transitions)
-
----
-
-### `ui/transitions_tab.py`
-**Purpose**: Transitions configuration  
-**Key Classes**:
-- `TransitionsTab(QWidget)` - Transitions tab
-  - Transition type selector
-  - Duration slider
-  - Display mode selector
-  - Pan & scan options
-  - Block puzzle grid config
-
-**Features**: Instant save
-
----
-
-### `ui/widgets_tab.py`
-**Purpose**: Widgets configuration  
-**Key Classes**:
-- `WidgetsTab(QWidget)` - Widgets tab
-  - Clock settings
-  - Weather settings
-  - Multiple timezone dialog
-  - Position and transparency controls
-
-**Features**: Instant save
-
----
-
-### `ui/about_tab.py`
-**Purpose**: About page  
-**Key Classes**:
-- `AboutTab(QWidget)` - About information
-  - Version info
-  - Credits
-  - Links
-
----
-
-### `ui/preview_window.py`
-**Purpose**: Preview mode handler  
-**Key Classes**:
-- `PreviewWindow(QWidget)` - Preview mode
-  - Embed in Windows preview window
-  - Handle /p <hwnd> argument
-
----
-
-## Utilities (`utils/`)
-
-### `utils/monitors.py` 🟢 COMPLETE
-**Purpose**: Multi-monitor detection and utilities  
-**Status**: ✅ Implemented, ✅ Tested (multi-monitor with DPI scaling support)  
-**Key Functions**:
-- `get_all_screens()` - Get all connected screens
-- `get_primary_screen()` - Get primary screen
-- `get_screen_count()` - Get number of screens
-- `is_multi_monitor()` - Check if multi-monitor setup
-- `get_screen_geometry(screen)` - Get logical (DPI-scaled) geometry
-- `get_physical_resolution(screen)` - Get physical pixel resolution (DPI-aware)
-- `get_screen_available_geometry(screen)` - Get available geometry (excluding taskbar)
-- `get_screen_by_index(index)` - Get screen by index
-- `get_screen_by_name(name)` - Get screen by name
-- `get_virtual_desktop_rect()` - Get bounding rect of all screens
-- `get_screen_at_point(point)` - Get screen containing point
-- `get_screen_info_dict(screen)` - Get comprehensive screen info with physical + logical sizes
-- `log_screen_configuration()` - Log detailed screen info for debugging
-
-**Features**: 
-- DPI-aware resolution detection (physical pixels vs logical pixels)
-- Comprehensive screen info including device pixel ratio and DPI scaling percentage
-- Virtual desktop support for multi-monitor setups
-- Simplified interface from original 652 lines
-
-**Adapted From**: `MyReuseableUtilityModules/utils/window/monitors.py` (652 lines → 270 lines)  
-**Implemented**: Day 2
-
----
-
-### `utils/lockfree/` 🟢 COMPLETE
-**Purpose**: Lock-free data structures for high-frequency cross-thread communication  
-**Status**: ✅ Implemented, ✅ Used by ThreadManager  
-**Key Classes**:
-- `SPSCQueue` - Single-producer/single-consumer bounded ring buffer
-  - `try_push(item)` - Non-blocking push
-  - `try_pop()` - Non-blocking pop
-  - `push_drop_oldest(item)` - Push with drop-oldest policy
-- `TripleBuffer` - Lock-free latest-value exchange
-  - `publish(value)` - Publish new value
-  - `consume_latest()` - Consume latest value
-
-**Features**: No locks, relies on GIL atomic operations, strict SPSC usage  
-**Adapted From**: `MyReuseableUtilityModules/utils/lockfree/`  
-**Implemented**: Day 1
-
----
-
-### `utils/image_cache.py` 🟢 COMPLETE
-**Purpose**: LRU image cache for QPixmap objects  
-**Status**: ✅ Implemented, ✅ Tested (5 items, 4MB memory usage)  
-**Key Classes**:
-- `ImageCache` - LRU cache with automatic eviction
-  - `get(key)` - Get cached pixmap (moves to end = most recently used)
-  - `put(key, pixmap)` - Cache pixmap (auto-evicts if needed)
-  - `contains(key)` - Check if key is cached
-  - `remove(key)` - Remove entry from cache
-  - `clear()` - Clear all cached images
-  - `size()` - Get number of cached images
-  - `memory_usage()` - Get approximate memory usage
-  - `get_stats()` - Get cache statistics
-
-**Features**:
-- OrderedDict-based LRU implementation
-- Dual limits: max_items and max_memory_mb
-- Automatic LRU eviction when limits exceeded
-- QPixmap memory estimation (width × height × 4 bytes)
-- Cache hit/miss logging
-
-**Implemented**: Day 3
-
----
-
-## Themes (`themes/`)
-
-### `themes/dark.qss`
-**Purpose**: Dark theme stylesheet  
-**Features**:
-- Complete dark theme
-- Glass effects
-- Custom button styles
-- Overlay support
-- All Qt widgets styled
-
-**Copied From**: `MyReuseableUtilityModules/themes/dark.qss`
-
----
-
-## Tests (`tests/`)
-
-### `tests/conftest.py`
-**Purpose**: Shared pytest fixtures  
-**Key Fixtures**:
-- `qt_app` - QApplication instance
-- `settings_manager` - SettingsManager instance
-- `thread_manager` - ThreadManager instance
-- `resource_manager` - ResourceManager instance
-- `event_system` - EventSystem instance
-- `temp_image` - Temporary test image
-
----
-
-### `tests/test_threading.py`
-**Purpose**: ThreadManager tests  
-**Tests**: Initialization, task submission, UI dispatch, timers
-
----
-
-### `tests/test_resources.py`
-**Purpose**: ResourceManager tests  
-**Tests**: Registration, cleanup, Qt widgets, temp files
-
----
-
-### `tests/test_events.py`
-**Purpose**: EventSystem tests  
-**Tests**: Subscribe/publish, priority, filtering, unsubscribe
-
----
-
-### `tests/test_settings.py`
-**Purpose**: SettingsManager tests  
-**Tests**: Get/set, defaults, persistence, change notifications
-
----
-
-### `tests/test_image_processor.py`
-**Purpose**: ImageProcessor tests  
-**Tests**: All display modes, aspect ratios, edge cases
-
----
-
-### `tests/test_transitions.py`
-**Purpose**: Transition tests  
-**Tests**: All transition types, creation, completion
-
----
-
-### `tests/test_sources.py`
-**Purpose**: Image source tests  
-**Tests**: Folder scanning, RSS parsing, image cache
-
----
-
-### `tests/test_integration.py`
-**Purpose**: Integration tests  
-**Tests**: Complete workflows, multi-monitor, end-to-end
-
----
-
-## Configuration Files
-
-### `requirements.txt`
-**Purpose**: Python dependencies  
-**Packages**: PySide6, requests, pytz, pytest, pytest-qt
-
----
-
-### `screensaver.spec`
-**Purpose**: PyInstaller build specification  
-**Output**: ShittyRandomPhotoScreenSaver.scr
-
----
-
-### `README.md`
-**Purpose**: User documentation  
-**Contents**: Installation, usage, features, troubleshooting
-
----
-
-## Documentation (`Docs/`)
-
-### Planning Documents (Read in Order)
-1. `00_PROJECT_OVERVIEW.md` - Project summary and objectives
-2. `01_ARCHITECTURE_DESIGN.md` - Architecture and design patterns
-3. `02_REUSABLE_MODULES_INTEGRATION.md` - Integration plan for reusable modules
-4. `03_CORE_IMPLEMENTATION.md` - Core infrastructure implementation
-5. `04_IMAGE_SOURCES.md` - Image source implementations
-6. `05_DISPLAY_AND_RENDERING.md` - Display modes and rendering
-7. `06_TRANSITIONS.md` - Transition effects implementation
-8. `07_WIDGETS_AND_UI.md` - Overlay widgets and configuration UI
-9. `08_TESTING_AND_DEPLOYMENT.md` - Testing strategy and deployment
-10. `09_IMPLEMENTATION_ORDER.md` - Step-by-step implementation guide
-
-### Reference Documents
-- `INDEX.md` (this file) - Module index and quick reference
-- `SPEC.md` - Technical specification (single source of truth)
-- `initial_screensaver_plan.md` - Original planning document
-- `settings_gui.txt` - Original GUI requirements
-
----
-
 ## Module Dependencies Graph
 
 ```
@@ -1468,10 +976,18 @@ main.py
 │   └── pan_scan_animator.py
 │
 ├── transitions/
-│   ├── crossfade.py (base_transition)
-│   ├── slide.py (base_transition)
-│   ├── diffuse.py (base_transition)
-│   └── block_puzzle_flip.py (base_transition)
+│   ├── base_transition.py
+│   ├── crossfade_transition.py
+│   ├── slide_transition.py
+│   ├── wipe_transition.py
+│   ├── diffuse_transition.py
+│   ├── block_puzzle_flip_transition.py
+│   ├── gl_crossfade_transition.py
+│   ├── gl_slide_transition.py
+│   ├── gl_wipe_transition.py
+│   ├── gl_diffuse_transition.py
+│   ├── gl_block_puzzle_flip_transition.py
+│   └── overlay_manager.py
 │
 ├── widgets/
 │   ├── clock_widget.py

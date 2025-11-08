@@ -130,22 +130,84 @@ class BlockPuzzleFlipTransition(BaseTransition):
             
             # Note: interval logic handled by AnimationManager progression
             
-            # Two-label pattern (old below, new above with evolving mask)
-            self._old_label = QLabel(widget)
-            self._old_label.setGeometry(0, 0, width, height)
-            self._old_label.setScaledContents(False)
-            self._old_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self._old_label.setPixmap(old_pixmap)
-            self._old_label.show()
+            # Persistent label pattern (like GL transitions) - reuse or create
+            old_label = getattr(widget, "_srpss_sw_blockflip_old", None)
+            new_label = getattr(widget, "_srpss_sw_blockflip_new", None)
+            
+            if old_label is None or not isinstance(old_label, QLabel):
+                logger.debug("[SW BLOCK] Creating persistent old label")
+                old_label = QLabel(widget)
+                old_label.setGeometry(0, 0, width, height)
+                old_label.setScaledContents(False)
+                old_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                old_label.setStyleSheet("background: transparent;")
+                old_label.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+                old_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+                try:
+                    old_label.setAutoFillBackground(False)
+                except Exception:
+                    pass
+                setattr(widget, "_srpss_sw_blockflip_old", old_label)
+                if self._resource_manager:
+                    try:
+                        self._resource_manager.register_qt(old_label, description="SW Block old label")
+                    except Exception:
+                        pass
+            else:
+                logger.debug("[SW BLOCK] Reusing persistent old label")
+            
+            old_label.setPixmap(old_pixmap)
+            old_label.setGeometry(0, 0, width, height)
+            old_label.show()
+            
+            if new_label is None or not isinstance(new_label, QLabel):
+                logger.debug("[SW BLOCK] Creating persistent new label")
+                new_label = QLabel(widget)
+                new_label.setGeometry(0, 0, width, height)
+                new_label.setScaledContents(False)
+                new_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                new_label.setStyleSheet("background: transparent;")
+                new_label.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+                new_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+                try:
+                    new_label.setAutoFillBackground(False)
+                except Exception:
+                    pass
+                setattr(widget, "_srpss_sw_blockflip_new", new_label)
+                if self._resource_manager:
+                    try:
+                        self._resource_manager.register_qt(new_label, description="SW Block new label")
+                    except Exception:
+                        pass
+            else:
+                logger.debug("[SW BLOCK] Reusing persistent new label")
+            
+            new_label.setPixmap(new_pixmap)
+            new_label.setGeometry(0, 0, width, height)
+            # Start fully hidden via empty mask - set BEFORE showing
+            new_label.setMask(QRegion())
+            new_label.show()  # Now showing won't flash - mask already empty
+            try:
+                new_label.raise_()
+            except Exception:
+                pass
+            
+            # Store references
+            self._old_label = old_label
+            self._new_label = new_label
+            
+            # Keep clock widget above labels if present
+            try:
+                if hasattr(widget, "clock_widget") and getattr(widget, "clock_widget"):
+                    widget.clock_widget.raise_()
+            except Exception:
+                pass
 
-            self._new_label = QLabel(widget)
-            self._new_label.setGeometry(0, 0, width, height)
-            self._new_label.setScaledContents(False)
-            self._new_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self._new_label.setPixmap(new_pixmap)
-            # Start fully hidden via empty mask
-            self._new_label.setMask(QRegion())
-            self._new_label.show()
+            # Present initial frame synchronously to avoid a one-frame flash
+            try:
+                widget.repaint()
+            except Exception:
+                pass
             
             # Drive via centralized AnimationManager
             am = self._get_animation_manager(widget)
@@ -398,15 +460,16 @@ class BlockPuzzleFlipTransition(BaseTransition):
         # Clean up resources immediately
         self._blocks = []
         
+        # Hide persistent labels (don't delete - they'll be reused)
         if hasattr(self, "_old_label") and self._old_label:
             try:
-                self._old_label.deleteLater()
+                self._old_label.hide()
             except RuntimeError:
                 pass
             self._old_label = None
         if hasattr(self, "_new_label") and self._new_label:
             try:
-                self._new_label.deleteLater()
+                self._new_label.hide()
             except RuntimeError:
                 pass
             self._new_label = None

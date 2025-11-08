@@ -146,20 +146,6 @@ class DisplayTab(QWidget):
         quality_group = QGroupBox("Image Quality")
         quality_layout = QVBoxLayout(quality_group)
         
-        # Quality explanation
-        quality_label = QLabel(
-            "High quality scaling uses Lanczos resampling for better image quality,\n"
-            "especially when downscaling images. Disable if you experience performance issues."
-        )
-        quality_label.setWordWrap(True)
-        quality_label.setStyleSheet("color: #aaaaaa; font-size: 11px;")
-        quality_layout.addWidget(quality_label)
-        
-        self.quality_check = QCheckBox("Use high quality image scaling (Lanczos)")
-        self.quality_check.setChecked(True)
-        self.quality_check.stateChanged.connect(self._save_settings)
-        quality_layout.addWidget(self.quality_check)
-        
         self.sharpen_check = QCheckBox("Apply sharpening filter when downscaling")
         self.sharpen_check.setChecked(False)
         self.sharpen_check.stateChanged.connect(self._save_settings)
@@ -209,6 +195,15 @@ class DisplayTab(QWidget):
         
         layout.addWidget(pan_group)
         
+        # Performance group
+        perf_group = QGroupBox("Performance")
+        perf_layout = QVBoxLayout(perf_group)
+        self.hw_accel_check = QCheckBox("Use GPU acceleration (experimental)")
+        self.hw_accel_check.setChecked(False)
+        self.hw_accel_check.stateChanged.connect(self._save_settings)
+        perf_layout.addWidget(self.hw_accel_check)
+        layout.addWidget(perf_group)
+        
         # Add stretch at bottom
         layout.addStretch()
         
@@ -227,7 +222,6 @@ class DisplayTab(QWidget):
         self.mode_combo.blockSignals(True)
         self.interval_spin.blockSignals(True)
         self.shuffle_check.blockSignals(True)
-        self.quality_check.blockSignals(True)
         self.sharpen_check.blockSignals(True)
         self.pan_check.blockSignals(True)
         self.pan_auto_check.blockSignals(True)
@@ -269,12 +263,7 @@ class DisplayTab(QWidget):
                 shuffle = shuffle.lower() == 'true'
             self.shuffle_check.setChecked(shuffle)
             
-            # Quality
-            use_lanczos = self._settings.get('display.use_lanczos', True)
-            if isinstance(use_lanczos, str):
-                use_lanczos = use_lanczos.lower() == 'true'
-            self.quality_check.setChecked(use_lanczos)
-            
+            # Quality (Lanczos intentionally hidden/disabled; only sharpen exposed)
             sharpen = self._settings.get('display.sharpen_downscale', False)
             if isinstance(sharpen, str):
                 sharpen = sharpen.lower() == 'true'
@@ -295,7 +284,13 @@ class DisplayTab(QWidget):
             self.pan_speed_spin.setValue(int(pan_speed))
             self.pan_speed_spin.setEnabled(not pan_auto)
             
-            logger.debug(f"Loaded display settings: use_lanczos={use_lanczos}, sharpen={sharpen}, pan={pan_enabled}")
+            # Hardware acceleration
+            hw_accel = self._settings.get('display.hw_accel', False)
+            if isinstance(hw_accel, str):
+                hw_accel = hw_accel.lower() == 'true'
+            self.hw_accel_check.setChecked(hw_accel)
+            
+            logger.debug(f"Loaded display settings: sharpen={sharpen}, pan={pan_enabled}")
         finally:
             # Re-enable signals
             self.monitor_combo.blockSignals(False)
@@ -303,7 +298,6 @@ class DisplayTab(QWidget):
             self.mode_combo.blockSignals(False)
             self.interval_spin.blockSignals(False)
             self.shuffle_check.blockSignals(False)
-            self.quality_check.blockSignals(False)
             self.sharpen_check.blockSignals(False)
             self.pan_check.blockSignals(False)
             self.pan_auto_check.blockSignals(False)
@@ -337,10 +331,8 @@ class DisplayTab(QWidget):
         self._settings.set('timing.interval', self.interval_spin.value())
         self._settings.set('queue.shuffle', self.shuffle_check.isChecked())
         
-        # Quality
-        use_lanczos = self.quality_check.isChecked()
+        # Quality (only sharpen is user-configurable)
         sharpen = self.sharpen_check.isChecked()
-        self._settings.set('display.use_lanczos', use_lanczos)
         self._settings.set('display.sharpen_downscale', sharpen)
         
         # Pan and scan
@@ -348,13 +340,45 @@ class DisplayTab(QWidget):
         self._settings.set('display.pan_auto_speed', self.pan_auto_check.isChecked())
         self._settings.set('display.pan_speed', self.pan_speed_spin.value())
         
+        # Performance
+        self._settings.set('display.hw_accel', self.hw_accel_check.isChecked())
+        
         self._settings.save()
         self.display_changed.emit()
         
         logger.info(f"Saved display settings: mode={mode_map.get(mode_index, 'fill')}, "
-                   f"use_lanczos={use_lanczos}, sharpen={sharpen}, "
+                   f"sharpen={sharpen}, "
                    f"same_image={self.same_image_check.isChecked()}, "
                    f"pan_and_scan={self.pan_check.isChecked()}")
+
+        # Improve +/- button clarity and feedback on spin boxes (applies to this tab)
+        self.setStyleSheet(
+            self.styleSheet() + """
+            QSpinBox, QDoubleSpinBox {
+                background-color: #1e1e1e;
+                color: #ffffff;
+                border: 1px solid #3a3a3a;
+                border-radius: 4px;
+                padding-right: 24px; /* space for buttons */
+            }
+            QSpinBox::up-button, QDoubleSpinBox::up-button,
+            QSpinBox::down-button, QDoubleSpinBox::down-button {
+                subcontrol-origin: border;
+                width: 18px;
+                background: #2a2a2a;
+                border-left: 1px solid #3a3a3a;
+                margin: 0px;
+            }
+            QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
+            QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {
+                background: #3a3a3a;
+            }
+            QSpinBox::up-button:pressed, QDoubleSpinBox::up-button:pressed,
+            QSpinBox::down-button:pressed, QDoubleSpinBox::down-button:pressed {
+                background: #505050;
+            }
+            """
+        )
     
     def _on_pan_auto_changed(self) -> None:
         """Handle pan auto speed checkbox change."""
