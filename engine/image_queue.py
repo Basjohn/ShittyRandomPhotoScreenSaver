@@ -191,6 +191,24 @@ class ImageQueue:
         
         return None
     
+    def peek_many(self, count: int = 1) -> List[ImageMetadata]:
+        """
+        Peek at the next N images without removing them from the queue.
+        
+        Args:
+            count: Number of items to peek
+        
+        Returns:
+            List of up to N ImageMetadata entries
+        """
+        if count <= 0:
+            return []
+        with self._lock:
+            if not self._queue:
+                return []
+            ql = list(self._queue)
+            return ql[:min(count, len(ql))]
+    
     def _rebuild_queue(self) -> None:
         """Rebuild queue from original image list."""
         if not self._images:

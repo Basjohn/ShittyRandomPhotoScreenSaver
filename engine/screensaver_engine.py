@@ -30,6 +30,8 @@ from sources.rss_source import RSSSource
 from sources.base_provider import ImageMetadata
 from rendering.display_modes import DisplayMode
 from ui.settings_dialog import SettingsDialog
+from utils.image_cache import ImageCache
+from utils.image_prefetcher import ImagePrefetcher
 
 logger = get_logger(__name__)
 
@@ -88,6 +90,10 @@ class ScreensaverEngine(QObject):
         self._loading_lock = threading.Lock()  # FIX: Protect loading flag from race conditions
         self._transition_types: List[str] = ["Crossfade", "Slide", "Wipe", "Diffuse", "Block Puzzle Flip"]
         self._current_transition_index: int = 0  # Will sync with settings in initialize()
+        # Caching / prefetch
+        self._image_cache: Optional[ImageCache] = None
+        self._prefetcher: Optional[ImagePrefetcher] = None
+        self._prefetch_ahead: int = 5
         
         logger.info("ScreensaverEngine created")
     
@@ -122,6 +128,8 @@ class ScreensaverEngine(QObject):
             if not self._build_image_queue():
                 logger.error("Failed to build image queue")
                 return False
+            # Initialize cache + prefetcher after queue is ready
+            self._initialize_cache_prefetcher()
             
             # Initialize display manager
             if not self._initialize_display():
@@ -195,6 +203,9 @@ class ScreensaverEngine(QObject):
             
             shuffle = self.settings_manager.get('queue.shuffle', True)
             logger.info(f"Shuffle enabled: {shuffle}")
+            # Cache-related settings
+            self._prefetch_ahead = int(self.settings_manager.get('cache.prefetch_ahead', 5))
+            logger.info(f"Prefetch ahead: {self._prefetch_ahead}")
             
             return True
         
@@ -305,6 +316,38 @@ class ScreensaverEngine(QObject):
         except Exception as e:
             logger.exception(f"Image queue build failed: {e}")
             return False
+
+    def _initialize_cache_prefetcher(self) -> None:
+        try:
+            max_items = int(self.settings_manager.get('cache.max_items', 20))
+            max_mem_mb = int(self.settings_manager.get('cache.max_memory_mb', 512))
+            max_conc = int(self.settings_manager.get('cache.max_concurrent', 2))
+            self._image_cache = ImageCache(max_items=max_items, max_memory_mb=max_mem_mb)
+            if self.thread_manager:
+                self._prefetcher = ImagePrefetcher(self.thread_manager, self._image_cache, max_concurrent=max_conc)
+            logger.info(f"Image prefetcher initialized (ahead={self._prefetch_ahead}, max_concurrent={max_conc})")
+            self._schedule_prefetch()
+        except Exception as e:
+            logger.debug(f"Prefetcher init failed: {e}")
+
+    def _schedule_prefetch(self) -> None:
+        try:
+            if not self.image_queue or not self._prefetcher or self._prefetch_ahead <= 0:
+                return
+            upcoming = self.image_queue.peek_many(self._prefetch_ahead)
+            paths = []
+            for m in upcoming:
+                try:
+                    p = str(m.local_path) if m and m.local_path else (m.url or "")
+                    if p:
+                        paths.append(p)
+                except Exception:
+                    continue
+            self._prefetcher.prefetch_paths(paths)
+            if paths:
+                logger.debug(f"Prefetch scheduled for {len(paths)} upcoming images")
+        except Exception as e:
+            logger.debug(f"Prefetch schedule failed: {e}")
     
     def _initialize_display(self) -> bool:
         """Initialize display manager."""
@@ -581,8 +624,20 @@ class ScreensaverEngine(QObject):
                 logger.warning("[FALLBACK] No path or URL for image")
                 return None
             
-            # Load pixmap
-            pixmap = QPixmap(image_path)
+            # Use cache if available (QImage decoded on IO thread)
+            if self._prefetcher and self._image_cache:
+                cached = self._image_cache.get(image_path)
+                if isinstance(cached, QPixmap):
+                    pixmap = cached
+                elif cached is not None:
+                    try:
+                        pixmap = QPixmap.fromImage(cached)  # must be on UI thread
+                    except Exception:
+                        pixmap = QPixmap()
+                else:
+                    pixmap = QPixmap(image_path)
+            else:
+                pixmap = QPixmap(image_path)
             
             if pixmap.isNull():
                 logger.warning("Image load failed for: %s", image_path)
@@ -659,6 +714,8 @@ class ScreensaverEngine(QObject):
                 logger.info(f"Different images displayed on {display_count} displays")
             
             self.image_changed.emit(image_path)
+            # Schedule prefetch of next images
+            self._schedule_prefetch()
             
             self._loading_in_progress = False
             return True
