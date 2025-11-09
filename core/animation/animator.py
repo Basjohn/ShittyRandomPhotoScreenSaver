@@ -269,6 +269,16 @@ class AnimationManager(QObject):
         self._timer = QTimer()
         self._timer.setInterval(int(self.frame_time * 1000))  # Convert to milliseconds
         self._timer.timeout.connect(self._update_all)
+        # Register timer with ResourceManager for lifecycle tracking
+        try:
+            from core.resources.manager import ResourceManager
+            self._resources = ResourceManager()
+            try:
+                self._resources.register_qt(self._timer, description="AnimationManager timer")
+            except Exception:
+                pass
+        except Exception:
+            self._resources = None
         
         logger.info(f"AnimationManager initialized (fps={fps})")
 

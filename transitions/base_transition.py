@@ -253,6 +253,19 @@ class BaseTransition(QObject, metaclass=QABCMeta):
         """
         am = getattr(widget, "_animation_manager", None)
         target_fps = getattr(widget, "_target_fps", 60)
+        # Apply SW caps if configured and this is a SW transition (class name not starting with 'GL')
+        try:
+            sm = getattr(widget, 'settings_manager', None)
+            if sm is not None and not self.__class__.__name__.startswith('GL'):
+                cap = sm.get('transitions.max_fps_sw', 0)
+                try:
+                    cap = int(cap)
+                except Exception:
+                    cap = 0
+                if cap and cap > 0:
+                    target_fps = min(int(target_fps), cap)
+        except Exception:
+            pass
         if am is None:
             from core.animation.animator import AnimationManager
             try:

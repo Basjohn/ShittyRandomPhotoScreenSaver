@@ -125,6 +125,13 @@ class DisplayWidget(QWidget):
             self._configure_refresh_rate_sync()
         except Exception as e:
             logger.warning(f"Failed to configure refresh rate sync: {e}")
+        # Reconfigure when screen changes
+        try:
+            handle = self.windowHandle()
+            if handle is not None:
+                handle.screenChanged.connect(lambda s: self._configure_refresh_rate_sync())
+        except Exception:
+            pass
         
         # Pre-warm GL contexts if hardware acceleration enabled
         if self.settings_manager:
@@ -160,7 +167,14 @@ class DisplayWidget(QWidget):
         self._target_fps = target
         logger.info(f"Detected refresh rate: {detected} Hz, target animation FPS: {self._target_fps}")
         try:
-            self._pan_and_scan.set_target_fps(self._target_fps)
+            pan_cap = 0
+            if self.settings_manager:
+                try:
+                    pan_cap = int(self.settings_manager.get('pan_and_scan.max_fps', 0))
+                except Exception:
+                    pan_cap = 0
+            eff_pan_fps = min(self._target_fps, pan_cap) if pan_cap > 0 else self._target_fps
+            self._pan_and_scan.set_target_fps(eff_pan_fps)
         except Exception:
             pass
         try:
@@ -345,6 +359,7 @@ class DisplayWidget(QWidget):
         for name, attr_name, create_fn in overlays_to_prewarm:
             try:
                 # Create overlay
+                per_overlay_start = time.time()
                 overlay = create_fn()
                 overlay.setGeometry(0, 0, 10, 10)
                 overlay.show()
@@ -367,6 +382,11 @@ class DisplayWidget(QWidget):
                 overlay.hide()
                 setattr(self, attr_name, overlay)
                 prewarmed_count += 1
+                per_elapsed_ms = (time.time() - per_overlay_start) * 1000
+                if per_elapsed_ms > 250:
+                    logger.warning(f"[PREWARM] {name} overlay initialization slow: {per_elapsed_ms:.1f}ms")
+                else:
+                    logger.debug(f"[PREWARM] {name} overlay initialization {per_elapsed_ms:.1f}ms")
                 
             except Exception as e:
                 logger.warning(f"[PREWARM] Failed to pre-warm {name}: {e}")
@@ -389,6 +409,17 @@ class DisplayWidget(QWidget):
         # Support both nested dict and dot notation for settings
         transitions_settings = self.settings_manager.get('transitions', {})
         transition_type = transitions_settings.get('type', self.settings_manager.get('transitions.type', 'Crossfade'))
+        # Apply random selection if enabled (choice synced via settings key on each rotation)
+        try:
+            rnd = transitions_settings.get('random_always', self.settings_manager.get('transitions.random_always', False))
+            if isinstance(rnd, str):
+                rnd = rnd.lower() in ('true', '1', 'yes')
+            if rnd:
+                chosen = self.settings_manager.get('transitions.random_choice', None)
+                if chosen:
+                    transition_type = chosen
+        except Exception:
+            pass
         # BUG FIX #5: Increased default from 1000ms to 1300ms (30% slower) for smoother crossfades
         duration_ms = transitions_settings.get('duration_ms', self.settings_manager.get('transitions.duration_ms', 1300))
         
@@ -564,6 +595,10 @@ class DisplayWidget(QWidget):
                         # Create black pixmap matching display size
                         black_pixmap = QPixmap(new_pixmap.size())
                         black_pixmap.fill(Qt.GlobalColor.black)
+                        try:
+                            black_pixmap.setDevicePixelRatio(self._device_pixel_ratio)
+                        except Exception:
+                            pass
                         self.previous_pixmap = black_pixmap
                         logger.debug("[INIT] Created black pixmap for first transition (eliminates init flicker)")
                     else:
@@ -618,6 +653,11 @@ class DisplayWidget(QWidget):
                     self._pan_and_scan.set_speed(float(manual_speed))
                 
                 # Use original uncropped pixmap for pan & scan
+                try:
+                    init_off = self._pan_and_scan.preview_offset(original_pixmap, self.size())
+                    self._pan_and_scan.set_initial_offset(init_off)
+                except Exception:
+                    pass
                 self._pan_and_scan.set_image(original_pixmap, self._image_label, self.size())
                 
                 # Ensure label is visible and on top
@@ -689,6 +729,11 @@ class DisplayWidget(QWidget):
             
             # CRITICAL: Use original_pixmap for pan & scan, not the processed one
             # This prevents the zoom effect where the image suddenly changes size
+            try:
+                init_off = self._pan_and_scan.preview_offset(original_pixmap, self.size())
+                self._pan_and_scan.set_initial_offset(init_off)
+            except Exception:
+                pass
             self._pan_and_scan.set_image(original_pixmap, self._image_label, self.size())
             
             # Ensure label is visible and on top

@@ -20,6 +20,7 @@ This document reviews the current systems (AnimationManager, ThreadManager, Reso
 - [ ] Add CI-safe offscreen configuration guidance for GUI tests
 - [ ] When Pan and Scan is enabled transitions should use the PanAndScanAnimator/Zoomlevel as the goal point of the transition to avoid jumps/zooms/flickers.
 - [ ] When starting screensaver with Diffuse enabled there is init flicker. This ONLY happens with Diffuse enabled. Try to carefully analyze the cause of this and resolve said flicker.
+[] Add "Always use random transitions" checkbox to transitions tab and wire it. In this mode the transition should be chosen at random from the available transitions but be the same choice for all displays each time.
 ---
 
 ## Findings

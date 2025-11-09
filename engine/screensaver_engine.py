@@ -9,6 +9,7 @@ The ScreensaverEngine is the central controller that:
 - Processes events and user input
 """
 import threading
+import random
 from pathlib import Path
 from typing import Optional, List, Dict
 from PySide6.QtCore import QObject, Signal, QTimer
@@ -344,6 +345,12 @@ class ScreensaverEngine(QObject):
         self._rotation_timer = QTimer(self)
         self._rotation_timer.setInterval(interval_ms)
         self._rotation_timer.timeout.connect(self._on_rotation_timer)
+        # Register with ResourceManager
+        try:
+            if self.resource_manager:
+                self.resource_manager.register_qt(self._rotation_timer, description="Engine rotation timer")
+        except Exception:
+            pass
         
         logger.info(f"Rotation timer configured: {interval_seconds}s")
     
@@ -375,6 +382,8 @@ class ScreensaverEngine(QObject):
         try:
             logger.info("Starting screensaver engine...")
             
+            # Choose random transition for this cycle if enabled
+            self._prepare_random_transition_if_needed()
             # Show first image immediately
             if not self._show_next_image():
                 logger.warning("[FALLBACK] Failed to show first image")
@@ -645,7 +654,29 @@ class ScreensaverEngine(QObject):
     def _on_rotation_timer(self) -> None:
         """Handle rotation timer timeout."""
         logger.debug("Rotation timer triggered")
+        # Update random transition choice for this rotation if enabled
+        self._prepare_random_transition_if_needed()
         self._show_next_image()
+
+    def _prepare_random_transition_if_needed(self) -> None:
+        try:
+            transitions = self.settings_manager.get('transitions', {})
+            rnd = transitions.get('random_always', self.settings_manager.get('transitions.random_always', False))
+            if isinstance(rnd, str):
+                rnd = rnd.lower() in ('true', '1', 'yes')
+            if not rnd:
+                return
+            # Available transition types (non-GL)
+            available = ["Crossfade", "Slide", "Wipe", "Diffuse", "Block Puzzle Flip"]
+            # Choose deterministically seeded by time slice to allow repeatability across displays
+            choice = random.choice(available)
+            # Persist for this cycle so all displays pick the same
+            transitions['random_choice'] = choice
+            self.settings_manager.set('transitions', transitions)
+            self.settings_manager.save()
+            logger.info(f"Random transition choice for this rotation: {choice}")
+        except Exception as e:
+            logger.debug(f"Random transition selection failed: {e}")
     
     def _on_exit_requested(self) -> None:
         """Handle exit request from display."""

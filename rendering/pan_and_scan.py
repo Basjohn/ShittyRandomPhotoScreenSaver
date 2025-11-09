@@ -47,6 +47,7 @@ class PanAndScan:
         self._image_size = QSize(0, 0)
         self._display_size = QSize(0, 0)
         self._scaled_pixmap: Optional[QPixmap] = None
+        self._initial_offset: Optional[QPoint] = None
         
         # Settings
         self._speed_pixels_per_second = 2.5  # Default speed (reduced from 20.0)
@@ -109,23 +110,42 @@ class PanAndScan:
         self._label.setPixmap(self._scaled_pixmap)
         self._label.resize(self._image_size)
         
-        # Random starting position (centered with small offset)
+        # Starting position: use provided initial offset if present; otherwise random
         max_offset_x = max(0, self._image_size.width() - display_size.width())
         max_offset_y = max(0, self._image_size.height() - display_size.height())
-        
-        start_x = random.randint(0, max_offset_x) if max_offset_x > 0 else 0
-        start_y = random.randint(0, max_offset_y) if max_offset_y > 0 else 0
+        if self._initial_offset is not None:
+            start_x = max(0, min(max_offset_x, int(self._initial_offset.x())))
+            start_y = max(0, min(max_offset_y, int(self._initial_offset.y())))
+        else:
+            start_x = random.randint(0, max_offset_x) if max_offset_x > 0 else 0
+            start_y = random.randint(0, max_offset_y) if max_offset_y > 0 else 0
         
         self._current_offset = QPoint(start_x, start_y)
         self._current_offset_x_float = float(start_x)
         self._current_offset_y_float = float(start_y)
         self._label.move(-start_x, -start_y)
+        # Clear one-shot initial offset after applying
+        self._initial_offset = None
         
         # Pick random drift direction
         self._choose_new_direction()
         
         logger.debug(f"Pan and scan image set: {self._image_size.width()}x{self._image_size.height()} "
                     f"on {display_size.width()}x{display_size.height()}, offset ({start_x}, {start_y})")
+
+    def set_initial_offset(self, offset: Optional[QPoint]) -> None:
+        """Set an initial offset to use on next set_image (one-shot)."""
+        self._initial_offset = offset
+
+    def preview_offset(self, pixmap: QPixmap, display_size: QSize) -> Optional[QPoint]:
+        """Compute the centered offset that aligns with preview_scale()."""
+        if pixmap.isNull() or not display_size.isValid():
+            return None
+        scaled = self._scale_image_for_pan(pixmap, display_size)
+        img_w, img_h = scaled.width(), scaled.height()
+        off_x = max(0, (img_w - display_size.width()) // 2)
+        off_y = max(0, (img_h - display_size.height()) // 2)
+        return QPoint(off_x, off_y)
     
     def start(self) -> None:
         """Start pan and scan animation."""

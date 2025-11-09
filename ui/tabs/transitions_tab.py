@@ -10,7 +10,7 @@ Allows users to configure transition settings:
 from typing import Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QSpinBox, QGroupBox, QScrollArea, QSlider
+    QSpinBox, QGroupBox, QScrollArea, QSlider, QCheckBox
 )
 from PySide6.QtCore import Signal, Qt
 
@@ -85,6 +85,14 @@ class TransitionsTab(QWidget):
         type_row.addWidget(self.transition_combo)
         type_row.addStretch()
         type_layout.addLayout(type_row)
+
+        # Random transitions option
+        random_row = QHBoxLayout()
+        self.random_checkbox = QCheckBox("Always use random transitions")
+        self.random_checkbox.stateChanged.connect(self._save_settings)
+        random_row.addWidget(self.random_checkbox)
+        random_row.addStretch()
+        type_layout.addLayout(random_row)
         
         layout.addWidget(type_group)
         
@@ -268,6 +276,12 @@ class TransitionsTab(QWidget):
         if index >= 0:
             self.easing_combo.setCurrentIndex(index)
 
+        # Load random transitions flag
+        rnd = transitions_config.get('random_always', False)
+        if isinstance(rnd, str):
+            rnd = rnd.lower() in ('true', '1', 'yes')
+        self.random_checkbox.setChecked(bool(rnd))
+
         # Note: GPU acceleration is controlled globally in Display tab
         
         # Load block flip settings
@@ -311,6 +325,7 @@ class TransitionsTab(QWidget):
             'duration_ms': self.duration_slider.value(),
             'direction': self.direction_combo.currentText(),
             'easing': self.easing_combo.currentText(),
+            'random_always': self.random_checkbox.isChecked(),
             'block_flip': {
                 'rows': self.grid_rows_spin.value(),
                 'cols': self.grid_cols_spin.value()
