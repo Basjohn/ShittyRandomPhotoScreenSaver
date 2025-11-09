@@ -111,6 +111,7 @@ class ClockWidget(QLabel):
     def _setup_ui(self) -> None:
         """Setup widget UI."""
         # Set label properties
+        self.setObjectName("clock_main")
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._update_stylesheet()
         
@@ -120,7 +121,7 @@ class ClockWidget(QLabel):
         
         # Create timezone label if needed
         if self._show_timezone and self.parent():
-            self._tz_label = QLabel(self.parent())
+            self._tz_label = QLabel(self)
             self._tz_label.setAlignment(Qt.AlignmentFlag.AlignRight)
             tz_font_size = max(int(self._font_size / 4), 8)
             tz_font = QFont(self._font_family, tz_font_size)
@@ -129,6 +130,8 @@ class ClockWidget(QLabel):
                 color: rgba({self._text_color.red()}, {self._text_color.green()}, 
                            {self._text_color.blue()}, {self._text_color.alpha()});
                 background-color: transparent;
+                padding: 0px;
+                border: none;
             }}""")
             self._tz_label.hide()
         
@@ -336,6 +339,9 @@ class ClockWidget(QLabel):
         if self._show_timezone and self._tz_label and self._timezone_abbrev:
             self._tz_label.setText(self._timezone_abbrev)
             self._tz_label.adjustSize()
+            if self._show_background:
+                self._update_stylesheet()
+                self.adjustSize()
         
         # Adjust size to content
         self.adjustSize()
@@ -386,10 +392,10 @@ class ClockWidget(QLabel):
         
         self.move(x, y)
         
-        # Position timezone label directly below clock with minimal gap
+        # Position timezone label inside the background frame (bottom-right)
         if self._show_timezone and self._tz_label:
-            tz_x = x + widget_width - self._tz_label.width()  # Right-aligned with clock
-            tz_y = y + widget_height - 2  # 2px gap (negative overlap)
+            tz_x = self.width() - self._tz_label.width() - 12
+            tz_y = self.height() - self._tz_label.height() - 6
             self._tz_label.move(tz_x, tz_y)
     
     def set_time_format(self, time_format: TimeFormat) -> None:
@@ -601,10 +607,16 @@ class ClockWidget(QLabel):
         """Update widget stylesheet based on current settings."""
         if self._show_background:
             # Extend bottom padding if timezone is shown to include it in the frame
-            bottom_padding = 20 if (self._show_timezone and self._tz_label) else 6
+            bottom_padding = 6
+            if self._show_timezone and self._tz_label:
+                try:
+                    self._tz_label.adjustSize()
+                    bottom_padding = max(6, self._tz_label.height() + 6)
+                except Exception:
+                    bottom_padding = 20
             # With background frame
             self.setStyleSheet(f"""
-                QLabel {{
+                QLabel#clock_main {{
                     color: rgba({self._text_color.red()}, {self._text_color.green()}, 
                                {self._text_color.blue()}, {self._text_color.alpha()});
                     background-color: rgba({self._bg_color.red()}, {self._bg_color.green()}, 
@@ -620,7 +632,7 @@ class ClockWidget(QLabel):
         else:
             # Transparent background (default)
             self.setStyleSheet(f"""
-                QLabel {{
+                QLabel#clock_main {{
                     color: rgba({self._text_color.red()}, {self._text_color.green()}, 
                                {self._text_color.blue()}, {self._text_color.alpha()});
                     background-color: transparent;

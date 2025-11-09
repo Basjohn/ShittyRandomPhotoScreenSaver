@@ -16,6 +16,7 @@ from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from transitions.base_transition import BaseTransition, TransitionState
 from core.animation.types import EasingCurve
 from core.logging.logger import get_logger
+from utils.profiler import profile
 
 logger = get_logger(__name__)
 
@@ -27,7 +28,11 @@ class _GLFadeWidget(QOpenGLWidget):
         # Configure surface format before context is created
         try:
             fmt = QSurfaceFormat()
-            fmt.setSwapBehavior(QSurfaceFormat.SwapBehavior.DoubleBuffer)
+            # Prefer triple buffering where supported; platform may clamp
+            try:
+                fmt.setSwapBehavior(QSurfaceFormat.SwapBehavior.TripleBuffer)
+            except Exception:
+                fmt.setSwapBehavior(QSurfaceFormat.SwapBehavior.DefaultSwapBehavior)
             fmt.setSwapInterval(1)  # vsync
             self.setFormat(fmt)
         except Exception:
@@ -192,21 +197,29 @@ class GLCrossfadeTransition(BaseTransition):
                     widget.clock_widget.raise_()
             except Exception:
                 pass
+            # Ensure event queue processes widget show/geometry before prepaint
+            try:
+                from PySide6.QtCore import QCoreApplication
+                QCoreApplication.processEvents()
+            except Exception:
+                pass
             try:
                 self._gl.makeCurrent()
             except Exception:
                 pass
             # Prepaint the initial frame offscreen to avoid one-frame black
             try:
-                self._gl.set_alpha(0.0)
-                _fb = self._gl.grabFramebuffer()  # forces a paintGL pass
-                _ = _fb
-                logger.debug("[GL XFADE] Prepainted initial frame (alpha=0.0)")
+                with profile("GL_XFADE_PREPAINT", threshold_ms=5.0, log_level="WARNING"):
+                    self._gl.set_alpha(0.0)
+                    _fb = self._gl.grabFramebuffer()  # forces a paintGL pass
+                    _ = _fb
+                    logger.debug("[GL XFADE] Prepainted initial frame (alpha=0.0)")
             except Exception:
                 pass
             try:
                 # Present first frame synchronously
-                self._gl.repaint()
+                with profile("GL_XFADE_REPAINT0", threshold_ms=5.0, log_level="WARNING"):
+                    self._gl.repaint()
             except Exception:
                 pass
 
@@ -273,7 +286,8 @@ class GLCrossfadeTransition(BaseTransition):
         try:
             self._gl.set_alpha(progress)
             # Force immediate draw to avoid missed vsync paints causing black flashes
-            self._gl.repaint()
+            with profile("GL_XFADE_REPAINT_FRAME", threshold_ms=5.0, log_level="WARNING"):
+                self._gl.repaint()
         except Exception:
             pass
         self._emit_progress(progress)

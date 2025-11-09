@@ -276,9 +276,15 @@ class WeatherWidget(QLabel):
             condition = data.get('condition', 'Unknown')
             location = data.get('location', self._location)
             
-            # Format display (all caps)
-            text = f"{location}\n{temp:.0f}°C - {condition}"
-            self.setText(text.upper())
+            # Relative sizing
+            city_pt = max(6, self._font_size + 2)
+            details_pt = max(6, self._font_size - 2)
+            city_html = f"<div style='font-size:{city_pt}pt; font-weight:700;'>{(location or '').upper()}</div>"
+            details_text = f"{temp:.0f}°C - {condition}"
+            details_html = f"<div style='font-size:{details_pt}pt; font-weight:500;'>{details_text.upper()}</div>"
+            html = f"<div style='line-height:1.0'>{city_html}{details_html}</div>"
+            self.setTextFormat(Qt.TextFormat.RichText)
+            self.setText(html)
             
             # Adjust size
             self.adjustSize()
