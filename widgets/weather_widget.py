@@ -115,6 +115,13 @@ class WeatherWidget(QLabel):
         self._text_color = QColor(255, 255, 255, 230)
         self._margin = 20
         
+        # Background frame settings
+        self._show_background = False
+        self._bg_opacity = 0.9  # 90% opacity default
+        self._bg_color = QColor(64, 64, 64, int(255 * self._bg_opacity))  # Dark grey
+        self._bg_border_width = 2
+        self._bg_border_color = QColor(128, 128, 128, 200)  # Light grey border
+        
         # Setup UI
         self._setup_ui()
         
@@ -123,16 +130,9 @@ class WeatherWidget(QLabel):
     def _setup_ui(self) -> None:
         """Setup widget UI."""
         self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        self.setStyleSheet(f"""
-            QLabel {{
-                color: rgba({self._text_color.red()}, {self._text_color.green()}, 
-                           {self._text_color.blue()}, {self._text_color.alpha()});
-                background-color: transparent;
-                padding: 10px 15px;
-            }}
-        """)
+        self._update_stylesheet()
         
-        font = QFont(self._font_family, self._font_size)
+        font = QFont(self._font_family, self._font_size, QFont.Weight.Normal)  # Lighter weight than clock
         self.setFont(font)
         
         # Initially hidden
@@ -276,9 +276,9 @@ class WeatherWidget(QLabel):
             condition = data.get('condition', 'Unknown')
             location = data.get('location', self._location)
             
-            # Format display
+            # Format display (all caps)
             text = f"{location}\n{temp:.0f}°C - {condition}"
-            self.setText(text)
+            self.setText(text.upper())
             
             # Adjust size
             self.adjustSize()
@@ -301,22 +301,23 @@ class WeatherWidget(QLabel):
         widget_width = self.width()
         widget_height = self.height()
         
-        # Calculate position
+        # Calculate position with 20px minimum margin from all edges
+        edge_margin = 20
         if self._position == WeatherPosition.TOP_LEFT:
-            x = self._margin
-            y = self._margin
+            x = edge_margin
+            y = edge_margin
         elif self._position == WeatherPosition.TOP_RIGHT:
-            x = parent_width - widget_width - self._margin
-            y = self._margin
+            x = parent_width - widget_width - edge_margin
+            y = edge_margin
         elif self._position == WeatherPosition.BOTTOM_LEFT:
-            x = self._margin
-            y = parent_height - widget_height - self._margin
+            x = edge_margin
+            y = parent_height - widget_height - edge_margin
         elif self._position == WeatherPosition.BOTTOM_RIGHT:
-            x = parent_width - widget_width - self._margin
-            y = parent_height - widget_height - self._margin
+            x = parent_width - widget_width - edge_margin
+            y = parent_height - widget_height - edge_margin
         else:
-            x = self._margin
-            y = parent_height - widget_height - self._margin
+            x = edge_margin
+            y = parent_height - widget_height - edge_margin
         
         self.move(x, y)
     
@@ -352,6 +353,18 @@ class WeatherWidget(QLabel):
         if self._enabled:
             self._update_position()
     
+    def set_font_family(self, family: str) -> None:
+        """
+        Set font family.
+        
+        Args:
+            family: Font family name
+        """
+        self._font_family = family
+        font = QFont(self._font_family, self._font_size, QFont.Weight.Normal)
+        self.setFont(font)
+        logger.debug(f"Font family set to {family}")
+    
     def set_font_size(self, size: int) -> None:
         """
         Set font size.
@@ -364,7 +377,7 @@ class WeatherWidget(QLabel):
             size = 24
         
         self._font_size = size
-        font = QFont(self._font_family, self._font_size)
+        font = QFont(self._font_family, self._font_size, QFont.Weight.Normal)
         self.setFont(font)
         
         logger.debug(f"Font size set to {size}")
@@ -377,15 +390,91 @@ class WeatherWidget(QLabel):
             color: Text color
         """
         self._text_color = color
-        self.setStyleSheet(f"""
-            QLabel {{
-                color: rgba({color.red()}, {color.green()}, 
-                           {color.blue()}, {color.alpha()});
-                background-color: transparent;
-                padding: 10px 15px;
-            }}
-        """)
-        logger.debug(f"Text color set")
+        self._update_stylesheet()
+        logger.debug(f"Text color set to rgba({color.red()}, {color.green()}, "
+                    f"{color.blue()}, {color.alpha()})")
+    
+    def set_show_background(self, show: bool) -> None:
+        """
+        Set whether to show background frame.
+        
+        Args:
+            show: True to show background frame
+        """
+        self._show_background = show
+        self._update_stylesheet()
+        logger.debug(f"Show background set to {show}")
+    
+    def set_background_color(self, color: QColor) -> None:
+        """
+        Set background frame color.
+        
+        Args:
+            color: Background color (with alpha for opacity)
+        """
+        self._bg_color = color
+        if self._show_background:
+            self._update_stylesheet()
+        logger.debug(f"Background color set to rgba({color.red()}, {color.green()}, "
+                    f"{color.blue()}, {color.alpha()})")
+    
+    def set_background_opacity(self, opacity: float) -> None:
+        """
+        Set background frame opacity (0.0 to 1.0).
+        
+        Args:
+            opacity: Opacity value from 0.0 (transparent) to 1.0 (opaque)
+        """
+        self._bg_opacity = max(0.0, min(1.0, opacity))
+        # Update background color with new opacity
+        self._bg_color.setAlpha(int(255 * self._bg_opacity))
+        if self._show_background:
+            self._update_stylesheet()
+        logger.debug(f"Background opacity set to {self._bg_opacity * 100:.0f}%")
+    
+    def set_background_border(self, width: int, color: QColor) -> None:
+        """
+        Set background frame border.
+        
+        Args:
+            width: Border width in pixels
+            color: Border color
+        """
+        self._bg_border_width = width
+        self._bg_border_color = color
+        if self._show_background:
+            self._update_stylesheet()
+        logger.debug(f"Background border set to {width}px, rgba({color.red()}, {color.green()}, "
+                    f"{color.blue()}, {color.alpha()})")
+    
+    def _update_stylesheet(self) -> None:
+        """Update widget stylesheet based on current settings."""
+        if self._show_background:
+            # With background frame
+            self.setStyleSheet(f"""
+                QLabel {{
+                    color: rgba({self._text_color.red()}, {self._text_color.green()}, 
+                               {self._text_color.blue()}, {self._text_color.alpha()});
+                    background-color: rgba({self._bg_color.red()}, {self._bg_color.green()}, 
+                                          {self._bg_color.blue()}, {self._bg_color.alpha()});
+                    border: {self._bg_border_width}px solid rgba({self._bg_border_color.red()}, 
+                                                                 {self._bg_border_color.green()}, 
+                                                                 {self._bg_border_color.blue()}, 
+                                                                 {self._bg_border_color.alpha()});
+                    border-radius: 8px;
+                    padding: 6px 12px 6px 16px;
+                }}
+            """)
+        else:
+            # Transparent background (default)
+            self.setStyleSheet(f"""
+                QLabel {{
+                    color: rgba({self._text_color.red()}, {self._text_color.green()}, 
+                               {self._text_color.blue()}, {self._text_color.alpha()});
+                    background-color: transparent;
+                    padding: 6px 12px 6px 16px;
+                }}
+            """)
     
     def cleanup(self) -> None:
         """Clean up resources."""

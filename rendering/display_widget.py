@@ -12,6 +12,7 @@ from rendering.image_processor import ImageProcessor
 from rendering.pan_and_scan import PanAndScan
 from transitions.base_transition import BaseTransition
 from widgets.clock_widget import ClockWidget, TimeFormat, ClockPosition
+from widgets.weather_widget import WeatherWidget, WeatherPosition
 from core.logging.logger import get_logger
 from transitions.gl_crossfade_transition import _GLFadeWidget
 from transitions.overlay_manager import hide_all_overlays, any_overlay_ready_for_display
@@ -64,6 +65,7 @@ class DisplayWidget(QWidget):
         self.previous_pixmap: Optional[QPixmap] = None
         self.error_message: Optional[str] = None
         self.clock_widget: Optional[ClockWidget] = None
+        self.weather_widget: Optional[WeatherWidget] = None
         self._current_transition: Optional[BaseTransition] = None
         self._image_label: Optional[QLabel] = None  # For pan and scan
         self._pan_and_scan = PanAndScan(self)
@@ -162,10 +164,25 @@ class DisplayWidget(QWidget):
             return 60.0
 
     def _configure_refresh_rate_sync(self) -> None:
-        detected = int(round(self._detect_refresh_rate()))
-        target = max(10, min(240, detected))
-        self._target_fps = target
-        logger.info(f"Detected refresh rate: {detected} Hz, target animation FPS: {self._target_fps}")
+        # Check if refresh rate sync is enabled
+        refresh_sync_enabled = True
+        if self.settings_manager:
+            refresh_sync = self.settings_manager.get('display.refresh_sync', True)
+            if isinstance(refresh_sync, str):
+                refresh_sync_enabled = refresh_sync.lower() in ('true', '1', 'yes')
+            else:
+                refresh_sync_enabled = bool(refresh_sync)
+        
+        if not refresh_sync_enabled:
+            # Use fixed 60 FPS when sync is disabled
+            self._target_fps = 60
+            logger.info("Refresh rate sync disabled, using fixed 60 FPS")
+        else:
+            detected = int(round(self._detect_refresh_rate()))
+            target = max(10, min(240, detected))
+            self._target_fps = target
+            logger.info(f"Detected refresh rate: {detected} Hz, target animation FPS: {self._target_fps}")
+        
         try:
             pan_cap = 0
             if self.settings_manager:
@@ -230,6 +247,12 @@ class DisplayWidget(QWidget):
                                                timezone_str, show_timezone)
                 logger.debug("ClockWidget created successfully")
                 
+                # Set font family if specified
+                font_family = clock_settings.get('font_family', 'Segoe UI')
+                if hasattr(self.clock_widget, 'set_font_family'):
+                    self.clock_widget.set_font_family(font_family)
+                    logger.debug(f"Font family set to {font_family}")
+                
                 self.clock_widget.set_font_size(font_size)
                 logger.debug(f"Font size set to {font_size}")
                 
@@ -241,6 +264,16 @@ class DisplayWidget(QWidget):
                 qcolor = QColor(color[0], color[1], color[2], color[3])
                 self.clock_widget.set_text_color(qcolor)
                 logger.debug(f"Color set to RGBA({color[0]}, {color[1]}, {color[2]}, {color[3]})")
+                
+                # Set background frame if enabled
+                show_background = clock_settings.get('show_background', False)
+                self.clock_widget.set_show_background(show_background)
+                logger.debug(f"Background frame: {show_background}")
+                
+                # Set background opacity
+                bg_opacity = clock_settings.get('bg_opacity', 0.9)
+                self.clock_widget.set_background_opacity(bg_opacity)
+                logger.debug(f"Background opacity: {bg_opacity * 100:.0f}%")
                 
                 # Ensure clock is on top of image
                 self.clock_widget.raise_()
@@ -259,6 +292,54 @@ class DisplayWidget(QWidget):
                 logger.error(f"Failed to create/configure clock widget: {e}", exc_info=True)
         else:
             logger.debug("Clock widget disabled in settings")
+        
+        # Weather widget
+        weather_settings = widgets.get('weather', {}) if isinstance(widgets, dict) else {}
+        if weather_settings.get('enabled', False):
+            position_str = weather_settings.get('position', 'Bottom Left')
+            location = weather_settings.get('location', 'London')
+            font_size = weather_settings.get('font_size', 24)
+            color = weather_settings.get('color', [255, 255, 255, 230])
+            
+            # Map position string to enum
+            weather_position_map = {
+                'Top Left': WeatherPosition.TOP_LEFT,
+                'Top Right': WeatherPosition.TOP_RIGHT,
+                'Bottom Left': WeatherPosition.BOTTOM_LEFT,
+                'Bottom Right': WeatherPosition.BOTTOM_RIGHT,
+            }
+            position = weather_position_map.get(position_str, WeatherPosition.BOTTOM_LEFT)
+            
+            try:
+                self.weather_widget = WeatherWidget(self, location, position)
+                
+                # Set font family if specified
+                font_family = weather_settings.get('font_family', 'Segoe UI')
+                if hasattr(self.weather_widget, 'set_font_family'):
+                    self.weather_widget.set_font_family(font_family)
+                
+                self.weather_widget.set_font_size(font_size)
+                
+                # Convert color array to QColor
+                from PySide6.QtGui import QColor
+                qcolor = QColor(color[0], color[1], color[2], color[3])
+                self.weather_widget.set_text_color(qcolor)
+                
+                # Set background frame if enabled
+                show_background = weather_settings.get('show_background', False)
+                self.weather_widget.set_show_background(show_background)
+                
+                # Set background opacity
+                bg_opacity = weather_settings.get('bg_opacity', 0.9)
+                self.weather_widget.set_background_opacity(bg_opacity)
+                
+                self.weather_widget.raise_()
+                self.weather_widget.start()
+                logger.info(f"✅ Weather widget started: {location}, {position_str}, font={font_size}px")
+            except Exception as e:
+                logger.error(f"Failed to create/configure weather widget: {e}", exc_info=True)
+        else:
+            logger.debug("Weather widget disabled in settings")
 
     def _warm_up_gl_overlay(self, base_pixmap: QPixmap) -> None:
         """Warm up the persistent GL overlay once to avoid first-run flicker."""
@@ -456,7 +537,13 @@ class DisplayWidget(QWidget):
                     'Diagonal TR-BL': SlideDirection.DIAG_TR_BL
                 }
                 
-                if direction_str == 'Random':
+                # Only randomize if direction is explicitly 'Random' AND random_always is disabled
+                # If random_always is enabled, the engine already chose a direction
+                rnd_always = transitions_settings.get('random_always', self.settings_manager.get('transitions.random_always', False))
+                if isinstance(rnd_always, str):
+                    rnd_always = rnd_always.lower() in ('true', '1', 'yes')
+                
+                if direction_str == 'Random' and not rnd_always:
                     direction = random.choice([
                         SlideDirection.LEFT, SlideDirection.RIGHT,
                         SlideDirection.UP, SlideDirection.DOWN
@@ -470,12 +557,28 @@ class DisplayWidget(QWidget):
             
             elif transition_type == 'Wipe':
                 import random
-                # Pick a random wipe direction (includes diagonals)
-                direction = random.choice([
-                    WipeDirection.LEFT_TO_RIGHT, WipeDirection.RIGHT_TO_LEFT,
-                    WipeDirection.TOP_TO_BOTTOM, WipeDirection.BOTTOM_TO_TOP,
-                    WipeDirection.DIAG_TL_BR, WipeDirection.DIAG_TR_BL
-                ])
+                # Check if we have a persisted wipe direction from random_always
+                wipe_dir_str = self.settings_manager.get('transitions.wipe_direction', None)
+                
+                direction_map = {
+                    'Left to Right': WipeDirection.LEFT_TO_RIGHT,
+                    'Right to Left': WipeDirection.RIGHT_TO_LEFT,
+                    'Top to Bottom': WipeDirection.TOP_TO_BOTTOM,
+                    'Bottom to Top': WipeDirection.BOTTOM_TO_TOP,
+                    'Diagonal TL-BR': WipeDirection.DIAG_TL_BR,
+                    'Diagonal TR-BL': WipeDirection.DIAG_TR_BL
+                }
+                
+                if wipe_dir_str and wipe_dir_str in direction_map:
+                    # Use persisted direction from random_always
+                    direction = direction_map[wipe_dir_str]
+                else:
+                    # Pick a random wipe direction (includes diagonals)
+                    direction = random.choice([
+                        WipeDirection.LEFT_TO_RIGHT, WipeDirection.RIGHT_TO_LEFT,
+                        WipeDirection.TOP_TO_BOTTOM, WipeDirection.BOTTOM_TO_TOP,
+                        WipeDirection.DIAG_TL_BR, WipeDirection.DIAG_TR_BL
+                    ])
                 if hw_accel:
                     return GLWipeTransition(duration_ms, direction, easing_str)
                 return WipeTransition(duration_ms, direction, easing_str)
@@ -614,10 +717,17 @@ class DisplayWidget(QWidget):
                     # Start transition
                     success = transition.start(self.previous_pixmap, new_pixmap, self)
                     if success:
-                        # Keep clock above any overlay/labels created by the transition
+                        # Keep widgets above any overlay/labels created by the transition
                         if self.clock_widget:
                             try:
                                 self.clock_widget.raise_()
+                                if hasattr(self.clock_widget, '_tz_label') and self.clock_widget._tz_label:
+                                    self.clock_widget._tz_label.raise_()
+                            except Exception:
+                                pass
+                        if self.weather_widget:
+                            try:
+                                self.weather_widget.raise_()
                             except Exception:
                                 pass
                         logger.debug(f"Transition started: {transition.__class__.__name__}")
@@ -740,15 +850,26 @@ class DisplayWidget(QWidget):
             self._image_label.show()
             self._image_label.raise_()
             
-            # Keep clock above pan & scan
+            # Keep widgets above pan & scan
             if self.clock_widget:
                 self.clock_widget.raise_()
+                if hasattr(self.clock_widget, '_tz_label') and self.clock_widget._tz_label:
+                    self.clock_widget._tz_label.raise_()
+            if self.weather_widget:
+                self.weather_widget.raise_()
             
             self._pan_and_scan.start()
         else:
             self._pan_and_scan.enable(False)
             if self._image_label:
                 self._image_label.hide()
+            # Ensure widgets stay visible after transition
+            if self.clock_widget:
+                self.clock_widget.raise_()
+                if hasattr(self.clock_widget, '_tz_label') and self.clock_widget._tz_label:
+                    self.clock_widget._tz_label.raise_()
+            if self.weather_widget:
+                self.weather_widget.raise_()
             self.update()
         
         # After the display reflects the new pixmap (and optional pan), clean up

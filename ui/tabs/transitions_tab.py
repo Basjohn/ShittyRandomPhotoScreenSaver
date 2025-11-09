@@ -228,12 +228,24 @@ class TransitionsTab(QWidget):
                 color: #ffffff;
                 border: 1px solid #3a3a3a;
                 border-radius: 4px;
-                padding-right: 24px; /* space for buttons */
+                padding-right: 28px; /* more space for larger buttons */
+                min-height: 24px;
             }
-            QSpinBox::up-button, QDoubleSpinBox::up-button,
+            QSpinBox::up-button, QDoubleSpinBox::up-button {
+                subcontrol-origin: border;
+                subcontrol-position: top right;
+                width: 24px;
+                height: 12px;
+                background: #2a2a2a;
+                border-left: 1px solid #3a3a3a;
+                border-bottom: 1px solid #3a3a3a;
+                margin: 0px;
+            }
             QSpinBox::down-button, QDoubleSpinBox::down-button {
                 subcontrol-origin: border;
-                width: 18px;
+                subcontrol-position: bottom right;
+                width: 24px;
+                height: 12px;
                 background: #2a2a2a;
                 border-left: 1px solid #3a3a3a;
                 margin: 0px;
@@ -245,6 +257,24 @@ class TransitionsTab(QWidget):
             QSpinBox::up-button:pressed, QDoubleSpinBox::up-button:pressed,
             QSpinBox::down-button:pressed, QDoubleSpinBox::down-button:pressed {
                 background: #505050;
+            }
+            QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {
+                image: none;
+                width: 0px;
+                height: 0px;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-bottom: 6px solid #ffffff;
+                margin-top: 2px;
+            }
+            QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
+                image: none;
+                width: 0px;
+                height: 0px;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 6px solid #ffffff;
+                margin-bottom: 2px;
             }
             """
         )

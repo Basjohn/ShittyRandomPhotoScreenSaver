@@ -5,11 +5,11 @@ Allows users to configure image sources:
 - Folder sources (browse and add)
 - RSS feed sources (add/edit/remove)
 """
-from typing import Optional, List
+from typing import Optional
 from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget,
-    QPushButton, QLineEdit, QFileDialog, QGroupBox, QMessageBox
+    QPushButton, QLineEdit, QFileDialog, QGroupBox, QMessageBox, QCheckBox
 )
 from PySide6.QtCore import Signal
 
@@ -110,6 +110,30 @@ class SourcesTab(QWidget):
         rss_buttons.addStretch()
         rss_layout.addLayout(rss_buttons)
         
+        # RSS save to disk option
+        self.rss_save_to_disk = QCheckBox("Save RSS Images To Disk")
+        self.rss_save_to_disk.setToolTip("Hope you have space! All RSS feed images will be permanently saved to a folder of your choosing.")
+        self.rss_save_to_disk.stateChanged.connect(self._on_rss_save_toggled)
+        rss_layout.addWidget(self.rss_save_to_disk)
+        
+        # RSS save directory (hidden by default)
+        self.rss_save_dir_layout = QHBoxLayout()
+        self.rss_save_dir_label = QLabel("Save Directory:")
+        self.rss_save_dir_input = QLineEdit()
+        self.rss_save_dir_input.setReadOnly(True)
+        self.rss_save_dir_input.setPlaceholderText("No directory selected...")
+        self.rss_save_dir_btn = QPushButton("Browse...")
+        self.rss_save_dir_btn.clicked.connect(self._browse_rss_save_dir)
+        self.rss_save_dir_layout.addWidget(self.rss_save_dir_label)
+        self.rss_save_dir_layout.addWidget(self.rss_save_dir_input)
+        self.rss_save_dir_layout.addWidget(self.rss_save_dir_btn)
+        rss_layout.addLayout(self.rss_save_dir_layout)
+        
+        # Hide save directory controls initially
+        self.rss_save_dir_label.setVisible(False)
+        self.rss_save_dir_input.setVisible(False)
+        self.rss_save_dir_btn.setVisible(False)
+        
         layout.addWidget(rss_group)
         
         layout.addStretch()
@@ -127,6 +151,19 @@ class SourcesTab(QWidget):
         self.rss_list.clear()
         for feed in rss_feeds:
             self.rss_list.addItem(feed)
+        
+        # Load RSS save-to-disk settings
+        rss_save_enabled = self._settings.get('sources.rss_save_to_disk', False)
+        self.rss_save_to_disk.setChecked(rss_save_enabled)
+        
+        rss_save_dir = self._settings.get('sources.rss_save_directory', '')
+        if rss_save_dir:
+            self.rss_save_dir_input.setText(rss_save_dir)
+        
+        # Show/hide save directory controls based on checkbox
+        self.rss_save_dir_label.setVisible(rss_save_enabled)
+        self.rss_save_dir_input.setVisible(rss_save_enabled)
+        self.rss_save_dir_btn.setVisible(rss_save_enabled)
         
         logger.debug(f"Loaded {len(folders)} folders and {len(rss_feeds)} RSS feeds")
     
@@ -209,3 +246,37 @@ class SourcesTab(QWidget):
                 self.rss_list.takeItem(self.rss_list.currentRow())
                 self.sources_changed.emit()
                 logger.info(f"Removed RSS feed: {url}")
+    
+    def _on_rss_save_toggled(self, state: int) -> None:
+        """Handle RSS save-to-disk checkbox toggle."""
+        enabled = state == 2  # Qt.CheckState.Checked
+        
+        # Show/hide directory controls
+        self.rss_save_dir_label.setVisible(enabled)
+        self.rss_save_dir_input.setVisible(enabled)
+        self.rss_save_dir_btn.setVisible(enabled)
+        
+        # If enabling and no directory set, prompt for one
+        if enabled and not self.rss_save_dir_input.text():
+            self._browse_rss_save_dir()
+        
+        # Save setting
+        self._settings.set('sources.rss_save_to_disk', enabled)
+        self._settings.save()
+        self.sources_changed.emit()
+        logger.info(f"RSS save-to-disk {'enabled' if enabled else 'disabled'}")
+    
+    def _browse_rss_save_dir(self) -> None:
+        """Browse for RSS save directory."""
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            "Select RSS Image Save Directory",
+            self.rss_save_dir_input.text() or str(Path.home())
+        )
+        
+        if directory:
+            self.rss_save_dir_input.setText(directory)
+            self._settings.set('sources.rss_save_directory', directory)
+            self._settings.save()
+            self.sources_changed.emit()
+            logger.info(f"RSS save directory set to: {directory}")

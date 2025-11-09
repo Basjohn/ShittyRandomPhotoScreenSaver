@@ -222,13 +222,25 @@ class ScreensaverEngine(QObject):
             
             # Get RSS sources from settings
             rss_feeds = self.settings_manager.get('sources.rss_feeds', [])
+            rss_save_to_disk = self.settings_manager.get('sources.rss_save_to_disk', False)
+            rss_save_directory = self.settings_manager.get('sources.rss_save_directory', '')
             
             # Only use RSS feeds if explicitly configured by user
             for feed_url in rss_feeds:
                 try:
-                    rss_source = RSSSource(feed_urls=[feed_url])
+                    # Create RSS source with save-to-disk settings if enabled
+                    if rss_save_to_disk and rss_save_directory:
+                        rss_source = RSSSource(
+                            feed_urls=[feed_url],
+                            save_to_disk=True,
+                            save_directory=Path(rss_save_directory)
+                        )
+                        logger.info(f"RSS source added with save-to-disk: {feed_url} -> {rss_save_directory}")
+                    else:
+                        rss_source = RSSSource(feed_urls=[feed_url])
+                        logger.info(f"RSS source added: {feed_url}")
+                    
                     self.rss_sources.append(rss_source)
-                    logger.info(f"RSS source added: {feed_url}")
                     sources_initialized += 1
                 except Exception as e:
                     logger.warning(f"[FALLBACK] Failed to add RSS source {feed_url}: {e}")
@@ -670,9 +682,22 @@ class ScreensaverEngine(QObject):
             available = ["Crossfade", "Slide", "Wipe", "Diffuse", "Block Puzzle Flip"]
             # Choose deterministically seeded by time slice to allow repeatability across displays
             choice = random.choice(available)
-            # Persist for this cycle so all displays pick the same
-            transitions['random_choice'] = choice
-            self.settings_manager.set('transitions', transitions)
+            
+            # Also choose random parameters for transitions that need them
+            # This ensures all displays use the SAME random parameters
+            if choice == "Slide":
+                directions = ['Left to Right', 'Right to Left', 'Top to Bottom', 'Bottom to Top']
+                direction = random.choice(directions)
+                self.settings_manager.set('transitions.direction', direction)
+            elif choice == "Wipe":
+                # Choose a random wipe direction and persist it
+                wipe_directions = ['Left to Right', 'Right to Left', 'Top to Bottom', 'Bottom to Top', 
+                                  'Diagonal TL-BR', 'Diagonal TR-BL']
+                wipe_direction = random.choice(wipe_directions)
+                self.settings_manager.set('transitions.wipe_direction', wipe_direction)
+            
+            # Persist using dot notation for flat settings structure
+            self.settings_manager.set('transitions.random_choice', choice)
             self.settings_manager.save()
             logger.info(f"Random transition choice for this rotation: {choice}")
         except Exception as e:

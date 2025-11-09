@@ -8,6 +8,7 @@ import requests
 import hashlib
 import tempfile
 import re
+import shutil
 from pathlib import Path
 from datetime import datetime
 from typing import List, Optional
@@ -41,7 +42,9 @@ class RSSSource(ImageProvider):
     def __init__(self, feed_urls: Optional[List[str]] = None, 
                  cache_dir: Optional[Path] = None,
                  max_cache_size_mb: int = 500,
-                 timeout_seconds: int = 30):
+                 timeout_seconds: int = 30,
+                 save_to_disk: bool = False,
+                 save_directory: Optional[Path] = None):
         """
         Initialize RSS source.
         
@@ -50,6 +53,8 @@ class RSSSource(ImageProvider):
             cache_dir: Directory for cached images (defaults to temp)
             max_cache_size_mb: Maximum cache size in MB
             timeout_seconds: Network timeout in seconds
+            save_to_disk: If True, permanently save RSS images to save_directory
+            save_directory: Directory for permanent RSS image storage (required if save_to_disk=True)
         """
         self.feed_urls = feed_urls or list(DEFAULT_RSS_FEEDS.values())
         self.timeout = timeout_seconds
@@ -62,6 +67,22 @@ class RSSSource(ImageProvider):
             self.cache_dir = Path(tempfile.gettempdir()) / "screensaver_rss_cache"
         
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Setup permanent save directory
+        self.save_to_disk = save_to_disk
+        self.save_directory = None
+        if save_to_disk:
+            if save_directory:
+                self.save_directory = Path(save_directory)
+                try:
+                    self.save_directory.mkdir(parents=True, exist_ok=True)
+                    logger.info(f"RSS save-to-disk enabled: {self.save_directory}")
+                except Exception as e:
+                    logger.error(f"Failed to create RSS save directory: {e}")
+                    self.save_to_disk = False
+            else:
+                logger.warning("RSS save-to-disk enabled but no directory specified, disabling feature")
+                self.save_to_disk = False
         
         self._images: List[ImageMetadata] = []
         self._feed_data = {}  # Store feed metadata
@@ -252,6 +273,17 @@ class RSSSource(ImageProvider):
                     f.write(chunk)
             
             logger.info(f"Downloaded image: {cache_file.name} ({cache_file.stat().st_size} bytes)")
+            
+            # Optionally save to permanent storage
+            if self.save_to_disk and self.save_directory:
+                try:
+                    save_file = self.save_directory / cache_file.name
+                    if not save_file.exists():
+                        shutil.copy2(cache_file, save_file)
+                        logger.info(f"Saved RSS image to disk: {save_file}")
+                except Exception as e:
+                    logger.warning(f"Failed to save RSS image to disk: {e}")
+            
             return cache_file
         
         except requests.RequestException as e:

@@ -17,6 +17,8 @@ from transitions.base_transition import BaseTransition, TransitionState
 from transitions.wipe_transition import WipeDirection
 from core.animation.types import EasingCurve
 from core.logging.logger import get_logger
+from core.resources.manager import ResourceManager
+from utils.profiler import profile
 
 logger = get_logger(__name__)
 
@@ -262,11 +264,12 @@ class GLWipeTransition(BaseTransition):
             
             # Prepaint initial frame to avoid black flicker
             try:
-                self._gl.makeCurrent()
-                self._gl.set_progress(0.0)
-                _fb = self._gl.grabFramebuffer()  # forces a paintGL pass
-                _ = _fb
-                logger.debug("[GL WIPE] Prepainted initial frame (progress=0.0)")
+                with profile("GL_WIPE_PREPAINT", threshold_ms=5.0, log_level="WARNING"):
+                    self._gl.makeCurrent()
+                    self._gl.set_progress(0.0)
+                    _fb = self._gl.grabFramebuffer()  # forces a paintGL pass
+                    _ = _fb
+                    logger.debug("[GL WIPE] Prepainted initial frame (progress=0.0)")
             except Exception as e:
                 logger.warning(f"[GL WIPE] Prepaint failed: {e}")
             try:
