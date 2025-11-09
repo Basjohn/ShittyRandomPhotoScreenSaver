@@ -17,7 +17,6 @@ from transitions.base_transition import BaseTransition, TransitionState
 from transitions.wipe_transition import WipeDirection
 from core.animation.types import EasingCurve
 from core.logging.logger import get_logger
-from core.resources.manager import ResourceManager
 from utils.profiler import profile
 
 logger = get_logger(__name__)
@@ -263,10 +262,12 @@ class GLWipeTransition(BaseTransition):
                 self._gl.raise_()
             except Exception:
                 pass
-            # Keep clock above overlay
+            # Keep widgets above overlay
             try:
                 if hasattr(widget, "clock_widget") and getattr(widget, "clock_widget"):
                     widget.clock_widget.raise_()
+                if hasattr(widget, "weather_widget") and getattr(widget, "weather_widget"):
+                    widget.weather_widget.raise_()
             except Exception:
                 pass
             
@@ -351,8 +352,9 @@ class GLWipeTransition(BaseTransition):
             return
         progress = max(0.0, min(1.0, progress))
         try:
-            self._gl.set_progress(progress)
-            self._gl.repaint()
+            with profile("GL_WIPE_REPAINT_FRAME", threshold_ms=8.0, log_level="WARNING"):
+                self._gl.set_progress(progress)
+                self._gl.repaint()
         except Exception:
             pass
         self._emit_progress(progress)

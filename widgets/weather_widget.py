@@ -130,6 +130,14 @@ class WeatherWidget(QLabel):
     def _setup_ui(self) -> None:
         """Setup widget UI."""
         self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        try:
+            # Reduce flashing during transitions by avoiding system background clears
+            self.setAutoFillBackground(False)
+            self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+            self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        except Exception:
+            pass
         self._update_stylesheet()
         
         font = QFont(self._font_family, self._font_size, QFont.Weight.Normal)  # Lighter weight than clock

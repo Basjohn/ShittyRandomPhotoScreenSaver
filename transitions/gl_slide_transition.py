@@ -17,6 +17,7 @@ from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from transitions.base_transition import BaseTransition, TransitionState
 from transitions.slide_transition import SlideDirection
 from core.animation.types import EasingCurve
+from utils.profiler import profile
 from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
@@ -223,10 +224,12 @@ class GLSlideTransition(BaseTransition):
                 self._gl.raise_()
             except Exception:
                 pass
-            # Keep clock above overlay
+            # Keep widgets above overlay
             try:
                 if hasattr(widget, "clock_widget") and getattr(widget, "clock_widget"):
                     widget.clock_widget.raise_()
+                if hasattr(widget, "weather_widget") and getattr(widget, "weather_widget"):
+                    widget.weather_widget.raise_()
             except Exception:
                 pass
             
@@ -239,11 +242,12 @@ class GLSlideTransition(BaseTransition):
             
             # Prepaint initial frame to avoid black flicker
             try:
-                self._gl.makeCurrent()
-                self._gl.set_progress(0.0)
-                _fb = self._gl.grabFramebuffer()  # forces a paintGL pass
-                _ = _fb
-                logger.debug("[GL SLIDE] Prepainted initial frame (progress=0.0)")
+                with profile("GL_SLIDE_PREPAINT", threshold_ms=6.0, log_level="WARNING"):
+                    self._gl.makeCurrent()
+                    self._gl.set_progress(0.0)
+                    _fb = self._gl.grabFramebuffer()  # forces a paintGL pass
+                    _ = _fb
+                    logger.debug("[GL SLIDE] Prepainted initial frame (progress=0.0)")
             except Exception as e:
                 logger.warning(f"[GL SLIDE] Prepaint failed: {e}")
             try:

@@ -511,6 +511,11 @@ class ScreensaverEngine(QObject):
     
     def _show_next_image(self) -> bool:
         """Load and display next image from queue."""
+        # If random transitions are enabled, prepare a new non-repeating choice for this change
+        try:
+            self._prepare_random_transition_if_needed()
+        except Exception:
+            pass
         if not self.image_queue or not self.display_manager:
             logger.warning("[FALLBACK] Queue or display not initialized")
             return False
@@ -680,8 +685,12 @@ class ScreensaverEngine(QObject):
                 return
             # Available transition types (non-GL)
             available = ["Crossfade", "Slide", "Wipe", "Diffuse", "Block Puzzle Flip"]
-            # Choose deterministically seeded by time slice to allow repeatability across displays
-            choice = random.choice(available)
+            # Avoid immediate repeats of transition type
+            last_type = self.settings_manager.get('transitions.last_random_choice', None)
+            candidates = [t for t in available if t != last_type] if last_type in available else available
+            if not candidates:
+                candidates = available
+            choice = random.choice(candidates)
             
             # Also choose random parameters for transitions that need them
             # This ensures all displays use the SAME random parameters
@@ -704,6 +713,7 @@ class ScreensaverEngine(QObject):
             
             # Persist using dot notation for flat settings structure
             self.settings_manager.set('transitions.random_choice', choice)
+            self.settings_manager.set('transitions.last_random_choice', choice)
             self.settings_manager.save()
             logger.info(f"Random transition choice for this rotation: {choice}")
         except Exception as e:
