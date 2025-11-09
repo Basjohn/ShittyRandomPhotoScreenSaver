@@ -64,7 +64,27 @@ class PanAndScan:
         except Exception:
             self._resource_manager = None
         
-        logger.debug("PanAndScan initialized")
+        logger.debug("Pan and Scan initialized")
+
+    def set_target_fps(self, fps: int) -> None:
+        try:
+            new_fps = max(10, min(240, int(fps)))
+        except Exception:
+            new_fps = 60
+        if new_fps == self._fps:
+            return
+        self._fps = new_fps
+        self._timer_interval_ms = max(1, int(1000 // self._fps))
+        was_running = self._timer.isActive() if self._timer else False
+        if was_running:
+            try:
+                self._timer.stop()
+            except Exception:
+                pass
+            try:
+                self._timer.start(self._timer_interval_ms)
+            except Exception:
+                pass
     
     def set_image(self, pixmap: QPixmap, label: QLabel, display_size: QSize) -> None:
         """

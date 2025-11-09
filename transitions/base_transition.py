@@ -252,10 +252,20 @@ class BaseTransition(QObject, metaclass=QABCMeta):
         Avoids raw QTimer usage inside transitions.
         """
         am = getattr(widget, "_animation_manager", None)
+        target_fps = getattr(widget, "_target_fps", 60)
         if am is None:
             from core.animation.animator import AnimationManager
-            am = AnimationManager()
+            try:
+                am = AnimationManager(int(target_fps))
+            except Exception:
+                am = AnimationManager()
             setattr(widget, "_animation_manager", am)
+        else:
+            try:
+                if hasattr(am, 'set_target_fps'):
+                    am.set_target_fps(int(target_fps))
+            except Exception:
+                pass
         return am
     
     def __repr__(self) -> str:

@@ -57,13 +57,13 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     # Get the first argument (after program name)
     arg = args[1].lower()
     
-    # Run screensaver
-    if arg == '/s' or arg == '-s':
+    # Run screensaver (Windows /s only). For convenience, -s/--s open settings.
+    if arg == '/s':
         logger.info("RUN mode selected")
         return ScreensaverMode.RUN, None
     
     # Configuration dialog
-    elif arg == '/c' or arg == '-c':
+    elif arg in ('/c', '-c', '-s', '--s'):
         logger.info("CONFIG mode selected")
         return ScreensaverMode.CONFIG, None
     

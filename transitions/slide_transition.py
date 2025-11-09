@@ -311,7 +311,7 @@ class SlideTransition(BaseTransition):
         """Map UI easing string to core EasingCurve with 'Auto' default."""
         name = (self._easing or 'Auto').strip()
         if name == 'Auto':
-            return EasingCurve.QUAD_IN_OUT
+            return EasingCurve.LINEAR
         mapping = {
             'Linear': EasingCurve.LINEAR,
             'InQuad': EasingCurve.QUAD_IN,

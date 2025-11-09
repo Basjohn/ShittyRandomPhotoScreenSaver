@@ -71,6 +71,7 @@ class DisplayWidget(QWidget):
         self._device_pixel_ratio = 1.0  # DPI scaling factor
         self._initial_mouse_pos = None  # Track mouse movement for exit
         self._mouse_move_threshold = 10  # Pixels of movement before exit
+        self._target_fps = 60  # Target FPS derived from screen refresh rate
         
         # FIX: Use ResourceManager for Qt object lifecycle
         try:
@@ -119,6 +120,11 @@ class DisplayWidget(QWidget):
         # Position and size window
         self.setGeometry(geometry)
         self.showFullScreen()
+        # Configure per-display refresh rate and animation cadence (does not touch prewarm)
+        try:
+            self._configure_refresh_rate_sync()
+        except Exception as e:
+            logger.warning(f"Failed to configure refresh rate sync: {e}")
         
         # Pre-warm GL contexts if hardware acceleration enabled
         if self.settings_manager:
@@ -132,6 +138,37 @@ class DisplayWidget(QWidget):
         # Setup overlay widgets AFTER geometry is set
         if self.settings_manager:
             self._setup_widgets()
+
+    def _detect_refresh_rate(self) -> float:
+        try:
+            screen = self._screen
+            if screen is None:
+                from PySide6.QtGui import QGuiApplication
+                screens = QGuiApplication.screens()
+                screen = screens[self.screen_index] if self.screen_index < len(screens) else QGuiApplication.primaryScreen()
+            hz_attr = getattr(screen, 'refreshRate', None)
+            rate = float(hz_attr()) if callable(hz_attr) else 60.0
+            if not (10.0 <= rate <= 240.0):
+                return 60.0
+            return rate
+        except Exception:
+            return 60.0
+
+    def _configure_refresh_rate_sync(self) -> None:
+        detected = int(round(self._detect_refresh_rate()))
+        target = max(10, min(240, detected))
+        self._target_fps = target
+        logger.info(f"Detected refresh rate: {detected} Hz, target animation FPS: {self._target_fps}")
+        try:
+            self._pan_and_scan.set_target_fps(self._target_fps)
+        except Exception:
+            pass
+        try:
+            am = getattr(self, "_animation_manager", None)
+            if am is not None and hasattr(am, 'set_target_fps'):
+                am.set_target_fps(self._target_fps)
+        except Exception:
+            pass
     
     def _setup_widgets(self) -> None:
         """Setup overlay widgets (clock, weather) based on settings."""
@@ -359,7 +396,7 @@ class DisplayWidget(QWidget):
             from transitions import (
                 CrossfadeTransition, GLCrossfadeTransition,
                 SlideTransition, GLSlideTransition, SlideDirection,
-                DiffuseTransition, GLDiffuseTransition,
+                DiffuseTransition,
                 BlockPuzzleFlipTransition, GLBlockPuzzleFlipTransition,
                 WipeTransition, GLWipeTransition, WipeDirection
             )
@@ -418,8 +455,6 @@ class DisplayWidget(QWidget):
                     self.settings_manager.get('transitions.diffuse.block_size', 50))
                 shape = diffuse_settings.get('shape', 
                     self.settings_manager.get('transitions.diffuse.shape', 'Rectangle'))
-                if hw_accel:
-                    return GLDiffuseTransition(duration_ms, block_size, shape)
                 return DiffuseTransition(duration_ms, block_size, shape)
             
             elif transition_type == 'Block Puzzle Flip':

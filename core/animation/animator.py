@@ -7,9 +7,9 @@ NO raw QPropertyAnimation or QTimer should be used outside this module.
 import time
 import uuid
 from typing import Any, Dict, Optional, Callable
-from PySide6.QtCore import QObject, QTimer, Signal, Property
+from PySide6.QtCore import QObject, QTimer, Signal
 from core.animation.types import (
-    AnimationState, AnimationType, EasingCurve,
+    AnimationState, EasingCurve,
     PropertyAnimationConfig, CustomAnimationConfig, AnimationGroupConfig
 )
 from core.animation.easing import ease
@@ -271,6 +271,25 @@ class AnimationManager(QObject):
         self._timer.timeout.connect(self._update_all)
         
         logger.info(f"AnimationManager initialized (fps={fps})")
+
+    def set_target_fps(self, fps: int) -> None:
+        """Update target FPS and reconfigure the timer interval safely."""
+        try:
+            new_fps = max(10, min(240, int(fps)))
+        except Exception:
+            new_fps = 60
+        if new_fps == self.fps:
+            return
+        self.fps = new_fps
+        self.frame_time = 1.0 / self.fps
+        was_active = self._timer.isActive() if self._timer else False
+        if was_active:
+            self._timer.stop()
+        self._timer.setInterval(int(self.frame_time * 1000))
+        if was_active:
+            self._last_update_time = time.time()
+            self._timer.start()
+        logger.info(f"AnimationManager target FPS set to {self.fps}")
     
     def start(self) -> None:
         """Start the animation manager's update loop."""

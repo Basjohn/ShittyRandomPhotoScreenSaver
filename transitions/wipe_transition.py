@@ -87,8 +87,11 @@ class WipeTransition(BaseTransition):
             self.error.emit("Invalid image")
             return False
         
-        self._old_pixmap = old_pixmap
-        self._new_pixmap = new_pixmap
+        # Pre-fit pixmaps to widget size (device pixels) for caching and fidelity
+        fitted_old = self._fit_pixmap_to_widget(old_pixmap, widget) if old_pixmap and not old_pixmap.isNull() else None
+        fitted_new = self._fit_pixmap_to_widget(new_pixmap, widget)
+        self._old_pixmap = fitted_old if fitted_old is not None else old_pixmap
+        self._new_pixmap = fitted_new
         self._elapsed_ms = 0
         self._widget = widget
         
@@ -104,7 +107,8 @@ class WipeTransition(BaseTransition):
         self._old_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._old_label.setStyleSheet("background: transparent;")
         self._old_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        self._old_label.setPixmap(old_pixmap)
+        if self._old_pixmap:
+            self._old_label.setPixmap(self._old_pixmap)
         self._old_label.show()
 
         self._new_label = QLabel(widget)
@@ -113,7 +117,7 @@ class WipeTransition(BaseTransition):
         self._new_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._new_label.setStyleSheet("background: transparent;")
         self._new_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        self._new_label.setPixmap(new_pixmap)
+        self._new_label.setPixmap(self._new_pixmap)
         # Start fully hidden (no show yet); apply empty mask
         self._new_label.setMask(QRegion())
         try:
