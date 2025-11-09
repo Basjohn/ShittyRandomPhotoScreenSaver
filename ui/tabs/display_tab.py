@@ -232,6 +232,9 @@ class DisplayTab(QWidget):
         self.pan_check.blockSignals(True)
         self.pan_auto_check.blockSignals(True)
         self.pan_speed_spin.blockSignals(True)
+        # Also block performance toggles to avoid saving defaults while loading
+        self.hw_accel_check.blockSignals(True)
+        self.refresh_sync_check.blockSignals(True)
         
         try:
             # Monitor selection
@@ -314,6 +317,8 @@ class DisplayTab(QWidget):
             self.pan_check.blockSignals(False)
             self.pan_auto_check.blockSignals(False)
             self.pan_speed_spin.blockSignals(False)
+            self.hw_accel_check.blockSignals(False)
+            self.refresh_sync_check.blockSignals(False)
     
     def _save_settings(self) -> None:
         """Save current settings to settings manager."""

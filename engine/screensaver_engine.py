@@ -687,14 +687,20 @@ class ScreensaverEngine(QObject):
             # This ensures all displays use the SAME random parameters
             if choice == "Slide":
                 directions = ['Left to Right', 'Right to Left', 'Top to Bottom', 'Bottom to Top']
-                direction = random.choice(directions)
+                last_dir = self.settings_manager.get('transitions.last_slide_direction', None)
+                candidates = [d for d in directions if d != last_dir] if last_dir in directions else directions
+                direction = random.choice(candidates) if candidates else random.choice(directions)
                 self.settings_manager.set('transitions.direction', direction)
+                self.settings_manager.set('transitions.last_slide_direction', direction)
             elif choice == "Wipe":
                 # Choose a random wipe direction and persist it
                 wipe_directions = ['Left to Right', 'Right to Left', 'Top to Bottom', 'Bottom to Top', 
                                   'Diagonal TL-BR', 'Diagonal TR-BL']
-                wipe_direction = random.choice(wipe_directions)
+                last_wipe = self.settings_manager.get('transitions.last_wipe_direction', None)
+                candidates = [d for d in wipe_directions if d != last_wipe] if last_wipe in wipe_directions else wipe_directions
+                wipe_direction = random.choice(candidates) if candidates else random.choice(wipe_directions)
                 self.settings_manager.set('transitions.wipe_direction', wipe_direction)
+                self.settings_manager.set('transitions.last_wipe_direction', wipe_direction)
             
             # Persist using dot notation for flat settings structure
             self.settings_manager.set('transitions.random_choice', choice)

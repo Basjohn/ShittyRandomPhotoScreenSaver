@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import threading
 from typing import Optional
-from PySide6.QtGui import QPixmap, QPainter
+from PySide6.QtGui import QPixmap, QPainter, QSurfaceFormat
 from PySide6.QtWidgets import QWidget
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
@@ -25,6 +25,17 @@ logger = get_logger(__name__)
 
 class _GLWipeWidget(QOpenGLWidget):
     def __init__(self, parent: QWidget, old_pixmap: QPixmap, new_pixmap: QPixmap, direction: WipeDirection) -> None:
+        # Configure surface format before context is created
+        try:
+            fmt = QSurfaceFormat()
+            try:
+                fmt.setSwapBehavior(QSurfaceFormat.SwapBehavior.TripleBuffer)
+            except Exception:
+                fmt.setSwapBehavior(QSurfaceFormat.SwapBehavior.DefaultSwapBehavior)
+            fmt.setSwapInterval(1)  # vsync
+            self.setFormat(fmt)
+        except Exception:
+            pass
         super().__init__(parent)
         self.setAutoFillBackground(False)
         try:
@@ -32,6 +43,10 @@ class _GLWipeWidget(QOpenGLWidget):
             self.setAttribute(_Qt.WidgetAttribute.WA_NoSystemBackground, True)
             self.setAttribute(_Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
             self.setAttribute(_Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        except Exception:
+            pass
+        try:
+            self.setUpdateBehavior(QOpenGLWidget.UpdateBehavior.NoPartialUpdate)
         except Exception:
             pass
         self._old = old_pixmap

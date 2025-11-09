@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QScrollArea, QSlider, QCompleter, QFontComboBox
 )
 from PySide6.QtCore import Signal, Qt
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QFont
 
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger
@@ -333,65 +333,98 @@ class WidgetsTab(QWidget):
     
     def _load_settings(self) -> None:
         """Load settings from settings manager."""
-        # Load clock settings
-        clock_config = self._settings.get('widgets', {}).get('clock', {})
-        self.clock_enabled.setChecked(clock_config.get('enabled', False))
-        
-        format_text = "12 Hour" if clock_config.get('format', '12h') == '12h' else "24 Hour"
-        index = self.clock_format.findText(format_text)
-        if index >= 0:
-            self.clock_format.setCurrentIndex(index)
-        
-        self.clock_seconds.setChecked(clock_config.get('show_seconds', True))
-        
-        # Load timezone settings
-        timezone_str = clock_config.get('timezone', 'local')
-        tz_index = self.clock_timezone.findData(timezone_str)
-        if tz_index >= 0:
-            self.clock_timezone.setCurrentIndex(tz_index)
-        
-        self.clock_show_tz.setChecked(clock_config.get('show_timezone', False))
-        
-        position = clock_config.get('position', 'Top Right')
-        index = self.clock_position.findText(position)
-        if index >= 0:
-            self.clock_position.setCurrentIndex(index)
-        
-        self.clock_font_combo.setCurrentFont(clock_config.get('font_family', 'Segoe UI'))
-        self.clock_font_size.setValue(clock_config.get('font_size', 48))
-        self.clock_margin.setValue(clock_config.get('margin', 20))
-        self.clock_show_background.setChecked(clock_config.get('show_background', False))
-        opacity_pct = int(clock_config.get('bg_opacity', 0.9) * 100)
-        self.clock_bg_opacity.setValue(opacity_pct)
-        self.clock_opacity_label.setText(f"{opacity_pct}%")
-        
-        # Load clock color
-        color_data = clock_config.get('color', [255, 255, 255, 230])
-        self._clock_color = QColor(*color_data)
-        
-        # Load weather settings
-        weather_config = self._settings.get('widgets', {}).get('weather', {})
-        self.weather_enabled.setChecked(weather_config.get('enabled', False))
-        # No API key needed with Open-Meteo!
-        self.weather_location.setText(weather_config.get('location', 'London'))
-        
-        weather_pos = weather_config.get('position', 'Bottom Left')
-        index = self.weather_position.findText(weather_pos)
-        if index >= 0:
-            self.weather_position.setCurrentIndex(index)
-        
-        self.weather_font_combo.setCurrentFont(weather_config.get('font_family', 'Segoe UI'))
-        self.weather_font_size.setValue(weather_config.get('font_size', 24))
-        self.weather_show_background.setChecked(weather_config.get('show_background', False))
-        weather_opacity_pct = int(weather_config.get('bg_opacity', 0.9) * 100)
-        self.weather_bg_opacity.setValue(weather_opacity_pct)
-        self.weather_opacity_label.setText(f"{weather_opacity_pct}%")
-        
-        # Load weather color
-        weather_color_data = weather_config.get('color', [255, 255, 255, 230])
-        self._weather_color = QColor(*weather_color_data)
-        
-        logger.debug("Loaded widget settings")
+        # Block all signals during load to prevent unintended saves from valueChanged/stateChanged
+        blockers = []
+        try:
+            for w in [
+                getattr(self, 'clock_enabled', None),
+                getattr(self, 'clock_format', None),
+                getattr(self, 'clock_seconds', None),
+                getattr(self, 'clock_timezone', None),
+                getattr(self, 'clock_show_tz', None),
+                getattr(self, 'clock_position', None),
+                getattr(self, 'clock_font_combo', None),
+                getattr(self, 'clock_font_size', None),
+                getattr(self, 'clock_margin', None),
+                getattr(self, 'clock_show_background', None),
+                getattr(self, 'clock_bg_opacity', None),
+                getattr(self, 'weather_enabled', None),
+                getattr(self, 'weather_location', None),
+                getattr(self, 'weather_position', None),
+                getattr(self, 'weather_font_combo', None),
+                getattr(self, 'weather_font_size', None),
+                getattr(self, 'weather_show_background', None),
+                getattr(self, 'weather_bg_opacity', None),
+            ]:
+                if w is not None and hasattr(w, 'blockSignals'):
+                    w.blockSignals(True)
+                    blockers.append(w)
+
+            # Load clock settings
+            clock_config = self._settings.get('widgets', {}).get('clock', {})
+            self.clock_enabled.setChecked(clock_config.get('enabled', False))
+            
+            format_text = "12 Hour" if clock_config.get('format', '12h') == '12h' else "24 Hour"
+            index = self.clock_format.findText(format_text)
+            if index >= 0:
+                self.clock_format.setCurrentIndex(index)
+            
+            self.clock_seconds.setChecked(clock_config.get('show_seconds', True))
+            
+            # Load timezone settings
+            timezone_str = clock_config.get('timezone', 'local')
+            tz_index = self.clock_timezone.findData(timezone_str)
+            if tz_index >= 0:
+                self.clock_timezone.setCurrentIndex(tz_index)
+            
+            self.clock_show_tz.setChecked(clock_config.get('show_timezone', False))
+            
+            position = clock_config.get('position', 'Top Right')
+            index = self.clock_position.findText(position)
+            if index >= 0:
+                self.clock_position.setCurrentIndex(index)
+            
+            self.clock_font_combo.setCurrentFont(QFont(clock_config.get('font_family', 'Segoe UI')))
+            self.clock_font_size.setValue(clock_config.get('font_size', 48))
+            self.clock_margin.setValue(clock_config.get('margin', 20))
+            self.clock_show_background.setChecked(clock_config.get('show_background', False))
+            opacity_pct = int(clock_config.get('bg_opacity', 0.9) * 100)
+            self.clock_bg_opacity.setValue(opacity_pct)
+            self.clock_opacity_label.setText(f"{opacity_pct}%")
+            
+            # Load clock color
+            color_data = clock_config.get('color', [255, 255, 255, 230])
+            self._clock_color = QColor(*color_data)
+            
+            # Load weather settings
+            weather_config = self._settings.get('widgets', {}).get('weather', {})
+            self.weather_enabled.setChecked(weather_config.get('enabled', False))
+            # No API key needed with Open-Meteo!
+            self.weather_location.setText(weather_config.get('location', 'London'))
+            
+            weather_pos = weather_config.get('position', 'Bottom Left')
+            index = self.weather_position.findText(weather_pos)
+            if index >= 0:
+                self.weather_position.setCurrentIndex(index)
+            
+            self.weather_font_combo.setCurrentFont(QFont(weather_config.get('font_family', 'Segoe UI')))
+            self.weather_font_size.setValue(weather_config.get('font_size', 24))
+            self.weather_show_background.setChecked(weather_config.get('show_background', False))
+            weather_opacity_pct = int(weather_config.get('bg_opacity', 0.9) * 100)
+            self.weather_bg_opacity.setValue(weather_opacity_pct)
+            self.weather_opacity_label.setText(f"{weather_opacity_pct}%")
+            
+            # Load weather color
+            weather_color_data = weather_config.get('color', [255, 255, 255, 230])
+            self._weather_color = QColor(*weather_color_data)
+            
+            logger.debug("Loaded widget settings")
+        finally:
+            for w in blockers:
+                try:
+                    w.blockSignals(False)
+                except Exception:
+                    pass
     
     def _choose_clock_color(self) -> None:
         """Choose clock text color."""

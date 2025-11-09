@@ -214,13 +214,19 @@ class DisplayWidget(QWidget):
         clock_settings = widgets.get('clock', {}) if isinstance(widgets, dict) else {}
         logger.debug(f"Widgets config: {widgets}")
         logger.debug(f"Clock settings retrieved: {clock_settings}")
-        if clock_settings.get('enabled', False):
+        # Normalize booleans possibly stored as strings
+        def _to_bool(val, default=False):
+            if isinstance(val, str):
+                return val.lower() in ('true', '1', 'yes')
+            return bool(val) if val is not None else default
+        clock_enabled = _to_bool(clock_settings.get('enabled', False), False)
+        if clock_enabled:
             # Parse settings
             time_format = TimeFormat.TWELVE_HOUR if clock_settings.get('format', '12h') == '12h' else TimeFormat.TWENTY_FOUR_HOUR
             position_str = clock_settings.get('position', 'Top Right')
-            show_seconds = clock_settings.get('show_seconds', False)
+            show_seconds = _to_bool(clock_settings.get('show_seconds', False), False)
             timezone_str = clock_settings.get('timezone', 'local')
-            show_timezone = clock_settings.get('show_timezone', False)
+            show_timezone = _to_bool(clock_settings.get('show_timezone', False), False)
             font_size = clock_settings.get('font_size', 48)
             margin = clock_settings.get('margin', 20)
             color = clock_settings.get('color', [255, 255, 255, 230])
@@ -266,7 +272,7 @@ class DisplayWidget(QWidget):
                 logger.debug(f"Color set to RGBA({color[0]}, {color[1]}, {color[2]}, {color[3]})")
                 
                 # Set background frame if enabled
-                show_background = clock_settings.get('show_background', False)
+                show_background = _to_bool(clock_settings.get('show_background', False), False)
                 self.clock_widget.set_show_background(show_background)
                 logger.debug(f"Background frame: {show_background}")
                 
@@ -295,7 +301,8 @@ class DisplayWidget(QWidget):
         
         # Weather widget
         weather_settings = widgets.get('weather', {}) if isinstance(widgets, dict) else {}
-        if weather_settings.get('enabled', False):
+        weather_enabled = _to_bool(weather_settings.get('enabled', False), False)
+        if weather_enabled:
             position_str = weather_settings.get('position', 'Bottom Left')
             location = weather_settings.get('location', 'London')
             font_size = weather_settings.get('font_size', 24)
@@ -326,7 +333,7 @@ class DisplayWidget(QWidget):
                 self.weather_widget.set_text_color(qcolor)
                 
                 # Set background frame if enabled
-                show_background = weather_settings.get('show_background', False)
+                show_background = _to_bool(weather_settings.get('show_background', False), False)
                 self.weather_widget.set_show_background(show_background)
                 
                 # Set background opacity
@@ -409,8 +416,11 @@ class DisplayWidget(QWidget):
         start_time = time.time()
         logger.debug(f"[PREWARM] Starting GL context pre-warming for screen {self.screen_index}")
         
-        # Create tiny dummy pixmap
-        dummy = QPixmap(10, 10)
+        # Create full-screen dummy pixmap to allocate FBOs at final size
+        w, h = self.width(), self.height()
+        if w <= 0 or h <= 0:
+            w, h = 10, 10
+        dummy = QPixmap(w, h)
         dummy.fill(Qt.GlobalColor.black)
         dummy.setDevicePixelRatio(self._device_pixel_ratio)
         
@@ -432,8 +442,8 @@ class DisplayWidget(QWidget):
             ("Crossfade", "_srpss_gl_xfade_overlay", lambda: _GLFadeWidget(self, dummy, dummy)),
             ("Slide", "_srpss_gl_slide_overlay", lambda: _GLSlideWidget(self, dummy, dummy, SlideDirection.LEFT)),
             ("Wipe", "_srpss_gl_wipe_overlay", lambda: _GLWipeWidget(self, dummy, dummy, WipeDirection.LEFT_TO_RIGHT)),
-            ("Diffuse", "_srpss_gl_diffuse_overlay", lambda: _GLDiffuseWidget(self, dummy, dummy, [_Cell(QRect(0, 0, 10, 10))])),
-            ("Block", "_srpss_gl_blockflip_overlay", lambda: _GLBlockFlipWidget(self, dummy, dummy, [_GLFlipBlock(QRect(0, 0, 10, 10))])),
+            ("Diffuse", "_srpss_gl_diffuse_overlay", lambda: _GLDiffuseWidget(self, dummy, dummy, [_Cell(QRect(0, 0, w, h))])),
+            ("Block", "_srpss_gl_blockflip_overlay", lambda: _GLBlockFlipWidget(self, dummy, dummy, [_GLFlipBlock(QRect(0, 0, w, h))])),
         ]
         
         prewarmed_count = 0
@@ -442,7 +452,7 @@ class DisplayWidget(QWidget):
                 # Create overlay
                 per_overlay_start = time.time()
                 overlay = create_fn()
-                overlay.setGeometry(0, 0, 10, 10)
+                overlay.setGeometry(0, 0, w, h)
                 overlay.show()
                 
                 # Force GL initialization
@@ -450,7 +460,7 @@ class DisplayWidget(QWidget):
                 overlay.repaint()
                 
                 # Wait briefly for GL init (with timeout)
-                timeout_ms = 100
+                timeout_ms = 150
                 start = time.time()
                 while not overlay.is_ready_for_display():
                     QApplication.processEvents()
@@ -544,10 +554,30 @@ class DisplayWidget(QWidget):
                     rnd_always = rnd_always.lower() in ('true', '1', 'yes')
                 
                 if direction_str == 'Random' and not rnd_always:
-                    direction = random.choice([
+                    # Avoid repeating the previous direction
+                    all_dirs = [
                         SlideDirection.LEFT, SlideDirection.RIGHT,
                         SlideDirection.UP, SlideDirection.DOWN
-                    ])
+                    ]
+                    last_dir = self.settings_manager.get('transitions.last_slide_direction', None)
+                    # Map last string to enum if present
+                    str_to_enum = {
+                        'Left to Right': SlideDirection.LEFT,
+                        'Right to Left': SlideDirection.RIGHT,
+                        'Top to Bottom': SlideDirection.DOWN,
+                        'Bottom to Top': SlideDirection.UP,
+                    }
+                    last_enum = str_to_enum.get(last_dir) if isinstance(last_dir, str) else None
+                    candidates = [d for d in all_dirs if d != last_enum] if last_enum in all_dirs else all_dirs
+                    direction = random.choice(candidates) if candidates else random.choice(all_dirs)
+                    # Persist last for next time
+                    enum_to_str = {
+                        SlideDirection.LEFT: 'Left to Right',
+                        SlideDirection.RIGHT: 'Right to Left',
+                        SlideDirection.DOWN: 'Top to Bottom',
+                        SlideDirection.UP: 'Bottom to Top',
+                    }
+                    self.settings_manager.set('transitions.last_slide_direction', enum_to_str.get(direction, 'Left to Right'))
                 else:
                     direction = direction_map.get(direction_str, SlideDirection.LEFT)
                 
@@ -573,12 +603,35 @@ class DisplayWidget(QWidget):
                     # Use persisted direction from random_always
                     direction = direction_map[wipe_dir_str]
                 else:
-                    # Pick a random wipe direction (includes diagonals)
-                    direction = random.choice([
+                    # Pick a random wipe direction (includes diagonals) without repeating last if possible
+                    all_wipes = [
                         WipeDirection.LEFT_TO_RIGHT, WipeDirection.RIGHT_TO_LEFT,
                         WipeDirection.TOP_TO_BOTTOM, WipeDirection.BOTTOM_TO_TOP,
                         WipeDirection.DIAG_TL_BR, WipeDirection.DIAG_TR_BL
-                    ])
+                    ]
+                    last_wipe = self.settings_manager.get('transitions.last_wipe_direction', None)
+                    # Map last string to enum if present
+                    str_to_enum = {
+                        'Left to Right': WipeDirection.LEFT_TO_RIGHT,
+                        'Right to Left': WipeDirection.RIGHT_TO_LEFT,
+                        'Top to Bottom': WipeDirection.TOP_TO_BOTTOM,
+                        'Bottom to Top': WipeDirection.BOTTOM_TO_TOP,
+                        'Diagonal TL-BR': WipeDirection.DIAG_TL_BR,
+                        'Diagonal TR-BL': WipeDirection.DIAG_TR_BL,
+                    }
+                    last_enum = str_to_enum.get(last_wipe) if isinstance(last_wipe, str) else None
+                    candidates = [d for d in all_wipes if d != last_enum] if last_enum in all_wipes else all_wipes
+                    direction = random.choice(candidates) if candidates else random.choice(all_wipes)
+                    # Persist last for next time
+                    enum_to_str = {
+                        WipeDirection.LEFT_TO_RIGHT: 'Left to Right',
+                        WipeDirection.RIGHT_TO_LEFT: 'Right to Left',
+                        WipeDirection.TOP_TO_BOTTOM: 'Top to Bottom',
+                        WipeDirection.BOTTOM_TO_TOP: 'Bottom to Top',
+                        WipeDirection.DIAG_TL_BR: 'Diagonal TL-BR',
+                        WipeDirection.DIAG_TR_BL: 'Diagonal TR-BL',
+                    }
+                    self.settings_manager.set('transitions.last_wipe_direction', enum_to_str.get(direction, 'Left to Right'))
                 if hw_accel:
                     return GLWipeTransition(duration_ms, direction, easing_str)
                 return WipeTransition(duration_ms, direction, easing_str)
