@@ -220,7 +220,13 @@ class DisplayWidget(QWidget):
                 return val.lower() in ('true', '1', 'yes')
             return bool(val) if val is not None else default
         clock_enabled = _to_bool(clock_settings.get('enabled', False), False)
-        if clock_enabled:
+        # Monitor selection: 'ALL' or 1-based screen index
+        clock_monitor_sel = clock_settings.get('monitor', 'ALL')
+        try:
+            show_on_this = (clock_monitor_sel == 'ALL') or (int(clock_monitor_sel) == (self.screen_index + 1))
+        except Exception:
+            show_on_this = True
+        if clock_enabled and show_on_this:
             # Parse settings
             time_format = TimeFormat.TWELVE_HOUR if clock_settings.get('format', '12h') == '12h' else TimeFormat.TWENTY_FOUR_HOUR
             position_str = clock_settings.get('position', 'Top Right')
@@ -302,7 +308,13 @@ class DisplayWidget(QWidget):
         # Weather widget
         weather_settings = widgets.get('weather', {}) if isinstance(widgets, dict) else {}
         weather_enabled = _to_bool(weather_settings.get('enabled', False), False)
-        if weather_enabled:
+        # Monitor selection for weather
+        weather_monitor_sel = weather_settings.get('monitor', 'ALL')
+        try:
+            weather_show_on_this = (weather_monitor_sel == 'ALL') or (int(weather_monitor_sel) == (self.screen_index + 1))
+        except Exception:
+            weather_show_on_this = True
+        if weather_enabled and weather_show_on_this:
             position_str = weather_settings.get('position', 'Bottom Left')
             location = weather_settings.get('location', 'London')
             font_size = weather_settings.get('font_size', 24)
@@ -537,14 +549,14 @@ class DisplayWidget(QWidget):
             
             elif transition_type == 'Slide':
                 import random
-                direction_str = transitions_settings.get('direction', self.settings_manager.get('transitions.direction', 'Random'))
+                # Prefer nested slide.direction; fallback to top-level 'direction'
+                direction_str = transitions_settings.get('slide', {}).get('direction', transitions_settings.get('direction', self.settings_manager.get('transitions.direction', 'Random')))
+                # Slide: no diagonals
                 direction_map = {
                     'Left to Right': SlideDirection.LEFT,
                     'Right to Left': SlideDirection.RIGHT,
                     'Top to Bottom': SlideDirection.DOWN,
                     'Bottom to Top': SlideDirection.UP,
-                    'Diagonal TL-BR': SlideDirection.DIAG_TL_BR,
-                    'Diagonal TR-BL': SlideDirection.DIAG_TR_BL
                 }
                 
                 # Only randomize if direction is explicitly 'Random' AND random_always is disabled
@@ -559,7 +571,8 @@ class DisplayWidget(QWidget):
                         SlideDirection.LEFT, SlideDirection.RIGHT,
                         SlideDirection.UP, SlideDirection.DOWN
                     ]
-                    last_dir = self.settings_manager.get('transitions.last_slide_direction', None)
+                    # Prefer nested last key, fallback to legacy flat
+                    last_dir = transitions_settings.get('slide', {}).get('last_direction', self.settings_manager.get('transitions.last_slide_direction', None))
                     # Map last string to enum if present
                     str_to_enum = {
                         'Left to Right': SlideDirection.LEFT,
@@ -577,6 +590,7 @@ class DisplayWidget(QWidget):
                         SlideDirection.DOWN: 'Top to Bottom',
                         SlideDirection.UP: 'Bottom to Top',
                     }
+                    # Persist to legacy flat key for backward-compat
                     self.settings_manager.set('transitions.last_slide_direction', enum_to_str.get(direction, 'Left to Right'))
                 else:
                     direction = direction_map.get(direction_str, SlideDirection.LEFT)
@@ -587,8 +601,16 @@ class DisplayWidget(QWidget):
             
             elif transition_type == 'Wipe':
                 import random
-                # Check if we have a persisted wipe direction from random_always
-                wipe_dir_str = self.settings_manager.get('transitions.wipe_direction', None)
+                # Read wipe direction from nested dict first (UI), then legacy flat keys, then top-level direction
+                wipe_dir_str = None
+                try:
+                    wipe_dir_str = transitions_settings.get('wipe', {}).get('direction', None)
+                    if wipe_dir_str is None:
+                        wipe_dir_str = transitions_settings.get('wipe_direction', None)
+                    if wipe_dir_str is None:
+                        wipe_dir_str = transitions_settings.get('direction', self.settings_manager.get('transitions.wipe_direction', None))
+                except Exception:
+                    wipe_dir_str = None
                 
                 direction_map = {
                     'Left to Right': WipeDirection.LEFT_TO_RIGHT,
@@ -599,18 +621,23 @@ class DisplayWidget(QWidget):
                     'Diagonal TR-BL': WipeDirection.DIAG_TR_BL
                 }
                 
-                if wipe_dir_str and wipe_dir_str in direction_map:
-                    # Use persisted direction from random_always
+                # If UI selected Random and random_always is disabled, ignore any persisted wipe_direction
+                rnd_always = transitions_settings.get('random_always', self.settings_manager.get('transitions.random_always', False))
+                if isinstance(rnd_always, str):
+                    rnd_always = rnd_always.lower() in ('true', '1', 'yes')
+
+                if wipe_dir_str and wipe_dir_str in direction_map and not (isinstance(wipe_dir_str, str) and wipe_dir_str == 'Random' and not rnd_always):
+                    # Use explicit direction (or engine-provided when random_always)
                     direction = direction_map[wipe_dir_str]
                 else:
-                    # Pick a random wipe direction (includes diagonals) without repeating last if possible
+                    # Non-repeating random (includes diagonals)
                     all_wipes = [
                         WipeDirection.LEFT_TO_RIGHT, WipeDirection.RIGHT_TO_LEFT,
                         WipeDirection.TOP_TO_BOTTOM, WipeDirection.BOTTOM_TO_TOP,
                         WipeDirection.DIAG_TL_BR, WipeDirection.DIAG_TR_BL
                     ]
-                    last_wipe = self.settings_manager.get('transitions.last_wipe_direction', None)
-                    # Map last string to enum if present
+                    # Prefer nested last key, fallback to legacy flat
+                    last_wipe = transitions_settings.get('wipe', {}).get('last_direction', self.settings_manager.get('transitions.last_wipe_direction', None))
                     str_to_enum = {
                         'Left to Right': WipeDirection.LEFT_TO_RIGHT,
                         'Right to Left': WipeDirection.RIGHT_TO_LEFT,
@@ -622,7 +649,6 @@ class DisplayWidget(QWidget):
                     last_enum = str_to_enum.get(last_wipe) if isinstance(last_wipe, str) else None
                     candidates = [d for d in all_wipes if d != last_enum] if last_enum in all_wipes else all_wipes
                     direction = random.choice(candidates) if candidates else random.choice(all_wipes)
-                    # Persist last for next time
                     enum_to_str = {
                         WipeDirection.LEFT_TO_RIGHT: 'Left to Right',
                         WipeDirection.RIGHT_TO_LEFT: 'Right to Left',

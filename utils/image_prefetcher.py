@@ -8,6 +8,7 @@ Image prefetcher built on ThreadManager and ImageCache.
 from __future__ import annotations
 
 from typing import List, Optional, Set
+import threading
 from PySide6.QtGui import QImage
 
 from core.logging.logger import get_logger
@@ -28,6 +29,7 @@ class ImagePrefetcher:
         self._cache = cache
         self._max_concurrent = max(1, int(max_concurrent))
         self._inflight: Set[str] = set()
+        self._lock = threading.Lock()
 
     def get_cached(self, path: str) -> Optional[QImage]:
         img = self._cache.get(path)
@@ -43,15 +45,19 @@ class ImagePrefetcher:
         for p in paths:
             if not p:
                 continue
-            if self._cache.contains(p) or p in self._inflight:
+            if self._cache.contains(p):
                 continue
-            if submitted >= self._max_concurrent:
-                break
+            with self._lock:
+                if p in self._inflight:
+                    continue
+                if submitted >= self._max_concurrent:
+                    break
+                self._inflight.add(p)
             self._submit_load(p)
             submitted += 1
 
     def _submit_load(self, path: str) -> None:
-        self._inflight.add(path)
+        # inflight is already marked by caller under lock
 
         def _load_qimage(p: str) -> Optional[QImage]:
             try:
@@ -75,10 +81,8 @@ class ImagePrefetcher:
                     except Exception:
                         pass
             finally:
-                try:
+                with self._lock:
                     self._inflight.discard(path)
-                except Exception:
-                    pass
 
         try:
             self._threads.submit_task(
@@ -90,7 +94,5 @@ class ImagePrefetcher:
             )
         except Exception as e:
             logger.debug(f"Prefetch submit failed for {path}: {e}")
-            try:
+            with self._lock:
                 self._inflight.discard(path)
-            except Exception:
-                pass

@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QObject, Signal, QTimer
 from PySide6.QtGui import QGuiApplication, QScreen, QPixmap
 from rendering.display_widget import DisplayWidget
+from transitions.overlay_manager import hide_all_overlays
 from rendering.display_modes import DisplayMode
 from core.logging.logger import get_logger
 from utils.lockfree.spsc_queue import SPSCQueue
@@ -257,6 +258,10 @@ class DisplayManager(QObject):
         """Show all display widgets (after dialogs close)."""
         for display in self.displays:
             display.showFullScreen()
+            try:
+                hide_all_overlays(display)
+            except Exception:
+                pass
         logger.info("All displays shown")
     
     def set_display_mode(self, mode: DisplayMode) -> None:

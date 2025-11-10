@@ -319,8 +319,8 @@ class ScreensaverEngine(QObject):
 
     def _initialize_cache_prefetcher(self) -> None:
         try:
-            max_items = int(self.settings_manager.get('cache.max_items', 20))
-            max_mem_mb = int(self.settings_manager.get('cache.max_memory_mb', 512))
+            max_items = int(self.settings_manager.get('cache.max_items', 24))
+            max_mem_mb = int(self.settings_manager.get('cache.max_memory_mb', 1024))
             max_conc = int(self.settings_manager.get('cache.max_concurrent', 2))
             self._image_cache = ImageCache(max_items=max_items, max_memory_mb=max_mem_mb)
             if self.thread_manager:
@@ -346,6 +346,54 @@ class ScreensaverEngine(QObject):
             self._prefetcher.prefetch_paths(paths)
             if paths:
                 logger.debug(f"Prefetch scheduled for {len(paths)} upcoming images")
+                # UI warmup: convert first cached QImage to QPixmap to reduce on-demand conversion
+                try:
+                    if self.thread_manager and self._image_cache:
+                        first = paths[0]
+                        def _ui_convert():
+                            try:
+                                from PySide6.QtGui import QPixmap, QImage
+                                cached = self._image_cache.get(first)
+                                if isinstance(cached, QImage):
+                                    pm = QPixmap.fromImage(cached)
+                                    if not pm.isNull():
+                                        self._image_cache.put(first, pm)
+                                        logger.debug(f"UI warmup: cached QPixmap for {first}")
+                            except Exception as e:
+                                logger.debug(f"UI warmup failed for {first}: {e}")
+                        self.thread_manager.run_on_ui_thread(_ui_convert)
+                except Exception:
+                    pass
+                # Pre-scale proposal: safely compute scaled QImages for distinct display sizes (multi-monitor safe)
+                # Optional and removable; computes only for the next image to limit memory.
+                try:
+                    if self.thread_manager and self._image_cache:
+                        first_path = paths[0]
+                        sizes = self._get_distinct_display_sizes()
+                        for (w, h) in sizes:
+                            scaled_key = f"{first_path}|scaled:{w}x{h}"
+                            def _compute_prescale_wh(width=w, height=h, src_path=first_path, cache_key=scaled_key):
+                                """Compute-task: scale cached QImage to a target size and store in cache.
+                                Safe to remove if not needed. Avoids doing the heavy scale on the next frame.
+                                """
+                                try:
+                                    from PySide6.QtGui import QImage
+                                    from PySide6.QtCore import Qt
+                                    base = self._image_cache.get(src_path)
+                                    if isinstance(base, QImage) and not base.isNull():
+                                        scaled = base.scaled(width, height, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                                        if not scaled.isNull():
+                                            self._image_cache.put(cache_key, scaled)
+                                except Exception as e:
+                                    logger.debug(f"Pre-scale compute failed ({width}x{height}): {e}")
+                            try:
+                                submit = getattr(self.thread_manager, 'submit_compute_task', None)
+                                if callable(submit):
+                                    submit(_compute_prescale_wh)
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
         except Exception as e:
             logger.debug(f"Prefetch schedule failed: {e}")
     
@@ -598,7 +646,7 @@ class ScreensaverEngine(QObject):
             self._loading_in_progress = False
             return False
     
-    def _load_image_task(self, image_meta: ImageMetadata) -> Optional[QPixmap]:
+    def _load_image_task(self, image_meta: ImageMetadata, preferred_size: Optional[tuple] = None) -> Optional[QPixmap]:
         """
         Load image task (runs in thread pool).
         
@@ -626,16 +674,36 @@ class ScreensaverEngine(QObject):
             
             # Use cache if available (QImage decoded on IO thread)
             if self._prefetcher and self._image_cache:
-                cached = self._image_cache.get(image_path)
-                if isinstance(cached, QPixmap):
-                    pixmap = cached
-                elif cached is not None:
-                    try:
-                        pixmap = QPixmap.fromImage(cached)  # must be on UI thread
-                    except Exception:
-                        pixmap = QPixmap()
+                # Prefer a pre-scaled variant for this display if present
+                scaled_pm: Optional[QPixmap] = None
+                try:
+                    size = preferred_size or self._get_primary_display_size()
+                    if size:
+                        w, h = size
+                        scaled_key = f"{image_path}|scaled:{w}x{h}"
+                        scaled_cached = self._image_cache.get(scaled_key)
+                        if isinstance(scaled_cached, QPixmap):
+                            scaled_pm = scaled_cached
+                        elif scaled_cached is not None:
+                            try:
+                                scaled_pm = QPixmap.fromImage(scaled_cached)
+                            except Exception:
+                                scaled_pm = None
+                except Exception:
+                    pass
+                if scaled_pm is not None and not scaled_pm.isNull():
+                    pixmap = scaled_pm
                 else:
-                    pixmap = QPixmap(image_path)
+                    cached = self._image_cache.get(image_path)
+                    if isinstance(cached, QPixmap):
+                        pixmap = cached
+                    elif cached is not None:
+                        try:
+                            pixmap = QPixmap.fromImage(cached)  # must be on UI thread
+                        except Exception:
+                            pixmap = QPixmap()
+                    else:
+                        pixmap = QPixmap(image_path)
             else:
                 pixmap = QPixmap(image_path)
             
@@ -707,7 +775,13 @@ class ScreensaverEngine(QObject):
                         # Other displays get next images from queue
                         next_meta = self.image_queue.next() if self.image_queue else None
                         if next_meta:
-                            next_pixmap = self._load_image_task(next_meta)
+                            # Prefer a pre-scaled variant for this display size if available
+                            try:
+                                d = self.display_manager.displays[i]
+                                size = (d.width(), d.height())
+                            except Exception:
+                                size = None
+                            next_pixmap = self._load_image_task(next_meta, preferred_size=size)
                             if next_pixmap:
                                 next_path = str(next_meta.local_path) if next_meta.local_path else next_meta.url or "unknown"
                                 self.display_manager.show_image_on_screen(i, next_pixmap, next_path)
@@ -753,33 +827,44 @@ class ScreensaverEngine(QObject):
             # This ensures all displays use the SAME random parameters
             if choice == "Slide":
                 directions = ['Left to Right', 'Right to Left', 'Top to Bottom', 'Bottom to Top']
-                last_dir = self.settings_manager.get('transitions.last_slide_direction', None)
+                last_dir = self.settings_manager.get('transitions.slide.last_direction', None)
                 candidates = [d for d in directions if d != last_dir] if last_dir in directions else directions
                 direction = random.choice(candidates) if candidates else random.choice(directions)
-                self.settings_manager.set('transitions.direction', direction)
-                self.settings_manager.set('transitions.last_slide_direction', direction)
+                # Persist under nested slide key (no diagonals)
+                self.settings_manager.set('transitions.slide.direction', direction)
+                self.settings_manager.set('transitions.slide.last_direction', direction)
             elif choice == "Wipe":
                 # Choose a random wipe direction and persist it
                 wipe_directions = ['Left to Right', 'Right to Left', 'Top to Bottom', 'Bottom to Top', 
                                   'Diagonal TL-BR', 'Diagonal TR-BL']
-                last_wipe = self.settings_manager.get('transitions.last_wipe_direction', None)
-                candidates = [d for d in wipe_directions if d != last_wipe] if last_wipe in wipe_directions else wipe_directions
-                wipe_direction = random.choice(candidates) if candidates else random.choice(wipe_directions)
-                self.settings_manager.set('transitions.wipe_direction', wipe_direction)
-                self.settings_manager.set('transitions.last_wipe_direction', wipe_direction)
+                last_wipe_dir = self.settings_manager.get('transitions.wipe.last_direction', None)
+                candidates = [d for d in wipe_directions if d != last_wipe_dir] if last_wipe_dir in wipe_directions else wipe_directions
+                wdir = random.choice(candidates) if candidates else random.choice(wipe_directions)
+                # Persist under nested wipe key
+                self.settings_manager.set('transitions.wipe.direction', wdir)
+                self.settings_manager.set('transitions.wipe.last_direction', wdir)
             
-            # Persist using dot notation for flat settings structure
+            # Persist chosen type for this rotation so all displays share it
             self.settings_manager.set('transitions.random_choice', choice)
             self.settings_manager.set('transitions.last_random_choice', choice)
             self.settings_manager.save()
             logger.info(f"Random transition choice for this rotation: {choice}")
         except Exception as e:
             logger.debug(f"Random transition selection failed: {e}")
-    
-    def _on_exit_requested(self) -> None:
-        """Handle exit request from display."""
-        logger.info("Exit requested from display")
-        self.stop()
+
+    def _get_primary_display_size(self):
+        """Return primary display size (width, height) for pre-scaling, or None.
+        Safe helper for pre-scaling; returns None if displays not ready.
+        """
+        try:
+            if self.display_manager and self.display_manager.displays:
+                d0 = self.display_manager.displays[0]
+                w, h = d0.width(), d0.height()
+                if w > 0 and h > 0:
+                    return (w, h)
+        except Exception:
+            return None
+        return None
     
     def _on_previous_requested(self) -> None:
         """Handle previous image request (Z key)."""
@@ -850,6 +935,11 @@ class ScreensaverEngine(QObject):
         except Exception as e:
             logger.exception(f"Failed to open settings dialog: {e}")
             QApplication.quit()
+    
+    def _on_exit_requested(self) -> None:
+        """Handle exit request coming from any display window."""
+        logger.info("Exit requested from display")
+        self.stop()
     
     def _show_current_image(self) -> bool:
         """Show the current image from queue without advancing."""

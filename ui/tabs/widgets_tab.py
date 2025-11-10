@@ -138,6 +138,16 @@ class WidgetsTab(QWidget):
         position_row.addWidget(self.clock_position)
         position_row.addStretch()
         clock_layout.addLayout(position_row)
+
+        # Display (monitor selection)
+        clock_disp_row = QHBoxLayout()
+        clock_disp_row.addWidget(QLabel("Display:"))
+        self.clock_monitor_combo = QComboBox()
+        self.clock_monitor_combo.addItems(["ALL", "1", "2", "3"])  # monitor indices are 1-based
+        self.clock_monitor_combo.currentTextChanged.connect(self._save_settings)
+        clock_disp_row.addWidget(self.clock_monitor_combo)
+        clock_disp_row.addStretch()
+        clock_layout.addLayout(clock_disp_row)
         
         # Font family
         font_family_row = QHBoxLayout()
@@ -268,6 +278,16 @@ class WidgetsTab(QWidget):
         weather_pos_row.addWidget(self.weather_position)
         weather_pos_row.addStretch()
         weather_layout.addLayout(weather_pos_row)
+
+        # Display (monitor selection)
+        weather_disp_row = QHBoxLayout()
+        weather_disp_row.addWidget(QLabel("Display:"))
+        self.weather_monitor_combo = QComboBox()
+        self.weather_monitor_combo.addItems(["ALL", "1", "2", "3"])  # monitor indices are 1-based
+        self.weather_monitor_combo.currentTextChanged.connect(self._save_settings)
+        weather_disp_row.addWidget(self.weather_monitor_combo)
+        weather_disp_row.addStretch()
+        weather_layout.addLayout(weather_disp_row)
         
         # Font family
         weather_font_family_row = QHBoxLayout()
@@ -391,6 +411,12 @@ class WidgetsTab(QWidget):
             opacity_pct = int(clock_config.get('bg_opacity', 0.9) * 100)
             self.clock_bg_opacity.setValue(opacity_pct)
             self.clock_opacity_label.setText(f"{opacity_pct}%")
+            # Monitor selection
+            monitor_sel = clock_config.get('monitor', 'ALL')
+            mon_text = str(monitor_sel) if isinstance(monitor_sel, (int, str)) else 'ALL'
+            idx = self.clock_monitor_combo.findText(mon_text)
+            if idx >= 0:
+                self.clock_monitor_combo.setCurrentIndex(idx)
             
             # Load clock color
             color_data = clock_config.get('color', [255, 255, 255, 230])
@@ -417,6 +443,12 @@ class WidgetsTab(QWidget):
             # Load weather color
             weather_color_data = weather_config.get('color', [255, 255, 255, 230])
             self._weather_color = QColor(*weather_color_data)
+            # Monitor selection
+            w_monitor_sel = weather_config.get('monitor', 'ALL')
+            w_mon_text = str(w_monitor_sel) if isinstance(w_monitor_sel, (int, str)) else 'ALL'
+            idx = self.weather_monitor_combo.findText(w_mon_text)
+            if idx >= 0:
+                self.weather_monitor_combo.setCurrentIndex(idx)
             
             logger.debug("Loaded widget settings")
         finally:
@@ -461,6 +493,9 @@ class WidgetsTab(QWidget):
             'color': [self._clock_color.red(), self._clock_color.green(), 
                      self._clock_color.blue(), self._clock_color.alpha()]
         }
+        # Monitor selection save: 'ALL' or int
+        cmon_text = self.clock_monitor_combo.currentText()
+        clock_config['monitor'] = cmon_text if cmon_text == 'ALL' else int(cmon_text)
         
         weather_config = {
             'enabled': self.weather_enabled.isChecked(),
@@ -474,6 +509,8 @@ class WidgetsTab(QWidget):
             'color': [self._weather_color.red(), self._weather_color.green(), 
                      self._weather_color.blue(), self._weather_color.alpha()]
         }
+        wmon_text = self.weather_monitor_combo.currentText()
+        weather_config['monitor'] = wmon_text if wmon_text == 'ALL' else int(wmon_text)
         
         widgets_config = {
             'clock': clock_config,

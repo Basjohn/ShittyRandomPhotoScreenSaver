@@ -1,0 +1,98 @@
+# Index
+
+A living map of modules, purposes, and key classes. Keep this up to date.
+
+## Core Managers
+- core/threading/manager.py
+  - ThreadManager, ThreadPoolType, TaskPriority
+  - UI dispatch helpers: run_on_ui_thread, single_shot
+  - IO/Compute pools, lock-free stats and mutation queues
+- core/resources/manager.py
+  - ResourceManager for Qt object lifecycle tracking (register_qt, cleanup_all)
+- core/events/event_system.py
+  - EventSystem pub/sub (thread-safe)
+- core/settings/settings_manager.py
+  - SettingsManager (get/set, dot-notation)
+- core/animation/animator.py
+  - AnimationManager and easing types
+
+## Engine
+- engine/screensaver_engine.py
+  - Orchestrator: sources → ImageQueue → display → transitions
+  - Caching/prefetch integration via ImageCache + ImagePrefetcher
+  - Random transition/type selection with non-repeating logic (persisted)
+- engine/display_manager.py
+  - Multi-monitor DisplayWidget management, sync scaffolding
+- engine/image_queue.py
+  - ImageQueue with RLock, shuffle/history, wraparound
+  - peek() and peek_many(n) for prefetch look-ahead
+
+## Rendering
+- rendering/display_widget.py
+  - Fullscreen image presentation, DPR-aware scaling
+  - Creates transitions based on settings (GL and CPU variants)
+  - Pre-warms GL overlays, manages widgets Z-order
+- rendering/image_processor.py
+  - Scaling/cropping for FILL/FIT/SHRINK, optional Lanczos via PIL
+- rendering/pan_and_scan.py
+  - Pan & scan utility for post-transition motion
+- rendering/display_modes.py
+  - DisplayMode enum and helpers
+
+## Transitions
+- transitions/base_transition.py
+  - BaseTransition with centralized animation
+- transitions/crossfade_transition.py, transitions/gl_crossfade_transition.py
+- transitions/slide_transition.py, transitions/gl_slide_transition.py
+- transitions/wipe_transition.py, transitions/gl_wipe_transition.py
+  - Slide/Wipe directions stored independently in settings; Slide is cardinals only, Wipe includes diagonals
+  - Wipe random direction honored; non-repeating when Random is selected in UI
+- transitions/diffuse_transition.py, transitions/gl_diffuse_transition.py
+- transitions/block_puzzle_flip_transition.py, transitions/gl_block_puzzle_flip_transition.py
+
+## Sources
+- sources/base_provider.py
+  - ImageMetadata
+- sources/folder_source.py
+- sources/rss_source.py
+
+## Widgets
+- widgets/clock_widget.py
+- widgets/weather_widget.py
+  - Both support per-monitor selection via settings (ALL or 1/2/3)
+
+## Utilities
+- utils/image_cache.py
+  - Thread-safe LRU (QImage/QPixmap), memory-bound, eviction
+- utils/image_prefetcher.py
+  - IO-thread decode to QImage; prefetch N ahead; inflight tracking
+- utils/profiler.py
+- utils/lockfree/spsc_queue.py
+- utils/monitors.py
+
+## Docs
+- Docs/TestSuite.md – canonical tests
+- Docs/AUDIT_*.md – technical audits
+
+## Settings (selected)
+- display.refresh_sync: bool
+- display.hw_accel: bool
+- display.mode: fill|fit|shrink
+- transitions.type
+- transitions.random_always: bool
+- transitions.random_choice: str
+- transitions.slide.direction, transitions.last_slide_direction (legacy)
+- transitions.wipe.direction, transitions.last_wipe_direction (legacy)
+- timing.interval: int seconds
+- display.same_image_all_monitors: bool
+- cache.prefetch_ahead: int (default 5)
+- cache.max_items: int (default 24)
+- cache.max_memory_mb: int (default 1024)
+- cache.max_concurrent: int (default 2)
+- widgets.clock.monitor: 'ALL'|1|2|3
+- widgets.weather.monitor: 'ALL'|1|2|3
+
+## Notes
+- DPR-aware scaling in DisplayWidget → ImageProcessor to reduce GL upload cost
+- GL overlays pre-warmed and persisted; NoPartialUpdate enabled
+- Prefetch pipeline: ImageQueue.peek_many → IO decode (QImage) → optional UI warmup (QPixmap) → optional compute pre-scale-to-screen (QImage) → transition

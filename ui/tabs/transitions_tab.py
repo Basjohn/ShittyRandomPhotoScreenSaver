@@ -37,6 +37,9 @@ class TransitionsTab(QWidget):
         super().__init__(parent)
         
         self._settings = settings
+        # Maintain per-transition direction selections in-memory
+        self._dir_slide: str = "Left to Right"
+        self._dir_wipe: str = "Left to Right"
         self._setup_ui()
         self._load_settings()
         
@@ -121,13 +124,7 @@ class TransitionsTab(QWidget):
         direction_row = QHBoxLayout()
         direction_row.addWidget(QLabel("Direction:"))
         self.direction_combo = QComboBox()
-        self.direction_combo.addItems([
-            "Left to Right",
-            "Right to Left",
-            "Top to Bottom",
-            "Bottom to Top",
-            "Random"
-        ])
+        # Items are populated dynamically per transition in _update_specific_settings()
         self.direction_combo.currentTextChanged.connect(self._save_settings)
         direction_row.addWidget(self.direction_combo)
         direction_row.addStretch()
@@ -294,11 +291,9 @@ class TransitionsTab(QWidget):
         self.duration_slider.setValue(duration)
         self.duration_value_label.setText(f"{duration} ms")
         
-        # Load direction
-        direction = transitions_config.get('direction', 'Left to Right')
-        index = self.direction_combo.findText(direction)
-        if index >= 0:
-            self.direction_combo.setCurrentIndex(index)
+        # Load per-transition directions (nested with backward-compat to top-level)
+        self._dir_slide = transitions_config.get('slide', {}).get('direction', transitions_config.get('direction', 'Left to Right'))
+        self._dir_wipe = transitions_config.get('wipe', {}).get('direction', transitions_config.get('direction', 'Left to Right'))
         
         # Load easing
         easing = transitions_config.get('easing', 'Auto')
@@ -337,11 +332,53 @@ class TransitionsTab(QWidget):
     def _update_specific_settings(self) -> None:
         """Update visibility of transition-specific settings."""
         transition = self.transition_combo.currentText()
-        
+
         # Show/hide direction for directional transitions
         show_direction = transition in ["Slide", "Wipe", "Diffuse"]
         self.direction_group.setVisible(show_direction)
-        
+
+        # Populate direction options per transition
+        if show_direction:
+            self.direction_combo.blockSignals(True)
+            try:
+                self.direction_combo.clear()
+                if transition == "Slide":
+                    # Slide: no diagonals
+                    slide_items = [
+                        "Left to Right",
+                        "Right to Left",
+                        "Top to Bottom",
+                        "Bottom to Top",
+                        "Random",
+                    ]
+                    self.direction_combo.addItems(slide_items)
+                    # Set previously stored selection
+                    idx = self.direction_combo.findText(self._dir_slide)
+                    if idx < 0:
+                        idx = self.direction_combo.findText("Random") if self._dir_slide == "Random" else 0
+                    self.direction_combo.setCurrentIndex(max(0, idx))
+                elif transition == "Wipe":
+                    # Wipe: include diagonals
+                    wipe_items = [
+                        "Left to Right",
+                        "Right to Left",
+                        "Top to Bottom",
+                        "Bottom to Top",
+                        "Diagonal TL-BR",
+                        "Diagonal TR-BL",
+                        "Random",
+                    ]
+                    self.direction_combo.addItems(wipe_items)
+                    idx = self.direction_combo.findText(self._dir_wipe)
+                    if idx < 0:
+                        idx = self.direction_combo.findText("Random") if self._dir_wipe == "Random" else 0
+                    self.direction_combo.setCurrentIndex(max(0, idx))
+                else:
+                    # Diffuse currently uses direction group visibility only
+                    self.direction_combo.addItems(["Left to Right", "Right to Left", "Random"])  # conservative default
+            finally:
+                self.direction_combo.blockSignals(False)
+
         # Show/hide block flip settings
         self.flip_group.setVisible(transition == "Block Puzzle Flip")
         
@@ -350,10 +387,19 @@ class TransitionsTab(QWidget):
     
     def _save_settings(self) -> None:
         """Save current settings."""
+        cur_type = self.transition_combo.currentText()
+        cur_dir = self.direction_combo.currentText()
+        # Update in-memory per-type direction
+        if cur_type == "Slide":
+            self._dir_slide = cur_dir
+        elif cur_type == "Wipe":
+            self._dir_wipe = cur_dir
+
         config = {
-            'type': self.transition_combo.currentText(),
+            'type': cur_type,
             'duration_ms': self.duration_slider.value(),
-            'direction': self.direction_combo.currentText(),
+            # Keep top-level for backward compatibility; reflects current tab's direction
+            'direction': cur_dir,
             'easing': self.easing_combo.currentText(),
             'random_always': self.random_checkbox.isChecked(),
             'block_flip': {
@@ -363,7 +409,14 @@ class TransitionsTab(QWidget):
             'diffuse': {
                 'block_size': self.block_size_spin.value(),
                 'shape': self.diffuse_shape_combo.currentText()
-            }
+            },
+            # New nested per-transition direction settings
+            'slide': {
+                'direction': self._dir_slide,
+            },
+            'wipe': {
+                'direction': self._dir_wipe,
+            },
         }
         
         self._settings.set('transitions', config)
