@@ -5,13 +5,14 @@ Manages DisplayWidget instances across multiple screens.
 """
 import time
 from typing import List, Dict, Optional, Set
-from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QObject, Signal, QTimer
+from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QGuiApplication, QScreen, QPixmap
+
+from core.logging.logger import get_logger
+from core.resources.manager import ResourceManager
+from rendering.display_modes import DisplayMode
 from rendering.display_widget import DisplayWidget
 from transitions.overlay_manager import hide_all_overlays
-from rendering.display_modes import DisplayMode
-from core.logging.logger import get_logger
 from utils.lockfree.spsc_queue import SPSCQueue
 
 logger = get_logger(__name__)
@@ -40,9 +41,13 @@ class DisplayManager(QObject):
     cycle_transition_requested = Signal()  # C key - cycle transition mode
     settings_requested = Signal()  # S key - open settings
     
-    def __init__(self, display_mode: DisplayMode = DisplayMode.FILL,
-                 same_image_mode: bool = True,
-                 settings_manager=None):
+    def __init__(
+        self,
+        display_mode: DisplayMode = DisplayMode.FILL,
+        same_image_mode: bool = True,
+        settings_manager=None,
+        resource_manager: ResourceManager | None = None,
+    ):
         """
         Initialize display manager.
         
@@ -56,6 +61,7 @@ class DisplayManager(QObject):
         self.display_mode = display_mode
         self.same_image_mode = same_image_mode
         self.settings_manager = settings_manager
+        self._resource_manager: ResourceManager | None = resource_manager or ResourceManager()
         self.displays: List[DisplayWidget] = []
         self.current_images: Dict[int, str] = {}  # screen_index -> image_path
         
@@ -67,7 +73,7 @@ class DisplayManager(QObject):
         self.screen_count = 0
         self._setup_monitor_detection()
         
-        logger.info(f"DisplayManager initialized (mode={display_mode}, same_image={same_image_mode})")
+        logger.info("DisplayManager initialized (mode=%s, same_image=%s)" % (display_mode, same_image_mode))
     
     def _setup_monitor_detection(self) -> None:
         """Setup monitor hotplug detection."""
@@ -79,11 +85,11 @@ class DisplayManager(QObject):
             
             # Store initial screen count
             self.screen_count = len(app.screens())
-            logger.info(f"Monitor detection enabled ({self.screen_count} screens)")
+            logger.info("Monitor detection enabled (%d screens)" % self.screen_count)
     
     def _on_screen_added(self, screen: QScreen) -> None:
         """Handle screen added event."""
-        logger.info(f"Screen added: {screen.name()} ({screen.geometry().width()}x{screen.geometry().height()})")
+        logger.info("Screen added: %s (%dx%d)" % (screen.name(), screen.geometry().width(), screen.geometry().height()))
         
         new_count = len(QGuiApplication.screens())
         
@@ -98,7 +104,7 @@ class DisplayManager(QObject):
     
     def _on_screen_removed(self, screen: QScreen) -> None:
         """Handle screen removed event."""
-        logger.info(f"Screen removed: {screen.name()}")
+        logger.info("Screen removed: %s" % screen.name())
         
         new_count = len(QGuiApplication.screens())
         
@@ -119,7 +125,7 @@ class DisplayManager(QObject):
         screens = QGuiApplication.screens()
         screen_count = len(screens)
         
-        logger.info(f"Initializing displays for {screen_count} screens")
+        logger.info("Initializing displays for %d screens" % screen_count)
         
         # Clear existing displays
         self.cleanup()
@@ -128,7 +134,7 @@ class DisplayManager(QObject):
         for i in range(screen_count):
             self._create_display_for_screen(i)
         
-        logger.info(f"Created {len(self.displays)} display widgets")
+        logger.info("Created %d display widgets" % len(self.displays))
         return len(self.displays)
     
     def _create_display_for_screen(self, screen_index: int) -> None:
@@ -142,7 +148,8 @@ class DisplayManager(QObject):
             display = DisplayWidget(
                 screen_index=screen_index,
                 display_mode=self.display_mode,
-                settings_manager=self.settings_manager
+                settings_manager=self.settings_manager,
+                resource_manager=self._resource_manager,
             )
             
             # Connect signals
@@ -162,10 +169,10 @@ class DisplayManager(QObject):
             display.show_on_screen()
             
             self.displays.append(display)
-            logger.info(f"Display widget created for screen {screen_index}")
+            logger.info("Display widget created for screen %d" % screen_index)
         
         except Exception as e:
-            logger.error(f"Failed to create display for screen {screen_index}: {e}", exc_info=True)
+            logger.error("Failed to create display for screen %d: %s" % (screen_index, e), exc_info=True)
     
     def _cleanup_excess_displays(self) -> None:
         """Clean up displays for screens that no longer exist."""
@@ -175,7 +182,7 @@ class DisplayManager(QObject):
             display = self.displays.pop()
             display.close()
             display.deleteLater()
-            logger.info(f"Removed excess display widget")
+            logger.info("Removed excess display widget")
     
     def _on_exit_requested(self) -> None:
         """Handle exit request from any display."""
@@ -257,6 +264,11 @@ class DisplayManager(QObject):
     def show_all(self) -> None:
         """Show all display widgets (after dialogs close)."""
         for display in self.displays:
+            try:
+                if hasattr(display, "reset_after_settings"):
+                    display.reset_after_settings()
+            except Exception:
+                pass
             display.showFullScreen()
             try:
                 hide_all_overlays(display)

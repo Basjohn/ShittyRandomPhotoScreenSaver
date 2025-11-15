@@ -85,10 +85,18 @@ class ScreensaverEngine(QObject):
         self._initialized: bool = False
         self._display_initialized: bool = False
         self._rotation_timer: Optional[QTimer] = None
+        self._rotation_timer_resource_id: Optional[str] = None
         self._current_image: Optional[ImageMetadata] = None
         self._loading_in_progress: bool = False
         self._loading_lock = threading.Lock()  # FIX: Protect loading flag from race conditions
-        self._transition_types: List[str] = ["Crossfade", "Slide", "Wipe", "Diffuse", "Block Puzzle Flip"]
+        self._transition_types: List[str] = [
+            "Crossfade",
+            "Slide",
+            "Wipe",
+            "Diffuse",
+            "Block Puzzle Flip",
+            "Blinds",
+        ]
         self._current_transition_index: int = 0  # Will sync with settings in initialize()
         # Caching / prefetch
         self._image_cache: Optional[ImageCache] = None
@@ -444,14 +452,29 @@ class ScreensaverEngine(QObject):
         """Setup timer for image rotation."""
         interval_seconds = self.settings_manager.get('timing.interval', 10)
         interval_ms = interval_seconds * 1000
-        
+
+        if self._rotation_timer:
+            try:
+                self._rotation_timer.stop()
+            except Exception:
+                pass
+            if self._rotation_timer_resource_id and self.resource_manager:
+                try:
+                    self.resource_manager.unregister(self._rotation_timer_resource_id, force=True)
+                except Exception:
+                    pass
+                self._rotation_timer_resource_id = None
+
         self._rotation_timer = QTimer(self)
         self._rotation_timer.setInterval(interval_ms)
         self._rotation_timer.timeout.connect(self._on_rotation_timer)
         # Register with ResourceManager
         try:
             if self.resource_manager:
-                self.resource_manager.register_qt(self._rotation_timer, description="Engine rotation timer")
+                self._rotation_timer_resource_id = self.resource_manager.register_qt(
+                    self._rotation_timer,
+                    description="Engine rotation timer",
+                )
         except Exception:
             pass
         
@@ -533,6 +556,17 @@ class ScreensaverEngine(QObject):
                     logger.debug("Rotation timer stopped")
                 except RuntimeError as e:
                     logger.debug(f"Timer stop during cleanup raised: {e}")
+                try:
+                    self._rotation_timer.deleteLater()
+                except Exception:
+                    pass
+                if self._rotation_timer_resource_id and self.resource_manager:
+                    try:
+                        self.resource_manager.unregister(self._rotation_timer_resource_id, force=True)
+                    except Exception:
+                        pass
+                    self._rotation_timer_resource_id = None
+                self._rotation_timer = None
             
             # Clear and hide/cleanup displays
             if self.display_manager:
@@ -814,8 +848,16 @@ class ScreensaverEngine(QObject):
                 rnd = rnd.lower() in ('true', '1', 'yes')
             if not rnd:
                 return
-            # Available transition types (non-GL)
+            # Available transition types; include GL-only when HW is enabled
             available = ["Crossfade", "Slide", "Wipe", "Diffuse", "Block Puzzle Flip"]
+            try:
+                hw = self.settings_manager.get('display.hw_accel', False)
+                if isinstance(hw, str):
+                    hw = hw.lower() in ('true', '1', 'yes')
+                if hw:
+                    available.append("Blinds")
+            except Exception:
+                pass
             # Avoid immediate repeats of transition type
             last_type = self.settings_manager.get('transitions.last_random_choice', None)
             candidates = [t for t in available if t != last_type] if last_type in available else available
@@ -882,14 +924,42 @@ class ScreensaverEngine(QObject):
         """Handle cycle transition request (C key)."""
         logger.info("Cycle transition requested")
         
-        # Cycle to next transition
-        self._current_transition_index = (self._current_transition_index + 1) % len(self._transition_types)
-        new_transition = self._transition_types[self._current_transition_index]
+        if not self._transition_types:
+            logger.warning("No transitions configured; ignoring cycle request")
+            return
+
+        hw = self.settings_manager.get('display.hw_accel', False)
+        if isinstance(hw, str):
+            hw = hw.lower() in ('true', '1', 'yes')
+        gl_only = {"Blinds"}
+
+        # Cycle to next transition honoring HW capabilities
+        for _ in range(len(self._transition_types)):
+            self._current_transition_index = (self._current_transition_index + 1) % len(self._transition_types)
+            candidate = self._transition_types[self._current_transition_index]
+            if hw or candidate not in gl_only:
+                new_transition = candidate
+                break
+        else:
+            # Fallback to Crossfade if somehow no valid transition found
+            new_transition = "Crossfade"
+            self._current_transition_index = self._transition_types.index(new_transition) if new_transition in self._transition_types else 0
         
-        # Update settings
+        # Update settings with permissible transition
+        if not hw and new_transition in gl_only:
+            new_transition = "Crossfade"
+            if new_transition in self._transition_types:
+                self._current_transition_index = self._transition_types.index(new_transition)
         transitions_config = self.settings_manager.get('transitions', {})
+        if not isinstance(transitions_config, dict):
+            transitions_config = {}
         transitions_config['type'] = new_transition
+        transitions_config['random_always'] = False
         self.settings_manager.set('transitions', transitions_config)
+        self.settings_manager.set('transitions.type', new_transition)
+        self.settings_manager.set('transitions.random_always', False)
+        self.settings_manager.remove('transitions.random_choice')
+        self.settings_manager.remove('transitions.last_random_choice')
         self.settings_manager.save()
         
         logger.info(f"Transition cycled to: {new_transition}")

@@ -56,13 +56,6 @@ class WipeTransition(BaseTransition):
         self._elapsed_ms = 0
         self._fps = 60
         
-        # FIX: Use ResourceManager for Qt object lifecycle
-        try:
-            from core.resources.manager import ResourceManager
-            self._resource_manager = ResourceManager()
-        except Exception:
-            self._resource_manager = None
-        
         logger.debug(f"WipeTransition created (duration={duration_ms}ms, direction={direction.value})")
     
     def start(self, old_pixmap: Optional[QPixmap], new_pixmap: QPixmap, 
@@ -134,6 +127,11 @@ class WipeTransition(BaseTransition):
         if self._old_pixmap:
             self._old_label.setPixmap(self._old_pixmap)
         self._old_label.show()
+        if self._resource_manager:
+            try:
+                self._resource_manager.register_qt(self._old_label, description="WipeTransition old label")
+            except Exception:
+                pass
 
         self._new_label = QLabel(widget)
         self._new_label.setGeometry(0, 0, widget.width(), widget.height())
@@ -148,6 +146,11 @@ class WipeTransition(BaseTransition):
             self._new_label.raise_()
         except Exception:
             pass
+        if self._resource_manager:
+            try:
+                self._resource_manager.register_qt(self._new_label, description="WipeTransition new label")
+            except Exception:
+                pass
         
         # Drive animation via centralized AnimationManager
         am = self._get_animation_manager(widget)

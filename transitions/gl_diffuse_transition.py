@@ -16,8 +16,14 @@ from PySide6.QtWidgets import QWidget
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
 from transitions.base_transition import BaseTransition, TransitionState
+from transitions.overlay_manager import (
+    get_or_create_overlay,
+    notify_overlay_stage,
+    prepare_gl_overlay,
+)
 from core.animation.types import EasingCurve
 from core.logging.logger import get_logger
+from rendering.gl_format import apply_widget_surface_format
 
 logger = get_logger(__name__)
 
@@ -32,6 +38,7 @@ class _Cell:
 class _GLDiffuseWidget(QOpenGLWidget):
     def __init__(self, parent: QWidget, old_pixmap: QPixmap, new_pixmap: QPixmap, cells: List[_Cell], shape: str = 'Rectangle'):
         super().__init__(parent)
+        prefs = apply_widget_surface_format(self, reason="gl_diffuse_overlay")
         self.setAutoFillBackground(False)
         try:
             from PySide6.QtCore import Qt as _Qt
@@ -45,6 +52,9 @@ class _GLDiffuseWidget(QOpenGLWidget):
         self._cells: List[_Cell] = cells
         self._region = QRegion()
         self._shape = shape or 'Rectangle'
+        self._surface_prefs = prefs
+        self._requested_swap_behavior = "Triple" if prefs.prefer_triple_buffer and prefs.refresh_sync else "Double"
+        self._requested_swap_interval = 1 if prefs.refresh_sync else 0
         
         # Atomic state flags with lock protection
         self._state_lock = threading.Lock()
@@ -80,6 +90,22 @@ class _GLDiffuseWidget(QOpenGLWidget):
     def initializeGL(self) -> None:  # type: ignore[override]
         """Called once when GL context is created."""
         try:
+            ctx = self.context()
+            if ctx is not None:
+                fmt = ctx.format()
+                logger.debug(
+                    f"[GL DIFFUSE] Context initialized: version={fmt.majorVersion()}.{fmt.minorVersion()}, "
+                    f"swap={fmt.swapBehavior()}, interval={fmt.swapInterval()}"
+                )
+                notify_overlay_stage(
+                    self,
+                    "gl_initialized",
+                    version=f"{fmt.majorVersion()}.{fmt.minorVersion()}",
+                    swap=str(fmt.swapBehavior()),
+                    interval=fmt.swapInterval(),
+                    requested_swap=self._requested_swap_behavior,
+                    requested_interval=self._requested_swap_interval,
+                )
             with self._state_lock:
                 self._gl_initialized = True
         except Exception:
@@ -107,6 +133,7 @@ class _GLDiffuseWidget(QOpenGLWidget):
             if not self._first_frame_drawn:
                 self._first_frame_drawn = True
                 logger.debug("[GL DIFFUSE] First frame drawn, overlay ready")
+                notify_overlay_stage(self, "first_frame_drawn")
             self._has_drawn = True
 
 
@@ -116,7 +143,8 @@ class GLDiffuseTransition(BaseTransition):
     def __init__(self, duration_ms: int = 1000, block_size: int = 50, shape: str = 'Rectangle', easing: str = 'Auto'):
         super().__init__(duration_ms)
         self._block_size = max(1, int(block_size))
-        self._shape = shape or 'Rectangle'
+        valid_shapes = ['Rectangle', 'Circle', 'Diamond', 'Plus', 'Triangle']
+        self._shape = shape if shape in valid_shapes else 'Rectangle'
         self._widget: Optional[QWidget] = None
         self._old_pixmap: Optional[QPixmap] = None
         self._new_pixmap: Optional[QPixmap] = None
@@ -125,11 +153,6 @@ class GLDiffuseTransition(BaseTransition):
         self._animation_id: Optional[str] = None
         self._gl: Optional[_GLDiffuseWidget] = None
         self._easing_str = easing
-        try:
-            from core.resources.manager import ResourceManager
-            self._resources = ResourceManager()
-        except Exception:
-            self._resources = None
 
     def start(self, old_pixmap: Optional[QPixmap], new_pixmap: QPixmap, widget: QWidget) -> bool:
         if self._state == TransitionState.RUNNING:
@@ -154,53 +177,24 @@ class GLDiffuseTransition(BaseTransition):
             self._order = list(range(total))
             random.shuffle(self._order)
 
-            overlay = getattr(widget, "_srpss_gl_diffuse_overlay", None)
-            if overlay is None or not isinstance(overlay, _GLDiffuseWidget):
-                logger.debug("[GL DIFFUSE] Creating persistent GL overlay")
-                overlay = _GLDiffuseWidget(widget, old_pixmap, new_pixmap, self._cells, self._shape)
-                overlay.setGeometry(0, 0, w, h)
-                setattr(widget, "_srpss_gl_diffuse_overlay", overlay)
-                if getattr(self, "_resources", None):
-                    try:
-                        self._resources.register_qt(overlay, description="GL Diffuse persistent overlay")
-                    except Exception:
-                        pass
-            else:
-                logger.debug("[GL DIFFUSE] Reusing persistent GL overlay")
-                overlay.set_images(old_pixmap, new_pixmap)
-                overlay.set_shape(self._shape)
-                overlay.set_region(QRegion())
+            overlay = get_or_create_overlay(
+                widget,
+                "_srpss_gl_diffuse_overlay",
+                _GLDiffuseWidget,
+                lambda: _GLDiffuseWidget(widget, old_pixmap, new_pixmap, self._cells, self._shape),
+            )
+            logger.debug("[GL DIFFUSE] %s persistent GL overlay", "Reusing" if overlay is getattr(widget, "_srpss_gl_diffuse_overlay") else "Creating")
+            overlay.set_images(old_pixmap, new_pixmap)
+            overlay.set_shape(self._shape)
+            overlay.set_region(QRegion())
 
             self._gl = overlay
-            self._gl.setVisible(True)
-            self._gl.setGeometry(0, 0, w, h)
-            try:
-                self._gl.raise_()
-            except Exception:
-                pass
-            # Keep clock above overlay
-            try:
-                if hasattr(widget, "clock_widget") and getattr(widget, "clock_widget"):
-                    widget.clock_widget.raise_()
-            except Exception:
-                pass
-            
-            # Prepaint initial frame to avoid black flicker (same pattern as GLCrossfade)
-            try:
-                self._gl.makeCurrent()
-            except Exception:
-                pass
-            try:
-                self._gl.set_region(QRegion())  # Start with empty region
-                _fb = self._gl.grabFramebuffer()  # forces a paintGL pass
-                _ = _fb
-                logger.debug("[GL DIFFUSE] Prepainted initial frame (empty region)")
-            except Exception:
-                pass
-            try:
-                self._gl.repaint()
-            except Exception:
-                pass
+            prepare_gl_overlay(
+                widget,
+                self._gl,
+                stage="initial_raise",
+                prepaint_description="GL DIFFUSE",
+            )
 
             am = self._get_animation_manager(widget)
             duration_sec = max(0.001, self.duration_ms / 1000.0)
@@ -297,6 +291,32 @@ class GLDiffuseTransition(BaseTransition):
                     bottom_left = QPoint(r.x(), r.y() + r.height())
                     bottom_right = QPoint(r.x() + r.width(), r.y() + r.height())
                     region = region.united(QRegion(QPolygon([top, bottom_left, bottom_right])))
+                elif self._shape == 'Diamond':
+                    from PySide6.QtGui import QPolygon
+                    from PySide6.QtCore import QPoint
+                    r = cell.rect
+                    cx = r.x() + r.width() // 2
+                    cy = r.y() + r.height() // 2
+                    top = QPoint(cx, r.y())
+                    right = QPoint(r.x() + r.width(), cy)
+                    bottom = QPoint(cx, r.y() + r.height())
+                    left = QPoint(r.x(), cy)
+                    region = region.united(QRegion(QPolygon([top, right, bottom, left])))
+                elif self._shape == 'Plus':
+                    # Approximate plus shape using two rectangles
+                    r = cell.rect
+                    size_w = max(1, r.width())
+                    size_h = max(1, r.height())
+                    thickness_w = max(1, size_w // 3)
+                    thickness_h = max(1, size_h // 3)
+                    cx = r.x() + size_w // 2
+                    cy = r.y() + size_h // 2
+                    # Vertical bar
+                    v_rect = QRect(cx - thickness_w // 2, r.y(), thickness_w, size_h)
+                    # Horizontal bar
+                    h_rect = QRect(r.x(), cy - thickness_h // 2, size_w, thickness_h)
+                    region = region.united(QRegion(v_rect))
+                    region = region.united(QRegion(h_rect))
                 else:  # Rectangle
                     region = region.united(QRegion(cell.rect))
         try:

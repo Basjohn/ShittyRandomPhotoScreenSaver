@@ -3,7 +3,7 @@ Settings manager implementation for screensaver.
 
 Uses QSettings for persistent storage. Simplified from SPQDocker reusable modules.
 """
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List
 import threading
 from PySide6.QtCore import QSettings, QObject, Signal
 from core.logging.logger import get_logger
@@ -55,6 +55,11 @@ class SettingsManager(QObject):
             'display.pan_scan_enabled': False,
             'display.pan_scan_speed': 1.0,
             'display.pan_scan_zoom': 1.3,
+            'display.refresh_sync': True,
+            'display.prefer_triple_buffer': True,
+            'display.gl_depth_bits': 24,
+            'display.gl_stencil_bits': 8,
+            'display.render_backend_mode': 'opengl',
             
             # Transitions
             'transitions.type': 'crossfade',  # 'crossfade' | 'slide' | 'diffuse' | 'block_puzzle'

@@ -1,8 +1,24 @@
+#### `rendering/backends/base.py`
+**Purpose**: Backend-agnostic renderer interfaces (`RendererBackend`, `RenderSurface`, `TransitionPipeline`).
+**Status**: ✅ Interfaces defined and reused for OpenGL + software.
+
+#### `rendering/backends/__init__.py`
+**Purpose**: Backend registry/factory with settings-driven creation and telemetry.
+**Status**: ✅ OpenGL primary, software fallback; diagnostics counters active.
+
+#### `rendering/backends/opengl/backend.py`
+**Purpose**: Maintains OpenGL renderer implementation.
+**Status**: ✅ Active production backend.
+
+#### `rendering/backends/software/backend.py`
+**Purpose**: CPU fallback renderer.
+**Status**: ✅ Available for troubleshooting scenarios.
+
 # ShittyRandomPhotoScreenSaver - Module Index
 
 **Purpose**: Living file map of all modules, their purposes, and key classes/functions.  
-**Last Updated**: Nov 7, 2025 21:58 UTC+2 - Post‑audit implementation (AM/GL overlays)  
-**Implementation Status**: 🟢 Core Framework | 🟢 Animation | 🟢 Entry Point | 🟢 Image Sources | 🟢 Display & Rendering | 🟢 Engine | ⚠️ **Transitions (AM‑driven, GL overlays) – NOT TESTED** | 🟢 Pan & Scan | 🟢 Widgets | 🟢 UI  
+**Last Updated**: Nov 12, 2025 06:11 UTC+2 - GL Blinds readiness + display persistence  
+**Implementation Status**: 🟢 Core Framework | 🟢 Animation | 🟢 Entry Point | 🟢 Image Sources | 🟢 Display & Rendering | 🟢 Engine | 🟠 **Transitions (GL Blinds tuned, other GL transitions pending review)** | 🟢 Pan & Scan | 🟢 Widgets | 🟢 UI  
 **Test Status**: Runs locally; transition stack refactored and pending manual verification  
 **Note**: Update this file after any major structural changes.
 
@@ -377,8 +393,8 @@ SETTINGS_CHANGED = "settings.changed"
   - `_create_transition()` - **NEW**: Create transition from settings
   - `_on_transition_finished(pixmap, path)` - **NEW**: Handle transition completion
   - `set_display_mode(mode)` - Change display mode
-  - `clear()` - **UPDATED**: Clear and stop transitions
-  - `show_error(message)` - Display error message
+  - `clear()` - **UPDATED** (Nov 12, 2025): Stops transitions and preserves last rendered pixmap for restart to avoid fallback flash
+  - `show_error(message)` - Display error message while retaining previous pixmap for recovery
   - `get_screen_info()` - Get display information
   - `paintEvent()` - Render current image or error
   - `keyPressEvent()` - **UPDATED**: Exit on any key (except hotkeys Z/X/C/S/Esc)
@@ -634,9 +650,9 @@ SETTINGS_CHANGED = "settings.changed"
 
 ---
 
-### `transitions/crossfade_transition.py` 🟢 COMPLETE (AM‑driven overlay)
+### `transitions/crossfade_transition.py` COMPLETE (AM‑driven overlay)
 **Purpose**: Smooth opacity-based crossfade transition  
-**Status**: ⚠️ CODE CHANGED - NOT TESTED (AnimationManager + persistent CPU overlay)  
+**Status**: CODE CHANGED - NOT TESTED (AnimationManager + persistent CPU overlay)  
 **Key Classes**:
 - `CrossfadeTransition(BaseTransition)` - Crossfade effect
   - `start(old_pixmap, new_pixmap, widget)` - Begin fade

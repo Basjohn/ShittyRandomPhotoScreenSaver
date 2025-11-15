@@ -82,7 +82,8 @@ class TransitionsTab(QWidget):
             "Slide",
             "Wipe",
             "Diffuse",
-            "Block Puzzle Flip"
+            "Block Puzzle Flip",
+            "Blinds",  # GL-only
         ])
         self.transition_combo.currentTextChanged.connect(self._on_transition_changed)
         type_row.addWidget(self.transition_combo)
@@ -164,13 +165,13 @@ class TransitionsTab(QWidget):
         grid_row = QHBoxLayout()
         grid_row.addWidget(QLabel("Grid Size:"))
         self.grid_rows_spin = QSpinBox()
-        self.grid_rows_spin.setRange(2, 10)
+        self.grid_rows_spin.setRange(2, 25)
         self.grid_rows_spin.setValue(4)
         self.grid_rows_spin.valueChanged.connect(self._save_settings)
         grid_row.addWidget(QLabel("Rows:"))
         grid_row.addWidget(self.grid_rows_spin)
         self.grid_cols_spin = QSpinBox()
-        self.grid_cols_spin.setRange(2, 10)
+        self.grid_cols_spin.setRange(2, 25)
         self.grid_cols_spin.setValue(6)
         self.grid_cols_spin.valueChanged.connect(self._save_settings)
         grid_row.addWidget(QLabel("Cols:"))
@@ -187,7 +188,7 @@ class TransitionsTab(QWidget):
         block_size_row = QHBoxLayout()
         block_size_row.addWidget(QLabel("Block Size (px):"))
         self.block_size_spin = QSpinBox()
-        self.block_size_spin.setRange(10, 200)
+        self.block_size_spin.setRange(4, 256)
         self.block_size_spin.setValue(50)
         self.block_size_spin.valueChanged.connect(self._save_settings)
         block_size_row.addWidget(self.block_size_spin)
@@ -197,7 +198,7 @@ class TransitionsTab(QWidget):
         shape_row = QHBoxLayout()
         shape_row.addWidget(QLabel("Shape:"))
         self.diffuse_shape_combo = QComboBox()
-        self.diffuse_shape_combo.addItems(["Rectangle", "Circle", "Triangle"])
+        self.diffuse_shape_combo.addItems(["Rectangle", "Circle", "Diamond", "Plus", "Triangle"])
         self.diffuse_shape_combo.currentTextChanged.connect(self._save_settings)
         shape_row.addWidget(self.diffuse_shape_combo)
         shape_row.addStretch()
@@ -216,6 +217,8 @@ class TransitionsTab(QWidget):
         
         # Update visibility based on default transition
         self._update_specific_settings()
+        # Enforce GL-only availability on initial build
+        self._refresh_hw_dependent_options()
         
         # Improve +/- button clarity and feedback on spin boxes
         self.setStyleSheet(
@@ -326,6 +329,8 @@ class TransitionsTab(QWidget):
     
     def _on_transition_changed(self, transition: str) -> None:
         """Handle transition type change."""
+        # If a GL-only transition was selected while HW is off, revert to Crossfade
+        self._enforce_gl_only_selection()
         self._update_specific_settings()
         self._save_settings()
     
@@ -384,6 +389,54 @@ class TransitionsTab(QWidget):
         
         # Show/hide diffuse settings
         self.diffuse_group.setVisible(transition == "Diffuse")
+
+    def _refresh_hw_dependent_options(self) -> None:
+        """Grey out GL-only transitions when HW acceleration is disabled."""
+        try:
+            from PySide6.QtCore import Qt
+            hw = self._settings.get('display.hw_accel', False)
+            if isinstance(hw, str):
+                hw = hw.lower() in ('true', '1', 'yes')
+            gl_only = ["Blinds"]
+            for name in gl_only:
+                idx = self.transition_combo.findText(name)
+                if idx >= 0:
+                    self.transition_combo.setItemData(
+                        idx,
+                        True if hw else False,
+                        Qt.ItemDataRole.EnabledRole
+                    )
+                    self.transition_combo.setItemData(
+                        idx,
+                        "Requires GPU acceleration",
+                        Qt.ItemDataRole.ToolTipRole
+                    )
+            # If HW is off and currently selected is GL-only, force Crossfade
+            if not hw:
+                self._enforce_gl_only_selection()
+        except Exception:
+            pass
+
+    def _enforce_gl_only_selection(self) -> None:
+        """If a GL-only transition is selected with HW off, switch to Crossfade and persist."""
+        hw = self._settings.get('display.hw_accel', False)
+        if isinstance(hw, str):
+            hw = hw.lower() in ('true', '1', 'yes')
+        cur = self.transition_combo.currentText()
+        if cur in {"Blinds"} and not hw:
+            idx = self.transition_combo.findText("Crossfade")
+            if idx >= 0:
+                self.transition_combo.blockSignals(True)
+                try:
+                    self.transition_combo.setCurrentIndex(idx)
+                finally:
+                    self.transition_combo.blockSignals(False)
+                self._save_settings()
+        if not hw:
+            cached_choice = self._settings.get('transitions.random_choice', None)
+            if isinstance(cached_choice, str) and cached_choice in {"Blinds"}:
+                self._settings.remove('transitions.random_choice')
+                self._settings.remove('transitions.last_random_choice')
     
     def _save_settings(self) -> None:
         """Save current settings."""
@@ -420,6 +473,24 @@ class TransitionsTab(QWidget):
         }
         
         self._settings.set('transitions', config)
+        # Maintain legacy flat keys for consumers still reading old paths
+        self._settings.set('transitions.type', cur_type)
+        self._settings.set('transitions.duration_ms', config['duration_ms'])
+        self._settings.set('transitions.direction', cur_dir)
+        self._settings.set('transitions.easing', config['easing'])
+        self._settings.set('transitions.random_always', config['random_always'])
+        self._settings.set('transitions.slide.direction', self._dir_slide)
+        self._settings.set('transitions.wipe.direction', self._dir_wipe)
+        self._settings.set('transitions.block_flip.rows', config['block_flip']['rows'])
+        self._settings.set('transitions.block_flip.cols', config['block_flip']['cols'])
+        self._settings.set('transitions.diffuse.block_size', config['diffuse']['block_size'])
+        self._settings.set('transitions.diffuse.shape', config['diffuse']['shape'])
+
+        if not config['random_always']:
+            # Manual selection requires clearing any cached random choice so DisplayWidget honors explicit type
+            self._settings.remove('transitions.random_choice')
+            self._settings.remove('transitions.last_random_choice')
+
         self._settings.save()
         self.transitions_changed.emit()
         

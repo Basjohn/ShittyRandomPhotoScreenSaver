@@ -1,8 +1,8 @@
 # ShittyRandomPhotoScreenSaver - Technical Specification
 
 **Version**: 1.0  
-**Last Updated**: Nov 7, 2025 21:58 - Post‑audit implementation (AM/GL overlays)  
-**Status**: Architecture Solid, ⚠️ Transition stack refactored (NOT TESTED)
+**Last Updated**: Nov 12, 2025 06:11 - GL Blinds tuning & display persistence  
+**Status**: Architecture solid, GL Blinds validated; other GL transitions pending re-verification
 
 ---
 
@@ -33,21 +33,21 @@ A modern, feature-rich Windows screensaver built with PySide6 that displays phot
   - Smooth cubic easing
 
 #### 3. Transitions (CPU + GL variants)
-- **FR-3.1**: Crossfade - opacity-based smooth transition ⚠️ CODE CHANGED - NOT TESTED
+- **FR-3.1**: Crossfade - opacity-based smooth transition (GL + CPU)
   - Centralized AnimationManager (no QPropertyAnimation)
   - Persistent CPU overlay paints old/new pixmaps with opacity
   - Easing via `core.animation.types.EasingCurve`
-- **FR-3.2**: Slide - directional slide (left/right/up/down) ⚠️ CODE CHANGED - NOT TESTED
+- **FR-3.2**: Slide - directional slide (left/right/up/down)
   - AnimationManager‑driven label movement (old out, new in)
   - Directions: LEFT, RIGHT, UP, DOWN (diag optional)
-- **FR-3.3**: Wipe - progressive reveal transition ⚠️ CODE CHANGED - NOT TESTED
+- **FR-3.3**: Wipe - progressive reveal transition
   - Mask‑based reveal on new label; full‑rect DPR alignment
-- **FR-3.4**: Diffuse - random block reveal ⚠️ CODE CHANGED - NOT TESTED
+- **FR-3.4**: Diffuse - random block reveal
   - CompositionMode_Clear punching holes in old label; AM timing
-- **FR-3.5**: Block Puzzle Flip - grid flip ⭐ STAR FEATURE ⚠️ CODE CHANGED - NOT TESTED
+- **FR-3.5**: Block Puzzle Flip - grid flip ⭐ STAR FEATURE
   - Mask union on new label; DPR‑aligned grid; AM timing
 
-GL Path: Optional GL overlays (QOpenGLWidget + QPainter) for Crossfade/Slide/Wipe/Diffuse/BlockFlip; reuse per‑display where available; base paint gated when GL overlay has drawn.
+GL Path: Optional GL overlays (QOpenGLWidget + QPainter) for Crossfade/Slide/Wipe/Diffuse/BlockFlip/Blinds; reuse per-display where available. Overlays now expose `is_ready_for_display()` to gate base paints before they present.
 
 #### 4. Multi-Monitor Support
 - **FR-4.1**: Detect all connected monitors
@@ -63,13 +63,16 @@ GL Path: Optional GL overlays (QOpenGLWidget + QPainter) for Crossfade/Slide/Wip
   - Auto-update every second
   - Customizable styling
 - **FR-5.2**: Weather widget - temperature, condition, location ✅ IMPLEMENTED (Days 14-16)
-  - OpenWeatherMap API integration
+  - OpenWeatherMap/Open-Meteo integration
   - Background fetching with QThread
   - 30-minute caching
   - 4 position options
   - Error handling
 - **FR-5.3**: Configurable position, transparency, and size
 - **FR-5.4**: Multiple clock support for different timezones
+  - Primary clock (Clock 1) plus optional Clock 2 and Clock 3
+  - Each clock can target a specific monitor (ALL/1/2/3)
+  - Each clock has an independent timezone, derived from either local time, UTC or explicit region (pytz/zoneinfo) with DST support
 
 #### 6. Configuration
 - **FR-6.1**: Dark-themed settings dialog
@@ -159,8 +162,8 @@ GL Path: Optional GL overlays (QOpenGLWidget + QPainter) for Crossfade/Slide/Wip
 #### 4. DisplayWidget
 - **Role**: Fullscreen display on one monitor
 - **Responsibilities**:
-  - Render images
-  - Execute transitions
+  - Render images (retains last frame during pauses to avoid fallback flashes)
+  - Execute transitions using AnimationManager and persistent overlays
   - Host widgets (clock, weather)
   - Capture input for exit
 
@@ -171,12 +174,14 @@ GL Path: Optional GL overlays (QOpenGLWidget + QPainter) for Crossfade/Slide/Wip
   - Signals: started, finished, progress, error
   - Methods: start(), stop(), cleanup()
 - **Types**:
-  - Crossfade ✅ IMPLEMENTED (Day 9) - QGraphicsOpacityEffect
-  - Slide ✅ IMPLEMENTED (Day 10) - QPropertyAnimation with 4 directions
-  - Diffuse ✅ IMPLEMENTED (Day 10) - QTimer with random block reveal
-  - BlockPuzzleFlip ✅ IMPLEMENTED (Day 11) - 3D flip with grid (STAR FEATURE)
+  - Crossfade (CPU + GL variants)
+  - Slide (CPU + GL variants)
+  - Wipe (CPU + GL variants)
+  - Diffuse (CPU + GL variants)
+  - BlockPuzzleFlip (CPU + GL variants)
+  - Blinds (GL-only) – readiness-gated overlay with eased tail repainting
 - **Interface**: start(old, new, widget), stop(), finished signal
-- **Features**: Progress tracking (0.0-1.0), configurable duration, easing curves
+- **Features**: Progress tracking (0.0-1.0), configurable duration, easing curves; GL overlays publish readiness flags to avoid fallback paints
 
 #### 6. Overlay Widgets
 - **Types**: ClockWidget, WeatherWidget
@@ -244,8 +249,8 @@ GL Path: Optional GL overlays (QOpenGLWidget + QPainter) for Crossfade/Slide/Wip
         'easing': 'Auto',                  # 'Auto' | 'Linear' | 'InQuad' | 'OutQuad' | ...
         'direction': 'Random',             # Slide only: 'Random' | 'Left to Right' | 'Right to Left' | 'Top to Bottom' | 'Bottom to Top'
         'diffuse': {
-            'block_size': 50,             # int pixels
-            'shape': 'Rectangle',         # 'Rectangle' | 'Circle' | 'Triangle'
+            'block_size': 50,             # int pixels (UI-enforced range e.g. 4–256)
+            'shape': 'Rectangle',         # 'Rectangle' | 'Circle' | 'Diamond' | 'Plus' | 'Triangle'
         },
         'block_flip': {
             'rows': 4,
@@ -257,18 +262,57 @@ GL Path: Optional GL overlays (QOpenGLWidget + QPainter) for Crossfade/Slide/Wip
         'image_duration_sec': 5.0,         # float seconds between images
     },
 
+    'input': {
+        'hard_exit': False,                # bool - when True, only ESC/Q exit; mouse movement/clicks are ignored for exit
+    },
+
     'widgets': {
         'clock': {
             'enabled': True,
+            'monitor': 'ALL',              # 'ALL' | 1 | 2 | 3
             'format': '12h',               # '12h' | '24h'
             'position': 'Top Right',       # placement label
             'show_seconds': False,
-            'timezone': 'local',
+            'timezone': 'local',           # 'local' | pytz/zoneinfo name | 'UTC±HH:MM'
             'show_timezone': False,
             'font_size': 48,
             'margin': 20,
             'color': [255, 255, 255, 230],
-        }
+        },
+        'clock2': {
+            'enabled': False,
+            'monitor': 'ALL',              # 'ALL' | 1 | 2 | 3
+            'format': '24h',
+            'position': 'Bottom Right',
+            'show_seconds': False,
+            'timezone': 'UTC',             # Defaults to UTC; user may override
+            'show_timezone': True,
+            'font_size': 32,
+            'margin': 20,
+            'color': [255, 255, 255, 230],
+        },
+        'clock3': {
+            'enabled': False,
+            'monitor': 'ALL',              # 'ALL' | 1 | 2 | 3
+            'format': '24h',
+            'position': 'Bottom Left',
+            'show_seconds': False,
+            'timezone': 'UTC+01:00',       # Example offset-based timezone
+            'show_timezone': True,
+            'font_size': 32,
+            'margin': 20,
+            'color': [255, 255, 255, 230],
+        },
+        'weather': {
+            'enabled': True,
+            'monitor': 'ALL',              # 'ALL' | 1 | 2 | 3
+            'position': 'Bottom Left',
+            'location': 'London',
+            'font_size': 24,
+            'color': [255, 255, 255, 230],
+            'show_background': True,
+            'bg_opacity': 0.9,
+        },
     },
 }
 ```

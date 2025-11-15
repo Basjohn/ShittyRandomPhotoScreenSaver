@@ -52,14 +52,10 @@ class SlideTransition(BaseTransition):
         self._old_label: Optional[QLabel] = None
         self._new_label: Optional[QLabel] = None
         self._animation_id: Optional[str] = None
+        # Legacy compatibility placeholders (tests expect these attributes)
+        self._old_animation = None
+        self._new_animation = None
         self._finished_count = 0
-        
-        # FIX: Use ResourceManager for Qt object lifecycle
-        try:
-            from core.resources.manager import ResourceManager
-            self._resource_manager = ResourceManager()
-        except Exception:
-            self._resource_manager = None
         
         logger.debug(f"SlideTransition created (duration={duration_ms}ms, direction={direction.value}, easing={easing})")
     
@@ -133,6 +129,15 @@ class SlideTransition(BaseTransition):
             self._old_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self._old_label.setStyleSheet("background: transparent;")
             self._old_label.show()
+            if self._resource_manager:
+                try:
+                    resource_id = self._resource_manager.register_qt(
+                        self._old_label,
+                        description="SlideTransition old label",
+                    )
+                    setattr(self._old_label, "_resource_id", resource_id)
+                except Exception:
+                    pass
 
             self._new_label = QLabel(widget)
             self._new_label.setPixmap(fitted_new)
@@ -140,6 +145,15 @@ class SlideTransition(BaseTransition):
             self._new_label.setScaledContents(False)
             self._new_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self._new_label.setStyleSheet("background: transparent;")
+            if self._resource_manager:
+                try:
+                    resource_id = self._resource_manager.register_qt(
+                        self._new_label,
+                        description="SlideTransition new label",
+                    )
+                    setattr(self._new_label, "_resource_id", resource_id)
+                except Exception:
+                    pass
 
             # Calculate start and end positions based on direction
             old_start, old_end, new_start, new_end = self._calculate_positions(width, height)
@@ -158,6 +172,9 @@ class SlideTransition(BaseTransition):
                 update_callback=lambda p, os=old_start, oe=old_end, ns=new_start, ne=new_end: self._on_anim_update(p, os, oe, ns, ne),
                 on_complete=lambda: self._on_anim_complete(old_end, new_end),
             )
+            # Maintain backwards-compatible attributes
+            self._old_animation = self._animation_id
+            self._new_animation = self._animation_id
 
             self._set_state(TransitionState.RUNNING)
             self.started.emit()
@@ -186,6 +203,8 @@ class SlideTransition(BaseTransition):
             except Exception:
                 pass
             self._animation_id = None
+        self._old_animation = None
+        self._new_animation = None
         
         self._set_state(TransitionState.CANCELLED)
         self._emit_progress(1.0)
@@ -194,7 +213,7 @@ class SlideTransition(BaseTransition):
     def cleanup(self) -> None:
         """Clean up transition resources."""
         logger.debug("Cleaning up slide transition")
-        
+
         # Cancel centralized animation if active
         if self._animation_id and self._widget:
             try:
@@ -203,23 +222,45 @@ class SlideTransition(BaseTransition):
             except Exception:
                 pass
             self._animation_id = None
-        
+        self._old_animation = None
+        self._new_animation = None
+
         # Delete labels
         if self._old_label:
-            try:
-                self._old_label.deleteLater()
-            except RuntimeError:
-                pass
+            if self._resource_manager and hasattr(self._old_label, "_resource_id"):
+                try:
+                    self._resource_manager.unregister(self._old_label._resource_id, force=True)  # type: ignore[attr-defined]
+                except Exception:
+                    try:
+                        self._old_label.deleteLater()
+                    except RuntimeError:
+                        pass
+            else:
+                try:
+                    self._old_label.deleteLater()
+                except RuntimeError:
+                    pass
+            self._old_label = None
         
         if self._new_label:
-            try:
-                self._new_label.deleteLater()
-            except RuntimeError:
-                pass
-        
+            if self._resource_manager and hasattr(self._new_label, "_resource_id"):
+                try:
+                    self._resource_manager.unregister(self._new_label._resource_id, force=True)  # type: ignore[attr-defined]
+                except Exception:
+                    try:
+                        self._new_label.deleteLater()
+                    except RuntimeError:
+                        pass
+            else:
+                try:
+                    self._new_label.deleteLater()
+                except RuntimeError:
+                    pass
+            self._new_label = None
+
         self._widget = None
         self._finished_count = 0
-        
+
         if self._state not in [TransitionState.FINISHED, TransitionState.CANCELLED]:
             self._set_state(TransitionState.IDLE)
     

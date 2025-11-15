@@ -31,7 +31,8 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - rendering/display_widget.py
   - Fullscreen image presentation, DPR-aware scaling
   - Creates transitions based on settings (GL and CPU variants)
-  - Pre-warms GL overlays, manages widgets Z-order
+  - Injects shared ResourceManager into transitions; seeds base pixmap pre/post transition to avoid black frames
+  - Pre-warms GL overlays, manages widgets Z-order, logs per-stage telemetry, handles transition watchdog timers
 - rendering/image_processor.py
   - Scaling/cropping for FILL/FIT/SHRINK, optional Lanczos via PIL
 - rendering/pan_and_scan.py
@@ -42,6 +43,8 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 ## Transitions
 - transitions/base_transition.py
   - BaseTransition with centralized animation
+- transitions/overlay_manager.py
+  - Persistent overlay helpers (`get_or_create_overlay`, `prepare_gl_overlay`, diagnostics/raise helpers) registering with shared ResourceManager; logs swap downgrades and readiness telemetry
 - transitions/crossfade_transition.py, transitions/gl_crossfade_transition.py
 - transitions/slide_transition.py, transitions/gl_slide_transition.py
 - transitions/wipe_transition.py, transitions/gl_wipe_transition.py
@@ -73,6 +76,8 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 ## Docs
 - Docs/TestSuite.md – canonical tests
 - Docs/AUDIT_*.md – technical audits
+- Docs/Route3_OpenGL_Roadmap.md – live checklist for stability work, must update each step
+- Docs/FlashFlickerDiagnostic.md – flicker/banding symptom tracker and mitigation history
 
 ## Settings (selected)
 - display.refresh_sync: bool

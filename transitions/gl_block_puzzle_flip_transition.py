@@ -16,8 +16,14 @@ from PySide6.QtWidgets import QWidget
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
 from transitions.base_transition import BaseTransition, TransitionState
+from transitions.overlay_manager import (
+    get_or_create_overlay,
+    notify_overlay_stage,
+    prepare_gl_overlay,
+)
 from core.animation.types import EasingCurve
 from core.logging.logger import get_logger
+from rendering.gl_format import apply_widget_surface_format
 
 logger = get_logger(__name__)
 
@@ -34,6 +40,7 @@ class _GLFlipBlock:
 class _GLBlockFlipWidget(QOpenGLWidget):
     def __init__(self, parent: QWidget, old_pixmap: QPixmap, new_pixmap: QPixmap, blocks: List[_GLFlipBlock]):
         super().__init__(parent)
+        apply_widget_surface_format(self, reason="gl_blockflip_overlay")
         self.setAutoFillBackground(False)
         try:
             from PySide6.QtCore import Qt as _Qt
@@ -79,6 +86,17 @@ class _GLBlockFlipWidget(QOpenGLWidget):
     def initializeGL(self) -> None:  # type: ignore[override]
         """Called once when GL context is created."""
         try:
+            ctx = self.context()
+            if ctx is not None:
+                fmt = ctx.format()
+                logger.debug(
+                    f"[GL BLOCK] Context initialized: version={fmt.majorVersion()}.{fmt.minorVersion()}, "
+                    f"swap={fmt.swapBehavior()}, interval={fmt.swapInterval()}"
+                )
+                notify_overlay_stage(self, "gl_initialized",
+                                     version=f"{fmt.majorVersion()}.{fmt.minorVersion()}",
+                                     swap=str(fmt.swapBehavior()),
+                                     interval=fmt.swapInterval())
             with self._state_lock:
                 self._gl_initialized = True
         except Exception:
@@ -129,11 +147,6 @@ class GLBlockPuzzleFlipTransition(BaseTransition):
         self._total_duration_ms: int = duration_ms
         self._total_dur_sec: float = max(0.001, duration_ms / 1000.0)
         self._last_progress: float = 0.0
-        try:
-            from core.resources.manager import ResourceManager
-            self._resources = ResourceManager()
-        except Exception:
-            self._resources = None
 
     def start(self, old_pixmap: Optional[QPixmap], new_pixmap: QPixmap, widget: QWidget) -> bool:
         if self._state == TransitionState.RUNNING:
@@ -158,52 +171,26 @@ class GLBlockPuzzleFlipTransition(BaseTransition):
             self._flip_order = list(range(total_blocks))
             random.shuffle(self._flip_order)
 
-            overlay = getattr(widget, "_srpss_gl_blockflip_overlay", None)
-            if overlay is None or not isinstance(overlay, _GLBlockFlipWidget):
-                logger.debug("[GL BLOCK] Creating persistent GL overlay")
-                overlay = _GLBlockFlipWidget(widget, old_pixmap, new_pixmap, self._blocks)
-                overlay.setGeometry(0, 0, w, h)
-                setattr(widget, "_srpss_gl_blockflip_overlay", overlay)
-                if getattr(self, "_resources", None):
-                    try:
-                        self._resources.register_qt(overlay, description="GL BlockFlip persistent overlay")
-                    except Exception:
-                        pass
-            else:
-                logger.debug("[GL BLOCK] Reusing persistent GL overlay")
-                overlay.set_images(old_pixmap, new_pixmap)
-                overlay.set_region(QRegion())
+            existing = getattr(widget, "_srpss_gl_blockflip_overlay", None)
+            overlay = get_or_create_overlay(
+                widget,
+                "_srpss_gl_blockflip_overlay",
+                _GLBlockFlipWidget,
+                lambda: _GLBlockFlipWidget(widget, old_pixmap, new_pixmap, self._blocks),
+            )
+            reuse_existing = overlay is existing
+            logger.debug("[GL BLOCK] %s persistent GL overlay", "Reusing" if reuse_existing else "Creating")
+            overlay._blocks = self._blocks  # keep updated grid reference
+            overlay.set_images(old_pixmap, new_pixmap)
+            overlay.set_region(QRegion())
 
             self._gl = overlay
-            self._gl.setVisible(True)
-            self._gl.setGeometry(0, 0, w, h)
-            try:
-                self._gl.raise_()
-            except Exception:
-                pass
-            # Keep clock above overlay
-            try:
-                if hasattr(widget, "clock_widget") and getattr(widget, "clock_widget"):
-                    widget.clock_widget.raise_()
-            except Exception:
-                pass
-            
-            # Prepaint initial frame to avoid black flicker (same pattern as GLCrossfade)
-            try:
-                self._gl.makeCurrent()
-            except Exception:
-                pass
-            try:
-                self._gl.set_region(QRegion())  # Start with empty region
-                _fb = self._gl.grabFramebuffer()  # forces a paintGL pass
-                _ = _fb
-                logger.debug("[GL BLOCK] Prepainted initial frame (empty region)")
-            except Exception:
-                pass
-            try:
-                self._gl.repaint()
-            except Exception:
-                pass
+            prepare_gl_overlay(
+                widget,
+                self._gl,
+                stage="initial_raise_blockflip",
+                prepaint_description="GL BLOCK",
+            )
 
             # Two-phase timeline similar to CPU: total duration includes drain
             self._total_duration_ms = max(1, int(self.duration_ms + self._flip_duration_ms))

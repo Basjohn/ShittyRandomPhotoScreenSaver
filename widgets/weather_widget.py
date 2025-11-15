@@ -279,17 +279,34 @@ class WeatherWidget(QLabel):
             return
         
         try:
-            # Extract data from Open-Meteo format
-            temp = data.get('temperature', 0)
-            condition = data.get('condition', 'Unknown')
-            location = data.get('location', self._location)
+            # Try modern provider format first (Open-Meteo)
+            temp = data.get('temperature')
+            condition = data.get('condition')
+            location = data.get('location')
+
+            # Back-compat: OpenWeather-style nested JSON (used in tests/mock data)
+            if temp is None and isinstance(data.get('main'), dict):
+                temp = data['main'].get('temp')
+            if condition is None and isinstance(data.get('weather'), list) and data['weather']:
+                weather_entry = data['weather'][0]
+                condition = weather_entry.get('main') or weather_entry.get('description')
+            if not location:
+                location = data.get('name') or self._location
+
+            # Normalize extracted values
+            if temp is None:
+                temp = 0.0
+            if condition is None:
+                condition = 'Unknown'
+            if not location:
+                location = self._location
             
             # Relative sizing
             city_pt = max(6, self._font_size + 2)
             details_pt = max(6, self._font_size - 2)
-            city_html = f"<div style='font-size:{city_pt}pt; font-weight:700;'>{(location or '').upper()}</div>"
+            city_html = f"<div style='font-size:{city_pt}pt; font-weight:700;'>{location}</div>"
             details_text = f"{temp:.0f}°C - {condition}"
-            details_html = f"<div style='font-size:{details_pt}pt; font-weight:500;'>{details_text.upper()}</div>"
+            details_html = f"<div style='font-size:{details_pt}pt; font-weight:500;'>{details_text}</div>"
             html = f"<div style='line-height:1.0'>{city_html}{details_html}</div>"
             self.setTextFormat(Qt.TextFormat.RichText)
             self.setText(html)
@@ -343,7 +360,6 @@ class WeatherWidget(QLabel):
             location: City name or coordinates
         """
         self._location = location
-        logger.debug(f"Location set to {location}")
         
         # Clear cache
         self._cached_data = None
@@ -361,7 +377,6 @@ class WeatherWidget(QLabel):
             position: Screen position
         """
         self._position = position
-        logger.debug(f"Position set to {position.value}")
         
         # Update position immediately if running
         if self._enabled:
@@ -377,7 +392,6 @@ class WeatherWidget(QLabel):
         self._font_family = family
         font = QFont(self._font_family, self._font_size, QFont.Weight.Normal)
         self.setFont(font)
-        logger.debug(f"Font family set to {family}")
     
     def set_font_size(self, size: int) -> None:
         """
@@ -393,8 +407,6 @@ class WeatherWidget(QLabel):
         self._font_size = size
         font = QFont(self._font_family, self._font_size, QFont.Weight.Normal)
         self.setFont(font)
-        
-        logger.debug(f"Font size set to {size}")
     
     def set_text_color(self, color: QColor) -> None:
         """
@@ -405,8 +417,6 @@ class WeatherWidget(QLabel):
         """
         self._text_color = color
         self._update_stylesheet()
-        logger.debug(f"Text color set to rgba({color.red()}, {color.green()}, "
-                    f"{color.blue()}, {color.alpha()})")
     
     def set_show_background(self, show: bool) -> None:
         """
@@ -417,7 +427,6 @@ class WeatherWidget(QLabel):
         """
         self._show_background = show
         self._update_stylesheet()
-        logger.debug(f"Show background set to {show}")
     
     def set_background_color(self, color: QColor) -> None:
         """
@@ -429,8 +438,6 @@ class WeatherWidget(QLabel):
         self._bg_color = color
         if self._show_background:
             self._update_stylesheet()
-        logger.debug(f"Background color set to rgba({color.red()}, {color.green()}, "
-                    f"{color.blue()}, {color.alpha()})")
     
     def set_background_opacity(self, opacity: float) -> None:
         """
@@ -444,7 +451,6 @@ class WeatherWidget(QLabel):
         self._bg_color.setAlpha(int(255 * self._bg_opacity))
         if self._show_background:
             self._update_stylesheet()
-        logger.debug(f"Background opacity set to {self._bg_opacity * 100:.0f}%")
     
     def set_background_border(self, width: int, color: QColor) -> None:
         """
@@ -458,8 +464,6 @@ class WeatherWidget(QLabel):
         self._bg_border_color = color
         if self._show_background:
             self._update_stylesheet()
-        logger.debug(f"Background border set to {width}px, rgba({color.red()}, {color.green()}, "
-                    f"{color.blue()}, {color.alpha()})")
     
     def _update_stylesheet(self) -> None:
         """Update widget stylesheet based on current settings."""

@@ -9,33 +9,29 @@ from __future__ import annotations
 
 import threading
 from typing import Optional
-from PySide6.QtGui import QPixmap, QPainter, QSurfaceFormat
+from PySide6.QtGui import QPixmap, QPainter
 from PySide6.QtWidgets import QWidget
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
 from transitions.base_transition import BaseTransition, TransitionState
+from transitions.overlay_manager import (
+    get_or_create_overlay,
+    notify_overlay_stage,
+    prepare_gl_overlay,
+)
 from transitions.wipe_transition import WipeDirection
 from core.animation.types import EasingCurve
 from core.logging.logger import get_logger
 from utils.profiler import profile
+from rendering.gl_format import apply_widget_surface_format
 
 logger = get_logger(__name__)
 
 
 class _GLWipeWidget(QOpenGLWidget):
     def __init__(self, parent: QWidget, old_pixmap: QPixmap, new_pixmap: QPixmap, direction: WipeDirection) -> None:
-        # Configure surface format before context is created
-        try:
-            fmt = QSurfaceFormat()
-            try:
-                fmt.setSwapBehavior(QSurfaceFormat.SwapBehavior.TripleBuffer)
-            except Exception:
-                fmt.setSwapBehavior(QSurfaceFormat.SwapBehavior.DefaultSwapBehavior)
-            fmt.setSwapInterval(1)  # vsync
-            self.setFormat(fmt)
-        except Exception:
-            pass
         super().__init__(parent)
+        apply_widget_surface_format(self, reason="gl_wipe_overlay")
         self.setAutoFillBackground(False)
         try:
             from PySide6.QtCore import Qt as _Qt
@@ -88,8 +84,18 @@ class _GLWipeWidget(QOpenGLWidget):
             return False
     
     def initializeGL(self) -> None:  # type: ignore[override]
-        """Called once when GL context is created."""
         try:
+            ctx = self.context()
+            if ctx is not None:
+                fmt = ctx.format()
+                logger.debug(
+                    f"[GL WIPE] Context initialized: version={fmt.majorVersion()}.{fmt.minorVersion()}, "
+                    f"swap={fmt.swapBehavior()}, interval={fmt.swapInterval()}"
+                )
+                notify_overlay_stage(self, "gl_initialized",
+                                     version=f"{fmt.majorVersion()}.{fmt.minorVersion()}",
+                                     swap=str(fmt.swapBehavior()),
+                                     interval=fmt.swapInterval())
             with self._state_lock:
                 self._gl_initialized = True
         except Exception:
@@ -203,6 +209,7 @@ class _GLWipeWidget(QOpenGLWidget):
             if not self._first_frame_drawn:
                 self._first_frame_drawn = True
                 logger.debug("[GL WIPE] First frame drawn, overlay ready")
+                notify_overlay_stage(self, "first_frame_drawn")
             self._has_drawn = True
 
 
@@ -216,11 +223,6 @@ class GLWipeTransition(BaseTransition):
         self._animation_id: Optional[str] = None
         self._direction = direction
         self._easing_str = easing
-        try:
-            from core.resources.manager import ResourceManager
-            self._resources = ResourceManager()
-        except Exception:
-            self._resources = None
 
     def start(self, old_pixmap: Optional[QPixmap], new_pixmap: QPixmap, widget: QWidget) -> bool:
         if self._state == TransitionState.RUNNING:
@@ -237,61 +239,29 @@ class GLWipeTransition(BaseTransition):
                 self._show_image_immediately()
                 return True
 
-            w, h = widget.width(), widget.height()
-            overlay = getattr(widget, "_srpss_gl_wipe_overlay", None)
-            if overlay is None or not isinstance(overlay, _GLWipeWidget):
-                logger.debug("[GL WIPE] Creating persistent GL overlay")
-                overlay = _GLWipeWidget(widget, old_pixmap, new_pixmap, self._direction)
-                overlay.setGeometry(0, 0, w, h)
-                setattr(widget, "_srpss_gl_wipe_overlay", overlay)
-                if getattr(self, "_resources", None):
-                    try:
-                        self._resources.register_qt(overlay, description="GL Wipe persistent overlay")
-                    except Exception:
-                        pass
-            else:
-                logger.debug("[GL WIPE] Reusing persistent GL overlay")
-                overlay.set_direction(self._direction)
-                overlay.set_images(old_pixmap, new_pixmap)
-                overlay.set_progress(0.0)
+            overlay = get_or_create_overlay(
+                widget,
+                "_srpss_gl_wipe_overlay",
+                _GLWipeWidget,
+                lambda: _GLWipeWidget(widget, old_pixmap, new_pixmap, self._direction),
+            )
+            logger.debug("[GL WIPE] %s persistent GL overlay", "Reusing" if overlay is getattr(widget, "_srpss_gl_wipe_overlay") else "Creating")
+            overlay.set_direction(self._direction)
+            overlay.set_images(old_pixmap, new_pixmap)
+            overlay.set_progress(0.0)
 
             self._gl = overlay
-            self._gl.setVisible(True)
-            self._gl.setGeometry(0, 0, w, h)
-            try:
-                self._gl.raise_()
-            except Exception:
-                pass
-            # Keep widgets above overlay
-            try:
-                if hasattr(widget, "clock_widget") and getattr(widget, "clock_widget"):
-                    widget.clock_widget.raise_()
-                if hasattr(widget, "weather_widget") and getattr(widget, "weather_widget"):
-                    widget.weather_widget.raise_()
-            except Exception:
-                pass
-            
-            # Process events to ensure GL context is initialized before prepainting
-            try:
-                from PySide6.QtCore import QCoreApplication
-                QCoreApplication.processEvents()
-            except Exception:
-                pass
-            
-            # Prepaint initial frame to avoid black flicker
-            try:
-                with profile("GL_WIPE_PREPAINT", threshold_ms=5.0, log_level="WARNING"):
-                    self._gl.makeCurrent()
+            with profile("GL_WIPE_PREPAINT", threshold_ms=5.0, log_level="WARNING"):
+                try:
                     self._gl.set_progress(0.0)
-                    _fb = self._gl.grabFramebuffer()  # forces a paintGL pass
-                    _ = _fb
-                    logger.debug("[GL WIPE] Prepainted initial frame (progress=0.0)")
-            except Exception as e:
-                logger.warning(f"[GL WIPE] Prepaint failed: {e}")
-            try:
-                self._gl.repaint()
-            except Exception:
-                pass
+                except Exception:
+                    pass
+                prepare_gl_overlay(
+                    widget,
+                    self._gl,
+                    stage="initial_raise_wipe",
+                    prepaint_description="GL WIPE",
+                )
 
             am = self._get_animation_manager(widget)
             duration_sec = max(0.001, self.duration_ms / 1000.0)

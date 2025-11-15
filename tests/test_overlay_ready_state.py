@@ -6,10 +6,9 @@ to eliminate paint event race conditions.
 """
 import pytest
 import threading
-import time
 from PySide6.QtWidgets import QApplication, QWidget
 from PySide6.QtGui import QPixmap
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QRect
 
 
 @pytest.fixture
@@ -223,6 +222,10 @@ class TestAllGLOverlaysReadyState:
             from transitions.gl_wipe_transition import _GLWipeWidget as OverlayClass
             from transitions.wipe_transition import WipeDirection
             args = [dummy_widget, dummy_pixmap, dummy_pixmap, WipeDirection.LEFT_TO_RIGHT]
+        elif "Blinds" in overlay_class:
+            from transitions.gl_blinds import _GLBlindsOverlay as OverlayClass, _GLBlindsSlat
+            slats = [_GLBlindsSlat(dummy_widget.rect(), 0, 1)]
+            args = [dummy_widget, dummy_pixmap, dummy_pixmap, slats]
         else:
             from transitions.gl_crossfade_transition import _GLFadeWidget as OverlayClass
             args = [dummy_widget, dummy_pixmap, dummy_pixmap]
@@ -235,6 +238,48 @@ class TestAllGLOverlaysReadyState:
         
         # Check initial state
         assert overlay.is_ready_for_display() is False
+
+    def test_gl_blinds_tail_repaint_flag(self, qapp, dummy_widget, dummy_pixmap):
+        """Tail repaint should only trigger once when slats fully open."""
+        from transitions.gl_blinds import GLBlindsTransition
+
+        widget = dummy_widget
+        widget.resize(120, 120)
+
+        old_pm = QPixmap(120, 120)
+        old_pm.fill(Qt.GlobalColor.black)
+        new_pm = QPixmap(120, 120)
+        new_pm.fill(Qt.GlobalColor.white)
+
+        transition = GLBlindsTransition(duration_ms=1000, slat_rows=2, slat_cols=2)
+        started = transition.start(old_pm, new_pm, widget)
+        if not started:
+            pytest.skip("GL context unavailable for blinds overlay")
+
+        overlay = getattr(widget, "_srpss_gl_blinds_overlay", None)
+        if overlay is None:
+            pytest.skip("GL blinds overlay not created (likely headless)")
+
+        # Drive animation update manually and capture repaint flag
+        transition._tail_repaint_sent = False
+        transition._on_anim_update(0.91)
+        assert transition._tail_repaint_sent is False
+        transition._on_anim_update(0.94)
+        assert transition._tail_repaint_sent is True
+
+    def test_display_widget_retains_previous_pixmap_on_clear(self, qapp, settings_manager, dummy_pixmap):
+        from rendering.display_widget import DisplayWidget
+
+        widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+        widget.resize(200, 200)
+        widget.current_pixmap = dummy_pixmap
+        widget.previous_pixmap = None
+
+        widget.clear()
+
+        assert widget.previous_pixmap is dummy_pixmap
+        assert widget.current_pixmap is None
+
     
     def test_gl_diffuse_overlay_ready(self, qapp, dummy_widget, dummy_pixmap):
         """Test GL Diffuse overlay ready state."""
@@ -289,6 +334,44 @@ class TestDisplayWidgetPaintEvent:
         QApplication.processEvents()
         
         widget.close()
+
+
+class TestDisplayWidgetOverlayDiagnostics:
+    def test_notify_overlay_ready_tracks_counts(self, qapp, dummy_pixmap):
+        from rendering.display_widget import DisplayWidget
+
+        widget = DisplayWidget(0, None, None)
+        widget.notify_overlay_ready("test_overlay", "gl_initialized", version="4.6")
+        widget.notify_overlay_ready("test_overlay", "prepaint_ready")
+
+        counts = widget.get_overlay_stage_counts()
+
+        assert counts["test_overlay:gl_initialized"] == 1
+        assert counts["test_overlay:prepaint_ready"] == 1
+
+    def test_handle_screen_change_updates_geometry_and_dpi(self, qapp, dummy_pixmap):
+        from rendering.display_widget import DisplayWidget
+
+        class _FakeScreen:
+            def __init__(self, rect: QRect, dpr: float) -> None:
+                self._rect = rect
+                self._dpr = dpr
+
+            def geometry(self) -> QRect:
+                return self._rect
+
+            def devicePixelRatio(self) -> float:
+                return self._dpr
+
+        widget = DisplayWidget(0, None, None)
+        widget.resize(100, 100)
+
+        fake_screen = _FakeScreen(QRect(0, 0, 640, 360), 1.75)
+        widget._handle_screen_change(fake_screen)
+
+        assert widget._screen is fake_screen
+        assert widget.width() == 640 and widget.height() == 360
+        assert pytest.approx(widget._device_pixel_ratio, rel=1e-3) == 1.75
 
 
 if __name__ == "__main__":

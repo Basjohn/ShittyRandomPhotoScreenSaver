@@ -6,12 +6,15 @@ Defines the abstract interface that all transitions must implement.
 from abc import ABCMeta, abstractmethod
 from enum import Enum
 import time
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from PySide6.QtCore import QObject, Signal, Qt
 from PySide6.QtGui import QPixmap, QPainter
 from PySide6.QtWidgets import QWidget
 
 from core.logging.logger import get_logger
+
+if TYPE_CHECKING:  # pragma: no cover - imported for typing only
+    from core.resources.manager import ResourceManager
 
 logger = get_logger(__name__)
 
@@ -74,8 +77,15 @@ class BaseTransition(QObject, metaclass=QABCMeta):
         self._start_time: Optional[float] = None
         self._end_time: Optional[float] = None
         
+        # Shared resource manager wiring (assigned by caller)
+        self._resource_manager: Optional["ResourceManager"] = None
+        
         logger.debug(f"{self.__class__.__name__} created with duration {duration_ms}ms")
-    
+
+    def set_resource_manager(self, manager: Optional["ResourceManager"]) -> None:
+        """Bind a shared ResourceManager for widget-owned resources."""
+        self._resource_manager = manager
+
     @abstractmethod
     def start(self, old_pixmap: Optional[QPixmap], new_pixmap: QPixmap, 
               widget: QWidget) -> bool:
@@ -280,6 +290,20 @@ class BaseTransition(QObject, metaclass=QABCMeta):
             except Exception:
                 pass
         return am
+
+    def _get_thread_manager(self, widget: QWidget):
+        """
+        Retrieve or attach a per-widget ThreadManager for UI scheduling helpers.
+        """
+        tm = getattr(widget, "_thread_manager", None)
+        if tm is None:
+            from core.threading.manager import ThreadManager
+            try:
+                tm = ThreadManager()
+            except Exception:
+                tm = ThreadManager()
+            setattr(widget, "_thread_manager", tm)
+        return tm
     
     def __repr__(self) -> str:
         """String representation."""

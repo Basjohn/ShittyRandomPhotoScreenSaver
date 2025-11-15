@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QSpinBox, QGroupBox, QCheckBox, QScrollArea
 )
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Signal, Qt
 
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger
@@ -47,7 +47,6 @@ class DisplayTab(QWidget):
     def _setup_ui(self) -> None:
         """Setup tab UI with scroll area."""
         # Create scroll area
-        from PySide6.QtCore import Qt
         scroll = QScrollArea(self)
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -194,7 +193,29 @@ class DisplayTab(QWidget):
         pan_layout.addLayout(manual_speed_row)
         
         layout.addWidget(pan_group)
-        
+
+        # Renderer backend group
+        backend_group = QGroupBox("Renderer Backend")
+        backend_layout = QVBoxLayout(backend_group)
+
+        backend_row = QHBoxLayout()
+        backend_row.addWidget(QLabel("Preferred backend:"))
+        self.backend_combo = QComboBox()
+        self.backend_combo.addItem("OpenGL (recommended)", userData="opengl")
+        self.backend_combo.addItem("Software (fallback)", userData="software")
+        self.backend_combo.currentIndexChanged.connect(self._save_settings)
+        backend_row.addWidget(self.backend_combo, 1)
+        backend_layout.addLayout(backend_row)
+
+        backend_hint = QLabel(
+            "OpenGL is the primary renderer. If it fails during startup, the software fallback engages automatically."
+        )
+        backend_hint.setWordWrap(True)
+        backend_hint.setStyleSheet("color: #aaaaaa; font-size: 11px;")
+        backend_layout.addWidget(backend_hint)
+
+        layout.addWidget(backend_group)
+
         # Performance group
         perf_group = QGroupBox("Performance")
         perf_layout = QVBoxLayout(perf_group)
@@ -209,6 +230,18 @@ class DisplayTab(QWidget):
         perf_layout.addWidget(self.refresh_sync_check)
         
         layout.addWidget(perf_group)
+
+        # Input & Exit group
+        input_group = QGroupBox("Input && Exit")
+        input_layout = QVBoxLayout(input_group)
+        self.hard_exit_check = QCheckBox("Hard Exit (ESC only)")
+        self.hard_exit_check.setToolTip(
+            "Makes the screensaver only close if you press escape and no longer for simple mouse movement"
+        )
+        self.hard_exit_check.setChecked(False)
+        self.hard_exit_check.stateChanged.connect(self._save_settings)
+        input_layout.addWidget(self.hard_exit_check)
+        layout.addWidget(input_group)
         
         # Add stretch at bottom
         layout.addStretch()
@@ -235,6 +268,9 @@ class DisplayTab(QWidget):
         # Also block performance toggles to avoid saving defaults while loading
         self.hw_accel_check.blockSignals(True)
         self.refresh_sync_check.blockSignals(True)
+        self.backend_combo.blockSignals(True)
+        # Block input toggles
+        self.hard_exit_check.blockSignals(True)
         
         try:
             # Monitor selection
@@ -304,7 +340,25 @@ class DisplayTab(QWidget):
             if isinstance(refresh_sync, str):
                 refresh_sync = refresh_sync.lower() == 'true'
             self.refresh_sync_check.setChecked(refresh_sync)
-            
+
+            # Input / Hard Exit
+            hard_exit = self._settings.get('input.hard_exit', False)
+            if isinstance(hard_exit, str):
+                hard_exit = hard_exit.lower() in ('true', '1', 'yes')
+            self.hard_exit_check.setChecked(bool(hard_exit))
+
+            # Renderer backend preferences
+            backend_mode_raw = self._settings.get('display.render_backend_mode', 'opengl')
+            backend_mode = str(backend_mode_raw).lower()
+            if backend_mode == 'd3d11':
+                logger.info("[DISPLAY] Legacy Direct3D setting detected; normalizing to OpenGL")
+                backend_mode = 'opengl'
+                self._settings.set('display.render_backend_mode', 'opengl')
+            index = self.backend_combo.findData(backend_mode)
+            if index == -1:
+                index = 0
+            self.backend_combo.setCurrentIndex(index)
+
             logger.debug(f"Loaded display settings: sharpen={sharpen}, pan={pan_enabled}")
         finally:
             # Re-enable signals
@@ -319,6 +373,8 @@ class DisplayTab(QWidget):
             self.pan_speed_spin.blockSignals(False)
             self.hw_accel_check.blockSignals(False)
             self.refresh_sync_check.blockSignals(False)
+            self.backend_combo.blockSignals(False)
+            self.hard_exit_check.blockSignals(False)
     
     def _save_settings(self) -> None:
         """Save current settings to settings manager."""
@@ -360,7 +416,14 @@ class DisplayTab(QWidget):
         # Performance
         self._settings.set('display.hw_accel', self.hw_accel_check.isChecked())
         self._settings.set('display.refresh_sync', self.refresh_sync_check.isChecked())
-        
+
+        # Input / Exit
+        self._settings.set('input.hard_exit', self.hard_exit_check.isChecked())
+
+        # Renderer backend
+        backend_value = self.backend_combo.currentData() or 'opengl'
+        self._settings.set('display.render_backend_mode', backend_value)
+
         self._settings.save()
         self.display_changed.emit()
         

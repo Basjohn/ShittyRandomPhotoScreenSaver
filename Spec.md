@@ -33,15 +33,19 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
 - `ImageCache`: LRU with RLock, stores `QImage` or `QPixmap`, memory-bound by `max_memory_mb` and `max_items`.
 - `ImagePrefetcher`: uses ThreadManager IO pool to decode file paths into `QImage`, tracks inflight under lock, and populates cache.
 - Look-ahead: `ImageQueue.peek_many(n)` used to determine upcoming assets.
+- Skip policy: when a transition is active, prefetch defers to avoid thrash; skipped requests are logged for pacing diagnostics.
 
 ## Transitions
 - GL and CPU variants for Crossfade, Slide, Wipe, Diffuse, Block Puzzle Flip.
-- GL overlays persistent and pre-warmed to avoid first-use flicker.
+- DisplayWidget injects the shared ResourceManager into every transition; overlays are created through `overlay_manager.get_or_create_overlay` so lifecycle is centralized.
+- GL overlays persistent and pre-warmed via `overlay_manager.prepare_gl_overlay` to avoid first-use flicker.
 - Non-repeating random selection:
   - Engine sets `transitions.random_choice` per rotation.
   - Slide: cardinal-only directions; stored as `transitions.slide.direction` and last as `transitions.slide.last_direction` (legacy fallback maintained).
   - Wipe: includes diagonals; stored as `transitions.wipe.direction` and last as `transitions.wipe.last_direction` (legacy fallback maintained).
   - UI 'Random direction' respected when `random_always` is false.
+  - Manual selection or hotkey cycling must clear `transitions.random_choice` cache immediately so the chosen type instantiates next rotation.
+  - Random selection disabled when `transitions.random_always=False`; engine respects explicit `transitions.type` from settings/GUI.
 
 ## Performance Notes
 - All decoding happens off UI thread.
@@ -77,6 +81,25 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
 - UI updates only on main thread (`run_on_ui_thread`).
 - Simple locks (Lock/RLock) guard mutable state; no raw QThread.
 - Qt objects registered with `ResourceManager` where appropriate.
+
+## OpenGL Overlay Lifecycle
+- Persistent overlays per transition type; reuse prevents reallocation churn.
+- Warmup path (`DisplayWidget._prewarm_gl_contexts`) initializes five core overlays per monitor and records per-stage telemetry.
+- Triple-buffer requests may downgrade to double-buffer when driver rejects configuration; log and surface downgrade reason through diagnostics overlay.
+- Watchdog timers accompany each GL transition; timeout cancellation required once `transition_finish` fires to avoid thread leaks.
+- Overlay Z-order is revalidated after each transition to ensure widgets (clock/weather) remain visible across monitors.
+
+## Banding & Pixmap Seeding
+- `DisplayWidget` seeds `current_pixmap` as soon as an image loads, before transition warmup, to prevent black/banding frames.
+- After closing the settings dialog, force reseed and unblock updates before transitions resume (multi-monitor specific).
+- `_has_rendered_first_frame` gates transitions only for the initial frame; settings reopen must reset this guard.
+
+## Diagnostics & Telemetry
+- Structured logging captures overlay readiness stages, swap behavior, and watchdog activity.
+- `Docs/Route3_OpenGL_Roadmap.md` acts as live checklist; every change must update both roadmap and `audits/AUDIT_OpenGL_Stability.md`.
+- `Docs/FlashFlickerDiagnostic.md` tracks symptoms, triggers, and mitigation experiments; roadmap items link back for traceability.
+- High-verbosity debug sessions require log rotation (size/time bound) to avoid disk pressure.
+- Telemetry counters record transition type requested vs. instantiated, cache hits/misses, and transition skips while in progress.
 
 ## Future Enhancements
 - Compute-pool pre-scale-to-screen (per-display DPR) ahead of time for the next image.

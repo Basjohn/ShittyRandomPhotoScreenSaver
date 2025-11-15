@@ -320,7 +320,9 @@ class ImageQueue:
             List of recent image paths (most recent last)
         """
         history_list = list(self._history)
-        return history_list[-count:] if count < len(history_list) else history_list
+        if count < len(history_list):
+            history_list = history_list[-count:]
+        return [str(img.local_path) for img in history_list]
     
     def is_in_recent_history(self, image_path: str, lookback: int = 10) -> bool:
         """
@@ -334,7 +336,7 @@ class ImageQueue:
             True if image was shown recently
         """
         recent = self.get_history(lookback)
-        return image_path in recent
+        return str(image_path) in recent
     
     def get_wrap_count(self) -> int:
         """

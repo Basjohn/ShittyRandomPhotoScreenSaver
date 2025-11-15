@@ -9,14 +9,21 @@ from __future__ import annotations
 
 import threading
 from typing import Optional
-from PySide6.QtGui import QPixmap, QPainter, QSurfaceFormat
+from PySide6.QtGui import QPixmap, QPainter
 from PySide6.QtWidgets import QWidget
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
 from transitions.base_transition import BaseTransition, TransitionState
+from transitions.overlay_manager import (
+    get_or_create_overlay,
+    notify_overlay_stage,
+    schedule_raise_when_ready,
+    set_overlay_geometry,
+)
 from core.animation.types import EasingCurve
 from core.logging.logger import get_logger
 from utils.profiler import profile
+from rendering.gl_format import apply_widget_surface_format
 
 logger = get_logger(__name__)
 
@@ -25,19 +32,8 @@ class _GLFadeWidget(QOpenGLWidget):
     """Internal GL widget that draws old and new pixmaps with opacity."""
 
     def __init__(self, parent: QWidget, old_pixmap: QPixmap, new_pixmap: QPixmap) -> None:
-        # Configure surface format before context is created
-        try:
-            fmt = QSurfaceFormat()
-            # Prefer triple buffering where supported; platform may clamp
-            try:
-                fmt.setSwapBehavior(QSurfaceFormat.SwapBehavior.TripleBuffer)
-            except Exception:
-                fmt.setSwapBehavior(QSurfaceFormat.SwapBehavior.DefaultSwapBehavior)
-            fmt.setSwapInterval(1)  # vsync
-            self.setFormat(fmt)
-        except Exception:
-            pass
         super().__init__(parent)
+        prefs = apply_widget_surface_format(self, reason="gl_crossfade_overlay")
         self.setAutoFillBackground(False)
         try:
             # Avoid system background clears and rely on our paint
@@ -55,6 +51,9 @@ class _GLFadeWidget(QOpenGLWidget):
         self._alpha: float = 0.0  # 0..1
         self._old = old_pixmap
         self._new = new_pixmap
+        self._surface_prefs = prefs
+        self._requested_swap_behavior = "Triple" if prefs.prefer_triple_buffer and prefs.refresh_sync else "Double"
+        self._requested_swap_interval = 1 if prefs.refresh_sync else 0
         
         # Atomic state flags with lock protection
         self._state_lock = threading.Lock()
@@ -97,6 +96,7 @@ class _GLFadeWidget(QOpenGLWidget):
             if not self._first_frame_drawn:
                 self._first_frame_drawn = True
                 logger.debug("[GL XFADE] First frame drawn, overlay ready")
+                notify_overlay_stage(self, "first_frame_drawn")
             self._has_drawn = True
 
     def initializeGL(self) -> None:  # type: ignore[override]
@@ -108,6 +108,12 @@ class _GLFadeWidget(QOpenGLWidget):
                     f"[GL XFADE] Context initialized: version={fmt.majorVersion()}.{fmt.minorVersion()}, "
                     f"swap={fmt.swapBehavior()}, interval={fmt.swapInterval()}"
                 )
+                notify_overlay_stage(self, "gl_initialized",
+                                     version=f"{fmt.majorVersion()}.{fmt.minorVersion()}",
+                                     swap=str(fmt.swapBehavior()),
+                                     interval=fmt.swapInterval(),
+                                     requested_swap=self._requested_swap_behavior,
+                                     requested_interval=self._requested_swap_interval)
             
             # Mark GL initialized atomically
             with self._state_lock:
@@ -137,12 +143,6 @@ class GLCrossfadeTransition(BaseTransition):
         self._gl: Optional[_GLFadeWidget] = None
         self._animation_id: Optional[str] = None
         self._easing_str = easing
-        # ResourceManager integration (best-effort)
-        try:
-            from core.resources.manager import ResourceManager
-            self._resources = ResourceManager()
-        except Exception:
-            self._resources = None  # Fallback if manager unavailable during tests
 
     def start(self, old_pixmap: Optional[QPixmap], new_pixmap: QPixmap, widget: QWidget) -> bool:
         if self._state == TransitionState.RUNNING:
@@ -158,7 +158,6 @@ class GLCrossfadeTransition(BaseTransition):
         
         try:
             self._widget = widget
-            w, h = widget.width(), widget.height()
 
             # If no old image, just show new one immediately
             if not old_pixmap or old_pixmap.isNull():
@@ -167,42 +166,20 @@ class GLCrossfadeTransition(BaseTransition):
                 return True
 
             # Reuse or create persistent overlay on the widget
-            overlay = getattr(widget, "_srpss_gl_xfade_overlay", None)
-            if overlay is None or not isinstance(overlay, _GLFadeWidget):
-                logger.debug("[GL XFADE] Creating persistent GL overlay")
-                overlay = _GLFadeWidget(widget, old_pixmap, new_pixmap)
-                overlay.setGeometry(0, 0, w, h)
-                setattr(widget, "_srpss_gl_xfade_overlay", overlay)
-                if getattr(self, "_resources", None):
-                    try:
-                        self._resources.register_qt(overlay, description="GL Crossfade persistent overlay")
-                    except Exception:
-                        pass
-            else:
-                logger.debug("[GL XFADE] Reusing persistent GL overlay")
-                overlay.set_images(old_pixmap, new_pixmap)
-                overlay.set_alpha(0.0)
+            overlay = get_or_create_overlay(
+                widget,
+                "_srpss_gl_xfade_overlay",
+                _GLFadeWidget,
+                lambda: _GLFadeWidget(widget, old_pixmap, new_pixmap),
+            )
+            logger.debug("[GL XFADE] %s persistent overlay", "Reusing" if overlay is getattr(widget, "_srpss_gl_xfade_overlay") else "Creating")
+            overlay.set_images(old_pixmap, new_pixmap)
+            overlay.set_alpha(0.0)
 
             self._gl = overlay
-            # Show first so QOpenGLWidget creates context/FBO, then prepaint
             self._gl.setVisible(True)
-            self._gl.setGeometry(0, 0, w, h)
-            try:
-                self._gl.raise_()
-            except Exception:
-                pass
-            # Keep clock widget above GL overlay if present
-            try:
-                if hasattr(widget, "clock_widget") and getattr(widget, "clock_widget"):
-                    widget.clock_widget.raise_()
-            except Exception:
-                pass
-            # Ensure event queue processes widget show/geometry before prepaint
-            try:
-                from PySide6.QtCore import QCoreApplication
-                QCoreApplication.processEvents()
-            except Exception:
-                pass
+            set_overlay_geometry(widget, self._gl)
+            notify_overlay_stage(self._gl, "prepaint_start")
             try:
                 self._gl.makeCurrent()
             except Exception:
@@ -214,6 +191,7 @@ class GLCrossfadeTransition(BaseTransition):
                     _fb = self._gl.grabFramebuffer()  # forces a paintGL pass
                     _ = _fb
                     logger.debug("[GL XFADE] Prepainted initial frame (alpha=0.0)")
+                    notify_overlay_stage(self._gl, "prepaint_ready")
             except Exception:
                 pass
             try:
@@ -222,6 +200,7 @@ class GLCrossfadeTransition(BaseTransition):
                     self._gl.repaint()
             except Exception:
                 pass
+            schedule_raise_when_ready(widget, self._gl, stage="initial_raise")
 
             # Drive via AnimationManager
             am = self._get_animation_manager(widget)

@@ -6,9 +6,10 @@ Scales image larger than display and slowly pans across it for dynamic effect.
 import math
 import random
 from typing import Optional
-from PySide6.QtCore import QTimer, QPoint, QSize
+from PySide6.QtCore import QTimer, QPoint, QSize, QRect
 from PySide6.QtWidgets import QLabel, QWidget
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QPixmap, QPainter
+from PySide6.QtCore import Qt
 
 from core.logging.logger import get_logger
 
@@ -173,6 +174,7 @@ class PanAndScan:
     
     def stop(self) -> None:
         """Stop pan and scan effect."""
+        did_change = False
         if self._timer:
             try:
                 self._timer.stop()
@@ -182,8 +184,18 @@ class PanAndScan:
                 pass
             finally:
                 self._timer = None
-        
-        logger.debug("Pan and scan stopped")
+            did_change = True
+
+        if self._label and self._label.isVisible():
+            try:
+                self._label.hide()
+            except Exception:
+                pass
+            else:
+                did_change = True
+
+        if did_change:
+            logger.debug("Pan and scan stopped")
     
     def enable(self, enabled: bool) -> None:
         """
@@ -194,11 +206,17 @@ class PanAndScan:
         """
         was_enabled = self._enabled
         self._enabled = enabled
-        
+
         if not enabled and was_enabled:
             self.stop()
-        
-        logger.debug(f"Pan and scan {'enabled' if enabled else 'disabled'}")
+            if self._label:
+                try:
+                    self._label.hide()
+                except Exception:
+                    pass
+
+        if was_enabled != enabled:
+            logger.debug(f"Pan and scan {'enabled' if enabled else 'disabled'}")
     
     def set_speed(self, pixels_per_second: float) -> None:
         """
@@ -250,6 +268,83 @@ class PanAndScan:
             return None
         
         return self._scale_image_for_pan(pixmap, display_size)
+
+    def build_transition_frame(
+        self,
+        pixmap: QPixmap,
+        display_size: QSize,
+        device_pixel_ratio: float
+    ) -> Optional[QPixmap]:
+        """
+        Build a transition-ready pixmap that matches the initial pan & scan viewport.
+
+        Produces a widget-sized frame showing the first pan & scan position so
+        that the transition seamlessly hands off into the animation.
+
+        Args:
+            pixmap: Original image pixmap.
+            display_size: Logical display size of the widget.
+            device_pixel_ratio: Target device pixel ratio for high-DPI displays.
+
+        Returns:
+            A pixmap the size of the display showing the first pan frame, or None.
+        """
+        if not self._enabled or pixmap.isNull() or not display_size.isValid():
+            return None
+
+        scaled = self._scale_image_for_pan(pixmap, display_size)
+        if scaled.isNull():
+            return None
+
+        source_offset = self.preview_offset(pixmap, display_size)
+        if source_offset is None:
+            source_offset = QPoint(0, 0)
+
+        max_offset_x = max(0, scaled.width() - display_size.width())
+        max_offset_y = max(0, scaled.height() - display_size.height())
+        start_x = max(0, min(max_offset_x, source_offset.x()))
+        start_y = max(0, min(max_offset_y, source_offset.y()))
+
+        viewport_rect = QRect(start_x, start_y, display_size.width(), display_size.height())
+        if viewport_rect.width() <= 0 or viewport_rect.height() <= 0:
+            return None
+
+        # Ensure pan & scan starts from the same offset after the transition completes
+        self.set_initial_offset(QPoint(start_x, start_y))
+
+        # Create a display-sized canvas and draw the scaled image with the offset applied
+        target_width = max(1, int(display_size.width()))
+        target_height = max(1, int(display_size.height()))
+
+        frame = QPixmap(target_width, target_height)
+        frame.fill(Qt.GlobalColor.black)
+
+        try:
+            painter = QPainter(frame)
+            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+            painter.drawPixmap(-start_x, -start_y, scaled)
+            painter.end()
+        except Exception:
+            return None
+
+        # Scale to physical pixels for high-DPI screens if required
+        if device_pixel_ratio and device_pixel_ratio > 1.0:
+            target_physical_w = int(display_size.width() * device_pixel_ratio)
+            target_physical_h = int(display_size.height() * device_pixel_ratio)
+            if target_physical_w > 0 and target_physical_h > 0:
+                frame = frame.scaled(
+                    target_physical_w,
+                    target_physical_h,
+                    Qt.AspectRatioMode.IgnoreAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                )
+
+        try:
+            frame.setDevicePixelRatio(device_pixel_ratio)
+        except Exception:
+            pass
+
+        return frame
     
     def _scale_image_for_pan(self, pixmap: QPixmap, display_size: QSize) -> QPixmap:
         """

@@ -331,17 +331,30 @@ class ClockWidget(QLabel):
         if self._time_format == TimeFormat.TWELVE_HOUR:
             time_str = time_str.lstrip('0')
         
+        timezone_abbrev = self._get_timezone_abbrev() if self._show_timezone else ""
+        self._timezone_abbrev = timezone_abbrev
+
+        # Main clock text should not include the timezone; the abbreviation is shown
+        # exclusively in the smaller secondary label when enabled.
+        display_text = time_str
+
         # Plain text display
-        self.setText(time_str)
+        self.setText(display_text)
         self.setTextFormat(Qt.TextFormat.PlainText)
-        
+
         # Update timezone label if shown
-        if self._show_timezone and self._tz_label and self._timezone_abbrev:
-            self._tz_label.setText(self._timezone_abbrev)
-            self._tz_label.adjustSize()
-            if self._show_background:
-                self._update_stylesheet()
-                self.adjustSize()
+        if self._show_timezone and self._tz_label:
+            if timezone_abbrev:
+                self._tz_label.setText(timezone_abbrev)
+                self._tz_label.adjustSize()
+                self._tz_label.show()
+                self._tz_label.raise_()
+            else:
+                self._tz_label.hide()
+        if self._show_background:
+            self._update_stylesheet()
+            self.adjustSize()
+
         
         # Adjust size to content
         self.adjustSize()
@@ -406,7 +419,6 @@ class ClockWidget(QLabel):
             time_format: 12h or 24h format
         """
         self._time_format = time_format
-        logger.debug(f"Time format set to {time_format.value}")
         
         # Update display immediately if running
         if self._enabled:
@@ -420,7 +432,6 @@ class ClockWidget(QLabel):
             position: Screen position
         """
         self._position = position
-        logger.debug(f"Position set to {position.value}")
         
         # Update position immediately if running
         if self._enabled:
@@ -434,7 +445,6 @@ class ClockWidget(QLabel):
             show_seconds: True to show seconds
         """
         self._show_seconds = show_seconds
-        logger.debug(f"Show seconds set to {show_seconds}")
         
         # Update display immediately if running
         if self._enabled:
@@ -456,8 +466,6 @@ class ClockWidget(QLabel):
             tz_font_size = max(int(self._font_size / 4), 8)
             tz_font = QFont(self._font_family, tz_font_size)
             self._tz_label.setFont(tz_font)
-        
-        logger.debug(f"Font family set to {family}")
         
         # Update display immediately if running
         if self._enabled:
@@ -484,8 +492,6 @@ class ClockWidget(QLabel):
             tz_font = QFont(self._font_family, tz_font_size)
             self._tz_label.setFont(tz_font)
         
-        logger.debug(f"Font size set to {size}")
-        
         # Update display immediately if running
         if self._enabled:
             self._update_time()
@@ -499,8 +505,6 @@ class ClockWidget(QLabel):
         """
         self._text_color = color
         self._update_stylesheet()
-        logger.debug(f"Text color set to rgba({color.red()}, {color.green()}, "
-                    f"{color.blue()}, {color.alpha()})")
     
     def set_margin(self, margin: int) -> None:
         """
@@ -514,7 +518,6 @@ class ClockWidget(QLabel):
             margin = 20
         
         self._margin = margin
-        logger.debug(f"Margin set to {margin}px")
         
         # Update position immediately if running
         if self._enabled:
@@ -530,12 +533,11 @@ class ClockWidget(QLabel):
         self._timezone_str = timezone_str
         self._timezone = self._parse_timezone(timezone_str)
         self._timezone_abbrev = self._get_timezone_abbrev()
-        logger.debug(f"Timezone set to {timezone_str} (abbrev: {self._timezone_abbrev})")
         
         # Update display immediately if running
         if self._enabled:
             self._update_time()
-    
+
     def set_show_timezone(self, show_timezone: bool) -> None:
         """
         Set whether to display timezone abbreviation.
@@ -543,9 +545,30 @@ class ClockWidget(QLabel):
         Args:
             show_timezone: True to show timezone
         """
+        if self._show_timezone == show_timezone:
+            # No change
+            return
+
         self._show_timezone = show_timezone
-        logger.debug(f"Show timezone set to {show_timezone}")
-        
+
+        if show_timezone and self._tz_label is None and self.parent():
+            # Lazily create timezone label if needed
+            self._tz_label = QLabel(self)
+            self._tz_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+            tz_font_size = max(int(self._font_size / 4), 8)
+            tz_font = QFont(self._font_family, tz_font_size)
+            self._tz_label.setFont(tz_font)
+            self._tz_label.setStyleSheet(f"""QLabel {{
+                color: rgba({self._text_color.red()}, {self._text_color.green()},
+                           {self._text_color.blue()}, {self._text_color.alpha()});
+                background-color: transparent;
+                padding: 0px;
+                border: none;
+            }}""")
+            self._tz_label.hide()
+        elif not show_timezone and self._tz_label:
+            self._tz_label.hide()
+
         # Update display immediately if running
         if self._enabled:
             self._update_time()
@@ -559,7 +582,6 @@ class ClockWidget(QLabel):
         """
         self._show_background = show
         self._update_stylesheet()
-        logger.debug(f"Show background set to {show}")
     
     def set_background_color(self, color: QColor) -> None:
         """
@@ -571,8 +593,6 @@ class ClockWidget(QLabel):
         self._bg_color = color
         if self._show_background:
             self._update_stylesheet()
-        logger.debug(f"Background color set to rgba({color.red()}, {color.green()}, "
-                    f"{color.blue()}, {color.alpha()})")
     
     def set_background_opacity(self, opacity: float) -> None:
         """
@@ -586,7 +606,6 @@ class ClockWidget(QLabel):
         self._bg_color.setAlpha(int(255 * self._bg_opacity))
         if self._show_background:
             self._update_stylesheet()
-        logger.debug(f"Background opacity set to {self._bg_opacity * 100:.0f}%")
     
     def set_background_border(self, width: int, color: QColor) -> None:
         """
@@ -600,8 +619,6 @@ class ClockWidget(QLabel):
         self._bg_border_color = color
         if self._show_background:
             self._update_stylesheet()
-        logger.debug(f"Background border set to {width}px, rgba({color.red()}, {color.green()}, "
-                    f"{color.blue()}, {color.alpha()})")
     
     def _update_stylesheet(self) -> None:
         """Update widget stylesheet based on current settings."""

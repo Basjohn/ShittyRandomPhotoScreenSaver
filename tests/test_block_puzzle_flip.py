@@ -3,7 +3,7 @@ import pytest
 from PySide6.QtWidgets import QWidget, QApplication
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt
-from transitions.block_puzzle_flip_transition import BlockPuzzleFlipTransition
+from transitions.block_puzzle_flip_transition import BlockPuzzleFlipTransition, _BlockFlipWidget
 
 
 @pytest.fixture
@@ -52,14 +52,15 @@ def test_block_puzzle_runs_and_labels(qapp, test_widget, test_pixmap, test_pixma
     t.started.connect(lambda: started.append(True))
     with qtbot.waitSignal(t.finished, timeout=4000):
         assert t.start(test_pixmap, test_pixmap2, test_widget) is True
-        # Structural assertions
-        assert hasattr(t, "_new_label") and t._new_label is not None
-        assert hasattr(t, "_old_label") and t._old_label is not None
-        assert t._new_label.scaledContents() is False
-        assert t._old_label.scaledContents() is False
-        # Geometry matches widget
-        assert t._new_label.width() == test_widget.width()
-        assert t._new_label.height() == test_widget.height()
+        # Overlay assertions (QPainter-based implementation)
+        overlay = getattr(test_widget, "_srpss_sw_blockflip_overlay", None)
+        assert overlay is not None
+        assert isinstance(overlay, _BlockFlipWidget)
+        assert overlay.width() == test_widget.width()
+        assert overlay.height() == test_widget.height()
+        # Ensure overlay holds source pixmaps
+        assert getattr(overlay, "_old") is test_pixmap
+        assert getattr(overlay, "_new") is test_pixmap2
 
     assert len(started) == 1
 
@@ -101,7 +102,8 @@ def test_block_puzzle_randomization(qapp, test_widget, test_pixmap, test_pixmap2
     transition.start(test_pixmap, test_pixmap2, test_widget)
     
     # Flip order should be shuffled (not sequential)
-    total_blocks = 12
+    total_blocks = len(transition._blocks)
+    assert total_blocks > 0
     assert len(transition._flip_order) == total_blocks
     
     # Check if order is non-sequential

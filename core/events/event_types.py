@@ -72,3 +72,8 @@ class EventType:
     
     # Settings events
     SETTINGS_CHANGED = "settings.changed"
+
+    # Backend events
+    RENDER_BACKEND_FAILED = "render.backend.failed"
+    RENDER_BACKEND_FALLBACK = "render.backend.fallback"
+    RENDER_BACKEND_SELECTED = "render.backend.selected"

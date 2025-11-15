@@ -6,6 +6,16 @@ transitions (both GL and software overlays).
 """
 from __future__ import annotations
 
+import time
+from typing import Callable, Optional, Type, TypeVar
+
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QLabel, QWidget
+
+from core.threading.manager import ThreadManager
+from core.logging.logger import get_logger
+
+
 # Known overlay attribute names on DisplayWidget
 GL_OVERLAY_KEYS: tuple[str, ...] = (
     "_srpss_gl_xfade_overlay",
@@ -13,13 +23,22 @@ GL_OVERLAY_KEYS: tuple[str, ...] = (
     "_srpss_gl_wipe_overlay",
     "_srpss_gl_diffuse_overlay",
     "_srpss_gl_blockflip_overlay",
+    "_srpss_gl_blinds_overlay",
 )
 
 SW_OVERLAY_KEYS: tuple[str, ...] = (
     "_srpss_sw_xfade_overlay",
 )
 
-ALL_OVERLAY_KEYS: tuple[str, ...] = GL_OVERLAY_KEYS + SW_OVERLAY_KEYS
+BACKEND_FALLBACK_OVERLAY_KEY = "_srpss_backend_fallback_overlay"
+
+ALL_OVERLAY_KEYS: tuple[str, ...] = GL_OVERLAY_KEYS + SW_OVERLAY_KEYS + (
+    BACKEND_FALLBACK_OVERLAY_KEY,
+)
+
+OverlayT = TypeVar("OverlayT", bound=QWidget)
+
+logger = get_logger(__name__)
 
 
 def hide_all_overlays(widget) -> None:
@@ -108,3 +127,237 @@ def raise_clock_if_present(widget) -> None:
             widget.clock_widget.raise_()
     except Exception:
         pass
+
+
+def get_or_create_overlay(
+    widget: QWidget,
+    attr_name: str,
+    overlay_type: Type[OverlayT],
+    factory: Callable[[], OverlayT],
+    on_create: Optional[Callable[[OverlayT], None]] = None,
+) -> OverlayT:
+    """Fetch an existing persistent overlay or create a new one via factory."""
+    overlay = getattr(widget, attr_name, None)
+    created = overlay is None or not isinstance(overlay, overlay_type)
+    if created:
+        overlay = factory()
+        # Ensure predictable naming for diagnostics
+        try:
+            if not overlay.objectName():
+                overlay.setObjectName(attr_name)
+        except Exception:
+            pass
+        setattr(widget, attr_name, overlay)
+        # Attach to widget parent immediately
+        try:
+            if overlay.parent() is not widget:
+                overlay.setParent(widget)
+        except Exception:
+            pass
+        # Register with widget ResourceManager if present
+        try:
+            resource_manager = getattr(widget, "_resource_manager", None)
+            if resource_manager and not getattr(overlay, "_resource_id", None):
+                overlay._resource_id = resource_manager.register_qt(  # type: ignore[attr-defined]
+                    overlay,
+                    description=f"Persistent overlay {attr_name}",
+                )
+        except Exception:
+            pass
+        if on_create:
+            try:
+                on_create(overlay)
+            except Exception:
+                pass
+    else:
+        # Ensure existing overlay remains parented and tracked
+        try:
+            if overlay.parent() is not widget:
+                overlay.setParent(widget)
+        except Exception:
+            pass
+        try:
+            resource_manager = getattr(widget, "_resource_manager", None)
+            if resource_manager and not getattr(overlay, "_resource_id", None):
+                overlay._resource_id = resource_manager.register_qt(  # type: ignore[attr-defined]
+                    overlay,
+                    description=f"Persistent overlay {attr_name}",
+                )
+        except Exception:
+            pass
+
+    # Make sure overlay geometry matches widget bounds on retrieval
+    try:
+        overlay.setGeometry(0, 0, widget.width(), widget.height())
+    except Exception:
+        pass
+    return overlay
+
+
+def show_backend_fallback_overlay(
+    widget: QWidget,
+    message: str,
+    *,
+    on_create: Optional[Callable[[QWidget], None]] = None,
+) -> QLabel:
+    """Show (or update) a red diagnostic overlay indicating backend fallback."""
+
+    def _factory() -> QLabel:
+        label = QLabel(widget)
+        label.setObjectName("BackendFallbackOverlay")
+        label.setWordWrap(True)
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        return label
+
+    overlay = get_or_create_overlay(
+        widget,
+        BACKEND_FALLBACK_OVERLAY_KEY,
+        QLabel,
+        _factory,
+        on_create,
+    )
+
+    overlay.setText(message)
+    overlay.setStyleSheet(
+        "background-color: rgba(160, 0, 0, 180); color: #ffffff; "
+        "font-weight: bold; padding: 16px; border: 2px solid rgba(255, 255, 255, 120);"
+    )
+    overlay.show()
+    set_overlay_geometry(widget, overlay)
+    raise_overlay(widget, overlay)
+    return overlay
+
+
+def hide_backend_fallback_overlay(widget: QWidget) -> None:
+    """Hide the backend fallback diagnostic overlay if present."""
+
+    try:
+        overlay = getattr(widget, BACKEND_FALLBACK_OVERLAY_KEY, None)
+        if overlay is not None:
+            overlay.hide()
+    except Exception:
+        pass
+
+
+def set_overlay_geometry(widget: QWidget, overlay: QWidget) -> None:
+    """Resize overlay to fully cover the widget."""
+    try:
+        overlay.setGeometry(0, 0, widget.width(), widget.height())
+    except Exception:
+        pass
+
+
+def raise_overlay(widget: QWidget, overlay: QWidget) -> None:
+    """Raise overlay above the base widget while keeping clock/weather above."""
+    try:
+        overlay.raise_()
+    except Exception:
+        pass
+    raise_clock_if_present(widget)
+    try:
+        if hasattr(widget, "weather_widget") and getattr(widget, "weather_widget"):
+            widget.weather_widget.raise_()
+    except Exception:
+        pass
+
+
+def notify_overlay_stage(overlay: QWidget, stage: str, **details) -> None:
+    """Forward overlay readiness diagnostics to the parent DisplayWidget."""
+    try:
+        parent = overlay.parent()
+        if parent and hasattr(parent, "notify_overlay_ready"):
+            name = overlay.objectName() or overlay.__class__.__name__
+            parent.notify_overlay_ready(name, stage, **details)
+    except Exception:
+        pass
+
+
+def schedule_raise_when_ready(
+    widget: QWidget,
+    overlay: QWidget,
+    *,
+    poll_ms: int = 8,
+    timeout_ms: int = 120,
+    stage: str = "initial_raise",
+    on_ready: Optional[Callable[[], None]] = None,
+    on_timeout: Optional[Callable[[], None]] = None,
+) -> None:
+    """Poll overlay readiness without blocking the event loop and raise when ready."""
+    start = time.monotonic()
+
+    def _check() -> None:
+        try:
+            # Many overlays expose is_ready_for_display(); fall back to has_drawn when absent
+            ready = False
+            if hasattr(overlay, "is_ready_for_display"):
+                ready = bool(overlay.is_ready_for_display())  # type: ignore[attr-defined]
+            elif hasattr(overlay, "has_drawn"):
+                ready = bool(overlay.has_drawn())  # type: ignore[attr-defined]
+        except Exception:
+            ready = False
+
+        elapsed_ms = (time.monotonic() - start) * 1000.0
+        if ready:
+            raise_overlay(widget, overlay)
+            notify_overlay_stage(overlay, stage, status="ready", wait_ms=f"{elapsed_ms:.2f}")
+            if on_ready:
+                try:
+                    on_ready()
+                except Exception:
+                    pass
+            return
+
+        if elapsed_ms >= timeout_ms:
+            notify_overlay_stage(overlay, stage, status="timeout", wait_ms=f"{elapsed_ms:.2f}")
+            if on_timeout:
+                try:
+                    on_timeout()
+                except Exception:
+                    pass
+            return
+
+        ThreadManager.single_shot(poll_ms, _check)
+
+    ThreadManager.single_shot(0, _check)
+
+
+def prepare_gl_overlay(
+    widget: QWidget,
+    overlay: QWidget,
+    *,
+    stage: str,
+    make_current: bool = True,
+    grab_framebuffer: bool = True,
+    repaint: bool = True,
+    prepaint_description: str | None = None,
+) -> None:
+    """Standardize GL overlay initialization sequence."""
+
+    overlay.setVisible(True)
+    set_overlay_geometry(widget, overlay)
+    notify_overlay_stage(overlay, "prepaint_start")
+
+    if make_current:
+        try:
+            overlay.makeCurrent()  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
+    if grab_framebuffer:
+        try:
+            _ = overlay.grabFramebuffer()  # type: ignore[attr-defined]
+            notify_overlay_stage(overlay, "prepaint_ready")
+        except Exception as exc:
+            if prepaint_description:
+                logger.warning("[%s] Prepaint failed: %s", prepaint_description, exc)
+            else:
+                logger.debug("[GL] Prepaint grabFramebuffer failed", exc_info=True)
+
+    if repaint:
+        try:
+            overlay.repaint()
+        except Exception:
+            pass
+
+    schedule_raise_when_ready(widget, overlay, stage=stage)

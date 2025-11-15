@@ -11,6 +11,7 @@ from .block_puzzle_flip_transition import BlockPuzzleFlipTransition
 from .gl_block_puzzle_flip_transition import GLBlockPuzzleFlipTransition
 from .wipe_transition import WipeTransition, WipeDirection
 from .gl_wipe_transition import GLWipeTransition
+from .gl_blinds import GLBlindsTransition
 
 __all__ = [
     'BaseTransition',
@@ -27,4 +28,5 @@ __all__ = [
     'WipeTransition',
     'GLWipeTransition',
     'WipeDirection',
+    'GLBlindsTransition',
 ]

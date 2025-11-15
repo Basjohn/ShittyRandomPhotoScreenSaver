@@ -15,8 +15,8 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QWidget, QPushButton,
     QLabel, QStackedWidget, QGraphicsDropShadowEffect, QSizeGrip
 )
-from PySide6.QtCore import Qt, QPoint, QPropertyAnimation, QEasingCurve, Signal
-from PySide6.QtGui import QIcon, QFont, QColor, QPalette
+from PySide6.QtCore import Qt, QPoint, Signal
+from PySide6.QtGui import QFont, QColor
 
 from core.logging.logger import get_logger
 from core.settings.settings_manager import SettingsManager
@@ -173,7 +173,7 @@ class SettingsDialog(QDialog):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         
         # Minimum size
-        self.setMinimumSize(800, 500)
+        self.setMinimumSize(900, 600)
         
         # Check if we have saved geometry first
         saved_geometry = self._settings.get('ui.dialog_geometry', {})

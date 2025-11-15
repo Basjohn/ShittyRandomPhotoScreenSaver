@@ -11,6 +11,12 @@ from PySide6.QtWidgets import QWidget
 from PySide6.QtGui import QPixmap, QPainter
 
 from transitions.base_transition import BaseTransition, TransitionState
+from transitions.overlay_manager import (
+    get_or_create_overlay,
+    notify_overlay_stage,
+    schedule_raise_when_ready,
+    set_overlay_geometry,
+)
 from core.animation.types import EasingCurve
 from core.logging.logger import get_logger
 
@@ -108,13 +114,6 @@ class CrossfadeTransition(BaseTransition):
         self._easing = easing
         self._elapsed_ms = 0  # FIX: Initialize to prevent AttributeError
         
-        # Get ResourceManager for proper cleanup
-        try:
-            from core.resources.manager import ResourceManager
-            self._resource_manager = ResourceManager()
-        except Exception:
-            self._resource_manager = None
-        
         logger.debug(f"CrossfadeTransition created (duration={duration_ms}ms, easing={easing})")
     
     def start(self, old_pixmap: Optional[QPixmap], new_pixmap: QPixmap, 
@@ -150,41 +149,32 @@ class CrossfadeTransition(BaseTransition):
                 return True
             
             # Reuse or create persistent CPU overlay on the widget
-            w, h = widget.width(), widget.height()
-            overlay = getattr(widget, "_srpss_sw_xfade_overlay", None)
-            if overlay is None or not isinstance(overlay, _SWFadeOverlay):
-                logger.debug("[SW XFADE] Creating persistent CPU overlay")
-                overlay = _SWFadeOverlay(widget, old_pixmap, new_pixmap)
-                overlay.setGeometry(0, 0, w, h)
-                setattr(widget, "_srpss_sw_xfade_overlay", overlay)
-                if self._resource_manager:
-                    try:
-                        self._resource_manager.register_qt(overlay, description="SW Crossfade persistent overlay")
-                    except Exception:
-                        pass
-            else:
+            existing = getattr(widget, "_srpss_sw_xfade_overlay", None)
+            overlay = get_or_create_overlay(
+                widget,
+                "_srpss_sw_xfade_overlay",
+                _SWFadeOverlay,
+                lambda: _SWFadeOverlay(widget, old_pixmap, new_pixmap),
+            )
+
+            if overlay is existing:
                 logger.debug("[SW XFADE] Reusing persistent CPU overlay")
-                overlay.set_images(old_pixmap, new_pixmap)
-                overlay.set_alpha(0.0)
+            else:
+                logger.debug("[SW XFADE] Created persistent CPU overlay")
+
+            overlay.set_images(old_pixmap, new_pixmap)
+            overlay.set_alpha(0.0)
 
             self._overlay = overlay
-            # Show overlay and force a first paint before animation to avoid black frame
-            self._overlay.setVisible(True)
-            self._overlay.setGeometry(0, 0, w, h)
+            # Ensure overlay covers widget and prepaint first frame to avoid flash
+            set_overlay_geometry(widget, overlay)
+            notify_overlay_stage(overlay, "prepaint_start")
+            overlay.setVisible(True)
             try:
-                self._overlay.raise_()
+                overlay.repaint()
             except Exception:
                 pass
-            # Keep clock above overlay if present
-            try:
-                if hasattr(widget, "clock_widget") and getattr(widget, "clock_widget"):
-                    widget.clock_widget.raise_()
-            except Exception:
-                pass
-            try:
-                self._overlay.repaint()
-            except Exception:
-                pass
+            schedule_raise_when_ready(widget, overlay, stage="initial_raise_sw")
 
             # Drive via centralized AnimationManager
             am = self._get_animation_manager(widget)

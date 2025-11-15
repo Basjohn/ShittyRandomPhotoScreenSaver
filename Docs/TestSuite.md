@@ -1,10 +1,10 @@
 # Test Suite Documentation
 
 **Purpose**: Canonical reference for all test modules, test cases, and testing procedures.  
-**Last Updated**: Nov 6, 2025 - Phase 6 Bug Fixes Complete  
-**Test Count**: 279 tests across 25+ modules  
-**Pass Rate**: 93.2% (260 passing, 18 failing, 1 skipped)  
-**Recent**: Phase 6 critical bug fixes completed (Nov 6, 2025)
+**Last Updated**: Nov 14, 2025 - Transition overrides + watchdog guard pass  
+**Test Count**: 343 tests across 25+ modules  
+**Pass Rate**: 97.1% (333 passing, 5 failing, 5 skipped)  
+**Recent**: Transition factory now honours SettingsManager overrides; `Shiboken.isValid` guard prevents teardown crashes during tests (pyqt slot callbacks).
 
 ### Phase 6 Bug Fix Summary
 **All 8 Critical Bugs Fixed:**
@@ -17,7 +17,14 @@
 7. ✅ Bug #19: Fill/Fit mode aspect ratio corrections
 8. ✅ Bug #20: Z key previous image navigation
 
-**Test Failures (18):** Mostly crossfade transition tests requiring updates after rewrite
+**Current Failures (5):**
+- `tests/test_settings_dialog.py::test_settings_dialog_creation`
+- `tests/test_slide_transition.py::test_slide_cleanup`
+- `tests/test_timezone_support.py::TestClockWidgetTimezone::test_clock_time_update_with_timezone`
+- `tests/test_timezone_support.py::TestClockWidgetTimezone::test_clock_timezone_display_formats`
+- `tests/test_transitions.py::test_crossfade_easing_curves`
+
+**Notes:** Latest run (Nov 14) logged to `logs/tests/pytest_20251114_123452.log`. Failures primarily stem from test harness expecting cleaned Qt objects post-transition; guard now prevents crashes, but logic still needs follow-up adjustments for cleanup and timezone widgets.
 
 ---
 
@@ -306,7 +313,28 @@ Get-Content test_output.log -Tail 50
 pytest -v tests/test_events.py::test_subscribe_and_publish --tb=short
 ```
 
+### Python Helper Script (`scripts/run_tests.py`)
+
+To avoid PowerShell syntax issues, use the helper script which wraps the
+logging-first workflow and writes output to timestamped log files:
+
+```powershell
+python scripts/run_tests.py --suite core
+```
+
+Key options:
+- `--suite {all,core,transitions,flicker}` – predefined groups (default: `all`).
+- `--test tests/test_file.py::test_name` – run an explicit pytest node.
+- `--pytest-args ...` – forward extra arguments after the suite selection.
+- `--dry-run` – print the pytest command without executing.
+- Logs: `logs/tests/pytest_YYYYMMDD_HHMMSS.log` (rotated, default keep=10).
+
+After execution the script prints the last 20 log lines and the full log path.
+On PowerShell follow up with `Get-Content <log> -Tail 100` if more context is
+needed.
+
 ### With Coverage (Future)
+
 ```powershell
 pytest --cov=core --cov=engine --cov=sources tests/
 ```

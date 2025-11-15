@@ -12,6 +12,7 @@ from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtCore import Qt
 
 from rendering.display_widget import DisplayWidget
+from rendering.pan_and_scan import PanAndScan
 from core.settings.settings_manager import SettingsManager
 from rendering.display_modes import DisplayMode
 
@@ -158,6 +159,37 @@ def test_block_puzzle_with_pan_scan(qapp, display_widget, test_pixmap_red, test_
     
     # Wait for transition to complete
     qtbot.wait(2500)
+
+
+def test_transition_uses_pan_preview_frame(qapp, display_widget, test_pixmap_red, test_pixmap_blue,
+                                           qtbot, settings_manager, monkeypatch):
+    """Ensure the transition consumes the pan preview frame to avoid post-transition jump."""
+    settings_manager.set('transitions.type', 'Crossfade')
+    settings_manager.set('transitions.duration_ms', 400)
+
+    captured = {}
+
+    original_builder = PanAndScan.build_transition_frame
+
+    def _capture_preview(self, pixmap, display_size, dpr):
+        frame = original_builder(self, pixmap, display_size, dpr)
+        captured['frame'] = frame
+        return frame
+
+    monkeypatch.setattr(PanAndScan, 'build_transition_frame', _capture_preview)
+
+    display_widget.set_image(test_pixmap_red, "red.jpg")
+    qtbot.wait(120)
+
+    display_widget.set_image(test_pixmap_blue, "blue.jpg")
+
+    with qtbot.waitSignal(display_widget.image_displayed, timeout=4000):
+        pass
+
+    assert 'frame' in captured and captured['frame'] is not None, "Pan preview frame was not generated"
+    assert display_widget.current_pixmap is not None
+    assert display_widget.current_pixmap.cacheKey() == captured['frame'].cacheKey(), \
+        "Displayed pixmap does not match the pan preview frame"
 
 
 def test_wipe_with_pan_scan(qapp, display_widget, test_pixmap_red, test_pixmap_blue, qtbot, settings_manager):

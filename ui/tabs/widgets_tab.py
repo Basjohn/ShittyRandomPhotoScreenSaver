@@ -211,7 +211,47 @@ class WidgetsTab(QWidget):
         self.clock_bg_opacity.valueChanged.connect(lambda v: self.clock_opacity_label.setText(f"{v}%"))
         opacity_row.addWidget(self.clock_opacity_label)
         clock_layout.addLayout(opacity_row)
-        
+
+        extra_label = QLabel("Additional clocks (optional, share style with main clock)")
+        extra_label.setStyleSheet("color: #aaaaaa; font-size: 11px;")
+        clock_layout.addWidget(extra_label)
+
+        clock2_row = QHBoxLayout()
+        self.clock2_enabled = QCheckBox("Enable Clock 2")
+        self.clock2_enabled.stateChanged.connect(self._save_settings)
+        clock2_row.addWidget(self.clock2_enabled)
+        clock2_row.addWidget(QLabel("Display:"))
+        self.clock2_monitor_combo = QComboBox()
+        self.clock2_monitor_combo.addItems(["ALL", "1", "2", "3"])
+        self.clock2_monitor_combo.currentTextChanged.connect(self._save_settings)
+        clock2_row.addWidget(self.clock2_monitor_combo)
+        clock2_row.addWidget(QLabel("Timezone:"))
+        self.clock2_timezone = QComboBox()
+        self.clock2_timezone.setMinimumWidth(160)
+        self._populate_timezones_for_combo(self.clock2_timezone)
+        self.clock2_timezone.currentTextChanged.connect(self._save_settings)
+        clock2_row.addWidget(self.clock2_timezone)
+        clock2_row.addStretch()
+        clock_layout.addLayout(clock2_row)
+
+        clock3_row = QHBoxLayout()
+        self.clock3_enabled = QCheckBox("Enable Clock 3")
+        self.clock3_enabled.stateChanged.connect(self._save_settings)
+        clock3_row.addWidget(self.clock3_enabled)
+        clock3_row.addWidget(QLabel("Display:"))
+        self.clock3_monitor_combo = QComboBox()
+        self.clock3_monitor_combo.addItems(["ALL", "1", "2", "3"])
+        self.clock3_monitor_combo.currentTextChanged.connect(self._save_settings)
+        clock3_row.addWidget(self.clock3_monitor_combo)
+        clock3_row.addWidget(QLabel("Timezone:"))
+        self.clock3_timezone = QComboBox()
+        self.clock3_timezone.setMinimumWidth(160)
+        self._populate_timezones_for_combo(self.clock3_timezone)
+        self.clock3_timezone.currentTextChanged.connect(self._save_settings)
+        clock3_row.addWidget(self.clock3_timezone)
+        clock3_row.addStretch()
+        clock_layout.addLayout(clock3_row)
+
         layout.addWidget(clock_group)
         
         # Weather widget group
@@ -368,6 +408,12 @@ class WidgetsTab(QWidget):
                 getattr(self, 'clock_margin', None),
                 getattr(self, 'clock_show_background', None),
                 getattr(self, 'clock_bg_opacity', None),
+                getattr(self, 'clock2_enabled', None),
+                getattr(self, 'clock2_timezone', None),
+                getattr(self, 'clock2_monitor_combo', None),
+                getattr(self, 'clock3_enabled', None),
+                getattr(self, 'clock3_timezone', None),
+                getattr(self, 'clock3_monitor_combo', None),
                 getattr(self, 'weather_enabled', None),
                 getattr(self, 'weather_location', None),
                 getattr(self, 'weather_position', None),
@@ -421,7 +467,31 @@ class WidgetsTab(QWidget):
             # Load clock color
             color_data = clock_config.get('color', [255, 255, 255, 230])
             self._clock_color = QColor(*color_data)
-            
+
+            clock2_config = self._settings.get('widgets', {}).get('clock2', {})
+            self.clock2_enabled.setChecked(clock2_config.get('enabled', False))
+            monitor2 = clock2_config.get('monitor', 'ALL')
+            mon2_text = str(monitor2) if isinstance(monitor2, (int, str)) else 'ALL'
+            idx2 = self.clock2_monitor_combo.findText(mon2_text)
+            if idx2 >= 0:
+                self.clock2_monitor_combo.setCurrentIndex(idx2)
+            timezone2 = clock2_config.get('timezone', 'UTC')
+            tz2_index = self.clock2_timezone.findData(timezone2)
+            if tz2_index >= 0:
+                self.clock2_timezone.setCurrentIndex(tz2_index)
+
+            clock3_config = self._settings.get('widgets', {}).get('clock3', {})
+            self.clock3_enabled.setChecked(clock3_config.get('enabled', False))
+            monitor3 = clock3_config.get('monitor', 'ALL')
+            mon3_text = str(monitor3) if isinstance(monitor3, (int, str)) else 'ALL'
+            idx3 = self.clock3_monitor_combo.findText(mon3_text)
+            if idx3 >= 0:
+                self.clock3_monitor_combo.setCurrentIndex(idx3)
+            timezone3 = clock3_config.get('timezone', 'UTC+01:00')
+            tz3_index = self.clock3_timezone.findData(timezone3)
+            if tz3_index >= 0:
+                self.clock3_timezone.setCurrentIndex(tz3_index)
+
             # Load weather settings
             weather_config = self._settings.get('widgets', {}).get('weather', {})
             self.weather_enabled.setChecked(weather_config.get('enabled', False))
@@ -511,9 +581,29 @@ class WidgetsTab(QWidget):
         }
         wmon_text = self.weather_monitor_combo.currentText()
         weather_config['monitor'] = wmon_text if wmon_text == 'ALL' else int(wmon_text)
-        
+
+        clock2_tz_data = self.clock2_timezone.currentData()
+        clock2_timezone = clock2_tz_data if clock2_tz_data else 'UTC'
+        clock2_config = {
+            'enabled': self.clock2_enabled.isChecked(),
+            'timezone': clock2_timezone,
+        }
+        c2mon_text = self.clock2_monitor_combo.currentText()
+        clock2_config['monitor'] = c2mon_text if c2mon_text == 'ALL' else int(c2mon_text)
+
+        clock3_tz_data = self.clock3_timezone.currentData()
+        clock3_timezone = clock3_tz_data if clock3_tz_data else 'UTC+01:00'
+        clock3_config = {
+            'enabled': self.clock3_enabled.isChecked(),
+            'timezone': clock3_timezone,
+        }
+        c3mon_text = self.clock3_monitor_combo.currentText()
+        clock3_config['monitor'] = c3mon_text if c3mon_text == 'ALL' else int(c3mon_text)
+
         widgets_config = {
             'clock': clock_config,
+            'clock2': clock2_config,
+            'clock3': clock3_config,
             'weather': weather_config
         }
         
@@ -523,15 +613,15 @@ class WidgetsTab(QWidget):
         
         logger.debug("Saved widget settings")
     
+    def _populate_timezones_for_combo(self, combo) -> None:
+        timezones = get_common_timezones()
+        for display_name, tz_str in timezones:
+            combo.addItem(display_name, tz_str)
+
     def _populate_timezones(self) -> None:
         """Populate timezone dropdown with common timezones and UTC offsets."""
         # Get common timezones
-        timezones = get_common_timezones()
-        
-        for display_name, tz_str in timezones:
-            self.clock_timezone.addItem(display_name, tz_str)
-        
-        logger.debug(f"Populated {len(timezones)} timezones")
+        self._populate_timezones_for_combo(self.clock_timezone)
     
     def _auto_detect_timezone(self) -> None:
         """Auto-detect user's local timezone."""
