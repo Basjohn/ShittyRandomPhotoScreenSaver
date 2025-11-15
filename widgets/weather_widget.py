@@ -6,8 +6,8 @@ Displays current weather information using Open-Meteo API (no API key needed).
 from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
 from enum import Enum
-from PySide6.QtWidgets import QLabel, QWidget
-from PySide6.QtCore import QTimer, Qt, Signal, QThread, QObject
+from PySide6.QtWidgets import QLabel, QWidget, QGraphicsOpacityEffect
+from PySide6.QtCore import QTimer, Qt, Signal, QThread, QObject, QPropertyAnimation
 from PySide6.QtGui import QFont, QColor
 
 from core.logging.logger import get_logger
@@ -104,6 +104,8 @@ class WeatherWidget(QLabel):
         self._cached_data: Optional[Dict[str, Any]] = None
         self._cache_time: Optional[datetime] = None
         self._cache_duration = timedelta(minutes=30)
+        self._has_displayed_valid_data = False
+        self._pending_first_show = False
         
         # Background thread
         self._fetch_thread: Optional[QThread] = None
@@ -121,6 +123,8 @@ class WeatherWidget(QLabel):
         self._bg_color = QColor(64, 64, 64, int(255 * self._bg_opacity))  # Dark grey
         self._bg_border_width = 2
         self._bg_border_color = QColor(128, 128, 128, 200)  # Light grey border
+        self._fade_effect: Optional[QGraphicsOpacityEffect] = None
+        self._fade_anim: Optional[QPropertyAnimation] = None
         
         # Setup UI
         self._setup_ui()
@@ -131,10 +135,6 @@ class WeatherWidget(QLabel):
         """Setup widget UI."""
         self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         try:
-            # Reduce flashing during transitions by avoiding system background clears
-            self.setAutoFillBackground(False)
-            self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
-            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
             self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         except Exception:
             pass
@@ -156,20 +156,40 @@ class WeatherWidget(QLabel):
             error_msg = "No location configured for weather widget"
             logger.error(error_msg)
             self.setText("Weather: No Location")
+            try:
+                self.adjustSize()
+                if self.parent():
+                    self._update_position()
+            except Exception:
+                pass
+            self.show()
             self.error_occurred.emit(error_msg)
             return
-        
-        # Fetch immediately
+
+        if self._is_cache_valid():
+            self._update_display(self._cached_data)
+            self._has_displayed_valid_data = True
+            self._enabled = True
+            self.show()
+
+            self._fetch_weather()
+            self._update_timer = QTimer(self)
+            self._update_timer.timeout.connect(self._fetch_weather)
+            self._update_timer.start(30 * 60 * 1000)
+
+            logger.info("Weather widget started (using cached data)")
+            return
+
+        self.hide()
+        self._pending_first_show = True
+
         self._fetch_weather()
-        
-        # Start update timer (30 minutes)
         self._update_timer = QTimer(self)
         self._update_timer.timeout.connect(self._fetch_weather)
-        self._update_timer.start(30 * 60 * 1000)  # 30 minutes
-        
+        self._update_timer.start(30 * 60 * 1000)
+
         self._enabled = True
-        self.show()
-        
+
         logger.info("Weather widget started")
     
     def stop(self) -> None:
@@ -189,8 +209,9 @@ class WeatherWidget(QLabel):
         if self._fetch_thread and self._fetch_thread.isRunning():
             self._fetch_thread.quit()
             self._fetch_thread.wait()
-        
+
         self._enabled = False
+        self._pending_first_show = False
         self.hide()
         
         logger.debug("Weather widget stopped")
@@ -239,7 +260,13 @@ class WeatherWidget(QLabel):
         # Update display
         self._update_display(data)
         
-        # Emit signal
+        if self._pending_first_show and not self._has_displayed_valid_data:
+            self._pending_first_show = False
+            self._has_displayed_valid_data = True
+            self._fade_in()
+        else:
+            self.show()
+
         self.weather_updated.emit(data)
     
     def _on_fetch_error(self, error: str) -> None:
@@ -498,3 +525,24 @@ class WeatherWidget(QLabel):
         """Clean up resources."""
         logger.debug("Cleaning up weather widget")
         self.stop()
+
+    def _fade_in(self) -> None:
+        try:
+            if self._fade_effect is None:
+                self._fade_effect = QGraphicsOpacityEffect(self)
+                self.setGraphicsEffect(self._fade_effect)
+            if self._fade_anim is not None:
+                try:
+                    self._fade_anim.stop()
+                except Exception:
+                    pass
+            self._fade_effect.setOpacity(0.0)
+            self.show()
+            anim = QPropertyAnimation(self._fade_effect, b"opacity", self)
+            anim.setDuration(250)
+            anim.setStartValue(0.0)
+            anim.setEndValue(1.0)
+            self._fade_anim = anim
+            self._fade_anim.start()
+        except Exception:
+            self.show()

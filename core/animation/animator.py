@@ -6,7 +6,7 @@ NO raw QPropertyAnimation or QTimer should be used outside this module.
 """
 import time
 import uuid
-from typing import Any, Dict, Optional, Callable
+from typing import Any, Dict, Optional, Callable, TYPE_CHECKING
 from PySide6.QtCore import QObject, QTimer, Signal
 from core.animation.types import (
     AnimationState, EasingCurve,
@@ -14,6 +14,9 @@ from core.animation.types import (
 )
 from core.animation.easing import ease
 from core.logging.logger import get_logger
+
+if TYPE_CHECKING:  # pragma: no cover - imported for typing only
+    from core.resources.manager import ResourceManager
 
 logger = get_logger(__name__)
 
@@ -249,7 +252,7 @@ class AnimationManager(QObject):
     animation_completed = Signal(str)  # animation_id
     animation_cancelled = Signal(str)  # animation_id
     
-    def __init__(self, fps: int = 60):
+    def __init__(self, fps: int = 60, resource_manager: Optional["ResourceManager"] = None):
         """
         Initialize animation manager.
         
@@ -270,9 +273,11 @@ class AnimationManager(QObject):
         self._timer.setInterval(int(self.frame_time * 1000))  # Convert to milliseconds
         self._timer.timeout.connect(self._update_all)
         # Register timer with ResourceManager for lifecycle tracking
+        self._resources: Optional["ResourceManager"] = resource_manager
         try:
             from core.resources.manager import ResourceManager
-            self._resources = ResourceManager()
+            if self._resources is None:
+                self._resources = ResourceManager()
             try:
                 self._resources.register_qt(self._timer, description="AnimationManager timer")
             except Exception:

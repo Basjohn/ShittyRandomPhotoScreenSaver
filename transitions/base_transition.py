@@ -279,9 +279,10 @@ class BaseTransition(QObject, metaclass=QABCMeta):
         if am is None:
             from core.animation.animator import AnimationManager
             try:
-                am = AnimationManager(int(target_fps))
+                resource_manager = getattr(widget, "_resource_manager", None)
+                am = AnimationManager(int(target_fps), resource_manager=resource_manager)
             except Exception:
-                am = AnimationManager()
+                am = AnimationManager(resource_manager=getattr(widget, "_resource_manager", None))
             setattr(widget, "_animation_manager", am)
         else:
             try:

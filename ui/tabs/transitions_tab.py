@@ -167,12 +167,14 @@ class TransitionsTab(QWidget):
         self.grid_rows_spin = QSpinBox()
         self.grid_rows_spin.setRange(2, 25)
         self.grid_rows_spin.setValue(4)
+        self.grid_rows_spin.setAccelerated(True)
         self.grid_rows_spin.valueChanged.connect(self._save_settings)
         grid_row.addWidget(QLabel("Rows:"))
         grid_row.addWidget(self.grid_rows_spin)
         self.grid_cols_spin = QSpinBox()
         self.grid_cols_spin.setRange(2, 25)
         self.grid_cols_spin.setValue(6)
+        self.grid_cols_spin.setAccelerated(True)
         self.grid_cols_spin.valueChanged.connect(self._save_settings)
         grid_row.addWidget(QLabel("Cols:"))
         grid_row.addWidget(self.grid_cols_spin)
@@ -190,6 +192,7 @@ class TransitionsTab(QWidget):
         self.block_size_spin = QSpinBox()
         self.block_size_spin.setRange(4, 256)
         self.block_size_spin.setValue(50)
+        self.block_size_spin.setAccelerated(True)
         self.block_size_spin.valueChanged.connect(self._save_settings)
         block_size_row.addWidget(self.block_size_spin)
         block_size_row.addStretch()
@@ -304,11 +307,10 @@ class TransitionsTab(QWidget):
         if index >= 0:
             self.easing_combo.setCurrentIndex(index)
 
-        # Load random transitions flag
+        # Load random transitions flag (prefer nested config)
         rnd = transitions_config.get('random_always', False)
-        if isinstance(rnd, str):
-            rnd = rnd.lower() in ('true', '1', 'yes')
-        self.random_checkbox.setChecked(bool(rnd))
+        rnd = SettingsManager.to_bool(rnd, False)
+        self.random_checkbox.setChecked(rnd)
 
         # Note: GPU acceleration is controlled globally in Display tab
         
@@ -394,9 +396,7 @@ class TransitionsTab(QWidget):
         """Grey out GL-only transitions when HW acceleration is disabled."""
         try:
             from PySide6.QtCore import Qt
-            hw = self._settings.get('display.hw_accel', False)
-            if isinstance(hw, str):
-                hw = hw.lower() in ('true', '1', 'yes')
+            hw = self._settings.get_bool('display.hw_accel', False)
             gl_only = ["Blinds"]
             for name in gl_only:
                 idx = self.transition_combo.findText(name)
@@ -419,9 +419,7 @@ class TransitionsTab(QWidget):
 
     def _enforce_gl_only_selection(self) -> None:
         """If a GL-only transition is selected with HW off, switch to Crossfade and persist."""
-        hw = self._settings.get('display.hw_accel', False)
-        if isinstance(hw, str):
-            hw = hw.lower() in ('true', '1', 'yes')
+        hw = self._settings.get_bool('display.hw_accel', False)
         cur = self.transition_combo.currentText()
         if cur in {"Blinds"} and not hw:
             idx = self.transition_combo.findText("Crossfade")

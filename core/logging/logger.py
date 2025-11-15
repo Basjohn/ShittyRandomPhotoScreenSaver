@@ -5,7 +5,6 @@ Uses rotating file handler with logs stored in logs/ directory.
 Includes colored console output for debug mode.
 """
 import logging
-import os
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -16,29 +15,37 @@ class ColoredFormatter(logging.Formatter):
     
     # ANSI color codes
     COLORS = {
-        'DEBUG': '\033[36m',      # Cyan
-        'INFO': '\033[32m',       # Green
-        'WARNING': '\033[33m',    # Yellow
-        'ERROR': '\033[31m',      # Red
-        'CRITICAL': '\033[35m',   # Magenta
+        'DEBUG': '\033[36m',       # Cyan
+        'INFO': '\033[32m',        # Green
+        'WARNING': '\033[33m',     # Yellow
+        'ERROR': '\033[31m',       # Red
+        'CRITICAL': '\033[35m',    # Magenta
     }
-    FALLBACK_COLOR = '\033[38;5;208m'  # Orange for fallback warnings
+    FALLBACK_COLOR = '\033[38;5;208m'   # Orange for fallback warnings
+    PREWARM_COLOR = '\033[38;5;135m'    # Purple for prewarm/flicker diagnostics
     RESET = '\033[0m'
     BOLD = '\033[1m'
     
     def format(self, record):
-        # Save original levelname
+        # Save original values
         original_levelname = record.levelname
         original_msg = record.msg
-        
-        # Check if this is a fallback message
-        is_fallback = '[FALLBACK]' in str(record.msg)
+
+        msg_text = str(record.msg)
+        # Check if this is a fallback or prewarm/flicker-related message
+        is_fallback = '[FALLBACK]' in msg_text
+        is_prewarm = ('[PREWARM]' in msg_text
+                      or 'flicker' in msg_text.lower()
+                      or 'Seed pixmap' in msg_text)
         
         # Color the entire line
         if record.levelname in self.COLORS:
-            # Use orange for fallback warnings instead of regular yellow
             if is_fallback and record.levelname == 'WARNING':
+                # Use orange for fallback warnings instead of regular yellow
                 color = self.FALLBACK_COLOR
+            elif is_prewarm:
+                # Use dedicated purple for prewarm/flicker diagnostics
+                color = self.PREWARM_COLOR
             else:
                 color = self.COLORS[record.levelname]
             
@@ -75,9 +82,9 @@ def setup_logging(debug: bool = False) -> None:
     # Configure root logger
     level = logging.DEBUG if debug else logging.INFO
     
-    # Create formatter
+    # Create formatter with aligned columns for logger name and level
     formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        '%(asctime)s - %(name)-30s - %(levelname)-8s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     
@@ -96,7 +103,7 @@ def setup_logging(debug: bool = False) -> None:
     if debug and sys.stdout.isatty():
         # Use colored formatter for terminal output
         colored_formatter = ColoredFormatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            '%(asctime)s - %(name)-30s - %(levelname)-8s - %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S'
         )
         console_handler.setFormatter(colored_formatter)
@@ -118,14 +125,22 @@ def setup_logging(debug: bool = False) -> None:
     root_logger.info("=" * 60)
 
 
+_SHORT_NAME_OVERRIDES = {
+    "core.resources.manager": "resources.manager",
+    "engine.screensaver_engine": "engine.screensaver",
+    "engine.display_manager": "engine.display",
+    "rendering.display_widget": "rendering.display",
+    "rendering.gl_format": "rendering.gl_format",
+    "transitions.gl_crossfade_transition": "transitions.gl_xfade",
+    "transitions.gl_slide_transition": "transitions.gl_slide",
+    "transitions.gl_wipe_transition": "transitions.gl_wipe",
+    "transitions.gl_diffuse_transition": "transitions.gl_diffuse",
+    "transitions.gl_block_puzzle_flip_transition": "transitions.gl_blockflip",
+    "transitions.gl_blinds": "transitions.gl_blinds",
+}
+
+
 def get_logger(name: str) -> logging.Logger:
-    """
-    Get a logger instance.
-    
-    Args:
-        name: Logger name (usually __name__ of the module)
-    
-    Returns:
-        logging.Logger: Configured logger instance
-    """
-    return logging.getLogger(name)
+    """Get a logger instance with optional short-name overrides for noisy modules."""
+    actual = _SHORT_NAME_OVERRIDES.get(name, name)
+    return logging.getLogger(actual)

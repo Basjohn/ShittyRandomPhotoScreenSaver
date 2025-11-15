@@ -135,6 +135,38 @@ GL Path: Optional GL overlays (QOpenGLWidget + QPainter) for Crossfade/Slide/Wip
 - **Backend**: QSettings
 - **Features**: Type-safe get/set, change notifications, defaults
 
+#### `core/logging/logger.py` 
+**Purpose**: Centralized logging configuration  
+**Status**: 
+**Key Functions**:
+- `setup_logging(debug=False)` - Configure application logging with file rotation
+- `ColoredFormatter` - ANSI colored console output for debug mode
+
+**Features**: 
+- Rotating file handler (10MB, 5 backups)
+- Colored console output in debug mode (cyan=DEBUG, green=INFO, yellow=WARNING, red=ERROR, magenta=CRITICAL)
+- Logs stored in `logs/screensaver.log`
+
+**Key Loggers**:
+- `screensaver.engine` - Engine logs
+- `screensaver.display` - Display logs
+- `screensaver.source` - Source logs
+- `screensaver.transition` - Transition logs
+- `screensaver.ui` - UI logs
+
+**Adapted From**: `MyReuseableUtilityModules/core/logging/`
+
+#### `core/logging/overlay_telemetry.py` 
+**Purpose**: Centralized overlay diagnostics/telemetry helper for GL/software transitions  
+**Status**: 
+**Key Functions**:
+- `record_overlay_ready(log, screen_index, overlay_name, stage, stage_counts, overlay_swap_warned, seed_age_ms, details)` - Aggregate overlay readiness events and emit structured `[DIAG]` logs.
+
+**Features**:
+- Aggregates per-overlay/per-stage readiness counts used by `DisplayWidget` and tests.  
+- Emits a single detailed `[DIAG] Overlay readiness` line per `(screen, overlay, stage)` with seed age and sanitized details.  
+- Logs swap-behaviour downgrades once per overlay when `gl_initialized` reports non-triple-buffered swap, using the same format across all GL overlays.
+
 ### Application Components
 
 #### 1. ScreensaverEngine

@@ -442,6 +442,11 @@ class DisplayManager(QObject):
         
         for display in self.displays:
             try:
+                # Ensure per-display cleanup (pan & scan, transitions, overlays)
+                try:
+                    display.clear()
+                except Exception:
+                    pass
                 display.close()
                 display.deleteLater()
             except Exception as e:

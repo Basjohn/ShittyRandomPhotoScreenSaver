@@ -59,12 +59,8 @@ class PanAndScan:
         self._fps = 60
         self._timer_interval_ms = 1000 // self._fps
         
-        # FIX: Use ResourceManager for Qt object lifecycle
-        try:
-            from core.resources.manager import ResourceManager
-            self._resource_manager = ResourceManager()
-        except Exception:
-            self._resource_manager = None
+        # FIX: Use parent ResourceManager for Qt object lifecycle
+        self._resource_manager = getattr(parent, "_resource_manager", None)
         
         logger.debug("Pan and Scan initialized")
 

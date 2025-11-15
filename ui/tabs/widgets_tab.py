@@ -9,7 +9,7 @@ from typing import Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QSpinBox, QGroupBox, QCheckBox, QLineEdit, QColorDialog, QPushButton,
-    QScrollArea, QSlider, QCompleter, QFontComboBox
+    QScrollArea, QSlider, QCompleter, QFontComboBox, QButtonGroup
 )
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QColor, QFont
@@ -76,7 +76,43 @@ class WidgetsTab(QWidget):
         title = QLabel("Overlay Widgets")
         title.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
         layout.addWidget(title)
-        
+
+        # Subtab-style toggle buttons (Clocks / Weather / Media)
+        subtab_row = QHBoxLayout()
+        self._subtab_group = QButtonGroup(self)
+        self._subtab_group.setExclusive(True)
+
+        self._btn_clocks = QPushButton("Clocks")
+        self._btn_weather = QPushButton("Weather")
+        self._btn_media = QPushButton("Media")
+
+        button_style = (
+            "QPushButton {"
+            " background-color: #2a2a2a;"
+            " color: #ffffff;"
+            " border: 1px solid #3a3a3a;"
+            " border-radius: 4px;"
+            " padding: 4px 12px;"
+            " }"
+            "QPushButton:checked {"
+            " background-color: #3a3a3a;"
+            " border-color: #5c5c5c;"
+            " font-weight: bold;"
+            " }"
+        )
+
+        for idx, btn in enumerate((self._btn_clocks, self._btn_weather, self._btn_media)):
+            btn.setCheckable(True)
+            btn.setStyleSheet(button_style)
+            self._subtab_group.addButton(btn, idx)
+            subtab_row.addWidget(btn)
+
+        subtab_row.addStretch()
+        layout.addLayout(subtab_row)
+
+        self._subtab_group.idClicked.connect(self._on_subtab_changed)
+        self._btn_clocks.setChecked(True)
+
         # Clock widget group
         clock_group = QGroupBox("Clock Widget")
         clock_layout = QVBoxLayout(clock_group)
@@ -164,6 +200,7 @@ class WidgetsTab(QWidget):
         self.clock_font_size = QSpinBox()
         self.clock_font_size.setRange(12, 144)
         self.clock_font_size.setValue(48)
+        self.clock_font_size.setAccelerated(True)
         self.clock_font_size.valueChanged.connect(self._save_settings)
         font_row.addWidget(self.clock_font_size)
         font_row.addWidget(QLabel("px"))
@@ -185,6 +222,7 @@ class WidgetsTab(QWidget):
         self.clock_margin = QSpinBox()
         self.clock_margin.setRange(0, 100)
         self.clock_margin.setValue(20)
+        self.clock_margin.setAccelerated(True)
         self.clock_margin.valueChanged.connect(self._save_settings)
         margin_row.addWidget(self.clock_margin)
         margin_row.addWidget(QLabel("px"))
@@ -252,7 +290,11 @@ class WidgetsTab(QWidget):
         clock3_row.addStretch()
         clock_layout.addLayout(clock3_row)
 
-        layout.addWidget(clock_group)
+        self._clocks_container = QWidget()
+        clocks_container_layout = QVBoxLayout(self._clocks_container)
+        clocks_container_layout.setContentsMargins(0, 10, 0, 0)
+        clocks_container_layout.addWidget(clock_group)
+        layout.addWidget(self._clocks_container)
         
         # Weather widget group
         weather_group = QGroupBox("Weather Widget")
@@ -344,6 +386,7 @@ class WidgetsTab(QWidget):
         self.weather_font_size = QSpinBox()
         self.weather_font_size.setRange(12, 72)
         self.weather_font_size.setValue(24)
+        self.weather_font_size.setAccelerated(True)
         self.weather_font_size.valueChanged.connect(self._save_settings)
         weather_font_row.addWidget(self.weather_font_size)
         weather_font_row.addWidget(QLabel("px"))
@@ -380,7 +423,21 @@ class WidgetsTab(QWidget):
         weather_opacity_row.addWidget(self.weather_opacity_label)
         weather_layout.addLayout(weather_opacity_row)
         
-        layout.addWidget(weather_group)
+        self._weather_container = QWidget()
+        weather_container_layout = QVBoxLayout(self._weather_container)
+        weather_container_layout.setContentsMargins(0, 10, 0, 0)
+        weather_container_layout.addWidget(weather_group)
+        layout.addWidget(self._weather_container)
+
+        # Media placeholder group (for future widgets like Spotify)
+        self._media_container = QWidget()
+        media_layout = QVBoxLayout(self._media_container)
+        media_layout.setContentsMargins(0, 20, 0, 0)
+        media_info = QLabel("Media widgets (e.g. Spotify) will appear here.")
+        media_info.setStyleSheet("color: #aaaaaa; font-size: 11px;")
+        media_layout.addWidget(media_info)
+        media_layout.addStretch()
+        layout.addWidget(self._media_container)
         
         layout.addStretch()
         
@@ -390,12 +447,107 @@ class WidgetsTab(QWidget):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll)
+        
+        # Default to "Clocks" subtab
+        self._on_subtab_changed(0)
+
+    def _on_subtab_changed(self, subtab_id: int) -> None:
+        """Show/hide widget sections based on selected subtab."""
+        try:
+            self._clocks_container.setVisible(subtab_id == 0)
+            self._weather_container.setVisible(subtab_id == 1)
+            self._media_container.setVisible(subtab_id == 2)
+        except Exception:
+            # If containers are not yet initialized, ignore
+            pass
     
     def _load_settings(self) -> None:
         """Load settings from settings manager."""
         # Block all signals during load to prevent unintended saves from valueChanged/stateChanged
         blockers = []
         try:
+            widgets_value = self._settings.get('widgets', {})
+            if isinstance(widgets_value, dict):
+                widgets = dict(widgets_value)
+            else:
+                widgets = {}
+            migrated = False
+
+            if 'clock' not in widgets or not isinstance(widgets.get('clock'), dict) or not widgets.get('clock'):
+                legacy_clock = {}
+                if self._settings.contains('widgets.clock_enabled'):
+                    legacy_clock['enabled'] = self._settings.get_bool('widgets.clock_enabled', False)
+                legacy_format = self._settings.get('widgets.clock_format', None)
+                if legacy_format:
+                    legacy_clock['format'] = str(legacy_format).lower()
+                legacy_tz = self._settings.get('widgets.clock_timezone', None)
+                if legacy_tz:
+                    legacy_clock['timezone'] = legacy_tz
+                legacy_pos = self._settings.get('widgets.clock_position', None)
+                if legacy_pos:
+                    try:
+                        pos_str = str(legacy_pos).replace('-', ' ')
+                        pos_str = pos_str.title()
+                        legacy_clock['position'] = pos_str
+                    except Exception:
+                        pass
+                legacy_transparency = self._settings.get('widgets.clock_transparency', None)
+                if legacy_transparency is not None:
+                    try:
+                        alpha = float(legacy_transparency)
+                    except Exception:
+                        alpha = 0.8
+                    legacy_clock['bg_opacity'] = alpha
+                    legacy_clock['show_background'] = alpha > 0.0
+                if legacy_clock:
+                    existing_clock = widgets.get('clock')
+                    if isinstance(existing_clock, dict):
+                        for k, v in legacy_clock.items():
+                            if k not in existing_clock:
+                                existing_clock[k] = v
+                        widgets['clock'] = existing_clock
+                    else:
+                        widgets['clock'] = legacy_clock
+                    migrated = True
+
+            if 'weather' not in widgets or not isinstance(widgets.get('weather'), dict) or not widgets.get('weather'):
+                legacy_weather = {}
+                if self._settings.contains('widgets.weather_enabled'):
+                    legacy_weather['enabled'] = self._settings.get_bool('widgets.weather_enabled', False)
+                legacy_loc = self._settings.get('widgets.weather_location', None)
+                if legacy_loc:
+                    legacy_weather['location'] = legacy_loc
+                legacy_wpos = self._settings.get('widgets.weather_position', None)
+                if legacy_wpos:
+                    try:
+                        wpos_str = str(legacy_wpos).replace('-', ' ')
+                        wpos_str = wpos_str.title()
+                        legacy_weather['position'] = wpos_str
+                    except Exception:
+                        pass
+                legacy_wtrans = self._settings.get('widgets.weather_transparency', None)
+                if legacy_wtrans is not None:
+                    try:
+                        walpha = float(legacy_wtrans)
+                    except Exception:
+                        walpha = 0.8
+                    legacy_weather['bg_opacity'] = walpha
+                    legacy_weather['show_background'] = walpha > 0.0
+                if legacy_weather:
+                    existing_weather = widgets.get('weather')
+                    if isinstance(existing_weather, dict):
+                        for k, v in legacy_weather.items():
+                            if k not in existing_weather:
+                                existing_weather[k] = v
+                        widgets['weather'] = existing_weather
+                    else:
+                        widgets['weather'] = legacy_weather
+                    migrated = True
+
+            if migrated:
+                self._settings.set('widgets', widgets)
+                self._settings.save()
+
             for w in [
                 getattr(self, 'clock_enabled', None),
                 getattr(self, 'clock_format', None),
@@ -427,7 +579,7 @@ class WidgetsTab(QWidget):
                     blockers.append(w)
 
             # Load clock settings
-            clock_config = self._settings.get('widgets', {}).get('clock', {})
+            clock_config = widgets.get('clock', {})
             self.clock_enabled.setChecked(clock_config.get('enabled', False))
             
             format_text = "12 Hour" if clock_config.get('format', '12h') == '12h' else "24 Hour"
@@ -468,7 +620,7 @@ class WidgetsTab(QWidget):
             color_data = clock_config.get('color', [255, 255, 255, 230])
             self._clock_color = QColor(*color_data)
 
-            clock2_config = self._settings.get('widgets', {}).get('clock2', {})
+            clock2_config = widgets.get('clock2', {})
             self.clock2_enabled.setChecked(clock2_config.get('enabled', False))
             monitor2 = clock2_config.get('monitor', 'ALL')
             mon2_text = str(monitor2) if isinstance(monitor2, (int, str)) else 'ALL'
@@ -480,7 +632,7 @@ class WidgetsTab(QWidget):
             if tz2_index >= 0:
                 self.clock2_timezone.setCurrentIndex(tz2_index)
 
-            clock3_config = self._settings.get('widgets', {}).get('clock3', {})
+            clock3_config = widgets.get('clock3', {})
             self.clock3_enabled.setChecked(clock3_config.get('enabled', False))
             monitor3 = clock3_config.get('monitor', 'ALL')
             mon3_text = str(monitor3) if isinstance(monitor3, (int, str)) else 'ALL'
@@ -493,7 +645,7 @@ class WidgetsTab(QWidget):
                 self.clock3_timezone.setCurrentIndex(tz3_index)
 
             # Load weather settings
-            weather_config = self._settings.get('widgets', {}).get('weather', {})
+            weather_config = widgets.get('weather', {})
             self.weather_enabled.setChecked(weather_config.get('enabled', False))
             # No API key needed with Open-Meteo!
             self.weather_location.setText(weather_config.get('location', 'London'))
@@ -600,14 +752,15 @@ class WidgetsTab(QWidget):
         c3mon_text = self.clock3_monitor_combo.currentText()
         clock3_config['monitor'] = c3mon_text if c3mon_text == 'ALL' else int(c3mon_text)
 
-        widgets_config = {
-            'clock': clock_config,
-            'clock2': clock2_config,
-            'clock3': clock3_config,
-            'weather': weather_config
-        }
-        
-        self._settings.set('widgets', widgets_config)
+        existing_widgets = self._settings.get('widgets', {})
+        if not isinstance(existing_widgets, dict):
+            existing_widgets = {}
+        existing_widgets['clock'] = clock_config
+        existing_widgets['clock2'] = clock2_config
+        existing_widgets['clock3'] = clock3_config
+        existing_widgets['weather'] = weather_config
+
+        self._settings.set('widgets', existing_widgets)
         self._settings.save()
         self.widgets_changed.emit()
         

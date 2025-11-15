@@ -302,8 +302,6 @@ class DiffuseTransition(BaseTransition):
         else:
             current = current.copy()
         
-        logger.debug(f"[DIFFUSE] Revealing {count} blocks, grid remaining: {len(self._pixel_grid)}, pixmap: {current.width()}x{current.height()}")
-        
         painter = QPainter(current)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         

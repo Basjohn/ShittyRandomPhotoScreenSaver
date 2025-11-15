@@ -108,6 +108,34 @@ class SettingsManager(QObject):
         with self._lock:
             return self._settings.value(key, default)
     
+    @staticmethod
+    def to_bool(value: Any, default: bool = False) -> bool:
+        """Normalize a stored setting value to bool.
+        
+        Accepts common string forms ("true", "1", "yes", "on") as True and
+        ("false", "0", "no", "off") as False. Falls back to bool(value) or
+        the provided default when the value cannot be interpreted.
+        """
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            v = value.strip().lower()
+            if v in ("true", "1", "yes", "on"):
+                return True
+            if v in ("false", "0", "no", "off"):
+                return False
+            return default
+        if value is None:
+            return default
+        if isinstance(value, (int, float)):
+            return bool(value)
+        return bool(value)
+
+    def get_bool(self, key: str, default: bool = False) -> bool:
+        """Convenience wrapper around get() that normalizes to bool."""
+        raw = self.get(key, default)
+        return self.to_bool(raw, default)
+    
     def set(self, key: str, value: Any) -> None:
         """
         Set a setting value.
@@ -131,7 +159,7 @@ class SettingsManager(QObject):
                     except Exception as e:
                         logger.error(f"Error in change handler for {key}: {e}")
         
-        logger.debug(f"Setting changed: {key} = {value}")
+        logger.debug("Setting changed: %s: %r -> %r", key, old_value, value)
     
     def save(self) -> None:
         """Force save settings to persistent storage."""

@@ -123,8 +123,16 @@ def any_overlay_ready_for_display(widget) -> bool:
 def raise_clock_if_present(widget) -> None:
     """Raise the clock overlay above any transition overlays if present."""
     try:
-        if hasattr(widget, "clock_widget") and getattr(widget, "clock_widget"):
-            widget.clock_widget.raise_()
+        for attr_name in ("clock_widget", "clock2_widget", "clock3_widget"):
+            if hasattr(widget, attr_name):
+                clock = getattr(widget, attr_name)
+                if clock:
+                    try:
+                        clock.raise_()
+                        if hasattr(clock, "_tz_label") and clock._tz_label:
+                            clock._tz_label.raise_()
+                    except Exception:
+                        continue
     except Exception:
         pass
 

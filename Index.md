@@ -30,9 +30,9 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 ## Rendering
 - rendering/display_widget.py
   - Fullscreen image presentation, DPR-aware scaling
-  - Creates transitions based on settings (GL and CPU variants)
-  - Injects shared ResourceManager into transitions; seeds base pixmap pre/post transition to avoid black frames
-  - Pre-warms GL overlays, manages widgets Z-order, logs per-stage telemetry, handles transition watchdog timers
+  - Creates transitions based on settings (GL and CPU variants, including GL-only Blinds when HW accel is enabled)
+  - Injects shared ResourceManager into transitions; seeds base pixmap pre/post transition and on startup to avoid black frames (wallpaper snapshot seeding + previous-pixmap fallback)
+  - Pre-warms persistent GL overlays per transition type, manages widgets Z-order, logs per-stage telemetry, handles transition watchdog timers
 - rendering/image_processor.py
   - Scaling/cropping for FILL/FIT/SHRINK, optional Lanczos via PIL
 - rendering/pan_and_scan.py
@@ -51,7 +51,10 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - Slide/Wipe directions stored independently in settings; Slide is cardinals only, Wipe includes diagonals
   - Wipe random direction honored; non-repeating when Random is selected in UI
 - transitions/diffuse_transition.py, transitions/gl_diffuse_transition.py
+  - Diffuse shapes: Rectangle, Circle, Diamond, Plus, Triangle; block size clamped (min 4px) and shared between CPU/GL
 - transitions/block_puzzle_flip_transition.py, transitions/gl_block_puzzle_flip_transition.py
+- transitions/gl_blinds.py
+  - GL-only Blinds transition using a persistent overlay; participates in GL prewarm and requires hardware acceleration
 
 ## Sources
 - sources/base_provider.py
@@ -61,8 +64,9 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 
 ## Widgets
 - widgets/clock_widget.py
+  - Digital clock widget supporting three instances (Clock 1/2/3) with per-monitor selection, independent timezones, optional seconds and timezone labels
 - widgets/weather_widget.py
-  - Both support per-monitor selection via settings (ALL or 1/2/3)
+  - Weather widget with per-monitor selection via settings (ALL or 1/2/3); planned QPainter-based iconography
 
 ## Utilities
 - utils/image_cache.py

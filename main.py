@@ -5,7 +5,6 @@ Windows screensaver application that displays photos with transitions.
 """
 import sys
 import os
-import logging
 import shutil
 from pathlib import Path
 from enum import Enum
@@ -122,7 +121,6 @@ def cleanup_pycache(root_path: Path) -> int:
                 try:
                     shutil.rmtree(pycache_path)
                     removed_count += 1
-                    logger.debug(f"Removed pycache: {pycache_path}")
                 except Exception as e:
                     logger.warning(f"Failed to remove pycache {pycache_path}: {e}")
     except Exception as e:
@@ -291,7 +289,7 @@ def main():
     QImageReader.setAllocationLimit(1024)  # 1GB in MB
     logger.info("Qt image allocation limit: 1GB (supports 8K+ images, per-image on-demand)")
     
-    logger.info(f"Qt Application created: {app.applicationName()}")
+    logger.info("Qt Application created: %s", app.applicationName())
     logger.debug(f"High DPI scaling enabled")
     
     # Route to appropriate mode

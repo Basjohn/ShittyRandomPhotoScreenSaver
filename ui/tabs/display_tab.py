@@ -126,6 +126,7 @@ class DisplayTab(QWidget):
         self.interval_spin = QSpinBox()
         self.interval_spin.setRange(1, 3600)
         self.interval_spin.setSingleStep(1)
+        self.interval_spin.setAccelerated(True)
         self.interval_spin.setSuffix(" seconds")
         self.interval_spin.setValue(10)
         self.interval_spin.valueChanged.connect(self._save_settings)
@@ -184,6 +185,7 @@ class DisplayTab(QWidget):
         self.pan_speed_spin = QSpinBox()
         self.pan_speed_spin.setRange(1, 50)
         self.pan_speed_spin.setSingleStep(1)
+        self.pan_speed_spin.setAccelerated(True)
         self.pan_speed_spin.setSuffix(" px/s")
         self.pan_speed_spin.setValue(5)
         self.pan_speed_spin.setEnabled(False)  # Disabled by default (auto mode)
@@ -303,26 +305,22 @@ class DisplayTab(QWidget):
             interval = self._settings.get('timing.interval', 10)
             self.interval_spin.setValue(int(interval))
             
-            shuffle = self._settings.get('queue.shuffle', True)
-            if isinstance(shuffle, str):
-                shuffle = shuffle.lower() == 'true'
+            shuffle_raw = self._settings.get('queue.shuffle', True)
+            shuffle = SettingsManager.to_bool(shuffle_raw, True)
             self.shuffle_check.setChecked(shuffle)
             
             # Quality (Lanczos intentionally hidden/disabled; only sharpen exposed)
-            sharpen = self._settings.get('display.sharpen_downscale', False)
-            if isinstance(sharpen, str):
-                sharpen = sharpen.lower() == 'true'
+            sharpen_raw = self._settings.get('display.sharpen_downscale', False)
+            sharpen = SettingsManager.to_bool(sharpen_raw, False)
             self.sharpen_check.setChecked(sharpen)
             
             # Pan and scan
-            pan_enabled = self._settings.get('display.pan_and_scan', False)
-            if isinstance(pan_enabled, str):
-                pan_enabled = pan_enabled.lower() == 'true'
+            pan_enabled_raw = self._settings.get('display.pan_and_scan', False)
+            pan_enabled = SettingsManager.to_bool(pan_enabled_raw, False)
             self.pan_check.setChecked(pan_enabled)
             
-            pan_auto = self._settings.get('display.pan_auto_speed', True)
-            if isinstance(pan_auto, str):
-                pan_auto = pan_auto.lower() == 'true'
+            pan_auto_raw = self._settings.get('display.pan_auto_speed', True)
+            pan_auto = SettingsManager.to_bool(pan_auto_raw, True)
             self.pan_auto_check.setChecked(pan_auto)
             
             pan_speed = self._settings.get('display.pan_speed', 3.0)
@@ -330,22 +328,17 @@ class DisplayTab(QWidget):
             self.pan_speed_spin.setEnabled(not pan_auto)
             
             # Hardware acceleration
-            hw_accel = self._settings.get('display.hw_accel', False)
-            if isinstance(hw_accel, str):
-                hw_accel = hw_accel.lower() == 'true'
+            hw_accel = self._settings.get_bool('display.hw_accel', False)
             self.hw_accel_check.setChecked(hw_accel)
             
             # Refresh rate sync
-            refresh_sync = self._settings.get('display.refresh_sync', True)
-            if isinstance(refresh_sync, str):
-                refresh_sync = refresh_sync.lower() == 'true'
+            refresh_sync = self._settings.get_bool('display.refresh_sync', True)
             self.refresh_sync_check.setChecked(refresh_sync)
 
             # Input / Hard Exit
-            hard_exit = self._settings.get('input.hard_exit', False)
-            if isinstance(hard_exit, str):
-                hard_exit = hard_exit.lower() in ('true', '1', 'yes')
-            self.hard_exit_check.setChecked(bool(hard_exit))
+            hard_exit_raw = self._settings.get('input.hard_exit', False)
+            hard_exit = SettingsManager.to_bool(hard_exit_raw, False)
+            self.hard_exit_check.setChecked(hard_exit)
 
             # Renderer backend preferences
             backend_mode_raw = self._settings.get('display.render_backend_mode', 'opengl')

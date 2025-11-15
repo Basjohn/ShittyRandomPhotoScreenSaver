@@ -7,7 +7,6 @@ Manages resource lifecycle and ensures proper cleanup.
 from __future__ import annotations
 
 import atexit
-import logging
 import sys
 import uuid
 import weakref
@@ -16,11 +15,11 @@ import threading
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
 
 from .types import CleanupProtocol, ResourceInfo, ResourceType
-from PySide6.QtCore import QCoreApplication
+from core.logging.logger import get_logger
 
 T = TypeVar('T')
 
-_logger = logging.getLogger(__name__)
+_logger = get_logger("resources.manager")
 
 
 class ResourceManager:
@@ -38,7 +37,7 @@ class ResourceManager:
         self._weak_refs: Dict[str, Any] = {}
         self._strong_refs: Dict[str, Any] = {}  # Strong refs for temp files, etc.
         self._cleanup_handlers: Dict[str, Callable[[Any], None]] = {}
-        self._logger = _logger.getChild('ResourceManager')
+        self._logger = _logger
         self._shutdown = False
         self._initialized = False
         self._lock = threading.RLock()

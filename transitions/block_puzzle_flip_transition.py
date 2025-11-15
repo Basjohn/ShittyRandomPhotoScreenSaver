@@ -123,13 +123,6 @@ class BlockPuzzleFlipTransition(BaseTransition):
         self._animation_id: Optional[str] = None
         self._overlay: Optional[_BlockFlipWidget] = None
         
-        # FIX: Use ResourceManager for Qt object lifecycle
-        try:
-            from core.resources.manager import ResourceManager
-            self._resource_manager = ResourceManager()
-        except Exception:
-            self._resource_manager = None
-        
         logger.debug(f"BlockPuzzleFlipTransition created (duration={duration_ms}ms, "
                     f"grid={grid_rows}x{grid_cols}, flip_duration={flip_duration_ms}ms)")
     

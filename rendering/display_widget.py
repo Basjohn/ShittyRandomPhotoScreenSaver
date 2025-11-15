@@ -33,7 +33,9 @@ from transitions import (
 from widgets.clock_widget import ClockWidget, TimeFormat, ClockPosition
 from widgets.weather_widget import WeatherWidget, WeatherPosition
 from core.logging.logger import get_logger
+from core.logging.overlay_telemetry import record_overlay_ready
 from core.resources.manager import ResourceManager
+from core.settings.settings_manager import SettingsManager
 from transitions.gl_crossfade_transition import _GLFadeWidget
 from transitions.overlay_manager import (
     hide_all_overlays,
@@ -215,11 +217,37 @@ class DisplayWidget(QWidget):
 
         # Position and size window
         self.setGeometry(geometry)
+        # Seed with a placeholder snapshot of the current screen to avoid a hard
+        # wallpaper->black flash while GL prewarm runs. If this fails, fall back
+        # to blocking updates until the first real image is seeded.
+        placeholder_set = False
         try:
-            self.setUpdatesEnabled(False)
-            self._updates_blocked_until_seed = True
+            wallpaper_pm = screen.grabWindow(0)
+            if wallpaper_pm is not None and not wallpaper_pm.isNull():
+                try:
+                    wallpaper_pm.setDevicePixelRatio(self._device_pixel_ratio)
+                except Exception:
+                    pass
+                self.current_pixmap = wallpaper_pm
+                self.previous_pixmap = wallpaper_pm
+                self._seed_pixmap = wallpaper_pm
+                self._last_pixmap_seed_ts = time.monotonic()
+                placeholder_set = True
         except Exception:
+            placeholder_set = False
+
+        if placeholder_set:
+            try:
+                self.setUpdatesEnabled(True)
+            except Exception:
+                pass
             self._updates_blocked_until_seed = False
+        else:
+            try:
+                self.setUpdatesEnabled(False)
+                self._updates_blocked_until_seed = True
+            except Exception:
+                self._updates_blocked_until_seed = False
         self.showFullScreen()
         self._handle_screen_change(screen)
         # Reconfigure when screen changes
@@ -232,11 +260,12 @@ class DisplayWidget(QWidget):
 
         # Pre-warm GL contexts if hardware acceleration enabled
         hw_accel = False
-        if self.settings_manager:
-            hw_accel = self.settings_manager.get('display.hw_accel', False)
-            # Handle string boolean values from settings file
-            if isinstance(hw_accel, str):
-                hw_accel = hw_accel.lower() in ('true', '1', 'yes')
+        if self.settings_manager is not None:
+            try:
+                raw = self.settings_manager.get('display.hw_accel', False)
+            except Exception:
+                raw = False
+            hw_accel = SettingsManager.to_bool(raw, False)
         if hw_accel:
             self._prewarm_gl_contexts()
             self._perform_initial_gl_flush()
@@ -322,11 +351,11 @@ class DisplayWidget(QWidget):
         # Check if refresh rate sync is enabled
         refresh_sync_enabled = True
         if self.settings_manager:
-            refresh_sync = self.settings_manager.get('display.refresh_sync', True)
-            if isinstance(refresh_sync, str):
-                refresh_sync_enabled = refresh_sync.lower() in ('true', '1', 'yes')
-            else:
-                refresh_sync_enabled = bool(refresh_sync)
+            try:
+                raw = self.settings_manager.get('display.refresh_sync', True)
+            except Exception:
+                raw = True
+            refresh_sync_enabled = SettingsManager.to_bool(raw, True)
         
         if not refresh_sync_enabled:
             # Use fixed 60 FPS when sync is disabled
@@ -389,11 +418,7 @@ class DisplayWidget(QWidget):
         logger.debug(f"Setting up overlay widgets for screen {self.screen_index}")
         
         widgets = self.settings_manager.get('widgets', {})
-
-        def _to_bool(val, default=False):
-            if isinstance(val, str):
-                return val.lower() in ('true', '1', 'yes')
-            return bool(val) if val is not None else default
+        base_clock_settings = widgets.get('clock', {}) if isinstance(widgets, dict) else {}
 
         position_map = {
             'Top Left': ClockPosition.TOP_LEFT,
@@ -405,9 +430,27 @@ class DisplayWidget(QWidget):
             'Bottom Center': ClockPosition.BOTTOM_CENTER,
         }
 
+        def _resolve_clock_style(key: str, default, clock_settings: dict, settings_key: str):
+            """Resolve a style value for a clock, with forced inheritance for Clock 2/3.
+
+            For the primary clock, values come from its own settings or the provided default.
+            For Clock 2/3, style and position always come from the main clock's settings so they
+            visually match Clock 1, regardless of any stray per-clock style keys.
+            """
+            # Primary clock: use its own style value when present.
+            if settings_key == 'clock':
+                if isinstance(clock_settings, dict) and key in clock_settings:
+                    return clock_settings[key]
+                return default
+
+            # Secondary clocks (clock2/clock3): force inheritance from main clock style.
+            if isinstance(base_clock_settings, dict) and key in base_clock_settings:
+                return base_clock_settings[key]
+            return default
+
         def _create_clock_widget(settings_key: str, attr_name: str, default_position: str, default_font_size: int) -> None:
             clock_settings = widgets.get(settings_key, {}) if isinstance(widgets, dict) else {}
-            clock_enabled = _to_bool(clock_settings.get('enabled', False), False)
+            clock_enabled = SettingsManager.to_bool(clock_settings.get('enabled', False), False)
             clock_monitor_sel = clock_settings.get('monitor', 'ALL')
             try:
                 show_on_this = (clock_monitor_sel == 'ALL') or (int(clock_monitor_sel) == (self.screen_index + 1))
@@ -426,21 +469,31 @@ class DisplayWidget(QWidget):
                 logger.debug("%s widget disabled in settings", settings_key)
                 return
 
-            time_format = TimeFormat.TWELVE_HOUR if clock_settings.get('format', '12h') == '12h' else TimeFormat.TWENTY_FOUR_HOUR
-            position_str = clock_settings.get('position', default_position)
-            show_seconds = _to_bool(clock_settings.get('show_seconds', False), False)
+            raw_format = _resolve_clock_style('format', '12h', clock_settings, settings_key)
+            time_format = TimeFormat.TWELVE_HOUR if raw_format == '12h' else TimeFormat.TWENTY_FOUR_HOUR
+
+            base_position_default = default_position
+            position_str = _resolve_clock_style('position', base_position_default, clock_settings, settings_key)
+
+            show_seconds_val = _resolve_clock_style('show_seconds', False, clock_settings, settings_key)
+            show_seconds = SettingsManager.to_bool(show_seconds_val, False)
+
+            # Timezone is independent per clock; do not inherit.
             timezone_str = clock_settings.get('timezone', 'local')
-            show_timezone = _to_bool(clock_settings.get('show_timezone', False), False)
-            font_size = clock_settings.get('font_size', default_font_size)
-            margin = clock_settings.get('margin', 20)
-            color = clock_settings.get('color', [255, 255, 255, 230])
+
+            show_tz_val = _resolve_clock_style('show_timezone', False, clock_settings, settings_key)
+            show_timezone = SettingsManager.to_bool(show_tz_val, False)
+
+            font_size = _resolve_clock_style('font_size', default_font_size, clock_settings, settings_key)
+            margin = _resolve_clock_style('margin', 20, clock_settings, settings_key)
+            color = _resolve_clock_style('color', [255, 255, 255, 230], clock_settings, settings_key)
 
             position = position_map.get(position_str, position_map.get(default_position, ClockPosition.TOP_RIGHT))
 
             try:
                 clock = ClockWidget(self, time_format, position, show_seconds, timezone_str, show_timezone)
 
-                font_family = clock_settings.get('font_family', 'Segoe UI')
+                font_family = _resolve_clock_style('font_family', 'Segoe UI', clock_settings, settings_key)
                 if hasattr(clock, 'set_font_family'):
                     clock.set_font_family(font_family)
 
@@ -451,10 +504,11 @@ class DisplayWidget(QWidget):
                 qcolor = QColor(color[0], color[1], color[2], color[3])
                 clock.set_text_color(qcolor)
 
-                show_background = _to_bool(clock_settings.get('show_background', False), False)
+                show_bg_val = _resolve_clock_style('show_background', False, clock_settings, settings_key)
+                show_background = SettingsManager.to_bool(show_bg_val, False)
                 clock.set_show_background(show_background)
 
-                bg_opacity = clock_settings.get('bg_opacity', 0.9)
+                bg_opacity = _resolve_clock_style('bg_opacity', 0.9, clock_settings, settings_key)
                 clock.set_background_opacity(bg_opacity)
 
                 setattr(self, attr_name, clock)
@@ -478,7 +532,7 @@ class DisplayWidget(QWidget):
 
         # Weather widget
         weather_settings = widgets.get('weather', {}) if isinstance(widgets, dict) else {}
-        weather_enabled = _to_bool(weather_settings.get('enabled', False), False)
+        weather_enabled = SettingsManager.to_bool(weather_settings.get('enabled', False), False)
         # Monitor selection for weather
         weather_monitor_sel = weather_settings.get('monitor', 'ALL')
         try:
@@ -521,7 +575,7 @@ class DisplayWidget(QWidget):
                 self.weather_widget.set_text_color(qcolor)
                 
                 # Set background frame if enabled
-                show_background = _to_bool(weather_settings.get('show_background', False), False)
+                show_background = SettingsManager.to_bool(weather_settings.get('show_background', False), False)
                 self.weather_widget.set_show_background(show_background)
                 
                 # Set background opacity
@@ -620,12 +674,36 @@ class DisplayWidget(QWidget):
         start_time = time.time()
         logger.debug(f"[PREWARM] Starting GL context pre-warming for screen {self.screen_index}")
 
-        # Create full-screen dummy pixmap to allocate FBOs at final size
+        # Create full-screen dummy pixmap to allocate FBOs at final size.
+        # Prefer the currently seeded pixmap (wallpaper snapshot or last image)
+        # so overlays do not flash pure black during startup.
         w, h = self.width(), self.height()
         if w <= 0 or h <= 0:
             w, h = 10, 10
+
+        base_pm: Optional[QPixmap] = None
+        try:
+            if self._seed_pixmap is not None and not self._seed_pixmap.isNull():
+                base_pm = self._seed_pixmap
+            elif self.current_pixmap is not None and not self.current_pixmap.isNull():
+                base_pm = self.current_pixmap
+            elif self.previous_pixmap is not None and not self.previous_pixmap.isNull():
+                base_pm = self.previous_pixmap
+        except Exception:
+            base_pm = None
+
         dummy = QPixmap(w, h)
         dummy.fill(Qt.GlobalColor.black)
+        if base_pm is not None:
+            try:
+                from PySide6.QtGui import QPainter
+                p = QPainter(dummy)
+                try:
+                    p.drawPixmap(dummy.rect(), base_pm)
+                finally:
+                    p.end()
+            except Exception:
+                pass
         dummy.setDevicePixelRatio(self._device_pixel_ratio)
 
         # Import GL overlay widget classes
@@ -797,7 +875,7 @@ class DisplayWidget(QWidget):
             return
 
         if GL is None:
-            logger.debug("[INIT] Skipping initial GL flush; PyOpenGL not available")
+            logger.info("[INIT] Skipping low-level GL flush; PyOpenGL not available (using QOpenGLWidget/QSurface flush only)")
             self._gl_initial_flush_done = True
             return
 
@@ -881,9 +959,11 @@ class DisplayWidget(QWidget):
                 easing_str = transitions_settings.get('easing')
             easing_str = easing_str or 'Auto'
 
-            hw_accel = self.settings_manager.get('display.hw_accel', False)
-            if isinstance(hw_accel, str):
-                hw_accel = hw_accel.lower() in ('true', '1', 'yes')
+            try:
+                hw_raw = self.settings_manager.get('display.hw_accel', False)
+            except Exception:
+                hw_raw = False
+            hw_accel = SettingsManager.to_bool(hw_raw, False)
 
             if transition_type == 'Crossfade':
                 transition = GLCrossfadeTransition(duration_ms, easing_str) if hw_accel else CrossfadeTransition(duration_ms, easing_str)
@@ -914,8 +994,7 @@ class DisplayWidget(QWidget):
                 rnd_always = self.settings_manager.get('transitions.random_always', None)
                 if rnd_always is None:
                     rnd_always = transitions_settings.get('random_always', False)
-                if isinstance(rnd_always, str):
-                    rnd_always = rnd_always.lower() in ('true', '1', 'yes')
+                rnd_always = SettingsManager.to_bool(rnd_always, False)
 
                 if direction_str == 'Random' and not rnd_always:
                     all_dirs = [SlideDirection.LEFT, SlideDirection.RIGHT, SlideDirection.UP, SlideDirection.DOWN]
@@ -971,8 +1050,7 @@ class DisplayWidget(QWidget):
                 rnd_always = self.settings_manager.get('transitions.random_always', None)
                 if rnd_always is None:
                     rnd_always = transitions_settings.get('random_always', False)
-                if isinstance(rnd_always, str):
-                    rnd_always = rnd_always.lower() in ('true', '1', 'yes')
+                rnd_always = SettingsManager.to_bool(rnd_always, False)
 
                 if wipe_dir_str and wipe_dir_str in direction_map and not (wipe_dir_str == 'Random' and not rnd_always):
                     direction = direction_map[wipe_dir_str]
@@ -1747,6 +1825,13 @@ class DisplayWidget(QWidget):
     def _on_destroyed(self, *_args) -> None:
         """Ensure active transitions are stopped when the widget is destroyed."""
         self._destroy_render_surface()
+        # Stop pan & scan if still active
+        try:
+            if hasattr(self, "_pan_and_scan") and self._pan_and_scan is not None:
+                self._pan_and_scan.stop()
+        except Exception:
+            pass
+        # Stop and clean up any active transition
         try:
             if self._current_transition:
                 try:
@@ -1758,6 +1843,11 @@ class DisplayWidget(QWidget):
                 except Exception:
                     pass
                 self._current_transition = None
+        except Exception:
+            pass
+        # Hide overlays and cancel watchdog timer
+        try:
+            hide_all_overlays(self)
         except Exception:
             pass
         self._cancel_transition_watchdog()
@@ -1944,44 +2034,16 @@ class DisplayWidget(QWidget):
         seed_age_ms = None
         if self._last_pixmap_seed_ts is not None:
             seed_age_ms = (self._last_overlay_ready_ts - self._last_pixmap_seed_ts) * 1000.0
-        key = f"{overlay_name}:{stage}"
-        self._overlay_stage_counts[key] += 1
-        # Avoid logging huge pixmap representations in details
-        sanitized_details = dict(details)
-        if "base_pixmap" in sanitized_details:
-            try:
-                bp = sanitized_details["base_pixmap"]
-                # Summarize pixmap geometry if possible
-                from PySide6.QtGui import QPixmap  # type: ignore
-                if isinstance(bp, QPixmap) and not bp.isNull():
-                    sanitized_details["base_pixmap"] = f"Pixmap(size={bp.width()}x{bp.height()}, dpr={bp.devicePixelRatioF():.2f})"
-                else:
-                    sanitized_details["base_pixmap"] = "<pixmap>"
-            except Exception:
-                sanitized_details["base_pixmap"] = "<pixmap>"
-        logger.debug(
-            "[DIAG] Overlay readiness (name=%s, stage=%s, seed_age_ms=%s, count=%s, details=%s)",
+        record_overlay_ready(
+            logger,
+            self.screen_index,
             overlay_name,
             stage,
-            f"{seed_age_ms:.2f}" if seed_age_ms is not None else "N/A",
-            self._overlay_stage_counts[key],
-            sanitized_details,
+            self._overlay_stage_counts,
+            self._overlay_swap_warned,
+            seed_age_ms,
+            details,
         )
-        if stage == "gl_initialized":
-            try:
-                actual_swap = str(details.get("swap", ""))
-            except Exception:
-                actual_swap = str(details.get("swap", ""))
-            if "triple" not in actual_swap.lower():
-                if overlay_name not in self._overlay_swap_warned:
-                    logger.info(
-                        "[DIAG] Overlay swap = %s (screen=%s, name=%s, interval=%s) — driver enforced double buffer",
-                        actual_swap or "Unknown",
-                        self.screen_index,
-                        overlay_name,
-                        details.get("interval", "?"),
-                    )
-                    self._overlay_swap_warned.add(overlay_name)
 
     def get_overlay_stage_counts(self) -> dict[str, int]:
         """Return snapshot of overlay readiness counts (for diagnostics/tests)."""

@@ -36,9 +36,10 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
 - Skip policy: when a transition is active, prefetch defers to avoid thrash; skipped requests are logged for pacing diagnostics.
 
 ## Transitions
-- GL and CPU variants for Crossfade, Slide, Wipe, Diffuse, Block Puzzle Flip.
+- GL and CPU variants for Crossfade, Slide, Wipe, Diffuse, Block Puzzle Flip; GL-only variant for Blinds (`GLBlindsTransition`) when hardware acceleration is enabled.
 - DisplayWidget injects the shared ResourceManager into every transition; overlays are created through `overlay_manager.get_or_create_overlay` so lifecycle is centralized.
-- GL overlays persistent and pre-warmed via `overlay_manager.prepare_gl_overlay` to avoid first-use flicker.
+- GL overlays persistent and pre-warmed via `overlay_manager.prepare_gl_overlay` / `DisplayWidget._prewarm_gl_contexts` to avoid first-use flicker.
+- Diffuse supports multiple shapes (`Rectangle`, `Circle`, `Diamond`, `Plus`, `Triangle`) with a validated block-size range (min 4px) shared between CPU and GL paths and enforced by the Transitions tab UI.
 - Non-repeating random selection:
   - Engine sets `transitions.random_choice` per rotation.
   - Slide: cardinal-only directions; stored as `transitions.slide.direction` and last as `transitions.slide.last_direction` (legacy fallback maintained).
@@ -60,21 +61,24 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
 - `display.refresh_sync`: bool
 - `display.hw_accel`: bool
 - `display.mode`: fill|fit|shrink
-- `transitions.type`: Crossfade|Slide|Wipe|Diffuse|Block Puzzle Flip
+- `input.hard_exit`: bool (when true, mouse movement/clicks do not exit; only ESC/Q and hotkeys remain active).
+- `transitions.type`: Crossfade|Slide|Wipe|Diffuse|Block Puzzle Flip|Blinds
 - `transitions.random_always`: bool
 - `transitions.random_choice`: str
 - `transitions.slide.direction`, `transitions.slide.last_direction` (legacy flat keys maintained)
 - `transitions.wipe.direction`, `transitions.wipe.last_direction` (legacy flat keys maintained)
+- `transitions.diffuse.block_size` (int, clamped to a 4–256px range) and `transitions.diffuse.shape` (`Rectangle`|`Circle`|`Diamond`|`Plus`|`Triangle`).
 - `timing.interval`: int seconds
 - `display.same_image_all_monitors`: bool
 - Cache:
   - `cache.prefetch_ahead` (default 5)
   - `cache.max_items` (default 24)
   - `cache.max_memory_mb` (default 1024)
-  - Widgets:
-    - `widgets.clock.monitor`: 'ALL'|1|2|3
-    - `widgets.weather.monitor`: 'ALL'|1|2|3
   - `cache.max_concurrent` (default 2)
+- Widgets:
+  - `widgets.clock.*` (Clock 1): monitor ('ALL'|1|2|3), position, font, colour, timezone, background options.
+  - `widgets.clock2.*`, `widgets.clock3.*` (Clock 2/3): same schema as Clock 1 with independent per-monitor/timezone configuration.
+  - `widgets.weather.*`: monitor ('ALL'|1|2|3), position, font, colour, optional iconography.
 
 ## Thread Safety & Centralization
 - All business logic threading via `ThreadManager`.
@@ -84,13 +88,16 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
 
 ## OpenGL Overlay Lifecycle
 - Persistent overlays per transition type; reuse prevents reallocation churn.
-- Warmup path (`DisplayWidget._prewarm_gl_contexts`) initializes five core overlays per monitor and records per-stage telemetry.
+- Warmup path (`DisplayWidget._prewarm_gl_contexts`) initializes six core overlays per monitor (Crossfade, Slide, Wipe, Diffuse, Block Puzzle Flip, Blinds) and records per-stage telemetry.
+- Warmup uses a dummy pixmap derived from the currently seeded frame (wallpaper snapshot or last image) so any first GL frames match existing content rather than a solid black buffer.
 - Triple-buffer requests may downgrade to double-buffer when driver rejects configuration; log and surface downgrade reason through diagnostics overlay.
 - Watchdog timers accompany each GL transition; timeout cancellation required once `transition_finish` fires to avoid thread leaks.
-- Overlay Z-order is revalidated after each transition to ensure widgets (clock/weather) remain visible across monitors.
+- Overlay Z-order is revalidated after each transition to ensure widgets (clock/weather/multi-clocks) remain visible across monitors.
 
 ## Banding & Pixmap Seeding
-- `DisplayWidget` seeds `current_pixmap` as soon as an image loads, before transition warmup, to prevent black/banding frames.
+- `DisplayWidget.show_on_screen` grabs a per-monitor wallpaper snapshot via `screen.grabWindow(0)` and seeds `current_pixmap`, `_seed_pixmap`, and `previous_pixmap` before GL prewarm runs. This prevents a wallpaper→black flash during startup even while overlays are initializing.
+- `DisplayWidget` seeds `current_pixmap` again as soon as a real image loads, before transition warmup, to keep the base widget drawing a valid frame while overlays warm and transitions start.
+- `paintEvent` prefers `current_pixmap`, then `_seed_pixmap`, and finally `previous_pixmap` (when no error is set), only falling back to a pure black fill when no pixmap is available. This keeps startup and fallback paths visually continuous.
 - After closing the settings dialog, force reseed and unblock updates before transitions resume (multi-monitor specific).
 - `_has_rendered_first_frame` gates transitions only for the initial frame; settings reopen must reset this guard.
 

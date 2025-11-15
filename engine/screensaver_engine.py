@@ -420,7 +420,8 @@ class ScreensaverEngine(QObject):
             self.display_manager = DisplayManager(
                 display_mode=display_mode,
                 same_image_mode=same_image,
-                settings_manager=self.settings_manager
+                settings_manager=self.settings_manager,
+                resource_manager=self.resource_manager,
             )
             
             # Connect exit signal
