@@ -9,7 +9,6 @@ import time
 from PySide6.QtWidgets import QApplication, QWidget
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt
-from transitions.base_transition import BaseTransition
 
 
 @pytest.fixture
@@ -152,10 +151,12 @@ class TestGLTransitionTelemetry:
     """Test GL transition telemetry integration."""
     
     def test_gl_crossfade_calls_mark_start(self, qapp, dummy_widget, dummy_pixmap):
-        """GL Crossfade should call _mark_start on transition start."""
-        from transitions.gl_crossfade_transition import GLCrossfadeTransition
+        """GL compositor crossfade should call _mark_start on transition start."""
+        from transitions.gl_compositor_crossfade_transition import (
+            GLCompositorCrossfadeTransition,
+        )
         
-        trans = GLCrossfadeTransition(duration_ms=1000)
+        trans = GLCompositorCrossfadeTransition(duration_ms=1000)
         
         trans.start(dummy_pixmap, dummy_pixmap, dummy_widget)
         
@@ -163,10 +164,12 @@ class TestGLTransitionTelemetry:
         assert trans._start_time is not None
     
     def test_gl_crossfade_calls_mark_end_on_complete(self, qapp, dummy_widget, dummy_pixmap):
-        """GL Crossfade should call _mark_end when animation completes."""
-        from transitions.gl_crossfade_transition import GLCrossfadeTransition
+        """GL compositor crossfade should call _mark_end when animation completes."""
+        from transitions.gl_compositor_crossfade_transition import (
+            GLCompositorCrossfadeTransition,
+        )
         
-        trans = GLCrossfadeTransition(duration_ms=100)
+        trans = GLCompositorCrossfadeTransition(duration_ms=100)
         trans.start(dummy_pixmap, dummy_pixmap, dummy_widget)
         
         # Manually trigger completion

@@ -26,6 +26,98 @@ class WipeDirection(Enum):
     DIAG_TR_BL = "diag_tr_bl"  # Top-right to bottom-left
 
 
+def _compute_wipe_region(direction: WipeDirection, w: int, h: int, progress: float) -> QRegion:
+    """Compute the QRegion used for wipe reveal based on direction and progress.
+
+    This helper is shared between the CPU WipeTransition and the GL compositor
+    wipe path to keep visual behaviour identical.
+    """
+
+    from PySide6.QtGui import QPolygon
+    from PySide6.QtCore import QPoint
+
+    p = max(0.0, min(1.0, float(progress)))
+
+    if direction == WipeDirection.LEFT_TO_RIGHT:
+        rw = int(w * p)
+        return QRegion(0, 0, rw, h)
+    if direction == WipeDirection.RIGHT_TO_LEFT:
+        x = int(w * (1.0 - p))
+        return QRegion(x, 0, w - x, h)
+    if direction == WipeDirection.TOP_TO_BOTTOM:
+        rh = int(h * p)
+        return QRegion(0, 0, w, rh)
+    if direction == WipeDirection.BOTTOM_TO_TOP:
+        y = int(h * (1.0 - p))
+        return QRegion(0, y, w, h - y)
+
+    if direction == WipeDirection.DIAG_TL_BR:
+        # Top-left to bottom-right diagonal
+        diag = int((w + h) * p)
+        if diag <= 0:
+            return QRegion()
+        if diag >= w + h:
+            # Complete
+            return QRegion(0, 0, w, h)
+        if diag > max(w, h):
+            # Both edges reached - pentagon shape
+            points = [
+                QPoint(0, 0),
+                QPoint(w, 0),
+                QPoint(w, diag - w),
+                QPoint(diag - h, h),
+                QPoint(0, h),
+            ]
+            return QRegion(QPolygon(points))
+        if diag > min(w, h):
+            # One edge reached - quadrilateral
+            if w < h:
+                # Right edge reached first
+                points = [QPoint(0, 0), QPoint(w, 0), QPoint(w, diag - w), QPoint(0, diag)]
+            else:
+                # Bottom edge reached first
+                points = [QPoint(0, 0), QPoint(diag, 0), QPoint(diag - h, h), QPoint(0, h)]
+            return QRegion(QPolygon(points))
+        # Initial triangle from corner
+        points = [QPoint(0, 0), QPoint(diag, 0), QPoint(0, diag)]
+        return QRegion(QPolygon(points))
+
+    if direction == WipeDirection.DIAG_TR_BL:
+        # Top-right to bottom-left diagonal
+        diag = int((w + h) * p)
+        if diag <= 0:
+            return QRegion()
+        if diag >= w + h:
+            # Complete
+            return QRegion(0, 0, w, h)
+        if diag > max(w, h):
+            # Both edges reached - pentagon shape
+            points = [
+                QPoint(w, 0),
+                QPoint(0, 0),
+                QPoint(0, diag - w),
+                QPoint(w - (diag - h), h),
+                QPoint(w, h),
+            ]
+            return QRegion(QPolygon(points))
+        if diag > min(w, h):
+            # One edge reached - quadrilateral
+            if w < h:
+                # Left edge reached first
+                points = [QPoint(w, 0), QPoint(0, 0), QPoint(0, diag - w), QPoint(w, diag)]
+            else:
+                # Bottom edge reached first
+                points = [QPoint(w, 0), QPoint(w - diag, 0), QPoint(w - (diag - h), h), QPoint(w, h)]
+            return QRegion(QPolygon(points))
+        # Initial triangle from corner
+        points = [QPoint(w, 0), QPoint(w - diag, 0), QPoint(w, diag)]
+        return QRegion(QPolygon(points))
+
+    # Fallback
+    rw = int(w * p)
+    return QRegion(0, 0, rw, h)
+
+
 class WipeTransition(BaseTransition):
     """
     Wipe/Reveal transition effect.
@@ -211,94 +303,9 @@ class WipeTransition(BaseTransition):
     def _on_anim_update(self, progress: float) -> None:
         if not self._new_label or not self._widget:
             return
-        progress = max(0.0, min(1.0, progress))
         w = self._widget.width()
         h = self._widget.height()
-
-        if self._direction == WipeDirection.LEFT_TO_RIGHT:
-            rw = int(w * progress)
-            region = QRegion(0, 0, rw, h)
-        elif self._direction == WipeDirection.RIGHT_TO_LEFT:
-            x = int(w * (1.0 - progress))
-            region = QRegion(x, 0, w - x, h)
-        elif self._direction == WipeDirection.TOP_TO_BOTTOM:
-            rh = int(h * progress)
-            region = QRegion(0, 0, w, rh)
-        elif self._direction == WipeDirection.BOTTOM_TO_TOP:
-            y = int(h * (1.0 - progress))
-            region = QRegion(0, y, w, h - y)
-        elif self._direction == WipeDirection.DIAG_TL_BR:
-            # Top-left to bottom-right diagonal
-            from PySide6.QtGui import QPolygon
-            from PySide6.QtCore import QPoint
-            # Diagonal wipe sweeps from TL corner, distance along diagonal edges
-            diag = int((w + h) * progress)
-            if diag <= 0:
-                region = QRegion()
-            elif diag >= w + h:
-                # Complete
-                region = QRegion(0, 0, w, h)
-            elif diag > max(w, h):
-                # Both edges reached - pentagon shape
-                points = [
-                    QPoint(0, 0),
-                    QPoint(w, 0),
-                    QPoint(w, diag - w),
-                    QPoint(diag - h, h),
-                    QPoint(0, h)
-                ]
-                region = QRegion(QPolygon(points))
-            elif diag > min(w, h):
-                # One edge reached - quadrilateral
-                if w < h:
-                    # Right edge reached first
-                    points = [QPoint(0, 0), QPoint(w, 0), QPoint(w, diag - w), QPoint(0, diag)]
-                else:
-                    # Bottom edge reached first
-                    points = [QPoint(0, 0), QPoint(diag, 0), QPoint(diag - h, h), QPoint(0, h)]
-                region = QRegion(QPolygon(points))
-            else:
-                # Initial triangle from corner
-                points = [QPoint(0, 0), QPoint(diag, 0), QPoint(0, diag)]
-                region = QRegion(QPolygon(points))
-        elif self._direction == WipeDirection.DIAG_TR_BL:
-            # Top-right to bottom-left diagonal
-            from PySide6.QtGui import QPolygon
-            from PySide6.QtCore import QPoint
-            # Diagonal wipe sweeps from TR corner
-            diag = int((w + h) * progress)
-            if diag <= 0:
-                region = QRegion()
-            elif diag >= w + h:
-                # Complete
-                region = QRegion(0, 0, w, h)
-            elif diag > max(w, h):
-                # Both edges reached - pentagon shape
-                points = [
-                    QPoint(w, 0),
-                    QPoint(0, 0),
-                    QPoint(0, diag - w),
-                    QPoint(w - (diag - h), h),
-                    QPoint(w, h)
-                ]
-                region = QRegion(QPolygon(points))
-            elif diag > min(w, h):
-                # One edge reached - quadrilateral
-                if w < h:
-                    # Left edge reached first
-                    points = [QPoint(w, 0), QPoint(0, 0), QPoint(0, diag - w), QPoint(w, diag)]
-                else:
-                    # Bottom edge reached first
-                    points = [QPoint(w, 0), QPoint(w - diag, 0), QPoint(w - (diag - h), h), QPoint(w, h)]
-                region = QRegion(QPolygon(points))
-            else:
-                # Initial triangle from corner
-                points = [QPoint(w, 0), QPoint(w - diag, 0), QPoint(w, diag)]
-                region = QRegion(QPolygon(points))
-        else:
-            # Fallback
-            rw = int(w * progress)
-            region = QRegion(0, 0, rw, h)
+        region = _compute_wipe_region(self._direction, w, h, progress)
 
         try:
             # Show only when region is non-empty to avoid pre-mask flash

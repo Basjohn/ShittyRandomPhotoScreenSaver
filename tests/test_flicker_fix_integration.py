@@ -62,89 +62,20 @@ class TestQtAllocationLimit:
         assert test_image_size < limit_bytes
 
 
-class TestOverlayReadyFlow:
-    """Test complete overlay ready state flow."""
-    
-    def test_overlay_lifecycle(self, qapp, dummy_pixmap):
-        """Test full overlay lifecycle: create -> init -> paint -> ready."""
-        from transitions.gl_crossfade_transition import _GLFadeWidget
-        
-        widget = QWidget()
-        widget.setGeometry(0, 0, 100, 100)
-        
-        try:
-            # 1. Create overlay - should NOT be ready
-            overlay = _GLFadeWidget(widget, dummy_pixmap, dummy_pixmap)
-            assert not overlay.is_ready_for_display()
-            
-            # 2. Show overlay - still not ready until paint
-            overlay.setGeometry(0, 0, 100, 100)
-            overlay.show()
-            assert not overlay.is_ready_for_display()
-            
-            # 3. Force GL init and paint
-            try:
-                overlay.makeCurrent()
-                overlay.repaint()
-                QApplication.processEvents()
-                
-                # 4. Should be ready after paint
-                assert overlay.is_ready_for_display()
-            except Exception:
-                pytest.skip("GL context not available")
-        finally:
-            widget.close()
-    
-    def test_paint_event_respects_ready_state(self, qapp, dummy_pixmap):
-        """DisplayWidget paintEvent should respect overlay ready state."""
-        from rendering.display_widget import DisplayWidget
-        from transitions.gl_crossfade_transition import _GLFadeWidget
-        
-        # Create display widget
-        widget = DisplayWidget(0, None, None)
-        widget.setGeometry(0, 0, 100, 100)
-        widget.current_pixmap = dummy_pixmap
-        
-        try:
-            # Create overlay but don't make it ready
-            overlay = _GLFadeWidget(widget, dummy_pixmap, dummy_pixmap)
-            overlay.setGeometry(0, 0, 100, 100)
-            overlay.show()
-            
-            # Attach to widget
-            setattr(widget, "_srpss_gl_xfade_overlay", overlay)
-            
-            # Trigger paint - should paint base widget (overlay not ready)
-            widget.repaint()
-            QApplication.processEvents()
-            
-            # Now mark overlay as ready
-            with overlay._state_lock:
-                overlay._gl_initialized = True
-                overlay._first_frame_drawn = True
-            
-            # Trigger paint again - should skip base paint (overlay ready)
-            widget.repaint()
-            QApplication.processEvents()
-            
-            # If we get here without exception, test passes
-            assert True
-        finally:
-            widget.close()
-
-
 class TestTransitionTelemetryFlow:
     """Test telemetry tracking through transition lifecycle."""
     
     def test_transition_tracks_timing(self, qapp, dummy_pixmap):
-        """GL Transition should track start and end times."""
-        from transitions.gl_crossfade_transition import GLCrossfadeTransition
+        """GL compositor transition should track start and end times."""
+        from transitions.gl_compositor_crossfade_transition import (
+            GLCompositorCrossfadeTransition,
+        )
         
         widget = QWidget()
         widget.setGeometry(0, 0, 100, 100)
         
         try:
-            trans = GLCrossfadeTransition(duration_ms=100)
+            trans = GLCompositorCrossfadeTransition(duration_ms=100)
             
             # Start transition (telemetry implemented in GL version)
             trans.start(dummy_pixmap, dummy_pixmap, widget)
@@ -219,73 +150,6 @@ class TestMultiDisplaySyncFlow:
         assert 0.09 < elapsed < 0.2  # Should timeout near 0.1s
 
 
-class TestEndToEndFlickerFix:
-    """End-to-end tests combining all phases."""
-    
-    def test_gl_overlay_eliminates_race_condition(self, qapp, dummy_pixmap):
-        """Test that atomic flags eliminate paint race condition."""
-        from rendering.display_widget import DisplayWidget
-        from transitions.gl_crossfade_transition import _GLFadeWidget
-        from transitions.overlay_manager import any_overlay_ready_for_display
-        
-        widget = DisplayWidget(0, None, None)
-        widget.setGeometry(0, 0, 100, 100)
-        widget.current_pixmap = dummy_pixmap
-        
-        try:
-            overlay = _GLFadeWidget(widget, dummy_pixmap, dummy_pixmap)
-            overlay.setGeometry(0, 0, 100, 100)
-            
-            # Attach before showing
-            setattr(widget, "_srpss_gl_xfade_overlay", overlay)
-            
-            # Show and process
-            overlay.show()
-            QApplication.processEvents()
-            
-            # 1. Initially not ready
-            assert not any_overlay_ready_for_display(widget)
-            
-            # Check if overlay is visible (may not be in test environment)
-            if not overlay.isVisible():
-                pytest.skip("GL overlay cannot be made visible in test environment")
-            
-            # 2. Mark as ready atomically
-            with overlay._state_lock:
-                overlay._gl_initialized = True
-                overlay._first_frame_drawn = True
-            
-            # 3. Now should be ready
-            assert any_overlay_ready_for_display(widget)
-            
-            # 4. Paint event should skip base paint
-            widget.repaint()
-            QApplication.processEvents()
-            
-            # No exception = success
-        finally:
-            widget.close()
-    
-    def test_pre_warming_reduces_init_time(self, qapp):
-        """Test that GL pre-warming reduces initialization overhead."""
-        # Note: Actual pre-warming happens in DisplayWidget._prewarm_gl_contexts
-        # This test verifies the method exists and is callable
-        from rendering.display_widget import DisplayWidget
-        
-        widget = DisplayWidget(0, None, None)
-        widget.setGeometry(0, 0, 100, 100)
-        
-        try:
-            # Check pre-warming method exists
-            assert hasattr(widget, '_prewarm_gl_contexts')
-            assert callable(widget._prewarm_gl_contexts)
-            
-            # Can't easily test actual pre-warming without GL context
-            # but verify method signature is correct
-        finally:
-            widget.close()
-
-
 class TestRegressionPrevention:
     """Tests to prevent regression of fixed issues."""
     
@@ -293,10 +157,11 @@ class TestRegressionPrevention:
         """Transitions should not call processEvents() (causes races)."""
         import ast
         import inspect
-        from transitions import gl_crossfade_transition, crossfade_transition
+        import transitions.gl_compositor_crossfade_transition as gl_compositor_crossfade_transition
+        import transitions.crossfade_transition as crossfade_transition
         
         # Get source code
-        modules_to_check = [gl_crossfade_transition, crossfade_transition]
+        modules_to_check = [gl_compositor_crossfade_transition, crossfade_transition]
         
         for module in modules_to_check:
             source = inspect.getsource(module)

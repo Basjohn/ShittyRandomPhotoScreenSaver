@@ -16,13 +16,14 @@ from dataclasses import dataclass
 from typing import Optional, Callable
 
 from PySide6.QtCore import Qt, QPoint, QRect
-from PySide6.QtGui import QPainter, QPixmap
+from PySide6.QtGui import QPainter, QPixmap, QRegion
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
 from core.logging.logger import get_logger
 from core.animation.types import EasingCurve
 from core.animation.animator import AnimationManager
 from rendering.gl_format import apply_widget_surface_format
+from transitions.wipe_transition import WipeDirection, _compute_wipe_region
 
 
 logger = get_logger(__name__)
@@ -47,6 +48,58 @@ class SlideState:
     old_end: QPoint
     new_start: QPoint
     new_end: QPoint
+    progress: float = 0.0  # 0..1
+
+
+@dataclass
+class WipeState:
+    """State for a compositor-driven wipe transition."""
+
+    old_pixmap: Optional[QPixmap]
+    new_pixmap: Optional[QPixmap]
+    direction: WipeDirection
+    progress: float = 0.0  # 0..1
+
+
+@dataclass
+class BlockFlipState:
+    """State for a compositor-driven block puzzle flip transition.
+
+    The detailed per-block progression is managed by the controller; the
+    compositor only needs the reveal region to clip the new pixmap.
+    """
+
+    old_pixmap: Optional[QPixmap]
+    new_pixmap: Optional[QPixmap]
+    region: Optional[QRegion] = None
+    progress: float = 0.0  # 0..1
+
+
+@dataclass
+class BlindsState:
+    """State for a compositor-driven blinds transition.
+
+    Like BlockFlip, the controller owns per-slat progression and provides an
+    aggregate reveal region; the compositor only clips the new pixmap.
+    """
+
+    old_pixmap: Optional[QPixmap]
+    new_pixmap: Optional[QPixmap]
+    region: Optional[QRegion] = None
+    progress: float = 0.0  # 0..1
+
+
+@dataclass
+class DiffuseState:
+    """State for a compositor-driven diffuse transition.
+
+    The controller owns per-cell progression and provides an aggregate reveal
+    region; the compositor only clips the new pixmap.
+    """
+
+    old_pixmap: Optional[QPixmap]
+    new_pixmap: Optional[QPixmap]
+    region: Optional[QRegion] = None
     progress: float = 0.0  # 0..1
 
 
@@ -80,6 +133,10 @@ class GLCompositorWidget(QOpenGLWidget):
         self._base_pixmap: Optional[QPixmap] = None
         self._crossfade: Optional[CrossfadeState] = None
         self._slide: Optional[SlideState] = None
+        self._wipe: Optional[WipeState] = None
+        self._blockflip: Optional[BlockFlipState] = None
+        self._blinds: Optional[BlindsState] = None
+        self._diffuse: Optional[DiffuseState] = None
 
         # Animation plumbing: compositor does not own AnimationManager, but we
         # keep the current animation id so the caller can cancel if needed.
@@ -156,6 +213,73 @@ class GLCompositorWidget(QOpenGLWidget):
         self._current_anim_id = anim_id
         return anim_id
 
+    def start_wipe(
+        self,
+        old_pixmap: Optional[QPixmap],
+        new_pixmap: QPixmap,
+        *,
+        direction: WipeDirection,
+        duration_ms: int,
+        easing: EasingCurve,
+        animation_manager: AnimationManager,
+        on_finished: Optional[Callable[[], None]] = None,
+    ) -> Optional[str]:
+        """Begin a wipe between two pixmaps using the compositor.
+
+        The caller is responsible for providing the wipe direction; geometry is
+        derived from the widget rect and kept in sync with the CPU Wipe
+        transition via the shared `_compute_wipe_region` helper.
+        """
+
+        if not new_pixmap or new_pixmap.isNull():
+            logger.error("[GL COMPOSITOR] Invalid new pixmap for wipe")
+            return None
+
+        # If there is no old image, simply set the base pixmap and repaint.
+        if old_pixmap is None or old_pixmap.isNull():
+            logger.debug("[GL COMPOSITOR] No old image; showing new image immediately (wipe)")
+            self._crossfade = None
+            self._slide = None
+            self._wipe = None
+            self._base_pixmap = new_pixmap
+            self.update()
+            if on_finished:
+                try:
+                    on_finished()
+                except Exception:
+                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
+            return None
+
+        # Wipe is mutually exclusive with crossfade and slide.
+        self._crossfade = None
+        self._slide = None
+        self._wipe = WipeState(
+            old_pixmap=old_pixmap,
+            new_pixmap=new_pixmap,
+            direction=direction,
+            progress=0.0,
+        )
+        self._animation_manager = animation_manager
+        self._current_easing = easing
+
+        # Cancel any previous animation on this compositor.
+        if self._current_anim_id and self._animation_manager:
+            try:
+                self._animation_manager.cancel_animation(self._current_anim_id)
+            except Exception:
+                pass
+            self._current_anim_id = None
+
+        duration_sec = max(0.001, duration_ms / 1000.0)
+        anim_id = animation_manager.animate_custom(
+            duration=duration_sec,
+            easing=easing,
+            update_callback=self._on_wipe_update,
+            on_complete=lambda: self._on_wipe_complete(on_finished),
+        )
+        self._current_anim_id = anim_id
+        return anim_id
+
     def start_slide(
         self,
         old_pixmap: Optional[QPixmap],
@@ -194,8 +318,9 @@ class GLCompositorWidget(QOpenGLWidget):
                     logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
             return None
 
-        # Slide and crossfade are mutually exclusive; clear any active crossfade.
+        # Slide and crossfade/wipe are mutually exclusive; clear any active crossfade/wipe.
         self._crossfade = None
+        self._wipe = None
         self._slide = SlideState(
             old_pixmap=old_pixmap,
             new_pixmap=new_pixmap,
@@ -222,6 +347,216 @@ class GLCompositorWidget(QOpenGLWidget):
             easing=easing,
             update_callback=self._on_slide_update,
             on_complete=lambda: self._on_slide_complete(on_finished),
+        )
+        self._current_anim_id = anim_id
+        return anim_id
+
+    def start_block_flip(
+        self,
+        old_pixmap: Optional[QPixmap],
+        new_pixmap: QPixmap,
+        *,
+        duration_ms: int,
+        easing: EasingCurve,
+        animation_manager: AnimationManager,
+        update_callback: Callable[[float], None],
+        on_finished: Optional[Callable[[], None]] = None,
+    ) -> Optional[str]:
+        """Begin a block puzzle flip using the compositor.
+
+        The caller owns per-block timing and progression and must update the
+        reveal region via :meth:`set_blockflip_region` from the provided
+        ``update_callback``.
+        """
+
+        if not new_pixmap or new_pixmap.isNull():
+            logger.error("[GL COMPOSITOR] Invalid new pixmap for block flip")
+            return None
+
+        # If there is no old image, simply set the base pixmap and repaint.
+        if old_pixmap is None or old_pixmap.isNull():
+            logger.debug("[GL COMPOSITOR] No old image; showing new image immediately (block flip)")
+            self._crossfade = None
+            self._slide = None
+            self._wipe = None
+            self._blockflip = None
+            self._base_pixmap = new_pixmap
+            self.update()
+            if on_finished:
+                try:
+                    on_finished()
+                except Exception:
+                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
+            return None
+
+        # Block flip is mutually exclusive with other transitions.
+        self._crossfade = None
+        self._slide = None
+        self._wipe = None
+        self._blockflip = BlockFlipState(
+            old_pixmap=old_pixmap,
+            new_pixmap=new_pixmap,
+            region=None,
+        )
+        self._animation_manager = animation_manager
+        self._current_easing = easing
+
+        # Cancel any previous animation on this compositor.
+        if self._current_anim_id and self._animation_manager:
+            try:
+                self._animation_manager.cancel_animation(self._current_anim_id)
+            except Exception:
+                pass
+            self._current_anim_id = None
+
+        duration_sec = max(0.001, duration_ms / 1000.0)
+        anim_id = animation_manager.animate_custom(
+            duration=duration_sec,
+            easing=easing,
+            update_callback=update_callback,
+            on_complete=lambda: self._on_blockflip_complete(on_finished),
+        )
+        self._current_anim_id = anim_id
+        return anim_id
+
+    def start_diffuse(
+        self,
+        old_pixmap: Optional[QPixmap],
+        new_pixmap: QPixmap,
+        *,
+        duration_ms: int,
+        easing: EasingCurve,
+        animation_manager: AnimationManager,
+        update_callback: Callable[[float], None],
+        on_finished: Optional[Callable[[], None]] = None,
+    ) -> Optional[str]:
+        """Begin a diffuse reveal using the compositor.
+
+        The caller owns per-cell timing/geometry and must update the reveal
+        region via :meth:`set_diffuse_region` from the provided
+        ``update_callback``.
+        """
+
+        if not new_pixmap or new_pixmap.isNull():
+            logger.error("[GL COMPOSITOR] Invalid new pixmap for diffuse")
+            return None
+
+        # If there is no old image, simply set the base pixmap and repaint.
+        if old_pixmap is None or old_pixmap.isNull():
+            logger.debug("[GL COMPOSITOR] No old image; showing new image immediately (diffuse)")
+            self._crossfade = None
+            self._slide = None
+            self._wipe = None
+            self._blockflip = None
+            self._blinds = None
+            self._diffuse = None
+            self._base_pixmap = new_pixmap
+            self.update()
+            if on_finished:
+                try:
+                    on_finished()
+                except Exception:
+                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
+            return None
+
+        # Diffuse is mutually exclusive with other transitions.
+        self._crossfade = None
+        self._slide = None
+        self._wipe = None
+        self._blockflip = None
+        self._blinds = None
+        self._diffuse = DiffuseState(
+            old_pixmap=old_pixmap,
+            new_pixmap=new_pixmap,
+            region=None,
+        )
+        self._animation_manager = animation_manager
+        self._current_easing = easing
+
+        # Cancel any previous animation on this compositor.
+        if self._current_anim_id and self._animation_manager:
+            try:
+                self._animation_manager.cancel_animation(self._current_anim_id)
+            except Exception:
+                pass
+            self._current_anim_id = None
+
+        duration_sec = max(0.001, duration_ms / 1000.0)
+        anim_id = animation_manager.animate_custom(
+            duration=duration_sec,
+            easing=easing,
+            update_callback=update_callback,
+            on_complete=lambda: self._on_diffuse_complete(on_finished),
+        )
+        self._current_anim_id = anim_id
+        return anim_id
+
+    def start_blinds(
+        self,
+        old_pixmap: Optional[QPixmap],
+        new_pixmap: QPixmap,
+        *,
+        duration_ms: int,
+        easing: EasingCurve,
+        animation_manager: AnimationManager,
+        update_callback: Callable[[float], None],
+        on_finished: Optional[Callable[[], None]] = None,
+    ) -> Optional[str]:
+        """Begin a blinds reveal using the compositor.
+
+        The caller owns per-slat timing/geometry and must update the reveal
+        region via :meth:`set_blinds_region` from the provided
+        ``update_callback``.
+        """
+
+        if not new_pixmap or new_pixmap.isNull():
+            logger.error("[GL COMPOSITOR] Invalid new pixmap for blinds")
+            return None
+
+        # If there is no old image, simply set the base pixmap and repaint.
+        if old_pixmap is None or old_pixmap.isNull():
+            logger.debug("[GL COMPOSITOR] No old image; showing new image immediately (blinds)")
+            self._crossfade = None
+            self._slide = None
+            self._wipe = None
+            self._blockflip = None
+            self._blinds = None
+            self._base_pixmap = new_pixmap
+            self.update()
+            if on_finished:
+                try:
+                    on_finished()
+                except Exception:
+                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
+            return None
+
+        # Blinds is mutually exclusive with other transitions.
+        self._crossfade = None
+        self._slide = None
+        self._wipe = None
+        self._blockflip = None
+        self._blinds = BlindsState(
+            old_pixmap=old_pixmap,
+            new_pixmap=new_pixmap,
+            region=None,
+        )
+        self._animation_manager = animation_manager
+        self._current_easing = easing
+
+        # Cancel any previous animation on this compositor.
+        if self._current_anim_id and self._animation_manager:
+            try:
+                self._animation_manager.cancel_animation(self._current_anim_id)
+            except Exception:
+                pass
+            self._current_anim_id = None
+
+        duration_sec = max(0.001, duration_ms / 1000.0)
+        anim_id = animation_manager.animate_custom(
+            duration=duration_sec,
+            easing=easing,
+            update_callback=update_callback,
+            on_complete=lambda: self._on_blinds_complete(on_finished),
         )
         self._current_anim_id = anim_id
         return anim_id
@@ -277,6 +612,110 @@ class GLCompositorWidget(QOpenGLWidget):
             except Exception:
                 logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
 
+    def _on_wipe_update(self, progress: float) -> None:
+        if self._wipe is None:
+            return
+        p = max(0.0, min(1.0, float(progress)))
+        self._wipe.progress = p
+        self.update()
+
+    def _on_wipe_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
+        # Snap to final state: base pixmap becomes the new image, transition ends.
+        if self._wipe is not None:
+            try:
+                self._base_pixmap = self._wipe.new_pixmap
+            except Exception:
+                pass
+        self._wipe = None
+        self._current_anim_id = None
+        self.update()
+        if on_finished:
+            try:
+                on_finished()
+            except Exception:
+                logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
+
+    def _on_blockflip_update(self, progress: float) -> None:
+        if self._blockflip is None:
+            return
+        p = max(0.0, min(1.0, float(progress)))
+        self._blockflip.progress = p
+        self.update()
+
+    def _on_blockflip_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
+        # Snap to final state: base pixmap becomes the new image, transition ends.
+        if self._blockflip is not None:
+            try:
+                self._base_pixmap = self._blockflip.new_pixmap
+            except Exception:
+                pass
+        self._blockflip = None
+        self._current_anim_id = None
+        self.update()
+        if on_finished:
+            try:
+                on_finished()
+            except Exception:
+                logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
+
+    def _on_diffuse_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
+        """Completion handler for compositor-driven diffuse transitions."""
+
+        if self._diffuse is not None:
+            try:
+                self._base_pixmap = self._diffuse.new_pixmap
+            except Exception:
+                pass
+        self._diffuse = None
+        self._current_anim_id = None
+        self.update()
+        if on_finished:
+            try:
+                on_finished()
+            except Exception:
+                logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
+
+    def _on_blinds_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
+        """Completion handler for compositor-driven blinds transitions."""
+
+        if self._blinds is not None:
+            try:
+                self._base_pixmap = self._blinds.new_pixmap
+            except Exception:
+                pass
+        self._blinds = None
+        self._current_anim_id = None
+        self.update()
+        if on_finished:
+            try:
+                on_finished()
+            except Exception:
+                logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
+
+    def set_blockflip_region(self, region: Optional[QRegion]) -> None:
+        """Update the reveal region for an in-flight block flip transition."""
+
+        if self._blockflip is None:
+            return
+        self._blockflip.region = region
+        self.update()
+
+    def set_blinds_region(self, region: Optional[QRegion]) -> None:
+        """Update the reveal region for an in-flight blinds transition."""
+
+        if self._blinds is None:
+            return
+        self._blinds.region = region
+        self.update()
+
+    def set_diffuse_region(self, region: Optional[QRegion]) -> None:
+        """Update the reveal region for an in-flight diffuse transition."""
+
+        if self._diffuse is None:
+            return
+        self._diffuse.region = region
+        self.update()
+
     def cancel_current_transition(self, snap_to_new: bool = True) -> None:
         """Cancel any active compositor-driven transition.
 
@@ -304,12 +743,36 @@ class GLCompositorWidget(QOpenGLWidget):
                 new_pm = self._slide.new_pixmap
             except Exception:
                 new_pm = None
+        elif self._wipe is not None:
+            try:
+                new_pm = self._wipe.new_pixmap
+            except Exception:
+                new_pm = None
+        elif self._blockflip is not None:
+            try:
+                new_pm = self._blockflip.new_pixmap
+            except Exception:
+                new_pm = None
+        elif self._blinds is not None:
+            try:
+                new_pm = self._blinds.new_pixmap
+            except Exception:
+                new_pm = None
+        elif self._diffuse is not None:
+            try:
+                new_pm = self._diffuse.new_pixmap
+            except Exception:
+                new_pm = None
 
         if snap_to_new and new_pm is not None:
             self._base_pixmap = new_pm
 
         self._crossfade = None
         self._slide = None
+        self._wipe = None
+        self._blockflip = None
+        self._blinds = None
+        self._diffuse = None
         self.update()
 
     # ------------------------------------------------------------------
@@ -336,6 +799,77 @@ class GLCompositorWidget(QOpenGLWidget):
         try:
             painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
             target = self.rect()
+
+            # If a block flip is active, draw old fully and new clipped to the
+            # aggregated reveal region.
+            if self._blockflip is not None:
+                st = self._blockflip
+                # Draw old image fully.
+                if st.old_pixmap and not st.old_pixmap.isNull():
+                    painter.setOpacity(1.0)
+                    painter.drawPixmap(target, st.old_pixmap)
+
+                # Clip and draw new image inside the reveal region.
+                if st.new_pixmap and not st.new_pixmap.isNull() and st.region is not None and not st.region.isEmpty():
+                    painter.save()
+                    painter.setClipRegion(st.region)
+                    painter.setOpacity(1.0)
+                    painter.drawPixmap(target, st.new_pixmap)
+                    painter.restore()
+                return
+
+            # If a blinds transition is active, draw old fully and new clipped
+            # to the blinds reveal region.
+            if self._blinds is not None:
+                st = self._blinds
+                if st.old_pixmap and not st.old_pixmap.isNull():
+                    painter.setOpacity(1.0)
+                    painter.drawPixmap(target, st.old_pixmap)
+
+                if st.new_pixmap and not st.new_pixmap.isNull() and st.region is not None and not st.region.isEmpty():
+                    painter.save()
+                    painter.setClipRegion(st.region)
+                    painter.setOpacity(1.0)
+                    painter.drawPixmap(target, st.new_pixmap)
+                    painter.restore()
+                return
+
+            if self._diffuse is not None:
+                st = self._diffuse
+                if st.old_pixmap and not st.old_pixmap.isNull():
+                    painter.setOpacity(1.0)
+                    painter.drawPixmap(target, st.old_pixmap)
+
+                if st.new_pixmap and not st.new_pixmap.isNull() and st.region is not None and not st.region.isEmpty():
+                    painter.save()
+                    painter.setClipRegion(st.region)
+                    painter.setOpacity(1.0)
+                    painter.drawPixmap(target, st.new_pixmap)
+                    painter.restore()
+                return
+
+            # If a wipe is active, draw old fully and new clipped to the wipe region.
+            if self._wipe is not None:
+                st = self._wipe
+                w = target.width()
+                h = target.height()
+                t = max(0.0, min(1.0, st.progress))
+
+                # Draw old image fully.
+                if st.old_pixmap and not st.old_pixmap.isNull():
+                    painter.setOpacity(1.0)
+                    painter.drawPixmap(target, st.old_pixmap)
+
+                # Clip and draw new according to wipe direction.
+                if st.new_pixmap and not st.new_pixmap.isNull():
+                    region = _compute_wipe_region(st.direction, w, h, t)
+                    if not region.isEmpty():
+                        painter.save()
+                        painter.setClipRegion(region)
+                        painter.setOpacity(1.0)
+                        painter.drawPixmap(target, st.new_pixmap)
+                        painter.restore()
+                return
 
             # If a slide is active, draw both images at interpolated positions.
             if self._slide is not None:

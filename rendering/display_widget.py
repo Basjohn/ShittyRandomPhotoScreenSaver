@@ -20,19 +20,17 @@ from transitions.base_transition import BaseTransition
 from transitions import (
     CrossfadeTransition,
     DiffuseTransition,
-    GLBlindsTransition,
-    GLBlockPuzzleFlipTransition,
-    GLCrossfadeTransition,
-    GLCompositorCrossfadeTransition,
-    GLCompositorSlideTransition,
-    GLSlideTransition,
-    GLWipeTransition,
     SlideDirection,
     SlideTransition,
     WipeDirection,
     WipeTransition,
     BlockPuzzleFlipTransition,
 )
+from transitions.gl_compositor_crossfade_transition import GLCompositorCrossfadeTransition
+from transitions.gl_compositor_slide_transition import GLCompositorSlideTransition
+from transitions.gl_compositor_wipe_transition import GLCompositorWipeTransition
+from transitions.gl_compositor_blockflip_transition import GLCompositorBlockFlipTransition
+from transitions.gl_compositor_blinds_transition import GLCompositorBlindsTransition
 from widgets.clock_widget import ClockWidget, TimeFormat, ClockPosition
 from widgets.weather_widget import WeatherWidget, WeatherPosition
 from core.logging.logger import get_logger
@@ -152,6 +150,7 @@ class DisplayWidget(QWidget):
         self._overlay_stage_counts: defaultdict[str, int] = defaultdict(int)
         self._overlay_timeouts: dict[str, float] = {}
         self._transitions_enabled: bool = True
+        self._ctrl_held: bool = False
         self._transition_watchdog: Optional[QTimer] = None
         self._transition_watchdog_resource_id: Optional[str] = None
         self._transition_watchdog_overlay_key: Optional[str] = None
@@ -1099,18 +1098,15 @@ class DisplayWidget(QWidget):
                 return transition
 
             if transition_type == 'Wipe':
-                wipe_settings = transitions_settings.get('wipe', {})
-                if not isinstance(wipe_settings, dict):
-                    wipe_settings = {}
+                wipe_settings = transitions_settings.get('wipe', {}) if isinstance(transitions_settings.get('wipe', {}), dict) else {}
                 wipe_dir_str = self.settings_manager.get('transitions.wipe.direction', None)
                 if wipe_dir_str is None:
                     wipe_dir_str = wipe_settings.get('direction')
                 if wipe_dir_str is None:
                     wipe_dir_str = self.settings_manager.get('transitions.direction', None)
                 if wipe_dir_str is None:
-                    wipe_dir_str = transitions_settings.get('wipe_direction')
-                if wipe_dir_str is None:
                     wipe_dir_str = transitions_settings.get('direction')
+                wipe_dir_str = wipe_dir_str or 'Random'
 
                 direction_map = {
                     'Left to Right': WipeDirection.LEFT_TO_RIGHT,
@@ -1139,7 +1135,22 @@ class DisplayWidget(QWidget):
                     enum_to_str = {enum: name for name, enum in direction_map.items()}
                     self.settings_manager.set('transitions.last_wipe_direction', enum_to_str.get(direction, 'Left to Right'))
 
-                transition = GLWipeTransition(duration_ms, direction, easing_str) if hw_accel else WipeTransition(duration_ms, direction, easing_str)
+                if hw_accel:
+                    try:
+                        self._ensure_gl_compositor()
+                    except Exception:
+                        logger.debug("[GL COMPOSITOR] Failed to ensure compositor during wipe selection", exc_info=True)
+                    use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
+                    if use_compositor:
+                        transition = GLCompositorWipeTransition(duration_ms, direction, easing_str)
+                    else:
+                        # Prefer CPU wipe over the legacy GL overlay path when the
+                        # compositor cannot be used, to avoid reintroducing
+                        # overlay-related flicker.
+                        transition = WipeTransition(duration_ms, direction, easing_str)
+                else:
+                    transition = WipeTransition(duration_ms, direction, easing_str)
+
                 transition.set_resource_manager(self._resource_manager)
                 self._log_transition_selection(requested_type, 'Wipe', random_mode, random_choice_value)
                 return transition
@@ -1154,7 +1165,9 @@ class DisplayWidget(QWidget):
                     diffuse_shape = diffuse_settings.get('shape')
                 block_size = int(diffuse_block or 50)
                 shape = diffuse_shape or 'Rectangle'
+
                 transition = DiffuseTransition(duration_ms, block_size, shape)
+
                 transition.set_resource_manager(self._resource_manager)
                 self._log_transition_selection(requested_type, 'Diffuse', random_mode, random_choice_value)
                 return transition
@@ -1169,7 +1182,22 @@ class DisplayWidget(QWidget):
                     cols = block_flip_settings.get('cols')
                 rows = int(rows or 4)
                 cols = int(cols or 6)
-                transition = GLBlockPuzzleFlipTransition(duration_ms, rows, cols) if hw_accel else BlockPuzzleFlipTransition(duration_ms, rows, cols)
+
+                if hw_accel:
+                    try:
+                        self._ensure_gl_compositor()
+                    except Exception:
+                        logger.debug("[GL COMPOSITOR] Failed to ensure compositor during block flip selection", exc_info=True)
+                    use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
+                    if use_compositor:
+                        transition = GLCompositorBlockFlipTransition(duration_ms, rows, cols)
+                    else:
+                        # Prefer CPU BlockPuzzleFlipTransition over the legacy GL
+                        # overlay path when the compositor cannot be used.
+                        transition = BlockPuzzleFlipTransition(duration_ms, rows, cols)
+                else:
+                    transition = BlockPuzzleFlipTransition(duration_ms, rows, cols)
+
                 transition.set_resource_manager(self._resource_manager)
                 self._log_transition_selection(requested_type, 'Block Puzzle Flip', random_mode, random_choice_value)
                 return transition
@@ -1177,15 +1205,23 @@ class DisplayWidget(QWidget):
             if transition_type == 'Blinds':
                 if hw_accel:
                     try:
-                        transition = GLBlindsTransition(duration_ms)
-                        transition.set_resource_manager(self._resource_manager)
-                        self._log_transition_selection(requested_type, 'Blinds', random_mode, random_choice_value)
-                        return transition
-                    except Exception as exc:
-                        logger.warning("Failed to init GL Blinds, falling back: %s", exc)
-                transition = CrossfadeTransition(duration_ms)
+                        self._ensure_gl_compositor()
+                    except Exception:
+                        logger.debug("[GL COMPOSITOR] Failed to ensure compositor during blinds selection", exc_info=True)
+                    use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
+                    if use_compositor:
+                        transition = GLCompositorBlindsTransition(duration_ms)
+                    else:
+                        # When compositor cannot be used, prefer a CPU
+                        # Crossfade fallback instead of the legacy GL Blinds
+                        # overlay path.
+                        transition = CrossfadeTransition(duration_ms)
+                else:
+                    transition = CrossfadeTransition(duration_ms)
+
                 transition.set_resource_manager(self._resource_manager)
-                self._log_transition_selection(requested_type, 'Crossfade', random_mode, random_choice_value)
+                label = 'Blinds' if hw_accel else 'Crossfade'
+                self._log_transition_selection(requested_type, label, random_mode, random_choice_value)
                 return transition
 
             logger.warning("Unknown transition type: %s, using Crossfade", transition_type)
@@ -2242,6 +2278,11 @@ class DisplayWidget(QWidget):
         """Handle key press - hotkeys and exit."""
         key = event.key()
         key_text = event.text().lower()
+
+        if key == Qt.Key.Key_Control:
+            self._ctrl_held = True
+            event.accept()
+            return
         
         # Hotkeys
         if key_text == 'z':
@@ -2269,10 +2310,18 @@ class DisplayWidget(QWidget):
         else:
             logger.debug(f"Unknown key pressed: {key} - ignoring")
             event.ignore()
+
+    def keyReleaseEvent(self, event: QKeyEvent) -> None:
+        key = event.key()
+        if key == Qt.Key.Key_Control:
+            self._ctrl_held = False
+            event.accept()
+            return
+        event.ignore()
     
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """Handle mouse press - exit on any click unless hard exit is enabled."""
-        if self._is_hard_exit_enabled():
+        if self._is_hard_exit_enabled() or self._ctrl_held:
             # In hard-exit mode, ignore mouse clicks for exit purposes.
             event.accept()
             return
@@ -2283,8 +2332,7 @@ class DisplayWidget(QWidget):
     
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         """Handle mouse move - exit if moved beyond threshold (unless hard exit)."""
-
-        if self._is_hard_exit_enabled():
+        if self._is_hard_exit_enabled() or self._ctrl_held:
             # Hard exit mode disables mouse-move exit entirely.
             event.accept()
             return

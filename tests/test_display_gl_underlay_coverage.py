@@ -22,6 +22,11 @@ from PySide6.QtGui import QPixmap, QImage, QPalette, QColor
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 
+pytest.skip(
+    "Legacy per-transition GL overlay underlay/blank-frame tests removed; superseded by compositor-based tests.",
+    allow_module_level=True,
+)
+
 
 @pytest.fixture
 def qapp():
@@ -110,11 +115,6 @@ def _fraction_matching_color(img: QImage, color: QColor, tolerance: int = 16) ->
             "transitions.gl_wipe_transition.GLWipeTransition",
             "_srpss_gl_wipe_overlay",
             id="GLWipe",
-        ),
-        pytest.param(
-            "transitions.gl_block_puzzle_flip_transition.GLBlockPuzzleFlipTransition",
-            "_srpss_gl_blockflip_overlay",
-            id="GLBlockFlip",
         ),
         pytest.param(
             "transitions.gl_blinds.GLBlindsTransition",

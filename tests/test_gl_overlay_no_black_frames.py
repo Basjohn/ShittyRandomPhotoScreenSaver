@@ -22,6 +22,11 @@ from PySide6.QtWidgets import QApplication, QWidget
 from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtCore import Qt
 
+pytest.skip(
+    "Legacy GL overlay visual regression tests removed; superseded by compositor-based tests.",
+    allow_module_level=True,
+)
+
 
 @pytest.fixture
 def qapp():

@@ -36,9 +36,9 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
 - Skip policy: when a transition is active, prefetch defers to avoid thrash; skipped requests are logged for pacing diagnostics.
 
 ## Transitions
-- GL and CPU variants for Crossfade, Slide, Wipe, Diffuse, Block Puzzle Flip; GL-only variant for Blinds (`GLBlindsTransition`) when hardware acceleration is enabled.
+- GL and CPU variants for Crossfade, Slide, Wipe, Diffuse, Block Puzzle Flip; GL-only variant for Blinds (`GLBlindsTransition`) when hardware acceleration is enabled. In addition, compositor-backed controllers (`GLCompositorCrossfadeTransition`, `GLCompositorSlideTransition`, `GLCompositorWipeTransition`, `GLCompositorBlockFlipTransition`) delegate rendering to a single `GLCompositorWidget` per display.
 - DisplayWidget injects the shared ResourceManager into every transition; overlays are created through `overlay_manager.get_or_create_overlay` so lifecycle is centralized.
-- GL overlays persistent and pre-warmed via `overlay_manager.prepare_gl_overlay` / `DisplayWidget._prewarm_gl_contexts` to avoid first-use flicker.
+- GL overlays remain persistent and pre-warmed via `overlay_manager.prepare_gl_overlay` / `DisplayWidget._prewarm_gl_contexts` to avoid first-use flicker on legacy GL paths, while compositor-backed transitions render through `GLCompositorWidget` instead of per-transition QOpenGLWidget overlays.
 - Diffuse supports multiple shapes (`Rectangle`, `Circle`, `Diamond`, `Plus`, `Triangle`) with a validated block-size range (min 4px) shared between CPU and GL paths and enforced by the Transitions tab UI.
 - Non-repeating random selection:
   - Engine sets `transitions.random_choice` per rotation.
@@ -61,7 +61,7 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
 - `display.refresh_sync`: bool
 - `display.hw_accel`: bool
 - `display.mode`: fill|fit|shrink
-- `input.hard_exit`: bool (when true, mouse movement/clicks do not exit; only ESC/Q and hotkeys remain active).
+- `input.hard_exit`: bool (when true, mouse movement/clicks do not exit; only ESC/Q and hotkeys remain active). Additionally, while the Ctrl key is held, `DisplayWidget` temporarily suppresses mouse-move and left-click exit even when `input.hard_exit` is false, allowing interaction with widgets without persisting a hard-exit setting change.
 - `transitions.type`: Crossfade|Slide|Wipe|Diffuse|Block Puzzle Flip|Blinds
 - `transitions.random_always`: bool
 - `transitions.random_choice`: str
@@ -87,8 +87,8 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
 - Qt objects registered with `ResourceManager` where appropriate.
 
 ## OpenGL Overlay Lifecycle
-- Persistent overlays per transition type; reuse prevents reallocation churn.
-- Warmup path (`DisplayWidget._prewarm_gl_contexts`) initializes six core overlays per monitor (Crossfade, Slide, Wipe, Diffuse, Block Puzzle Flip, Blinds) and records per-stage telemetry.
+- Persistent overlays per transition type for legacy GL paths (including Blinds and Diffuse), plus a single per-display `GLCompositorWidget` that renders the base image and compositor-backed transitions (Crossfade, Slide, Wipe, Block Puzzle Flip). Reuse prevents reallocation churn across both overlays and compositor surfaces.
+- Warmup path (`DisplayWidget._prewarm_gl_contexts`) initializes core GL surfaces per monitor (per-transition overlays and/or compositor) and records per-stage telemetry.
 - Warmup uses a dummy pixmap derived from the currently seeded frame (wallpaper snapshot or last image) so any first GL frames match existing content rather than a solid black buffer.
 - Triple-buffer requests may downgrade to double-buffer when driver rejects configuration; log and surface downgrade reason through diagnostics overlay.
 - Watchdog timers accompany each GL transition; timeout cancellation required once `transition_finish` fires to avoid thread leaks.

@@ -2,6 +2,7 @@ import pytest
 
 from rendering.display_widget import DisplayWidget
 from rendering.display_modes import DisplayMode
+from rendering.gl_compositor import GLCompositorWidget
 
 
 class DummySettings:
@@ -35,31 +36,23 @@ def test_gl_prewarm_overlays_ready(qtbot):
     w = DisplayWidget(screen_index=0, display_mode=DisplayMode.FILL, settings_manager=settings)
     qtbot.addWidget(w)
 
-    # Trigger show + prewarm
+    # Trigger show + prewarm (this now initializes the shared compositor
+    # rather than per-transition GL overlays).
     w.show_on_screen()
 
     # Allow time for prewarm loop to complete
     qtbot.wait(800)
 
-    # Verify persistent overlays exist and are ready
-    overlay_attrs = [
-        '_srpss_gl_xfade_overlay',
-        '_srpss_gl_slide_overlay',
-        '_srpss_gl_wipe_overlay',
-        '_srpss_gl_diffuse_overlay',
-        '_srpss_gl_blockflip_overlay',
-    ]
+    # Verify a shared GL compositor exists and is usable
+    comp = getattr(w, "_gl_compositor", None)
+    assert isinstance(comp, GLCompositorWidget), "Missing GL compositor after prewarm"
 
-    for attr in overlay_attrs:
-        overlay = getattr(w, attr, None)
-        assert overlay is not None, f"Missing overlay: {attr}"
-        ready = True
-        if hasattr(overlay, 'is_ready_for_display'):
-            try:
-                ready = bool(overlay.is_ready_for_display())
-            except Exception:
-                ready = False
-        assert ready, f"Overlay not ready: {attr}"
+    # If a GL context cannot be made current in this environment, skip rather
+    # than failing the test outright.
+    try:
+        comp.makeCurrent()
+    except Exception:
+        pytest.skip("GL context not available for GLCompositorWidget prewarm")
 
     # Cleanup
     w.close()

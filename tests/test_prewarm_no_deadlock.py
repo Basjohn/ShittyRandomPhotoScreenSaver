@@ -2,6 +2,11 @@ import time
 import pytest
 from PySide6.QtWidgets import QApplication
 
+pytest.skip(
+    "Legacy GL overlay prewarm test superseded by compositor prewarm tests.",
+    allow_module_level=True,
+)
+
 # Ensure a QApplication exists
 @pytest.fixture(scope="module")
 def app():

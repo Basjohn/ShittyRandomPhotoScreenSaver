@@ -152,8 +152,8 @@ class SourcesTab(QWidget):
         for feed in rss_feeds:
             self.rss_list.addItem(feed)
         
-        # Load RSS save-to-disk settings
-        rss_save_enabled = self._settings.get('sources.rss_save_to_disk', False)
+        # Load RSS save-to-disk settings with boolean normalization
+        rss_save_enabled = self._settings.get_bool('sources.rss_save_to_disk', False)
         self.rss_save_to_disk.setChecked(rss_save_enabled)
         
         rss_save_dir = self._settings.get('sources.rss_save_directory', '')
