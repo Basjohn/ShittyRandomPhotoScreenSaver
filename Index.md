@@ -29,10 +29,10 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 
 ## Rendering
 - rendering/display_widget.py
-  - Fullscreen image presentation, DPR-aware scaling
+  - Borderless fullscreen (frameless, always-on-top per monitor) image presentation, DPR-aware scaling
   - Creates transitions based on settings (GL and CPU variants, including GL-only Blinds when HW accel is enabled)
   - Injects shared ResourceManager into transitions; seeds base pixmap pre/post transition and on startup to avoid black frames (wallpaper snapshot seeding + previous-pixmap fallback)
-  - Pre-warms persistent GL overlays per transition type, manages widgets Z-order, logs per-stage telemetry, handles transition watchdog timers
+  - Uses lazy GL overlay initialization via `overlay_manager.prepare_gl_overlay` instead of a global startup prewarm; manages widgets Z-order, logs per-stage telemetry, handles transition watchdog timers
 - rendering/image_processor.py
   - Scaling/cropping for FILL/FIT/SHRINK, optional Lanczos via PIL
 - rendering/pan_and_scan.py
@@ -103,5 +103,5 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 
 ## Notes
 - DPR-aware scaling in DisplayWidget → ImageProcessor to reduce GL upload cost
-- GL overlays pre-warmed and persisted; NoPartialUpdate enabled
+- GL overlays are persistent and initialized lazily on first use via `prepare_gl_overlay`; NoPartialUpdate enabled
 - Prefetch pipeline: ImageQueue.peek_many → IO decode (QImage) → optional UI warmup (QPixmap) → optional compute pre-scale-to-screen (QImage) → transition

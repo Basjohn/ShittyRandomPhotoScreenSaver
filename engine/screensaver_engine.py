@@ -844,17 +844,15 @@ class ScreensaverEngine(QObject):
     def _prepare_random_transition_if_needed(self) -> None:
         try:
             transitions = self.settings_manager.get('transitions', {})
-            rnd = transitions.get('random_always', self.settings_manager.get('transitions.random_always', False))
-            if isinstance(rnd, str):
-                rnd = rnd.lower() in ('true', '1', 'yes')
+            raw_rnd = transitions.get('random_always', self.settings_manager.get('transitions.random_always', False))
+            rnd = SettingsManager.to_bool(raw_rnd, False)
             if not rnd:
                 return
             # Available transition types; include GL-only when HW is enabled
             available = ["Crossfade", "Slide", "Wipe", "Diffuse", "Block Puzzle Flip"]
             try:
-                hw = self.settings_manager.get('display.hw_accel', False)
-                if isinstance(hw, str):
-                    hw = hw.lower() in ('true', '1', 'yes')
+                raw_hw = self.settings_manager.get('display.hw_accel', False)
+                hw = SettingsManager.to_bool(raw_hw, False)
                 if hw:
                     available.append("Blinds")
             except Exception:
@@ -929,9 +927,8 @@ class ScreensaverEngine(QObject):
             logger.warning("No transitions configured; ignoring cycle request")
             return
 
-        hw = self.settings_manager.get('display.hw_accel', False)
-        if isinstance(hw, str):
-            hw = hw.lower() in ('true', '1', 'yes')
+        raw_hw = self.settings_manager.get('display.hw_accel', False)
+        hw = SettingsManager.to_bool(raw_hw, False)
         gl_only = {"Blinds"}
 
         # Cycle to next transition honoring HW capabilities

@@ -172,19 +172,27 @@ class GLCrossfadeTransition(BaseTransition):
                 _GLFadeWidget,
                 lambda: _GLFadeWidget(widget, old_pixmap, new_pixmap),
             )
-            logger.debug("[GL XFADE] %s persistent overlay", "Reusing" if overlay is getattr(widget, "_srpss_gl_xfade_overlay") else "Creating")
+            logger.debug(
+                "[GL XFADE] %s persistent overlay",
+                "Reusing" if overlay is getattr(widget, "_srpss_gl_xfade_overlay") else "Creating",
+            )
             overlay.set_images(old_pixmap, new_pixmap)
             overlay.set_alpha(0.0)
 
             self._gl = overlay
-            self._gl.setVisible(True)
+
+            # IMPORTANT: keep the overlay hidden until we've drawn the first
+            # frame into its FBO. Showing a fresh QOpenGLWidget before that
+            # can expose a driver-level black buffer for a frame or two.
             set_overlay_geometry(widget, self._gl)
+            self._gl.setVisible(False)
             notify_overlay_stage(self._gl, "prepaint_start")
+
+            # Prepaint the initial frame into the offscreen FBO.
             try:
                 self._gl.makeCurrent()
             except Exception:
                 pass
-            # Prepaint the initial frame offscreen to avoid one-frame black
             try:
                 with profile("GL_XFADE_PREPAINT", threshold_ms=5.0, log_level="WARNING"):
                     self._gl.set_alpha(0.0)
@@ -194,8 +202,29 @@ class GLCrossfadeTransition(BaseTransition):
                     notify_overlay_stage(self._gl, "prepaint_ready")
             except Exception:
                 pass
+
+            # If prepaint did not yield a ready frame, bail out to avoid
+            # showing an uninitialized (black) GL surface.
+            ready = False
             try:
-                # Present first frame synchronously
+                if hasattr(self._gl, "is_ready_for_display"):
+                    ready = bool(self._gl.is_ready_for_display())
+            except Exception:
+                ready = False
+
+            if not ready:
+                logger.warning("[GL XFADE] Prepaint did not produce a ready frame; falling back to immediate display")
+                self._show_image_immediately()
+                return True
+
+            # Now expose the overlay and present the first frame synchronously;
+            # DisplayWidget will stop painting the base image only once the
+            # overlay is both visible and marked ready.
+            try:
+                self._gl.setVisible(True)
+            except Exception:
+                pass
+            try:
                 with profile("GL_XFADE_REPAINT0", threshold_ms=5.0, log_level="WARNING"):
                     self._gl.repaint()
             except Exception:

@@ -15,6 +15,7 @@ from shiboken6 import Shiboken
 from rendering.display_modes import DisplayMode
 from rendering.image_processor import ImageProcessor
 from rendering.pan_and_scan import PanAndScan
+from rendering.gl_compositor import GLCompositorWidget
 from transitions.base_transition import BaseTransition
 from transitions import (
     CrossfadeTransition,
@@ -22,6 +23,8 @@ from transitions import (
     GLBlindsTransition,
     GLBlockPuzzleFlipTransition,
     GLCrossfadeTransition,
+    GLCompositorCrossfadeTransition,
+    GLCompositorSlideTransition,
     GLSlideTransition,
     GLWipeTransition,
     SlideDirection,
@@ -58,6 +61,7 @@ logger = get_logger(__name__)
 
 
 TRANSITION_WATCHDOG_DEFAULT_SEC = 6.0
+_FULLSCREEN_COMPAT_WORKAROUND = True
 
 
 def _describe_pixmap(pm: Optional[QPixmap]) -> str:
@@ -186,6 +190,7 @@ class DisplayWidget(QWidget):
         self._backend_selection: Optional[BackendSelectionResult] = None
         self._backend_fallback_message: Optional[str] = None
         self._has_rendered_first_frame = False
+        self._gl_compositor: Optional[GLCompositorWidget] = None
         self._init_renderer_backend()
 
         # Ensure transitions are cleaned up if the widget is destroyed
@@ -210,13 +215,25 @@ class DisplayWidget(QWidget):
         self._screen = screen
         self._device_pixel_ratio = screen.devicePixelRatio()
         
-        geometry = screen.geometry()
-        logger.info(f"Showing on screen {self.screen_index}: "
-                   f"{geometry.width()}x{geometry.height()} at ({geometry.x()}, {geometry.y()}) "
-                   f"DPR={self._device_pixel_ratio}")
+        screen_geom = screen.geometry()
+        geom = screen_geom
+        if _FULLSCREEN_COMPAT_WORKAROUND:
+            try:
+                if geom.height() > 1:
+                    geom.setHeight(geom.height() - 1)
+            except Exception:
+                pass
 
-        # Position and size window
-        self.setGeometry(geometry)
+        logger.info(
+            f"Showing on screen {self.screen_index}: "
+            f"{screen_geom.width()}x{screen_geom.height()} at ({screen_geom.x()}, {screen_geom.y()}) "
+            f"DPR={self._device_pixel_ratio}"
+        )
+
+        # Borderless fullscreen: frameless, always-on-top window sized to the
+        # target screen. Avoid exclusive fullscreen mode to reduce compositor
+        # and driver-induced flicker on modern Windows.
+        self.setGeometry(geom)
         # Seed with a placeholder snapshot of the current screen to avoid a hard
         # wallpaper->black flash while GL prewarm runs. If this fails, fall back
         # to blocking updates until the first real image is seeded.
@@ -248,7 +265,31 @@ class DisplayWidget(QWidget):
                 self._updates_blocked_until_seed = True
             except Exception:
                 self._updates_blocked_until_seed = False
-        self.showFullScreen()
+
+        # Determine hardware acceleration setting once for startup behaviour.
+        # IMPORTANT: We no longer run GL prewarm at startup; GL overlays are
+        # initialized lazily by per-transition prepaint. This avoids any
+        # startup interaction with GL contexts that could cause black flashes.
+        hw_accel = False
+        if self.settings_manager is not None:
+            try:
+                raw = self.settings_manager.get('display.hw_accel', False)
+            except Exception:
+                raw = False
+            hw_accel = SettingsManager.to_bool(raw, False)
+
+        # In pure software environments (no GL support at all), mark overlays
+        # as ready so diagnostics remain consistent. When GL is available, we
+        # defer all overlay initialization to transition-time prepaint.
+        if not hw_accel and GL is None:
+            self._mark_all_overlays_ready(GL_OVERLAY_KEYS, stage="software_prewarm")
+
+        # Show as borderless fullscreen instead of exclusive fullscreen.
+        self.show()
+        try:
+            self.raise_()
+        except Exception:
+            pass
         self._handle_screen_change(screen)
         # Reconfigure when screen changes
         try:
@@ -258,21 +299,12 @@ class DisplayWidget(QWidget):
         except Exception:
             pass
 
-        # Pre-warm GL contexts if hardware acceleration enabled
-        hw_accel = False
-        if self.settings_manager is not None:
-            try:
-                raw = self.settings_manager.get('display.hw_accel', False)
-            except Exception:
-                raw = False
-            hw_accel = SettingsManager.to_bool(raw, False)
-        if hw_accel:
-            self._prewarm_gl_contexts()
-            self._perform_initial_gl_flush()
-        elif GL is None:
-            self._mark_all_overlays_ready(GL_OVERLAY_KEYS, stage="software_prewarm")
+        # Ensure shared GL compositor and reuse any persistent overlays
+        try:
+            self._ensure_gl_compositor()
+        except Exception:
+            logger.debug("[GL COMPOSITOR] Failed to ensure compositor during show", exc_info=True)
 
-        # Reuse persistent GL overlays
         self._reuse_persistent_gl_overlays()
 
         # Setup overlay widgets AFTER geometry is set
@@ -306,9 +338,16 @@ class DisplayWidget(QWidget):
             logger.debug("[SCREEN] Failed to read devicePixelRatio", exc_info=True)
 
         try:
-            geometry = screen.geometry()
-            if geometry is not None and geometry.isValid():
-                self.setGeometry(geometry)
+            screen_geom = screen.geometry()
+            if screen_geom is not None and screen_geom.isValid():
+                geom = screen_geom
+                if _FULLSCREEN_COMPAT_WORKAROUND:
+                    try:
+                        if geom.height() > 1:
+                            geom.setHeight(geom.height() - 1)
+                    except Exception:
+                        pass
+                self.setGeometry(geom)
         except Exception:
             logger.debug("[SCREEN] Failed to apply screen geometry", exc_info=True)
 
@@ -331,6 +370,11 @@ class DisplayWidget(QWidget):
             self._reuse_persistent_gl_overlays()
         except Exception:
             logger.debug("[SCREEN] Persistent overlay reuse failed", exc_info=True)
+
+        try:
+            self._ensure_gl_compositor()
+        except Exception:
+            logger.debug("[SCREEN] GL compositor update failed", exc_info=True)
 
     def _detect_refresh_rate(self) -> float:
         try:
@@ -692,18 +736,21 @@ class DisplayWidget(QWidget):
         except Exception:
             base_pm = None
 
+        if base_pm is None or base_pm.isNull():
+            logger.debug("[PREWARM] Skipping GL prewarm - no seed pixmap available")
+            return
+
         dummy = QPixmap(w, h)
         dummy.fill(Qt.GlobalColor.black)
-        if base_pm is not None:
+        try:
+            from PySide6.QtGui import QPainter
+            p = QPainter(dummy)
             try:
-                from PySide6.QtGui import QPainter
-                p = QPainter(dummy)
-                try:
-                    p.drawPixmap(dummy.rect(), base_pm)
-                finally:
-                    p.end()
-            except Exception:
-                pass
+                p.drawPixmap(dummy.rect(), base_pm)
+            finally:
+                p.end()
+        except Exception:
+            pass
         dummy.setDevicePixelRatio(self._device_pixel_ratio)
 
         # Import GL overlay widget classes
@@ -966,7 +1013,21 @@ class DisplayWidget(QWidget):
             hw_accel = SettingsManager.to_bool(hw_raw, False)
 
             if transition_type == 'Crossfade':
-                transition = GLCrossfadeTransition(duration_ms, easing_str) if hw_accel else CrossfadeTransition(duration_ms, easing_str)
+                if hw_accel:
+                    try:
+                        self._ensure_gl_compositor()
+                    except Exception:
+                        logger.debug("[GL COMPOSITOR] Failed to ensure compositor during crossfade selection", exc_info=True)
+                    use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
+                    if use_compositor:
+                        transition = GLCompositorCrossfadeTransition(duration_ms, easing_str)
+                    else:
+                        # If compositor cannot be used, prefer CPU crossfade over
+                        # the legacy GL overlay path to avoid reintroducing
+                        # overlay-related flicker.
+                        transition = CrossfadeTransition(duration_ms, easing_str)
+                else:
+                    transition = CrossfadeTransition(duration_ms, easing_str)
                 transition.set_resource_manager(self._resource_manager)
                 self._log_transition_selection(requested_type, 'Crossfade', random_mode, random_choice_value)
                 return transition
@@ -1019,7 +1080,20 @@ class DisplayWidget(QWidget):
                 else:
                     direction = direction_map.get(direction_str, SlideDirection.LEFT)
 
-                transition = GLSlideTransition(duration_ms, direction, easing_str) if hw_accel else SlideTransition(duration_ms, direction, easing_str)
+                if hw_accel:
+                    try:
+                        self._ensure_gl_compositor()
+                    except Exception:
+                        logger.debug("[GL COMPOSITOR] Failed to ensure compositor during slide selection", exc_info=True)
+                    use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
+                    if use_compositor:
+                        transition = GLCompositorSlideTransition(duration_ms, direction, easing_str)
+                    else:
+                        # If compositor cannot be used, prefer CPU slide over
+                        # the legacy GL overlay path.
+                        transition = SlideTransition(duration_ms, direction, easing_str)
+                else:
+                    transition = SlideTransition(duration_ms, direction, easing_str)
                 transition.set_resource_manager(self._resource_manager)
                 self._log_transition_selection(requested_type, 'Slide', random_mode, random_choice_value)
                 return transition
@@ -1276,6 +1350,38 @@ class DisplayWidget(QWidget):
                     pass
                 self._updates_blocked_until_seed = False
 
+            # Pre-warm the shared GL compositor with the current frame so that
+            # its GL surface is active before any animated transition starts.
+            # This reduces first-use flicker, especially on secondary
+            # displays, by avoiding late compositor initialization.
+            try:
+                self._ensure_gl_compositor()
+            except Exception:
+                pass
+            comp = getattr(self, "_gl_compositor", None)
+            if isinstance(comp, GLCompositorWidget):
+                try:
+                    comp.setGeometry(0, 0, self.width(), self.height())
+                    comp.set_base_pixmap(self.current_pixmap)
+                    comp.show()
+                    comp.raise_()
+                    for attr_name in ("clock_widget", "clock2_widget", "clock3_widget"):
+                        clock = getattr(self, attr_name, None)
+                        if clock is not None:
+                            try:
+                                clock.raise_()
+                                if hasattr(clock, "_tz_label") and clock._tz_label:
+                                    clock._tz_label.raise_()
+                            except Exception:
+                                pass
+                    if getattr(self, "weather_widget", None) is not None:
+                        try:
+                            self.weather_widget.raise_()
+                        except Exception:
+                            pass
+                except Exception:
+                    logger.debug("[GL COMPOSITOR] Failed to pre-warm compositor with base frame", exc_info=True)
+
             use_transition = bool(self.settings_manager) and self._has_rendered_first_frame
             if self.settings_manager and not self._has_rendered_first_frame:
                 logger.debug("[INIT] First frame - presenting without transition to avoid black flicker")
@@ -1404,10 +1510,6 @@ class DisplayWidget(QWidget):
                     if self._image_label:
                         self._image_label.hide()
                     self.update()
-                    try:
-                        self._warm_up_gl_overlay(self.current_pixmap)
-                    except Exception:
-                        pass
                 if GL is None:
                     try:
                         self._mark_all_overlays_ready(GL_OVERLAY_KEYS, stage="software_display")
@@ -1574,6 +1676,18 @@ class DisplayWidget(QWidget):
             except (TypeError, ValueError):
                 timeout_sec = TRANSITION_WATCHDOG_DEFAULT_SEC
 
+        # Ensure watchdog timeout is never shorter than the transition
+        # duration plus a small safety margin, otherwise long transitions
+        # (e.g. 6.375s) will always hit the default 6s watchdog.
+        try:
+            duration_ms = getattr(transition, "duration_ms", None)
+            if duration_ms is not None:
+                duration_sec = float(duration_ms) / 1000.0
+                timeout_sec = max(timeout_sec, duration_sec + 1.0)
+        except Exception:
+            # If anything goes wrong, fall back to the configured timeout.
+            pass
+
         if timeout_sec <= 0:
             logger.debug("[WATCHDOG] Disabled (timeout %.2fs)", timeout_sec)
             self._cancel_transition_watchdog()
@@ -1649,18 +1763,25 @@ class DisplayWidget(QWidget):
             overlay_ready,
         )
 
+        # Snapshot current transition before cancelling the watchdog, as
+        # other paths may clear self._current_transition while we run.
+        transition = self._current_transition
+
         self._cancel_transition_watchdog()
 
-        if self._current_transition:
+        if transition is not None:
             try:
-                self._current_transition.stop()
+                transition.stop()
             except Exception:
                 logger.debug("[WATCHDOG] Failed to stop transition during timeout", exc_info=True)
             try:
-                self._current_transition.cleanup()
+                transition.cleanup()
             except Exception:
                 logger.debug("[WATCHDOG] Failed to cleanup transition during timeout", exc_info=True)
-            self._current_transition = None
+            # Only clear the active reference if it still points at the same
+            # transition we just operated on.
+            if self._current_transition is transition:
+                self._current_transition = None
 
         args = self._pending_transition_finish_args
         if args:
@@ -1811,6 +1932,55 @@ class DisplayWidget(QWidget):
             descriptor.prefer_triple_buffer,
         )
 
+    def _ensure_gl_compositor(self) -> None:
+        """Create or resize the shared GL compositor widget when appropriate.
+
+        The compositor is only used when hardware acceleration is enabled,
+        an OpenGL backend is active, and PyOpenGL/GL are available. This keeps
+        software-only environments on the existing CPU path.
+        """
+
+        # Guard on hw_accel setting
+        hw_accel = False
+        if self.settings_manager is not None:
+            try:
+                raw = self.settings_manager.get("display.hw_accel", False)
+            except Exception:
+                raw = False
+            hw_accel = SettingsManager.to_bool(raw, False)
+        if not hw_accel:
+            return
+
+        # Require an OpenGL backend selection
+        if self._backend_selection and self._backend_selection.resolved_mode != "opengl":
+            return
+
+        if self._gl_compositor is None:
+            try:
+                comp = GLCompositorWidget(self)
+                comp.setObjectName("_srpss_gl_compositor")
+                comp.setGeometry(0, 0, self.width(), self.height())
+                comp.hide()
+                if self._resource_manager is not None:
+                    try:
+                        self._resource_manager.register_qt(
+                            comp,
+                            description="Shared GL compositor for DisplayWidget",
+                        )
+                    except Exception:
+                        logger.debug("[GL COMPOSITOR] Failed to register compositor with ResourceManager", exc_info=True)
+                self._gl_compositor = comp
+                logger.info("[GL COMPOSITOR] Created shared compositor for screen %s", self.screen_index)
+            except Exception as exc:
+                logger.warning("[GL COMPOSITOR] Failed to create compositor: %s", exc)
+                self._gl_compositor = None
+                return
+        else:
+            try:
+                self._gl_compositor.setGeometry(0, 0, self.width(), self.height())
+            except Exception:
+                logger.debug("[GL COMPOSITOR] Failed to update compositor geometry", exc_info=True)
+
     def _destroy_render_surface(self) -> None:
         if self._render_surface is None or self._renderer_backend is None:
             self._render_surface = None
@@ -1825,6 +1995,14 @@ class DisplayWidget(QWidget):
     def _on_destroyed(self, *_args) -> None:
         """Ensure active transitions are stopped when the widget is destroyed."""
         self._destroy_render_surface()
+        # Ensure compositor is torn down cleanly
+        try:
+            if self._gl_compositor is not None:
+                self._gl_compositor.hide()
+                self._gl_compositor.setParent(None)
+        except Exception:
+            pass
+        self._gl_compositor = None
         # Stop pan & scan if still active
         try:
             if hasattr(self, "_pan_and_scan") and self._pan_and_scan is not None:
@@ -1964,10 +2142,20 @@ class DisplayWidget(QWidget):
 
     def paintEvent(self, event: QPaintEvent) -> None:
         """Paint event - draw current image or error message."""
-        # Thread-safe check: if any overlay is ready (GL initialized + first frame drawn), let it handle painting
+        # If the shared GL compositor is present and visible, let it handle
+        # all rendering instead of painting the base widget or legacy overlays.
+        try:
+            comp = getattr(self, "_gl_compositor", None)
+            if isinstance(comp, GLCompositorWidget) and comp.isVisible():
+                return
+        except Exception:
+            pass
+
+        # Thread-safe check: if any legacy overlay is ready (GL initialized +
+        # first frame drawn), let it handle painting. This path is only used
+        # when the compositor is not active.
         try:
             if any_overlay_ready_for_display(self):
-                # Overlay is ready and will handle the paint
                 return
         except Exception:
             pass
@@ -2005,18 +2193,17 @@ class DisplayWidget(QWidget):
             self._base_fallback_paint_logged = True
 
         painter = QPainter(self)
-        # Fill with black background
-        painter.fillRect(self.rect(), Qt.GlobalColor.black)
-        
-        # Draw image if available
+
+        # Draw image if available; only fall back to a black fill when we truly
+        # have nothing to show or an error message. This avoids a full-screen
+        # black flash during normal first-frame paints.
         if pixmap_to_paint and not pixmap_to_paint.isNull():
             try:
                 painter.drawPixmap(self.rect(), pixmap_to_paint)
             except Exception:
                 painter.drawPixmap(0, 0, pixmap_to_paint)
-        
-        # Draw error message if present
         elif self.error_message:
+            painter.fillRect(self.rect(), Qt.GlobalColor.black)
             painter.setPen(Qt.GlobalColor.white)
             font = QFont("Arial", 24)
             painter.setFont(font)
@@ -2025,7 +2212,9 @@ class DisplayWidget(QWidget):
                 Qt.AlignmentFlag.AlignCenter,
                 self.error_message
             )
-        
+        else:
+            painter.fillRect(self.rect(), Qt.GlobalColor.black)
+
         painter.end()
     
     def notify_overlay_ready(self, overlay_name: str, stage: str, **details) -> None:

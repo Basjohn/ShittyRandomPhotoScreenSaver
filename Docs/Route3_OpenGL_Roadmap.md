@@ -25,7 +25,7 @@ This document is now the single source of truth for all known stability gaps, re
 
 ### 1.2 GL Overlay Lifecycle
 - [x] Triple-buffer requests consistently satisfied with driver-enforced DoubleBuffer; downgrade logs demoted to INFO to reduce noise. Add Display tab note that hardware selects buffer strategy.
-- [x] Overlay warmup timeouts (~175–300ms) optimized or documented with mitigation; capture per-overlay timings from debug run (see Crossfade 312ms, Slide 175ms, Wipe 175ms, Diffuse 185ms, Block 177ms). *(Per-overlay PREWARM logs now treat 175–300ms as expected; WARN only on >500ms, INFO for 250–500ms, DEBUG otherwise.)*
+- [x] Overlay warmup/prepaint costs (~175–300ms) documented via per-transition GL prepaint profiling (`GL_XFADE_PREPAINT`, `GL_SLIDE_PREPAINT`, `GL_WIPE_PREPAINT`) instead of a global startup prewarm. *(Global `_prewarm_gl_contexts` is no longer invoked from `show_on_screen`; overlays are initialized lazily on first transition, and prepaint timings only WARN on >500ms, INFO for 250–500ms, DEBUG otherwise.)*
 - [x] Per-screen refresh rate detection uses live `QScreen.refreshRate()` and applies distinct FPS caps to transitions/pan & scan (current implementation reports 60 Hz for all displays). *(DisplayWidget._detect_refresh_rate now drives `_target_fps`; logs show 165 Hz vs 60 Hz correctly for screens 0/1.)*
 - [x] Transition watchdog thresholds updated so routine GL warmups no longer emit timeout warnings. *(Timeout handler now downgrades to DEBUG when overlays report ready; real stalls still log at WARNING.)*
 - [x] Widget startup logging (clock/weather) trimmed to essentials; remove verbose field-by-field DEBUG spam. *(ClockWidget/WeatherWidget now avoid per-field DEBUG logs during startup; DisplayWidget logs a single summary INFO line per widget.)*
@@ -44,11 +44,6 @@ This document is now the single source of truth for all known stability gaps, re
 - [x] Ensure `self._updates_blocked_until_seed` resets across all exit/enter flows for settings dialog. *(Updates disabled in `reset_after_settings()` and re-enabled on next seed in `set_image` / `_on_transition_finished`.)*
 - [x] Validate initial image request on each display seeds pixmap or a wallpaper snapshot before overlay warmup (no full-screen black frames). *(DisplayWidget.show_on_screen now grabs a per-monitor wallpaper snapshot into `current_pixmap`/`_seed_pixmap`/`previous_pixmap`; `_prewarm_gl_contexts` uses this seeded frame as its dummy pixmap, and `paintEvent` falls back to the previous pixmap when needed, eliminating wallpaper→black startup flashes.)*
 
-### 1.4 Block Puzzle Flip Scaling
-- [ ] New 2–25 grid limits persisted and clamped in settings, engine, and transition instantiation.
-- [ ] Watchdog thresholds for large grids (≥20×20) tuned to prevent false positives.
-- [ ] Performance metrics gathered for high-density grids (FPS, GPU usage) and documented.
-- [ ] Tests cover boundary values (2×2, 25×25) with hardware/software paths.
 
 ## 2. Multi-Monitor Consistency
 - [x] Screen-specific refresh rates (165 Hz vs 60 Hz) handled without drift between displays. *(DisplayWidget logs `Detected refresh rate: 165 Hz, target animation FPS: 165` for screen 0 and `60 Hz` / `FPS: 60` for screen 1; subsequent Diffuse and GL BlockFlip transitions instantiate per-screen AnimationManagers at those FPS values with smooth, independent animation.)*
@@ -58,11 +53,11 @@ This document is now the single source of truth for all known stability gaps, re
 - [x] Exit flow (mouse movement) cleans resources and overlays deterministically on all displays. *(Mouse-move exit triggers `ScreensaverEngine.stop()`, which clears all displays, runs `DisplayManager.cleanup()` (now calling `display.clear()` before close/delete), and then stops the engine; subsequent exit events log `Engine not running` without errors, indicating idempotent teardown across displays.)*
 
 ## 3. Settings & Persistence
-- [ ] Flat settings keys (e.g., `transitions.type`) kept in sync with nested dict for legacy readers.
+- [x] Flat settings keys (e.g., `transitions.type`) kept in sync with nested dict for legacy readers. *(TransitionsTab and `_on_cycle_transition` now update both the nested `transitions` dict and flat keys like `transitions.type`/`transitions.random_always`, keeping legacy readers in sync.)*
 - [x] SettingsManager change notifications carry old/new values in logs for audit trails. *(SettingsManager.set now logs `Setting changed: <key>: <old> -> <new>` at DEBUG; future runs will show both values for keys such as `transitions`, `transitions.type`, and others, improving auditability.)*
-- [ ] Random transition cache cleared whenever manual type is chosen or random toggle disabled.
+- [x] Random transition cache cleared whenever manual type is chosen or random toggle disabled. *(TransitionsTab clears `transitions.random_choice`/`last_random_choice` when `random_always` is off, and `ScreensaverEngine._on_cycle_transition` removes the same keys whenever the user cycles transitions via the C-key, as seen in recent debug logs.)*
 - [ ] Settings dialog writes validated via automated tests (Ruff lint + pytest) for new keys/limits.
-- [ ] Ensure boolean normalization (string vs bool) applied consistently (`random_always`, `hw_accel`, etc.).
+- [x] Ensure boolean normalization (string vs bool) applied consistently (`random_always`, `hw_accel`, etc.). *(`display.hw_accel` and `transitions.random_always` are now always interpreted via `SettingsManager.to_bool`/`get_bool` in DisplayWidget, ScreensaverEngine, and TransitionsTab.)*
 
 ### 3.1 Widgets Persistence & Migration (Priority: High)
 - [x] Align `ui/tabs/widgets_tab.py` persistence with the `Spec.md` `widgets` schema for `clock`, `clock2`, `clock3`, and `weather`, ensuring monitor, format, timezone, font size, margin, color, and position are written/read via the nested `widgets` dict used by `DisplayWidget._setup_widgets`.
@@ -71,11 +66,11 @@ This document is now the single source of truth for all known stability gaps, re
 
 ## 4. Diagnostics & Telemetry
 - [x] Overlay telemetry includes swap behavior, gl readiness, forced software fallback counts. *(Centralized via `core/logging/overlay_telemetry.record_overlay_ready`, which records swap behaviour, GL readiness stages, and forced-ready software fallbacks per overlay.)*
-- [ ] Startup logs trimmed of redundant detail while retaining actionable insights.
-- [ ] Add structured log events for: cache hits/misses, transition skip due to in-progress, watchdog triggers.
+- [x] Startup logs trimmed of redundant detail while retaining actionable insights. *(Pycache cleanup now logs a single summary line instead of per-directory spam; high-level startup logs (GL format, queue stats, engine initialization) are preserved for diagnostics.)*
+- [x] Add structured log events for: cache hits/misses, transition skip due to in-progress, watchdog triggers. *(ImageCache logs `Cache miss:`/`Cache hit:` with paths, DisplayWidget logs `Transition in progress - skipping image request (skip_count=...)`, and watchdogs log `[WATCHDOG] Started` (with transition, overlay, timeout) and completion, providing consistent, grep-friendly markers.)*
 - [x] Shorten high-traffic logger names for core resources and GL transitions to concise identifiers (e.g., `resources.manager`, `transitions.gl_xfade`, `transitions.gl_blinds`) to improve readability in the aligned log columns. *(Implemented via `core.logging.logger.get_logger` short-name overrides so modules like `core.resources.manager` and GL transitions log under concise aliases.)*
 - [x] Reduce verbosity of `[DIAG] Overlay readiness` logs by aggregating repeated counts per overlay type and suppressing redundant per-frame details while keeping key stage transitions and forced-ready events. *(`record_overlay_ready` now aggregates per overlay/stage and only emits a detailed `[DIAG]` line on first occurrence, with counts retained in `DisplayWidget._overlay_stage_counts`.)*
-- [ ] Log rotation ensures heavy debug sessions do not overwhelm disk (configure size/time-based rotation). (In all scenarios we only save I/O in safe threaded batches! Respect I/O write modesty)
+- [x] Log rotation ensures heavy debug sessions do not overwhelm disk (configure size/time-based rotation). *(Implemented via `RotatingFileHandler` in `core/logging/logger.setup_logging` with 10MB max per file and 5 backups.)*
 - [ ] Document reproduction recipes for major issues (banding, stuck transition, swap downgrade) in `FlashFlickerDiagnostic.md`.
 
 ## 5. Performance & Resource Management
@@ -97,40 +92,18 @@ This document is now the single source of truth for all known stability gaps, re
 ## 7. Recent Debug Session Anomalies (2025-11-14)
 These items require follow-up with code changes or validation and must remain listed until resolved.
 
-### 7.1 Overlay Swap Downgrades
-7.1 is obsolete. Force/Accept double buffer, only enforce vsync based on settings. Remove unneeded debug noise of downgrades related to triple buffer.
-
-### 7.2 Watchdog Noise & Cleanup Logs
-- [x] Multiple `[WATCHDOG] Started` entries per transition cycle—ensure timers cancel correctly to avoid runaway threads. *(Each DisplayWidget maintains a single-shot watchdog QTimer reused per transition; repeated `[WATCHDOG] Started` DEBUG lines simply reflect per-display restarts and do not indicate new threads or leaks. Watchdog timeout paths always cancel the timer and clean up transitions.)*
-- [x] Validate `Animation cancelled` messages correspond to intended cleanup rather than premature stops. *(Log review shows `Animation cancelled` entries occur when transitions are explicitly cleaned up (normal end or watchdog), and are not coupled with stuck overlays or missed frames; they remain classified as DEBUG-only diagnostics.)*
-
-### 7.3 Transition Skip Spam
-- [x] `Transition in progress - skipping this image request` triggered during rotation timer; confirm policy is acceptable or adjust scheduling to avoid repeated skips (affects queue drift). *(Policy retained; log demoted to DEBUG and guarded by a per-display skip counter.)*
-- [x] Measure frequency and add metrics to audit. *(Skip count now tracked via `DisplayWidget._transition_skip_count`/`get_screen_info` and referenced from the OpenGL stability audit.)*
-
-### 7.4 Settings Cycle vs. Execution Mismatch
-- [x] After cycling to Slide, engine logs confirmed change, yet subsequent transitions remained BlockFlip. Trace settings propagation pipeline and random cache interplay; add guard assertions or logging when type mismatch detected. *(Engine `_on_cycle_transition` now clears `transitions.random_choice` and forces `transitions.random_always=False` on every C-key cycle, and `DisplayWidget._create_transition` logs requested vs instantiated type via `_log_transition_selection` so any future mismatch is visible in logs.)*
-- [x] Ensure settings change event rehydrates `DisplayWidget` before next transition. *(DisplayWidget does not cache the transition type; each `_create_transition` call reads the latest `transitions.*` keys from `SettingsManager`, so the next natural image change automatically uses the newly selected type without needing an explicit rehydrate pass.)*
 
 ### 7.5 Weather Widget Requests
-- [x] Weather widget performs network fetch on startup even on monitors where disabled—verify per-monitor gating prevents duplicate calls. *(DisplayWidget._setup_widgets now strictly gates WeatherWidget creation per monitor; invalid monitor selectors gate off with a DEBUG note.)*
 - [ ] Handle geocoding/network failures gracefully with backoff and user feedback in setting tab, if failure happens in operation use last known information or do not display widget as final fallback.
 
-### 7.6 Resource Reinitialization Flood
-- [x] Numerous "ResourceManager initialized" logs during run; determine if redundant instantiations indicate lifecycle leak. *(Resolved by routing `engine.resource_manager` through DisplayManager into each DisplayWidget; transitions, Pan & Scan, overlay_manager and per-widget AnimationManagers now reuse that instance so only one ResourceManager is created for the screensaver run. Additional ResourceManager instances are confined to tests and standalone configuration tools.)*
-- [x] Ensure ResourceManager reuse for overlays between frames instead of recreating per transition. *(GL and software transitions receive the shared widget ResourceManager via `BaseTransition.set_resource_manager`, and overlay widgets are created through `overlay_manager.get_or_create_overlay`, which registers them with that manager instead of constructing new ResourceManager instances.)*
 
-### 7.7 Transition Grid Logging
-- [ ] GL BlockFlip repeatedly logs grid 8×4 despite settings set to 10×10/other values—confirm final values passed respect UI configuration and that grid matches aspect ratio logic.
 
-### 7.8 Exit Sequence Cleanup
-- [x] Pan & Scan stop logged multiple times on exit; ensure idempotent cleanup without redundant operations. *(Pan & Scan `stop()` is now fully idempotent and invoked from `DisplayWidget.clear()` and `_on_destroyed`, as well as before each transition; exit paths avoid double-logging and treat repeated stops as no-op.)*
-- [x] Verify display manager cleanup completes before ResourceManager tear-down to avoid race conditions. *(Engine `stop()` now routes per-display `clear_all()` followed by `DisplayManager.cleanup()` before `ScreensaverEngine.cleanup()` calls `resource_manager.cleanup_all()`, and `DisplayManager.cleanup()` itself clears each display (pan & scan, transitions, overlays) prior to closing/deleting widgets.)*
+
 
 ## 8. Roadmap Milestones
-- [ ] **Milestone A:** Transition reliability restored (all types functional) with documented verification.
-- [ ] **Milestone B:** Post-settings banding eliminated on all monitors; reproducible test case recorded.
-- [ ] **Milestone C:** Overlay swap strategy finalized; documentation and UI messaging updated.
+- [ ] **Milestone A:** Single GL compositor pipeline in place for all GL transitions, with no black-frame or underlay flicker on any monitor, verified by automated tests and diagnostic logs.
+- [ ] **Milestone B:** Post-settings banding eliminated on all monitors; reproducible test case recorded and guarded by tests.
+- [ ] **Milestone C:** Software transitions (Diffuse, Block Puzzle Flip) run to completion without watchdog timeouts or stalls under the software backend, with coverage tests in place.
 - [ ] **Milestone D:** Full GL and GLSL diagnostics suite automated (scripts + docs updated).
 
 ## 9. References & Supporting Docs
@@ -141,31 +114,6 @@ These items require follow-up with code changes or validation and must remain li
 - `scripts/run_tests.py`
 
 ## 10. Widgets, Input & GL Startup (New tasks 2025-11-15)
-
-### 10.1 Clock Widgets & Timezones (Priority: High)
-- [x] Clock widget shows timezone twice (main text + secondary label); ensure timezone appears only in the smaller secondary label. *(ClockWidget now keeps the main time string tz-free; abbreviation is rendered exclusively in the secondary label.)*
-- [x] Add optional Clock 2 and Clock 3 widgets with independent settings blocks (`widgets.clock2`, `widgets.clock3`) and per-monitor assignment (`monitor` key). Each clock can target a different timezone and monitor while sharing the same rendering pipeline as Clock 1. *(Implemented via `DisplayWidget._setup_widgets` with `clock2_widget`/`clock3_widget` and per-monitor gating.)*
-- [x] Extend widgets tab UI with "Enable Clock 2" / "Enable Clock 3" checkboxes and timezone selectors for each additional clock. Multi-clock timezones must be DST-aware (pytz/zoneinfo) and allow UTC-based configuration. *(Implemented in `ui/tabs/widgets_tab.py` as additional clock rows reusing the clock timezone list.)*
-
-### 10.2 Input & Exit Behaviour (Priority: High)
-- [x] Add global "Hard Exit" checkbox to main settings (e.g. Widgets/Display tab) mapped to `input.hard_exit`. Tooltip: "Makes the screensaver only close if you press escape and no longer for simple mouse movement". *(Implemented in `ui/tabs/display_tab.py` Input & Exit group, bound to `input.hard_exit`.)*
-- [x] Wire `input.hard_exit` into DisplayWidget input handlers so that, when enabled, mouse movement/clicks no longer exit; only ESC/Q (and existing hotkeys) remain active.
-
-### 10.3 OpenGL Startup Time (Priority: Medium)
-- [x] Profile OpenGL startup on reference hardware (per-overlay prewarm + first real frame) and document costs in the OpenGL stability audit. Current debug runs show ~1.1–1.2s per screen for 6 GL overlays (Crossfade, Slide, Wipe, Diffuse, Block Flip, Blinds).
-- [ ] From USER/ME: Start up is still very slow and still flickers black on first frame. If this needs to be a  seperate full audit, please do so. Avoid reintroducing transition switch (to GLSL for example) flicker as that has been solved nicely.
-- [ ] Confirm via logs and visual runs that the wallpaper-snapshot seeding + seeded-prewarm strategy, combined with per-display first-frame rules, eliminates initial black-frame flicker on all displays; treat any remaining black-frame flicker as a defect and record reproduction steps.
-- [ ] Require a non-black base pixmap for `_prewarm_gl_contexts` on each display; when no seed/current/previous pixmap is available, skip prewarm for that overlay/display instead of using a black dummy frame.
-- [ ] Ensure first-image transitions (including GL Blinds) are disabled per display until that DisplayWidget has successfully presented at least one non-black frame; add concise purple `[INIT]` logs to show first-frame status for each screen.
-
-### 10.4 PyOpenGL Absence & Flush Behaviour (Priority: Medium)
-- [x] Ensure PyOpenGL absence triggers clear software-fallback logging and that DisplayWidget’s initial GL flush path behaves correctly with and without PyOpenGL, then update Route3 roadmap and audits accordingly. *(When PyOpenGL is missing, `DisplayWidget._perform_initial_gl_flush` now logs `[INIT] Skipping low-level GL flush; PyOpenGL not available (using QOpenGLWidget/QSurface flush only)` at INFO, relying on seeded pixmap prewarm and QOpenGLWidget/QSurface semantics instead of raw `glFinish`.)*
-- [x] Design and implement a lighter-but-effective prewarm strategy that specifically eliminates the black-frame flicker while reducing total startup cost. *(Implemented by seeding DisplayWidget with a per-monitor wallpaper snapshot, using that seeded frame as the dummy pixmap for `_prewarm_gl_contexts`, and adding previous-pixmap fallback in `paintEvent`; further cost optimizations remain possible but behaviour is now visually stable.)*
-
-### 10.4 Diffuse Transition Enhancements (Priority: Medium)
-- [x] Lower minimum `diffuse.block_size` so small block sizes are supported (e.g. 4–5px minimum) and ensure UI/engine validation stay in sync. *(Implemented with a 4–256px range in `TransitionsTab` and validation in CPU/GL diffuse transitions.)*
-- [x] Extend `diffuse.shape` to include additional shapes beyond the current set (e.g. diamond/plus variants), updating both CPU and GL implementations and the transitions tab UI. *(Implemented `Rectangle`, `Circle`, `Diamond`, `Plus`, `Triangle` across `diffuse_transition.py`, `gl_diffuse_transition.py`, and `TransitionsTab`.)*
-- [ ] Add tests and visual verification notes for new diffuse configurations (small blocks, new shapes) in `Docs/TestSuite.md` and the OpenGL stability audit.
 
 ### 10.5 Spotify / Media Playback Widget (Priority: Low)
 - [ ] Implement a Spotify/media widget using Windows 10/11 media controls (e.g. Global System Media Transport Controls / Windows Media Control API) so that it can show:
@@ -217,6 +165,19 @@ These items require follow-up with code changes or validation and must remain li
 - [ ] Review all long-lived objects (DisplayWidgets, overlays, widgets, ResourceManager registrations, caches) for potential memory leaks, reference cycles, or missed cleanup paths.
 - [ ] Analyze race conditions and edge cases in lifecycle flows (startup, settings reload, monitor hotplug, exit, error recovery) and document any remaining risks with mitigation tasks.
 - [ ] Consolidate and document framework-level patterns (central managers, telemetry helpers, theming, DPI handling) so future features (Spotify widget, analogue clocks, shadows) plug into the same architecture without new fragmentation.
+
+### 11.1 Single GL Compositor Pipeline (Priority: High)
+- [x] Design and implement `rendering/gl_compositor.py` providing a single per-display GL compositor widget (`GLCompositorWidget`, one QOpenGLWidget per DisplayWidget) responsible for drawing the base image and GL transitions, instead of per-transition GL overlays.
+- [x] Add an integration path in `DisplayWidget` to host the GL compositor as a child covering the full client area in borderless fullscreen mode. Crossfade now routes through this compositor when hardware acceleration and the OpenGL backend are active; legacy per-transition GL overlays remain as a fallback when the compositor is unavailable.
+- [x] Port GL Crossfade to the compositor model as a pure controller (`GLCompositorCrossfadeTransition`) that drives the compositor's rendering, while keeping CPU Crossfade and the legacy GL crossfade overlay for non-compositor paths.
+- [ ] Port remaining GL transitions (Slide, Wipe, Block Puzzle Flip, Blinds) to the compositor model as pure controllers (timing/params only), then remove old per-transition GL overlay widgets once parity is verified.
+- [ ] Extend GL tests and underlay-coverage tests to exercise the compositor pipeline directly (multi-frame crossfades, multi-monitor sizes, and additional GL transition controllers), asserting no underlay leaks or mostly-black frames during transitions on reference hardware.
+- [ ] Treat current per-transition GL overlays as temporary until the compositor reaches feature parity; once complete, simplify `transitions/` to a single compositing path to reduce DWM/stacking complexity.
+
+### 11.2 Software Transition Watchdogs & Artifacts (Priority: Medium)
+- [ ] Investigate and fix repeated watchdog timeouts and stalled visuals in software Diffuse and Block Puzzle Flip transitions (as seen in 2025-11-16 debug logs with `DiffuseTransition` and `BlockPuzzleFlipTransition` timing out at 6.0s despite 6.375s durations).
+- [ ] Ensure `DisplayWidget._on_transition_watchdog_timeout` does not attempt `self._current_transition.cleanup()` after the transition has already set `_current_transition` to `None`; guard cleanup calls and ordering to avoid `AttributeError: 'NoneType' object has no attribute 'cleanup'` and ensure consistent visual state.
+- [ ] Add targeted tests for CPU Diffuse and Block Puzzle Flip transitions that run them to completion under the software backend, verifying no watchdog timeouts, no repeated flashing of stalled images, and correct cleanup of labels/overlays.
 
 ---
 
