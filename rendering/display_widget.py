@@ -532,6 +532,13 @@ class DisplayWidget(QWidget):
             font_size = _resolve_clock_style('font_size', default_font_size, clock_settings, settings_key)
             margin = _resolve_clock_style('margin', 20, clock_settings, settings_key)
             color = _resolve_clock_style('color', [255, 255, 255, 230], clock_settings, settings_key)
+            bg_color_data = _resolve_clock_style('bg_color', [64, 64, 64, 255], clock_settings, settings_key)
+            border_color_data = _resolve_clock_style(
+                'border_color', [128, 128, 128, 255], clock_settings, settings_key
+            )
+            border_opacity_val = _resolve_clock_style(
+                'border_opacity', 0.8, clock_settings, settings_key
+            )
 
             position = position_map.get(position_str, position_map.get(default_position, ClockPosition.TOP_RIGHT))
 
@@ -548,6 +555,32 @@ class DisplayWidget(QWidget):
                 from PySide6.QtGui import QColor
                 qcolor = QColor(color[0], color[1], color[2], color[3])
                 clock.set_text_color(qcolor)
+
+                # Background color (inherits from main clock for clock2/clock3)
+                try:
+                    bg_r, bg_g, bg_b = bg_color_data[0], bg_color_data[1], bg_color_data[2]
+                    bg_a = bg_color_data[3] if len(bg_color_data) > 3 else 255
+                    bg_qcolor = QColor(bg_r, bg_g, bg_b, bg_a)
+                    if hasattr(clock, "set_background_color"):
+                        clock.set_background_color(bg_qcolor)
+                except Exception:
+                    pass
+
+                # Background border customization (inherits from main clock for clock2/clock3)
+                try:
+                    br_r, br_g, br_b = border_color_data[0], border_color_data[1], border_color_data[2]
+                    base_alpha = border_color_data[3] if len(border_color_data) > 3 else 255
+                    try:
+                        bo = float(border_opacity_val)
+                    except Exception:
+                        bo = 0.8
+                    bo = max(0.0, min(1.0, bo))
+                    br_a = int(bo * base_alpha)
+                    border_qcolor = QColor(br_r, br_g, br_b, br_a)
+                    if hasattr(clock, "set_background_border"):
+                        clock.set_background_border(2, border_qcolor)
+                except Exception:
+                    pass
 
                 show_bg_val = _resolve_clock_style('show_background', False, clock_settings, settings_key)
                 show_background = SettingsManager.to_bool(show_bg_val, False)

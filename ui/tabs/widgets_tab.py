@@ -40,6 +40,8 @@ class WidgetsTab(QWidget):
         self._settings = settings
         self._clock_color = QColor(255, 255, 255, 230)
         self._weather_color = QColor(255, 255, 255, 230)
+        self._clock_border_color = QColor(128, 128, 128, 255)
+        self._clock_bg_color = QColor(64, 64, 64, 255)
         # Weather widget frame defaults mirror WeatherWidget internals
         self._weather_bg_color = QColor(64, 64, 64, 255)
         self._weather_border_color = QColor(128, 128, 128, 255)
@@ -193,8 +195,10 @@ class WidgetsTab(QWidget):
         font_family_row.addWidget(QLabel("Font:"))
         self.clock_font_combo = QFontComboBox()
         self.clock_font_combo.setCurrentFont("Segoe UI")
+        self.clock_font_combo.setMinimumWidth(220)
         self.clock_font_combo.currentFontChanged.connect(self._save_settings)
         font_family_row.addWidget(self.clock_font_combo)
+        font_family_row.addStretch()
         clock_layout.addLayout(font_family_row)
         
         # Font size
@@ -252,6 +256,42 @@ class WidgetsTab(QWidget):
         self.clock_bg_opacity.valueChanged.connect(lambda v: self.clock_opacity_label.setText(f"{v}%"))
         opacity_row.addWidget(self.clock_opacity_label)
         clock_layout.addLayout(opacity_row)
+
+        # Background color
+        clock_bg_color_row = QHBoxLayout()
+        clock_bg_color_row.addWidget(QLabel("Background Color:"))
+        self.clock_bg_color_btn = QPushButton("Choose Color...")
+        self.clock_bg_color_btn.clicked.connect(self._choose_clock_bg_color)
+        clock_bg_color_row.addWidget(self.clock_bg_color_btn)
+        clock_bg_color_row.addStretch()
+        clock_layout.addLayout(clock_bg_color_row)
+
+        # Background border color
+        clock_border_color_row = QHBoxLayout()
+        clock_border_color_row.addWidget(QLabel("Border Color:"))
+        self.clock_border_color_btn = QPushButton("Choose Color...")
+        self.clock_border_color_btn.clicked.connect(self._choose_clock_border_color)
+        clock_border_color_row.addWidget(self.clock_border_color_btn)
+        clock_border_color_row.addStretch()
+        clock_layout.addLayout(clock_border_color_row)
+
+        # Background border opacity
+        clock_border_opacity_row = QHBoxLayout()
+        clock_border_opacity_row.addWidget(QLabel("Border Opacity:"))
+        self.clock_border_opacity = QSlider(Qt.Orientation.Horizontal)
+        self.clock_border_opacity.setMinimum(0)
+        self.clock_border_opacity.setMaximum(100)
+        self.clock_border_opacity.setValue(80)
+        self.clock_border_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.clock_border_opacity.setTickInterval(10)
+        self.clock_border_opacity.valueChanged.connect(self._save_settings)
+        clock_border_opacity_row.addWidget(self.clock_border_opacity)
+        self.clock_border_opacity_label = QLabel("80%")
+        self.clock_border_opacity.valueChanged.connect(
+            lambda v: self.clock_border_opacity_label.setText(f"{v}%")
+        )
+        clock_border_opacity_row.addWidget(self.clock_border_opacity_label)
+        clock_layout.addLayout(clock_border_opacity_row)
 
         extra_label = QLabel("Additional clocks (optional, share style with main clock)")
         extra_label.setStyleSheet("color: #aaaaaa; font-size: 11px;")
@@ -604,6 +644,9 @@ class WidgetsTab(QWidget):
                 getattr(self, 'clock_margin', None),
                 getattr(self, 'clock_show_background', None),
                 getattr(self, 'clock_bg_opacity', None),
+                getattr(self, 'clock_border_opacity', None),
+                getattr(self, 'clock_bg_color_btn', None),
+                getattr(self, 'clock_border_color_btn', None),
                 getattr(self, 'clock2_enabled', None),
                 getattr(self, 'clock2_timezone', None),
                 getattr(self, 'clock2_monitor_combo', None),
@@ -667,6 +710,19 @@ class WidgetsTab(QWidget):
             # Load clock color
             color_data = clock_config.get('color', [255, 255, 255, 230])
             self._clock_color = QColor(*color_data)
+            bg_color_data = clock_config.get('bg_color', [64, 64, 64, 255])
+            try:
+                self._clock_bg_color = QColor(*bg_color_data)
+            except Exception:
+                self._clock_bg_color = QColor(64, 64, 64, 255)
+            border_color_data = clock_config.get('border_color', [128, 128, 128, 255])
+            try:
+                self._clock_border_color = QColor(*border_color_data)
+            except Exception:
+                self._clock_border_color = QColor(128, 128, 128, 255)
+            border_opacity_pct = int(clock_config.get('border_opacity', 0.8) * 100)
+            self.clock_border_opacity.setValue(border_opacity_pct)
+            self.clock_border_opacity_label.setText(f"{border_opacity_pct}%")
 
             clock2_config = widgets.get('clock2', {})
             self.clock2_enabled.setChecked(clock2_config.get('enabled', False))
@@ -751,6 +807,20 @@ class WidgetsTab(QWidget):
             self._clock_color = color
             self._save_settings()
     
+    def _choose_clock_bg_color(self) -> None:
+        """Choose clock background color."""
+        color = QColorDialog.getColor(self._clock_bg_color, self, "Choose Clock Background Color")
+        if color.isValid():
+            self._clock_bg_color = color
+            self._save_settings()
+    
+    def _choose_clock_border_color(self) -> None:
+        """Choose clock border color."""
+        color = QColorDialog.getColor(self._clock_border_color, self, "Choose Clock Border Color")
+        if color.isValid():
+            self._clock_border_color = color
+            self._save_settings()
+    
     def _choose_weather_color(self) -> None:
         """Choose weather text color."""
         color = QColorDialog.getColor(self._weather_color, self, "Choose Weather Color")
@@ -790,8 +860,13 @@ class WidgetsTab(QWidget):
             'margin': self.clock_margin.value(),
             'show_background': self.clock_show_background.isChecked(),
             'bg_opacity': self.clock_bg_opacity.value() / 100.0,
+            'bg_color': [self._clock_bg_color.red(), self._clock_bg_color.green(),
+                        self._clock_bg_color.blue(), self._clock_bg_color.alpha()],
             'color': [self._clock_color.red(), self._clock_color.green(), 
-                     self._clock_color.blue(), self._clock_color.alpha()]
+                     self._clock_color.blue(), self._clock_color.alpha()],
+            'border_color': [self._clock_border_color.red(), self._clock_border_color.green(),
+                             self._clock_border_color.blue(), self._clock_border_color.alpha()],
+            'border_opacity': self.clock_border_opacity.value() / 100.0,
         }
         # Monitor selection save: 'ALL' or int
         cmon_text = self.clock_monitor_combo.currentText()
