@@ -40,6 +40,9 @@ class WidgetsTab(QWidget):
         self._settings = settings
         self._clock_color = QColor(255, 255, 255, 230)
         self._weather_color = QColor(255, 255, 255, 230)
+        # Weather widget frame defaults mirror WeatherWidget internals
+        self._weather_bg_color = QColor(64, 64, 64, 255)
+        self._weather_border_color = QColor(128, 128, 128, 255)
         self._setup_ui()
         self._load_settings()
         
@@ -422,6 +425,47 @@ class WidgetsTab(QWidget):
         self.weather_bg_opacity.valueChanged.connect(lambda v: self.weather_opacity_label.setText(f"{v}%"))
         weather_opacity_row.addWidget(self.weather_opacity_label)
         weather_layout.addLayout(weather_opacity_row)
+
+        # Background color
+        weather_bg_color_row = QHBoxLayout()
+        weather_bg_color_row.addWidget(QLabel("Background Color:"))
+        self.weather_bg_color_btn = QPushButton("Choose Color...")
+        self.weather_bg_color_btn.clicked.connect(self._choose_weather_bg_color)
+        weather_bg_color_row.addWidget(self.weather_bg_color_btn)
+        weather_bg_color_row.addStretch()
+        weather_layout.addLayout(weather_bg_color_row)
+
+        # Border color
+        weather_border_color_row = QHBoxLayout()
+        weather_border_color_row.addWidget(QLabel("Border Color:"))
+        self.weather_border_color_btn = QPushButton("Choose Color...")
+        self.weather_border_color_btn.clicked.connect(self._choose_weather_border_color)
+        weather_border_color_row.addWidget(self.weather_border_color_btn)
+        weather_border_color_row.addStretch()
+        weather_layout.addLayout(weather_border_color_row)
+
+        # Border opacity (independent from background opacity)
+        weather_border_opacity_row = QHBoxLayout()
+        weather_border_opacity_row.addWidget(QLabel("Border Opacity:"))
+        self.weather_border_opacity = QSlider(Qt.Orientation.Horizontal)
+        self.weather_border_opacity.setMinimum(0)
+        self.weather_border_opacity.setMaximum(100)
+        self.weather_border_opacity.setValue(80)
+        self.weather_border_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.weather_border_opacity.setTickInterval(10)
+        self.weather_border_opacity.valueChanged.connect(self._save_settings)
+        weather_border_opacity_row.addWidget(self.weather_border_opacity)
+        self.weather_border_opacity_label = QLabel("80%")
+        self.weather_border_opacity.valueChanged.connect(
+            lambda v: self.weather_border_opacity_label.setText(f"{v}%")
+        )
+        weather_border_opacity_row.addWidget(self.weather_border_opacity_label)
+        weather_layout.addLayout(weather_border_opacity_row)
+
+        # Condition icons toggle
+        self.weather_show_icons = QCheckBox("Show Condition Icons")
+        self.weather_show_icons.stateChanged.connect(self._save_settings)
+        weather_layout.addWidget(self.weather_show_icons)
         
         self._weather_container = QWidget()
         weather_container_layout = QVBoxLayout(self._weather_container)
@@ -572,7 +616,11 @@ class WidgetsTab(QWidget):
                 getattr(self, 'weather_font_combo', None),
                 getattr(self, 'weather_font_size', None),
                 getattr(self, 'weather_show_background', None),
+                getattr(self, 'weather_show_icons', None),
                 getattr(self, 'weather_bg_opacity', None),
+                getattr(self, 'weather_bg_color_btn', None),
+                getattr(self, 'weather_border_color_btn', None),
+                getattr(self, 'weather_border_opacity', None),
             ]:
                 if w is not None and hasattr(w, 'blockSignals'):
                     w.blockSignals(True)
@@ -658,6 +706,8 @@ class WidgetsTab(QWidget):
             self.weather_font_combo.setCurrentFont(QFont(weather_config.get('font_family', 'Segoe UI')))
             self.weather_font_size.setValue(weather_config.get('font_size', 24))
             self.weather_show_background.setChecked(weather_config.get('show_background', False))
+            show_icons = SettingsManager.to_bool(weather_config.get('show_icons', True), True)
+            self.weather_show_icons.setChecked(show_icons)
             weather_opacity_pct = int(weather_config.get('bg_opacity', 0.9) * 100)
             self.weather_bg_opacity.setValue(weather_opacity_pct)
             self.weather_opacity_label.setText(f"{weather_opacity_pct}%")
@@ -665,6 +715,20 @@ class WidgetsTab(QWidget):
             # Load weather color
             weather_color_data = weather_config.get('color', [255, 255, 255, 230])
             self._weather_color = QColor(*weather_color_data)
+            # Load weather background and border colors
+            bg_color_data = weather_config.get('bg_color', [64, 64, 64, 255])
+            try:
+                self._weather_bg_color = QColor(*bg_color_data)
+            except Exception:
+                self._weather_bg_color = QColor(64, 64, 64, 255)
+            border_color_data = weather_config.get('border_color', [128, 128, 128, 255])
+            try:
+                self._weather_border_color = QColor(*border_color_data)
+            except Exception:
+                self._weather_border_color = QColor(128, 128, 128, 255)
+            border_opacity_pct = int(weather_config.get('border_opacity', 0.8) * 100)
+            self.weather_border_opacity.setValue(border_opacity_pct)
+            self.weather_border_opacity_label.setText(f"{border_opacity_pct}%")
             # Monitor selection
             w_monitor_sel = weather_config.get('monitor', 'ALL')
             w_mon_text = str(w_monitor_sel) if isinstance(w_monitor_sel, (int, str)) else 'ALL'
@@ -692,6 +756,20 @@ class WidgetsTab(QWidget):
         color = QColorDialog.getColor(self._weather_color, self, "Choose Weather Color")
         if color.isValid():
             self._weather_color = color
+            self._save_settings()
+    
+    def _choose_weather_bg_color(self) -> None:
+        """Choose weather background color."""
+        color = QColorDialog.getColor(self._weather_bg_color, self, "Choose Weather Background Color")
+        if color.isValid():
+            self._weather_bg_color = color
+            self._save_settings()
+
+    def _choose_weather_border_color(self) -> None:
+        """Choose weather border color."""
+        color = QColorDialog.getColor(self._weather_border_color, self, "Choose Weather Border Color")
+        if color.isValid():
+            self._weather_border_color = color
             self._save_settings()
     
     def _save_settings(self) -> None:
@@ -727,9 +805,15 @@ class WidgetsTab(QWidget):
             'font_family': self.weather_font_combo.currentFont().family(),
             'font_size': self.weather_font_size.value(),
             'show_background': self.weather_show_background.isChecked(),
+            'show_icons': self.weather_show_icons.isChecked(),
             'bg_opacity': self.weather_bg_opacity.value() / 100.0,
             'color': [self._weather_color.red(), self._weather_color.green(), 
-                     self._weather_color.blue(), self._weather_color.alpha()]
+                     self._weather_color.blue(), self._weather_color.alpha()],
+            'bg_color': [self._weather_bg_color.red(), self._weather_bg_color.green(),
+                        self._weather_bg_color.blue(), self._weather_bg_color.alpha()],
+            'border_color': [self._weather_border_color.red(), self._weather_border_color.green(),
+                             self._weather_border_color.blue(), self._weather_border_color.alpha()],
+            'border_opacity': self.weather_border_opacity.value() / 100.0,
         }
         wmon_text = self.weather_monitor_combo.currentText()
         weather_config['monitor'] = wmon_text if wmon_text == 'ALL' else int(wmon_text)

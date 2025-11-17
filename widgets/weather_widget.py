@@ -6,14 +6,18 @@ Displays current weather information using Open-Meteo API (no API key needed).
 from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
 from enum import Enum
+from pathlib import Path
+import json
 from PySide6.QtWidgets import QLabel, QWidget, QGraphicsOpacityEffect
 from PySide6.QtCore import QTimer, Qt, Signal, QThread, QObject, QPropertyAnimation
 from PySide6.QtGui import QFont, QColor
 
 from core.logging.logger import get_logger
+from core.threading.manager import ThreadManager
 from weather.open_meteo_provider import OpenMeteoProvider
 
 logger = get_logger(__name__)
+_CACHE_FILE = Path(__file__).resolve().parent / "last_weather.json"
 
 
 class WeatherPosition(Enum):
@@ -98,6 +102,7 @@ class WeatherWidget(QLabel):
         self._location = location
         self._position = position
         self._update_timer: Optional[QTimer] = None
+        self._retry_timer: Optional[QTimer] = None
         self._enabled = False
         
         # Caching
@@ -106,16 +111,19 @@ class WeatherWidget(QLabel):
         self._cache_duration = timedelta(minutes=30)
         self._has_displayed_valid_data = False
         self._pending_first_show = False
+        self._load_persisted_cache()
         
         # Background thread
         self._fetch_thread: Optional[QThread] = None
         self._fetcher: Optional[WeatherFetcher] = None
+        self._thread_manager = None
         
         # Styling defaults
         self._font_family = "Segoe UI"
         self._font_size = 24
         self._text_color = QColor(255, 255, 255, 230)
         self._margin = 20
+        self._show_icons = True
         
         # Background frame settings
         self._show_background = False
@@ -170,7 +178,7 @@ class WeatherWidget(QLabel):
             self._update_display(self._cached_data)
             self._has_displayed_valid_data = True
             self._enabled = True
-            self.show()
+            self._fade_in()
 
             self._fetch_weather()
             self._update_timer = QTimer(self)
@@ -204,6 +212,13 @@ class WeatherWidget(QLabel):
             except RuntimeError:
                 pass
             self._update_timer = None
+        if self._retry_timer:
+            try:
+                self._retry_timer.stop()
+                self._retry_timer.deleteLater()
+            except RuntimeError:
+                pass
+            self._retry_timer = None
         
         # Stop fetch thread if running
         if self._fetch_thread and self._fetch_thread.isRunning():
@@ -230,21 +245,54 @@ class WeatherWidget(QLabel):
         
         # Fetch from API in background
         logger.debug("Fetching fresh weather data")
-        
-        # Create worker thread
+
+        if self._thread_manager is not None:
+            self._fetch_via_thread_manager()
+        else:
+            self._start_fetch_thread()
+
+    def _start_fetch_thread(self) -> None:
         self._fetch_thread = QThread()
         self._fetcher = WeatherFetcher(self._location)
         self._fetcher.moveToThread(self._fetch_thread)
-        
-        # Connect signals
+
         self._fetch_thread.started.connect(self._fetcher.fetch)
         self._fetcher.data_fetched.connect(self._on_weather_fetched)
         self._fetcher.error_occurred.connect(self._on_fetch_error)
         self._fetcher.data_fetched.connect(self._fetch_thread.quit)
         self._fetcher.error_occurred.connect(self._fetch_thread.quit)
-        
-        # Start thread
+
         self._fetch_thread.start()
+
+    def _fetch_via_thread_manager(self) -> None:
+        tm = self._thread_manager
+        if tm is None:
+            self._start_fetch_thread()
+            return
+
+        def _do_fetch(location: str) -> Dict[str, Any]:
+            logger.debug("[ThreadManager] Fetching weather for %s", location)
+            provider = OpenMeteoProvider(timeout=10)
+            return provider.get_current_weather(location)
+
+        def _on_result(result) -> None:
+            try:
+                if getattr(result, "success", False) and isinstance(getattr(result, "result", None), dict):
+                    data = result.result
+                    ThreadManager.run_on_ui_thread(self._on_weather_fetched, data)
+                else:
+                    err = getattr(result, "error", None)
+                    if err is None:
+                        err = "No weather data returned"
+                    ThreadManager.run_on_ui_thread(self._on_fetch_error, str(err))
+            except Exception as e:
+                ThreadManager.run_on_ui_thread(self._on_fetch_error, f"Weather fetch failed: {e}")
+
+        try:
+            tm.submit_io_task(_do_fetch, self._location, callback=_on_result)
+        except Exception as e:
+            logger.exception("ThreadManager IO task submission failed, falling back to QThread: %s", e)
+            self._start_fetch_thread()
     
     def _on_weather_fetched(self, data: Dict[str, Any]) -> None:
         """
@@ -259,6 +307,7 @@ class WeatherWidget(QLabel):
         
         # Update display
         self._update_display(data)
+        self._persist_cache(data)
         
         if self._pending_first_show and not self._has_displayed_valid_data:
             self._pending_first_show = False
@@ -282,8 +331,10 @@ class WeatherWidget(QLabel):
             self._update_display(self._cached_data)
         else:
             logger.error(f"Fetch failed with no cache: {error}")
-            self.setText("Weather: Error")
         
+        if not self._cached_data and self._enabled:
+            self._schedule_retry()
+
         self.error_occurred.emit(error)
     
     def _is_cache_valid(self) -> bool:
@@ -293,6 +344,85 @@ class WeatherWidget(QLabel):
         
         age = datetime.now() - self._cache_time
         return age < self._cache_duration
+
+    def _load_persisted_cache(self) -> None:
+        try:
+            if not _CACHE_FILE.exists():
+                return
+            raw = _CACHE_FILE.read_text(encoding="utf-8")
+            payload = json.loads(raw)
+        except Exception:
+            logger.debug("Failed to load persisted weather cache", exc_info=True)
+            return
+
+        loc = payload.get("location")
+        ts = payload.get("timestamp")
+        if not loc or not ts:
+            return
+        try:
+            dt = datetime.fromisoformat(ts)
+        except Exception:
+            return
+        if loc.lower() != self._location.lower():
+            return
+        age = datetime.now() - dt
+        if age > self._cache_duration:
+            return
+
+        temp = payload.get("temperature")
+        condition = payload.get("condition")
+        if temp is None or condition is None:
+            return
+
+        self._cached_data = {
+            "temperature": temp,
+            "condition": condition,
+            "location": loc,
+        }
+        self._cache_time = dt
+
+    def _schedule_retry(self, delay_ms: int = 5 * 60 * 1000) -> None:
+        if self._retry_timer is not None:
+            return
+        timer = QTimer(self)
+        timer.setSingleShot(True)
+        timer.timeout.connect(self._on_retry_timeout)
+        timer.start(delay_ms)
+        self._retry_timer = timer
+
+    def _on_retry_timeout(self) -> None:
+        self._retry_timer = None
+        if self._enabled:
+            self._fetch_weather()
+    
+    def _persist_cache(self, data: Dict[str, Any]) -> None:
+        try:
+            temp = data.get("temperature")
+            condition = data.get("condition")
+            location = data.get("location") or self._location
+
+            if temp is None:
+                main = data.get("main")
+                if isinstance(main, dict):
+                    temp = main.get("temp")
+            if condition is None:
+                weather_list = data.get("weather")
+                if isinstance(weather_list, list) and weather_list:
+                    entry = weather_list[0]
+                    condition = entry.get("main") or entry.get("description")
+
+            if temp is None or condition is None:
+                return
+
+            payload = {
+                "location": location,
+                "temperature": float(temp),
+                "condition": str(condition),
+                "timestamp": datetime.now().isoformat(),
+            }
+            _CACHE_FILE.write_text(json.dumps(payload), encoding="utf-8")
+        except Exception:
+            logger.debug("Failed to persist weather cache", exc_info=True)
     
     def _update_display(self, data: Optional[Dict[str, Any]]) -> None:
         """
@@ -332,7 +462,24 @@ class WeatherWidget(QLabel):
             city_pt = max(6, self._font_size + 2)
             details_pt = max(6, self._font_size - 2)
             city_html = f"<div style='font-size:{city_pt}pt; font-weight:700;'>{location}</div>"
-            details_text = f"{temp:.0f}°C - {condition}"
+            c_lower = str(condition).lower()
+            tag = ""
+            if self._show_icons:
+                if "thunder" in c_lower or "storm" in c_lower:
+                    tag = "[STORM] "
+                elif "snow" in c_lower or "sleet" in c_lower:
+                    tag = "[SNOW] "
+                elif "rain" in c_lower or "drizzle" in c_lower or "shower" in c_lower:
+                    tag = "[RAIN] "
+                elif "sun" in c_lower or "clear" in c_lower:
+                    tag = "[SUN] "
+                elif "cloud" in c_lower or "overcast" in c_lower:
+                    tag = "[CLOUD] "
+
+            if self._show_icons and tag:
+                details_text = f"{tag}{temp:.0f}°C - {condition}"
+            else:
+                details_text = f"{temp:.0f}°C - {condition}"
             details_html = f"<div style='font-size:{details_pt}pt; font-weight:500;'>{details_text}</div>"
             html = f"<div style='line-height:1.0'>{city_html}{details_html}</div>"
             self.setTextFormat(Qt.TextFormat.RichText)
@@ -409,6 +556,9 @@ class WeatherWidget(QLabel):
         if self._enabled:
             self._update_position()
     
+    def set_thread_manager(self, thread_manager) -> None:
+        self._thread_manager = thread_manager
+    
     def set_font_family(self, family: str) -> None:
         """
         Set font family.
@@ -454,6 +604,10 @@ class WeatherWidget(QLabel):
         """
         self._show_background = show
         self._update_stylesheet()
+
+    def set_show_icons(self, show: bool) -> None:
+        """Enable or disable inline condition tags/icons."""
+        self._show_icons = bool(show)
     
     def set_background_color(self, color: QColor) -> None:
         """

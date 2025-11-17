@@ -114,6 +114,7 @@ This document is now the single source of truth for all known stability gaps, re
   - Current playback state (Playing / Paused)
   - Track title and artist
   - Album artwork, with artwork crossfading in/out when tracks change
+  - When no artwork is available the border (if border enabled) should reduce in size to match the ommitance of the artwork image. The reverse should happen when album artwork becomes available from being unavailable. Ideally have this change as either a smooth animation growth or a fade.
 - [ ] Provide layout options equivalent to the weather widget (per-monitor selection, corner position, background on/off, margin, opacity) through the widgets settings UI.
 - [ ] Add transport controls to the widget UI: clickable Previous (`<`), Play/Pause, and Next (`>`).
 - [ ] Gate interactivity behind explicit user intent: transport buttons are only clickable when either `input.hard_exit` is enabled or the Ctrl key is held down in the new temporary interaction mode; in normal mode the widget is display-only to avoid accidental exits.
@@ -121,13 +122,8 @@ This document is now the single source of truth for all known stability gaps, re
 - [ ] If Widget cannot retrieve media information or controls widget should fallback to not rendering and log failure silently. 
 
 ### 11.2 Weather Iconography (Priority: Low)
-- [ ] Add QPainter-based weather iconography (no external bitmaps) for the primary conditions:
-  - Sun: circle + rays (lines radiating out)
-  - Cloud: overlapping circles/ellipses
-  - Rain: diagonal lines below cloud
-  - Snow: asterisks or small circles
-  - Thunder: zigzag line below cloud
-- [ ] Integrate these icons into `widgets/weather_widget.py`, positioned in the lower-left portion of the widget and styled to match the configured text color (respecting theme and DPI).
+- [ ] Replace the current simple ASCII condition tags (e.g. `[CLOUD]`, `[RAIN]`, `[SUN]`) with a more refined iconography approach (either improved ASCII or a free-to-use icon set) that remains readable and theme-aware.
+- [ ] Integrate the chosen iconography into `widgets/weather_widget.py`, positioned cleanly relative to the text and styled to match the configured text color (respecting theme and DPI).
 - [ ] Add a `show_icon`/style setting for the weather widget (with sensible defaults) and ensure drawing stays performant and flicker-free.
 
 ### 11.3 Analogue Clock Mode (Priority: Low)
@@ -151,9 +147,10 @@ This document is now the single source of truth for all known stability gaps, re
 ### 11.6 Long-term UI & Widgets ideas (Very low priority)
 - [ ] Add small but strong bottom-right drop shadows to most buttons where space allows (including tab buttons), matching project-wide shadow styling.
 - [ ] Improve spin button visual design (clean up/down arrows, white icons, appropriate drop shadow for the control container).
-- [ ] Ensure the Settings GUI is never created larger than the user's screen (target ~60% of screen space) while remaining resizable.
+- [ ] Ensure the Settings GUI is never created larger than the user's screen (target ~60% of screen space) while remaining resizable. Minimum height is currently much too large, if that adjustment will fix that great, if not minimum height needs be 850px
 - [ ] Fix Windows theme accent colours leaking into Settings GUI highlights; force monochrome highlights matching the app theme. *(Requires explicit approval before implementation.)*
-- [ ] Revise the About section layout (heading, blurb, four external links) and integrate the `images/Shoogle300W.png` artwork with responsive sizing (scale down only, avoid overlap with text).
+- [ ] Revise the About section layout (heading replaced with image "F:\Programming\Apps\ShittyRandomPhotoScreenSaver\images\Logo.png", blurb - "C:\Users\Basjohn\Documents\AboutBlurb.txt", four external links with styled buttons shown in blurb, keep Hotkey text below links, matching alignments) and integrate the `images/Shoogle300W.png` artwork top aligned with the logo.png with responsive sizing for both (scale down only, avoid overlap with text). An exact example can be seen here "F:\Programming\Apps\ShittyRandomPhotoScreenSaver\images\ABOUTExample.png"
+The example shows the main content area of the tab which is the only area you need to adjust for this.
 - [ ] Add a Reddit widget that lists post titles from a configured subreddit (r/...), with configurable count, text styling, and clickable links opened in the default browser. *(Feasibility depends on acceptable, non-API-key access.)*
 - [ ] Add a MusicBee widget mirroring Spotify/media widget behaviour but driven by Music Bee APIs/integration, this is a seperate widget to spotify.
 - [ ] Implement a Ctrl+right-click-and-drag custom widget positioning mode with snapping between widgets and per-widget persistent positions.

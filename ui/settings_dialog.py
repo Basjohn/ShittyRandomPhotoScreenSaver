@@ -196,7 +196,7 @@ class SettingsDialog(QDialog):
             self.resize(default_width, default_height)
             logger.debug(f"No saved geometry - defaulting to 60% of screen: {default_width}x{default_height}")
         
-        # Drop shadow effect
+        # Drop shadow effect (no global windowOpacity so controls stay fully opaque)
         shadow = QGraphicsDropShadowEffect(self)
         shadow.setBlurRadius(20)
         shadow.setXOffset(0)
@@ -216,19 +216,19 @@ class SettingsDialog(QDialog):
                     custom_styles = """
                     /* Settings Dialog Custom Styles */
                     QDialog {
-                        background-color: rgba(43, 43, 43, 0.8);
+                        background-color: transparent;
                         border: 3px solid #ffffff;
                         border-radius: 12px;
                     }
                     
                     #dialogContainer {
-                        background-color: rgba(43, 43, 43, 0.8);
+                        background-color: #2B2B2B;
                         border: 2px solid #5a5a5a;
                         border-radius: 10px;
                     }
                     
                     #customTitleBar {
-                        background-color: rgba(30, 30, 30, 0.8);
+                        background-color: #1E1E1E;
                         border-top-left-radius: 10px;
                         border-top-right-radius: 10px;
                     }
@@ -265,12 +265,12 @@ class SettingsDialog(QDialog):
                     }
                     
                     #sidebar {
-                        background-color: rgba(35, 35, 35, 0.8);
+                        background-color: #232323;
                         border-radius: 8px;
                     }
                     
                     #tabButton {
-                        background-color: rgba(43, 43, 43, 0.8);
+                        background-color: #2B2B2B;
                         color: #cccccc;
                         border: none;
                         text-align: left;
@@ -280,18 +280,18 @@ class SettingsDialog(QDialog):
                     }
                     
                     #tabButton:hover {
-                        background-color: rgba(62, 62, 62, 0.8);
+                        background-color: #3E3E3E;
                         color: #ffffff;
                     }
                     
                     #tabButton:checked {
-                        background-color: rgba(0, 120, 212, 0.8);
+                        background-color: #0078D4;
                         color: #ffffff;
                         font-weight: bold;
                     }
                     
                     #contentArea {
-                        background-color: rgba(30, 30, 30, 0.8);
+                        background-color: #1E1E1E;
                         border-radius: 8px;
                         padding: 20px;
                     }

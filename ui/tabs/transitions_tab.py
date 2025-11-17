@@ -297,9 +297,25 @@ class TransitionsTab(QWidget):
         self.duration_slider.setValue(duration)
         self.duration_value_label.setText(f"{duration} ms")
         
-        # Load per-transition directions (nested with backward-compat to top-level)
-        self._dir_slide = transitions_config.get('slide', {}).get('direction', transitions_config.get('direction', 'Left to Right'))
-        self._dir_wipe = transitions_config.get('wipe', {}).get('direction', transitions_config.get('direction', 'Left to Right'))
+        # Load per-transition directions (nested with backward-compat to flat keys and top-level)
+        slide_cfg = transitions_config.get('slide', {})
+        wipe_cfg = transitions_config.get('wipe', {})
+
+        slide_dir = slide_cfg.get('direction') if isinstance(slide_cfg, dict) else None
+        wipe_dir = wipe_cfg.get('direction') if isinstance(wipe_cfg, dict) else None
+
+        if slide_dir is None:
+            slide_dir = self._settings.get('transitions.slide.direction', None)
+        if wipe_dir is None:
+            wipe_dir = self._settings.get('transitions.wipe.direction', None)
+
+        if slide_dir is None:
+            slide_dir = transitions_config.get('direction', 'Left to Right')
+        if wipe_dir is None:
+            wipe_dir = transitions_config.get('direction', 'Left to Right')
+
+        self._dir_slide = slide_dir or 'Left to Right'
+        self._dir_wipe = wipe_dir or 'Left to Right'
         
         # Load easing
         easing = transitions_config.get('easing', 'Auto')

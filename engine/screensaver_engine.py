@@ -416,12 +416,13 @@ class ScreensaverEngine(QObject):
             
             same_image = self.settings_manager.get('display.same_image_all_monitors', True)
             
-            # Create display manager
+            # Create display manager (inject core managers)
             self.display_manager = DisplayManager(
                 display_mode=display_mode,
                 same_image_mode=same_image,
                 settings_manager=self.settings_manager,
                 resource_manager=self.resource_manager,
+                thread_manager=self.thread_manager,
             )
             
             # Connect exit signal
@@ -788,13 +789,14 @@ class ScreensaverEngine(QObject):
             image_path = str(image_meta.local_path) if image_meta.local_path else image_meta.url or "unknown"
             
             # Check if we should show same image on all displays or different images
-            same_image = self.settings_manager.get('display.same_image_all_monitors', True)
-            logger.debug(f"Same image on all monitors setting: {same_image} (type: {type(same_image)})")
-            
-            # Convert to bool if string
-            if isinstance(same_image, str):
-                same_image = same_image.lower() in ('true', '1', 'yes')
-            
+            raw_same_image = self.settings_manager.get('display.same_image_all_monitors', True)
+            same_image = SettingsManager.to_bool(raw_same_image, True)
+            logger.debug(
+                "Same image on all monitors setting: %s (raw=%r)",
+                same_image,
+                raw_same_image,
+            )
+
             if same_image:
                 # Show same image on all displays
                 self.display_manager.show_image(pixmap, image_path)
@@ -983,23 +985,35 @@ class ScreensaverEngine(QObject):
                 # FIX: Use result or mark as intentionally ignored
                 _ = dialog.exec()  # Result intentionally ignored - dialog handles its own state
                 
-                # After dialog closes, show displays again and restart
-                logger.info("Settings dialog closed, restarting screensaver...")
-                
-                # Show displays again
+                # After dialog closes, fully reset displays and restart
+                logger.info("Settings dialog closed, performing full-style restart of screensaver")
+
+                # Tear down any existing display manager stack so we get a fresh
+                # set of DisplayWidget instances (clears stale GL/compositor state
+                # and avoids banding on secondary displays).
                 if self.display_manager:
-                    self.display_manager.show_all()
-                
-                if self._display_initialized:
-                    self.start()
-                else:
-                    # If displays weren't initialized, try to initialize them
-                    if self.initialize():
-                        self.start()
-                    else:
-                        # Initialization failed, exit
-                        logger.error("Failed to restart screensaver")
-                        QApplication.quit()
+                    try:
+                        self.display_manager.cleanup()
+                    except Exception:
+                        logger.debug("DisplayManager cleanup after settings failed", exc_info=True)
+                    self.display_manager = None
+                    self._display_initialized = False
+
+                # Reinitialize displays using current settings
+                if not self._initialize_display():
+                    logger.error("Failed to reinitialize displays after settings; quitting")
+                    QApplication.quit()
+                    return
+
+                # Recreate rotation timer with any updated timing settings
+                self._setup_rotation_timer()
+
+                # Ensure start() does not early-out on a stale running flag
+                self._running = False
+
+                if not self.start():
+                    logger.error("Failed to restart screensaver after settings; quitting")
+                    QApplication.quit()
         except Exception as e:
             logger.exception(f"Failed to open settings dialog: {e}")
             QApplication.quit()

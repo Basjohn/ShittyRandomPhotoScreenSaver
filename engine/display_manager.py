@@ -47,6 +47,7 @@ class DisplayManager(QObject):
         same_image_mode: bool = True,
         settings_manager=None,
         resource_manager: ResourceManager | None = None,
+        thread_manager=None,
     ):
         """
         Initialize display manager.
@@ -62,6 +63,7 @@ class DisplayManager(QObject):
         self.same_image_mode = same_image_mode
         self.settings_manager = settings_manager
         self._resource_manager: ResourceManager | None = resource_manager or ResourceManager()
+        self._thread_manager = thread_manager
         self.displays: List[DisplayWidget] = []
         self.current_images: Dict[int, str] = {}  # screen_index -> image_path
         
@@ -150,6 +152,7 @@ class DisplayManager(QObject):
                 display_mode=self.display_mode,
                 settings_manager=self.settings_manager,
                 resource_manager=self._resource_manager,
+                thread_manager=self._thread_manager,
             )
             
             # Connect signals

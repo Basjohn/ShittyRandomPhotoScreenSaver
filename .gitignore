@@ -8,6 +8,7 @@ dist/
 build/
 .cache/
 .tmp/
+release/
 *.ps1
 
 # Python
@@ -25,6 +26,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 audits/
+temp/
+settings/
 
 # IDE and editor files
 .vscode/

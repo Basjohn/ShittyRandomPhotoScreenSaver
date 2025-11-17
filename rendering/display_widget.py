@@ -37,7 +37,6 @@ from core.logging.logger import get_logger
 from core.logging.overlay_telemetry import record_overlay_ready
 from core.resources.manager import ResourceManager
 from core.settings.settings_manager import SettingsManager
-from transitions.gl_crossfade_transition import _GLFadeWidget
 from transitions.overlay_manager import (
     hide_all_overlays,
     any_overlay_ready_for_display,
@@ -107,6 +106,7 @@ class DisplayWidget(QWidget):
         settings_manager=None,
         parent: Optional[QWidget] = None,
         resource_manager: Optional[ResourceManager] = None,
+        thread_manager=None,
     ):
         """
         Initialize display widget.
@@ -166,6 +166,8 @@ class DisplayWidget(QWidget):
                 self._resource_manager = ResourceManager()
             except Exception:
                 self._resource_manager = None
+        # Central ThreadManager wiring (optional, provided by engine)
+        self._thread_manager = thread_manager
         
         # Setup widget
         self.setWindowFlags(
@@ -604,7 +606,13 @@ class DisplayWidget(QWidget):
             
             try:
                 self.weather_widget = WeatherWidget(self, location, position)
-                
+                # Inject ThreadManager if available so weather fetches use central IO pool
+                if self._thread_manager is not None and hasattr(self.weather_widget, "set_thread_manager"):
+                    try:
+                        self.weather_widget.set_thread_manager(self._thread_manager)
+                    except Exception:
+                        pass
+
                 # Set font family if specified
                 font_family = weather_settings.get('font_family', 'Segoe UI')
                 if hasattr(self.weather_widget, 'set_font_family'):
@@ -612,18 +620,51 @@ class DisplayWidget(QWidget):
                 
                 self.weather_widget.set_font_size(font_size)
                 
-                # Convert color array to QColor
+                # Convert color arrays to QColor
                 from PySide6.QtGui import QColor
                 qcolor = QColor(color[0], color[1], color[2], color[3])
                 self.weather_widget.set_text_color(qcolor)
-                
-                # Set background frame if enabled
-                show_background = SettingsManager.to_bool(weather_settings.get('show_background', False), False)
+
+                # Background/frame customization
+                show_background = SettingsManager.to_bool(
+                    weather_settings.get('show_background', False), False
+                )
                 self.weather_widget.set_show_background(show_background)
-                
-                # Set background opacity
+
+                # Background color (RGB+alpha), default matches WeatherWidget internal default
+                bg_color_data = weather_settings.get('bg_color', [64, 64, 64, 255])
+                try:
+                    bg_r, bg_g, bg_b = bg_color_data[0], bg_color_data[1], bg_color_data[2]
+                    bg_a = bg_color_data[3] if len(bg_color_data) > 3 else 255
+                    bg_qcolor = QColor(bg_r, bg_g, bg_b, bg_a)
+                    self.weather_widget.set_background_color(bg_qcolor)
+                except Exception:
+                    pass
+
+                # Background opacity (scales alpha regardless of bg_color alpha)
                 bg_opacity = weather_settings.get('bg_opacity', 0.9)
                 self.weather_widget.set_background_opacity(bg_opacity)
+
+                # Border color and opacity (independent from background opacity)
+                border_color_data = weather_settings.get('border_color', [128, 128, 128, 255])
+                border_opacity = weather_settings.get('border_opacity', 0.8)
+                try:
+                    br_r, br_g, br_b = (
+                        border_color_data[0],
+                        border_color_data[1],
+                        border_color_data[2],
+                    )
+                    base_alpha = border_color_data[3] if len(border_color_data) > 3 else 255
+                    br_a = int(max(0.0, min(1.0, float(border_opacity))) * base_alpha)
+                    border_qcolor = QColor(br_r, br_g, br_b, br_a)
+                    # Border width remains driven by WeatherWidget's defaults (2px)
+                    self.weather_widget.set_background_border(2, border_qcolor)
+                except Exception:
+                    pass
+                # Show/hide condition icons
+                show_icons = SettingsManager.to_bool(weather_settings.get('show_icons', True), True)
+                if hasattr(self.weather_widget, 'set_show_icons'):
+                    self.weather_widget.set_show_icons(show_icons)
                 
                 self.weather_widget.raise_()
                 self.weather_widget.start()
@@ -634,52 +675,9 @@ class DisplayWidget(QWidget):
             logger.debug("Weather widget disabled in settings")
 
     def _warm_up_gl_overlay(self, base_pixmap: QPixmap) -> None:
-        """Warm up the persistent GL overlay once to avoid first-run flicker."""
-        if not self.settings_manager:
-            return
-        hw_accel = self.settings_manager.get('display.hw_accel', False)
-        if isinstance(hw_accel, str):
-            hw_accel = hw_accel.lower() == 'true'
-        existing = getattr(self, "_srpss_gl_xfade_overlay", None)
-        w, h = self.width(), self.height()
-        if w <= 0 or h <= 0 or base_pixmap is None or base_pixmap.isNull():
-            return
-
-        overlay = get_or_create_overlay(
-            self,
-            "_srpss_gl_xfade_overlay",
-            _GLFadeWidget,
-            lambda: _GLFadeWidget(self, base_pixmap, base_pixmap),
-        )
-        set_overlay_geometry(self, overlay)
-        overlay.set_alpha(1.0)
-        overlay.set_images(base_pixmap, base_pixmap)
-        if overlay is not existing:
-            logger.debug("[WARMUP] Created GL crossfade overlay for warm-up")
-        else:
-            logger.debug("[WARMUP] Reusing GL crossfade overlay for warm-up")
-
-        # Present once with the current image to ensure context/FBO are ready
-        try:
-            overlay.setVisible(True)
-            raise_overlay(self, overlay)
-            try:
-                overlay.makeCurrent()
-            except Exception:
-                pass
-            try:
-                _ = overlay.grabFramebuffer()
-            except Exception:
-                pass
-            try:
-                overlay.repaint()
-            except Exception:
-                pass
-        finally:
-            try:
-                overlay.hide()
-            except Exception:
-                pass
+        """Legacy GL overlay warm-up disabled (compositor-only pipeline)."""
+        logger.debug("[WARMUP] Skipping legacy GL overlay warm-up (compositor-only pipeline)")
+        return
 
     def _ensure_overlay_stack(self, stage: str = "runtime") -> None:
         """Refresh overlay geometry and schedule raises to maintain Z-order."""
@@ -708,8 +706,10 @@ class DisplayWidget(QWidget):
 
     def _prewarm_gl_contexts(self) -> None:
         """
-        Pre-warm GL overlays so they have live contexts and textures before first use.
+        Legacy GL overlay prewarm disabled now that compositor is the only GL path.
         """
+        logger.debug("[PREWARM] Skipping legacy GL overlay prewarm (compositor-only pipeline)")
+        return
 
         from PySide6.QtWidgets import QApplication
         from PySide6.QtCore import Qt
