@@ -6,7 +6,8 @@ consistently across multiple DisplayWidget instances.
 """
 
 import pytest
-from PySide6.QtCore import Qt, QPoint
+from PySide6.QtCore import Qt, QPoint, QEvent
+from PySide6.QtGui import QMouseEvent
 from PySide6.QtTest import QTest
 
 from rendering.display_widget import DisplayWidget
@@ -179,3 +180,88 @@ def test_ctrl_halo_fades_in_and_out(qt_app, settings_manager, qtbot):
     if hint_after.isVisible():
         opacity_after = float(getattr(hint_after, "_opacity", 1.0))
         assert opacity_after <= 0.1
+
+
+@pytest.mark.qt
+def test_ctrl_halo_owner_migrates_between_screens(qt_app, settings_manager, qtbot, monkeypatch):
+    """Ctrl halo ownership should migrate between DisplayWidgets by QScreen.
+
+    This exercises the global Ctrl halo logic in DisplayWidget.eventFilter by
+    mocking QCursor.pos and QGuiApplication.screenAt so that the halo moves
+    from one DisplayWidget (screen 0) to another (screen 1) when the cursor is
+    reported on a different QScreen.
+    """
+
+    # Two widgets representing different screens.
+    w0 = DisplayWidget(
+        screen_index=0,
+        display_mode=DisplayMode.FILL,
+        settings_manager=settings_manager,
+    )
+    w1 = DisplayWidget(
+        screen_index=1,
+        display_mode=DisplayMode.FILL,
+        settings_manager=settings_manager,
+    )
+    for w in (w0, w1):
+        qtbot.addWidget(w)
+        w.resize(400, 300)
+        w.show()
+
+    # Assign synthetic QScreen-like identities so that the eventFilter can
+    # distinguish screens without relying on the host environment.
+    screen0 = object()
+    screen1 = object()
+    w0._screen = screen0  # type: ignore[attr-defined]
+    w1._screen = screen1  # type: ignore[attr-defined]
+
+    # Start with Ctrl held and the halo owned by w0.
+    from rendering import display_widget as display_mod
+
+    display_mod.DisplayWidget._global_ctrl_held = True  # type: ignore[attr-defined]
+    display_mod.DisplayWidget._halo_owner = w0  # type: ignore[attr-defined]
+    # Ensure w0 has a visible halo before migration.
+    w0._show_ctrl_cursor_hint(QPoint(10, 10), mode="fade_in")  # type: ignore[attr-defined]
+    qt_app.processEvents()
+
+    # Mock global cursor and QScreen mapping so the cursor moves to screen1.
+    monkeypatch.setattr(
+        display_mod.QCursor,  # type: ignore[attr-defined]
+        "pos",
+        staticmethod(lambda: QPoint(100, 100)),
+    )
+
+    def _fake_screen_at(pos):  # noqa: ARG001
+        return screen1
+
+    monkeypatch.setattr(
+        display_mod.QGuiApplication,  # type: ignore[attr-defined]
+        "screenAt",
+        staticmethod(_fake_screen_at),
+    )
+
+    # Feed a synthetic mouse-move event through w0's eventFilter. The global
+    # filter logic should notice the screen change and migrate the halo owner
+    # from w0 to w1.
+    event = QMouseEvent(
+        QEvent.Type.MouseMove,
+        QPoint(50, 50),
+        Qt.MouseButton.NoButton,
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+
+    w0.eventFilter(w0, event)
+    qt_app.processEvents()
+
+    # After migration, the global owner should be w1, w0's halo should be
+    # hidden, and w1's halo should be visible.
+    assert display_mod.DisplayWidget._halo_owner is w1  # type: ignore[attr-defined]
+
+    hint0 = getattr(w0, "_ctrl_cursor_hint", None)
+    hint1 = getattr(w1, "_ctrl_cursor_hint", None)
+
+    if hint0 is not None:
+        assert not hint0.isVisible()
+    assert hint1 is not None
+    assert hint1.isVisible()

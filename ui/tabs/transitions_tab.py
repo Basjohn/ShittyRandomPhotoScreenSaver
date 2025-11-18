@@ -435,7 +435,7 @@ class TransitionsTab(QWidget):
         """Grey out GL-only transitions when HW acceleration is disabled."""
         try:
             from PySide6.QtCore import Qt
-            hw = self._settings.get_bool('display.hw_accel', False)
+            hw = self._settings.get_bool('display.hw_accel', True)
             gl_only = ["Blinds"]
             for name in gl_only:
                 idx = self.transition_combo.findText(name)
@@ -458,7 +458,7 @@ class TransitionsTab(QWidget):
 
     def _enforce_gl_only_selection(self) -> None:
         """If a GL-only transition is selected with HW off, switch to Crossfade and persist."""
-        hw = self._settings.get_bool('display.hw_accel', False)
+        hw = self._settings.get_bool('display.hw_accel', True)
         cur = self.transition_combo.currentText()
         if cur in {"Blinds"} and not hw:
             idx = self.transition_combo.findText("Crossfade")

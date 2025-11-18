@@ -221,16 +221,12 @@ class DisplayTab(QWidget):
         # Performance group
         perf_group = QGroupBox("Performance")
         perf_layout = QVBoxLayout(perf_group)
-        self.hw_accel_check = QCheckBox("Use GPU acceleration (experimental)")
-        self.hw_accel_check.setChecked(False)
-        self.hw_accel_check.stateChanged.connect(self._save_settings)
-        perf_layout.addWidget(self.hw_accel_check)
-        
+
         self.refresh_sync_check = QCheckBox("Sync animations to display refresh rate")
         self.refresh_sync_check.setChecked(True)
         self.refresh_sync_check.stateChanged.connect(self._save_settings)
         perf_layout.addWidget(self.refresh_sync_check)
-        
+
         layout.addWidget(perf_group)
 
         # Input & Exit group
@@ -268,7 +264,6 @@ class DisplayTab(QWidget):
         self.pan_auto_check.blockSignals(True)
         self.pan_speed_spin.blockSignals(True)
         # Also block performance toggles to avoid saving defaults while loading
-        self.hw_accel_check.blockSignals(True)
         self.refresh_sync_check.blockSignals(True)
         self.backend_combo.blockSignals(True)
         # Block input toggles
@@ -327,10 +322,6 @@ class DisplayTab(QWidget):
             self.pan_speed_spin.setValue(int(pan_speed))
             self.pan_speed_spin.setEnabled(not pan_auto)
             
-            # Hardware acceleration
-            hw_accel = self._settings.get_bool('display.hw_accel', False)
-            self.hw_accel_check.setChecked(hw_accel)
-            
             # Refresh rate sync
             refresh_sync = self._settings.get_bool('display.refresh_sync', True)
             self.refresh_sync_check.setChecked(refresh_sync)
@@ -364,7 +355,6 @@ class DisplayTab(QWidget):
             self.pan_check.blockSignals(False)
             self.pan_auto_check.blockSignals(False)
             self.pan_speed_spin.blockSignals(False)
-            self.hw_accel_check.blockSignals(False)
             self.refresh_sync_check.blockSignals(False)
             self.backend_combo.blockSignals(False)
             self.hard_exit_check.blockSignals(False)
@@ -407,7 +397,6 @@ class DisplayTab(QWidget):
         self._settings.set('display.pan_speed', self.pan_speed_spin.value())
         
         # Performance
-        self._settings.set('display.hw_accel', self.hw_accel_check.isChecked())
         self._settings.set('display.refresh_sync', self.refresh_sync_check.isChecked())
 
         # Input / Exit
@@ -416,6 +405,7 @@ class DisplayTab(QWidget):
         # Renderer backend
         backend_value = self.backend_combo.currentData() or 'opengl'
         self._settings.set('display.render_backend_mode', backend_value)
+        self._settings.set('display.hw_accel', backend_value == 'opengl')
 
         self._settings.save()
         self.display_changed.emit()

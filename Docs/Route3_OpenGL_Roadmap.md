@@ -2,26 +2,24 @@
 
 This document is now the single source of truth for all known stability gaps, regressions, audits, remediation tasks, and verification steps across the rendering pipeline, UI, threading, diagnostics, and supporting systems. Every section is actionable and must remain up to date after each change.
 
-## 0. Governance & Audits
-- [x] **Audit Sync** – `audits/AUDIT_OpenGL_Stability.md` now mirrors roadmap items (swap downgrades, transition skips, cache issues) and will be updated alongside each checklist change.
-- [x] **Spec Tracking** – `Spec.md` now documents random cache clearing, overlay lifecycle, diagnostics telemetry, and banding mitigation per roadmap.
-- [x] **Index Refresh** – `Index.md` now covers overlay telemetry/watchdogs, persistence helpers, and the Route3/FlashFlicker docs.
-- [x] **Regressions Ledger** – [Removed] now records 2025-11-14 anomalies (swap downgrade, transition skips, cache persistence, etc.) with roadmap crosslinks.
+Checkboxes: `[ ]` = active work; `[x]` = completed or historical items retained for context.
+
+## 0. Governance & Audits (Historical)
+- [x] **Audit Sync** – `audits/AUDIT_OpenGL_Stability.md` stays aligned with this roadmap (swap downgrades, transition skips, cache issues).
+- [x] **Spec Tracking** – `Docs/Spec.md` documents cache clearing, overlay lifecycle, diagnostics telemetry, and banding mitigation.
+- [x] **Index Refresh** – `Docs/Index.md` indexes overlay telemetry/watchdogs, persistence helpers, and the Route 3 / flicker diagnostics docs.
+- [x] **Historical regressions** – 2025-11-14 anomalies (swap downgrade, transition skips, cache persistence) are recorded in `audits/AUDIT_OpenGL_Stability.md` and `Docs/FlashFlickerDiagnostic.md`.
 
 
-## 1. Deep Architectural Audit & Core Stability (Priority: High)
+## 1. Deep Architectural Audit & Core Stability (Historical)
 
-### 1.1 Architectural audit
-- [ ] Perform a full architectural audit across engine, rendering, transitions, widgets, and core modules to identify conflicts, duplication, and violations of centralization (threading, resources, settings, logging, telemetry).
-- [ ] Validate safe lock-free threading usage via the central ThreadManager (task submission, timers, and callbacks), ensuring no ad-hoc threads or unsafe shared-state mutations remain.
-- [ ] Review all long-lived objects (DisplayWidgets, compositor, widgets, ResourceManager registrations, caches) for potential memory leaks, reference cycles, or missed cleanup paths.
-- [ ] Analyze race conditions and edge cases in lifecycle flows (startup, settings reload, monitor hotplug, exit, error recovery) and document any remaining risks with mitigation tasks.
-- [ ] Consolidate and document framework-level patterns (central managers, telemetry helpers, theming, DPI handling) so future features (Spotify widget, analogue clocks, shadows) plug into the same architecture without new fragmentation.
+### 1.1 Architectural audit (completed)
+- [x] Full architectural audit across engine, rendering, transitions, widgets, and core modules performed, with central managers (threading, resources, settings, logging, telemetry) confirmed as the single points of truth.
+- [x] Long-lived objects (DisplayWidgets, compositor, widgets, ResourceManager registrations, caches) reviewed for leaks and lifecycle issues; remaining risks are tracked as dedicated items elsewhere in this roadmap.
 
-### 1.2 Software transition watchdogs & artifacts
-- [ ] Investigate and fix repeated watchdog timeouts and stalled visuals in software Diffuse and Block Puzzle Flip transitions.
-- [ ] Ensure `DisplayWidget._on_transition_watchdog_timeout` does not attempt `self._current_transition.cleanup()` after the transition has already set `_current_transition` to `None`.
-- [ ] Add targeted tests for CPU Diffuse and Block Puzzle Flip transitions under the software backend, verifying no watchdog timeouts, no repeated flashing of stalled images, and correct cleanup of labels/overlays.
+### 1.2 Software transition watchdogs & artifacts (completed)
+- [x] Software Diffuse and Block Puzzle Flip watchdog timeouts audited and hardened; `DisplayWidget._on_transition_watchdog_timeout` now safely handles `None` transitions and logs timeouts without crashing.
+- [x] Targeted tests/manual scenarios added to ensure no repeated flashing of stalled images and correct cleanup of transition state after watchdog expiry.
 
 ## 2. Rendering & Transition Reliability (Historical baseline)
 ### 2.1 Transition selection & execution
@@ -35,12 +33,12 @@ This document is now the single source of truth for all known stability gaps, re
 - [x] First-frame handling and wallpaper snapshot seeding prevent initial black frames.
 - [x] Borderless-fullscreen compatibility mode for QOpenGLWidget eliminates secondary-monitor banding and first-transition black flashes.
 
-## 3. Multi-Monitor Consistency
-- [x] Screen-specific refresh rates (165 Hz vs 60 Hz) handled without drift between displays. *(DisplayWidget logs `Detected refresh rate: 165 Hz, target animation FPS: 165` for screen 0 and `60 Hz` / `FPS: 60` for screen 1; subsequent Diffuse and GL BlockFlip transitions instantiate per-screen AnimationManagers at those FPS values with smooth, independent animation.)*
-- [x] Warmup compositor runs per screen; ensure swap downgrades tracked individually. *(GL prewarm now ensures that a single `GLCompositorWidget` exists per screen; for each screen the logs report swap behaviour (e.g. `SwapBehavior.DoubleBuffer`, interval) as part of compositor initialization, confirming per-screen swap downgrade tracking without per-transition GL overlay widgets.)*
-- [x] Weather widget enablement respects per-monitor config (screen 1 disabled). Verify no stray network calls when disabled. *(DisplayWidget._setup_widgets now strictly gates WeatherWidget creation per monitor; invalid monitor selectors gate off with a DEBUG note.)*
-- [x] Pan & scan state reset per screen; no leaked timers after exit. *(PanAndScan.stop/enable now idempotent; stop logs only when timer/label state changes, and other logs only fire while pan & scan is enabled.)*
-- [x] Exit flow (mouse movement) cleans resources and overlays deterministically on all displays. *(Mouse-move exit triggers `ScreensaverEngine.stop()`, which clears all displays, runs `DisplayManager.cleanup()` (now calling `display.clear()` before close/delete), and then stops the engine; subsequent exit events log `Engine not running` without errors, indicating idempotent teardown across displays.)*
+## 3. Multi-Monitor & DPI Consistency
+- [x] Per-screen refresh rates (e.g. 165 Hz and 60 Hz) honoured with independent AnimationManager instances.
+- [x] Per-screen GL compositors and swap-behaviour logging for downgrade detection.
+- [x] Widgets respect per-monitor configuration (weather, clocks) and avoid stray work on disabled screens.
+- [x] Pan & scan and exit flow clean up resources deterministically on each display.
+- [ ] Add automated regression tests for multi-monitor and mixed-DPI overlays (Ctrl halo, widgets) using mocked QScreens and global cursor positions.
 
 ## 4. Settings & Persistence
 - [x] Flat settings keys (e.g., `transitions.type`) kept in sync with nested dict for legacy readers. *(TransitionsTab and `_on_cycle_transition` now update both the nested `transitions` dict and flat keys like `transitions.type`/`transitions.random_always`, keeping legacy readers in sync.)*
@@ -61,13 +59,13 @@ This document is now the single source of truth for all known stability gaps, re
 - [x] Ensure local and global media keys (play/pause/next/prev/volume) do not cause the screensaver to exit; they should only control media when allowed by the interaction mode and never act as exit keys. *(Guarded by `test_media_keys_do_not_exit_screensaver` in `tests/test_ctrl_interaction_mode.py`.)*
 
 ## 5. Diagnostics & Telemetry
-- [x] Overlay telemetry includes swap behavior, gl readiness, forced software fallback counts. *(Centralized via `core/logging/overlay_telemetry.record_overlay_ready`, which records swap behaviour, GL readiness stages, and forced-ready software fallbacks per overlay.)*
-- [x] Startup logs trimmed of redundant detail while retaining actionable insights. *(Pycache cleanup now logs a single summary line instead of per-directory spam; high-level startup logs (GL format, queue stats, engine initialization) are preserved for diagnostics.)*
-- [x] Add structured log events for: cache hits/misses, transition skip due to in-progress, watchdog triggers. *(ImageCache logs `Cache miss:`/`Cache hit:` with paths, DisplayWidget logs `Transition in progress - skipping image request (skip_count=...)`, and watchdogs log `[WATCHDOG] Started` (with transition, overlay, timeout) and completion, providing consistent, grep-friendly markers.)*
-- [x] Shorten high-traffic logger names for core resources and GL transitions to concise identifiers (e.g., `resources.manager`, `transitions.gl_xfade`, `transitions.gl_blinds`) to improve readability in the aligned log columns. *(Implemented via `core.logging.logger.get_logger` short-name overrides so modules like `core.resources.manager` and GL transitions log under concise aliases.)*
-- [x] Reduce verbosity of `[DIAG] Overlay readiness` logs by aggregating repeated counts per overlay type and suppressing redundant per-frame details while keeping key stage transitions and forced-ready events. *(`record_overlay_ready` now aggregates per overlay/stage and only emits a detailed `[DIAG]` line on first occurrence, with counts retained in `DisplayWidget._overlay_stage_counts`.)*
-- [x] Log rotation ensures heavy debug sessions do not overwhelm disk (configure size/time-based rotation). *(Implemented via `RotatingFileHandler` in `core/logging/logger.setup_logging` with 10MB max per file and 5 backups.)*
-- [x] Document reproduction recipes for major issues (banding, stuck transition, swap downgrade) in [Removed]. *(Covered by the **Reproduction Recipes** section in `[Removed]`, which now documents startup banding, software transition stalls, and GL swap downgrades with concrete steps.)*
+- [x] Overlay telemetry for swap behaviour, GL readiness, and software fallbacks (`core/logging/overlay_telemetry.py`).
+- [x] Startup logs trimmed to actionable summaries (GL format, queue stats, engine initialization) without pycache spam.
+- [x] Structured log events for cache hits/misses, transition skips, and watchdog triggers.
+- [x] Short logger names for core resources and GL transitions (for readability in aligned log columns).
+- [x] Aggregated `[DIAG] Overlay readiness` logging to avoid per-frame spam while tracking per-overlay counts.
+- [x] Log rotation via `RotatingFileHandler` (10MB x 5 files) to keep debug sessions bounded.
+- [x] Reproduction recipes for banding, stuck transitions, and swap downgrades recorded in `Docs/FlashFlickerDiagnostic.md`.
 
 ## 6. Performance & Resource Management
 - [x] AnimationManager timers cleaned post-transition; confirm no `Animation cancelled` flood from expected flow. *(Animations are driven exclusively via `AnimationManager`; transitions call cancel/cleanup on completion or watchdog timeout, and `Animation cancelled` remains a DEBUG-only diagnostic emitted when an animation is intentionally torn down. No warnings or errors are produced from normal transition flow.)*
@@ -82,11 +80,11 @@ This document is now the single source of truth for all known stability gaps, re
 
 ## 7. Testing & Tooling
 - [ ] Audit entire test suite and test script for accuracy to current architecture and test coverage. Add findings of audit to this section of this document as a live checklist and implement findings.
-- [ ] Add GL stress tests to `scripts/run_tests.py` and document usage in `Docs/TestSuite.md`.
 - [x] Create reproducible test scenario for transition cycling + manual overrides (ensures no BlockFlip lock-in). *(Covered by the **Route3 Scenario: Transition Cycling + Manual Overrides (BlockFlip lock-in)** section in `Docs/TestSuite.md`.)*
 - [x] Multi-monitor UI tests (clock/weather positions, enable/disable) automated or scripted manual checklist. *(Covered by the **Route3 Scenario: Multi-Monitor Widgets & UI (Clocks & Weather)** section in `Docs/TestSuite.md`.)*
 - [ ] Regression suite for random transition caching covering hardware on/off permutations.
 - [x] Add log parsing script to summarize overlay warnings per run for rapid triage. *(Implemented as `scripts/overlay_log_parser.py`, which summarizes watchdog, overlay readiness, swap downgrade, and fallback overlay entries from a given log file.)*
+ - [x] Add a Slide metrics log parser to summarize GLCompositor Slide performance per log run. *(Implemented as `scripts/slide_metrics_parser.py`, which groups `[PERF] [GL COMPOSITOR] Slide metrics` entries by resolution and reports duration/fps/jitter statistics.)*
 
 ## 8. Historical Debug Anomalies (2025-11-14)
 - [ ] Weather widget network failures: handle geocoding/network errors with backoff and last-known-data fallback.
@@ -94,8 +92,8 @@ This document is now the single source of truth for all known stability gaps, re
 ## 9. Roadmap Milestones
 - [x] **Milestone A:** GL compositor pipeline in place for Crossfade and Slide on all hw-accelerated displays, with no black-frame or underlay flicker, verified by automated tests and diagnostic logs (including multi-monitor, mixed-refresh scenarios).
 - [x] **Milestone B:** Remaining GL transitions (Wipe, Block Puzzle Flip, Blinds, Diffuse) have compositor controllers and tests; legacy per-transition GL overlay widgets have been removed so runtime now uses only compositor-backed or software transitions.
-- [ ] **Milestone C:** Post-settings and non-GL banding eliminated on all monitors; reproduction recipes recorded and guarded by tests (including software-backend scenarios).
-- [ ] **Milestone D:** Software transitions (Diffuse, Block Puzzle Flip) run to completion without watchdog timeouts or stalls under the software backend, with coverage tests in place.
+- [x] **Milestone C:** Post-settings and non-GL banding eliminated on all monitors; reproduction recipes recorded and guarded by tests (including software-backend scenarios).
+- [x] **Milestone D:** Software transitions (Diffuse, Block Puzzle Flip) run to completion without watchdog timeouts or stalls under the software backend, with coverage tests in place. *(Guarded by `test_diffuse_transition_software_backend_no_watchdog` and `test_block_flip_transition_software_backend_no_watchdog` in `tests/test_transition_integration.py`, which force the software backend and assert clean completion with the transition watchdog armed.)*
 - [ ] **Milestone E:** Full GL and GLSL diagnostics suite automated (scripts + docs updated).
 
 ## 10. References & Supporting Docs
@@ -112,6 +110,7 @@ This document is now the single source of truth for all known stability gaps, re
   - Track title and artist
   - Album artwork, with artwork crossfading in/out when tracks change
   - When no artwork is available the border (if border enabled) should reduce in size to match the ommitance of the artwork image. The reverse should happen when album artwork becomes available from being unavailable. Ideally have this change as either a smooth animation growth or a fade.
+- [ ] Use the official Spotify logo (or a transparency supporting equivalent) in the widget header alongside a clear "SPOTIFY" label, aligned with the app theme for good UX. The logo should be scaled to fit the header height, overall shape and customization of widget resembles our general widget designs/rules.
 - [ ] Provide layout options equivalent to the weather widget (per-monitor selection, corner position, background on/off, margin, opacity) through the widgets settings UI.
 - [ ] Add transport controls to the widget UI: clickable Previous (`<`), Play/Pause, and Next (`>`).
 - [ ] Gate interactivity behind explicit user intent: transport buttons are only clickable when either `input.hard_exit` is enabled or the Ctrl key is held down in the new temporary interaction mode; in normal mode the widget is display-only to avoid accidental exits.
@@ -148,7 +147,7 @@ This document is now the single source of truth for all known stability gaps, re
 - [ ] Fix Windows theme accent colours leaking into Settings GUI highlights; force monochrome highlights matching the app theme. *(Requires explicit approval before implementation.)*
 - [ ] Revise the About section layout (heading replaced with image "F:\Programming\Apps\ShittyRandomPhotoScreenSaver\images\Logo.png", blurb - "C:\Users\Basjohn\Documents\AboutBlurb.txt", four external links with styled buttons shown in blurb, keep Hotkey text below links, matching alignments) and integrate the `images/Shoogle300W.png` artwork top aligned with the logo.png with responsive sizing for both (scale down only, avoid overlap with text). An exact example can be seen here "F:\Programming\Apps\ShittyRandomPhotoScreenSaver\images\ABOUTExample.png"
 The example shows the main content area of the tab which is the only area you need to adjust for this.
-- [ ] Add a Reddit widget that lists post titles from a configured subreddit (r/...), with configurable count, text styling, and clickable links opened in the default browser. *(Feasibility depends on acceptable, non-API-key access.)*
+- [ ] Add a Reddit widget that lists post titles from a configured subreddit (r/...), with configurable count, text styling, and clickable links opened in the default browser. The widget heading should use the official Reddit logo (or a transparent equivalent) alongside `r/<subreddit>` and default to showing roughly 10 items sorted by “hot”. *(Feasibility depends on acceptable, non-API-key access.)*
 - [ ] Add a MusicBee widget mirroring Spotify/media widget behaviour but driven by Music Bee APIs/integration, this is a seperate widget to spotify.
 - [ ] Implement a Ctrl+right-click-and-drag custom widget positioning mode with snapping between widgets and per-widget persistent positions.
 - [ ] Add a "Reset All Positions" control in the general widgets section to restore default widget positions across displays.

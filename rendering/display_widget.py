@@ -303,13 +303,13 @@ class DisplayWidget(QWidget):
         # IMPORTANT: We no longer run GL prewarm at startup; GL overlays are
         # initialized lazily by per-transition prepaint. This avoids any
         # startup interaction with GL contexts that could cause black flashes.
-        hw_accel = False
+        hw_accel = True
         if self.settings_manager is not None:
             try:
-                raw = self.settings_manager.get('display.hw_accel', False)
+                raw = self.settings_manager.get('display.hw_accel', True)
             except Exception:
-                raw = False
-            hw_accel = SettingsManager.to_bool(raw, False)
+                raw = True
+            hw_accel = SettingsManager.to_bool(raw, True)
 
         # In pure software environments (no GL support at all), mark overlays
         # as ready so diagnostics remain consistent. When GL is available, we
@@ -1065,10 +1065,10 @@ class DisplayWidget(QWidget):
             easing_str = transitions_settings.get('easing') or 'Auto'
 
             try:
-                hw_raw = self.settings_manager.get('display.hw_accel', False)
+                hw_raw = self.settings_manager.get('display.hw_accel', True)
             except Exception:
-                hw_raw = False
-            hw_accel = SettingsManager.to_bool(hw_raw, False)
+                hw_raw = True
+            hw_accel = SettingsManager.to_bool(hw_raw, True)
 
             if transition_type == 'Crossfade':
                 if hw_accel:
@@ -2025,13 +2025,13 @@ class DisplayWidget(QWidget):
         """
 
         # Guard on hw_accel setting
-        hw_accel = False
+        hw_accel = True
         if self.settings_manager is not None:
             try:
-                raw = self.settings_manager.get("display.hw_accel", False)
+                raw = self.settings_manager.get("display.hw_accel", True)
             except Exception:
-                raw = False
-            hw_accel = SettingsManager.to_bool(raw, False)
+                raw = True
+            hw_accel = SettingsManager.to_bool(raw, True)
         if not hw_accel:
             return
 
@@ -2473,33 +2473,47 @@ class DisplayWidget(QWidget):
                 except Exception:
                     widgets = []
 
+                display_widgets = []
+                for w in widgets:
+                    try:
+                        if not isinstance(w, DisplayWidget):
+                            continue
+                        display_widgets.append(w)
+                    except Exception:
+                        continue
+
+                # First, reset Ctrl state and any existing halos on all
+                # DisplayWidgets so we never end up with multiple visible
+                # halos from previous uses.
+                for w in display_widgets:
+                    try:
+                        w._ctrl_held = False
+                        anim = getattr(w, "_ctrl_cursor_hint_anim", None)
+                        if anim is not None:
+                            try:
+                                anim.stop()
+                            except Exception:
+                                pass
+                            w._ctrl_cursor_hint_anim = None
+                        hint = getattr(w, "_ctrl_cursor_hint", None)
+                        if hint is not None:
+                            try:
+                                hint.hide()
+                            except Exception:
+                                pass
+                    except Exception:
+                        continue
+
                 target_widget = None
                 target_pos = None
 
-                # First pass: prefer the DisplayWidget whose QScreen matches
-                # the cursor's screen. This is more robust across mixed-DPI
-                # multi-monitor layouts than relying purely on geometry.
+                # Prefer the DisplayWidget whose QScreen matches the cursor's
+                # screen. This is more robust across mixed-DPI multi-monitor
+                # layouts than relying purely on geometry.
                 if cursor_screen is not None and global_pos is not None:
-                    for w in widgets:
+                    for w in display_widgets:
                         try:
-                            if not isinstance(w, DisplayWidget):
-                                continue
-                            w._ctrl_held = False
-                            anim = getattr(w, "_ctrl_cursor_hint_anim", None)
-                            if anim is not None:
-                                try:
-                                    anim.stop()
-                                except Exception:
-                                    pass
-                                w._ctrl_cursor_hint_anim = None
-                            hint = getattr(w, "_ctrl_cursor_hint", None)
-                            if hint is not None:
-                                try:
-                                    hint.hide()
-                                except Exception:
-                                    pass
-                            screen = getattr(w, "_screen", None)
-                            if screen is cursor_screen:
+                            if getattr(w, "_screen", None) is cursor_screen:
                                 local_pos = w.mapFromGlobal(global_pos)
                                 target_widget = w
                                 target_pos = local_pos
@@ -2507,31 +2521,16 @@ class DisplayWidget(QWidget):
                         except Exception:
                             continue
 
-                # Second pass fallback: pick the first DisplayWidget whose
-                # geometry contains the cursor in its local coordinates.
+                # Fallback: pick the first DisplayWidget whose geometry
+                # contains the cursor in its local coordinates.
                 if target_widget is None and global_pos is not None:
-                    for w in widgets:
+                    for w in display_widgets:
                         try:
-                            if not isinstance(w, DisplayWidget):
-                                continue
-                            w._ctrl_held = False
-                            anim = getattr(w, "_ctrl_cursor_hint_anim", None)
-                            if anim is not None:
-                                try:
-                                    anim.stop()
-                                except Exception:
-                                    pass
-                                w._ctrl_cursor_hint_anim = None
-                            hint = getattr(w, "_ctrl_cursor_hint", None)
-                            if hint is not None:
-                                try:
-                                    hint.hide()
-                                except Exception:
-                                    pass
                             local_pos = w.mapFromGlobal(global_pos)
-                            if w.rect().contains(local_pos) and target_widget is None:
+                            if w.rect().contains(local_pos):
                                 target_widget = w
                                 target_pos = local_pos
+                                break
                         except Exception:
                             continue
 
@@ -2585,11 +2584,13 @@ class DisplayWidget(QWidget):
     def keyReleaseEvent(self, event: QKeyEvent) -> None:
         key = event.key()
         if key == Qt.Key.Key_Control:
-            # Clear global Ctrl-held mode and broadcast a graceful fade-out
-            # to all DisplayWidget instances that currently have a visible
-            # halo, so no screen is left with a stuck ring.
+            # Clear global Ctrl-held mode and gracefully fade out the halo
+            # owned by the current DisplayWidget, while ensuring any stray
+            # halos on other displays are also cleared.
             DisplayWidget._global_ctrl_held = False
+            owner = DisplayWidget._halo_owner
             DisplayWidget._halo_owner = None
+
             try:
                 widgets = QApplication.topLevelWidgets()
             except Exception:
@@ -2600,21 +2601,52 @@ class DisplayWidget(QWidget):
             except Exception:
                 global_pos = None
 
+            display_widgets = []
             for w in widgets:
                 try:
                     if not isinstance(w, DisplayWidget):
                         continue
-                    # Reset per-widget Ctrl state.
-                    w._ctrl_held = False
-                    hint = getattr(w, "_ctrl_cursor_hint", None)
-                    if hint is None or not hint.isVisible():
-                        continue
-                    if global_pos is not None:
-                        local_pos = w.mapFromGlobal(global_pos)
-                    else:
+                    display_widgets.append(w)
+                except Exception:
+                    continue
+
+            # Fade out the halo for the current owner, if any.
+            if isinstance(owner, DisplayWidget) and owner in display_widgets:
+                try:
+                    owner._ctrl_held = False
+                except Exception:
+                    pass
+                try:
+                    hint = getattr(owner, "_ctrl_cursor_hint", None)
+                except Exception:
+                    hint = None
+                if hint is not None and hint.isVisible():
+                    try:
+                        if global_pos is not None:
+                            local_pos = owner.mapFromGlobal(global_pos)
+                        else:
+                            local_pos = hint.pos() + hint.rect().center()
+                    except Exception:
                         local_pos = hint.pos() + hint.rect().center()
                     logger.debug("[CTRL HALO] Ctrl released; starting fade-out at %s", local_pos)
-                    w._show_ctrl_cursor_hint(local_pos, mode="fade_out")
+                    try:
+                        owner._show_ctrl_cursor_hint(local_pos, mode="fade_out")
+                    except Exception:
+                        pass
+
+            # Ensure all other DisplayWidgets leave Ctrl mode and hide any
+            # stray halos without starting additional fade animations.
+            for w in display_widgets:
+                if w is owner:
+                    continue
+                try:
+                    w._ctrl_held = False
+                    hint = getattr(w, "_ctrl_cursor_hint", None)
+                    if hint is not None:
+                        try:
+                            hint.hide()
+                        except Exception:
+                            pass
                 except Exception:
                     continue
 

@@ -44,7 +44,7 @@ A modern, feature-rich Windows screensaver built with PySide6 that displays phot
   - Mask‑based reveal on new label; full‑rect DPR alignment
 - **FR-3.4**: Diffuse - random block reveal
   - CompositionMode_Clear punching holes in old label; AM timing
-- **FR-3.5**: Block Puzzle Flip - grid flip ⭐ STAR FEATURE
+- **FR-3.5**: Block Puzzle Flip - grid flip 
   - Mask union on new label; DPR‑aligned grid; AM timing
 
 GL Path: The only supported GL route uses a single `GLCompositorWidget` per display (Route 3) that executes Crossfade/Slide/Wipe/Diffuse/BlockFlip/Blinds via a compositor API. Legacy per-transition GL overlays (QOpenGLWidget + QPainter) are quarantined for reference/tests only and are not used by the current engine. Overlays/compositor expose readiness flags (e.g. `is_ready_for_display()`) to gate base paints before they present.

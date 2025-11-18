@@ -1,21 +1,16 @@
-"""
-Integration tests for transition system.
+"""Integration tests for transition system.
 
 Tests that transitions actually run in DisplayWidget and complete properly.
 These tests validate the full transition lifecycle end-to-end.
 """
 import pytest
-from PySide6.QtWidgets import QWidget
+import types
 from PySide6.QtGui import QPixmap, QImage, QColor
-from PySide6.QtCore import QSize, QTimer, Qt
+from PySide6.QtCore import QSize, QTimer
+
 from rendering.display_widget import DisplayWidget
 from rendering.display_modes import DisplayMode
-from core.settings import SettingsManager
-from transitions.crossfade_transition import CrossfadeTransition
-from transitions.slide_transition import SlideTransition, SlideDirection
-from transitions.diffuse_transition import DiffuseTransition
-from transitions.block_puzzle_flip_transition import BlockPuzzleFlipTransition
-from transitions.wipe_transition import WipeTransition, WipeDirection
+from transitions.slide_transition import SlideDirection
 
 
 @pytest.fixture
@@ -327,3 +322,94 @@ class TestTransitionIntegration:
             assert type(display_widget._current_transition).__name__ == 'SlideTransition'
             # Direction should be one of the four valid directions
             assert display_widget._current_transition._direction in [SlideDirection.LEFT, SlideDirection.RIGHT, SlideDirection.UP, SlideDirection.DOWN]
+
+    def test_diffuse_transition_software_backend_no_watchdog(self, qt_app, settings_manager, test_pixmap, test_pixmap2):
+        self._set_transitions(
+            settings_manager,
+            transition_type='Diffuse',
+            duration_ms=300,
+            diffuse_block_size=50,
+        )
+        settings_manager.set('display.render_backend_mode', 'software')
+        settings_manager.set('display.hw_accel', False)
+        settings_manager.set('transitions.watchdog_timeout_sec', 1.0)
+
+        widget = DisplayWidget(
+            screen_index=0,
+            display_mode=DisplayMode.FILL,
+            settings_manager=settings_manager,
+        )
+        widget.resize(400, 400)
+
+        watchdog_flag = {'triggered': False}
+        original_timeout = widget._on_transition_watchdog_timeout
+
+        def _wrapped_timeout(self):
+            watchdog_flag['triggered'] = True
+            return original_timeout()
+
+        widget._on_transition_watchdog_timeout = types.MethodType(_wrapped_timeout, widget)
+
+        widget.set_image(test_pixmap, "test1.png")
+
+        finished = {'value': False}
+
+        def on_finished():
+            finished['value'] = True
+
+        widget.set_image(test_pixmap2, "test2.png")
+
+        if widget._current_transition:
+            widget._current_transition.finished.connect(on_finished)
+            QTimer.singleShot(3000, qt_app.quit)
+            qt_app.exec()
+            assert finished['value'] is True
+            assert watchdog_flag['triggered'] is False
+
+        widget.close()
+
+    def test_block_flip_transition_software_backend_no_watchdog(self, qt_app, settings_manager, test_pixmap, test_pixmap2):
+        self._set_transitions(
+            settings_manager,
+            transition_type='Block Puzzle Flip',
+            duration_ms=300,
+            block_rows=2,
+            block_cols=2,
+        )
+        settings_manager.set('display.render_backend_mode', 'software')
+        settings_manager.set('display.hw_accel', False)
+        settings_manager.set('transitions.watchdog_timeout_sec', 1.0)
+
+        widget = DisplayWidget(
+            screen_index=0,
+            display_mode=DisplayMode.FILL,
+            settings_manager=settings_manager,
+        )
+        widget.resize(400, 400)
+
+        watchdog_flag = {'triggered': False}
+        original_timeout = widget._on_transition_watchdog_timeout
+
+        def _wrapped_timeout(self):
+            watchdog_flag['triggered'] = True
+            return original_timeout()
+
+        widget._on_transition_watchdog_timeout = types.MethodType(_wrapped_timeout, widget)
+
+        widget.set_image(test_pixmap, "test1.png")
+
+        finished = {'value': False}
+
+        def on_finished():
+            finished['value'] = True
+
+        widget.set_image(test_pixmap2, "test2.png")
+
+        if widget._current_transition:
+            widget._current_transition.finished.connect(on_finished)
+            QTimer.singleShot(3000, qt_app.quit)
+            qt_app.exec()
+            assert finished['value'] is True
+            assert watchdog_flag['triggered'] is False
+
+        widget.close()
