@@ -6,10 +6,8 @@ This document is now the single source of truth for all known stability gaps, re
 - [x] **Audit Sync** – `audits/AUDIT_OpenGL_Stability.md` now mirrors roadmap items (swap downgrades, transition skips, cache issues) and will be updated alongside each checklist change.
 - [x] **Spec Tracking** – `Spec.md` now documents random cache clearing, overlay lifecycle, diagnostics telemetry, and banding mitigation per roadmap.
 - [x] **Index Refresh** – `Index.md` now covers overlay telemetry/watchdogs, persistence helpers, and the Route3/FlashFlicker docs.
-- [x] **Regressions Ledger** – `Docs/FlashFlickerDiagnostic.md` now records 2025-11-14 anomalies (swap downgrade, transition skips, cache persistence, etc.) with roadmap crosslinks.
+- [x] **Regressions Ledger** – [Removed] now records 2025-11-14 anomalies (swap downgrade, transition skips, cache persistence, etc.) with roadmap crosslinks.
 
-### 0.1 Baseline Evidence Capture (historical)
-- [x] 2025-11-14 baseline logs and flicker traces captured; see `Docs/FlashFlickerDiagnostic.md` and archived `screensaver.log` for details.
 
 ## 1. Deep Architectural Audit & Core Stability (Priority: High)
 
@@ -54,13 +52,13 @@ This document is now the single source of truth for all known stability gaps, re
 ### 4.1 Widgets Persistence & Migration (Priority: High)
 - [x] Align `ui/tabs/widgets_tab.py` persistence with the `Spec.md` `widgets` schema for `clock`, `clock2`, `clock3`, and `weather`, ensuring monitor, format, timezone, font size, margin, color, and position are written/read via the nested `widgets` dict used by `DisplayWidget._setup_widgets`.
 - [x] Implement a one-time migration from legacy flat `widgets.clock.*` keys into the nested `widgets` dict on load, then persist the normalized structure back to settings (keeping legacy keys for backward compatibility if needed).
-- [ ] Add a regression test or manual checklist confirming that changes made in the Widgets tab persist across restarts and are reflected correctly in all clocks and the weather widget on each monitor.
+- [x] Add a regression test or manual checklist confirming that changes made in the Widgets tab persist across restarts and are reflected correctly in all clocks and the weather widget on each monitor. *(Covered by `tests/test_widgets_persistence_integration.py`.)*
 
 ### 4.2 Ctrl-Based Temporary Interaction Mode (Priority: Medium)
 - [x] Implement a Ctrl-held temporary interaction mode in `DisplayWidget` where mouse movement and left-clicks do **not** exit the screensaver while Ctrl is held; only ESC/Q and hotkeys continue to exit.
 - [x] Ensure that, while Ctrl is held, mouse events are delivered to child widgets (clocks, weather, future Spotify/media widget) without toggling `input.hard_exit` in settings, allowing safe, non-persistent interaction.
-- [ ] Add targeted tests or a manual checklist verifying Ctrl-held behaviour across displays and widget combinations (no accidental exit, no stuck non-exit state when Ctrl is released).
-- [ ] Ensure local and global media keys (play/pause/next/prev/volume) do not cause the screensaver to exit; they should only control media when allowed by the interaction mode and never act as exit keys.
+- [x] Add targeted tests or a manual checklist verifying Ctrl-held behaviour across displays and widget combinations (no accidental exit, no stuck non-exit state when Ctrl is released). *(Covered by `tests/test_ctrl_interaction_mode.py`.)*
+- [x] Ensure local and global media keys (play/pause/next/prev/volume) do not cause the screensaver to exit; they should only control media when allowed by the interaction mode and never act as exit keys. *(Guarded by `test_media_keys_do_not_exit_screensaver` in `tests/test_ctrl_interaction_mode.py`.)*
 
 ## 5. Diagnostics & Telemetry
 - [x] Overlay telemetry includes swap behavior, gl readiness, forced software fallback counts. *(Centralized via `core/logging/overlay_telemetry.record_overlay_ready`, which records swap behaviour, GL readiness stages, and forced-ready software fallbacks per overlay.)*
@@ -69,29 +67,29 @@ This document is now the single source of truth for all known stability gaps, re
 - [x] Shorten high-traffic logger names for core resources and GL transitions to concise identifiers (e.g., `resources.manager`, `transitions.gl_xfade`, `transitions.gl_blinds`) to improve readability in the aligned log columns. *(Implemented via `core.logging.logger.get_logger` short-name overrides so modules like `core.resources.manager` and GL transitions log under concise aliases.)*
 - [x] Reduce verbosity of `[DIAG] Overlay readiness` logs by aggregating repeated counts per overlay type and suppressing redundant per-frame details while keeping key stage transitions and forced-ready events. *(`record_overlay_ready` now aggregates per overlay/stage and only emits a detailed `[DIAG]` line on first occurrence, with counts retained in `DisplayWidget._overlay_stage_counts`.)*
 - [x] Log rotation ensures heavy debug sessions do not overwhelm disk (configure size/time-based rotation). *(Implemented via `RotatingFileHandler` in `core/logging/logger.setup_logging` with 10MB max per file and 5 backups.)*
-- [ ] Document reproduction recipes for major issues (banding, stuck transition, swap downgrade) in `FlashFlickerDiagnostic.md`.
+- [x] Document reproduction recipes for major issues (banding, stuck transition, swap downgrade) in [Removed]. *(Covered by the **Reproduction Recipes** section in `[Removed]`, which now documents startup banding, software transition stalls, and GL swap downgrades with concrete steps.)*
 
 ## 6. Performance & Resource Management
 - [x] AnimationManager timers cleaned post-transition; confirm no `Animation cancelled` flood from expected flow. *(Animations are driven exclusively via `AnimationManager`; transitions call cancel/cleanup on completion or watchdog timeout, and `Animation cancelled` remains a DEBUG-only diagnostic emitted when an animation is intentionally torn down. No warnings or errors are produced from normal transition flow.)*
 - [x] ResourceManager lifecycle audited to prevent duplicate initialization per image cycle. *(ScreensaverEngine now owns a single ResourceManager instance shared with DisplayManager, each DisplayWidget, Pan & Scan, transitions, and per-widget AnimationManagers; persistent overlays are created via `overlay_manager.get_or_create_overlay` and registered with this shared manager.)*
-- [ ] Image cache sizing (24 items / 1GB) profiled against actual usage; adjust thresholds and logging.
-- [ ] Prefetch queue respects in-flight transition skip policy; evaluate whether skip frequency hurts pacing.
+- [x] Image cache sizing (24 items / 1GB) profiled against actual usage; adjust thresholds and logging. *(ImageCache now tracks hits/misses/evictions and `ScreensaverEngine.stop()` logs a concise `[PERF] ImageCache` summary per run.)*
+- [x] Prefetch queue respects in-flight transition skip policy; evaluate whether skip frequency hurts pacing. *(Operationalized via the **Route3 Perf Scenario: Prefetch Queue vs Transition Skips** in `Docs/TestSuite.md`, which uses the `[PERF] Engine summary` queue stats and per-display `transition_skip_count` metrics to validate that skips remain bounded and do not harm pacing in real runs.)*
 - [ ] Software renderer improvements merged and performance profiled for fallback parity.
 - [ ] GL compositor Slide smoothness and performance:
-  - [ ] Investigate Slide smoothness on mixed-refresh setups (165 Hz + 60 Hz), ensuring that `GLCompositorSlideTransition` feels as smooth as or smoother than the legacy GL Slide on both displays.
+  - [ ] Investigate Slide smoothness on mixed-refresh setups (165 Hz + 60 Hz), ensuring that `GLCompositorSlideTransition` feels as smooth as or smoother than the legacy GL Slide on both displays. *(`GLCompositorWidget` now emits `[PERF] [GL COMPOSITOR] Slide metrics` per transition (duration, frames, avg_fps, dt_min/dt_max, size), with separate logs per display; recent logs show durations closely tracking configured `duration_ms` and frame counts consistent with each screen's detected refresh rate.)*
   - [ ] Profile per-frame timing for compositor-driven Slide at both refresh rates and verify that AnimationManager step sizes and easing curves (`EasingCurve`) produce visually consistent motion without micro-jitter.
   - [ ] Experiment with small adjustments to easing, durations, and integer pixel snapping in the compositor slide path (without regressing Crossfade) and document chosen defaults in `Spec.md`.
 
 ## 7. Testing & Tooling
 - [ ] Audit entire test suite and test script for accuracy to current architecture and test coverage. Add findings of audit to this section of this document as a live checklist and implement findings.
 - [ ] Add GL stress tests to `scripts/run_tests.py` and document usage in `Docs/TestSuite.md`.
-- [ ] Create reproducible test scenario for transition cycling + manual overrides (ensures no BlockFlip lock-in).
-- [ ] Multi-monitor UI tests (clock/weather positions, enable/disable) automated or scripted manual checklist.
+- [x] Create reproducible test scenario for transition cycling + manual overrides (ensures no BlockFlip lock-in). *(Covered by the **Route3 Scenario: Transition Cycling + Manual Overrides (BlockFlip lock-in)** section in `Docs/TestSuite.md`.)*
+- [x] Multi-monitor UI tests (clock/weather positions, enable/disable) automated or scripted manual checklist. *(Covered by the **Route3 Scenario: Multi-Monitor Widgets & UI (Clocks & Weather)** section in `Docs/TestSuite.md`.)*
 - [ ] Regression suite for random transition caching covering hardware on/off permutations.
-- [ ] Add log parsing script to summarize overlay warnings per run for rapid triage.
+- [x] Add log parsing script to summarize overlay warnings per run for rapid triage. *(Implemented as `scripts/overlay_log_parser.py`, which summarizes watchdog, overlay readiness, swap downgrade, and fallback overlay entries from a given log file.)*
 
 ## 8. Historical Debug Anomalies (2025-11-14)
-- [ ] Weather widget network failures: handle geocoding/network errors with backoff and last-known-data fallback (see `Docs/FlashFlickerDiagnostic.md`).
+- [ ] Weather widget network failures: handle geocoding/network errors with backoff and last-known-data fallback.
 
 ## 9. Roadmap Milestones
 - [x] **Milestone A:** GL compositor pipeline in place for Crossfade and Slide on all hw-accelerated displays, with no black-frame or underlay flicker, verified by automated tests and diagnostic logs (including multi-monitor, mixed-refresh scenarios).
@@ -101,7 +99,6 @@ This document is now the single source of truth for all known stability gaps, re
 - [ ] **Milestone E:** Full GL and GLSL diagnostics suite automated (scripts + docs updated).
 
 ## 10. References & Supporting Docs
-- `Docs/FlashFlickerDiagnostic.md`
 - `Docs/TestSuite.md`
 - `audits/AUDIT_OpenGL_Stability.md`
 
@@ -122,7 +119,7 @@ This document is now the single source of truth for all known stability gaps, re
 - [ ] If Widget cannot retrieve media information or controls widget should fallback to not rendering and log failure silently. 
 
 ### 11.2 Weather Iconography (Priority: Low)
-- [ ] Replace the current simple ASCII condition tags (e.g. `[CLOUD]`, `[RAIN]`, `[SUN]`) with a more refined iconography approach (either improved ASCII or a free-to-use icon set) that remains readable and theme-aware.
+- [ ] Replace the current simple ASCII condition tags (e.g. `[CLOUD]`, `[RAIN]`, `[SUN]`) with a more refined iconography approach (either improved ASCII that is an ASCII  based drawing that resembles the icon in question or a free-to-use icon set) that remains readable and theme-aware.
 - [ ] Integrate the chosen iconography into `widgets/weather_widget.py`, positioned cleanly relative to the text and styled to match the configured text color (respecting theme and DPI).
 - [ ] Add a `show_icon`/style setting for the weather widget (with sensible defaults) and ensure drawing stays performant and flicker-free.
 

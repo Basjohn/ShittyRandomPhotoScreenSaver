@@ -1,7 +1,7 @@
 # Test Suite Documentation
 
 **Purpose**: Canonical reference for all test modules, test cases, and testing procedures.  
-**Last Updated**: Nov 14, 2025 - Transition overrides + watchdog guard pass  
+**Last Updated**: Nov 18, 2025 - Route3 scenarios (Ctrl mode, transition cycling, overlay tools)  
 **Test Count**: 343 tests across 25+ modules  
 **Pass Rate**: 97.1% (333 passing, 5 failing, 5 skipped)  
 **Recent**: Transition factory now honours SettingsManager overrides; `Shiboken.isValid` guard prevents teardown crashes during tests (pyqt slot callbacks).
@@ -288,6 +288,114 @@ Get-Content test_output.log -Tail 50
 - Visual verification of all transitions
 - Clock and weather widget display
 - Configuration UI workflows
+
+#### Route3 Scenario: Transition Cycling + Manual Overrides (BlockFlip lock-in)
+
+**Goal**: Verify that cycling transitions with `C` and then applying manual overrides in the settings dialog does **not** leave the engine stuck on Block Puzzle Flip (or any prior random choice), and that settings/telemetry stay in sync.
+
+**Prerequisites**:
+- Run in debug mode for full logging:
+  - `python main.py --debug`
+- Ensure at least two displays are active if available (to exercise multi-monitor paths).
+
+**Steps**:
+1. Start the screensaver (`RUN` mode, no `/c` or `/p` arguments).
+2. While the slideshow is running, press `C` several times:
+   - Observe log lines from `rendering.display` / `engine.screensaver` such as:
+     - `C key pressed - cycle transition requested`
+     - `Transition cycled to: <Type>` (e.g. `Block Puzzle Flip`, `Blinds`, `Crossfade`, `Slide`).
+   - Confirm that the visible transition type matches the logged `Transition cycled to:` value on subsequent image changes.
+3. When `Block Puzzle Flip` is active, note the current type from the log and then **cycle away** using `C` until a different transition is selected (e.g. `Crossfade` or `Slide`).
+4. Open the settings dialog with `S` while the screensaver is still running:
+   - On the **Transitions** tab, choose a specific non-random transition type (e.g. **Diffuse**), and ensure that any "Random" toggles are disabled.
+   - Apply/OK the dialog to return to the slideshow.
+5. Observe the next several transitions and the log output:
+   - `SettingsManager` should log a single `Setting changed: transitions: {...} -> {...}` with the new `type` and no lingering `transitions.random_choice` / `transitions.last_random_choice` keys.
+   - `engine.screensaver` should log `Transition type updated in settings - will apply on next image change` followed by `Transition cycled to: <NewType>` if cycled again.
+   - Visually confirm that after moving away from Block Puzzle Flip, subsequent transitions actually use the new type and do **not** revert to Block Puzzle Flip unless explicitly selected again.
+6. Optional: repeat steps 2–5 with `display.hw_accel` toggled (OpenGL vs software backend) to ensure behaviour is consistent across backends.
+
+**Pass Criteria**:
+- No evidence in logs or visuals of being "locked" into Block Puzzle Flip after cycling away or applying manual overrides.
+- `transitions.random_choice` and `transitions.last_random_choice` are cleared whenever a specific type is chosen or cycled to, as reflected in `SettingsManager` DEBUG logs.
+- `Transition cycled to:` messages and on-screen transitions remain in sync across multiple cycles and settings changes.
+
+#### Route3 Scenario: Multi-Monitor Widgets & UI (Clocks & Weather)
+
+**Goal**: Verify that clock and weather widgets respect per-monitor configuration (enable/disable and target monitor), and that no widgets appear or fetch data on monitors where they are disabled.
+
+**Prerequisites**:
+- Run in debug mode: `python main.py --debug`.
+- Ideally have at least two physical displays connected.
+
+**Steps**:
+1. Open the settings dialog (`S`) from a running slideshow.
+2. On the **Widgets** tab, configure:
+   - **Clock 1**: `enabled = True`, `monitor = 1`, position any corner.
+   - **Clock 2**: `enabled = True`, `monitor = ALL`, position a different corner.
+   - **Weather**: `enabled = True`, `monitor = 1`, choose a known location (e.g. `Johannesburg`).
+3. Apply/OK and observe each display:
+   - On monitor 1: both Clock 1 and Clock 2 should appear, plus the Weather widget.
+   - On monitor 2: only Clock 2 should appear; no Weather widget should be visible.
+4. In `logs/screensaver.log`, verify startup lines from `rendering.display` and `widgets.weather_widget` / `widgets.clock_widget` match expectations, e.g.:
+   - `✅ clock widget started: ...` / `✅ clock2 widget started: ...` on the correct screens.
+   - `Weather widget started: <location>, <position>` **only** for the configured monitor.
+   - `weather widget disabled in settings` DEBUG lines for monitors where weather is gated off.
+5. Change the Widgets tab configuration so that Weather targets `monitor = ALL` and Clock 2 targets `monitor = 2`, then apply again:
+   - Confirm visually that Weather appears on both monitors and Clock 2 only on monitor 2.
+   - Confirm corresponding log messages reflect the new layout with no stray widget creations on disabled screens.
+
+**Pass Criteria**:
+- Widget visibility (clocks, weather) always matches the per-monitor settings for `enabled` + `monitor` in the Widgets tab.
+- Logs show weather and clock creation only on the monitors they are configured for, and `... widget disabled in settings` entries for all others.
+- No unexpected weather network activity is logged for displays where the Weather widget is disabled.
+
+#### Route3 Perf Scenario: Prefetch Queue vs Transition Skips
+
+**Goal**: Use existing telemetry to confirm that the prefetch queue and the single-skip policy in `DisplayWidget.set_image` work together without harming pacing, and that `transition_skip_count` remains bounded for normal runs.
+
+**Telemetry Reference**:
+- `DisplayWidget.set_image(...)`:
+  - When a transition is still running, increments `self._transition_skip_count` and logs:
+    - `Transition in progress - skipping image request (skip_count=...)`
+- `DisplayWidget.get_screen_info()`:
+  - Includes `transition_skip_count` in the per-display info dict.
+- `ScreensaverEngine.cleanup()`:
+  - Logs a concise engine summary at shutdown:
+    - `[PERF] Engine summary: queue={...}, displays=[{...}]`
+  - `queue` comes from `ImageQueue.get_stats()` (fields like `total_images`, `remaining`, `current_index`, `wrap_count`).
+  - `displays` is a list of `DisplayWidget.get_screen_info()` dicts, including `transition_skip_count` per display.
+
+**Prerequisites**:
+- Run with debug logging enabled, e.g.:
+  - `python main.py --debug`
+- Configure a realistic rotation interval in the **Display** tab (e.g. 10–30 seconds per image).
+- Optional: enable a mix of heavier transitions (Diffuse, Block Puzzle Flip) and lighter ones (Crossfade, Slide) to exercise both GPU and software paths.
+
+**Steps**:
+1. Start the screensaver in normal run mode and let it run uninterrupted for at least a few dozen image changes (5–10 minutes on a typical interval).
+2. Avoid excessive manual skipping (`Z`/`X`) to keep the workload representative of a normal unattended slideshow.
+3. Exit the screensaver with `Esc`.
+4. Open the most recent log file (e.g. `logs/screensaver.log` or the latest rotated file) and search for:
+   - `[PERF] Engine summary:`
+5. Inspect the `queue={...}` portion:
+   - Note `total_images`, `remaining`, `current_index`, and `wrap_count` as a rough measure of how many images were cycled.
+6. Inspect the `displays=[{...}]` portion:
+   - For each display dict, note `transition_skip_count` along with basic screen info.
+7. Optionally, also grep within the same log for:
+   - `Transition in progress - skipping image request (skip_count=`
+   - Confirm that skip messages appear occasionally rather than continuously.
+
+**Interpretation / Pass Criteria**:
+- For a typical run (tens to hundreds of images shown):
+  - `transition_skip_count` per display should be **non-zero but bounded**—skips should be rare events, not the dominant path.
+  - `transition_skip_count` should be noticeably smaller than `current_index` from `queue` stats for the same session; if they are of the same order of magnitude, prefetch + rotation timing may be too aggressive.
+- Visual pacing during the run should feel even:
+  - No long pauses where multiple consecutive images are silently skipped because transitions never finish in time.
+  - No obvious “stutter” caused by repeated skip retries on heavy transitions.
+- If skip counts appear excessively high relative to images shown, record the log and configuration and adjust:
+  - Rotation interval (slightly longer gaps between images), and/or
+  - Mix of very heavy transitions, then re-run this scenario and compare `transition_skip_count` and `[PERF] Engine summary` output.
 
 ---
 

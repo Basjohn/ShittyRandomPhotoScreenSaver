@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Optional, Callable
+import time
 
 from PySide6.QtCore import Qt, QPoint, QRect
 from PySide6.QtGui import QPainter, QPixmap, QRegion
@@ -137,6 +138,15 @@ class GLCompositorWidget(QOpenGLWidget):
         self._blockflip: Optional[BlockFlipState] = None
         self._blinds: Optional[BlindsState] = None
         self._diffuse: Optional[DiffuseState] = None
+
+        # Profiling for compositor-driven slide transitions (Route3 §6.4).
+        # Metrics are logged with the "[PERF] [GL COMPOSITOR]" tag so
+        # production builds can grep and gate/strip this telemetry if needed.
+        self._slide_profile_start_ts: Optional[float] = None
+        self._slide_profile_last_ts: Optional[float] = None
+        self._slide_profile_frame_count: int = 0
+        self._slide_profile_min_dt: float = 0.0
+        self._slide_profile_max_dt: float = 0.0
 
         # Animation plumbing: compositor does not own AnimationManager, but we
         # keep the current animation id so the caller can cancel if needed.
@@ -332,6 +342,13 @@ class GLCompositorWidget(QOpenGLWidget):
         )
         self._animation_manager = animation_manager
         self._current_easing = easing
+
+        # Reset slide profiling state for this transition.
+        self._slide_profile_start_ts = time.time()
+        self._slide_profile_last_ts = None
+        self._slide_profile_frame_count = 0
+        self._slide_profile_min_dt = 0.0
+        self._slide_profile_max_dt = 0.0
 
         # Cancel any previous animation on this compositor.
         if self._current_anim_id and self._animation_manager:
@@ -594,9 +611,60 @@ class GLCompositorWidget(QOpenGLWidget):
             return
         p = max(0.0, min(1.0, float(progress)))
         self._slide.progress = p
+
+        # Profiling: track frame timing for compositor-driven slide.
+        now = time.time()
+        if self._slide_profile_start_ts is None:
+            self._slide_profile_start_ts = now
+        if self._slide_profile_last_ts is not None:
+            dt = now - self._slide_profile_last_ts
+            if dt > 0.0:
+                if self._slide_profile_min_dt == 0.0 or dt < self._slide_profile_min_dt:
+                    self._slide_profile_min_dt = dt
+                if dt > self._slide_profile_max_dt:
+                    self._slide_profile_max_dt = dt
+        self._slide_profile_last_ts = now
+        self._slide_profile_frame_count += 1
+
         self.update()
 
     def _on_slide_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
+        # Emit a concise profiling summary for slide transitions.
+        # The log line is tagged with "[PERF] [GL COMPOSITOR]" for easy
+        # discovery/disablement when preparing production builds.
+        try:
+            if (
+                self._slide_profile_start_ts is not None
+                and self._slide_profile_last_ts is not None
+                and self._slide_profile_frame_count > 0
+            ):
+                elapsed = max(0.0, self._slide_profile_last_ts - self._slide_profile_start_ts)
+                if elapsed > 0.0:
+                    duration_ms = elapsed * 1000.0
+                    avg_fps = self._slide_profile_frame_count / elapsed
+                    min_dt_ms = self._slide_profile_min_dt * 1000.0 if self._slide_profile_min_dt > 0.0 else 0.0
+                    max_dt_ms = self._slide_profile_max_dt * 1000.0 if self._slide_profile_max_dt > 0.0 else 0.0
+                    logger.info(
+                        "[PERF] [GL COMPOSITOR] Slide metrics: duration=%.1fms, frames=%d, "
+                        "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, size=%dx%d",
+                        duration_ms,
+                        self._slide_profile_frame_count,
+                        avg_fps,
+                        min_dt_ms,
+                        max_dt_ms,
+                        self.width(),
+                        self.height(),
+                    )
+        except Exception:
+            pass
+
+        # Reset profiling state.
+        self._slide_profile_start_ts = None
+        self._slide_profile_last_ts = None
+        self._slide_profile_frame_count = 0
+        self._slide_profile_min_dt = 0.0
+        self._slide_profile_max_dt = 0.0
+
         # Snap to final state: base pixmap becomes the new image, transition ends.
         if self._slide is not None:
             try:

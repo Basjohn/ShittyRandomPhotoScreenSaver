@@ -55,6 +55,7 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
   - `GL_SLIDE_PREPAINT`
   - `GL_WIPE_PREPAINT`
   - `GL_WIPE_REPAINT_FRAME`
+  - `[PERF] [GL COMPOSITOR] Slide metrics` (per-transition summary: duration, frame count, avg_fps, dt_min/dt_max, compositor size) emitted by `GLCompositorWidget` for compositor-driven Slide to validate timing on mixed-refresh setups.
 - If spikes persist, consider compute-pool pre-scale-to-screen ahead of time as a future enhancement.
 
 ## Settings

@@ -587,6 +587,27 @@ class ScreensaverEngine(QObject):
             
             self.stopped.emit()
             logger.info("Screensaver engine stopped")
+
+            # Emit a concise image cache summary for profiling (Route3 §6.4).
+            # Tagged with "[PERF] ImageCache" so production builds can grep and
+            # gate/strip this debug telemetry if desired.
+            try:
+                if self._image_cache is not None:
+                    stats = self._image_cache.get_stats()
+                    logger.info(
+                        "[PERF] ImageCache: items=%d/%d, mem=%.1f/%.0fMB, hits=%d, "
+                        "misses=%d, hit_rate=%.1f%%%%, evictions=%d",
+                        stats.get('item_count', 0),
+                        stats.get('max_items', 0),
+                        stats.get('memory_usage_mb', 0.0),
+                        stats.get('max_memory_mb', 0.0),
+                        stats.get('hits', 0),
+                        stats.get('misses', 0),
+                        stats.get('hit_rate_percent', 0.0),
+                        stats.get('evictions', 0),
+                    )
+            except Exception:
+                pass
             
             # Only exit the Qt event loop if requested
             if exit_app:
@@ -611,7 +632,30 @@ class ScreensaverEngine(QObject):
             # Stop if running
             if self._running:
                 self.stop()
-            
+
+            # Emit a concise summary tying together queue stats and transition skips
+            # (Route3 §6.4: prefetch vs transition skip pacing diagnostics).
+            # Tagged with "[PERF] Engine summary" so production builds can grep
+            # and gate/strip this debug telemetry if desired.
+            try:
+                if self.image_queue:
+                    qstats = self.image_queue.get_stats()
+                else:
+                    qstats = None
+                dstats = None
+                if self.display_manager:
+                    try:
+                        dstats = self.display_manager.get_display_info()
+                    except Exception:
+                        dstats = None
+                logger.info(
+                    "[PERF] Engine summary: queue=%s, displays=%s",
+                    qstats,
+                    dstats,
+                )
+            except Exception:
+                pass
+
             # Cleanup display manager
             if self.display_manager:
                 self.display_manager.cleanup()

@@ -8,9 +8,20 @@ try:
     from OpenGL import GL  # type: ignore[import]
 except ImportError:  # pragma: no cover - optional dependency
     GL = None
-from PySide6.QtWidgets import QWidget, QLabel
-from PySide6.QtCore import Qt, Signal, QSize, QTimer
-from PySide6.QtGui import QPixmap, QPainter, QKeyEvent, QMouseEvent, QPaintEvent, QFont, QResizeEvent
+from PySide6.QtWidgets import QWidget, QLabel, QApplication
+from PySide6.QtCore import Qt, Signal, QSize, QTimer, QPropertyAnimation, QVariantAnimation, QEasingCurve, QEvent
+from PySide6.QtGui import (
+    QPixmap,
+    QPainter,
+    QKeyEvent,
+    QMouseEvent,
+    QPaintEvent,
+    QFont,
+    QResizeEvent,
+    QCursor,
+    QFocusEvent,
+    QGuiApplication,
+)
 from shiboken6 import Shiboken
 from rendering.display_modes import DisplayMode
 from rendering.image_processor import ImageProcessor
@@ -90,6 +101,10 @@ class DisplayWidget(QWidget):
     Signals:
     - exit_requested: Emitted when user wants to exit
     - image_displayed: Emitted when new image is shown
+    - previous_requested: Emitted when user wants to go to previous image
+    - next_requested: Emitted when user wants to go to next image
+    - cycle_transition_requested: Emitted when user wants to cycle transitions
+    - settings_requested: Emitted when user wants to open settings
     """
     
     exit_requested = Signal()
@@ -99,6 +114,12 @@ class DisplayWidget(QWidget):
     cycle_transition_requested = Signal()  # C key - cycle transition mode
     settings_requested = Signal()  # S key - open settings
     
+    # Global Ctrl-held interaction mode flag shared across all display instances.
+    # This ensures that holding Ctrl on any screen suppresses mouse-based exit
+    # (movement/click) on all displays simultaneously.
+    _global_ctrl_held: bool = False
+    _halo_owner: Optional["DisplayWidget"] = None
+
     def __init__(
         self,
         screen_index: int = 0,
@@ -151,6 +172,10 @@ class DisplayWidget(QWidget):
         self._overlay_timeouts: dict[str, float] = {}
         self._transitions_enabled: bool = True
         self._ctrl_held: bool = False
+        self._ctrl_cursor_hint = None
+        self._ctrl_cursor_hint_anim: Optional[QPropertyAnimation] = None
+        self._exiting: bool = False
+        self._focus_loss_logged: bool = False
         self._transition_watchdog: Optional[QTimer] = None
         self._transition_watchdog_resource_id: Optional[str] = None
         self._transition_watchdog_overlay_key: Optional[str] = None
@@ -176,6 +201,15 @@ class DisplayWidget(QWidget):
         )
         self.setCursor(Qt.CursorShape.BlankCursor)
         self.setMouseTracking(True)
+        # Ensure we can keep the Ctrl halo moving even when the cursor is over
+        # child widgets (clocks, weather, etc.) by observing global mouse
+        # move events.
+        try:
+            app = QGuiApplication.instance()
+            if app is not None:
+                app.installEventFilter(self)
+        except Exception:
+            pass
         
         # Set black background
         self.setAutoFillBackground(True)
@@ -202,8 +236,6 @@ class DisplayWidget(QWidget):
     
     def show_on_screen(self) -> None:
         """Show widget fullscreen on assigned screen."""
-        from PySide6.QtGui import QGuiApplication
-        
         screens = QGuiApplication.screens()
         
         if self.screen_index >= len(screens):
@@ -2290,13 +2322,235 @@ class DisplayWidget(QWidget):
         """Return snapshot of overlay readiness counts (for diagnostics/tests)."""
         return dict(self._overlay_stage_counts)
 
+    def _ensure_ctrl_cursor_hint(self) -> None:
+        if self._ctrl_cursor_hint is not None:
+            return
+        from PySide6.QtWidgets import QWidget as _W
+        from PySide6.QtGui import QColor
+
+        class _CtrlCursorHint(_W):
+            def __init__(self, parent: _W) -> None:
+                super().__init__(parent)
+                self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+                self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+                self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+                self.resize(40, 40)
+                self._opacity = 1.0
+
+            def setOpacity(self, value: float) -> None:
+                try:
+                    self._opacity = max(0.0, min(1.0, float(value)))
+                except Exception:
+                    self._opacity = 1.0
+                self.update()
+
+            def opacity(self) -> float:
+                return float(self._opacity)
+
+            def paintEvent(self, event: QPaintEvent) -> None:  # type: ignore[override]
+                painter = QPainter(self)
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+                base_alpha = 200
+                alpha = int(max(0.0, min(1.0, self._opacity)) * base_alpha)
+                color = QColor(255, 255, 255, alpha)
+
+                # Thicker outer ring
+                pen = painter.pen()
+                pen.setColor(color)
+                pen.setWidth(4)
+                painter.setPen(pen)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                r = min(self.width(), self.height()) - 8
+                painter.drawEllipse(4, 4, r, r)
+
+                # Inner solid dot to suggest the click position
+                inner_radius = max(2, r // 6)
+                cx = self.width() // 2
+                cy = self.height() // 2
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(color)
+                painter.drawEllipse(cx - inner_radius, cy - inner_radius, inner_radius * 2, inner_radius * 2)
+                painter.end()
+
+        self._ctrl_cursor_hint = _CtrlCursorHint(self)
+
+    def _show_ctrl_cursor_hint(self, pos, mode: str = "none") -> None:
+        self._ensure_ctrl_cursor_hint()
+        hint = self._ctrl_cursor_hint
+        if hint is None:
+            return
+        size = hint.size()
+        hint.move(pos.x() - size.width() // 2, pos.y() - size.height() // 2)
+        hint.show()
+        hint.raise_()
+
+        # Movement-only updates while Ctrl is held just reposition the halo.
+        if mode == "none":
+            return
+
+        if self._ctrl_cursor_hint_anim is not None:
+            try:
+                self._ctrl_cursor_hint_anim.stop()
+            except Exception:
+                pass
+            self._ctrl_cursor_hint_anim = None
+
+        fade_in = mode == "fade_in"
+        fade_out = mode == "fade_out"
+        if not (fade_in or fade_out):
+            return
+
+        try:
+            if fade_in:
+                hint.setOpacity(0.0)
+            else:
+                hint.setOpacity(1.0)
+        except Exception:
+            pass
+
+        anim = QVariantAnimation(self)
+        if fade_in:
+            anim.setDuration(600)
+            anim.setStartValue(0.0)
+            anim.setEndValue(1.0)
+        else:
+            anim.setDuration(1200)
+            anim.setStartValue(1.0)
+            anim.setEndValue(0.0)
+        anim.setEasingCurve(QEasingCurve.OutQuad)
+
+        def _on_value_changed(value):
+            try:
+                hint.setOpacity(float(value))
+            except Exception:
+                pass
+
+        anim.valueChanged.connect(_on_value_changed)
+
+        def _on_finished() -> None:
+            if fade_out:
+                try:
+                    hint.hide()
+                except Exception:
+                    pass
+            try:
+                hint.setWindowOpacity(1.0)
+            except Exception:
+                pass
+            # Allow future fades after this one completes.
+            self._ctrl_cursor_hint_anim = None
+
+        anim.finished.connect(_on_finished)
+        self._ctrl_cursor_hint_anim = anim
+        anim.start()
+
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """Handle key press - hotkeys and exit."""
         key = event.key()
         key_text = event.text().lower()
 
         if key == Qt.Key.Key_Control:
-            self._ctrl_held = True
+            # Summon halo at the current cursor position and fade it in
+            # while keeping the system cursor hidden.
+            DisplayWidget._global_ctrl_held = True
+            try:
+                try:
+                    global_pos = QCursor.pos()
+                except Exception:
+                    global_pos = None
+
+                from PySide6.QtGui import QGuiApplication
+
+                cursor_screen = None
+                if global_pos is not None:
+                    try:
+                        cursor_screen = QGuiApplication.screenAt(global_pos)
+                    except Exception:
+                        cursor_screen = None
+
+                try:
+                    widgets = QApplication.topLevelWidgets()
+                except Exception:
+                    widgets = []
+
+                target_widget = None
+                target_pos = None
+
+                # First pass: prefer the DisplayWidget whose QScreen matches
+                # the cursor's screen. This is more robust across mixed-DPI
+                # multi-monitor layouts than relying purely on geometry.
+                if cursor_screen is not None and global_pos is not None:
+                    for w in widgets:
+                        try:
+                            if not isinstance(w, DisplayWidget):
+                                continue
+                            w._ctrl_held = False
+                            anim = getattr(w, "_ctrl_cursor_hint_anim", None)
+                            if anim is not None:
+                                try:
+                                    anim.stop()
+                                except Exception:
+                                    pass
+                                w._ctrl_cursor_hint_anim = None
+                            hint = getattr(w, "_ctrl_cursor_hint", None)
+                            if hint is not None:
+                                try:
+                                    hint.hide()
+                                except Exception:
+                                    pass
+                            screen = getattr(w, "_screen", None)
+                            if screen is cursor_screen:
+                                local_pos = w.mapFromGlobal(global_pos)
+                                target_widget = w
+                                target_pos = local_pos
+                                break
+                        except Exception:
+                            continue
+
+                # Second pass fallback: pick the first DisplayWidget whose
+                # geometry contains the cursor in its local coordinates.
+                if target_widget is None and global_pos is not None:
+                    for w in widgets:
+                        try:
+                            if not isinstance(w, DisplayWidget):
+                                continue
+                            w._ctrl_held = False
+                            anim = getattr(w, "_ctrl_cursor_hint_anim", None)
+                            if anim is not None:
+                                try:
+                                    anim.stop()
+                                except Exception:
+                                    pass
+                                w._ctrl_cursor_hint_anim = None
+                            hint = getattr(w, "_ctrl_cursor_hint", None)
+                            if hint is not None:
+                                try:
+                                    hint.hide()
+                                except Exception:
+                                    pass
+                            local_pos = w.mapFromGlobal(global_pos)
+                            if w.rect().contains(local_pos) and target_widget is None:
+                                target_widget = w
+                                target_pos = local_pos
+                        except Exception:
+                            continue
+
+                if target_widget is None:
+                    target_widget = self
+                    try:
+                        if global_pos is not None:
+                            target_pos = self.mapFromGlobal(global_pos)
+                        else:
+                            target_pos = self.rect().center()
+                    except Exception:
+                        target_pos = self.rect().center()
+
+                DisplayWidget._halo_owner = target_widget
+                target_widget._ctrl_held = True
+                logger.debug("[CTRL HALO] Ctrl pressed; starting fade-in at %s", target_pos)
+                target_widget._show_ctrl_cursor_hint(target_pos, mode="fade_in")
+            except Exception:
+                pass
             event.accept()
             return
         
@@ -2320,6 +2574,7 @@ class DisplayWidget(QWidget):
         # Exit keys
         elif key == Qt.Key.Key_Escape or key == Qt.Key.Key_Q:
             logger.info(f"Exit key pressed: {key}, requesting exit")
+            self._exiting = True
             self.exit_requested.emit()
             event.accept()
         # FIX: Don't exit on any key - only specific hotkeys and exit keys
@@ -2330,26 +2585,63 @@ class DisplayWidget(QWidget):
     def keyReleaseEvent(self, event: QKeyEvent) -> None:
         key = event.key()
         if key == Qt.Key.Key_Control:
-            self._ctrl_held = False
+            # Clear global Ctrl-held mode and broadcast a graceful fade-out
+            # to all DisplayWidget instances that currently have a visible
+            # halo, so no screen is left with a stuck ring.
+            DisplayWidget._global_ctrl_held = False
+            DisplayWidget._halo_owner = None
+            try:
+                widgets = QApplication.topLevelWidgets()
+            except Exception:
+                widgets = []
+
+            try:
+                global_pos = QCursor.pos()
+            except Exception:
+                global_pos = None
+
+            for w in widgets:
+                try:
+                    if not isinstance(w, DisplayWidget):
+                        continue
+                    # Reset per-widget Ctrl state.
+                    w._ctrl_held = False
+                    hint = getattr(w, "_ctrl_cursor_hint", None)
+                    if hint is None or not hint.isVisible():
+                        continue
+                    if global_pos is not None:
+                        local_pos = w.mapFromGlobal(global_pos)
+                    else:
+                        local_pos = hint.pos() + hint.rect().center()
+                    logger.debug("[CTRL HALO] Ctrl released; starting fade-out at %s", local_pos)
+                    w._show_ctrl_cursor_hint(local_pos, mode="fade_out")
+                except Exception:
+                    continue
+
             event.accept()
             return
         event.ignore()
     
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """Handle mouse press - exit on any click unless hard exit is enabled."""
-        if self._is_hard_exit_enabled() or self._ctrl_held:
-            # In hard-exit mode, ignore mouse clicks for exit purposes.
+        ctrl_mode_active = self._ctrl_held or DisplayWidget._global_ctrl_held
+        if self._is_hard_exit_enabled() or ctrl_mode_active:
+            # In hard-exit or Ctrl-held interaction mode, ignore mouse clicks
+            # for exit purposes so widgets can be interacted with safely.
             event.accept()
             return
 
         logger.info(f"Mouse clicked at ({event.pos().x()}, {event.pos().y()}), requesting exit")
+        self._exiting = True
         self.exit_requested.emit()
         event.accept()
     
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         """Handle mouse move - exit if moved beyond threshold (unless hard exit)."""
-        if self._is_hard_exit_enabled() or self._ctrl_held:
-            # Hard exit mode disables mouse-move exit entirely.
+        ctrl_mode_active = DisplayWidget._global_ctrl_held
+        if self._is_hard_exit_enabled() or ctrl_mode_active:
+            # Hard exit or Ctrl-held mode disables mouse-move exit entirely.
+            # Halo movement is handled centrally via the global event filter.
             event.accept()
             return
 
@@ -2367,9 +2659,104 @@ class DisplayWidget(QWidget):
         # Exit if moved beyond threshold
         if distance > self._mouse_move_threshold:
             logger.info(f"Mouse moved {distance:.1f} pixels, requesting exit")
+            self._exiting = True
             self.exit_requested.emit()
         
         event.accept()
+
+    def focusOutEvent(self, event: QFocusEvent) -> None:  # type: ignore[override]
+        """Diagnostic: log once if we lose focus while still visible.
+
+        This helps detect cases where another window occludes the screensaver
+        without going through the normal exit paths. Only logs in debug mode
+        and only once per widget instance.
+        """
+        try:
+            if self.isVisible() and not self._exiting and not self._focus_loss_logged:
+                logger.debug(
+                    "[ZORDER] DisplayWidget lost focus while visible; "
+                    "screensaver may be occluded (screen_index=%s, window_state=%s)",
+                    self.screen_index,
+                    int(self.windowState()),
+                )
+                self._focus_loss_logged = True
+        except Exception:
+            pass
+
+        super().focusOutEvent(event)
+
+    def eventFilter(self, watched, event):  # type: ignore[override]
+        """Global event filter to keep the Ctrl halo responsive over children."""
+        try:
+            if event is not None and event.type() == QEvent.Type.MouseMove:
+                if DisplayWidget._global_ctrl_held:
+                    # Use global cursor position so we track even when the
+                    # event originates from a child widget. Resolve the
+                    # DisplayWidget that owns the halo based on the cursor's
+                    # current QScreen to behave correctly across mixed-DPI
+                    # multi-monitor layouts.
+                    global_pos = QCursor.pos()
+
+                    from PySide6.QtGui import QGuiApplication
+
+                    cursor_screen = None
+                    try:
+                        cursor_screen = QGuiApplication.screenAt(global_pos)
+                    except Exception:
+                        cursor_screen = None
+
+                    owner = DisplayWidget._halo_owner
+
+                    # If the cursor moved to a different screen, migrate the
+                    # halo owner to the DisplayWidget bound to that screen.
+                    if cursor_screen is not None:
+                        screen_changed = (
+                            owner is None
+                            or getattr(owner, "_screen", None) is not cursor_screen
+                        )
+                        if screen_changed:
+                            try:
+                                widgets = QApplication.topLevelWidgets()
+                            except Exception:
+                                widgets = []
+
+                            new_owner = None
+                            for w in widgets:
+                                try:
+                                    if not isinstance(w, DisplayWidget):
+                                        continue
+                                    if getattr(w, "_screen", None) is cursor_screen:
+                                        new_owner = w
+                                        break
+                                except Exception:
+                                    continue
+
+                            if new_owner is None:
+                                new_owner = owner or self
+
+                            if owner is not None and owner is not new_owner:
+                                try:
+                                    hint = getattr(owner, "_ctrl_cursor_hint", None)
+                                    if hint is not None:
+                                        hint.hide()
+                                except Exception:
+                                    pass
+                                owner._ctrl_held = False
+
+                            DisplayWidget._halo_owner = new_owner
+                            owner = new_owner
+
+                    if owner is None:
+                        owner = self
+
+                    try:
+                        local_pos = owner.mapFromGlobal(global_pos)
+                        owner._show_ctrl_cursor_hint(local_pos, mode="none")
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        return super().eventFilter(watched, event)
 
     def get_screen_info(self) -> dict:
         """Get information about this display."""
@@ -2385,6 +2772,13 @@ class DisplayWidget(QWidget):
     def get_transition_skip_count(self) -> int:
         """Return the number of image requests skipped due to active transitions."""
         return int(self._transition_skip_count)
+
+    def has_running_transition(self) -> bool:
+        ct = getattr(self, "_current_transition", None)
+        try:
+            return bool(ct and ct.is_running())
+        except Exception:
+            return False
 
     def _preserve_base_before_overlay(self) -> None:
         """Diagnostic: log when an overlay raises while the base pixmap is absent.

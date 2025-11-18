@@ -22,6 +22,9 @@ class ImageCache:
     - Memory-efficient (stores references, not copies)
     - Thread-safe for single writer, multiple readers
     - Size tracking for memory management
+    - Lightweight PERF counters (hits/misses/evictions) used by
+      ``"[PERF] ImageCache"`` summary logs in ``ScreensaverEngine.stop()``;
+      grep for that tag to gate/strip profiling in production builds.
     """
     
     def __init__(self, max_items: int = 10, max_memory_mb: int = 500):
@@ -37,6 +40,10 @@ class ImageCache:
         
         self._cache: OrderedDict[str, Union[QImage, QPixmap]] = OrderedDict()
         self._current_memory = 0
+        # Lightweight telemetry counters (Route3 §6.4: cache profiling)
+        self._hit_count: int = 0
+        self._miss_count: int = 0
+        self._evict_count: int = 0
         self._lock = threading.RLock()
         
         logger.info(f"ImageCache initialized: max_items={max_items}, "
@@ -56,9 +63,11 @@ class ImageCache:
             if key in self._cache:
                 # Move to end (most recently used)
                 self._cache.move_to_end(key)
+                self._hit_count += 1
                 logger.debug(f"Cache hit: {key}")
                 return self._cache[key]
             
+            self._miss_count += 1
             logger.debug(f"Cache miss: {key}")
             return None
     
@@ -151,12 +160,22 @@ class ImageCache:
             Dictionary with cache stats
         """
         with self._lock:
+            item_count = len(self._cache)
+            memory_mb = self._current_memory / (1024 * 1024)
+            max_memory_mb = self.max_memory_bytes / (1024 * 1024)
+            total_accesses = self._hit_count + self._miss_count
+            hit_rate = (self._hit_count / total_accesses * 100.0) if total_accesses > 0 else 0.0
+
             return {
-                'item_count': len(self._cache),
+                'item_count': item_count,
                 'max_items': self.max_items,
-                'memory_usage_mb': self.memory_usage_mb(),
-                'max_memory_mb': self.max_memory_bytes / (1024 * 1024),
-                'utilization_percent': (len(self._cache) / self.max_items) * 100 if self.max_items > 0 else 0
+                'memory_usage_mb': memory_mb,
+                'max_memory_mb': max_memory_mb,
+                'utilization_percent': (item_count / self.max_items) * 100 if self.max_items > 0 else 0.0,
+                'hits': self._hit_count,
+                'misses': self._miss_count,
+                'hit_rate_percent': hit_rate,
+                'evictions': self._evict_count,
             }
     
     def _should_evict_locked(self) -> bool:
@@ -170,6 +189,7 @@ class ImageCache:
             return
         key, img = self._cache.popitem(last=False)
         self._current_memory -= self._estimate_size(img)
+        self._evict_count += 1
         logger.debug(f"Evicted from cache: {key}")
     
     def _estimate_size(self, image: Union[QImage, QPixmap]) -> int:

@@ -180,12 +180,21 @@ class BaseTransition(QObject, metaclass=QABCMeta):
     
     # --- Telemetry helpers (Phase 2.2) ---------------------------------------
     def _mark_start(self) -> None:
-        """Mark transition start time for telemetry."""
+        """Mark transition start time for telemetry.
+
+        NOTE: This emits a debug-level ``"[PERF]"`` log. Grep for ``"[PERF]"``
+        to locate or disable transition profiling when preparing production
+        builds.
+        """
         self._start_time = time.time()
         logger.debug(f"[PERF] {self.__class__.__name__} started")
     
     def _mark_end(self) -> None:
-        """Mark transition end time and log performance metrics."""
+        """Mark transition end time and log performance metrics.
+
+        See :meth:`_mark_start` for notes on PERF logging and production
+        gating.
+        """
         if self._start_time is not None:
             self._end_time = time.time()
             elapsed_ms = (self._end_time - self._start_time) * 1000
