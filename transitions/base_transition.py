@@ -153,6 +153,9 @@ class BaseTransition(QObject, metaclass=QABCMeta):
         """
         return self.duration_ms
     
+    def get_expected_duration_ms(self) -> int:
+        return self.duration_ms
+    
     def _set_state(self, state: TransitionState) -> None:
         """
         Set transition state.
@@ -186,7 +189,7 @@ class BaseTransition(QObject, metaclass=QABCMeta):
         if self._start_time is not None:
             self._end_time = time.time()
             elapsed_ms = (self._end_time - self._start_time) * 1000
-            expected_ms = self.duration_ms
+            expected_ms = self.get_expected_duration_ms()
             delta_ms = elapsed_ms - expected_ms
             
             # Log performance with delta from expected

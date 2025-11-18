@@ -51,11 +51,69 @@ def display_widget(qt_app, settings_manager):
 class TestTransitionIntegration:
     """Integration tests for transition system."""
     
+    def _set_transitions(
+        self,
+        settings_manager,
+        *,
+        transition_type=None,
+        duration_ms=None,
+        slide_direction=None,
+        wipe_direction=None,
+        diffuse_block_size=None,
+        block_rows=None,
+        block_cols=None,
+    ):
+        """Helper to update canonical nested transition config for tests."""
+        config = settings_manager.get('transitions', {}) or {}
+        if not isinstance(config, dict):
+            config = {}
+
+        if transition_type is not None:
+            config['type'] = transition_type
+        if duration_ms is not None:
+            config['duration_ms'] = duration_ms
+
+        if slide_direction is not None:
+            slide_cfg = config.get('slide', {})
+            if not isinstance(slide_cfg, dict):
+                slide_cfg = {}
+            slide_cfg['direction'] = slide_direction
+            config['slide'] = slide_cfg
+
+        if wipe_direction is not None:
+            wipe_cfg = config.get('wipe', {})
+            if not isinstance(wipe_cfg, dict):
+                wipe_cfg = {}
+            wipe_cfg['direction'] = wipe_direction
+            config['wipe'] = wipe_cfg
+
+        if diffuse_block_size is not None:
+            diffuse_cfg = config.get('diffuse', {})
+            if not isinstance(diffuse_cfg, dict):
+                diffuse_cfg = {}
+            diffuse_cfg['block_size'] = diffuse_block_size
+            config['diffuse'] = diffuse_cfg
+
+        if block_rows is not None or block_cols is not None:
+            block_cfg = config.get('block_flip', {})
+            if not isinstance(block_cfg, dict):
+                block_cfg = {}
+            if block_rows is not None:
+                block_cfg['rows'] = block_rows
+            if block_cols is not None:
+                block_cfg['cols'] = block_cols
+            config['block_flip'] = block_cfg
+
+        settings_manager.set('transitions', config)
+
     def test_crossfade_transition_runs(self, qt_app, display_widget, test_pixmap, test_pixmap2):
         """Test that crossfade transition actually runs."""
         # Set up transition settings
-        display_widget.settings_manager.set('transitions.type', 'Crossfade')
-        display_widget.settings_manager.set('transitions.duration_ms', 500)
+        self._set_transitions(
+            display_widget.settings_manager,
+            transition_type='Crossfade',
+            duration_ms=500,
+        )
         
         # Display first image
         display_widget.set_image(test_pixmap, "test1.png")
@@ -87,9 +145,12 @@ class TestTransitionIntegration:
     def test_slide_transition_runs(self, qt_app, display_widget, test_pixmap, test_pixmap2):
         """Test that slide transition actually runs."""
         # Set up transition settings
-        display_widget.settings_manager.set('transitions.type', 'Slide')
-        display_widget.settings_manager.set('transitions.duration_ms', 300)
-        display_widget.settings_manager.set('transitions.direction', 'Left to Right')
+        self._set_transitions(
+            display_widget.settings_manager,
+            transition_type='Slide',
+            duration_ms=300,
+            slide_direction='Left to Right',
+        )
         
         # Display first image
         display_widget.set_image(test_pixmap, "test1.png")
@@ -118,9 +179,12 @@ class TestTransitionIntegration:
     
     def test_diffuse_transition_runs(self, qt_app, display_widget, test_pixmap, test_pixmap2):
         """Test that diffuse transition actually runs."""
-        display_widget.settings_manager.set('transitions.type', 'Diffuse')
-        display_widget.settings_manager.set('transitions.duration_ms', 300)
-        display_widget.settings_manager.set('transitions.diffuse.block_size', 50)
+        self._set_transitions(
+            display_widget.settings_manager,
+            transition_type='Diffuse',
+            duration_ms=300,
+            diffuse_block_size=50,
+        )
         
         display_widget.set_image(test_pixmap, "test1.png")
         
@@ -141,10 +205,13 @@ class TestTransitionIntegration:
     
     def test_block_puzzle_flip_transition_runs(self, qt_app, display_widget, test_pixmap, test_pixmap2):
         """Test that block puzzle flip transition actually runs."""
-        display_widget.settings_manager.set('transitions.type', 'Block Puzzle Flip')
-        display_widget.settings_manager.set('transitions.duration_ms', 200)
-        display_widget.settings_manager.set('transitions.block_flip.rows', 2)
-        display_widget.settings_manager.set('transitions.block_flip.cols', 2)
+        self._set_transitions(
+            display_widget.settings_manager,
+            transition_type='Block Puzzle Flip',
+            duration_ms=200,
+            block_rows=2,
+            block_cols=2,
+        )
         
         display_widget.set_image(test_pixmap, "test1.png")
         
@@ -165,8 +232,11 @@ class TestTransitionIntegration:
     
     def test_wipe_transition_runs(self, qt_app, display_widget, test_pixmap, test_pixmap2):
         """Test that wipe transition actually runs."""
-        display_widget.settings_manager.set('transitions.type', 'Wipe')
-        display_widget.settings_manager.set('transitions.duration_ms', 200)
+        self._set_transitions(
+            display_widget.settings_manager,
+            transition_type='Wipe',
+            duration_ms=200,
+        )
         
         display_widget.set_image(test_pixmap, "test1.png")
         
@@ -187,8 +257,11 @@ class TestTransitionIntegration:
     
     def test_transition_cleanup_on_stop(self, qt_app, display_widget, test_pixmap, test_pixmap2):
         """Test that transitions clean up properly when stopped."""
-        display_widget.settings_manager.set('transitions.type', 'Slide')
-        display_widget.settings_manager.set('transitions.duration_ms', 2000)  # Long duration
+        self._set_transitions(
+            display_widget.settings_manager,
+            transition_type='Slide',
+            duration_ms=2000,
+        )  # Long duration
         
         display_widget.set_image(test_pixmap, "test1.png")
         display_widget.set_image(test_pixmap2, "test2.png")
@@ -206,9 +279,12 @@ class TestTransitionIntegration:
     def test_transition_settings_respected(self, qt_app, display_widget, test_pixmap, test_pixmap2):
         """Test that transition settings are properly read and applied."""
         # Set specific settings
-        display_widget.settings_manager.set('transitions.type', 'Slide')
-        display_widget.settings_manager.set('transitions.duration_ms', 750)
-        display_widget.settings_manager.set('transitions.direction', 'Top to Bottom')
+        self._set_transitions(
+            display_widget.settings_manager,
+            transition_type='Slide',
+            duration_ms=750,
+            slide_direction='Top to Bottom',
+        )
         
         display_widget.set_image(test_pixmap, "test1.png")
         display_widget.set_image(test_pixmap2, "test2.png")
@@ -222,7 +298,10 @@ class TestTransitionIntegration:
     def test_transition_fallback_on_error(self, qt_app, display_widget, test_pixmap, test_pixmap2):
         """Test that invalid transition settings fall back gracefully."""
         # Set invalid transition type
-        display_widget.settings_manager.set('transitions.type', 'InvalidType')
+        self._set_transitions(
+            display_widget.settings_manager,
+            transition_type='InvalidType',
+        )
         
         # Should fall back to crossfade or instant display
         display_widget.set_image(test_pixmap, "test1.png")
@@ -233,9 +312,12 @@ class TestTransitionIntegration:
     
     def test_random_slide_direction(self, qt_app, display_widget, test_pixmap, test_pixmap2):
         """Test that random slide direction selection works."""
-        display_widget.settings_manager.set('transitions.type', 'Slide')
-        display_widget.settings_manager.set('transitions.duration_ms', 500)
-        display_widget.settings_manager.set('transitions.direction', 'Random')
+        self._set_transitions(
+            display_widget.settings_manager,
+            transition_type='Slide',
+            duration_ms=500,
+            slide_direction='Random',
+        )
         
         display_widget.set_image(test_pixmap, "test1.png")
         display_widget.set_image(test_pixmap2, "test2.png")

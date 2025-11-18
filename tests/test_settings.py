@@ -35,7 +35,7 @@ def test_default_values(qt_app):
     # Check some defaults exist
     assert manager.contains("sources.mode")
     assert manager.contains("display.mode")
-    assert manager.contains("transitions.type")
+    assert manager.contains("transitions")
     
     manager.clear()
 

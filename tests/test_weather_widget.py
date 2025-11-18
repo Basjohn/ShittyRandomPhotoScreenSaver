@@ -109,9 +109,9 @@ def test_weather_display_update(qapp, parent_widget, mock_weather_data):
     text = weather.text()
     
     # Should contain location and temperature
-    assert "London" in text
+    assert "LONDON" in text
     assert "20°C" in text or "21°C" in text  # Rounded
-    assert "Clouds" in text
+    assert "CLOUDS" in text
 
 
 def test_weather_cache(qapp, parent_widget, mock_weather_data):
@@ -254,7 +254,7 @@ def test_weather_error_with_cache(qapp, parent_widget, mock_weather_data):
     
     # Should fall back to cache
     text = weather.text()
-    assert "London" in text
+    assert "LONDON" in text
 
 
 def test_weather_fetcher_creation(qapp):

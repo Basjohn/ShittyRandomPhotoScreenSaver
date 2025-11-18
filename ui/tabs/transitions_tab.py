@@ -37,9 +37,9 @@ class TransitionsTab(QWidget):
         super().__init__(parent)
         
         self._settings = settings
-        # Maintain per-transition direction selections in-memory
-        self._dir_slide: str = "Left to Right"
-        self._dir_wipe: str = "Left to Right"
+        # Maintain per-transition direction selections in-memory (default: Random)
+        self._dir_slide: str = "Random"
+        self._dir_wipe: str = "Random"
         self._setup_ui()
         self._load_settings()
         
@@ -284,66 +284,89 @@ class TransitionsTab(QWidget):
     
     def _load_settings(self) -> None:
         """Load settings from settings manager."""
-        transitions_config = self._settings.get('transitions', {})
-        
-        # Load transition type
-        transition_type = transitions_config.get('type', 'Crossfade')
-        index = self.transition_combo.findText(transition_type)
-        if index >= 0:
-            self.transition_combo.setCurrentIndex(index)
-        
-        # Load duration (default 1300ms - Bug Fix #5)
-        duration = transitions_config.get('duration_ms', 1300)
-        self.duration_slider.setValue(duration)
-        self.duration_value_label.setText(f"{duration} ms")
-        
-        # Load per-transition directions (nested with backward-compat to flat keys and top-level)
-        slide_cfg = transitions_config.get('slide', {})
-        wipe_cfg = transitions_config.get('wipe', {})
+        transitions_config = self._settings.get('transitions', {}) or {}
+        if not isinstance(transitions_config, dict):
+            transitions_config = {}
 
-        slide_dir = slide_cfg.get('direction') if isinstance(slide_cfg, dict) else None
-        wipe_dir = wipe_cfg.get('direction') if isinstance(wipe_cfg, dict) else None
+        # Block signals while we apply settings to avoid recursive saves with stale state
+        blockers = []
+        for w in [
+            getattr(self, 'transition_combo', None),
+            getattr(self, 'random_checkbox', None),
+            getattr(self, 'duration_slider', None),
+            getattr(self, 'direction_combo', None),
+            getattr(self, 'easing_combo', None),
+            getattr(self, 'grid_rows_spin', None),
+            getattr(self, 'grid_cols_spin', None),
+            getattr(self, 'block_size_spin', None),
+            getattr(self, 'diffuse_shape_combo', None),
+        ]:
+            if w is not None and hasattr(w, 'blockSignals'):
+                w.blockSignals(True)
+                blockers.append(w)
 
-        if slide_dir is None:
-            slide_dir = self._settings.get('transitions.slide.direction', None)
-        if wipe_dir is None:
-            wipe_dir = self._settings.get('transitions.wipe.direction', None)
+        try:
+            # Load transition type (default to Wipe to match SettingsManager defaults)
+            transition_type = transitions_config.get('type', 'Wipe')
+            index = self.transition_combo.findText(transition_type)
+            if index >= 0:
+                self.transition_combo.setCurrentIndex(index)
+            
+            # Load duration (default 1300ms - Bug Fix #5)
+            duration_raw = transitions_config.get('duration_ms', 1300)
+            try:
+                duration = int(duration_raw)
+            except Exception:
+                duration = 1300
+            self.duration_slider.setValue(duration)
+            self.duration_value_label.setText(f"{duration} ms")
+            
+            # Load per-transition directions (nested)
+            slide_cfg = transitions_config.get('slide', {}) if isinstance(transitions_config.get('slide', {}), dict) else {}
+            wipe_cfg = transitions_config.get('wipe', {}) if isinstance(transitions_config.get('wipe', {}), dict) else {}
 
-        if slide_dir is None:
-            slide_dir = transitions_config.get('direction', 'Left to Right')
-        if wipe_dir is None:
-            wipe_dir = transitions_config.get('direction', 'Left to Right')
+            slide_dir = slide_cfg.get('direction', 'Random') or 'Random'
+            wipe_dir = wipe_cfg.get('direction', 'Random') or 'Random'
 
-        self._dir_slide = slide_dir or 'Left to Right'
-        self._dir_wipe = wipe_dir or 'Left to Right'
-        
-        # Load easing
-        easing = transitions_config.get('easing', 'Auto')
-        index = self.easing_combo.findText(easing)
-        if index >= 0:
-            self.easing_combo.setCurrentIndex(index)
+            self._dir_slide = slide_dir
+            self._dir_wipe = wipe_dir
+            
+            # Load easing
+            easing = transitions_config.get('easing', 'Auto')
+            index = self.easing_combo.findText(easing)
+            if index >= 0:
+                self.easing_combo.setCurrentIndex(index)
 
-        # Load random transitions flag (prefer nested config)
-        rnd = transitions_config.get('random_always', False)
-        rnd = SettingsManager.to_bool(rnd, False)
-        self.random_checkbox.setChecked(rnd)
+            # Load random transitions flag (prefer nested config)
+            rnd = transitions_config.get('random_always', False)
+            rnd = SettingsManager.to_bool(rnd, False)
+            self.random_checkbox.setChecked(rnd)
 
-        # Note: GPU acceleration is controlled globally in Display tab
-        
-        # Load block flip settings
-        block_flip = transitions_config.get('block_flip', {})
-        self.grid_rows_spin.setValue(block_flip.get('rows', 4))
-        self.grid_cols_spin.setValue(block_flip.get('cols', 6))
-        
-        # Load diffuse settings
-        diffuse = transitions_config.get('diffuse', {})
-        self.block_size_spin.setValue(diffuse.get('block_size', 50))
-        shape = diffuse.get('shape', 'Rectangle')
-        index = self.diffuse_shape_combo.findText(shape)
-        if index >= 0:
-            self.diffuse_shape_combo.setCurrentIndex(index)
-        
-        logger.debug("Loaded transition settings")
+            # Note: GPU acceleration is controlled globally in Display tab
+            
+            # Load block flip settings
+            block_flip = transitions_config.get('block_flip', {})
+            self.grid_rows_spin.setValue(block_flip.get('rows', 4))
+            self.grid_cols_spin.setValue(block_flip.get('cols', 6))
+            
+            # Load diffuse settings
+            diffuse = transitions_config.get('diffuse', {})
+            self.block_size_spin.setValue(diffuse.get('block_size', 50))
+            shape = diffuse.get('shape', 'Rectangle')
+            index = self.diffuse_shape_combo.findText(shape)
+            if index >= 0:
+                self.diffuse_shape_combo.setCurrentIndex(index)
+
+            # Now that in-memory per-type directions are loaded, update the direction combo
+            self._update_specific_settings()
+
+            logger.debug("Loaded transition settings")
+        finally:
+            for w in blockers:
+                try:
+                    w.blockSignals(False)
+                except Exception:
+                    pass
     
     def _on_transition_changed(self, transition: str) -> None:
         """Handle transition type change."""
@@ -356,8 +379,8 @@ class TransitionsTab(QWidget):
         """Update visibility of transition-specific settings."""
         transition = self.transition_combo.currentText()
 
-        # Show/hide direction for directional transitions
-        show_direction = transition in ["Slide", "Wipe", "Diffuse"]
+        # Show/hide direction for directional transitions (Slide/Wipe only)
+        show_direction = transition in ["Slide", "Wipe"]
         self.direction_group.setVisible(show_direction)
 
         # Populate direction options per transition
@@ -465,8 +488,6 @@ class TransitionsTab(QWidget):
         config = {
             'type': cur_type,
             'duration_ms': self.duration_slider.value(),
-            # Keep top-level for backward compatibility; reflects current tab's direction
-            'direction': cur_dir,
             'easing': self.easing_combo.currentText(),
             'random_always': self.random_checkbox.isChecked(),
             'block_flip': {
@@ -487,18 +508,6 @@ class TransitionsTab(QWidget):
         }
         
         self._settings.set('transitions', config)
-        # Maintain legacy flat keys for consumers still reading old paths
-        self._settings.set('transitions.type', cur_type)
-        self._settings.set('transitions.duration_ms', config['duration_ms'])
-        self._settings.set('transitions.direction', cur_dir)
-        self._settings.set('transitions.easing', config['easing'])
-        self._settings.set('transitions.random_always', config['random_always'])
-        self._settings.set('transitions.slide.direction', self._dir_slide)
-        self._settings.set('transitions.wipe.direction', self._dir_wipe)
-        self._settings.set('transitions.block_flip.rows', config['block_flip']['rows'])
-        self._settings.set('transitions.block_flip.cols', config['block_flip']['cols'])
-        self._settings.set('transitions.diffuse.block_size', config['diffuse']['block_size'])
-        self._settings.set('transitions.diffuse.shape', config['diffuse']['shape'])
 
         if not config['random_always']:
             # Manual selection requires clearing any cached random choice so DisplayWidget honors explicit type

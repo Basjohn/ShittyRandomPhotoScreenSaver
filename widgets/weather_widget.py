@@ -457,11 +457,15 @@ class WeatherWidget(QLabel):
                 condition = 'Unknown'
             if not location:
                 location = self._location
+
+            # Uppercase presentation for emphasis (city & condition)
+            location_display = str(location).upper()
+            condition_display = str(condition).upper()
             
             # Relative sizing
             city_pt = max(6, self._font_size + 2)
             details_pt = max(6, self._font_size - 2)
-            city_html = f"<div style='font-size:{city_pt}pt; font-weight:700;'>{location}</div>"
+            city_html = f"<div style='font-size:{city_pt}pt; font-weight:700;'>{location_display}</div>"
             c_lower = str(condition).lower()
             tag = ""
             if self._show_icons:
@@ -477,9 +481,9 @@ class WeatherWidget(QLabel):
                     tag = "[CLOUD] "
 
             if self._show_icons and tag:
-                details_text = f"{tag}{temp:.0f}°C - {condition}"
+                details_text = f"{tag}{temp:.0f}°C - {condition_display}"
             else:
-                details_text = f"{temp:.0f}°C - {condition}"
+                details_text = f"{temp:.0f}°C - {condition_display}"
             details_html = f"<div style='font-size:{details_pt}pt; font-weight:500;'>{details_text}</div>"
             html = f"<div style='line-height:1.0'>{city_html}{details_html}</div>"
             self.setTextFormat(Qt.TextFormat.RichText)

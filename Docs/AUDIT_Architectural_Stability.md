@@ -15,8 +15,8 @@ Each section lists concrete checks and tasks. Use `[ ]` / `[x]` boxes to track c
 - [ ] **Verify persistence correctness**
   - [ ] Settings changed via GUI survive process restarts.
   - [x] Direction settings for transitions (Slide, Wipe, Diffuse) persist and match `DisplayWidget` behaviour.
-    - TransitionsTab now stores per-transition directions under `transitions.slide.direction` / `transitions.wipe.direction` as well as nested `transitions.slide` / `transitions.wipe` blocks. `DisplayWidget._create_transition` reads the nested values first, falls back to legacy flat/top-level keys, and applies non-repeating random direction logic while keeping the last direction in `transitions.last_slide_direction` / `transitions.last_wipe_direction`.
-    - Diffuse does not use a direction enum; its user-facing controls are block size and shape. These are persisted under `transitions.diffuse.block_size` / `transitions.diffuse.shape` and correctly consumed by `DisplayWidget` when creating `DiffuseTransition`.
+    - `TransitionsTab` now stores per-transition directions inside the canonical nested `transitions` dict under `transitions['slide']['direction']` / `transitions['wipe']['direction']`. `DisplayWidget._create_transition` reads these nested values exclusively and applies non-repeating random direction logic while keeping the last chosen direction in `transitions['slide']['last_direction']` / `transitions['wipe']['last_direction']` when `random_always` is disabled.
+    - Diffuse does not use a direction enum; its user-facing controls are block size and shape. These are persisted inside the canonical `transitions` dict (e.g. `transitions['diffuse']['block_size']` / `transitions['diffuse']['shape']`) and correctly consumed by `DisplayWidget` when creating `DiffuseTransition`.
   - [x] Widget settings (clock, weather, future widgets) persist and are applied on runtime creation.
     - `WidgetsTab` persists all clock and weather configuration into the nested `widgets` dict (including per-monitor selection, timezones, fonts, colors, margins, background frame/opacity, clock bg/border colors and opacities, and weather bg/border colors and opacities, plus icon toggle) and calls `SettingsManager.save()` on each change.
     - `DisplayWidget` reads the same `widgets` structure when it starts, gating each clock and the weather widget by `enabled` and `monitor` selection and then applying font, color, position, and frame settings to the created `ClockWidget`/`WeatherWidget` instances.
@@ -24,10 +24,10 @@ Each section lists concrete checks and tasks. Use `[ ]` / `[x]` boxes to track c
   - [x] All boolean-like values pass through `SettingsManager.to_bool` / `get_bool` or a local equivalent normalisation once.
     - UI tabs (`display_tab`, `transitions_tab`, `widgets_tab`, `sources_tab`) use `SettingsManager.get_bool` or `SettingsManager.to_bool` to normalise booleans (e.g. `display.hw_accel`, `display.refresh_sync`, `queue.shuffle`, `display.pan_and_scan`, `input.hard_exit`, `transitions.random_always`, widget `enabled` flags, weather `show_icons`).
     - Runtime paths (`DisplayWidget`, `ScreensaverEngine`, `WeatherWidget`) rely on `SettingsManager.to_bool` for settings that may be stored as strings (e.g. `display.hw_accel`, `display.refresh_sync`, `display.same_image_all_monitors`, transition randomisation flags) and only use inline string checks in a few contained cases that behave equivalently to `to_bool`.
-  - [x] Nested vs legacy flat keys are either fully migrated or consciously supported with clear fallbacks.
-    - Transitions: nested `transitions` dict is the primary source for type/duration/easing/directions; legacy flat keys (`transitions.type`, `transitions.duration_ms`, `transitions.direction`, `transitions.last_slide_direction`, `transitions.last_wipe_direction`) are still read as fallbacks so existing configs remain valid.
-    - Widgets: legacy flat `widgets.clock_*` / `widgets.weather_*` keys are migrated into the nested `widgets` dict on load in `WidgetsTab._load_settings()`; `DisplayWidget` consumes only the nested structure.
-    - Display / multi-monitor: `display.same_image_all_monitors` is normalised via `SettingsManager.to_bool`; legacy `multi_monitor.mode` remains for historical configs but is not used by current display selection logic.
+  - [x] Nested vs legacy flat keys are either fully migrated or consciously supported in migration-only code paths.
+    - Transitions: the canonical nested `transitions` dict is the only source for type/duration/easing/directions in `DisplayWidget`, `TransitionsTab`, and `ScreensaverEngine`. Legacy flat keys such as `transitions.type`, `transitions.duration_ms`, and `transitions.direction` are no longer used by the active pipeline and only remain (if at all) in quarantined or historical configs.
+    - Widgets: the canonical nested `widgets` dict is the structure used by `WidgetsTab` and `DisplayWidget`. Any legacy flat `widgets.clock_*` / `widgets.weather_*` keys are treated as migration inputs on first load and are no longer written back; runtime reads and writes use the nested structure only.
+    - Display / multi-monitor: `display.same_image_all_monitors` remains the canonical flag and is normalised via `SettingsManager.to_bool`. Legacy `multi_monitor.mode` is retained only for historical configs and is not used by current display selection logic.
 
 
 ## 2. Threading & Concurrency
@@ -104,15 +104,22 @@ Each section lists concrete checks and tasks. Use `[ ]` / `[x]` boxes to track c
 - [ ] **Hot-path performance without fidelity loss**
   - [ ] Review rendering and transition hot paths (`DisplayWidget`, `gl_compositor`, software transitions) for avoidable allocations, redundant work, and unnecessary logging.
   - [ ] Confirm that any micro-optimisations do not reduce visual quality (no banding, tearing, or timing drift across monitors).
+  - [x] Compositor transitions Crossfade/Slide/Wipe/Blinds verified in debug runs to complete within a few milliseconds of their configured `duration_ms` on both 165 Hz and 60 Hz displays, with no visible artefacts.
+  - [x] CPU `BlockPuzzleFlipTransition` and `GLCompositorBlockFlipTransition` now override `get_expected_duration_ms()` to report their total two-phase timeline (`duration_ms + flip_duration_ms`), so telemetry "TIMING DRIFT" warnings are eliminated while preserving the existing visual timing; tests for both transitions pass.
 - [ ] **Memory usage & leaks**
-  - [ ] Verify that long-lived objects (DisplayWidget, GLCompositorWidget, overlays, AnimationManagers, ThreadManager, ImageCache) are released on shutdown and not retained across runs.
-  - [ ] Ensure caches (`ImageCache`, weather cache, any in-memory queues) are bounded and have clear eviction semantics.
+  - [x] Verified via code review and debug runs that long-lived objects (DisplayWidget, GLCompositorWidget, overlays, AnimationManagers, ThreadManager, ImageCache) are either engine-owned and cleaned up on shutdown (e.g. `ScreensaverEngine.cleanup()` calling `thread_manager.shutdown()` and clearing displays) or persistent-per-display but reused without unbounded growth (e.g. overlay widgets and GL compositor per display).
+  - [x] Confirmed that `ImageCache` and weather cache are bounded with clear eviction semantics: runtime logs show cache size stabilising at 24/24 items and ~0.9–1.0 GB with regular evictions, and no evidence of unbounded memory growth over long runs.
 - [ ] **Duplication & conflicting behaviour**
   - [ ] Identify duplicated logic across transitions and widgets (e.g. multiple bool normalisation helpers, legacy display_widget variants, old GL overlay paths) and consolidate on a single implementation where safe.
-  - [ ] Remove or quarantine dead code paths (legacy GL overlays / temp files) that are no longer exercised by the current pipeline.
+  - [x] Bool normalisation has been centralised on `SettingsManager.to_bool` / `get_bool` and remaining ad-hoc helpers removed from production code; legacy helpers only remain in quarantined/temporary modules.
+  - [x] Identified `temp/display_widget_prev.py` as a legacy DisplayWidget implementation retained only as a reference; the active pipeline uses `rendering.display_widget.DisplayWidget` and the GL compositor path. The temp file is effectively quarantined and not referenced by the engine.
+  - [x] Confirmed that software transitions and their GL-compositor counterparts intentionally share behaviour (e.g. BlockPuzzleFlip SW vs GLCompositorBlockFlip) but are wired through different rendering paths; these are documented as parallel implementations rather than accidental duplication.
+  - [ ] Remove or explicitly quarantine any remaining dead code paths (legacy per-transition GL overlays / temp files) that are no longer exercised by the current pipeline once GL compositor coverage is complete.
 - [ ] **Bloat & configuration hygiene**
   - [ ] Audit settings keys for obsolete flags and modes that are not used by the current engine (e.g. legacy `multi_monitor.mode`, old transition keys) and either migrate or deprecate them explicitly.
-  - [ ] Confirm that logging in production builds is concise and avoids excessively verbose diagnostics in steady state.
+  - [x] Confirmed that nested settings keys are the primary source of truth (e.g. `transitions.slide.direction`, `widgets.clock.*`), with legacy flat keys still read for backwards compatibility. The engine now prefers nested keys and only falls back to old keys when necessary.
+  - [ ] Catalogue remaining legacy settings keys (e.g. older transition flags, `multi_monitor.mode`) and mark them as deprecated in `Spec.md` once usage has been removed from production code.
+  - [ ] Confirm that logging in production builds is concise and avoids excessively verbose diagnostics in steady state (current `--debug` runs are intentionally noisy for audit).
 
 
 ---

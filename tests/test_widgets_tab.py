@@ -1,0 +1,102 @@
+"""Tests for Widgets tab UI.
+
+Verifies that WidgetsTab integrates correctly with the canonical nested
+`widgets` settings structure (clock + weather) and that defaults and
+roundtrips behave as expected.
+"""
+import pytest
+
+from ui.tabs.widgets_tab import WidgetsTab
+from core.settings import SettingsManager
+
+
+@pytest.fixture
+def widgets_tab(qt_app, settings_manager):
+    """Create WidgetsTab for testing."""
+    tab = WidgetsTab(settings_manager)
+    yield tab
+    tab.deleteLater()
+
+
+class TestWidgetsTab:
+    """Tests for Widgets tab UI component."""
+
+    def test_widgets_tab_creation(self, qt_app, settings_manager):
+        """WidgetsTab can be created and wired to SettingsManager."""
+        tab = WidgetsTab(settings_manager)
+        assert tab is not None
+        assert tab._settings is settings_manager
+        tab.deleteLater()
+
+    def test_widgets_tab_default_values(self, qt_app):
+        """Default widget settings match canonical SettingsManager defaults."""
+        mgr = SettingsManager(organization="Test", application="WidgetsTabTest")
+        # Ensure a clean slate so _set_defaults() applies canonical defaults
+        mgr.clear()
+
+        tab = WidgetsTab(mgr)
+
+        # Clock defaults: enabled on monitor 1, Top Right, 24h, seconds on,
+        # background frame enabled with 90% opacity.
+        assert tab.clock_enabled.isChecked() is True
+        assert tab.clock_position.currentText() == "Top Right"
+        assert tab.clock_format.currentText() == "24 Hour"
+        assert tab.clock_seconds.isChecked() is True
+        assert tab.clock_show_background.isChecked() is True
+        assert tab.clock_bg_opacity.value() == 90
+        # Monitor selection stored as integer 1 in settings → combo shows "1"
+        assert tab.clock_monitor_combo.currentText() == "1"
+
+        # Weather defaults: disabled, but styled and ready when user enables.
+        assert tab.weather_enabled.isChecked() is False
+        assert tab.weather_location.text() == "London"
+        assert tab.weather_position.currentText() == "Bottom Left"
+        # Style defaults: background on, icons on, 90% opacity
+        assert tab.weather_show_background.isChecked() is True
+        assert tab.weather_show_icons.isChecked() is True
+        assert tab.weather_bg_opacity.value() == 90
+
+        tab.deleteLater()
+        mgr.clear()
+
+    def test_widgets_tab_saves_and_roundtrips(self, qt_app, widgets_tab):
+        """Changing widget controls and saving updates nested `widgets` config."""
+        tab = widgets_tab
+
+        # Mutate some clock settings through the UI
+        tab.clock_enabled.setChecked(True)
+        tab.clock_position.setCurrentText("Bottom Left")
+        tab.clock_show_background.setChecked(True)
+        tab.clock_bg_opacity.setValue(75)  # 75%
+        tab.clock_monitor_combo.setCurrentText("ALL")
+
+        # Mutate some weather settings
+        tab.weather_enabled.setChecked(True)
+        tab.weather_location.setText("Johannesburg")
+        tab.weather_position.setCurrentText("Bottom Left")
+        tab.weather_show_background.setChecked(True)
+        tab.weather_show_icons.setChecked(True)
+        tab.weather_bg_opacity.setValue(80)  # 80%
+
+        # Persist settings
+        tab._save_settings()
+
+        widgets_cfg = tab._settings.get("widgets", {})
+        assert isinstance(widgets_cfg, dict)
+
+        clock_cfg = widgets_cfg.get("clock", {})
+        assert clock_cfg.get("enabled") is True
+        assert clock_cfg.get("position") == "Bottom Left"
+        assert clock_cfg.get("show_background") is True
+        assert pytest.approx(clock_cfg.get("bg_opacity", 0.0)) == 0.75
+        # Monitor stored as "ALL" string when combo shows ALL
+        assert clock_cfg.get("monitor") == "ALL"
+
+        weather_cfg = widgets_cfg.get("weather", {})
+        assert weather_cfg.get("enabled") is True
+        assert weather_cfg.get("location") == "Johannesburg"
+        assert weather_cfg.get("position") == "Bottom Left"
+        assert weather_cfg.get("show_background") is True
+        assert weather_cfg.get("show_icons") is True
+        assert pytest.approx(weather_cfg.get("bg_opacity", 0.0)) == 0.80
+        assert weather_cfg.get("monitor") == "ALL"

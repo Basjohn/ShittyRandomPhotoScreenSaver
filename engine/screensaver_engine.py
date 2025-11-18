@@ -956,8 +956,6 @@ class ScreensaverEngine(QObject):
         transitions_config['type'] = new_transition
         transitions_config['random_always'] = False
         self.settings_manager.set('transitions', transitions_config)
-        self.settings_manager.set('transitions.type', new_transition)
-        self.settings_manager.set('transitions.random_always', False)
         self.settings_manager.remove('transitions.random_choice')
         self.settings_manager.remove('transitions.last_random_choice')
         self.settings_manager.save()

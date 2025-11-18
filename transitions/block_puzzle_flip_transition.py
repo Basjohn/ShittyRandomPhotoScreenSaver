@@ -126,6 +126,12 @@ class BlockPuzzleFlipTransition(BaseTransition):
         logger.debug(f"BlockPuzzleFlipTransition created (duration={duration_ms}ms, "
                     f"grid={grid_rows}x{grid_cols}, flip_duration={flip_duration_ms}ms)")
     
+    def get_expected_duration_ms(self) -> int:
+        total = getattr(self, "_total_duration_ms", None)
+        if isinstance(total, (int, float)) and total > 0:
+            return int(total)
+        return self.duration_ms
+    
     def start(self, old_pixmap: Optional[QPixmap], new_pixmap: QPixmap,
               widget: QWidget) -> bool:
         """

@@ -17,6 +17,50 @@ from core.settings.settings_manager import SettingsManager
 from rendering.display_modes import DisplayMode
 
 
+def _set_transitions(
+    settings: SettingsManager,
+    *,
+    transition_type: str | None = None,
+    duration_ms: int | None = None,
+    block_rows: int | None = None,
+    block_cols: int | None = None,
+    diffuse_block_size: int | None = None,
+    diffuse_shape: str | None = None,
+) -> None:
+    """Helper to mutate the canonical nested 'transitions' config.
+
+    Only keys passed as non-None are updated, preserving other values.
+    """
+    cfg = settings.get('transitions', {}) or {}
+    if not isinstance(cfg, dict):
+        cfg = {}
+
+    if transition_type is not None:
+        cfg['type'] = transition_type
+    if duration_ms is not None:
+        cfg['duration_ms'] = int(duration_ms)
+
+    # Block puzzle flip nested settings
+    block_flip = cfg.get('block_flip') if isinstance(cfg.get('block_flip'), dict) else {}
+    if block_rows is not None:
+        block_flip['rows'] = int(block_rows)
+    if block_cols is not None:
+        block_flip['cols'] = int(block_cols)
+    if block_flip:
+        cfg['block_flip'] = block_flip
+
+    # Diffuse nested settings
+    diffuse = cfg.get('diffuse') if isinstance(cfg.get('diffuse'), dict) else {}
+    if diffuse_block_size is not None:
+        diffuse['block_size'] = int(diffuse_block_size)
+    if diffuse_shape is not None:
+        diffuse['shape'] = str(diffuse_shape)
+    if diffuse:
+        cfg['diffuse'] = diffuse
+
+    settings.set('transitions', cfg)
+
+
 @pytest.fixture
 def qapp():
     """Qt application instance."""
@@ -34,9 +78,8 @@ def settings_manager():
     settings.set('display.pan_and_scan', True)
     settings.set('timing.interval', 10)  # 10 second intervals
     settings.set('display.pan_auto_speed', True)
-    # Set transition duration to 2000ms (not too fast for reliable testing)
-    settings.set('transitions.duration_ms', 2000)
-    settings.set('transitions.type', 'Crossfade')
+    # Set transition defaults via canonical nested config
+    _set_transitions(settings, transition_type='Crossfade', duration_ms=2000)
     return settings
 
 
@@ -107,13 +150,12 @@ def test_diffuse_with_pan_scan(qapp, display_widget, test_pixmap_red, test_pixma
     
     Tests all three shapes: Rectangle, Circle, Triangle
     """
-    settings_manager.set('transitions.type', 'Diffuse')
-    settings_manager.set('transitions.diffuse.block_size', 50)
+    _set_transitions(settings_manager, transition_type='Diffuse', diffuse_block_size=50)
     
     shapes = ['Rectangle', 'Circle', 'Triangle']
     
     for shape in shapes:
-        settings_manager.set('transitions.diffuse.shape', shape)
+        _set_transitions(settings_manager, transition_type='Diffuse', diffuse_block_size=50, diffuse_shape=shape)
         
         # Set first image
         display_widget.set_image(test_pixmap_red, f"red_{shape}.jpg")
@@ -141,9 +183,7 @@ def test_block_puzzle_with_pan_scan(qapp, display_widget, test_pixmap_red, test_
     
     This test would have CAUGHT the visual artifacts bug shown in the screenshot.
     """
-    settings_manager.set('transitions.type', 'Block Puzzle Flip')
-    settings_manager.set('transitions.block_flip.rows', 3)
-    settings_manager.set('transitions.block_flip.cols', 4)
+    _set_transitions(settings_manager, transition_type='Block Puzzle Flip', block_rows=3, block_cols=4)
     
     # Set first image
     display_widget.set_image(test_pixmap_red, "red.jpg")
@@ -164,8 +204,7 @@ def test_block_puzzle_with_pan_scan(qapp, display_widget, test_pixmap_red, test_
 def test_transition_uses_pan_preview_frame(qapp, display_widget, test_pixmap_red, test_pixmap_blue,
                                            qtbot, settings_manager, monkeypatch):
     """Ensure the transition consumes the pan preview frame to avoid post-transition jump."""
-    settings_manager.set('transitions.type', 'Crossfade')
-    settings_manager.set('transitions.duration_ms', 400)
+    _set_transitions(settings_manager, transition_type='Crossfade', duration_ms=400)
 
     captured = {}
 
@@ -198,7 +237,7 @@ def test_wipe_with_pan_scan(qapp, display_widget, test_pixmap_red, test_pixmap_b
     
     User reported wipe was "completely broken" with pan & scan enabled.
     """
-    settings_manager.set('transitions.type', 'Wipe')
+    _set_transitions(settings_manager, transition_type='Wipe')
     
     # Set first image
     display_widget.set_image(test_pixmap_red, "red.jpg")
@@ -266,7 +305,7 @@ def test_all_transitions_with_pan_scan(qapp, display_widget, test_pixmap_red, te
     ]
     
     for transition_type in transitions:
-        settings_manager.set('transitions.type', transition_type)
+        _set_transitions(settings_manager, transition_type=transition_type)
         
         # Set first image
         display_widget.set_image(test_pixmap_red, f"{transition_type}_1.jpg")

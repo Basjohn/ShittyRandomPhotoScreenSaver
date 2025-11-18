@@ -52,42 +52,107 @@ class SettingsManager(QObject):
             
             # Display
             'display.mode': 'fill',  # 'fill' | 'fit' | 'shrink'
-            'display.pan_scan_enabled': False,
-            'display.pan_scan_speed': 1.0,
-            'display.pan_scan_zoom': 1.3,
+            'display.hw_accel': True,
             'display.refresh_sync': True,
             'display.prefer_triple_buffer': True,
             'display.gl_depth_bits': 24,
             'display.gl_stencil_bits': 8,
             'display.render_backend_mode': 'opengl',
-            
-            # Transitions
-            'transitions.type': 'crossfade',  # 'crossfade' | 'slide' | 'diffuse' | 'block_puzzle'
-            'transitions.duration': 1.0,
-            'transitions.block_puzzle_grid': (6, 6),
-            'transitions.slide_direction': 'left',
-            'transitions.diffuse_block_size': 10,
-            
-            # Timing
-            'timing.image_duration': 5.0,
-            
-            # Widgets - Clock
-            'widgets.clock_enabled': True,
-            'widgets.clock_format': '24h',
-            'widgets.clock_timezone': 'local',
-            'widgets.clock_position': 'top-right',
-            'widgets.clock_transparency': 0.8,
-            'widgets.clock_multiple': False,
-            'widgets.clock_timezones': [],
-            
-            # Widgets - Weather
-            'widgets.weather_enabled': False,
-            'widgets.weather_location': '',
-            'widgets.weather_position': 'top-left',
-            'widgets.weather_transparency': 0.8,
-            
-            # Multi-monitor
-            'multi_monitor.mode': 'same',  # 'same' | 'different'
+            'display.pan_and_scan': False,
+            'display.pan_auto_speed': True,
+            'display.pan_speed': 3.0,
+            'display.sharpen_downscale': False,
+            'display.same_image_all_monitors': False,
+
+            # Timing / queue
+            'timing.interval': 10,
+            'queue.shuffle': True,
+
+            # Transitions (canonical nested config)
+            'transitions': {
+                'type': 'Wipe',
+                'duration_ms': 1300,
+                'easing': 'Auto',
+                'direction': 'Random',
+                'random_always': False,
+                'block_flip': {
+                    'rows': 4,
+                    'cols': 6,
+                },
+                'diffuse': {
+                    'block_size': 50,
+                    'shape': 'Rectangle',
+                },
+                'slide': {
+                    'direction': 'Random',
+                },
+                'wipe': {
+                    'direction': 'Random',
+                },
+            },
+
+            # Widgets (canonical nested config)
+            'widgets': {
+                'clock': {
+                    'enabled': True,
+                    'monitor': 1,
+                    'format': '24h',
+                    'position': 'Top Right',
+                    'show_seconds': True,
+                    'timezone': 'local',
+                    'show_timezone': False,
+                    'font_family': 'Segoe UI',
+                    'font_size': 48,
+                    'margin': 20,
+                    'show_background': True,
+                    'bg_opacity': 0.9,
+                    'bg_color': [64, 64, 64, 255],
+                    'color': [255, 255, 255, 230],
+                    'border_color': [128, 128, 128, 255],
+                    'border_opacity': 0.9,
+                },
+                'clock2': {
+                    'enabled': False,
+                    'monitor': 'ALL',
+                    'format': '24h',
+                    'position': 'Bottom Right',
+                    'show_seconds': False,
+                    'timezone': 'UTC',
+                    'show_timezone': True,
+                    'font_family': 'Segoe UI',
+                    'font_size': 32,
+                    'margin': 20,
+                    'color': [255, 255, 255, 230],
+                },
+                'clock3': {
+                    'enabled': False,
+                    'monitor': 'ALL',
+                    'format': '24h',
+                    'position': 'Bottom Left',
+                    'show_seconds': False,
+                    'timezone': 'UTC+01:00',
+                    'show_timezone': True,
+                    'font_family': 'Segoe UI',
+                    'font_size': 32,
+                    'margin': 20,
+                    'color': [255, 255, 255, 230],
+                },
+                'weather': {
+                    'enabled': False,
+                    'monitor': 'ALL',
+                    'position': 'Bottom Left',
+                    'location': 'London',
+                    'font_family': 'Segoe UI',
+                    'font_size': 24,
+                    'color': [255, 255, 255, 230],
+                    'show_background': True,
+                    'bg_opacity': 0.9,
+                    'bg_color': [64, 64, 64, 255],
+                    'border_color': [128, 128, 128, 255],
+                    'border_opacity': 0.9,
+                    'show_icons': True,
+                },
+            },
         }
         
         for key, value in defaults.items():

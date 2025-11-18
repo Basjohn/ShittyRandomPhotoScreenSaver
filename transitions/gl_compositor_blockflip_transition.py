@@ -60,6 +60,12 @@ class GLCompositorBlockFlipTransition(BaseTransition):
         self._total_dur_sec: float = max(0.001, self._total_duration_ms / 1000.0)
         self._last_progress: float = 0.0
 
+    def get_expected_duration_ms(self) -> int:
+        total = getattr(self, "_total_duration_ms", None)
+        if isinstance(total, (int, float)) and total > 0:
+            return int(total)
+        return self.duration_ms
+
     # ------------------------------------------------------------------
     # BaseTransition API
     # ------------------------------------------------------------------

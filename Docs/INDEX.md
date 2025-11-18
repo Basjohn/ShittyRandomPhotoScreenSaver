@@ -17,9 +17,9 @@
 # ShittyRandomPhotoScreenSaver - Module Index
 
 **Purpose**: Living file map of all modules, their purposes, and key classes/functions.  
-**Last Updated**: Nov 12, 2025 06:11 UTC+2 - GL Blinds readiness + display persistence  
-**Implementation Status**: 🟢 Core Framework | 🟢 Animation | 🟢 Entry Point | 🟢 Image Sources | 🟢 Display & Rendering | 🟢 Engine | 🟠 **Transitions (GL Blinds tuned, other GL transitions pending review)** | 🟢 Pan & Scan | 🟢 Widgets | 🟢 UI  
-**Test Status**: Runs locally; transition stack refactored and pending manual verification  
+**Last Updated**: Nov 17, 2025 23:30 UTC+2 - Canonical settings + GL compositor route (Route 3)  
+**Implementation Status**: 🟢 Core Framework | 🟢 Animation | 🟢 Entry Point | 🟢 Image Sources | 🟢 Display & Rendering | 🟢 Engine | 🟠 **Transitions (GL compositor + Blinds tuned, remaining GL visuals pending review)** | 🟢 Pan & Scan | 🟢 Widgets | 🟢 UI  
+**Test Status**: Runs locally; GL compositor route and settings schema stable, transitions still require targeted visual/manual verification  
 **Note**: Update this file after any major structural changes.
 
 **Audit Session (Nov 6, 2025 21:00-21:30) - 48/63 Issues Fixed**:
@@ -185,7 +185,7 @@ SETTINGS_CHANGED = "settings.changed"
   - `on_changed(key, handler)` - Change notification
   - `reset_to_defaults()` - Reset all settings
 
-**Features**: Automatic defaults, change notifications, QSettings persistence  
+**Features**: Automatic defaults using the canonical nested settings schema (`display`, `transitions`, `timing`, `widgets`, `input`), change notifications, and QSettings persistence. Legacy flat settings keys (e.g. `transitions.type`, `widgets.clock_*`) are migration-only and not used by the active runtime pipeline.  
 **Adapted From**: `MyReuseableUtilityModules/core/settings/settings_manager.py`  
 **Tests**: `tests/test_settings.py`
 
@@ -384,7 +384,7 @@ SETTINGS_CHANGED = "settings.changed"
 
 ### `rendering/display_widget.py` 🟢 COMPLETE + TRANSITIONS + WIDGETS
 **Purpose**: Fullscreen display widget with transitions and overlay widgets  
-**Status**: ✅ Implemented, 🆕 **Transitions Integrated!**, 🆕 **Clock Widget Working!**  
+**Status**: ✅ Implemented, 🆕 **Transitions Integrated!**, 🆕 **Clock Widget Working!**, 🆕 **GL Compositor route active (Route 3)**  
 **Key Classes**:
 - `DisplayWidget(QWidget)` - Fullscreen image display with transitions
   - `show_on_screen()` - Position fullscreen, **setup widgets**
@@ -398,6 +398,10 @@ SETTINGS_CHANGED = "settings.changed"
   - `get_screen_info()` - Get display information
   - `paintEvent()` - Render current image or error
   - `keyPressEvent()` - **UPDATED**: Exit on any key (except hotkeys Z/X/C/S/Esc)
+
+### `temp/display_widget_prev.py` 🟡 LEGACY / REFERENCE ONLY
+**Purpose**: Legacy DisplayWidget implementation from the earlier per-transition GL overlay pipeline, retained for comparison during audits and refactors.  
+**Status**: 🟡 Legacy; not referenced by the current engine. Do not add new features here—use `rendering.display_widget.DisplayWidget` + `GLCompositorWidget` instead.  
   - `mousePressEvent()` - Exit on any click
   - `mouseMoveEvent()` - **NEW**: Track movement, exit if >5px
 

@@ -46,15 +46,64 @@ def settings_manager(tmp_path):
     """Create settings manager for tests."""
     settings_file = tmp_path / "test_settings.json"
     manager = SettingsManager(str(settings_file))
-    
+
     # Configure for testing
     manager.set('display.pan_and_scan', True)
     manager.set('display.pan_auto_speed', True)
     manager.set('timing.interval', 5)  # 5 second rotation
-    manager.set('transitions.type', 'Crossfade')
-    manager.set('transitions.duration_ms', 500)  # Fast transitions for testing
-    
+
+    # Canonical nested transitions config for tests
+    transitions_cfg = manager.get('transitions', {}) or {}
+    if not isinstance(transitions_cfg, dict):
+        transitions_cfg = {}
+    transitions_cfg['type'] = 'Crossfade'
+    transitions_cfg['duration_ms'] = 500  # Fast transitions for testing
+    manager.set('transitions', transitions_cfg)
+
     return manager
+
+
+def _update_transitions(
+    settings_manager: SettingsManager,
+    *,
+    transition_type: str | None = None,
+    duration_ms: int | None = None,
+    diffuse_block_size: int | None = None,
+    diffuse_shape: str | None = None,
+    block_rows: int | None = None,
+    block_cols: int | None = None,
+) -> None:
+    """Helper to update canonical nested transition config for these tests."""
+    cfg = settings_manager.get('transitions', {}) or {}
+    if not isinstance(cfg, dict):
+        cfg = {}
+
+    if transition_type is not None:
+        cfg['type'] = transition_type
+    if duration_ms is not None:
+        cfg['duration_ms'] = duration_ms
+
+    if diffuse_block_size is not None or diffuse_shape is not None:
+        diff_cfg = cfg.get('diffuse', {})
+        if not isinstance(diff_cfg, dict):
+            diff_cfg = {}
+        if diffuse_block_size is not None:
+            diff_cfg['block_size'] = diffuse_block_size
+        if diffuse_shape is not None:
+            diff_cfg['shape'] = diffuse_shape
+        cfg['diffuse'] = diff_cfg
+
+    if block_rows is not None or block_cols is not None:
+        block_cfg = cfg.get('block_flip', {})
+        if not isinstance(block_cfg, dict):
+            block_cfg = {}
+        if block_rows is not None:
+            block_cfg['rows'] = block_rows
+        if block_cols is not None:
+            block_cfg['cols'] = block_cols
+        cfg['block_flip'] = block_cfg
+
+    settings_manager.set('transitions', cfg)
 
 
 def test_crossfade_with_pan_and_scan(app, test_images, settings_manager):
@@ -127,7 +176,7 @@ def test_diffuse_with_pan_and_scan(app, test_images, settings_manager):
         pytest.skip("Not enough test images")
     
     # Configure for diffuse
-    settings_manager.set('transitions.type', 'Diffuse')
+    _update_transitions(settings_manager, transition_type='Diffuse')
     
     # Create display widget
     widget = DisplayWidget(

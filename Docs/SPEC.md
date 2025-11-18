@@ -1,8 +1,8 @@
 # ShittyRandomPhotoScreenSaver - Technical Specification
 
 **Version**: 1.0  
-**Last Updated**: Nov 12, 2025 06:11 - GL Blinds tuning & display persistence  
-**Status**: Architecture solid, GL Blinds validated; other GL transitions pending re-verification
+**Last Updated**: Nov 17, 2025 23:30 - Canonical settings + GL compositor path  
+**Status**: Architecture solid; GL compositor route and settings schema stabilised; GL transition visuals (Diffuse/Wipe/BlockPuzzle) still pending final tuning
 
 ---
 
@@ -47,7 +47,7 @@ A modern, feature-rich Windows screensaver built with PySide6 that displays phot
 - **FR-3.5**: Block Puzzle Flip - grid flip ⭐ STAR FEATURE
   - Mask union on new label; DPR‑aligned grid; AM timing
 
-GL Path: Optional GL overlays (QOpenGLWidget + QPainter) for Crossfade/Slide/Wipe/Diffuse/BlockFlip/Blinds; reuse per-display where available. Overlays now expose `is_ready_for_display()` to gate base paints before they present.
+GL Path: The only supported GL route uses a single `GLCompositorWidget` per display (Route 3) that executes Crossfade/Slide/Wipe/Diffuse/BlockFlip/Blinds via a compositor API. Legacy per-transition GL overlays (QOpenGLWidget + QPainter) are quarantined for reference/tests only and are not used by the current engine. Overlays/compositor expose readiness flags (e.g. `is_ready_for_display()`) to gate base paints before they present.
 
 #### 4. Multi-Monitor Support
 - **FR-4.1**: Detect all connected monitors
@@ -205,6 +205,7 @@ GL Path: Optional GL overlays (QOpenGLWidget + QPainter) for Crossfade/Slide/Wip
   - TransitionState enum
   - Signals: started, finished, progress, error
   - Methods: start(), stop(), cleanup()
+  - Telemetry helpers `_mark_start()` / `_mark_end()` with an overridable `get_expected_duration_ms()` used to log actual vs expected wall-clock duration for each transition type (BlockPuzzleFlip variants override this to account for their two-phase timeline: `duration_ms + flip_duration_ms`).
 - **Types**:
   - Crossfade (CPU + GL variants)
   - Slide (CPU + GL variants)
@@ -270,16 +271,25 @@ GL Path: Optional GL overlays (QOpenGLWidget + QPainter) for Crossfade/Slide/Wip
 {
     'display': {
         'mode': 'fill',                    # 'fill' | 'fit' | 'shrink'
-        'pan_and_scan': False,             # bool
-        'sharpen_downscale': False,        # bool
-        'hw_accel': False,                 # bool - GL overlays enabled when True
+        'hw_accel': True,                  # bool - GL compositor / hardware backend enabled when True
+        'refresh_sync': True,              # bool - enable vsync / refresh sync
+        'prefer_triple_buffer': True,      # bool - prefer triple-buffered swap when available
+        'gl_depth_bits': 24,               # int - depth buffer bits for GL context
+        'gl_stencil_bits': 8,              # int - stencil buffer bits for GL context
+        'render_backend_mode': 'opengl',   # 'opengl' | 'software' (fallback)
+        'pan_and_scan': False,             # bool - Ken Burns effect
+        'pan_auto_speed': True,            # bool - auto speed selection based on image size
+        'pan_speed': 3.0,                  # float - manual speed when auto_speed is False
+        'sharpen_downscale': False,        # bool - optional sharpening after downscale
+        'same_image_all_monitors': False,  # bool - True = same image on all screens
     },
 
     'transitions': {
-        'type': 'Crossfade',               # 'Crossfade' | 'Slide' | 'Wipe' | 'Diffuse' | 'Block Puzzle Flip'
+        'type': 'Wipe',                    # 'Crossfade' | 'Slide' | 'Wipe' | 'Diffuse' | 'Block Puzzle Flip' | 'Blinds'
         'duration_ms': 1300,               # int milliseconds
         'easing': 'Auto',                  # 'Auto' | 'Linear' | 'InQuad' | 'OutQuad' | ...
-        'direction': 'Random',             # Slide only: 'Random' | 'Left to Right' | 'Right to Left' | 'Top to Bottom' | 'Bottom to Top'
+        'direction': 'Random',             # Global direction hint (Slide/Wipe); usually 'Random'
+        'random_always': False,            # When True, always choose a new random direction
         'diffuse': {
             'block_size': 50,             # int pixels (UI-enforced range e.g. 4–256)
             'shape': 'Rectangle',         # 'Rectangle' | 'Circle' | 'Diamond' | 'Plus' | 'Triangle'
@@ -288,10 +298,18 @@ GL Path: Optional GL overlays (QOpenGLWidget + QPainter) for Crossfade/Slide/Wip
             'rows': 4,
             'cols': 6,
         },
+        'slide': {
+            'direction': 'Random',        # 'Random' | 'Left to Right' | 'Right to Left' | 'Top to Bottom' | 'Bottom to Top'
+            # 'last_direction': 'Left to Right'  # persisted at runtime for non-repeating Random
+        },
+        'wipe': {
+            'direction': 'Random',        # Same options as Slide
+            # 'last_direction': 'Left to Right'  # persisted at runtime for non-repeating Random
+        },
     },
 
     'timing': {
-        'image_duration_sec': 5.0,         # float seconds between images
+        'interval': 10,                    # int seconds between images
     },
 
     'input': {
@@ -301,15 +319,21 @@ GL Path: Optional GL overlays (QOpenGLWidget + QPainter) for Crossfade/Slide/Wip
     'widgets': {
         'clock': {
             'enabled': True,
-            'monitor': 'ALL',              # 'ALL' | 1 | 2 | 3
-            'format': '12h',               # '12h' | '24h'
+            'monitor': 1,                  # default clock on primary monitor only
+            'format': '24h',               # '12h' | '24h'
             'position': 'Top Right',       # placement label
-            'show_seconds': False,
+            'show_seconds': True,
             'timezone': 'local',           # 'local' | pytz/zoneinfo name | 'UTC±HH:MM'
             'show_timezone': False,
+            'font_family': 'Segoe UI',
             'font_size': 48,
             'margin': 20,
+            'show_background': True,
+            'bg_opacity': 0.9,
+            'bg_color': [64, 64, 64, 255],
             'color': [255, 255, 255, 230],
+            'border_color': [128, 128, 128, 255],
+            'border_opacity': 0.9,
         },
         'clock2': {
             'enabled': False,
@@ -319,6 +343,7 @@ GL Path: Optional GL overlays (QOpenGLWidget + QPainter) for Crossfade/Slide/Wip
             'show_seconds': False,
             'timezone': 'UTC',             # Defaults to UTC; user may override
             'show_timezone': True,
+            'font_family': 'Segoe UI',
             'font_size': 32,
             'margin': 20,
             'color': [255, 255, 255, 230],
@@ -331,23 +356,113 @@ GL Path: Optional GL overlays (QOpenGLWidget + QPainter) for Crossfade/Slide/Wip
             'show_seconds': False,
             'timezone': 'UTC+01:00',       # Example offset-based timezone
             'show_timezone': True,
+            'font_family': 'Segoe UI',
             'font_size': 32,
             'margin': 20,
             'color': [255, 255, 255, 230],
         },
         'weather': {
-            'enabled': True,
+            'enabled': False,
             'monitor': 'ALL',              # 'ALL' | 1 | 2 | 3
             'position': 'Bottom Left',
             'location': 'London',
+            'font_family': 'Segoe UI',
             'font_size': 24,
             'color': [255, 255, 255, 230],
             'show_background': True,
             'bg_opacity': 0.9,
+            'bg_color': [64, 64, 64, 255],
+            'border_color': [128, 128, 128, 255],
+            'border_opacity': 0.9,
+            'show_icons': True,
         },
     },
 }
 ```
+
+---
+
+## Implementation Policies & Conventions
+
+These policies are **normative**: new code, tests, and docs must follow them unless explicitly overridden.
+
+### 1. Settings & Configuration
+
+- **Canonical nested schema only**
+  - All runtime code and UI tabs must use the nested settings structure documented above (`display`, `transitions`, `timing`, `widgets`, `input`).
+  - No new flat keys such as `transitions.type`, `transitions.duration_ms`, `widgets.clock_*`, or `widgets.weather_*` may be introduced.
+  - Migration logic from flat keys to nested dicts is allowed **only** in clearly marked migration helpers (e.g. widget/tab loaders) and must never be extended for new features.
+- **Single source of truth**
+  - A given behaviour must be configured from one canonical setting (e.g. `display.same_image_all_monitors`, `transitions.random_always`) with no duplicated flags.
+  - Boolean-like values must be normalised via `SettingsManager.to_bool` / `get_bool` or an equivalent central helper.
+- **Defaults come from SettingsManager**
+  - All defaults are defined in `SettingsManager._set_defaults()` and mirrored in this spec. UI tabs and runtime components must not hardcode conflicting default values.
+
+### 2. Rendering, GL Path & Flicker Policy
+
+- **Single accelerated path (Route 3)**
+  - The only supported GL path is the compositor route using `GLCompositorWidget` and the backend registry in `rendering/backends`. Per-transition GL overlays are considered legacy and must not be used for new features.
+  - Software transitions are retained as a fallback when GL is unavailable or misconfigured.
+- **Flicker-free requirement**
+  - The display pipeline must avoid visual flicker and banding at all costs:
+    - `DisplayWidget` must preserve the last rendered pixmap across transitions, errors, and restarts.
+    - GL compositor readiness (`is_ready_for_display()` or equivalent) must gate base paints and avoid showing partially initialised frames.
+    - Error states should prefer reusing the previous frame with overlayed messaging rather than flashing a blank or placeholder screen.
+  - New transitions or rendering changes must be evaluated against this no-flicker policy.
+- **Transition selection rules**
+  - All transitions are created through `DisplayWidget._create_transition()` using the canonical `transitions` dict.
+  - GL-only transitions (e.g. Blinds) must gracefully fall back to CPU equivalents when `display.hw_accel` is disabled or GL compositor setup fails.
+
+### 3. Threading & Concurrency
+
+- **Central ThreadManager**
+  - `ThreadManager` is the single point of coordination for thread pools and timers.
+  - New background work must use `ThreadManager` (IO/COMPUTE pools, `single_shot`, `schedule_recurring`) rather than ad-hoc `threading.Thread` instances.
+- **QThread usage**
+  - Direct `QThread` usage is reserved for exceptional cases (e.g. `WeatherWidget` fallback when no `ThreadManager` is available) and must be tightly scoped with explicit cleanup.
+- **UI thread discipline**
+  - Worker threads must never touch Qt widgets directly. All UI updates must go through `ThreadManager.run_on_ui_thread` or Qt signal/slot connections.
+  - Long-lived worker components must have well-defined shutdown paths invoked from `ScreensaverEngine.cleanup()`.
+
+### 4. Resource Management & Cleanup
+
+- **ResourceManager integration**
+  - Long-lived Qt objects (displays, overlays, widgets, timers) and external resources (temp files, image caches) must be registered with `ResourceManager` where practical.
+  - `ScreensaverEngine.cleanup()` is responsible for calling `thread_manager.shutdown()` followed by `ResourceManager.shutdown()`/`cleanup_all()` to ensure deterministic teardown.
+- **Ownership model**
+  - `ScreensaverEngine` owns `DisplayManager`, which owns per-screen `DisplayWidget` instances. Each `DisplayWidget` owns its overlays, compositor, and widgets via Qt parent/child relationships and ResourceManager registration.
+  - New components must fit into this ownership graph rather than introducing new global state.
+
+### 5. Widgets & Configuration Patterns
+
+- **Nested widget configuration**
+  - All overlay widgets use the `widgets` nested dict for configuration (`widgets.clock`, `widgets.clock2`, `widgets.clock3`, `widgets.weather`, future widgets).
+  - Each widget configuration must include at minimum: `enabled`, `monitor`, `position`, font family/size, text color, `show_background`, `bg_color`, `bg_opacity`, `border_color`, and `border_opacity` where frames are supported.
+- **Consistent theming**
+  - Widget styling should follow the shared dark theme (e.g. dark grey background + white text with alpha) and prefer QSS/theme-based styling over inline palette changes, unless a specific behaviour requires programmatic styling.
+  - New widgets should reuse existing patterns for background frames, opacity sliders, and color pickers in the Widgets tab.
+
+### 6. Testing & Tooling
+
+- **Logging-first test policy**
+  - All pytest runs should follow the logging-first policy described in `Docs/TestSuite.md`, using file-based logs when terminal output is unreliable.
+  - On Windows/PowerShell the preferred entrypoint is the helper script:
+    - `python scripts/run_tests.py --suite {all,core,transitions,flicker}`
+  - New tests must integrate with this tooling and keep output minimal by default.
+- **Feature/tests coupling**
+  - New features, bug fixes, or refactors must be accompanied by tests (unit or integration) that lock in the intended behaviour, especially for transitions, threading, and widget configuration.
+
+### 7. Legacy & Compatibility Shims
+
+- **No new shims by default**
+  - Compatibility shims or legacy code paths are strongly discouraged. They may be introduced only when absolutely unavoidable and must be clearly marked as such in code and documentation.
+- **Migration over permanent dual-paths**
+  - When behaviour or settings change, the preferred strategy is:
+    1. Migrate legacy data into the canonical schema on first load.
+    2. Persist only the canonical form going forward.
+    3. Avoid long-lived dual-path logic that keeps both legacy and new behaviour active.
+- **Legacy modules are quarantined**
+  - Legacy modules (e.g. `temp/display_widget_prev.py` and per-transition GL overlays) are retained for reference/tests only and must not be wired into the main engine or used for new development.
 
 ---
 

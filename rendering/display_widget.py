@@ -1003,40 +1003,34 @@ class DisplayWidget(QWidget):
         if not isinstance(transitions_settings, dict):
             transitions_settings = {}
 
-        transition_type = self.settings_manager.get('transitions.type', None)
-        if not transition_type:
-            transition_type = transitions_settings.get('type')
-        transition_type = transition_type or 'Crossfade'
+        # Canonical transition type comes from nested config
+        transition_type = transitions_settings.get('type') or 'Crossfade'
         requested_type = transition_type
 
         try:
-            rnd = self.settings_manager.get('transitions.random_always', None)
-            if rnd is None:
-                rnd = transitions_settings.get('random_always', False)
-            if isinstance(rnd, str):
-                rnd = rnd.lower() in ('true', '1', 'yes')
+            # Random mode configured via nested flag; engine may still publish
+            # a per-rotation choice in 'transitions.random_choice'.
+            rnd = transitions_settings.get('random_always', False)
+            rnd = SettingsManager.to_bool(rnd, False)
             random_mode = bool(rnd)
             random_choice_value = None
-            if rnd:
+            if random_mode:
                 chosen = self.settings_manager.get('transitions.random_choice', None)
-                if chosen:
+                if isinstance(chosen, str) and chosen:
                     transition_type = chosen
                     random_choice_value = chosen
         except Exception:
-            rnd = False
             random_mode = False
             random_choice_value = None
 
-        duration_ms = self.settings_manager.get('transitions.duration_ms', None)
-        if duration_ms is None:
-            duration_ms = transitions_settings.get('duration_ms')
-        duration_ms = int(duration_ms or 1300)
+        duration_ms_raw = transitions_settings.get('duration_ms', 1300)
+        try:
+            duration_ms = int(duration_ms_raw)
+        except Exception:
+            duration_ms = 1300
 
         try:
-            easing_str = self.settings_manager.get('transitions.easing', None)
-            if not easing_str:
-                easing_str = transitions_settings.get('easing')
-            easing_str = easing_str or 'Auto'
+            easing_str = transitions_settings.get('easing') or 'Auto'
 
             try:
                 hw_raw = self.settings_manager.get('display.hw_accel', False)
@@ -1065,17 +1059,8 @@ class DisplayWidget(QWidget):
                 return transition
 
             if transition_type == 'Slide':
-                slide_settings = transitions_settings.get('slide', {})
-                if not isinstance(slide_settings, dict):
-                    slide_settings = {}
-                direction_str = self.settings_manager.get('transitions.slide.direction', None)
-                if direction_str is None:
-                    direction_str = slide_settings.get('direction')
-                if direction_str is None:
-                    direction_str = self.settings_manager.get('transitions.direction', None)
-                if direction_str is None:
-                    direction_str = transitions_settings.get('direction')
-                direction_str = direction_str or 'Random'
+                slide_settings = transitions_settings.get('slide', {}) if isinstance(transitions_settings.get('slide', {}), dict) else {}
+                direction_str = slide_settings.get('direction', 'Random') or 'Random'
 
                 direction_map = {
                     'Left to Right': SlideDirection.LEFT,
@@ -1084,15 +1069,11 @@ class DisplayWidget(QWidget):
                     'Bottom to Top': SlideDirection.UP,
                 }
 
-                rnd_always = self.settings_manager.get('transitions.random_always', None)
-                if rnd_always is None:
-                    rnd_always = transitions_settings.get('random_always', False)
-                rnd_always = SettingsManager.to_bool(rnd_always, False)
+                rnd_always = SettingsManager.to_bool(transitions_settings.get('random_always', False), False)
 
                 if direction_str == 'Random' and not rnd_always:
                     all_dirs = [SlideDirection.LEFT, SlideDirection.RIGHT, SlideDirection.UP, SlideDirection.DOWN]
-                    last_dir = self.settings_manager.get('transitions.last_slide_direction', None)
-                    last_dir = slide_settings.get('last_direction', last_dir)
+                    last_dir = slide_settings.get('last_direction')
                     str_to_enum = {
                         'Left to Right': SlideDirection.LEFT,
                         'Right to Left': SlideDirection.RIGHT,
@@ -1108,7 +1089,12 @@ class DisplayWidget(QWidget):
                         SlideDirection.DOWN: 'Top to Bottom',
                         SlideDirection.UP: 'Bottom to Top',
                     }
-                    self.settings_manager.set('transitions.last_slide_direction', enum_to_str.get(direction, 'Left to Right'))
+                    try:
+                        slide_settings['last_direction'] = enum_to_str.get(direction, 'Left to Right')
+                        transitions_settings['slide'] = slide_settings
+                        self.settings_manager.set('transitions', transitions_settings)
+                    except Exception:
+                        pass
                 else:
                     direction = direction_map.get(direction_str, SlideDirection.LEFT)
 
@@ -1132,14 +1118,7 @@ class DisplayWidget(QWidget):
 
             if transition_type == 'Wipe':
                 wipe_settings = transitions_settings.get('wipe', {}) if isinstance(transitions_settings.get('wipe', {}), dict) else {}
-                wipe_dir_str = self.settings_manager.get('transitions.wipe.direction', None)
-                if wipe_dir_str is None:
-                    wipe_dir_str = wipe_settings.get('direction')
-                if wipe_dir_str is None:
-                    wipe_dir_str = self.settings_manager.get('transitions.direction', None)
-                if wipe_dir_str is None:
-                    wipe_dir_str = transitions_settings.get('direction')
-                wipe_dir_str = wipe_dir_str or 'Random'
+                wipe_dir_str = wipe_settings.get('direction', 'Random') or 'Random'
 
                 direction_map = {
                     'Left to Right': WipeDirection.LEFT_TO_RIGHT,
@@ -1159,14 +1138,18 @@ class DisplayWidget(QWidget):
                     direction = direction_map[wipe_dir_str]
                 else:
                     all_wipes = list(direction_map.values())
-                    last_wipe = self.settings_manager.get('transitions.last_wipe_direction', None)
-                    last_wipe = wipe_settings.get('last_direction', last_wipe)
+                    last_wipe = wipe_settings.get('last_direction')
                     str_to_enum = {name: enum for name, enum in direction_map.items()}
                     last_enum = str_to_enum.get(last_wipe) if isinstance(last_wipe, str) else None
                     candidates = [d for d in all_wipes if d != last_enum] if last_enum in all_wipes else all_wipes
                     direction = random.choice(candidates) if candidates else random.choice(all_wipes)
                     enum_to_str = {enum: name for name, enum in direction_map.items()}
-                    self.settings_manager.set('transitions.last_wipe_direction', enum_to_str.get(direction, 'Left to Right'))
+                    try:
+                        wipe_settings['last_direction'] = enum_to_str.get(direction, 'Left to Right')
+                        transitions_settings['wipe'] = wipe_settings
+                        self.settings_manager.set('transitions', transitions_settings)
+                    except Exception:
+                        pass
 
                 if hw_accel:
                     try:
@@ -1189,15 +1172,13 @@ class DisplayWidget(QWidget):
                 return transition
 
             if transition_type == 'Diffuse':
-                diffuse_block = self.settings_manager.get('transitions.diffuse.block_size', None)
-                diffuse_shape = self.settings_manager.get('transitions.diffuse.shape', None)
                 diffuse_settings = transitions_settings.get('diffuse', {}) if isinstance(transitions_settings.get('diffuse', {}), dict) else {}
-                if diffuse_block is None:
-                    diffuse_block = diffuse_settings.get('block_size')
-                if diffuse_shape is None:
-                    diffuse_shape = diffuse_settings.get('shape')
-                block_size = int(diffuse_block or 50)
-                shape = diffuse_shape or 'Rectangle'
+                block_size_raw = diffuse_settings.get('block_size', 50)
+                try:
+                    block_size = int(block_size_raw)
+                except Exception:
+                    block_size = 50
+                shape = diffuse_settings.get('shape', 'Rectangle') or 'Rectangle'
 
                 transition = DiffuseTransition(duration_ms, block_size, shape)
 
@@ -1206,15 +1187,17 @@ class DisplayWidget(QWidget):
                 return transition
 
             if transition_type == 'Block Puzzle Flip':
-                rows = self.settings_manager.get('transitions.block_flip.rows', None)
-                cols = self.settings_manager.get('transitions.block_flip.cols', None)
                 block_flip_settings = transitions_settings.get('block_flip', {}) if isinstance(transitions_settings.get('block_flip', {}), dict) else {}
-                if rows is None:
-                    rows = block_flip_settings.get('rows')
-                if cols is None:
-                    cols = block_flip_settings.get('cols')
-                rows = int(rows or 4)
-                cols = int(cols or 6)
+                rows_raw = block_flip_settings.get('rows', 4)
+                cols_raw = block_flip_settings.get('cols', 6)
+                try:
+                    rows = int(rows_raw)
+                except Exception:
+                    rows = 4
+                try:
+                    cols = int(cols_raw)
+                except Exception:
+                    cols = 6
 
                 if hw_accel:
                     try:
