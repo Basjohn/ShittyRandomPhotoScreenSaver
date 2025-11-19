@@ -525,12 +525,20 @@ class MediaWidget(QLabel):
             inactive_color = "rgba(200,200,200,230)"
             active_color = "rgba(255,255,255,255)"
 
-            def _control_span(symbol: str, is_active: bool, scale: float = 1.0) -> str:
+            def _control_span(
+                symbol: str,
+                is_active: bool,
+                scale: float = 1.0,
+                extra_top_px: int = 0,
+            ) -> str:
                 size = max(4.0, float(controls_font) * max(0.5, float(scale)))
                 color = active_color if is_active else inactive_color
                 weight = "700" if is_active else "500"
+                extra_top = f" margin-top:{extra_top_px}px;" if extra_top_px else ""
                 return (
-                    f"<span style='font-size:{size}pt; font-weight:{weight}; color:{color};'>{symbol}</span>"
+                    f"<span style='display:inline-block; font-size:{size}pt; "
+                    f"font-weight:{weight}; color:{color}; line-height:1; "
+                    f"vertical-align:middle;{extra_top}'>{symbol}</span>"
                 )
 
             # Structured, minimal controls: left/right arrows and a single
@@ -545,9 +553,11 @@ class MediaWidget(QLabel):
                 centre_sym = "\u25b6"  # play
                 centre_scale = 1.25
 
-            prev_html = _control_span(prev_sym, False)
+            # Slightly bias the side arrows down so they visually align with
+            # the play glyph's centre line.
+            prev_html = _control_span(prev_sym, False, extra_top_px=1)
             centre_html = _control_span(centre_sym, True, centre_scale)
-            next_html = _control_span(next_sym, False)
+            next_html = _control_span(next_sym, False, extra_top_px=1)
 
             controls_html = (
                 f"{prev_html}&nbsp;&nbsp;{centre_html}&nbsp;&nbsp;{next_html}"
@@ -644,6 +654,7 @@ class MediaWidget(QLabel):
             painter = QPainter(self)
             try:
                 painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             except Exception:
                 pass
 
@@ -707,7 +718,9 @@ class MediaWidget(QLabel):
                         if self._bg_border_width > 0 and self._bg_border_color.alpha() > 0:
                             pen = painter.pen()
                             pen.setColor(self._bg_border_color)
-                            pen.setWidth(max(1, self._bg_border_width))
+                            # A bit thicker than the card frame so the
+                            # artwork reads as a strong focal element.
+                            pen.setWidth(max(1, self._bg_border_width + 2))
                             painter.setPen(pen)
                             painter.setBrush(Qt.BrushStyle.NoBrush)
                             if self._rounded_artwork_border:
@@ -795,7 +808,9 @@ class MediaWidget(QLabel):
         font = QFont(self._font_family, header_font_pt, QFont.Weight.Bold)
         fm = QFontMetrics(font)
         line_height = fm.height()
-        line_centre = margins.top() + (line_height / 2.0)
+        # Nudge the visual centre a bit lower than the strict mid-line so the
+        # SPOTIFY word and glyph feel horizontally balanced.
+        line_centre = margins.top() + (line_height * 0.6)
         icon_half = float(self._header_logo_size) / 2.0
         y = int(line_centre - icon_half)
         if y < margins.top():
