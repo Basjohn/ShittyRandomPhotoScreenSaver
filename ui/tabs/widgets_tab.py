@@ -677,6 +677,12 @@ class WidgetsTab(QWidget):
         self.media_rounded_artwork.stateChanged.connect(self._save_settings)
         media_layout.addWidget(self.media_rounded_artwork)
 
+        # Header frame around logo + title
+        self.media_show_header_frame = QCheckBox("Header Border Around Logo + Title")
+        self.media_show_header_frame.setChecked(True)
+        self.media_show_header_frame.stateChanged.connect(self._save_settings)
+        media_layout.addWidget(self.media_show_header_frame)
+
         # Controls visibility
         self.media_show_controls = QCheckBox("Show Transport Controls")
         self.media_show_controls.setChecked(True)
@@ -843,6 +849,7 @@ class WidgetsTab(QWidget):
                 getattr(self, 'media_border_opacity', None),
                 getattr(self, 'media_artwork_size', None),
                 getattr(self, 'media_rounded_artwork', None),
+                getattr(self, 'media_show_header_frame', None),
                 getattr(self, 'media_show_controls', None),
             ]:
                 if w is not None and hasattr(w, 'blockSignals'):
@@ -1001,6 +1008,11 @@ class WidgetsTab(QWidget):
                 media_config.get('rounded_artwork_border', True), True
             )
             self.media_rounded_artwork.setChecked(rounded_art)
+
+            show_header_frame = SettingsManager.to_bool(
+                media_config.get('show_header_frame', True), True
+            )
+            self.media_show_header_frame.setChecked(show_header_frame)
 
             show_controls = SettingsManager.to_bool(media_config.get('show_controls', True), True)
             self.media_show_controls.setChecked(show_controls)
@@ -1169,6 +1181,7 @@ class WidgetsTab(QWidget):
             'border_opacity': self.media_border_opacity.value() / 100.0,
             'artwork_size': self.media_artwork_size.value(),
             'rounded_artwork_border': self.media_rounded_artwork.isChecked(),
+            'show_header_frame': self.media_show_header_frame.isChecked(),
             'show_controls': self.media_show_controls.isChecked(),
         }
         mmon_text = self.media_monitor_combo.currentText()

@@ -806,6 +806,9 @@ class DisplayWidget(QWidget):
             media_settings.get('rounded_artwork_border', True), True
         )
         show_controls = SettingsManager.to_bool(media_settings.get('show_controls', True), True)
+        show_header_frame = SettingsManager.to_bool(
+            media_settings.get('show_header_frame', True), True
+        )
 
         try:
             self.media_widget = MediaWidget(self, position=mpos)
@@ -847,6 +850,11 @@ class DisplayWidget(QWidget):
             try:
                 if hasattr(self.media_widget, 'set_show_controls'):
                     self.media_widget.set_show_controls(show_controls)
+            except Exception:
+                pass
+            try:
+                if hasattr(self.media_widget, 'set_show_header_frame'):
+                    self.media_widget.set_show_header_frame(show_header_frame)
             except Exception:
                 pass
 

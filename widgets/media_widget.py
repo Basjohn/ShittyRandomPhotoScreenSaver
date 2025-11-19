@@ -90,6 +90,9 @@ class MediaWidget(QLabel):
         # Artwork border behaviour
         self._rounded_artwork_border: bool = True
 
+        # Optional header frame around the Spotify logo + title row.
+        self._show_header_frame: bool = True
+
         # Layout/controls behaviour
         self._show_controls: bool = True
 
@@ -344,6 +347,12 @@ class MediaWidget(QLabel):
         self._rounded_artwork_border = bool(rounded)
         self.update()
 
+    def set_show_header_frame(self, show: bool) -> None:
+        """Enable or disable the header subcontainer frame around logo+title."""
+
+        self._show_header_frame = bool(show)
+        self.update()
+
     def set_show_controls(self, show: bool) -> None:
         """Show or hide the transport controls row."""
 
@@ -529,16 +538,16 @@ class MediaWidget(QLabel):
                 symbol: str,
                 is_active: bool,
                 scale: float = 1.0,
-                extra_top_px: int = 0,
+                offset_px: int = 0,
             ) -> str:
                 size = max(4.0, float(controls_font) * max(0.5, float(scale)))
                 color = active_color if is_active else inactive_color
                 weight = "700" if is_active else "500"
-                extra_top = f" margin-top:{extra_top_px}px;" if extra_top_px else ""
+                offset = f" margin-top:{offset_px}px;" if offset_px else ""
                 return (
                     f"<span style='display:inline-block; font-size:{size}pt; "
                     f"font-weight:{weight}; color:{color}; line-height:1; "
-                    f"vertical-align:middle;{extra_top}'>{symbol}</span>"
+                    f"vertical-align:middle;{offset}'>{symbol}</span>"
                 )
 
             # Structured, minimal controls: left/right arrows and a single
@@ -553,11 +562,13 @@ class MediaWidget(QLabel):
                 centre_sym = "\u25b6"  # play
                 centre_scale = 1.25
 
-            # Slightly bias the side arrows down so they visually align with
-            # the play glyph's centre line.
-            prev_html = _control_span(prev_sym, False, extra_top_px=1)
+            # Upscale the side arrows and nudge them slightly upward so they
+            # visually align with the play glyph's centre line.
+            arrow_scale = 1.2
+            arrow_offset = -1
+            prev_html = _control_span(prev_sym, False, scale=arrow_scale, offset_px=arrow_offset)
             centre_html = _control_span(centre_sym, True, centre_scale)
-            next_html = _control_span(next_sym, False, extra_top_px=1)
+            next_html = _control_span(next_sym, False, scale=arrow_scale, offset_px=arrow_offset)
 
             controls_html = (
                 f"{prev_html}&nbsp;&nbsp;{centre_html}&nbsp;&nbsp;{next_html}"
@@ -565,7 +576,8 @@ class MediaWidget(QLabel):
 
         header_html = (
             f"<div style='font-size:{header_font}pt; font-weight:{header_weight}; "
-            f"opacity:0.9; letter-spacing:1px; margin-left:{self._header_logo_margin}px;'>SPOTIFY</div>"
+            f"letter-spacing:1px; margin-left:{self._header_logo_margin}px; "
+            f"color:rgba(255,255,255,255);'>SPOTIFY</div>"
         )
         # Outer wrapper just establishes spacing; individual lines carry
         # their own font sizes/weights.
@@ -657,6 +669,9 @@ class MediaWidget(QLabel):
                 painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             except Exception:
                 pass
+
+            # Optional header frame on the left side around logo + SPOTIFY.
+            self._paint_header_frame(painter)
 
             pm = self._artwork_pixmap
             if pm is not None and not pm.isNull():
@@ -761,6 +776,87 @@ class MediaWidget(QLabel):
             logger.debug("[MEDIA] Failed to load Spotify logo", exc_info=True)
         return None
 
+    def _paint_header_frame(self, painter: QPainter) -> None:
+        """Paint a rounded sub-frame around the logo + SPOTIFY header.
+
+        The frame inherits the media widget's background and border colours
+        and opacities so it feels like a lighter inner container instead of a
+        separate widget. It is confined to the left text column and never
+        overlaps the artwork on the right.
+        """
+
+        if not self._show_header_frame:
+            return
+        if not self._show_background:
+            # When the main card background is disabled, keep the header frame
+            # off as well so styling stays consistent.
+            return
+        if self._bg_border_width <= 0 or self._bg_border_color.alpha() <= 0:
+            return
+
+        margins = self.contentsMargins()
+        # Slightly offset the frame so the logo+SPOTIFY group reads more
+        # visually centred within it. Moving the frame left and down has the
+        # effect of the header content appearing ~5px right and ~3px up
+        # relative to the border without disturbing their mutual alignment.
+        left = margins.left() - 5
+        top = margins.top() + 3
+
+        # Use the same font metrics as the SPOTIFY header so the frame height
+        # comfortably contains both the wordmark and the logo glyph.
+        try:
+            header_font_pt = int(self._header_font_pt) if self._header_font_pt > 0 else self._font_size
+        except Exception:
+            header_font_pt = self._font_size
+
+        font = QFont(self._font_family, header_font_pt, QFont.Weight.Bold)
+        fm = QFontMetrics(font)
+        text_w = fm.horizontalAdvance("SPOTIFY")
+        text_h = fm.height()
+
+        logo_size = max(1, int(self._header_logo_size))
+        # Gap between logo and text mirrors the HTML margin.
+        gap = max(6, self._header_logo_margin - logo_size)
+
+        pad_x = 10
+        pad_y = 6
+
+        inner_w = logo_size + gap + text_w
+        row_h = max(text_h, logo_size)
+
+        extra_right_pad = 24
+        width = int(inner_w + pad_x * 2 + extra_right_pad)
+        height = int(row_h + pad_y * 2)
+
+        # Constrain the frame so it stays entirely within the text column on
+        # the left, leaving space for the artwork and its padding on the right.
+        max_width = max(0, self.width() - margins.right() - left - 10)
+        if max_width and width > max_width:
+            width = max_width
+
+        if width <= 0 or height <= 0:
+            return
+
+        rect = QRect(left, top, width, height)
+
+        painter.save()
+        try:
+            # Draw only the header border so the SPOTIFY text colour is not
+            # darkened by an overlaid semi-transparent fill.
+
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            pen = painter.pen()
+            pen.setColor(self._bg_border_color)
+            pen.setWidth(max(1, self._bg_border_width))
+            painter.setPen(pen)
+
+            path = QPainterPath()
+            radius = min(rect.width(), rect.height()) / 2.5
+            path.addRoundedRect(rect, radius, radius)
+            painter.drawPath(path)
+        finally:
+            painter.restore()
+
     def _paint_header_logo(self, painter: QPainter) -> None:
         """Paint the Spotify logo glyph next to the SPOTIFY header text.
 
@@ -795,7 +891,7 @@ class MediaWidget(QLabel):
             pass
 
         margins = self.contentsMargins()
-        x = margins.left()
+        x = margins.left() + 7
 
         # Align the logo vertically with the SPOTIFY text by centring the
         # glyph within the first header line's text metrics instead of
@@ -809,12 +905,13 @@ class MediaWidget(QLabel):
         fm = QFontMetrics(font)
         line_height = fm.height()
         # Nudge the visual centre a bit lower than the strict mid-line so the
-        # SPOTIFY word and glyph feel horizontally balanced.
+        # SPOTIFY word and glyph feel horizontally balanced. We then add a
+        # small fixed offset so the glyph does not touch the header frame.
         line_centre = margins.top() + (line_height * 0.6)
         icon_half = float(self._header_logo_size) / 2.0
-        y = int(line_centre - icon_half)
-        if y < margins.top():
-            y = margins.top()
+        y = int(line_centre - icon_half) + 4
+        if y < margins.top() + 4:
+            y = margins.top() + 4
 
         painter.save()
         try:

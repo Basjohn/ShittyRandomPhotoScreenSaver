@@ -188,6 +188,9 @@ class SettingsManager(QObject):
                     # When False the transport control row is hidden and
                     # the widget becomes a pure “now playing” block.
                     'show_controls': True,
+                    # Optional header subcontainer frame around the logo +
+                    # title row to mirror the Reddit widget styling.
+                    'show_header_frame': True,
                 },
             },
         }
