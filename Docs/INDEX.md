@@ -185,9 +185,9 @@ SETTINGS_CHANGED = "settings.changed"
   - `on_changed(key, handler)` - Change notification
   - `reset_to_defaults()` - Reset all settings
 
-**Features**: Automatic defaults using the canonical nested settings schema (`display`, `transitions`, `timing`, `widgets`, `input`), change notifications, and QSettings persistence. Legacy flat settings keys (e.g. `transitions.type`, `widgets.clock_*`) are migration-only and not used by the active runtime pipeline.  
+**Features**: Automatic defaults using the canonical nested settings schema (`display`, `transitions`, `timing`, `widgets`, `input`), including the full `widgets` map (`clock`, `clock2`, `clock3`, `weather`, `media`) maintained centrally via `_set_defaults()` + `_ensure_widgets_defaults`, change notifications, and QSettings persistence. Legacy flat settings keys (e.g. `transitions.type`, `widgets.clock_*`) are migration-only and not used by the active runtime pipeline.  
 **Adapted From**: `MyReuseableUtilityModules/core/settings/settings_manager.py`  
-**Tests**: `tests/test_settings.py`
+**Tests**: `tests/test_settings.py`, `tests/test_widgets_tab.py`, `tests/test_widgets_media_integration.py`
 
 ---
 
@@ -252,6 +252,37 @@ SETTINGS_CHANGED = "settings.changed"
 
 **Implemented**: Day 4  
 **Tests**: `tests/test_animation.py`
+
+---
+
+### `core/media/media_controller.py` 🟢 COMPLETE
+**Purpose**: Centralized media controller abstraction for system/Spotify playback.  
+**Status**: ✅ Implemented, ✅ Tested (controller + widget integration)
+
+**Key Classes**:
+- `MediaPlaybackState(Enum)` - Normalized playback states (UNKNOWN, STOPPED, PAUSED, PLAYING)
+- `MediaTrackInfo` - Dataclass snapshot of current track (title, artist, album, album_artist, playback state, capability flags, optional artwork bytes)
+- `BaseMediaController` - Abstract controller interface (get_current_track, play_pause, next, previous)
+- `WindowsGlobalMediaController(BaseMediaController)` - Windows 10/11 GSMTC-based implementation
+  - Uses `GlobalSystemMediaTransportControlsSessionManager` under the hood
+  - Selects a Spotify-specific session via `source_app_user_model_id` when available
+  - Normalizes playback status and capabilities, and fetches an optional thumbnail into `MediaTrackInfo.artwork`
+- `NoOpMediaController(BaseMediaController)` - Safe fallback when GSMTC/APIs are unavailable
+  - `get_current_track()` -> `None`
+  - Control methods log at debug and have no side-effects
+
+**Key Functions**:
+- `create_media_controller()` - Factory returning the best available controller
+  - Prefers `WindowsGlobalMediaController` when `_available` is truthy
+  - Falls back to `NoOpMediaController` otherwise so callers never branch on platform details
+
+**Features**:
+- Polling-friendly, UI-thread-safe interface (no long-lived event loops)
+- All failures are soft (logged at debug/info), never raised to callers
+- Explicit Spotify session selection for the current Spotify MediaWidget; other players are treated as "no media" for this widget
+
+**Tests**:
+- `tests/test_media_widget.py` (NoOp behaviour, factory fallback, Spotify session selection)
 
 ---
 

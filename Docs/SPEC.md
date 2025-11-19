@@ -217,8 +217,8 @@ GL Path: The only supported GL route uses a single `GLCompositorWidget` per disp
 - **Features**: Progress tracking (0.0-1.0), configurable duration, easing curves; GL overlays publish readiness flags to avoid fallback paints
 
 #### 6. Overlay Widgets
-- **Types**: ClockWidget, WeatherWidget
-- **Features**: Position, transparency, auto-update
+- **Types**: ClockWidget, WeatherWidget, MediaWidget (Spotify)
+- **Features**: Position, transparency, auto-update. All overlay widgets are configured exclusively via the canonical nested `widgets` map in settings (`widgets.clock`, `widgets.clock2`, `widgets.clock3`, `widgets.weather`, `widgets.media`), which is initialised and kept up to date by `SettingsManager._set_defaults()` + `_ensure_widgets_defaults()` with **no widget-specific default helpers**. The MediaWidget is a Spotify-specific overlay on Windows that shows playback state, track/artist/album text, and optional album artwork via the centralized media controller. It hides itself entirely when no Spotify GSMTC session is available or when media APIs are unavailable, and interaction is gated by Ctrl-held / hard-exit input modes. Creation of the MediaWidget at runtime is gated strictly by `widgets.media.enabled` and the configured `widgets.media.monitor` selection.
 
 #### 7. Configuration UI
 - **Main**: SettingsDialog
@@ -329,11 +329,11 @@ GL Path: The only supported GL route uses a single `GLCompositorWidget` per disp
             'font_size': 48,
             'margin': 20,
             'show_background': True,
-            'bg_opacity': 0.9,
+            'bg_opacity': 0.7,
             'bg_color': [64, 64, 64, 255],
             'color': [255, 255, 255, 230],
-            'border_color': [128, 128, 128, 255],
-            'border_opacity': 0.9,
+            'border_color': [255, 255, 255, 255],
+            'border_opacity': 1.0,
         },
         'clock2': {
             'enabled': False,
@@ -370,11 +370,28 @@ GL Path: The only supported GL route uses a single `GLCompositorWidget` per disp
             'font_size': 24,
             'color': [255, 255, 255, 230],
             'show_background': True,
-            'bg_opacity': 0.9,
+            'bg_opacity': 0.7,
             'bg_color': [64, 64, 64, 255],
-            'border_color': [128, 128, 128, 255],
-            'border_opacity': 0.9,
+            'border_color': [255, 255, 255, 255],
+            'border_opacity': 1.0,
             'show_icons': True,
+        },
+        'media': {
+            'enabled': False,
+            'monitor': 'ALL',              # 'ALL' | 1 | 2 | 3
+            'position': 'Bottom Left',
+            'font_family': 'Segoe UI',
+            'font_size': 20,
+            'margin': 20,
+            'show_background': True,
+            'bg_opacity': 0.7,
+            'color': [255, 255, 255, 230],
+            'bg_color': [64, 64, 64, 255],
+            'border_color': [255, 255, 255, 255],
+            'border_opacity': 1.0,
+            # Artwork and controls behaviour
+            'artwork_size': 200,           # int pixels, user-tunable in Widgets tab
+            'show_controls': True,         # bool – when False, hide transport row
         },
     },
 }
@@ -438,9 +455,23 @@ These policies are **normative**: new code, tests, and docs must follow them unl
 - **Nested widget configuration**
   - All overlay widgets use the `widgets` nested dict for configuration (`widgets.clock`, `widgets.clock2`, `widgets.clock3`, `widgets.weather`, future widgets).
   - Each widget configuration must include at minimum: `enabled`, `monitor`, `position`, font family/size, text color, `show_background`, `bg_color`, `bg_opacity`, `border_color`, and `border_opacity` where frames are supported.
+- **Single canonical defaults path for widgets**
+  - Default values and migration of widget configuration **must** flow through `SettingsManager._set_defaults()` and `_ensure_widgets_defaults()` so that new widget sections (e.g. media) are added in one place without per-widget helpers.
+  - No new widget-specific default/migration helpers (e.g. `_ensure_media_defaults`) may be introduced; legacy flat keys are migrated only inside UI/tab loaders where necessary.
 - **Consistent theming**
   - Widget styling should follow the shared dark theme (e.g. dark grey background + white text with alpha) and prefer QSS/theme-based styling over inline palette changes, unless a specific behaviour requires programmatic styling.
   - New widgets should reuse existing patterns for background frames, opacity sliders, and color pickers in the Widgets tab.
+ - **Overlay Z-order for widgets**
+   - `transitions.overlay_manager.raise_overlay()` must always re-raise clock, weather, and media widgets above transition overlays (GL and software) so that overlay widgets remain visible regardless of the active renderer backend.
+ - **Widget implementation checklist**
+   - Settings:
+     - All widget defaults (including new keys like `artwork_size`, `show_controls`, future style flags) must be added to `SettingsManager._set_defaults()` and merged via `_ensure_widgets_defaults()`.
+     - UI tabs must *only* read/write the canonical nested `widgets` map; no parallel flat keys.
+   - UI loading:
+     - Settings tabs that mirror `widgets.*` must block signals while loading and use a `_loading` guard in their save handlers to avoid writing partial defaults back to QSettings during construction.
+   - Logging:
+     - Diagnostics must avoid per-frame or per-paint spam (e.g. geometry logs in `paintEvent`); prefer one-shot startup snapshots and focused state transitions instead.
+     - Temporary high-volume logs added for investigations must be removed or gated once an issue is resolved.
 
 ### 6. Testing & Tooling
 

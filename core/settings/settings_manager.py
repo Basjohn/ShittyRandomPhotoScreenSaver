@@ -3,7 +3,7 @@ Settings manager implementation for screensaver.
 
 Uses QSettings for persistent storage. Simplified from SPQDocker reusable modules.
 """
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Mapping
 import threading
 from PySide6.QtCore import QSettings, QObject, Signal
 from core.logging.logger import get_logger
@@ -36,10 +36,18 @@ class SettingsManager(QObject):
         self._settings = QSettings(organization, application)
         self._lock = threading.RLock()
         self._change_handlers: Dict[str, List[Callable]] = {}
-        
+
         # Initialize defaults
         self._set_defaults()
-        
+
+        # Diagnostic snapshot so widget enable/monitor issues can be traced
+        # without guessing what QSettings returned on this machine.
+        try:
+            widgets_snapshot = self._settings.value('widgets', None)
+            logger.debug("Widgets snapshot on init: %r", widgets_snapshot)
+        except Exception:
+            logger.debug("Failed to read widgets snapshot on init", exc_info=True)
+
         logger.info("SettingsManager initialized")
     
     def _set_defaults(self) -> None:
@@ -91,7 +99,10 @@ class SettingsManager(QObject):
                 },
             },
 
-            # Widgets (canonical nested config)
+            # Widgets (canonical nested config). The actual stored "widgets"
+            # map is merged with these defaults in _set_defaults so that
+            # missing keys are filled in without overwriting existing user
+            # choices.
             'widgets': {
                 'clock': {
                     'enabled': True,
@@ -105,11 +116,11 @@ class SettingsManager(QObject):
                     'font_size': 48,
                     'margin': 20,
                     'show_background': True,
-                    'bg_opacity': 0.9,
+                    'bg_opacity': 0.7,
                     'bg_color': [64, 64, 64, 255],
                     'color': [255, 255, 255, 230],
-                    'border_color': [128, 128, 128, 255],
-                    'border_opacity': 0.9,
+                    'border_color': [255, 255, 255, 255],
+                    'border_opacity': 1.0,
                 },
                 'clock2': {
                     'enabled': False,
@@ -146,19 +157,88 @@ class SettingsManager(QObject):
                     'font_size': 24,
                     'color': [255, 255, 255, 230],
                     'show_background': True,
-                    'bg_opacity': 0.9,
+                    'bg_opacity': 0.7,
                     'bg_color': [64, 64, 64, 255],
-                    'border_color': [128, 128, 128, 255],
-                    'border_opacity': 0.9,
+                    'border_color': [255, 255, 255, 255],
+                    'border_opacity': 1.0,
                     'show_icons': True,
+                },
+                # Media widget defaults intentionally mirror other overlay
+                # widgets. It is disabled by default but configured with a
+                # Bottom Left position and a visible background frame so that
+                # enabling it in the UI immediately produces a clear overlay.
+                'media': {
+                    'enabled': False,
+                    'monitor': 'ALL',
+                    'position': 'Bottom Left',
+                    'font_family': 'Segoe UI',
+                    'font_size': 20,
+                    'margin': 20,
+                    'color': [255, 255, 255, 230],
+                    'show_background': True,
+                    'bg_opacity': 0.7,
+                    'bg_color': [64, 64, 64, 255],
+                    'border_color': [255, 255, 255, 255],
+                    'border_opacity': 1.0,
+                    # Artwork/controls behaviour
+                    # Default artwork size is larger and can be tuned per-user.
+                    'artwork_size': 200,
+                    # Rounded artwork border for album art frame.
+                    'rounded_artwork_border': True,
+                    # When False the transport control row is hidden and
+                    # the widget becomes a pure “now playing” block.
+                    'show_controls': True,
                 },
             },
         }
         
         for key, value in defaults.items():
-            if not self._settings.contains(key):
-                self._settings.setValue(key, value)
-    
+            if key == 'widgets':
+                # Merge any existing widgets map with canonical defaults so
+                # that legacy configs gain new sections (e.g. media) without
+                # losing user customizations.
+                self._ensure_widgets_defaults(value)
+            else:
+                if not self._settings.contains(key):
+                    self._settings.setValue(key, value)
+
+    def _ensure_widgets_defaults(self, default_widgets: Dict[str, Any]) -> None:
+        """Ensure the canonical widgets map exists and is merged with defaults.
+
+        This helper is similar in spirit to _ensure_media_defaults but operates
+        on the entire widgets map in one place so that new widget sections and
+        style keys are added without overwriting any existing user choices.
+        """
+
+        with self._lock:
+            raw_widgets = self._settings.value('widgets', None)
+            if isinstance(raw_widgets, dict):
+                widgets: Dict[str, Any] = dict(raw_widgets)
+            else:
+                widgets = {}
+
+            changed = False
+
+            for section_name, section_defaults in default_widgets.items():
+                existing_section = widgets.get(section_name)
+                if isinstance(existing_section, Mapping):
+                    # Fill in any missing keys for this section, preserving
+                    # the user's existing values even when QSettings returns
+                    # a mapping type that is not a plain dict.
+                    section_dict = dict(existing_section)
+                    for k, v in section_defaults.items():
+                        if k not in section_dict:
+                            section_dict[k] = v
+                            changed = True
+                    widgets[section_name] = section_dict
+                else:
+                    # Entire section missing or invalid – adopt defaults.
+                    widgets[section_name] = dict(section_defaults)
+                    changed = True
+
+            if changed or not isinstance(raw_widgets, dict):
+                self._settings.setValue('widgets', widgets)
+                
     def get(self, key: str, default: Any = None) -> Any:
         """
         Get a setting value.

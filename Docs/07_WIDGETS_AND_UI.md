@@ -309,6 +309,43 @@ class WeatherProvider:
 
 ---
 
+## Spotify Media Widget (Spotify)
+
+### Purpose
+Provide a Spotify-specific "Now Playing" overlay that surfaces track metadata and optional artwork from the Windows 10/11 media controls layer, using the centralized media controller abstraction.
+
+### Behaviour
+- **Spotify-only**: The underlying `WindowsGlobalMediaController` queries GSMTC sessions and picks only those whose `source_app_user_model_id` contains `spotify`. Other players (VLC, browser audio, etc.) are ignored for this widget.
+- **Hide-on-no-media**: When there is no active Spotify session or the controller cannot retrieve media properties, the widget hides itself entirely (no placeholder text is rendered).
+- **Display when active**:
+  - Header line: `SPOTIFY` label.
+  - State line: `▶ Playing`, `⏸ Paused`, `■ Stopped`, or `Now Playing`.
+  - Metadata line: `title · artist · album`, or `(no metadata)` when all three fields are empty.
+  - Optional album artwork drawn on the left when `MediaTrackInfo.artwork` is populated.
+  - Optional Spotify logo drawn on the left (from `/images/spotify_logo.png` or variants) when artwork is not available.
+- **Artwork fade-in**: The first time artwork becomes available for a track, the widget runs a short `QVariantAnimation` to fade the artwork from 0 → 1 opacity while keeping the text stable.
+
+### Integration & Settings
+- Implemented as `MediaWidget` in `widgets/media_widget.py`.
+- Created from `rendering/display_widget.DisplayWidget._setup_widgets()` when `widgets.media.enabled` is `True` and the per-monitor filter matches the current display.
+- Uses the `widgets.media` settings block from Spec/SettingsManager:
+  - `enabled`, `monitor`, `position` (corner), `font_family`, `font_size`, `margin`
+  - `show_background`, `bg_color`, `bg_opacity`, `border_color`, `border_opacity`
+- Polling is timer-based (~1.5s interval) and calls `BaseMediaController.get_current_track()` to refresh the label contents.
+
+### Interaction Gating
+- `MediaWidget` itself is marked `WA_TransparentForMouseEvents` and is non-interactive by default.
+- `DisplayWidget.mousePressEvent()` owns input and decides whether clicks should:
+  - Exit the screensaver (normal mode), or
+  - Be treated as Spotify transport controls during **Ctrl-held** or **hard-exit** interaction modes.
+- When interaction mode is active and the click is inside the media widget geometry:
+  - Left click → `MediaWidget.play_pause()`
+  - Right click → `MediaWidget.next_track()`
+  - Middle click → `MediaWidget.previous_track()`
+- This preserves the global "click to exit" behaviour unless the user is clearly signalling intent (Ctrl halo or hard-exit).
+
+---
+
 ## Settings Dialog
 
 ### Purpose

@@ -45,8 +45,15 @@ class WidgetsTab(QWidget):
         # Weather widget frame defaults mirror WeatherWidget internals
         self._weather_bg_color = QColor(64, 64, 64, 255)
         self._weather_border_color = QColor(128, 128, 128, 255)
+        # Media widget frame defaults mirror other overlay widgets
+        self._media_color = QColor(255, 255, 255, 230)
+        self._media_bg_color = QColor(64, 64, 64, 255)
+        self._media_border_color = QColor(128, 128, 128, 255)
+        self._media_artwork_size = 100
+        self._loading = True
         self._setup_ui()
         self._load_settings()
+        self._loading = False
         
         logger.debug("WidgetsTab created")
     
@@ -513,14 +520,173 @@ class WidgetsTab(QWidget):
         weather_container_layout.addWidget(weather_group)
         layout.addWidget(self._weather_container)
 
-        # Media placeholder group (for future widgets like Spotify)
-        self._media_container = QWidget()
-        media_layout = QVBoxLayout(self._media_container)
-        media_layout.setContentsMargins(0, 20, 0, 0)
-        media_info = QLabel("Media widgets (e.g. Spotify) will appear here.")
+        # Media widget group
+        media_group = QGroupBox("Media Widget")
+        media_layout = QVBoxLayout(media_group)
+
+        self.media_enabled = QCheckBox("Enable Media Widget")
+        self.media_enabled.setToolTip(
+            "Shows current media playback (e.g. Spotify) using Windows media controls when available."
+        )
+        self.media_enabled.stateChanged.connect(self._save_settings)
+        media_layout.addWidget(self.media_enabled)
+
+        media_info = QLabel(
+            "This widget is display-only and non-interactive. Transport controls will "
+            "only be active when explicitly enabled via input settings (hard-exit / Ctrl mode)."
+        )
+        media_info.setWordWrap(True)
         media_info.setStyleSheet("color: #aaaaaa; font-size: 11px;")
         media_layout.addWidget(media_info)
-        media_layout.addStretch()
+
+        media_pos_row = QHBoxLayout()
+        media_pos_row.addWidget(QLabel("Position:"))
+        self.media_position = QComboBox()
+        self.media_position.addItems([
+            "Top Left", "Top Right",
+            "Bottom Left", "Bottom Right",
+        ])
+        self.media_position.currentTextChanged.connect(self._save_settings)
+        media_pos_row.addWidget(self.media_position)
+        media_pos_row.addStretch()
+        media_layout.addLayout(media_pos_row)
+
+        media_disp_row = QHBoxLayout()
+        media_disp_row.addWidget(QLabel("Display:"))
+        self.media_monitor_combo = QComboBox()
+        self.media_monitor_combo.addItems(["ALL", "1", "2", "3"])
+        self.media_monitor_combo.currentTextChanged.connect(self._save_settings)
+        media_disp_row.addWidget(self.media_monitor_combo)
+        media_disp_row.addStretch()
+        media_layout.addLayout(media_disp_row)
+
+        media_font_family_row = QHBoxLayout()
+        media_font_family_row.addWidget(QLabel("Font:"))
+        self.media_font_combo = QFontComboBox()
+        self.media_font_combo.setCurrentFont("Segoe UI")
+        self.media_font_combo.setMinimumWidth(220)
+        self.media_font_combo.currentFontChanged.connect(self._save_settings)
+        media_font_family_row.addWidget(self.media_font_combo)
+        media_font_family_row.addStretch()
+        media_layout.addLayout(media_font_family_row)
+
+        media_font_row = QHBoxLayout()
+        media_font_row.addWidget(QLabel("Font Size:"))
+        self.media_font_size = QSpinBox()
+        self.media_font_size.setRange(10, 72)
+        self.media_font_size.setValue(20)
+        self.media_font_size.setAccelerated(True)
+        self.media_font_size.valueChanged.connect(self._save_settings)
+        media_font_row.addWidget(self.media_font_size)
+        media_font_row.addWidget(QLabel("px"))
+        media_font_row.addStretch()
+        media_layout.addLayout(media_font_row)
+
+        media_margin_row = QHBoxLayout()
+        media_margin_row.addWidget(QLabel("Margin:"))
+        self.media_margin = QSpinBox()
+        self.media_margin.setRange(0, 100)
+        self.media_margin.setValue(20)
+        self.media_margin.setAccelerated(True)
+        self.media_margin.valueChanged.connect(self._save_settings)
+        media_margin_row.addWidget(self.media_margin)
+        media_margin_row.addWidget(QLabel("px"))
+        media_margin_row.addStretch()
+        media_layout.addLayout(media_margin_row)
+
+        media_color_row = QHBoxLayout()
+        media_color_row.addWidget(QLabel("Text Color:"))
+        self.media_color_btn = QPushButton("Choose Color...")
+        self.media_color_btn.clicked.connect(self._choose_media_color)
+        media_color_row.addWidget(self.media_color_btn)
+        media_color_row.addStretch()
+        media_layout.addLayout(media_color_row)
+
+        self.media_show_background = QCheckBox("Show Background Frame")
+        self.media_show_background.stateChanged.connect(self._save_settings)
+        media_layout.addWidget(self.media_show_background)
+
+        media_opacity_row = QHBoxLayout()
+        media_opacity_row.addWidget(QLabel("Background Opacity:"))
+        self.media_bg_opacity = QSlider(Qt.Orientation.Horizontal)
+        self.media_bg_opacity.setMinimum(0)
+        self.media_bg_opacity.setMaximum(100)
+        self.media_bg_opacity.setValue(90)
+        self.media_bg_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.media_bg_opacity.setTickInterval(10)
+        self.media_bg_opacity.valueChanged.connect(self._save_settings)
+        media_opacity_row.addWidget(self.media_bg_opacity)
+        self.media_bg_opacity_label = QLabel("90%")
+        self.media_bg_opacity.valueChanged.connect(
+            lambda v: self.media_bg_opacity_label.setText(f"{v}%")
+        )
+        media_opacity_row.addWidget(self.media_bg_opacity_label)
+        media_layout.addLayout(media_opacity_row)
+
+        media_bg_color_row = QHBoxLayout()
+        media_bg_color_row.addWidget(QLabel("Background Color:"))
+        self.media_bg_color_btn = QPushButton("Choose Color...")
+        self.media_bg_color_btn.clicked.connect(self._choose_media_bg_color)
+        media_bg_color_row.addWidget(self.media_bg_color_btn)
+        media_bg_color_row.addStretch()
+        media_layout.addLayout(media_bg_color_row)
+
+        media_border_color_row = QHBoxLayout()
+        media_border_color_row.addWidget(QLabel("Border Color:"))
+        self.media_border_color_btn = QPushButton("Choose Color...")
+        self.media_border_color_btn.clicked.connect(self._choose_media_border_color)
+        media_border_color_row.addWidget(self.media_border_color_btn)
+        media_border_color_row.addStretch()
+        media_layout.addLayout(media_border_color_row)
+
+        media_border_opacity_row = QHBoxLayout()
+        media_border_opacity_row.addWidget(QLabel("Border Opacity:"))
+        self.media_border_opacity = QSlider(Qt.Orientation.Horizontal)
+        self.media_border_opacity.setMinimum(0)
+        self.media_border_opacity.setMaximum(100)
+        self.media_border_opacity.setValue(80)
+        self.media_border_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.media_border_opacity.setTickInterval(10)
+        self.media_border_opacity.valueChanged.connect(self._save_settings)
+        media_border_opacity_row.addWidget(self.media_border_opacity)
+        self.media_border_opacity_label = QLabel("80%")
+        self.media_border_opacity.valueChanged.connect(
+            lambda v: self.media_border_opacity_label.setText(f"{v}%")
+        )
+        media_border_opacity_row.addWidget(self.media_border_opacity_label)
+        media_layout.addLayout(media_border_opacity_row)
+
+        # Artwork size
+        media_artwork_row = QHBoxLayout()
+        media_artwork_row.addWidget(QLabel("Artwork Size:"))
+        self.media_artwork_size = QSpinBox()
+        # Artwork size is in logical pixels; allow a comfortable range while
+        # preventing values that would likely clip inside the widget.
+        self.media_artwork_size.setRange(100, 300)
+        self.media_artwork_size.setValue(200)
+        self.media_artwork_size.setAccelerated(True)
+        self.media_artwork_size.valueChanged.connect(self._save_settings)
+        media_artwork_row.addWidget(self.media_artwork_size)
+        media_artwork_row.addWidget(QLabel("px"))
+        media_artwork_row.addStretch()
+        media_layout.addLayout(media_artwork_row)
+
+        # Artwork border style
+        self.media_rounded_artwork = QCheckBox("Rounded Artwork Border")
+        self.media_rounded_artwork.setChecked(True)
+        self.media_rounded_artwork.stateChanged.connect(self._save_settings)
+        media_layout.addWidget(self.media_rounded_artwork)
+
+        # Controls visibility
+        self.media_show_controls = QCheckBox("Show Transport Controls")
+        self.media_show_controls.setChecked(True)
+        self.media_show_controls.stateChanged.connect(self._save_settings)
+        media_layout.addWidget(self.media_show_controls)
+
+        self._media_container = QWidget()
+        media_container_layout = QVBoxLayout(self._media_container)
+        media_container_layout.setContentsMargins(0, 20, 0, 0)
+        media_container_layout.addWidget(media_group)
         layout.addWidget(self._media_container)
         
         layout.addStretch()
@@ -664,6 +830,20 @@ class WidgetsTab(QWidget):
                 getattr(self, 'weather_bg_color_btn', None),
                 getattr(self, 'weather_border_color_btn', None),
                 getattr(self, 'weather_border_opacity', None),
+                getattr(self, 'media_enabled', None),
+                getattr(self, 'media_position', None),
+                getattr(self, 'media_monitor_combo', None),
+                getattr(self, 'media_font_combo', None),
+                getattr(self, 'media_font_size', None),
+                getattr(self, 'media_margin', None),
+                getattr(self, 'media_show_background', None),
+                getattr(self, 'media_bg_opacity', None),
+                getattr(self, 'media_bg_color_btn', None),
+                getattr(self, 'media_border_color_btn', None),
+                getattr(self, 'media_border_opacity', None),
+                getattr(self, 'media_artwork_size', None),
+                getattr(self, 'media_rounded_artwork', None),
+                getattr(self, 'media_show_controls', None),
             ]:
                 if w is not None and hasattr(w, 'blockSignals'):
                     w.blockSignals(True)
@@ -792,6 +972,62 @@ class WidgetsTab(QWidget):
             if idx >= 0:
                 self.weather_monitor_combo.setCurrentIndex(idx)
             
+            # Load media settings
+            media_config = widgets.get('media', {})
+            self.media_enabled.setChecked(media_config.get('enabled', False))
+
+            media_pos = media_config.get('position', 'Bottom Left')
+            index = self.media_position.findText(media_pos)
+            if index >= 0:
+                self.media_position.setCurrentIndex(index)
+
+            self.media_font_combo.setCurrentFont(QFont(media_config.get('font_family', 'Segoe UI')))
+            self.media_font_size.setValue(media_config.get('font_size', 20))
+            self.media_margin.setValue(media_config.get('margin', 20))
+            self.media_show_background.setChecked(media_config.get('show_background', False))
+            media_opacity_pct = int(media_config.get('bg_opacity', 0.9) * 100)
+            self.media_bg_opacity.setValue(media_opacity_pct)
+            self.media_bg_opacity_label.setText(f"{media_opacity_pct}%")
+
+            # Artwork size and controls visibility
+            artwork_size = media_config.get('artwork_size', 100)
+            try:
+                self._media_artwork_size = int(artwork_size)
+            except Exception:
+                self._media_artwork_size = 100
+            self.media_artwork_size.setValue(self._media_artwork_size)
+
+            rounded_art = SettingsManager.to_bool(
+                media_config.get('rounded_artwork_border', True), True
+            )
+            self.media_rounded_artwork.setChecked(rounded_art)
+
+            show_controls = SettingsManager.to_bool(media_config.get('show_controls', True), True)
+            self.media_show_controls.setChecked(show_controls)
+
+            # Load media colors
+            media_color_data = media_config.get('color', [255, 255, 255, 230])
+            self._media_color = QColor(*media_color_data)
+            media_bg_color_data = media_config.get('bg_color', [64, 64, 64, 255])
+            try:
+                self._media_bg_color = QColor(*media_bg_color_data)
+            except Exception:
+                self._media_bg_color = QColor(64, 64, 64, 255)
+            media_border_color_data = media_config.get('border_color', [128, 128, 128, 255])
+            try:
+                self._media_border_color = QColor(*media_border_color_data)
+            except Exception:
+                self._media_border_color = QColor(128, 128, 128, 255)
+            media_border_opacity_pct = int(media_config.get('border_opacity', 0.8) * 100)
+            self.media_border_opacity.setValue(media_border_opacity_pct)
+            self.media_border_opacity_label.setText(f"{media_border_opacity_pct}%")
+
+            m_monitor_sel = media_config.get('monitor', 'ALL')
+            m_mon_text = str(m_monitor_sel) if isinstance(m_monitor_sel, (int, str)) else 'ALL'
+            midx = self.media_monitor_combo.findText(m_mon_text)
+            if midx >= 0:
+                self.media_monitor_combo.setCurrentIndex(midx)
+
             logger.debug("Loaded widget settings")
         finally:
             for w in blockers:
@@ -842,8 +1078,31 @@ class WidgetsTab(QWidget):
             self._weather_border_color = color
             self._save_settings()
     
+    def _choose_media_color(self) -> None:
+        """Choose media text color."""
+        color = QColorDialog.getColor(self._media_color, self, "Choose Media Color")
+        if color.isValid():
+            self._media_color = color
+            self._save_settings()
+
+    def _choose_media_bg_color(self) -> None:
+        """Choose media background color."""
+        color = QColorDialog.getColor(self._media_bg_color, self, "Choose Media Background Color")
+        if color.isValid():
+            self._media_bg_color = color
+            self._save_settings()
+
+    def _choose_media_border_color(self) -> None:
+        """Choose media border color."""
+        color = QColorDialog.getColor(self._media_border_color, self, "Choose Media Border Color")
+        if color.isValid():
+            self._media_border_color = color
+            self._save_settings()
+    
     def _save_settings(self) -> None:
         """Save current settings."""
+        if getattr(self, "_loading", False):
+            return
         # Get timezone from current selection
         tz_data = self.clock_timezone.currentData()
         timezone_str = tz_data if tz_data else 'local'
@@ -893,6 +1152,28 @@ class WidgetsTab(QWidget):
         wmon_text = self.weather_monitor_combo.currentText()
         weather_config['monitor'] = wmon_text if wmon_text == 'ALL' else int(wmon_text)
 
+        media_config = {
+            'enabled': self.media_enabled.isChecked(),
+            'position': self.media_position.currentText(),
+            'font_family': self.media_font_combo.currentFont().family(),
+            'font_size': self.media_font_size.value(),
+            'margin': self.media_margin.value(),
+            'show_background': self.media_show_background.isChecked(),
+            'bg_opacity': self.media_bg_opacity.value() / 100.0,
+            'color': [self._media_color.red(), self._media_color.green(),
+                      self._media_color.blue(), self._media_color.alpha()],
+            'bg_color': [self._media_bg_color.red(), self._media_bg_color.green(),
+                         self._media_bg_color.blue(), self._media_bg_color.alpha()],
+            'border_color': [self._media_border_color.red(), self._media_border_color.green(),
+                             self._media_border_color.blue(), self._media_border_color.alpha()],
+            'border_opacity': self.media_border_opacity.value() / 100.0,
+            'artwork_size': self.media_artwork_size.value(),
+            'rounded_artwork_border': self.media_rounded_artwork.isChecked(),
+            'show_controls': self.media_show_controls.isChecked(),
+        }
+        mmon_text = self.media_monitor_combo.currentText()
+        media_config['monitor'] = mmon_text if mmon_text == 'ALL' else int(mmon_text)
+
         clock2_tz_data = self.clock2_timezone.currentData()
         clock2_timezone = clock2_tz_data if clock2_tz_data else 'UTC'
         clock2_config = {
@@ -918,6 +1199,7 @@ class WidgetsTab(QWidget):
         existing_widgets['clock2'] = clock2_config
         existing_widgets['clock3'] = clock3_config
         existing_widgets['weather'] = weather_config
+        existing_widgets['media'] = media_config
 
         self._settings.set('widgets', existing_widgets)
         self._settings.save()

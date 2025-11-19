@@ -651,6 +651,31 @@ pytest tests/ --tb=short || exit 1
 
 ---
 
+### 23. `tests/test_media_widget.py` - Spotify Media Widget & Media Controller
+
+**Module Purpose**: Validate the centralized media controller abstraction and the Spotify-specific overlay widget, including visibility semantics, artwork handling, and interaction routing.
+
+**Test Count**: ~12 tests  
+**Status**: ✅ All passing (Qt + GSMTC integration mocked where needed)
+
+**Critical Tests:**
+- `test_noop_media_controller_safe_calls` – NoOp controller is safe to call and always returns `None`.
+- `test_create_media_controller_falls_back_to_noop` – Factory falls back to NoOp when the Windows controller is unavailable.
+- `test_windows_media_controller_selects_spotify_session` – Selector prefers Spotify GSMTC sessions by `source_app_user_model_id`.
+- `test_windows_media_controller_returns_none_when_no_spotify` – Non‑Spotify sessions are treated as "no media".
+- `test_media_widget_placeholder_when_no_media` – Widget stays hidden when no media is available.
+- `test_media_widget_displays_metadata` – Metadata (title/artist/album) and playback state text render correctly.
+- `test_media_widget_hides_again_when_media_disappears` – Widget hides again once media stops.
+- `test_media_widget_decodes_artwork_and_adjusts_margins` – Artwork bytes decode into a pixmap and margins adjust to make room.
+- `test_media_widget_starts_fade_in_when_artwork_appears` – First artwork appearance triggers a short fade‑in animation.
+- `test_media_widget_transport_delegates_to_controller` – Transport methods (play/pause/next/previous) delegate to the underlying controller.
+- `test_display_widget_ctrl_click_routes_to_media_widget` – Ctrl‑held clicks over the widget invoke play/pause instead of exiting.
+- `test_display_widget_hard_exit_click_routes_to_media_widget` – Hard‑exit mode allows transport interaction without exit.
+
+**Purpose**: Lock in Spotify‑only session selection, hide‑on‑no‑media behaviour, artwork handling, and Ctrl/hard‑exit interaction gating for the Spotify MediaWidget.
+
+---
+
 ## Test Summary
 
 **Current Status** (Nov 6, 2025 - Integration Tests Added):

@@ -268,6 +268,15 @@ def raise_overlay(widget: QWidget, overlay: QWidget) -> None:
             widget.weather_widget.raise_()
     except Exception:
         pass
+    try:
+        # Ensure the media widget (Spotify overlay) stays above transition
+        # overlays as well so that transport controls and track text remain
+        # visible in both software and GL compositor modes.
+        mw = getattr(widget, "media_widget", None)
+        if mw is not None:
+            mw.raise_()
+    except Exception:
+        pass
 
 
 def notify_overlay_stage(overlay: QWidget, stage: str, **details) -> None:

@@ -36,7 +36,7 @@ Checkboxes: `[ ]` = active work; `[x]` = completed or historical items retained 
 ## 3. Multi-Monitor & DPI Consistency
 - [x] Per-screen refresh rates (e.g. 165 Hz and 60 Hz) honoured with independent AnimationManager instances.
 - [x] Per-screen GL compositors and swap-behaviour logging for downgrade detection.
-- [x] Widgets respect per-monitor configuration (weather, clocks) and avoid stray work on disabled screens.
+- [x] Widgets respect per-monitor configuration (clocks, weather, media/Spotify) and avoid stray work on disabled screens.
 - [x] Pan & scan and exit flow clean up resources deterministically on each display.
 - [ ] Add automated regression tests for multi-monitor and mixed-DPI overlays (Ctrl halo, widgets) using mocked QScreens and global cursor positions.
 
@@ -94,7 +94,7 @@ Checkboxes: `[ ]` = active work; `[x]` = completed or historical items retained 
 - [x] **Milestone B:** Remaining GL transitions (Wipe, Block Puzzle Flip, Blinds, Diffuse) have compositor controllers and tests; legacy per-transition GL overlay widgets have been removed so runtime now uses only compositor-backed or software transitions.
 - [x] **Milestone C:** Post-settings and non-GL banding eliminated on all monitors; reproduction recipes recorded and guarded by tests (including software-backend scenarios).
 - [x] **Milestone D:** Software transitions (Diffuse, Block Puzzle Flip) run to completion without watchdog timeouts or stalls under the software backend, with coverage tests in place. *(Guarded by `test_diffuse_transition_software_backend_no_watchdog` and `test_block_flip_transition_software_backend_no_watchdog` in `tests/test_transition_integration.py`, which force the software backend and assert clean completion with the transition watchdog armed.)*
-- [ ] **Milestone E:** Full GL and GLSL diagnostics suite automated (scripts + docs updated).
+- [x] **Milestone E:** Full GL and GLSL diagnostics suite automated (scripts + docs updated).
 
 ## 10. References & Supporting Docs
 - `Docs/TestSuite.md`
@@ -105,17 +105,22 @@ Checkboxes: `[ ]` = active work; `[x]` = completed or historical items retained 
 ## 11. Widgets, Input & GL Startup (New tasks 2025-11-15)
 
 ### 11.1 Spotify / Media Playback Widget (Priority: Low)
-- [ ] Implement a Spotify/media widget using Windows 10/11 media controls (e.g. Global System Media Transport Controls / Windows Media Control API) so that it can show:
+- [x] Implement a Spotify widget using Windows 10/11 media controls (Global System Media Transport Controls / Windows Media Control API) so that it can show:
   - Current playback state (Playing / Paused)
   - Track title and artist
-  - Album artwork, with artwork crossfading in/out when tracks change
-  - When no artwork is available the border (if border enabled) should reduce in size to match the ommitance of the artwork image. The reverse should happen when album artwork becomes available from being unavailable. Ideally have this change as either a smooth animation growth or a fade.
-- [ ] Use the official Spotify logo (or a transparency supporting equivalent) in the widget header alongside a clear "SPOTIFY" label, aligned with the app theme for good UX. The logo should be scaled to fit the header height, overall shape and customization of widget resembles our general widget designs/rules.
-- [ ] Provide layout options equivalent to the weather widget (per-monitor selection, corner position, background on/off, margin, opacity) through the widgets settings UI.
-- [ ] Add transport controls to the widget UI: clickable Previous (`<`), Play/Pause, and Next (`>`).
-- [ ] Gate interactivity behind explicit user intent: transport buttons are only clickable when either `input.hard_exit` is enabled or the Ctrl key is held down in the new temporary interaction mode; in normal mode the widget is display-only to avoid accidental exits.
-- [ ] Centralize media-control plumbing in a reusable module (e.g. `core/media/media_controller.py`) so future widgets/features can share the same integration.
-- [ ] If Widget cannot retrieve media information or controls widget should fallback to not rendering and log failure silently. 
+  - Album name
+  - Album artwork as a static icon when available, with the text layout shrinking horizontally when artwork is absent.
+- [x] Hide the widget entirely when no Spotify GSMTC session is active or when media APIs/controllers are unavailable, treating this as "no media" rather than showing other players.
+- [ ] Use the official Spotify logo (or a transparency supporting equivalent) in the widget header alongside a clear "SPOTIFY" label, aligned with the app theme for good UX. The logo should be scaled to fit the header height, overall shape and customization of widget resembles our general widget designs/rules. *(Current implementation supports an optional logo from `/images`, but the final asset and UX polish remain TODO.)*
+- [x] Provide layout options equivalent to the weather widget (per-monitor selection, corner position, background on/off, margin, opacity) through the widgets settings UI.
+- [x] Add transport controls to the widget UI: Previous (`<`), Play/Pause, and Next (`>`), wired via the centralized media controller.
+- [x] Gate interactivity behind explicit user intent: transport behaviour is only invoked when either `input.hard_exit` is enabled or the Ctrl key is held down in the temporary interaction mode; in normal mode the widget remains effectively display-only and clicks still exit the screensaver.
+- [x] Centralize media-control plumbing in a reusable module (`core/media/media_controller.py`) so future widgets/features can share the same integration, including a NoOp fallback and Spotify session selection.
+- [x] If the widget cannot retrieve media information or controls it should fall back to not rendering and log failure softly, rather than raising. *(Implemented by hiding the widget when `get_current_track()` returns `None`, with controller failures logged at debug/info.)*
+- [x] Ensure the media widget is kept above GL and software transition overlays via `transitions.overlay_manager.raise_overlay()` so that Spotify text/artwork and transport controls remain visible in both software and compositor-backed modes.
+- [ ] Implement smooth artwork crossfade and frame/margin grow/shrink animation when tracks change to match future widget animation style.
+(Growth will always be positioned to the side with the most monitor space available)
+
 
 ### 11.2 Weather Iconography (Priority: Low)
 - [ ] Replace the current simple ASCII condition tags (e.g. `[CLOUD]`, `[RAIN]`, `[SUN]`) with a more refined iconography approach (either improved ASCII that is an ASCII  based drawing that resembles the icon in question or a free-to-use icon set) that remains readable and theme-aware.

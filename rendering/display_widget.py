@@ -44,6 +44,7 @@ from transitions.gl_compositor_blockflip_transition import GLCompositorBlockFlip
 from transitions.gl_compositor_blinds_transition import GLCompositorBlindsTransition
 from widgets.clock_widget import ClockWidget, TimeFormat, ClockPosition
 from widgets.weather_widget import WeatherWidget, WeatherPosition
+from widgets.media_widget import MediaWidget, MediaPosition
 from core.logging.logger import get_logger
 from core.logging.overlay_telemetry import record_overlay_ready
 from core.resources.manager import ResourceManager
@@ -150,6 +151,7 @@ class DisplayWidget(QWidget):
         self.clock2_widget: Optional[ClockWidget] = None
         self.clock3_widget: Optional[ClockWidget] = None
         self.weather_widget: Optional[WeatherWidget] = None
+        self.media_widget: Optional[MediaWidget] = None
         self._current_transition: Optional[BaseTransition] = None
         self._current_transition_overlay_key: Optional[str] = None
         self._current_transition_started_at: float = 0.0
@@ -738,6 +740,178 @@ class DisplayWidget(QWidget):
                 logger.error(f"Failed to create/configure weather widget: {e}", exc_info=True)
         else:
             logger.debug("Weather widget disabled in settings")
+
+        # Media widget
+        media_settings = widgets.get('media', {}) if isinstance(widgets, dict) else {}
+        media_enabled = SettingsManager.to_bool(media_settings.get('enabled', False), False)
+        media_monitor_sel = media_settings.get('monitor', 'ALL')
+        try:
+            media_show_on_this = (media_monitor_sel == 'ALL') or (int(media_monitor_sel) == (self.screen_index + 1))
+        except Exception:
+            media_show_on_this = False
+            logger.debug(
+                "Media widget monitor setting invalid for screen %s: %r (gated off)",
+                self.screen_index,
+                media_monitor_sel,
+            )
+
+        # Detailed diagnostics so we can see exactly what the runtime settings
+        # look like for the media widget on each screen, including the raw
+        # enabled value and monitor selection.
+        try:
+            logger.debug(
+                "[MEDIA_WIDGET] _setup_widgets: screen=%s, raw_settings=%r, "
+                "enabled_raw=%r, enabled_bool=%s, monitor_sel=%r, show_on_this=%s",
+                self.screen_index,
+                media_settings,
+                media_settings.get('enabled', None),
+                media_enabled,
+                media_monitor_sel,
+                media_show_on_this,
+            )
+        except Exception:
+            logger.debug("[MEDIA_WIDGET] Failed to log media widget settings snapshot", exc_info=True)
+
+        existing_media = getattr(self, 'media_widget', None)
+        if not (media_enabled and media_show_on_this):
+            if existing_media is not None:
+                try:
+                    existing_media.stop()
+                    existing_media.hide()
+                except Exception:
+                    pass
+            self.media_widget = None
+            logger.debug(
+                "Media widget disabled in settings (screen=%s, enabled=%s, show_on_this=%s, monitor_sel=%r)",
+                self.screen_index,
+                media_enabled,
+                media_show_on_this,
+                media_monitor_sel,
+            )
+            return
+
+        position_str = media_settings.get('position', 'Bottom Left')
+        media_position_map = {
+            'Top Left': MediaPosition.TOP_LEFT,
+            'Top Right': MediaPosition.TOP_RIGHT,
+            'Bottom Left': MediaPosition.BOTTOM_LEFT,
+            'Bottom Right': MediaPosition.BOTTOM_RIGHT,
+        }
+        mpos = media_position_map.get(position_str, MediaPosition.BOTTOM_LEFT)
+
+        font_size = media_settings.get('font_size', 20)
+        color = media_settings.get('color', [255, 255, 255, 230])
+        artwork_size = media_settings.get('artwork_size', 100)
+        rounded_artwork = SettingsManager.to_bool(
+            media_settings.get('rounded_artwork_border', True), True
+        )
+        show_controls = SettingsManager.to_bool(media_settings.get('show_controls', True), True)
+
+        try:
+            self.media_widget = MediaWidget(self, position=mpos)
+
+            # Inject ThreadManager so media polling runs on the IO pool
+            if self._thread_manager is not None and hasattr(self.media_widget, "set_thread_manager"):
+                try:
+                    self.media_widget.set_thread_manager(self._thread_manager)
+                except Exception:
+                    pass
+
+            # Font family
+            font_family = media_settings.get('font_family', 'Segoe UI')
+            if hasattr(self.media_widget, 'set_font_family'):
+                self.media_widget.set_font_family(font_family)
+
+            # Font size and margin
+            try:
+                self.media_widget.set_font_size(int(font_size))
+            except Exception:
+                self.media_widget.set_font_size(20)
+            try:
+                margin_val = int(media_settings.get('margin', 20))
+            except Exception:
+                margin_val = 20
+            self.media_widget.set_margin(margin_val)
+
+            # Artwork size, border shape, and controls visibility
+            try:
+                if hasattr(self.media_widget, 'set_artwork_size'):
+                    self.media_widget.set_artwork_size(int(artwork_size))
+            except Exception:
+                pass
+            try:
+                if hasattr(self.media_widget, 'set_rounded_artwork_border'):
+                    self.media_widget.set_rounded_artwork_border(rounded_artwork)
+            except Exception:
+                pass
+            try:
+                if hasattr(self.media_widget, 'set_show_controls'):
+                    self.media_widget.set_show_controls(show_controls)
+            except Exception:
+                pass
+
+            # Colors
+            from PySide6.QtGui import QColor
+
+            try:
+                qcolor = QColor(color[0], color[1], color[2], color[3])
+                self.media_widget.set_text_color(qcolor)
+            except Exception:
+                pass
+
+            # Default to a visible background frame for media so the
+            # Spotify block stands out even on bright images. Users can
+            # still override this via widgets.media.show_background.
+            show_background = SettingsManager.to_bool(
+                media_settings.get('show_background', True), True
+            )
+            self.media_widget.set_show_background(show_background)
+
+            # Background color
+            bg_color_data = media_settings.get('bg_color', [64, 64, 64, 255])
+            try:
+                bg_r, bg_g, bg_b = bg_color_data[0], bg_color_data[1], bg_color_data[2]
+                bg_a = bg_color_data[3] if len(bg_color_data) > 3 else 255
+                bg_qcolor = QColor(bg_r, bg_g, bg_b, bg_a)
+                self.media_widget.set_background_color(bg_qcolor)
+            except Exception:
+                pass
+
+            # Background opacity
+            try:
+                bg_opacity = float(media_settings.get('bg_opacity', 0.9))
+            except Exception:
+                bg_opacity = 0.9
+            self.media_widget.set_background_opacity(bg_opacity)
+
+            # Border color and opacity
+            border_color_data = media_settings.get('border_color', [128, 128, 128, 255])
+            border_opacity = media_settings.get('border_opacity', 0.8)
+            try:
+                br_r, br_g, br_b = (
+                    border_color_data[0],
+                    border_color_data[1],
+                    border_color_data[2],
+                )
+                base_alpha = border_color_data[3] if len(border_color_data) > 3 else 255
+                try:
+                    bo = float(border_opacity)
+                except Exception:
+                    bo = 0.8
+                bo = max(0.0, min(1.0, bo))
+                br_a = int(bo * base_alpha)
+                border_qcolor = QColor(br_r, br_g, br_b, br_a)
+                self.media_widget.set_background_border(2, border_qcolor)
+            except Exception:
+                pass
+
+            self.media_widget.raise_()
+            self.media_widget.start()
+            logger.info(
+                "✅ Media widget started: %s, font=%spx, margin=%s", position_str, font_size, margin_val
+            )
+        except Exception as e:
+            logger.error("Failed to create/configure media widget: %s", e, exc_info=True)
 
     def _warm_up_gl_overlay(self, base_pixmap: QPixmap) -> None:
         """Legacy GL overlay warm-up disabled (compositor-only pipeline)."""
@@ -1463,6 +1637,14 @@ class DisplayWidget(QWidget):
                             self.weather_widget.raise_()
                         except Exception:
                             pass
+                    # Keep media widget above compositor as well so the
+                    # Spotify overlay never disappears during GL transitions.
+                    mw = getattr(self, "media_widget", None)
+                    if mw is not None:
+                        try:
+                            mw.raise_()
+                        except Exception:
+                            pass
                 except Exception:
                     logger.debug("[GL COMPOSITOR] Failed to pre-warm compositor with base frame", exc_info=True)
 
@@ -1531,6 +1713,12 @@ class DisplayWidget(QWidget):
                                 self.weather_widget.raise_()
                             except Exception:
                                 pass
+                        mw = getattr(self, "media_widget", None)
+                        if mw is not None:
+                            try:
+                                mw.raise_()
+                            except Exception:
+                                pass
                         try:
                             self._ensure_overlay_stack(stage="transition_start")
                         except Exception:
@@ -1587,6 +1775,13 @@ class DisplayWidget(QWidget):
                                 clock.raise_()
                             except Exception:
                                 pass
+
+                    mw = getattr(self, "media_widget", None)
+                    if mw is not None:
+                        try:
+                            mw.raise_()
+                        except Exception:
+                            pass
 
                     self._pan_and_scan.start()
                 else:
@@ -1697,6 +1892,13 @@ class DisplayWidget(QWidget):
             if self.weather_widget:
                 try:
                     self.weather_widget.raise_()
+                except Exception:
+                    pass
+
+            mw = getattr(self, "media_widget", None)
+            if mw is not None:
+                try:
+                    mw.raise_()
                 except Exception:
                     pass
 
@@ -2658,8 +2860,47 @@ class DisplayWidget(QWidget):
         """Handle mouse press - exit on any click unless hard exit is enabled."""
         ctrl_mode_active = self._ctrl_held or DisplayWidget._global_ctrl_held
         if self._is_hard_exit_enabled() or ctrl_mode_active:
-            # In hard-exit or Ctrl-held interaction mode, ignore mouse clicks
-            # for exit purposes so widgets can be interacted with safely.
+            # In hard-exit or Ctrl-held interaction mode, route clicks over
+            # interactive widgets (e.g. media widget) to their handlers while
+            # still suppressing screensaver exit.
+            handled = False
+            mw = getattr(self, "media_widget", None)
+            try:
+                if mw is not None and mw.isVisible():
+                    if mw.geometry().contains(event.pos()):
+                        button = event.button()
+                        try:
+                            from PySide6.QtCore import Qt as _Qt
+                        except Exception:  # pragma: no cover - import guard
+                            _Qt = Qt  # type: ignore[assignment]
+
+                        if button == _Qt.MouseButton.LeftButton:
+                            try:
+                                mw.play_pause()
+                                handled = True
+                            except Exception:
+                                logger.debug("[MEDIA] play_pause handling failed from mousePressEvent", exc_info=True)
+                        elif button == _Qt.MouseButton.RightButton:
+                            try:
+                                mw.next_track()
+                                handled = True
+                            except Exception:
+                                logger.debug("[MEDIA] next_track handling failed from mousePressEvent", exc_info=True)
+                        elif button == _Qt.MouseButton.MiddleButton:
+                            try:
+                                mw.previous_track()
+                                handled = True
+                            except Exception:
+                                logger.debug("[MEDIA] previous_track handling failed from mousePressEvent", exc_info=True)
+            except Exception:
+                logger.debug("[MEDIA] Error while routing click to media widget", exc_info=True)
+
+            if handled:
+                event.accept()
+                return
+
+            # Even when no widget handled the click, do not exit while in
+            # hard-exit / Ctrl-held interaction mode.
             event.accept()
             return
 

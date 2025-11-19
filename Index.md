@@ -67,6 +67,8 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - Digital clock widget supporting three instances (Clock 1/2/3) with per-monitor selection, independent timezones, optional seconds and timezone labels
 - widgets/weather_widget.py
   - Weather widget with per-monitor selection via settings (ALL or 1/2/3); planned QPainter-based iconography
+- widgets/media_widget.py
+  - Spotify/media overlay widget driven by `core/media/media_controller.py`; per-monitor selection via `widgets.media`, corner positioning, background frame, and monochrome transport controls (Prev/Play/Pause/Next) over track metadata
 
 ## Utilities
 - utils/image_cache.py
@@ -100,6 +102,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - cache.max_concurrent: int (default 2)
 - widgets.clock.monitor: 'ALL'|1|2|3
 - widgets.weather.monitor: 'ALL'|1|2|3
+ - widgets.media.monitor: 'ALL'|1|2|3
 
 ## Notes
 - DPR-aware scaling in DisplayWidget → ImageProcessor to reduce GL upload cost

@@ -236,14 +236,10 @@ class WeatherWidget(QLabel):
         return self._enabled
     
     def _fetch_weather(self) -> None:
-        """Fetch weather data (uses cache if valid)."""
-        # Check cache
-        if self._is_cache_valid():
-            logger.debug("Using cached weather data")
-            self._update_display(self._cached_data)
-            return
-        
-        # Fetch from API in background
+        """Fetch weather data (always attempts a refresh in the background)."""
+
+        # Always try to refresh from the provider; any existing cached data
+        # remains available for display if the fetch fails.
         logger.debug("Fetching fresh weather data")
 
         if self._thread_manager is not None:
@@ -338,12 +334,15 @@ class WeatherWidget(QLabel):
         self.error_occurred.emit(error)
     
     def _is_cache_valid(self) -> bool:
-        """Check if cached data is still valid."""
-        if not self._cached_data or not self._cache_time:
-            return False
-        
-        age = datetime.now() - self._cache_time
-        return age < self._cache_duration
+        """Return True if any cached data exists.
+
+        Age is intentionally ignored for display purposes so that the last
+        successfully fetched sample can be shown instantly on startup,
+        even if it is older than the 30 minute refresh cadence. Periodic
+        refresh attempts are still driven by the update timer.
+        """
+
+        return bool(self._cached_data)
 
     def _load_persisted_cache(self) -> None:
         try:
@@ -364,9 +363,6 @@ class WeatherWidget(QLabel):
         except Exception:
             return
         if loc.lower() != self._location.lower():
-            return
-        age = datetime.now() - dt
-        if age > self._cache_duration:
             return
 
         temp = payload.get("temperature")
