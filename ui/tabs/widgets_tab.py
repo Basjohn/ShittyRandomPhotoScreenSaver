@@ -520,13 +520,13 @@ class WidgetsTab(QWidget):
         weather_container_layout.addWidget(weather_group)
         layout.addWidget(self._weather_container)
 
-        # Media widget group
-        media_group = QGroupBox("Media Widget")
+        # Media widget group (Spotify-specific overlay)
+        media_group = QGroupBox("Spotify Widget")
         media_layout = QVBoxLayout(media_group)
 
-        self.media_enabled = QCheckBox("Enable Media Widget")
+        self.media_enabled = QCheckBox("Enable Spotify Widget")
         self.media_enabled.setToolTip(
-            "Shows current media playback (e.g. Spotify) using Windows media controls when available."
+            "Shows current Spotify playback using Windows media controls when available."
         )
         self.media_enabled.stateChanged.connect(self._save_settings)
         media_layout.addWidget(self.media_enabled)
@@ -1092,21 +1092,21 @@ class WidgetsTab(QWidget):
     
     def _choose_media_color(self) -> None:
         """Choose media text color."""
-        color = QColorDialog.getColor(self._media_color, self, "Choose Media Color")
+        color = QColorDialog.getColor(self._media_color, self, "Choose Spotify Color")
         if color.isValid():
             self._media_color = color
             self._save_settings()
 
     def _choose_media_bg_color(self) -> None:
         """Choose media background color."""
-        color = QColorDialog.getColor(self._media_bg_color, self, "Choose Media Background Color")
+        color = QColorDialog.getColor(self._media_bg_color, self, "Choose Spotify Background Color")
         if color.isValid():
             self._media_bg_color = color
             self._save_settings()
 
     def _choose_media_border_color(self) -> None:
         """Choose media border color."""
-        color = QColorDialog.getColor(self._media_border_color, self, "Choose Media Border Color")
+        color = QColorDialog.getColor(self._media_border_color, self, "Choose Spotify Border Color")
         if color.isValid():
             self._media_border_color = color
             self._save_settings()

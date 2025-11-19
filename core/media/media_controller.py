@@ -337,7 +337,16 @@ class WindowsGlobalMediaController(BaseMediaController):
             mgr = await self._MediaManager.request_async()
             if mgr is None:
                 return
-            session = mgr.get_current_session()
+
+            # For the Spotify widget we must send controls to the same
+            # Spotify-specific session that `get_current_track` uses,
+            # rather than whatever `get_current_session()` happens to
+            # return (which might be another player).
+            try:
+                session = self._select_spotify_session(mgr)
+            except Exception:
+                logger.debug("[MEDIA] Failed to select Spotify session for %s", action_name, exc_info=True)
+                session = None
             if session is None:
                 return
             try:

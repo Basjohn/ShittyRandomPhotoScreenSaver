@@ -311,6 +311,12 @@ class WeatherProvider:
 
 ## Spotify Media Widget (Spotify)
 
+> **Canonical layout & behaviour**  
+> Detailed, up-to-date guidance for all overlay widgets (including Spotify)
+> now lives in `Docs/10_WIDGET_GUIDELINES.md`. That document captures the
+> Spotify-based header/logo alignment, artwork placement, interaction gating,
+> Z-order rules, and settings persistence checklist used for future widgets.
+
 ### Purpose
 Provide a Spotify-specific "Now Playing" overlay that surfaces track metadata and optional artwork from the Windows 10/11 media controls layer, using the centralized media controller abstraction.
 

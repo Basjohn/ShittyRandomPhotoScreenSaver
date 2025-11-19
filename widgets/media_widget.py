@@ -570,8 +570,16 @@ class MediaWidget(QLabel):
             centre_html = _control_span(centre_sym, True, centre_scale)
             next_html = _control_span(next_sym, False, scale=arrow_scale, offset_px=arrow_offset)
 
+            # Lay out the controls in a simple three-column table that spans
+            # the full text content width so the visual left/centre/right
+            # glyphs align with the thirds-based hit-testing in
+            # DisplayWidget.mousePressEvent.
             controls_html = (
-                f"{prev_html}&nbsp;&nbsp;{centre_html}&nbsp;&nbsp;{next_html}"
+                "<table width='100%' cellspacing='0' cellpadding='0'><tr>"
+                f"<td align='left'>{prev_html}</td>"
+                f"<td align='center'>{centre_html}</td>"
+                f"<td align='right'>{next_html}</td>"
+                "</tr></table>"
             )
 
         header_html = (
@@ -585,7 +593,10 @@ class MediaWidget(QLabel):
 
         html_parts = ["<div style='line-height:1.25'>", header_html, body_wrapper]
         if controls_html:
-            html_parts.append(f"<div style='margin-top:8px;'>{controls_html}</div>")
+            # Add extra top margin so the controls row sits ~10px lower in
+            # the card while the overall widget size remains governed by the
+            # artwork-driven minimum height.
+            html_parts.append(f"<div style='margin-top:18px;'>{controls_html}</div>")
         html_parts.append("</div>")
         html = "".join(html_parts)
 

@@ -2883,11 +2883,71 @@ class DisplayWidget(QWidget):
                             _Qt = Qt  # type: ignore[assignment]
 
                         if button == _Qt.MouseButton.LeftButton:
+                            # Map left-clicks to previous / play-pause /
+                            # next based on horizontal thirds of the Spotify
+                            # widget's *text content* area (between
+                            # contentsMargins.left/right), so the visual
+                            # arrows and centre glyph match their actions
+                            # even when there is a large artwork margin on
+                            # the right.
                             try:
-                                mw.play_pause()
+                                geom = mw.geometry()
+                                local_x = event.pos().x() - geom.x()
+                                width = max(1, mw.width())
+                                margins = mw.contentsMargins()
+                                content_left = margins.left()
+                                content_right = width - margins.right()
+                                content_width = max(1, content_right - content_left)
+                                x_in_content = local_x - content_left
+                                # Clamp so clicks slightly inside the card
+                                # margins map to the nearest control.
+                                if x_in_content < 0:
+                                    x_in_content = 0
+                                elif x_in_content > content_width:
+                                    x_in_content = content_width
+                                third = content_width / 3.0
+                                if x_in_content < third:
+                                    logger.debug(
+                                        "[MEDIA] click mapped to PREVIOUS: pos=%s geom=%s local_x=%d x_in_content=%d width=%d content_left=%d content_right=%d third=%.2f",
+                                        event.pos(),
+                                        geom,
+                                        local_x,
+                                        x_in_content,
+                                        width,
+                                        content_left,
+                                        content_right,
+                                        third,
+                                    )
+                                    mw.previous_track()
+                                elif x_in_content < 2.0 * third:
+                                    logger.debug(
+                                        "[MEDIA] click mapped to PLAY/PAUSE: pos=%s geom=%s local_x=%d x_in_content=%d width=%d content_left=%d content_right=%d third=%.2f",
+                                        event.pos(),
+                                        geom,
+                                        local_x,
+                                        x_in_content,
+                                        width,
+                                        content_left,
+                                        content_right,
+                                        third,
+                                    )
+                                    mw.play_pause()
+                                else:
+                                    logger.debug(
+                                        "[MEDIA] click mapped to NEXT: pos=%s geom=%s local_x=%d x_in_content=%d width=%d content_left=%d content_right=%d third=%.2f",
+                                        event.pos(),
+                                        geom,
+                                        local_x,
+                                        x_in_content,
+                                        width,
+                                        content_left,
+                                        content_right,
+                                        third,
+                                    )
+                                    mw.next_track()
                                 handled = True
                             except Exception:
-                                logger.debug("[MEDIA] play_pause handling failed from mousePressEvent", exc_info=True)
+                                logger.debug("[MEDIA] left-click media routing failed", exc_info=True)
                         elif button == _Qt.MouseButton.RightButton:
                             try:
                                 mw.next_track()
