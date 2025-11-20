@@ -501,6 +501,7 @@ class MediaWidget(QLabel):
 
     def _update_display(self, info: Optional[MediaTrackInfo]) -> None:
         # Cache last track snapshot for diagnostics/interaction
+        prev_info = self._last_info
         self._last_info = info
 
         if info is None:
@@ -584,7 +585,7 @@ class MediaWidget(QLabel):
 
         header_html = (
             f"<div style='font-size:{header_font}pt; font-weight:{header_weight}; "
-            f"letter-spacing:1px; margin-left:{self._header_logo_margin}px; "
+            f"letter-spacing:1px; margin-left:{self._header_logo_margin + 2}px; "
             f"color:rgba(255,255,255,255);'>SPOTIFY</div>"
         )
         # Outer wrapper just establishes spacing; individual lines carry
@@ -645,7 +646,35 @@ class MediaWidget(QLabel):
                 pm = QPixmap()
                 if pm.loadFromData(bytes(artwork_bytes)) and not pm.isNull():
                     self._artwork_pixmap = pm
+
+                    # Fade in the artwork whenever it appears for the first
+                    # time or when the logical track metadata changes. This
+                    # keeps the card, header and controls perfectly stable
+                    # while giving album art a gentle dissolve on updates.
+                    should_fade_artwork = False
                     if not had_artwork_before:
+                        should_fade_artwork = True
+                    else:
+                        try:
+                            if prev_info is None:
+                                should_fade_artwork = True
+                            else:
+                                def _norm(s: Optional[str]) -> str:
+                                    return (s or "").strip()
+
+                                if (
+                                    _norm(getattr(prev_info, "title", None))
+                                    != _norm(getattr(info, "title", None))
+                                    or _norm(getattr(prev_info, "artist", None))
+                                    != _norm(getattr(info, "artist", None))
+                                    or _norm(getattr(prev_info, "album", None))
+                                    != _norm(getattr(info, "album", None))
+                                ):
+                                    should_fade_artwork = True
+                        except Exception:
+                            should_fade_artwork = False
+
+                    if should_fade_artwork:
                         self._start_artwork_fade_in()
             except Exception:
                 logger.debug("[MEDIA] Failed to decode artwork pixmap", exc_info=True)
@@ -667,7 +696,7 @@ class MediaWidget(QLabel):
         # simple fade-in. Subsequent track changes update in-place so the
         # card and controls do not move.
         if not was_visible:
-            self._start_widget_fade_in(1000)
+            self._start_widget_fade_in(2000)
         else:
             try:
                 self.show()
@@ -1143,7 +1172,7 @@ class MediaWidget(QLabel):
         anim.setEndValue(1.0)
         # OutCubic gives a slightly softer landing than OutQuad so the
         # fade does not feel like it "snaps" in the last few frames.
-        anim.setEasingCurve(QEasingCurve.OutCubic)
+        anim.setEasingCurve(QEasingCurve.InOutCubic)
 
         def _on_value_changed(value):
             try:
@@ -1186,10 +1215,10 @@ class MediaWidget(QLabel):
         self._artwork_opacity = 0.0
 
         anim = QVariantAnimation(self)
-        anim.setDuration(350)
+        anim.setDuration(850)
         anim.setStartValue(0.0)
         anim.setEndValue(1.0)
-        anim.setEasingCurve(QEasingCurve.OutQuad)
+        anim.setEasingCurve(QEasingCurve.InOutCubic)
 
         def _on_value_changed(value):
             try:

@@ -118,8 +118,7 @@ Checkboxes: `[ ]` = active work; `[x]` = completed or historical items retained 
 - [x] Centralize media-control plumbing in a reusable module (`core/media/media_controller.py`) so future widgets/features can share the same integration, including a NoOp fallback and Spotify session selection.
 - [x] If the widget cannot retrieve media information or controls it should fall back to not rendering and log failure softly, rather than raising. *(Implemented by hiding the widget when `get_current_track()` returns `None`, with controller failures logged at debug/info.)*
 - [x] Ensure the media widget is kept above GL and software transition overlays via `transitions.overlay_manager.raise_overlay()` so that Spotify text/artwork and transport controls remain visible in both software and compositor-backed modes.
-- [ ] Implement smooth artwork crossfade and frame/margin grow/shrink animation when tracks change to match future widget animation style.
-(Growth will always be positioned to the side with the most monitor space available)
+
 
 
 ### 11.2 Weather Iconography (Priority: Low)
