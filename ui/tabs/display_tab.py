@@ -8,7 +8,7 @@ Allows users to configure display settings:
 - Image rotation interval
 - Shuffle mode
 """
-from typing import Optional
+from typing import Optional, List
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QSpinBox, QGroupBox, QCheckBox, QScrollArea
@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal, Qt
 
 from core.settings.settings_manager import SettingsManager
+from utils.monitors import get_screen_count
 from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
@@ -39,6 +40,7 @@ class DisplayTab(QWidget):
         
         self._settings = settings
         self.settings_manager = settings  # Also expose as property for tests
+        self._loading: bool = False
         self._setup_ui()
         self._load_settings()
         
@@ -72,24 +74,26 @@ class DisplayTab(QWidget):
         # Monitor selection group
         monitor_group = QGroupBox("Monitor Configuration")
         monitor_layout = QVBoxLayout(monitor_group)
-        
-        # Monitor selection
-        monitor_row = QHBoxLayout()
-        monitor_row.addWidget(QLabel("Monitors:"))
-        self.monitor_combo = QComboBox()
-        self.monitor_combo.addItems([
-            "All Monitors",
-            "Primary Monitor Only",
-            "Monitor 1",
-            "Monitor 2",
-            "Monitor 3",
-            "Monitor 4"
-        ])
-        self.monitor_combo.currentTextChanged.connect(self._save_settings)
-        monitor_row.addWidget(self.monitor_combo)
-        monitor_row.addStretch()
-        monitor_layout.addLayout(monitor_row)
-        
+
+        # Show On section (per-monitor checkboxes)
+        monitor_layout.addWidget(QLabel("Show screensaver on:"))
+
+        show_row = QHBoxLayout()
+        self.show_all_check = QCheckBox("All")
+        self.monitor_checks: List[QCheckBox] = [
+            QCheckBox("Monitor 1"),
+            QCheckBox("Monitor 2"),
+            QCheckBox("Monitor 3"),
+            QCheckBox("Monitor 4"),
+        ]
+        self.show_all_check.stateChanged.connect(self._on_show_on_changed)
+        show_row.addWidget(self.show_all_check)
+        for cb in self.monitor_checks:
+            cb.stateChanged.connect(self._on_show_on_changed)
+            show_row.addWidget(cb)
+        show_row.addStretch()
+        monitor_layout.addLayout(show_row)
+
         # Same image toggle
         self.same_image_check = QCheckBox("Show same image on all monitors")
         self.same_image_check.setChecked(True)
@@ -166,7 +170,7 @@ class DisplayTab(QWidget):
         pan_label.setStyleSheet("color: #aaaaaa; font-size: 11px;")
         pan_layout.addWidget(pan_label)
         
-        self.pan_check = QCheckBox("Enable pan and scan effect")
+        self.pan_check = QCheckBox("Enable pan and scan effect (Experimental)")
         self.pan_check.setChecked(False)
         self.pan_check.stateChanged.connect(self._save_settings)
         pan_layout.addWidget(self.pan_check)
@@ -254,7 +258,10 @@ class DisplayTab(QWidget):
     def _load_settings(self) -> None:
         """Load settings from settings manager."""
         # Block signals during load to prevent triggering saves
-        self.monitor_combo.blockSignals(True)
+        # Guard against re-entrant saves while loading
+        self._loading = True
+
+        # Block signals during load to prevent triggering saves
         self.same_image_check.blockSignals(True)
         self.mode_combo.blockSignals(True)
         self.interval_spin.blockSignals(True)
@@ -270,15 +277,58 @@ class DisplayTab(QWidget):
         self.hard_exit_check.blockSignals(True)
         
         try:
-            # Monitor selection
-            monitor_setting = self._settings.get('display.monitor_selection', 'all')
-            if monitor_setting == 'all':
-                self.monitor_combo.setCurrentText("All Monitors")
-            elif monitor_setting == 'primary':
-                self.monitor_combo.setCurrentText("Primary Monitor Only")
-            elif monitor_setting.startswith('monitor_'):
-                monitor_num = monitor_setting.split('_')[1]
-                self.monitor_combo.setCurrentText(f"Monitor {monitor_num}")
+            # Monitor selection (new canonical: display.show_on_monitors)
+            raw_show_on = self._settings.get('display.show_on_monitors', 'ALL')
+
+            show_all = False
+            selected_monitors: set[int] = set()
+            if isinstance(raw_show_on, str):
+                if raw_show_on.upper() == 'ALL':
+                    show_all = True
+                else:
+                    # Attempt to parse stringified list, fall back to legacy setting
+                    try:
+                        import ast
+                        parsed = ast.literal_eval(raw_show_on)
+                        if isinstance(parsed, (list, tuple, set)):
+                            selected_monitors = {int(x) for x in parsed}
+                    except Exception:
+                        selected_monitors = set()
+            elif isinstance(raw_show_on, (list, tuple, set)):
+                try:
+                    selected_monitors = {int(x) for x in raw_show_on}
+                except Exception:
+                    selected_monitors = set()
+
+            # Legacy compatibility: if nothing parsed, fall back to
+            # display.monitor_selection.
+            if not show_all and not selected_monitors:
+                legacy = self._settings.get('display.monitor_selection', 'all')
+                if legacy == 'all':
+                    show_all = True
+                elif legacy == 'primary':
+                    selected_monitors = {1}
+                elif isinstance(legacy, str) and legacy.startswith('monitor_'):
+                    try:
+                        num = int(legacy.split('_')[1])
+                        selected_monitors = {num}
+                    except Exception:
+                        show_all = True
+
+            self.show_all_check.setChecked(show_all)
+
+            # Apply selection to per-monitor checkboxes, respecting available screens
+            screen_count = max(1, get_screen_count())
+            for idx, cb in enumerate(self.monitor_checks, start=1):
+                enabled = idx <= screen_count
+                cb.setEnabled(enabled)
+                if not enabled:
+                    cb.setChecked(False)
+                else:
+                    if show_all or not selected_monitors:
+                        cb.setChecked(True)
+                    else:
+                        cb.setChecked(idx in selected_monitors)
             
             # Same image toggle
             same_image = self._settings.get('display.same_image_all_monitors', True)
@@ -346,7 +396,6 @@ class DisplayTab(QWidget):
             logger.debug(f"Loaded display settings: sharpen={sharpen}, pan={pan_enabled}")
         finally:
             # Re-enable signals
-            self.monitor_combo.blockSignals(False)
             self.same_image_check.blockSignals(False)
             self.mode_combo.blockSignals(False)
             self.interval_spin.blockSignals(False)
@@ -358,21 +407,40 @@ class DisplayTab(QWidget):
             self.refresh_sync_check.blockSignals(False)
             self.backend_combo.blockSignals(False)
             self.hard_exit_check.blockSignals(False)
+            self._loading = False
     
     def _save_settings(self) -> None:
         """Save current settings to settings manager."""
-        # Monitor selection
-        monitor_text = self.monitor_combo.currentText()
-        if monitor_text == "All Monitors":
+        if getattr(self, "_loading", False):
+            return
+        # Monitor selection (canonical show_on_monitors + legacy shim)
+        screen_count = max(1, get_screen_count())
+        show_all = self.show_all_check.isChecked()
+
+        selected: list[int] = []
+        for idx, cb in enumerate(self.monitor_checks, start=1):
+            if idx <= screen_count and cb.isEnabled() and cb.isChecked():
+                selected.append(idx)
+
+        if show_all or not selected:
+            show_value = 'ALL'
+        else:
+            show_value = selected
+
+        self._settings.set('display.show_on_monitors', show_value)
+
+        # Legacy display.monitor_selection best-effort mapping (for tests/old logs)
+        if show_value == 'ALL':
             monitor_setting = 'all'
-        elif monitor_text == "Primary Monitor Only":
-            monitor_setting = 'primary'
-        elif monitor_text.startswith("Monitor "):
-            monitor_num = monitor_text.split(" ")[1]
-            monitor_setting = f'monitor_{monitor_num}'
+        elif isinstance(show_value, list) and len(show_value) == 1:
+            only = show_value[0]
+            if only == 1:
+                monitor_setting = 'primary'
+            else:
+                monitor_setting = f'monitor_{only}'
         else:
             monitor_setting = 'all'
-        
+
         self._settings.set('display.monitor_selection', monitor_setting)
         
         # Same image toggle
@@ -478,4 +546,38 @@ class DisplayTab(QWidget):
         """Handle pan auto speed checkbox change."""
         is_auto = self.pan_auto_check.isChecked()
         self.pan_speed_spin.setEnabled(not is_auto)
+        self._save_settings()
+
+    def _on_show_on_changed(self) -> None:
+        """Handle changes to the monitor "Show On" checkboxes."""
+
+        if getattr(self, "_loading", False):
+            return
+
+        sender = self.sender()
+
+        # Update dependent checkboxes without triggering recursive saves.
+        screen_count = max(1, get_screen_count())
+
+        if sender is self.show_all_check:
+            checked = self.show_all_check.isChecked()
+            for idx, cb in enumerate(self.monitor_checks, start=1):
+                if idx <= screen_count and cb.isEnabled():
+                    cb.blockSignals(True)
+                    cb.setChecked(checked)
+                    cb.blockSignals(False)
+        else:
+            # A specific monitor checkbox changed; update the "All" checkbox
+            # to reflect whether every enabled monitor is selected.
+            all_enabled_checked = True
+            for idx, cb in enumerate(self.monitor_checks, start=1):
+                if idx <= screen_count and cb.isEnabled():
+                    if not cb.isChecked():
+                        all_enabled_checked = False
+                        break
+
+            self.show_all_check.blockSignals(True)
+            self.show_all_check.setChecked(all_enabled_checked)
+            self.show_all_check.blockSignals(False)
+
         self._save_settings()

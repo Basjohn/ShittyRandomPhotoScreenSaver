@@ -13,10 +13,11 @@ from typing import Optional
 from pathlib import Path
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QWidget, QPushButton,
-    QLabel, QStackedWidget, QGraphicsDropShadowEffect, QSizeGrip
+    QLabel, QStackedWidget, QGraphicsDropShadowEffect, QSizeGrip,
+    QMessageBox, QSizePolicy,
 )
-from PySide6.QtCore import Qt, QPoint, Signal
-from PySide6.QtGui import QFont, QColor
+from PySide6.QtCore import Qt, QPoint, Signal, QUrl
+from PySide6.QtGui import QFont, QColor, QPixmap, QDesktopServices, QPainter, QPen
 
 from core.logging.logger import get_logger
 from core.settings.settings_manager import SettingsManager
@@ -120,6 +121,39 @@ class TabButton(QPushButton):
         self.setFont(font)
 
 
+class CornerSizeGrip(QSizeGrip):
+    """Custom size grip with a subtle white dotted diagonal indicator."""
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("cornerSizeGrip")
+        # Slightly larger footprint so the diagonal cut reads clearly.
+        self.setFixedSize(24, 24)
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        color = QColor(255, 255, 255, 200)
+        pen = QPen(color)
+        pen.setWidth(2)
+        pen.setStyle(Qt.PenStyle.DotLine)
+        painter.setPen(pen)
+
+        w = self.width()
+        h = self.height()
+
+        # Three short diagonal strokes that read as a "cut" into the
+        # corner rather than a tiny triangle of pixels.
+        margin = 3
+        for offset in (0, 5, 10):
+            x1 = w - margin - offset
+            y1 = h - margin
+            x2 = w - margin
+            y2 = h - margin - offset
+            if x1 >= 0 and y2 >= 0:
+                painter.drawLine(x1, y1, x2, y2)
+
+
 class SettingsDialog(QDialog):
     """
     Main settings dialog with gorgeous UI.
@@ -172,8 +206,10 @@ class SettingsDialog(QDialog):
         # Enable transparency for drop shadow
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         
-        # Minimum size
-        self.setMinimumSize(900, 600)
+        # Minimum size (kept modest so the dialog remains usable on
+        # 1080p displays while still providing enough room for the
+        # richer tabs like Sources and About).
+        self.setMinimumSize(800, 500)
         
         # Check if we have saved geometry first
         saved_geometry = self._settings.get('ui.dialog_geometry', {})
@@ -461,7 +497,9 @@ class SettingsDialog(QDialog):
         self.display_tab_btn = TabButton("Display", "🖥")
         self.transitions_tab_btn = TabButton("Transitions", "✨")
         self.widgets_tab_btn = TabButton("Widgets", "🕐")
-        self.about_tab_btn = TabButton("About", "ℹ")
+        # Use a circled information glyph for About so the icon's
+        # bounding box and spacing match the other emoji-style icons.
+        self.about_tab_btn = TabButton("About", "ⓘ")
         
         self.tab_buttons = [
             self.sources_tab_btn,
@@ -501,7 +539,7 @@ class SettingsDialog(QDialog):
         main_layout.addLayout(content_layout)
         
         # Size grip for resizing
-        self.size_grip = QSizeGrip(container)
+        self.size_grip = CornerSizeGrip(container)
         self.size_grip.setFixedSize(20, 20)
         
         # Set main layout
@@ -520,44 +558,309 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
-        
-        title = QLabel("About")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
-        layout.addWidget(title)
-        
-        # About info
-        about_text = QLabel(
-            "<h2>Shitty Random Photo Screensaver</h2>"
-            "<p>Version 1.0.0</p>"
-            "<p>A feature-rich photo screensaver with transitions, widgets, and more!</p>"
-            "<br>"
-            "<p><b>Features:</b></p>"
-            "<ul>"
-            "<li>5 Professional transitions (Crossfade, Slide, Wipe, Diffuse, Block Flip)</li>"
-            "<li>Pan & Scan (Ken Burns effect)</li>"
-            "<li>Clock and Weather widgets</li>"
-            "<li>Multiple image sources (Folders, RSS feeds)</li>"
-            "<li>Multi-monitor support</li>"
-            "<li>21 Easing curves for smooth animations</li>"
-            "</ul>"
-            "<br>"
-            "<p><b>Hotkeys While Running:</b></p>"
-            "<ul>"
-            "<li><b>Z</b> - Go back to previous image</li>"
-            "<li><b>X</b> - Go forward to next image</li>"
-            "<li><b>C</b> - Cycle transition modes (Crossfade → Slide → Wipe → Diffuse → Block Flip)</li>"
-            "<li><b>S</b> - Stop screensaver and open Settings</li>"
-            "<li><b>ESC</b> - Exit screensaver</li>"
-            "<li><b>Mouse Click/Any Other Key</b> - Exit screensaver</li>"
-            "</ul>"
+
+        # Main content card (matches ABOUTExample mockup)
+        content_card = QWidget(widget)
+        content_card.setObjectName("aboutContentCard")
+        content_card.setStyleSheet(
+            "#aboutContentCard {"
+            "  background-color: #1f1f1f;"
+            "  border-radius: 8px;"
+            "}"
         )
-        about_text.setWordWrap(True)
-        about_text.setStyleSheet("color: #cccccc; padding: 20px;")
-        about_text.setOpenExternalLinks(True)
-        layout.addWidget(about_text)
+        card_layout = QVBoxLayout(content_card)
+        # Slightly tighter top margin and vertical spacing to reduce empty space
+        card_layout.setContentsMargins(24, 12, 24, 24)
+        card_layout.setSpacing(12)
+
+        # Header with logo and Shoogle artwork, scaled down only
+        header_layout = QHBoxLayout()
+        header_layout.setSpacing(16)
+
+        # Keep references so we can rescale responsively on resize without
+        # repeatedly degrading the images.
+        self._about_content_card = content_card
+        self._about_header_layout = header_layout
+        self._about_logo_label = None
+        self._about_shoogle_label = None
+        self._about_logo_source = None
+        self._about_shoogle_source = None
+        self._about_last_card_width: int = 0
+
+        # Resolve images directory robustly (works both in dev and frozen builds)
+        try:
+            images_dir = (Path(__file__).resolve().parent.parent / "images").resolve()
+            if not images_dir.exists():
+                # Fallback: project launched from root, look for ./images
+                alt_dir = (Path.cwd() / "images").resolve()
+                if alt_dir.exists():
+                    images_dir = alt_dir
+            logger.debug("[ABOUT] Images directory resolved to %s (exists=%s)", images_dir, images_dir.exists())
+        except Exception:
+            images_dir = Path.cwd() / "images"
+
+        logo_label = QLabel()
+        logo_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        self._about_logo_label = logo_label
+        try:
+            logo_path = images_dir / "Logo.png"
+            logo_pm = QPixmap(str(logo_path))
+            logger.debug("[ABOUT] Loading logo pixmap from %s (exists=%s, null=%s)", logo_path, logo_path.exists(), logo_pm.isNull())
+            if not logo_pm.isNull():
+                # Store the original, unscaled pixmap; scaling is handled
+                # centrally in _update_about_header_images().
+                self._about_logo_source = logo_pm
+        except Exception:
+            logger.debug("[ABOUT] Failed to load Logo.png", exc_info=True)
+        header_layout.addWidget(logo_label, 0, Qt.AlignmentFlag.AlignTop)
+
+        shoogle_label = QLabel()
+        shoogle_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        self._about_shoogle_label = shoogle_label
+        try:
+            shoogle_path = images_dir / "Shoogle300W.png"
+            shoogle_pm = QPixmap(str(shoogle_path))
+            logger.debug("[ABOUT] Loading Shoogle pixmap from %s (exists=%s, null=%s)", shoogle_path, shoogle_path.exists(), shoogle_pm.isNull())
+            if not shoogle_pm.isNull():
+                # Store the original, unscaled pixmap for responsive
+                # scaling based on the dialog width.
+                self._about_shoogle_source = shoogle_pm
+        except Exception:
+            logger.debug("[ABOUT] Failed to load Shoogle300W.png", exc_info=True)
+        header_layout.addWidget(shoogle_label, 0, Qt.AlignmentFlag.AlignTop)
+        header_layout.addStretch()
+        card_layout.addLayout(header_layout)
+
+        # Blurb loaded from external text file when available
+        blurb_label = QLabel()
+        blurb_label.setWordWrap(True)
+        # Left-align blurb so it lines up with the logo and buttons
+        blurb_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        blurb_label.setStyleSheet("color: #dddddd; font-size: 12pt;")
+        blurb_label.setTextFormat(Qt.TextFormat.RichText)
+
+        default_blurb = (
+            "Made for my own weird niche, shared freely for yours.<br>"
+            "You can always donate to my dumbass though or buy my shitty literature."
+        )
+        blurb_text = default_blurb
+        try:
+            about_path = Path.home() / "Documents" / "AboutBlurb.txt"
+            if about_path.exists():
+                raw = about_path.read_text(encoding="utf-8").splitlines()
+                blurb_lines: list[str] = []
+                for line in raw:
+                    stripped = line.strip()
+                    if not stripped:
+                        continue
+                    lower = stripped.lower()
+                    # Skip URLs and instructions from the spec file
+                    if lower.startswith("http://") or lower.startswith("https://"):
+                        continue
+                    if "centre-aligned" in lower or "center-aligned" in lower:
+                        continue
+                    if "then the following" in lower and "links" in lower:
+                        continue
+                    # Strip wrapping quotes if present
+                    if (stripped.startswith('"') and stripped.endswith('"')) or (
+                        stripped.startswith("'") and stripped.endswith("'")
+                    ):
+                        stripped = stripped[1:-1].strip()
+                    if stripped:
+                        blurb_lines.append(stripped)
+
+                if blurb_lines:
+                    blurb_text = "<br>".join(blurb_lines)
+        except Exception:
+            pass
+
+        # Small stylistic tweak to italicize the "can" in the second sentence,
+        # matching the ABOUTExample reference mockup.
+        if "You can always" in blurb_text:
+            blurb_text = blurb_text.replace("You can", "You <i>can</i>", 1)
+
+        blurb_label.setText(blurb_text)
+        card_layout.addWidget(blurb_label)
+
+        # External links row (PayPal, Goodreads, Amazon, GitHub)
+        buttons_row = QHBoxLayout()
+        buttons_row.setSpacing(16)
+        # Left-align buttons to share a vertical line with the logo and blurb
+        buttons_row.setAlignment(Qt.AlignmentFlag.AlignLeft)
+
+        def _make_link_button(text: str, url: str) -> QPushButton:
+            btn = QPushButton(text)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setFixedHeight(32)
+            btn.setStyleSheet(
+                "QPushButton {"
+                "  padding: 6px 18px;"
+                "  font-weight: bold;"
+                "  border-radius: 16px;"
+                "  background-color: #2f2f2f;"
+                "  color: #ffffff;"
+                "  border: 1px solid #555555;"
+                "}"
+                "QPushButton:hover {"
+                "  background-color: #3a3a3a;"
+                "  border-color: #777777;"
+                "}"
+                "QPushButton:pressed {"
+                "  background-color: #262626;"
+                "}"
+            )
+
+            def _open() -> None:
+                try:
+                    QDesktopServices.openUrl(QUrl(url))
+                except Exception:
+                    pass
+
+            btn.clicked.connect(_open)
+            return btn
+
+        buttons_row.addWidget(_make_link_button("PAYPAL", "https://www.paypal.com/donate/?business=UBZJY8KHKKLGC&no_recurring=0&item_name=Why+are+you+doing+this?+Are+you+drunk?+&currency_code=USD"))
+        buttons_row.addWidget(_make_link_button("GOODREADS", "https://www.goodreads.com/book/show/25006763-usu"))
+        buttons_row.addWidget(_make_link_button("AMAZON", "https://www.amazon.com/Usu-Jayde-Ver-Elst-ebook/dp/B00V8A5K7Y"))
+        buttons_row.addWidget(_make_link_button("GITHUB", "https://github.com/Basjohn?tab=repositories"))
+        card_layout.addLayout(buttons_row)
+
+        # Hotkeys section beneath links (left-aligned, no bullet indent)
+        hotkeys_label = QLabel(
+            "<p><b>Hotkeys While Running:</b></p>"
+            "<p>"
+            "<b>Z</b>  - Go back to previous image<br>"
+            "<b>X</b>  - Go forward to next image<br>"
+            "<b>C</b>  - Cycle transition modes (Crossfade   Slide   Wipe   Diffuse   Block Flip)<br>"
+            "<b>S</b>  - Stop screensaver and open Settings<br>"
+            "<b>ESC</b> - Exit screensaver<br>"
+            "<b>Ctrl (HOLD)</b> - Temporary interaction mode (widgets clickable without exiting)<br>"
+            "<b>Mouse Click/Any Other Key</b> - Exit screensaver"
+            "</p>"
+        )
+        hotkeys_label.setWordWrap(True)
+        hotkeys_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        hotkeys_label.setStyleSheet("color: #cccccc; margin-top: 16px;")
+        hotkeys_label.setOpenExternalLinks(False)
+        card_layout.addWidget(hotkeys_label)
+
+        # Attach card to main layout
+        layout.addWidget(content_card)
         layout.addStretch()
-        
+
+        # Reset to Defaults button (bottom-left, small and unobtrusive)
+        button_row = QHBoxLayout()
+        self.reset_defaults_btn = QPushButton("Reset To Defaults")
+        self.reset_defaults_btn.setObjectName("resetDefaultsButton")
+        self.reset_defaults_btn.setFixedHeight(24)
+        self.reset_defaults_btn.setStyleSheet("font-size: 11px; padding: 4px 10px;")
+        self.reset_defaults_btn.clicked.connect(self._on_reset_to_defaults_clicked)
+        button_row.addWidget(self.reset_defaults_btn)
+        button_row.addStretch()
+        layout.addLayout(button_row)
+
         return widget
+
+    def _update_about_header_images(self) -> None:
+        """Scale About header images responsively based on dialog width.
+
+        The logo and fish artwork are always scaled down from their source
+        resolution using smooth, high-DPI aware transforms and never
+        upscaled beyond 100% size. When the settings dialog is narrow the
+        images shrink together so they never clip or overlap.
+        """
+
+        card = getattr(self, "_about_content_card", None)
+        header_layout = getattr(self, "_about_header_layout", None)
+        logo_label = getattr(self, "_about_logo_label", None)
+        shoogle_label = getattr(self, "_about_shoogle_label", None)
+        logo_src = getattr(self, "_about_logo_source", None)
+        shoogle_src = getattr(self, "_about_shoogle_source", None)
+
+        if (
+            card is None
+            or header_layout is None
+            or logo_label is None
+            or shoogle_label is None
+            or logo_src is None
+            or logo_src.isNull()
+            or shoogle_src is None
+            or shoogle_src.isNull()
+        ):
+            return
+
+        current_width = card.width()
+        if current_width <= 0:
+            return
+
+        # Avoid aggressive rescaling on tiny drags by only recomputing when
+        # the card width has changed meaningfully since the last update.
+        last_width = getattr(self, "_about_last_card_width", 0)
+        if last_width and abs(current_width - last_width) < 12:
+            return
+        self._about_last_card_width = current_width
+
+        available = current_width - card.contentsMargins().left() - card.contentsMargins().right()
+        if available <= 0:
+            return
+
+        spacing = header_layout.spacing()
+        total_w = logo_src.width() + shoogle_src.width()
+        if total_w <= 0 or available <= spacing + 10:
+            scale = 1.0
+        else:
+            scale = (available - spacing) / float(total_w)
+            # Allow a modest upscale so the header artwork can occupy the
+            # available space on wide dialogs while still clamping to
+            # reasonable bounds.
+            scale = max(0.5, min(2.0, scale))
+
+        try:
+            dpr = float(self.devicePixelRatioF())
+        except Exception:
+            dpr = 1.0
+        if dpr < 1.0:
+            dpr = 1.0
+
+        def _apply(src: QPixmap, label: QLabel, *, y_offset: int = 0) -> None:
+            if src is None or src.isNull():
+                return
+
+            target_w = max(1, int(round(src.width() * scale * dpr)))
+            target_h = max(1, int(round(src.height() * scale * dpr)))
+
+            scaled = src.scaled(
+                target_w,
+                target_h,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            if dpr != 1.0:
+                try:
+                    scaled.setDevicePixelRatio(dpr)
+                except Exception:
+                    pass
+
+            label.setPixmap(scaled)
+
+            # Use logical (device-independent) size for the label so the
+            # layout behaves consistently on high-DPI displays.
+            logical_w = max(1, int(round(scaled.width() / dpr)))
+            logical_h = max(1, int(round(scaled.height() / dpr)))
+            label.setMinimumSize(logical_w, logical_h)
+            label.setMaximumSize(logical_w, logical_h)
+            label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
+            if y_offset != 0:
+                label.setContentsMargins(0, max(0, y_offset), 0, 0)
+            else:
+                label.setContentsMargins(0, 0, 0, 0)
+
+        # Slight vertical nudge so the two images feel aligned by eye; the
+        # Shoogle artwork rides a touch lower so we bias the logo down a
+        # few extra pixels instead.
+        _apply(logo_src, logo_label, y_offset=5)
+        _apply(shoogle_src, shoogle_label, y_offset=0)
     
     def _connect_signals(self) -> None:
         """Connect signals to slots."""
@@ -589,13 +892,22 @@ class SettingsDialog(QDialog):
         
         # Get widgets
         old_widget = self.content_stack.currentWidget()
-        
         # Create simple fade animation using AnimationManager
         def fade_out_complete():
             # Switch to new widget
             self.content_stack.setCurrentIndex(index)
             new_widget = self.content_stack.currentWidget()
-            
+
+            if index == 4:
+                try:
+                    self._about_last_card_width = 0
+                except Exception:
+                    pass
+                try:
+                    self._update_about_header_images()
+                except Exception:
+                    pass
+
             # Fade in new widget
             self._animations.animate_property(
                 target=new_widget,
@@ -618,6 +930,43 @@ class SettingsDialog(QDialog):
         self._animations.start()
         
         logger.debug(f"Switched to tab {index}")
+
+    def _on_reset_to_defaults_clicked(self) -> None:
+        """Reset all application settings back to defaults with confirmation."""
+
+        reply = QMessageBox.question(
+            self,
+            "Reset To Defaults",
+            (
+                "This will reset all settings to their default values.\n\n"
+                "You will need to close this dialog and restart the screensaver "
+                "for all changes to fully apply.\n\nContinue?"
+            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+            self._settings.reset_to_defaults()
+            QMessageBox.information(
+                self,
+                "Defaults Restored",
+                (
+                    "Settings have been reset to defaults.\n\n"
+                    "Please close this dialog and restart the screensaver to "
+                    "reload all settings."
+                ),
+            )
+        except Exception as exc:
+            logger.exception("Failed to reset settings to defaults: %s", exc)
+            QMessageBox.warning(
+                self,
+                "Error",
+                "Failed to reset settings to defaults. See log for details.",
+            )
     
     def _toggle_maximize(self) -> None:
         """Toggle window maximize state."""
@@ -634,10 +983,16 @@ class SettingsDialog(QDialog):
         
         # Position size grip in bottom-right corner
         if hasattr(self, 'size_grip'):
-            self.size_grip.move(
-                self.width() - self.size_grip.width() - 10,
-                self.height() - self.size_grip.height() - 10
-            )
+            try:
+                parent = self.size_grip.parent() or self
+                pw = parent.width()
+                ph = parent.height()
+                self.size_grip.move(
+                    pw - self.size_grip.width(),
+                    ph - self.size_grip.height(),
+                )
+            except Exception:
+                pass
         
         # Save geometry on resize (debounced to avoid excessive saves)
         if hasattr(self, '_resize_timer'):
@@ -648,6 +1003,21 @@ class SettingsDialog(QDialog):
             self._resize_timer.setSingleShot(True)
             self._resize_timer.timeout.connect(self._save_geometry)
         self._resize_timer.start(500)  # Save 500ms after resize stops
+        
+        # Keep About header images scaled appropriately for the current
+        # dialog width, but guard in case the About tab has not been
+        # constructed yet.
+        try:
+            self._update_about_header_images()
+        except Exception:
+            pass
+    
+    def showEvent(self, event):
+        super().showEvent(event)
+        try:
+            self._update_about_header_images()
+        except Exception:
+            pass
     
     def moveEvent(self, event):
         """Handle move event to save geometry."""

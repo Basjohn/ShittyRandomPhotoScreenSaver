@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_verbose_logging
 
 logger = get_logger(__name__)
 
@@ -176,14 +176,16 @@ class WindowsGlobalMediaController(BaseMediaController):
             sessions = []
 
         if not sessions:
-            logger.debug("[MEDIA] No GSMTC sessions available")
+            if is_verbose_logging():
+                logger.debug("[MEDIA] No GSMTC sessions available")
         else:
-            try:
-                logger.debug("[MEDIA] GSMTC sessions: %s", [
-                    getattr(s, "source_app_user_model_id", None) for s in sessions
-                ])
-            except Exception:
-                logger.debug("[MEDIA] Failed to describe GSMTC sessions", exc_info=True)
+            if is_verbose_logging():
+                try:
+                    logger.debug("[MEDIA] GSMTC sessions: %s", [
+                        getattr(s, "source_app_user_model_id", None) for s in sessions
+                    ])
+                except Exception:
+                    logger.debug("[MEDIA] Failed to describe GSMTC sessions", exc_info=True)
 
         for session in sessions:
             try:
@@ -191,7 +193,8 @@ class WindowsGlobalMediaController(BaseMediaController):
             except Exception:
                 app_id = None
             if isinstance(app_id, str) and "spotify" in app_id.lower():
-                logger.debug("[MEDIA] Selected Spotify session: %r", app_id)
+                if is_verbose_logging():
+                    logger.debug("[MEDIA] Selected Spotify session: %r", app_id)
                 return session
 
         # No Spotify-specific session; for this widget we treat this as
@@ -241,7 +244,7 @@ class WindowsGlobalMediaController(BaseMediaController):
             except Exception:
                 logger.debug("[MEDIA] Failed to get media properties", exc_info=True)
 
-            if props is not None:
+            if props is not None and is_verbose_logging():
                 try:
                     logger.debug(
                         "[MEDIA] Raw media properties: title=%r, artist=%r, album=%r",
@@ -269,7 +272,8 @@ class WindowsGlobalMediaController(BaseMediaController):
                     info.album = (getattr(props, "album_title", "") or "").strip()[:256]
                     info.album_artist = (getattr(props, "album_artist", "") or "").strip()[:256]
                 except Exception:
-                    logger.debug("[MEDIA] Failed to normalize media properties", exc_info=True)
+                    if is_verbose_logging():
+                        logger.debug("[MEDIA] Failed to normalize media properties", exc_info=True)
 
             if status is not None:
                 info.state = self._map_status(status)
@@ -280,7 +284,8 @@ class WindowsGlobalMediaController(BaseMediaController):
                     info.can_next = bool(getattr(controls, "is_next_enabled", False))
                     info.can_previous = bool(getattr(controls, "is_previous_enabled", False))
             except Exception:
-                logger.debug("[MEDIA] Failed to read control capabilities", exc_info=True)
+                if is_verbose_logging():
+                    logger.debug("[MEDIA] Failed to read control capabilities", exc_info=True)
 
             # Optional album artwork thumbnail
             try:
@@ -308,19 +313,21 @@ class WindowsGlobalMediaController(BaseMediaController):
                                 reader.close()
                                 info.artwork = bytes(buf)
             except Exception:
-                logger.debug("[MEDIA] Failed to read artwork thumbnail", exc_info=True)
+                if is_verbose_logging():
+                    logger.debug("[MEDIA] Failed to read artwork thumbnail", exc_info=True)
 
-            try:
-                state_val = info.state.value if isinstance(info.state, MediaPlaybackState) else str(info.state)
-                logger.debug(
-                    "[MEDIA] Track snapshot: state=%s, title=%r, artist=%r, album=%r",
-                    state_val,
-                    getattr(info, "title", None),
-                    getattr(info, "artist", None),
-                    getattr(info, "album", None),
-                )
-            except Exception:
-                logger.debug("[MEDIA] Failed to log track snapshot", exc_info=True)
+            if is_verbose_logging():
+                try:
+                    state_val = info.state.value if isinstance(info.state, MediaPlaybackState) else str(info.state)
+                    logger.debug(
+                        "[MEDIA] Track snapshot: state=%s, title=%r, artist=%r, album=%r",
+                        state_val,
+                        getattr(info, "title", None),
+                        getattr(info, "artist", None),
+                        getattr(info, "album", None),
+                    )
+                except Exception:
+                    logger.debug("[MEDIA] Failed to log track snapshot", exc_info=True)
 
             return info
 

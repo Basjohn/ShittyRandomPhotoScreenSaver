@@ -88,6 +88,55 @@ class DisplayManager(QObject):
             # Store initial screen count
             self.screen_count = len(app.screens())
             logger.info("Monitor detection enabled (%d screens)" % self.screen_count)
+
+    def _get_allowed_screen_indices(self, screen_count: int) -> set[int]:
+        """Resolve which screen indices should create DisplayWidgets.
+
+        Uses the canonical display.show_on_monitors setting:
+        - 'ALL' (default) means all screens.
+        - A list/tuple/set of 1-based monitor indices (e.g. [1, 2]) selects
+          specific screens. Values outside the available range are ignored.
+        """
+
+        indices: set[int] = set(range(screen_count))
+        if self.settings_manager is None:
+            return indices
+
+        try:
+            raw = self.settings_manager.get('display.show_on_monitors', 'ALL')
+        except Exception:
+            raw = 'ALL'
+
+        # Default: all screens
+        if isinstance(raw, str):
+            if raw.upper() == 'ALL':
+                return indices
+            # Attempt to parse a stringified list such as "[1, 2]"
+            try:
+                import ast
+                parsed = ast.literal_eval(raw)
+                if not isinstance(parsed, (list, tuple, set)):
+                    return indices
+                values = {int(x) for x in parsed}
+            except Exception:
+                logger.debug("[DISPLAY] Failed to parse show_on_monitors=%r; defaulting to ALL", raw)
+                return indices
+        elif isinstance(raw, (list, tuple, set)):
+            try:
+                values = {int(x) for x in raw}
+            except Exception:
+                logger.debug("[DISPLAY] Invalid show_on_monitors=%r; defaulting to ALL", raw)
+                return indices
+        else:
+            return indices
+
+        # Convert 1-based monitor numbers to 0-based indices and clamp to range
+        allowed = {m - 1 for m in values if 1 <= int(m) <= screen_count}
+        if not allowed:
+            logger.debug("[DISPLAY] Resolved empty show_on_monitors from %r; defaulting to ALL", raw)
+            return indices
+        logger.info("[DISPLAY] show_on_monitors=%r → allowed screen indices=%s", raw, sorted(allowed))
+        return allowed
     
     def _on_screen_added(self, screen: QScreen) -> None:
         """Handle screen added event."""
@@ -102,7 +151,14 @@ class DisplayManager(QObject):
             # Create new display for added screen
             if self.displays:  # Only if already initialized
                 screen_index = new_count - 1
-                self._create_display_for_screen(screen_index)
+                allowed = self._get_allowed_screen_indices(new_count)
+                if screen_index in allowed:
+                    self._create_display_for_screen(screen_index)
+                else:
+                    logger.info(
+                        "[DISPLAY] Skipping display for screen %d due to show_on_monitors",
+                        screen_index,
+                    )
     
     def _on_screen_removed(self, screen: QScreen) -> None:
         """Handle screen removed event."""
@@ -131,10 +187,19 @@ class DisplayManager(QObject):
         
         # Clear existing displays
         self.cleanup()
+
+        # Resolve which screens should actually create DisplayWidgets
+        allowed_indices = self._get_allowed_screen_indices(screen_count)
         
-        # Create display for each screen
+        # Create display for each allowed screen
         for i in range(screen_count):
-            self._create_display_for_screen(i)
+            if i in allowed_indices:
+                self._create_display_for_screen(i)
+            else:
+                logger.info(
+                    "[DISPLAY] Skipping display for screen %d due to show_on_monitors",
+                    i,
+                )
         
         logger.info("Created %d display widgets" % len(self.displays))
         return len(self.displays)

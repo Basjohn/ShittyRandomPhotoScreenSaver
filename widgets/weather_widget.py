@@ -15,6 +15,7 @@ from PySide6.QtGui import QFont, QColor
 from core.logging.logger import get_logger
 from core.threading.manager import ThreadManager
 from weather.open_meteo_provider import OpenMeteoProvider
+from widgets.shadow_utils import apply_widget_shadow
 
 logger = get_logger(__name__)
 _CACHE_FILE = Path(__file__).resolve().parent / "last_weather.json"
@@ -133,6 +134,7 @@ class WeatherWidget(QLabel):
         self._bg_border_color = QColor(128, 128, 128, 200)  # Light grey border
         self._fade_effect: Optional[QGraphicsOpacityEffect] = None
         self._fade_anim: Optional[QPropertyAnimation] = None
+        self._shadow_config: Optional[Dict[str, Any]] = None
         
         # Setup UI
         self._setup_ui()
@@ -559,6 +561,11 @@ class WeatherWidget(QLabel):
     def set_thread_manager(self, thread_manager) -> None:
         self._thread_manager = thread_manager
     
+    def set_shadow_config(self, config: Optional[Dict[str, Any]]) -> None:
+        """Store shared shadow configuration for post-fade drop shadows."""
+
+        self._shadow_config = config
+    
     def set_font_family(self, family: str) -> None:
         """
         Set font family.
@@ -681,22 +688,77 @@ class WeatherWidget(QLabel):
         self.stop()
 
     def _fade_in(self) -> None:
+        """Fade the widget in, then attach the shared drop shadow.
+
+        A temporary QGraphicsOpacityEffect is installed for the fade so we
+        don't conflict with the global drop-shadow effect. Once the fade
+        completes the opacity effect is removed and the shared shadow is
+        applied.
+        """
+
         try:
             if self._fade_effect is None:
                 self._fade_effect = QGraphicsOpacityEffect(self)
-                self.setGraphicsEffect(self._fade_effect)
+
+            # Install the fade effect, overriding any previous graphics
+            # effect (e.g. a drop shadow) for the duration of the fade.
+            self.setGraphicsEffect(self._fade_effect)
+
             if self._fade_anim is not None:
                 try:
                     self._fade_anim.stop()
                 except Exception:
                     pass
+
             self._fade_effect.setOpacity(0.0)
             self.show()
+
             anim = QPropertyAnimation(self._fade_effect, b"opacity", self)
-            anim.setDuration(250)
+            anim.setDuration(1000)
             anim.setStartValue(0.0)
             anim.setEndValue(1.0)
+
+            def _on_finished() -> None:
+                # Tear down the fade effect and restore the shared shadow.
+                try:
+                    self.setGraphicsEffect(None)
+                except Exception:
+                    pass
+
+                self._fade_effect = None
+                self._fade_anim = None
+
+                if self._shadow_config is not None:
+                    try:
+                        apply_widget_shadow(
+                            self,
+                            self._shadow_config,
+                            has_background_frame=self._show_background,
+                        )
+                    except Exception:
+                        logger.debug(
+                            "[WEATHER] Failed to apply widget shadow after fade",
+                            exc_info=True,
+                        )
+
+            anim.finished.connect(_on_finished)
             self._fade_anim = anim
             self._fade_anim.start()
         except Exception:
-            self.show()
+            # Fallback: just show and, if available, apply the shared shadow.
+            try:
+                self.show()
+            except Exception:
+                pass
+            if self._shadow_config is not None:
+                try:
+                    apply_widget_shadow(
+                        self,
+                        self._shadow_config,
+                        has_background_frame=self._show_background,
+                    )
+                except Exception:
+                    logger.debug(
+                        "[WEATHER] Failed to apply widget shadow in fallback path",
+                        exc_info=True,
+                    )

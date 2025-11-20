@@ -6,7 +6,7 @@ Uses QSettings for persistent storage. Simplified from SPQDocker reusable module
 from typing import Any, Callable, Dict, List, Mapping
 import threading
 from PySide6.QtCore import QSettings, QObject, Signal
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_verbose_logging
 
 logger = get_logger('SettingsManager')
 
@@ -41,10 +41,24 @@ class SettingsManager(QObject):
         self._set_defaults()
 
         # Diagnostic snapshot so widget enable/monitor issues can be traced
-        # without guessing what QSettings returned on this machine.
+        # without guessing what QSettings returned on this machine. The
+        # full widgets map can be large, so we only dump it in verbose
+        # mode; normal debug just logs the presence/absence of the key.
         try:
             widgets_snapshot = self._settings.value('widgets', None)
-            logger.debug("Widgets snapshot on init: %r", widgets_snapshot)
+            if is_verbose_logging():
+                logger.debug("Widgets snapshot on init: %r", widgets_snapshot)
+            else:
+                if widgets_snapshot is None:
+                    logger.debug("Widgets snapshot on init: <missing>")
+                elif isinstance(widgets_snapshot, dict):
+                    logger.debug(
+                        "Widgets snapshot on init: %d sections", len(widgets_snapshot)
+                    )
+                else:
+                    logger.debug(
+                        "Widgets snapshot on init: type=%s", type(widgets_snapshot).__name__
+                    )
         except Exception:
             logger.debug("Failed to read widgets snapshot on init", exc_info=True)
 
@@ -71,6 +85,7 @@ class SettingsManager(QObject):
             'display.pan_speed': 3.0,
             'display.sharpen_downscale': False,
             'display.same_image_all_monitors': False,
+            'display.show_on_monitors': 'ALL',
 
             # Timing / queue
             'timing.interval': 10,
@@ -121,6 +136,11 @@ class SettingsManager(QObject):
                     'color': [255, 255, 255, 230],
                     'border_color': [255, 255, 255, 255],
                     'border_opacity': 1.0,
+                    # Display mode: 'digital' (existing behaviour) or 'analog'.
+                    'display_mode': 'digital',
+                    # When in analogue mode, controls whether hour numerals
+                    # (1–12) are rendered around the clock face.
+                    'show_numerals': True,
                 },
                 'clock2': {
                     'enabled': False,
@@ -134,6 +154,8 @@ class SettingsManager(QObject):
                     'font_size': 32,
                     'margin': 20,
                     'color': [255, 255, 255, 230],
+                    'display_mode': 'digital',
+                    'show_numerals': True,
                 },
                 'clock3': {
                     'enabled': False,
@@ -147,6 +169,8 @@ class SettingsManager(QObject):
                     'font_size': 32,
                     'margin': 20,
                     'color': [255, 255, 255, 230],
+                    'display_mode': 'digital',
+                    'show_numerals': True,
                 },
                 'weather': {
                     'enabled': False,
@@ -177,7 +201,8 @@ class SettingsManager(QObject):
                     'color': [255, 255, 255, 230],
                     'show_background': True,
                     'bg_opacity': 0.7,
-                    'bg_color': [64, 64, 64, 255],
+                    # Darker Spotify-style card background by default.
+                    'bg_color': [16, 16, 16, 255],
                     'border_color': [255, 255, 255, 255],
                     'border_opacity': 1.0,
                     # Artwork/controls behaviour
@@ -191,6 +216,25 @@ class SettingsManager(QObject):
                     # Optional header subcontainer frame around the logo +
                     # title row to mirror the Reddit widget styling.
                     'show_header_frame': True,
+                },
+                # Global widget drop-shadow configuration shared by all
+                # overlay widgets (clocks, weather, media). The Widgets tab
+                # currently exposes only an enable/disable checkbox; other
+                # parameters may be tweaked in future UI iterations.
+                'shadows': {
+                    'enabled': True,
+                    # Base shadow colour; alpha is further scaled by the
+                    # text/frame opacity fields below.
+                    'color': [0, 0, 0, 255],
+                    # Offset in logical pixels (dx, dy).
+                    'offset': [4, 4],
+                    # Blur radius in logical pixels.
+                    'blur_radius': 18,
+                    # Opacity multiplier for text-only widgets (no frame).
+                    'text_opacity': 0.3,
+                    # Opacity multiplier for widgets with active
+                    # background/frames.
+                    'frame_opacity': 0.7,
                 },
             },
         }
@@ -306,8 +350,14 @@ class SettingsManager(QObject):
                         handler(value, old_value)
                     except Exception as e:
                         logger.error(f"Error in change handler for {key}: {e}")
-        
-        logger.debug("Setting changed: %s: %r -> %r", key, old_value, value)
+
+        # Compact logging by default so large nested maps (e.g. 'widgets')
+        # do not flood the log. When verbose logging is enabled we still
+        # include the full before/after values for deep debugging.
+        if is_verbose_logging():
+            logger.debug("Setting changed: %s: %r -> %r", key, old_value, value)
+        else:
+            logger.debug("Setting changed: %s", key)
     
     def save(self) -> None:
         """Force save settings to persistent storage."""

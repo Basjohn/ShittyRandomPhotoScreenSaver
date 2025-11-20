@@ -9,9 +9,10 @@ from typing import Optional
 from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget,
-    QPushButton, QLineEdit, QFileDialog, QGroupBox, QMessageBox, QCheckBox
+    QPushButton, QLineEdit, QFileDialog, QGroupBox, QMessageBox, QCheckBox,
+    QScrollArea,
 )
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Signal, Qt
 
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger
@@ -43,7 +44,23 @@ class SourcesTab(QWidget):
     
     def _setup_ui(self) -> None:
         """Setup tab UI."""
-        layout = QVBoxLayout(self)
+        # Use a scroll area so this tab behaves consistently with the other
+        # tabs when the settings dialog is resized to smaller heights.
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        scroll.setStyleSheet(
+            """
+            QScrollArea { border: none; background: transparent; }
+            QScrollArea > QWidget > QWidget { background: transparent; }
+            QScrollArea QWidget { background: transparent; }
+            """
+        )
+        
+        content = QWidget()
+        layout = QVBoxLayout(content)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
         
@@ -137,6 +154,11 @@ class SourcesTab(QWidget):
         layout.addWidget(rss_group)
         
         layout.addStretch()
+        
+        scroll.setWidget(content)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(scroll)
     
     def _load_sources(self) -> None:
         """Load sources from settings."""

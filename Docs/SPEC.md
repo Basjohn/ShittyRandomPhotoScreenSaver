@@ -282,6 +282,7 @@ GL Path: The only supported GL route uses a single `GLCompositorWidget` per disp
         'pan_speed': 3.0,                  # float - manual speed when auto_speed is False
         'sharpen_downscale': False,        # bool - optional sharpening after downscale
         'same_image_all_monitors': False,  # bool - True = same image on all screens
+        'show_on_monitors': 'ALL',         # 'ALL' or list of 1-based monitor indices (e.g. [1, 2])
     },
 
     'transitions': {
@@ -334,6 +335,12 @@ GL Path: The only supported GL route uses a single `GLCompositorWidget` per disp
             'color': [255, 255, 255, 230],
             'border_color': [255, 255, 255, 255],
             'border_opacity': 1.0,
+            # Display mode: 'digital' (existing text-based clock) or
+            # 'analog' for the circular clock-face rendering.
+            'display_mode': 'digital',
+            # When in analogue mode, controls whether hour numerals (1–12)
+            # are rendered around the clock face.
+            'show_numerals': True,
         },
         'clock2': {
             'enabled': False,
@@ -347,6 +354,8 @@ GL Path: The only supported GL route uses a single `GLCompositorWidget` per disp
             'font_size': 32,
             'margin': 20,
             'color': [255, 255, 255, 230],
+            'display_mode': 'digital',
+            'show_numerals': True,
         },
         'clock3': {
             'enabled': False,
@@ -360,6 +369,8 @@ GL Path: The only supported GL route uses a single `GLCompositorWidget` per disp
             'font_size': 32,
             'margin': 20,
             'color': [255, 255, 255, 230],
+            'display_mode': 'digital',
+            'show_numerals': True,
         },
         'weather': {
             'enabled': False,
@@ -386,12 +397,23 @@ GL Path: The only supported GL route uses a single `GLCompositorWidget` per disp
             'show_background': True,
             'bg_opacity': 0.7,
             'color': [255, 255, 255, 230],
-            'bg_color': [64, 64, 64, 255],
+            'bg_color': [16, 16, 16, 255],
             'border_color': [255, 255, 255, 255],
             'border_opacity': 1.0,
-            # Artwork and controls behaviour
+            # Artwork and controls behaviour (Spotify widget baseline)
             'artwork_size': 200,           # int pixels, user-tunable in Widgets tab
             'show_controls': True,         # bool – when False, hide transport row
+            'rounded_artwork_border': True,
+            'show_header_frame': True,
+        },
+        # Global widget drop-shadow defaults shared by all overlay widgets.
+        'shadows': {
+            'enabled': True,
+            'color': [0, 0, 0, 255],       # base colour, alpha scaled by opacity fields
+            'offset': [4, 4],              # dx, dy in logical pixels
+            'blur_radius': 18,             # blur radius in logical pixels
+            'text_opacity': 0.3,           # opacity multiplier for text-only widgets
+            'frame_opacity': 0.7,          # opacity multiplier for framed widgets
         },
     },
 }

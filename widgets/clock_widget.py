@@ -6,6 +6,7 @@ Displays current time with configurable format, position, and styling.
 from typing import Optional, Union
 from datetime import datetime, timezone, timedelta
 from enum import Enum
+import math
 import time
 try:
     import pytz
@@ -15,7 +16,7 @@ except ImportError:
 
 from PySide6.QtWidgets import QLabel, QWidget
 from PySide6.QtCore import QTimer, Qt, Signal
-from PySide6.QtGui import QFont, QColor
+from PySide6.QtGui import QFont, QColor, QPainter, QPen, QPaintEvent
 
 from core.logging.logger import get_logger
 
@@ -100,6 +101,12 @@ class ClockWidget(QLabel):
         self._bg_color = QColor(64, 64, 64, int(255 * self._bg_opacity))  # Dark grey
         self._bg_border_width = 2
         self._bg_border_color = QColor(128, 128, 128, 200)  # Light grey border
+        # Display mode: digital (default) or analogue clock-face rendering.
+        self._display_mode: str = "digital"
+        self._show_numerals: bool = True
+
+        # Last timestamp used for analogue rendering.
+        self._current_dt: Optional[datetime] = None
         
         # Setup widget
         self._setup_ui()
@@ -314,7 +321,9 @@ class ClockWidget(QLabel):
             now = datetime.now()
         else:
             now = datetime.now(self._timezone)
-        
+
+        self._current_dt = now
+
         # Format time based on settings
         if self._time_format == TimeFormat.TWELVE_HOUR:
             if self._show_seconds:
@@ -326,27 +335,37 @@ class ClockWidget(QLabel):
                 time_str = now.strftime("%H:%M:%S")
             else:
                 time_str = now.strftime("%H:%M")
-        
+
         # Remove leading zero for 12-hour format
         if self._time_format == TimeFormat.TWELVE_HOUR:
             time_str = time_str.lstrip('0')
-        
+
         timezone_abbrev = self._get_timezone_abbrev() if self._show_timezone else ""
         self._timezone_abbrev = timezone_abbrev
 
         # Main clock text should not include the timezone; the abbreviation is shown
         # exclusively in the smaller secondary label when enabled.
-        display_text = time_str
+        if self._display_mode == "analog":
+            # Analogue mode uses custom paint; keep the label text empty so
+            # the base QLabel paint path only renders the background frame.
+            display_text = ""
+        else:
+            display_text = time_str
 
         # Plain text display
         self.setText(display_text)
         self.setTextFormat(Qt.TextFormat.PlainText)
 
-        # Update timezone label if shown
+        # Update timezone label if shown (digital mode only). When in
+        # analogue mode the timezone abbreviation is rendered directly in
+        # paintEvent beneath the clock face.
         if self._show_timezone and self._tz_label:
-            if timezone_abbrev:
+            if self._display_mode != "analog" and timezone_abbrev:
                 self._tz_label.setText(timezone_abbrev)
-                self._tz_label.adjustSize()
+                try:
+                    self._tz_label.adjustSize()
+                except Exception:
+                    pass
                 self._tz_label.show()
                 self._tz_label.raise_()
             else:
@@ -356,8 +375,10 @@ class ClockWidget(QLabel):
             self.adjustSize()
 
         
-        # Adjust size to content
-        self.adjustSize()
+        # Adjust size to content in digital mode; analogue mode relies more on
+        # its minimum size and custom paint logic.
+        if self._display_mode != "analog":
+            self.adjustSize()
         
         # Update position (includes timezone label positioning)
         if self.parent():
@@ -365,6 +386,10 @@ class ClockWidget(QLabel):
         
         # Emit signal
         self.time_updated.emit(time_str)
+
+        # Request a repaint for analogue mode so hands tick smoothly.
+        if self._display_mode == "analog":
+            self.update()
     
     def _update_position(self) -> None:
         """Update widget position based on settings."""
@@ -423,6 +448,33 @@ class ClockWidget(QLabel):
         # Update display immediately if running
         if self._enabled:
             self._update_time()
+
+    def set_display_mode(self, mode: str) -> None:
+        """Set display mode ("digital" or "analog")."""
+
+        mode_l = str(mode).lower()
+        if mode_l not in ("digital", "analog"):
+            mode_l = "digital"
+        if self._display_mode == mode_l:
+            return
+        self._display_mode = mode_l
+
+        # Digital mode uses automatic text sizing; analogue mode prefers a
+        # square footprint based on font size.
+        if self._display_mode == "analog":
+            # Allocate a larger footprint for the analogue clock so the
+            # face, numerals, and below-clock timezone have room without
+            # clipping.
+            base_side = max(160, int(self._font_size * 4.5))
+            self.setMinimumWidth(base_side)
+            self.setMinimumHeight(int(base_side * 1.3))
+        else:
+            self.setMinimumSize(0, 0)
+
+        if self._enabled:
+            self._update_time()
+        else:
+            self.update()
     
     def set_position(self, position: ClockPosition) -> None:
         """
@@ -449,7 +501,14 @@ class ClockWidget(QLabel):
         # Update display immediately if running
         if self._enabled:
             self._update_time()
-    
+
+    def set_show_numerals(self, show_numerals: bool) -> None:
+        """Enable or disable hour numerals when in analogue mode."""
+
+        self._show_numerals = bool(show_numerals)
+        if self._display_mode == "analog":
+            self.update()
+
     def set_font_family(self, family: str) -> None:
         """
         Set font family.
@@ -656,6 +715,168 @@ class ClockWidget(QLabel):
                     padding: 6px 12px 6px 16px;
                 }}
             """)
+    
+    def paintEvent(self, event: QPaintEvent) -> None:
+        """Custom paint for analogue mode; fall back to QLabel for digital."""
+
+        if self._display_mode != "analog":
+            super().paintEvent(event)
+            return
+
+        # First let QLabel render its background/frame (via stylesheet), but
+        # with an empty text payload.
+        super().paintEvent(event)
+
+        if self._current_dt is None:
+            if self._timezone is None:
+                now = datetime.now()
+            else:
+                now = datetime.now(self._timezone)
+        else:
+            now = self._current_dt
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+        # Leave a generous outer margin, with extra space at the bottom for
+        # the timezone abbreviation.
+        rect = self.rect().adjusted(16, 16, -16, -36)
+        side = min(rect.width(), rect.height())
+        if side <= 0:
+            return
+
+        center_x = rect.x() + rect.width() // 2
+        center_y = rect.y() + rect.height() // 2
+
+        # Precompute numeral metrics so we can keep the face well inside
+        # the widget and place numerals just outside the circle. Numeral
+        # size is scaled from both the configured font size and the
+        # available side length so they stay readable but subtle. This
+        # keeps them smaller than the main time text and avoids crowding
+        # the clock face.
+        numeral_pt = max(8, min(int(self._font_size * 0.25), max(9, side // 18)))
+        numeral_font = QFont(self._font_family, numeral_pt)
+        painter.setFont(numeral_font)
+        numeral_metrics = painter.fontMetrics()
+        numeral_height = numeral_metrics.height()
+
+        # Pull the clock face further in from the widget edges so there is
+        # comfortable space for numerals plus a bit of padding.
+        radius = side // 2 - (numeral_height * 2) - 8
+        if radius <= 0:
+            return
+
+        # Clock face border
+        face_pen = QPen(self._text_color)
+        face_pen.setWidth(2)
+        painter.setPen(face_pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawEllipse(center_x - radius, center_y - radius, radius * 2, radius * 2)
+
+        # Hour markers
+        marker_len = max(6, radius // 10)
+        for i in range(12):
+            angle = math.radians((i / 12.0) * 360.0 - 90.0)
+            cos_a = math.cos(angle)
+            sin_a = math.sin(angle)
+            outer_x = center_x + int(cos_a * (radius - 2))
+            outer_y = center_y + int(sin_a * (radius - 2))
+            inner_x = center_x + int(cos_a * (radius - marker_len - 2))
+            inner_y = center_y + int(sin_a * (radius - marker_len - 2))
+            painter.drawLine(inner_x, inner_y, outer_x, outer_y)
+
+        # Optional numerals (I–XII) placed just outside the clock face.
+        if self._show_numerals:
+            roman_map = {
+                1: "I",
+                2: "II",
+                3: "III",
+                4: "IV",
+                5: "V",
+                6: "VI",
+                7: "VII",
+                8: "VIII",
+                9: "IX",
+                10: "X",
+                11: "XI",
+                12: "XII",
+            }
+
+            # Place numerals with a clear gap from the face so they never
+            # visually touch the circle or its hour markers.
+            numeral_radius = radius + numeral_height
+            painter.setFont(numeral_font)
+            for hour in range(1, 13):
+                angle = math.radians((hour / 12.0) * 360.0 - 90.0)
+                cos_a = math.cos(angle)
+                sin_a = math.sin(angle)
+                tx = center_x + int(cos_a * numeral_radius)
+                ty = center_y + int(sin_a * numeral_radius)
+                text = roman_map.get(hour, str(hour))
+                tw = numeral_metrics.horizontalAdvance(text)
+                th = numeral_metrics.height()
+                painter.drawText(tx - tw // 2, ty + th // 4, text)
+
+        # Helper to draw a hand with a subtle bottom-right shadow.
+        def _draw_hand(angle_deg: float, length: float, thickness: int) -> None:
+            angle = math.radians(angle_deg - 90.0)
+            cos_a = math.cos(angle)
+            sin_a = math.sin(angle)
+            ex = center_x + int(cos_a * length)
+            ey = center_y + int(sin_a * length)
+
+            shadow_color = QColor(0, 0, 0, max(60, self._text_color.alpha() // 4))
+            shadow_pen = QPen(shadow_color)
+            shadow_pen.setWidth(thickness)
+            painter.setPen(shadow_pen)
+            painter.drawLine(center_x + 2, center_y + 2, ex + 2, ey + 2)
+
+            hand_pen = QPen(self._text_color)
+            hand_pen.setWidth(thickness)
+            painter.setPen(hand_pen)
+            painter.drawLine(center_x, center_y, ex, ey)
+
+        # Compute hand angles
+        sec = now.second + now.microsecond / 1_000_000.0
+        minute = now.minute + sec / 60.0
+        hour = (now.hour % 12) + minute / 60.0
+
+        hour_angle = (hour / 12.0) * 360.0
+        minute_angle = (minute / 60.0) * 360.0
+        second_angle = (sec / 60.0) * 360.0
+
+        # Draw hour and minute hands
+        _draw_hand(hour_angle, radius * 0.5, max(3, radius // 15))
+        _draw_hand(minute_angle, radius * 0.75, max(2, radius // 20))
+
+        # Optional seconds hand (thinner and longer)
+        if self._show_seconds:
+            _draw_hand(second_angle, radius * 0.85, 1)
+
+        # Timezone abbreviation rendered below the analogue clock, centred
+        # horizontally with a small gap from the face.
+        if self._show_timezone and self._timezone_abbrev:
+            tz_font = QFont(self._font_family, max(8, self._font_size // 3))
+            painter.setFont(tz_font)
+            tz_metrics = painter.fontMetrics()
+            tz_height = tz_metrics.height()
+            text = self._timezone_abbrev
+
+            # Position the timezone label below both the face and the
+            # numerals with extra padding so nothing overlaps visually.
+            top_y = center_y + radius + (numeral_height * 2) + 8
+            max_top = self.height() - tz_height - 4
+            if top_y > max_top:
+                top_y = max_top
+
+            painter.drawText(
+                0,
+                top_y,
+                self.width(),
+                tz_height,
+                Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
+                text,
+            )
     
     def cleanup(self) -> None:
         """Clean up resources."""

@@ -236,7 +236,8 @@ def main():
     """Main entry point for the screensaver application."""
     # Setup logging first
     debug_mode = '--debug' in sys.argv or '-d' in sys.argv
-    setup_logging(debug=debug_mode)
+    verbose_mode = '--verbose' in sys.argv or '-v' in sys.argv
+    setup_logging(debug=debug_mode, verbose=verbose_mode)
     
     logger.info("=" * 60)
     logger.info("ShittyRandomPhotoScreenSaver Starting")
@@ -290,7 +291,7 @@ def main():
     logger.info("Qt image allocation limit: 1GB (supports 8K+ images, per-image on-demand)")
     
     logger.info("Qt Application created: %s", app.applicationName())
-    logger.debug(f"High DPI scaling enabled")
+    logger.debug("High DPI scaling enabled")
     
     # Route to appropriate mode
     exit_code = 0

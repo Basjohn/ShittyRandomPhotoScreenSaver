@@ -89,6 +89,18 @@ class WidgetsTab(QWidget):
         title.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
         layout.addWidget(title)
 
+        # Global widget options
+        global_row = QHBoxLayout()
+        self.widget_shadows_enabled = QCheckBox("Enable Widget Drop Shadows")
+        self.widget_shadows_enabled.setToolTip(
+            "Applies a subtle bottom-right drop shadow to overlay widgets (clocks, "
+            "weather, media) when enabled."
+        )
+        self.widget_shadows_enabled.stateChanged.connect(self._save_settings)
+        global_row.addWidget(self.widget_shadows_enabled)
+        global_row.addStretch()
+        layout.addLayout(global_row)
+
         # Subtab-style toggle buttons (Clocks / Weather / Media)
         subtab_row = QHBoxLayout()
         self._subtab_group = QButtonGroup(self)
@@ -172,6 +184,18 @@ class WidgetsTab(QWidget):
         self.clock_show_tz = QCheckBox("Show Timezone Abbreviation")
         self.clock_show_tz.stateChanged.connect(self._save_settings)
         clock_layout.addWidget(self.clock_show_tz)
+
+        # Analogue mode options
+        self.clock_analog_mode = QCheckBox("Use Analogue Clock")
+        self.clock_analog_mode.setToolTip(
+            "Render the main clock as an analogue clock face with hour/minute/second hands."
+        )
+        self.clock_analog_mode.stateChanged.connect(self._save_settings)
+        clock_layout.addWidget(self.clock_analog_mode)
+
+        self.clock_show_numerals = QCheckBox("Show Hour Numerals (Analogue)")
+        self.clock_show_numerals.stateChanged.connect(self._save_settings)
+        clock_layout.addWidget(self.clock_show_numerals)
         
         # Position
         position_row = QHBoxLayout()
@@ -805,6 +829,7 @@ class WidgetsTab(QWidget):
                 self._settings.save()
 
             for w in [
+                getattr(self, 'widget_shadows_enabled', None),
                 getattr(self, 'clock_enabled', None),
                 getattr(self, 'clock_format', None),
                 getattr(self, 'clock_seconds', None),
@@ -856,6 +881,15 @@ class WidgetsTab(QWidget):
                     w.blockSignals(True)
                     blockers.append(w)
 
+            # Global widget shadow settings
+            shadows_config = widgets.get('shadows', {}) if isinstance(widgets, dict) else {}
+            if isinstance(shadows_config, dict):
+                shadows_enabled_raw = shadows_config.get('enabled', True)
+                enabled = SettingsManager.to_bool(shadows_enabled_raw, True)
+                self.widget_shadows_enabled.setChecked(enabled)
+            else:
+                self.widget_shadows_enabled.setChecked(True)
+
             # Load clock settings
             clock_config = widgets.get('clock', {})
             self.clock_enabled.setChecked(clock_config.get('enabled', False))
@@ -874,6 +908,15 @@ class WidgetsTab(QWidget):
                 self.clock_timezone.setCurrentIndex(tz_index)
             
             self.clock_show_tz.setChecked(clock_config.get('show_timezone', False))
+
+            # Analogue mode configuration (main clock only). Secondary clocks
+            # inherit style from Clock 1 in DisplayWidget._setup_widgets().
+            display_mode = str(clock_config.get('display_mode', 'digital')).lower()
+            self.clock_analog_mode.setChecked(display_mode == 'analog')
+
+            show_numerals_val = clock_config.get('show_numerals', True)
+            show_numerals = SettingsManager.to_bool(show_numerals_val, True)
+            self.clock_show_numerals.setChecked(show_numerals)
             
             position = clock_config.get('position', 'Top Right')
             index = self.clock_position.findText(position)
@@ -1138,6 +1181,8 @@ class WidgetsTab(QWidget):
             'border_color': [self._clock_border_color.red(), self._clock_border_color.green(),
                              self._clock_border_color.blue(), self._clock_border_color.alpha()],
             'border_opacity': self.clock_border_opacity.value() / 100.0,
+            'display_mode': 'analog' if self.clock_analog_mode.isChecked() else 'digital',
+            'show_numerals': self.clock_show_numerals.isChecked(),
         }
         # Monitor selection save: 'ALL' or int
         cmon_text = self.clock_monitor_combo.currentText()
@@ -1208,6 +1253,15 @@ class WidgetsTab(QWidget):
         existing_widgets = self._settings.get('widgets', {})
         if not isinstance(existing_widgets, dict):
             existing_widgets = {}
+
+        # Global widget shadow configuration: only the enabled flag is
+        # user-editable at present; other parameters remain driven by
+        # SettingsManager defaults.
+        shadows_config = existing_widgets.get('shadows', {})
+        if not isinstance(shadows_config, dict):
+            shadows_config = {}
+        shadows_config['enabled'] = self.widget_shadows_enabled.isChecked()
+        existing_widgets['shadows'] = shadows_config
         existing_widgets['clock'] = clock_config
         existing_widgets['clock2'] = clock2_config
         existing_widgets['clock3'] = clock3_config

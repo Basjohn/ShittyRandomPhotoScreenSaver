@@ -45,7 +45,8 @@ from transitions.gl_compositor_blinds_transition import GLCompositorBlindsTransi
 from widgets.clock_widget import ClockWidget, TimeFormat, ClockPosition
 from widgets.weather_widget import WeatherWidget, WeatherPosition
 from widgets.media_widget import MediaWidget, MediaPosition
-from core.logging.logger import get_logger
+from widgets.shadow_utils import apply_widget_shadow
+from core.logging.logger import get_logger, is_verbose_logging
 from core.logging.overlay_telemetry import record_overlay_ready
 from core.resources.manager import ResourceManager
 from core.settings.settings_manager import SettingsManager
@@ -499,6 +500,9 @@ class DisplayWidget(QWidget):
         widgets = self.settings_manager.get('widgets', {})
         base_clock_settings = widgets.get('clock', {}) if isinstance(widgets, dict) else {}
 
+        # Global widget shadow configuration shared by all overlay widgets.
+        shadows_config = widgets.get('shadows', {}) if isinstance(widgets, dict) else {}
+
         position_map = {
             'Top Left': ClockPosition.TOP_LEFT,
             'Top Right': ClockPosition.TOP_RIGHT,
@@ -623,6 +627,28 @@ class DisplayWidget(QWidget):
                 bg_opacity = _resolve_clock_style('bg_opacity', 0.9, clock_settings, settings_key)
                 clock.set_background_opacity(bg_opacity)
 
+                # Analogue/digital display style and numerals configuration.
+                try:
+                    display_mode_val = _resolve_clock_style('display_mode', 'digital', clock_settings, settings_key)
+                    if hasattr(clock, 'set_display_mode'):
+                        clock.set_display_mode(display_mode_val)
+                except Exception:
+                    logger.debug("Failed to apply display_mode for %s", settings_key, exc_info=True)
+
+                try:
+                    show_numerals_val = _resolve_clock_style('show_numerals', True, clock_settings, settings_key)
+                    show_numerals = SettingsManager.to_bool(show_numerals_val, True)
+                    if hasattr(clock, 'set_show_numerals'):
+                        clock.set_show_numerals(show_numerals)
+                except Exception:
+                    logger.debug("Failed to apply show_numerals for %s", settings_key, exc_info=True)
+
+                # Global widget drop shadow (shared config for all clocks).
+                try:
+                    apply_widget_shadow(clock, shadows_config, has_background_frame=show_background)
+                except Exception:
+                    logger.debug("Failed to apply widget shadow to %s", settings_key, exc_info=True)
+
                 setattr(self, attr_name, clock)
 
                 clock.raise_()
@@ -732,7 +758,20 @@ class DisplayWidget(QWidget):
                 show_icons = SettingsManager.to_bool(weather_settings.get('show_icons', True), True)
                 if hasattr(self.weather_widget, 'set_show_icons'):
                     self.weather_widget.set_show_icons(show_icons)
-                
+
+                # Global widget drop shadow (shared config for all widgets).
+                #
+                # WeatherWidget performs a fade-in using a temporary
+                # QGraphicsOpacityEffect, then attaches the drop shadow
+                # afterwards using the shared configuration passed in here.
+                try:
+                    if hasattr(self.weather_widget, "set_shadow_config"):
+                        self.weather_widget.set_shadow_config(shadows_config)
+                    else:
+                        apply_widget_shadow(self.weather_widget, shadows_config, has_background_frame=show_background)
+                except Exception:
+                    logger.debug("Failed to configure widget shadow for weather widget", exc_info=True)
+
                 self.weather_widget.raise_()
                 self.weather_widget.start()
                 logger.info(f"✅ Weather widget started: {location}, {position_str}, font={font_size}px")
@@ -757,20 +796,22 @@ class DisplayWidget(QWidget):
 
         # Detailed diagnostics so we can see exactly what the runtime settings
         # look like for the media widget on each screen, including the raw
-        # enabled value and monitor selection.
-        try:
-            logger.debug(
-                "[MEDIA_WIDGET] _setup_widgets: screen=%s, raw_settings=%r, "
-                "enabled_raw=%r, enabled_bool=%s, monitor_sel=%r, show_on_this=%s",
-                self.screen_index,
-                media_settings,
-                media_settings.get('enabled', None),
-                media_enabled,
-                media_monitor_sel,
-                media_show_on_this,
-            )
-        except Exception:
-            logger.debug("[MEDIA_WIDGET] Failed to log media widget settings snapshot", exc_info=True)
+        # enabled value and monitor selection. The full settings map can be
+        # large, so only dump it in verbose mode.
+        if is_verbose_logging():
+            try:
+                logger.debug(
+                    "[MEDIA_WIDGET] _setup_widgets: screen=%s, raw_settings=%r, "
+                    "enabled_raw=%r, enabled_bool=%s, monitor_sel=%r, show_on_this=%s",
+                    self.screen_index,
+                    media_settings,
+                    media_settings.get('enabled', None),
+                    media_enabled,
+                    media_monitor_sel,
+                    media_show_on_this,
+                )
+            except Exception:
+                logger.debug("[MEDIA_WIDGET] Failed to log media widget settings snapshot", exc_info=True)
 
         existing_media = getattr(self, 'media_widget', None)
         if not (media_enabled and media_show_on_this):
@@ -912,6 +953,19 @@ class DisplayWidget(QWidget):
                 self.media_widget.set_background_border(2, border_qcolor)
             except Exception:
                 pass
+
+            # Global widget drop shadow (shared config for all widgets).
+            #
+            # MediaWidget uses a temporary opacity effect for its own
+            # fade-in; once the fade completes it re-attaches the shared
+            # drop shadow using this configuration.
+            try:
+                if hasattr(self.media_widget, "set_shadow_config"):
+                    self.media_widget.set_shadow_config(shadows_config)
+                else:
+                    apply_widget_shadow(self.media_widget, shadows_config, has_background_frame=show_background)
+            except Exception:
+                logger.debug("Failed to configure widget shadow for media widget", exc_info=True)
 
             self.media_widget.raise_()
             self.media_widget.start()
@@ -1543,23 +1597,16 @@ class DisplayWidget(QWidget):
             sharpen
         )
 
-        # Keep original pixmap for pan & scan (will be used after transition)
+        # Keep original pixmap for pan & scan (used only after transition
+        # completes so that the transition itself always operates on the
+        # standard screen-fitted frame).
         original_pixmap = pixmap
 
-        # Optionally build a pan-aware preview so transition matches pan start frame
-        pan_transition_frame = None
-        if pan_and_scan_enabled:
-            try:
-                pan_transition_frame = self._pan_and_scan.build_transition_frame(
-                    original_pixmap,
-                    self.size(),
-                    self._device_pixel_ratio
-                )
-            except Exception:
-                pan_transition_frame = None
-
-        # Choose pixmap presented to transition
-        new_pixmap = pan_transition_frame or processed_pixmap
+        # For both GL and software transitions we now always present the
+        # processed, screen-fitted pixmap. Pan & scan uses the original
+        # pixmap in a separate QLabel overlay that starts only after the
+        # transition has finished, avoiding any mid-transition jumps.
+        new_pixmap = processed_pixmap
         
         self._animation_manager = None
         self._overlay_timeouts: dict[str, float] = {}
@@ -1567,13 +1614,11 @@ class DisplayWidget(QWidget):
         self._base_fallback_paint_logged = False
         
         # Set DPR on the processed pixmap for proper display scaling
-        new_pixmap.setDevicePixelRatio(self._device_pixel_ratio)
-        if pan_transition_frame is not None and pan_transition_frame is not new_pixmap:
-            try:
-                pan_transition_frame.setDevicePixelRatio(self._device_pixel_ratio)
-            except Exception:
-                pass
         processed_pixmap.setDevicePixelRatio(self._device_pixel_ratio)
+        try:
+            new_pixmap.setDevicePixelRatio(self._device_pixel_ratio)
+        except Exception:
+            pass
         
         # Stop any running transition
         if self._current_transition:
@@ -1597,7 +1642,7 @@ class DisplayWidget(QWidget):
 
         # Seed base widget with the new frame before starting transitions.
         # This prevents fallback paints (black bands) while overlays warm up.
-        self.current_pixmap = pan_transition_frame or processed_pixmap
+        self.current_pixmap = processed_pixmap
         if self.current_pixmap:
             try:
                 self.current_pixmap.setDevicePixelRatio(self._device_pixel_ratio)
@@ -1678,17 +1723,28 @@ class DisplayWidget(QWidget):
                     # after this widget is destroyed.
                     self_ref = weakref.ref(self)
 
+                    pan_preview = None
+                    if pan_and_scan_enabled and self._pan_and_scan is not None:
+                        try:
+                            pan_preview = self._pan_and_scan.build_transition_frame(
+                                original_pixmap,
+                                self.size(),
+                                self._device_pixel_ratio,
+                            )
+                        except Exception:
+                            pan_preview = None
+
                     self._pending_transition_finish_args = (
                         processed_pixmap,
                         original_pixmap,
                         image_path,
                         pan_and_scan_enabled,
-                        pan_transition_frame,
+                        pan_preview,
                     )
 
                     def _finish_handler(np=processed_pixmap, op=original_pixmap,
                                         ip=image_path, pse=pan_and_scan_enabled,
-                                        preview=pan_transition_frame, ref=self_ref):
+                                        preview=None, ref=self_ref):
                         widget = ref()
                         if widget is None or not Shiboken.isValid(widget):
                             return
@@ -1704,13 +1760,16 @@ class DisplayWidget(QWidget):
                     self._current_transition_started_at = time.monotonic()
                     if overlay_key:
                         self._overlay_timeouts[overlay_key] = self._current_transition_started_at
-                    success = transition.start(self.previous_pixmap, new_pixmap, self)
+                    new_pixmap_for_transition = pan_preview or new_pixmap
+                    success = transition.start(self.previous_pixmap, new_pixmap_for_transition, self)
                     if success:
                         self._start_transition_watchdog(overlay_key, transition)
                         for attr_name in ("clock_widget", "clock2_widget", "clock3_widget"):
                             clock = getattr(self, attr_name, None)
                             if clock is not None:
                                 try:
+                                    if not clock.isVisible():
+                                        clock.show()
                                     clock.raise_()
                                     if hasattr(clock, '_tz_label') and clock._tz_label:
                                         clock._tz_label.raise_()
@@ -1718,12 +1777,16 @@ class DisplayWidget(QWidget):
                                     pass
                         if self.weather_widget:
                             try:
+                                if not self.weather_widget.isVisible():
+                                    self.weather_widget.show()
                                 self.weather_widget.raise_()
                             except Exception:
                                 pass
                         mw = getattr(self, "media_widget", None)
                         if mw is not None:
                             try:
+                                if not mw.isVisible():
+                                    mw.show()
                                 mw.raise_()
                             except Exception:
                                 pass
@@ -1780,13 +1843,27 @@ class DisplayWidget(QWidget):
                         clock = getattr(self, attr_name, None)
                         if clock is not None:
                             try:
+                                if not clock.isVisible():
+                                    clock.show()
                                 clock.raise_()
                             except Exception:
                                 pass
 
+                    # Ensure weather widget, if present, stays above the pan
+                    # label just like in the golden path (no pan) case.
+                    if self.weather_widget:
+                        try:
+                            if not self.weather_widget.isVisible():
+                                self.weather_widget.show()
+                            self.weather_widget.raise_()
+                        except Exception:
+                            pass
+
                     mw = getattr(self, "media_widget", None)
                     if mw is not None:
                         try:
+                            if not mw.isVisible():
+                                mw.show()
                             mw.raise_()
                         except Exception:
                             pass
@@ -2794,6 +2871,22 @@ class DisplayWidget(QWidget):
     def keyReleaseEvent(self, event: QKeyEvent) -> None:
         key = event.key()
         if key == Qt.Key.Key_Control:
+            # When hard-exit mode is enabled we treat the Ctrl halo as a
+            # persistent cursor proxy while the screensaver is active. In
+            # that mode releasing Ctrl should simply leave the halo as-is;
+            # it will continue to be driven by mouse movement via the
+            # global event filter.
+            hard_exit = False
+            try:
+                hard_exit = self._is_hard_exit_enabled()
+            except Exception:
+                hard_exit = False
+
+            if hard_exit:
+                DisplayWidget._global_ctrl_held = False
+                event.accept()
+                return
+
             # Clear global Ctrl-held mode and gracefully fade out the halo
             # owned by the current DisplayWidget, while ensuring any stray
             # halos on other displays are also cleared.
@@ -3030,7 +3123,13 @@ class DisplayWidget(QWidget):
         """Global event filter to keep the Ctrl halo responsive over children."""
         try:
             if event is not None and event.type() == QEvent.Type.MouseMove:
-                if DisplayWidget._global_ctrl_held:
+                hard_exit = False
+                try:
+                    hard_exit = self._is_hard_exit_enabled()
+                except Exception:
+                    hard_exit = False
+
+                if DisplayWidget._global_ctrl_held or hard_exit:
                     # Use global cursor position so we track even when the
                     # event originates from a child widget. Resolve the
                     # DisplayWidget that owns the halo based on the cursor's
@@ -3092,9 +3191,26 @@ class DisplayWidget(QWidget):
 
                     try:
                         local_pos = owner.mapFromGlobal(global_pos)
-                        owner._show_ctrl_cursor_hint(local_pos, mode="none")
                     except Exception:
-                        pass
+                        try:
+                            local_pos = owner.rect().center()
+                        except Exception:
+                            local_pos = None
+
+                    if local_pos is not None:
+                        try:
+                            # In hard-exit mode the halo should always be
+                            # visible while the cursor is over an active
+                            # DisplayWidget, without requiring Ctrl to be
+                            # held. On the first move we trigger a fade-in;
+                            # subsequent moves just reposition the halo.
+                            if hard_exit and DisplayWidget._halo_owner is None:
+                                DisplayWidget._halo_owner = owner
+                                owner._show_ctrl_cursor_hint(local_pos, mode="fade_in")
+                            else:
+                                owner._show_ctrl_cursor_hint(local_pos, mode="none")
+                        except Exception:
+                            pass
         except Exception:
             pass
         return super().eventFilter(watched, event)

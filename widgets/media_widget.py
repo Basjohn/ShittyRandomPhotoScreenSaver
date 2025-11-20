@@ -18,7 +18,7 @@ from PySide6.QtWidgets import QLabel, QWidget, QGraphicsOpacityEffect
 from PySide6.QtCore import QTimer, Qt, Signal, QVariantAnimation, QEasingCurve, QRect
 from PySide6.QtGui import QFont, QColor, QPixmap, QPainter, QPainterPath, QFontMetrics
 
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_verbose_logging
 from core.media.media_controller import (
     BaseMediaController,
     MediaPlaybackState,
@@ -26,6 +26,7 @@ from core.media.media_controller import (
     create_media_controller,
 )
 from core.threading.manager import ThreadManager
+from widgets.shadow_utils import apply_widget_shadow
 
 logger = get_logger(__name__)
 
@@ -96,9 +97,15 @@ class MediaWidget(QLabel):
         # Layout/controls behaviour
         self._show_controls: bool = True
 
-        # Widget-level fade effect for startup and track changes
+        # Widget-level fade effect for the first time it becomes visible.
+        # Subsequent track changes update in-place so the card and controls
+        # remain perfectly stable.
         self._widget_opacity_effect: Optional[QGraphicsOpacityEffect] = None
         self._widget_fade_anim: Optional[QVariantAnimation] = None
+
+        # Shared shadow configuration, passed in from DisplayWidget so we
+        # can re-attach the global drop shadow after each fade.
+        self._shadow_config = None
 
         # Optional Spotify-style brand logo used when album artwork is absent.
         self._brand_pixmap: Optional[QPixmap] = self._load_brand_pixmap()
@@ -111,6 +118,16 @@ class MediaWidget(QLabel):
 
         # Cache of last track for diagnostics / interaction
         self._last_info: Optional[MediaTrackInfo] = None
+
+        # Fixed widget height once we have seen the first track so that
+        # changes in wrapped text do not move the card on screen.
+        self._fixed_card_height: Optional[int] = None
+
+        # One-shot guard so we can perform an initial layout pass using the
+        # first track's metadata, then only fade the widget in on the
+        # *second* update once geometry has settled. This avoids the card
+        # jumping size mid-fade or a second after it appears.
+        self._has_seen_first_track: bool = False
 
         # One-shot flag so we only log the first paintEvent geometry.
         self._paint_debug_logged = False
@@ -142,19 +159,21 @@ class MediaWidget(QLabel):
 
         # Ensure a reasonable default footprint before artwork/metadata arrive.
         self.setMinimumWidth(600)
-        self.setMinimumHeight(220)
+        # Tie the default minimum height to the configured artwork size so
+        # the widget does not "jump" in height once artwork is decoded.
+        self.setMinimumHeight(max(220, self._artwork_size + 60))
 
         self._update_stylesheet()
 
         # Install a graphics opacity effect so we can fade the entire widget
         # in on startup / track changes without affecting siblings.
-        try:
-            effect = QGraphicsOpacityEffect(self)
-            effect.setOpacity(0.0)
-            self.setGraphicsEffect(effect)
-            self._widget_opacity_effect = effect
-        except Exception:
-            self._widget_opacity_effect = None
+        #
+        # Global widget shadows are also provided via QGraphicsEffect, and
+        # Qt only supports a single active effect per widget. To keep the
+        # drop-shadow consistent across all widgets we no longer attach an
+        # opacity effect here; the fade helper falls back to an immediate
+        # show when no effect is present.
+        self._widget_opacity_effect = None
         self.hide()
 
     def start(self) -> None:
@@ -204,6 +223,11 @@ class MediaWidget(QLabel):
 
     def set_thread_manager(self, thread_manager) -> None:
         self._thread_manager = thread_manager
+    
+    def set_shadow_config(self, config) -> None:
+        """Store shared shadow configuration for post-fade drop shadows."""
+
+        self._shadow_config = config
 
     # ------------------------------------------------------------------
     # Position & layout
@@ -335,6 +359,10 @@ class MediaWidget(QLabel):
         if size <= 0:
             return
         self._artwork_size = int(size)
+        # Keep the card's minimum height in sync with the configured artwork
+        # footprint so resizing via settings does not cause unexpected jumps
+        # at runtime.
+        self.setMinimumHeight(max(220, self._artwork_size + 60))
         if self._last_info is not None:
             try:
                 self._update_display(self._last_info)
@@ -402,7 +430,8 @@ class MediaWidget(QLabel):
         if not self._enabled:
             return
         if self._thread_manager is not None:
-            logger.debug("[MEDIA_WIDGET] Scheduling async refresh via ThreadManager")
+            if is_verbose_logging():
+                logger.debug("[MEDIA_WIDGET] Scheduling async refresh via ThreadManager")
             self._refresh_async()
             return
 
@@ -410,7 +439,8 @@ class MediaWidget(QLabel):
         try:
             info = self._controller.get_current_track()
         except Exception:
-            logger.debug("[MEDIA] get_current_track failed", exc_info=True)
+            if is_verbose_logging():
+                logger.debug("[MEDIA] get_current_track failed", exc_info=True)
             info = None
 
         self._update_display(info)
@@ -423,13 +453,15 @@ class MediaWidget(QLabel):
             return
 
         self._refresh_in_flight = True
-        logger.debug("[MEDIA_WIDGET] Async refresh started")
+        if is_verbose_logging():
+            logger.debug("[MEDIA_WIDGET] Async refresh started")
 
         def _do_query():
             try:
                 return self._controller.get_current_track()
             except Exception:
-                logger.debug("[MEDIA] get_current_track failed", exc_info=True)
+                if is_verbose_logging():
+                    logger.debug("[MEDIA] get_current_track failed", exc_info=True)
                 return None
 
         def _on_result(task_result) -> None:
@@ -437,20 +469,22 @@ class MediaWidget(QLabel):
                 self._refresh_in_flight = False
                 try:
                     if info is None:
-                        logger.debug("[MEDIA_WIDGET] No track info in async result; hiding")
+                        if is_verbose_logging():
+                            logger.debug("[MEDIA_WIDGET] No track info in async result; hiding")
                     else:
                         try:
                             state = getattr(info, "state", None)
                             state_val = state.value if hasattr(state, "value") else str(state)
                         except Exception:
                             state_val = "?"
-                        logger.debug(
-                            "[MEDIA_WIDGET] Applying track: state=%s, title=%r, artist=%r, album=%r",
-                            state_val,
-                            getattr(info, "title", None),
-                            getattr(info, "artist", None),
-                            getattr(info, "album", None),
-                        )
+                        if is_verbose_logging():
+                            logger.debug(
+                                "[MEDIA_WIDGET] Applying track: state=%s, title=%r, artist=%r, album=%r",
+                                state_val,
+                                getattr(info, "title", None),
+                                getattr(info, "artist", None),
+                                getattr(info, "album", None),
+                            )
                 except Exception:
                     logger.debug("[MEDIA_WIDGET] Failed to log async apply", exc_info=True)
                 self._update_display(info)
@@ -467,12 +501,12 @@ class MediaWidget(QLabel):
 
     def _update_display(self, info: Optional[MediaTrackInfo]) -> None:
         # Cache last track snapshot for diagnostics/interaction
-        prev_info = self._last_info
         self._last_info = info
 
         if info is None:
             # No active media session (e.g. Spotify not playing) – hide widget
-            logger.debug("[MEDIA_WIDGET] _update_display called with None; hiding widget")
+            if is_verbose_logging():
+                logger.debug("[MEDIA_WIDGET] _update_display called with None; hiding widget")
             self._artwork_pixmap = None
             try:
                 self.hide()
@@ -480,23 +514,45 @@ class MediaWidget(QLabel):
                 pass
             return
 
-        try:
-            state = info.state
-        except Exception:
-            state = MediaPlaybackState.UNKNOWN
-
         # Metadata: title and artist on separate lines; album is intentionally
         # omitted to keep the block compact.
         title = (info.title or "").strip()
         artist = (info.artist or "").strip()
+
+        # Snapshot of current visibility, used at the end of the update to
+        # decide whether to run a one-shot fade-in or just keep the card
+        # visible. Track changes themselves no longer trigger extra fades.
+        was_visible = self.isVisible()
 
         # Typography: header is slightly larger than the base font, the song
         # title is emphasised, and the artist is a touch smaller but still
         # strong enough to read at a glance.
         base_font = max(6, self._font_size)
         header_font = max(6, int(base_font * 1.2))
-        title_font = max(6, base_font + 3)
-        artist_font = max(6, base_font - 2)
+
+        # Start from comfortable defaults and then downscale when titles get
+        # very long so they do not wrap so aggressively that they collide
+        # with the controls row. Artist text follows the title but with a
+        # smaller adjustment so hierarchy between the two is preserved.
+        title_font_base = max(6, base_font + 3)
+        artist_font_base = max(6, base_font - 2)
+
+        title_len = len(title)
+        scale_title = 1.0
+        if title_len > 40:
+            scale_title = 0.86
+        if title_len > 55:
+            scale_title = 0.76
+        if title_len > 70:
+            scale_title = 0.66
+
+        # Artist font tracks part of the title scaling so that very long
+        # track names compress the whole metadata block slightly without
+        # making the artist look disproportionately small.
+        scale_artist = 1.0 - (1.0 - scale_title) * 0.4
+
+        title_font = max(6, int(title_font_base * scale_title))
+        artist_font = max(6, int(artist_font_base * scale_artist))
 
         header_weight = 750  # a bit heavier than standard bold
         title_weight = 700
@@ -507,7 +563,7 @@ class MediaWidget(QLabel):
         # the SPOTIFY word and the header text is indented accordingly.
         self._header_font_pt = header_font
         self._header_logo_size = max(12, int(header_font * 1.3))
-        self._header_logo_margin = self._header_logo_size + 10
+        self._header_logo_margin = self._header_logo_size
 
         # Build metadata lines with per-line font sizes/weights.
         if not title and not artist:
@@ -526,62 +582,6 @@ class MediaWidget(QLabel):
                 )
             body_html = "".join(body_lines_html)
 
-        controls_html = ""
-        if self._show_controls:
-            # Slightly smaller than the main body text to keep controls
-            # visually subtle and avoid cartoonish glyph sizing.
-            controls_font = max(6, self._font_size - 3)
-            inactive_color = "rgba(200,200,200,230)"
-            active_color = "rgba(255,255,255,255)"
-
-            def _control_span(
-                symbol: str,
-                is_active: bool,
-                scale: float = 1.0,
-                offset_px: int = 0,
-            ) -> str:
-                size = max(4.0, float(controls_font) * max(0.5, float(scale)))
-                color = active_color if is_active else inactive_color
-                weight = "700" if is_active else "500"
-                offset = f" margin-top:{offset_px}px;" if offset_px else ""
-                return (
-                    f"<span style='display:inline-block; font-size:{size}pt; "
-                    f"font-weight:{weight}; color:{color}; line-height:1; "
-                    f"vertical-align:middle;{offset}'>{symbol}</span>"
-                )
-
-            # Structured, minimal controls: left/right arrows and a single
-            # centre play/pause toggle. The play glyph is slightly upsized so
-            # it visually matches the pause bars it toggles into.
-            prev_sym = "\u2190"  # LEFTWARDS ARROW
-            next_sym = "\u2192"  # RIGHTWARDS ARROW
-            if state == MediaPlaybackState.PLAYING:
-                centre_sym = "||"  # pause
-                centre_scale = 1.0
-            else:
-                centre_sym = "\u25b6"  # play
-                centre_scale = 1.25
-
-            # Upscale the side arrows and nudge them slightly upward so they
-            # visually align with the play glyph's centre line.
-            arrow_scale = 1.2
-            arrow_offset = -1
-            prev_html = _control_span(prev_sym, False, scale=arrow_scale, offset_px=arrow_offset)
-            centre_html = _control_span(centre_sym, True, centre_scale)
-            next_html = _control_span(next_sym, False, scale=arrow_scale, offset_px=arrow_offset)
-
-            # Lay out the controls in a simple three-column table that spans
-            # the full text content width so the visual left/centre/right
-            # glyphs align with the thirds-based hit-testing in
-            # DisplayWidget.mousePressEvent.
-            controls_html = (
-                "<table width='100%' cellspacing='0' cellpadding='0'><tr>"
-                f"<td align='left'>{prev_html}</td>"
-                f"<td align='center'>{centre_html}</td>"
-                f"<td align='right'>{next_html}</td>"
-                "</tr></table>"
-            )
-
         header_html = (
             f"<div style='font-size:{header_font}pt; font-weight:{header_weight}; "
             f"letter-spacing:1px; margin-left:{self._header_logo_margin}px; "
@@ -592,19 +592,40 @@ class MediaWidget(QLabel):
         body_wrapper = f"<div style='margin-top:8px;'>{body_html}</div>"
 
         html_parts = ["<div style='line-height:1.25'>", header_html, body_wrapper]
-        if controls_html:
-            # Add extra top margin so the controls row sits ~10px lower in
-            # the card while the overall widget size remains governed by the
-            # artwork-driven minimum height.
-            html_parts.append(f"<div style='margin-top:18px;'>{controls_html}</div>")
         html_parts.append("</div>")
         html = "".join(html_parts)
 
         self.setTextFormat(Qt.TextFormat.RichText)
         self.setText(html)
-        self.adjustSize()
-        if self.parent():
-            self._update_position()
+
+        # Lock the card height after the first track so that layout changes
+        # (for example when titles wrap to multiple lines) do not cause the
+        # widget to move vertically on screen. The height cap is allowed to
+        # grow when a later track needs more space, but never shrinks.
+        try:
+            hint_h = self.sizeHint().height()
+        except Exception:
+            hint_h = 0
+        base_min = self.minimumHeight()
+        fixed_candidate = max(220, base_min, hint_h)
+        if self._fixed_card_height is None or fixed_candidate > self._fixed_card_height:
+            self._fixed_card_height = fixed_candidate
+
+        if self._fixed_card_height is not None:
+            self.setMinimumHeight(self._fixed_card_height)
+            self.setMaximumHeight(self._fixed_card_height)
+
+        # On the very first non-empty track update we use this call purely
+        # to establish a stable layout and fixed height, but keep the widget
+        # hidden. The next update with the same track will then perform the
+        # actual fade-in so you never see the intermediate size.
+        if not self._has_seen_first_track:
+            self._has_seen_first_track = True
+            try:
+                self.hide()
+            except Exception:
+                pass
+            return
 
         try:
             payload = asdict(info)
@@ -633,27 +654,20 @@ class MediaWidget(QLabel):
         # when artwork is missing so the widget size stays stable. Text stays
         # anchored on the left side.
         right_margin = max(self._artwork_size + 40, 60)
-        self.setContentsMargins(24, 12, right_margin, 12)
+        # Extra bottom margin so the painted controls row has breathing
+        # room above the card edge while keeping text clear of the glyphs.
+        self.setContentsMargins(24, 12, right_margin, 40)
 
-        # Let the card height track the configured artwork size so large
-        # artwork (e.g. 300px) does not clip and always has comfortable
-        # padding to the top/bottom edges.
-        self.setMinimumHeight(max(220, self._artwork_size + 60))
-
-        # After adjusting margins and height, recompute the widget's anchored
-        # position so we do not "jump" after the fade completes.
+        # After adjusting margins, recompute the widget's anchored position
+        # once so we do not "jump" after the fade completes.
         if self.parent():
             self._update_position()
 
-        # Fade in the widget when the track changes (including the first
-        # time we see media); otherwise just ensure it is visible.
-        track_changed = (
-            prev_info is None
-            or getattr(prev_info, "title", "").strip() != title
-            or getattr(prev_info, "artist", "").strip() != artist
-        )
-        if track_changed:
-            self._start_widget_fade_in(800)
+        # For the very first time the widget becomes visible we use a
+        # simple fade-in. Subsequent track changes update in-place so the
+        # card and controls do not move.
+        if not was_visible:
+            self._start_widget_fade_in(1000)
         else:
             try:
                 self.show()
@@ -701,11 +715,19 @@ class MediaWidget(QLabel):
                     except Exception:
                         dpr = 1.0
                     scale_dpr = max(1.0, dpr)
+
+                    frame_w = size
+                    frame_h = size
                     target_px = int(size * scale_dpr)
+                    # Scale-to-fill inside the square frame while preserving
+                    # aspect ratio (object-fit: cover). We scale with
+                    # KeepAspectRatioByExpanding and then centre the pixmap
+                    # behind the frame, letting the clip path define the
+                    # visible region.
                     scaled = pm.scaled(
                         target_px,
                         target_px,
-                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                         Qt.TransformationMode.SmoothTransformation,
                     )
                     try:
@@ -713,20 +735,20 @@ class MediaWidget(QLabel):
                     except Exception:
                         pass
 
-                    logical_w = int(round(scaled.width() / scale_dpr)) or size
-                    logical_h = int(round(scaled.height() / scale_dpr)) or size
+                    scaled_logical_w = max(1, int(round(scaled.width() / scale_dpr)))
+                    scaled_logical_h = max(1, int(round(scaled.height() / scale_dpr)))
 
                     # Keep a fixed inset from the top/right card borders so the
                     # artwork and its border never touch the outer frame.
                     pad = 20
-                    x = max(pad, self.width() - pad - logical_w)
+                    x = max(pad, self.width() - pad - frame_w)
                     y = pad
                     painter.save()
                     try:
                         if self._artwork_opacity != 1.0:
                             painter.setOpacity(max(0.0, min(1.0, float(self._artwork_opacity))))
 
-                        border_rect = QRect(x, y, logical_w, logical_h).adjusted(-1, -1, 1, 1)
+                        border_rect = QRect(x, y, frame_w, frame_h).adjusted(-1, -1, 1, 1)
 
                         # Clip the artwork to the same rounded/square frame so
                         # pixels never bleed out past the border corners.
@@ -738,7 +760,17 @@ class MediaWidget(QLabel):
                             path.addRect(border_rect)
                         painter.setClipPath(path)
 
-                        painter.drawPixmap(x, y, scaled)
+                        # Centre the scaled artwork inside the frame; because
+                        # we used KeepAspectRatioByExpanding above, the
+                        # pixmap will completely cover the frame in at least
+                        # one dimension and any overflow is clipped by the
+                        # border path.
+                        cx = x + frame_w // 2
+                        cy = y + frame_h // 2
+                        offset_x = int(round(cx - scaled_logical_w / 2))
+                        offset_y = int(round(cy - scaled_logical_h / 2))
+
+                        painter.drawPixmap(offset_x, offset_y, scaled)
 
                         # Artwork border matching the widget frame colour/opacity.
                         if self._bg_border_width > 0 and self._bg_border_color.alpha() > 0:
@@ -759,6 +791,11 @@ class MediaWidget(QLabel):
             # scaling so it stays crisp and properly aligned with the SPOTIFY
             # word rendered by QLabel's rich text.
             self._paint_header_logo(painter)
+
+            # Finally, paint the transport controls row as a static stripe
+            # along the bottom of the text column so its position never
+            # drifts between tracks.
+            self._paint_controls_row(painter)
         except Exception:
             logger.debug("[MEDIA] Failed to paint artwork pixmap", exc_info=True)
 
@@ -930,16 +967,137 @@ class MediaWidget(QLabel):
         finally:
             painter.restore()
 
-    def _start_widget_fade_in(self, duration_ms: int = 800) -> None:
-        """Fade the entire widget in using a graphics opacity effect."""
+    def _paint_controls_row(self, painter: QPainter) -> None:
+        """Paint a static transport controls row along the bottom.
 
-        effect = self._widget_opacity_effect
-        if effect is None:
-            # No effect installed; fall back to an immediate show.
+        The controls are always aligned to the thirds of the text content
+        width (between contentsMargins.left/right) so they visually match
+        the click routing implemented in DisplayWidget.mousePressEvent.
+        """
+
+        if not self._show_controls:
+            return
+
+        info = self._last_info
+        if info is None:
+            return
+
+        try:
+            state = info.state
+        except Exception:
+            state = MediaPlaybackState.UNKNOWN
+
+        width = self.width()
+        height = self.height()
+        if width <= 0 or height <= 0:
+            return
+
+        margins = self.contentsMargins()
+        content_left = margins.left()
+        content_right = width - margins.right()
+        if content_right <= content_left:
+            return
+
+        content_width = content_right - content_left
+        third = content_width / 3.0
+
+        controls_font = max(6, self._font_size - 3)
+        font = QFont(self._font_family, controls_font, QFont.Weight.Medium)
+
+        painter.save()
+        try:
+            painter.setFont(font)
+            fm = QFontMetrics(font)
+
+            row_height = fm.height() + 4
+
+            # Previous anchoring kept the row just above the text bottom
+            # margin. To free up more vertical space for long titles while
+            # keeping the widget's geometry unchanged, we move the controls
+            # down by roughly one SPOTIFY header height and then clamp the
+            # result inside the card bounds.
+            prev_row_top = height - margins.bottom() - row_height - 4
+
+            try:
+                header_font_pt = int(self._header_font_pt) if self._header_font_pt > 0 else self._font_size
+            except Exception:
+                header_font_pt = self._font_size
+
+            header_fm = QFontMetrics(QFont(self._font_family, header_font_pt, QFont.Weight.Bold))
+            header_h = header_fm.height()
+
+            # Target position: one header height lower than the previous
+            # value, but never so low that the glyphs touch the card edge.
+            bottom_pad = 8
+            bottom_limit = height - row_height - bottom_pad
+            target_row_top = prev_row_top + header_h
+            row_top = max(margins.top(), min(bottom_limit, target_row_top))
+
+            from PySide6.QtCore import QRect as _QRect
+
+            left_rect = _QRect(
+                int(content_left),
+                int(row_top),
+                int(third),
+                int(row_height),
+            )
+            centre_rect = _QRect(
+                int(content_left + third),
+                int(row_top),
+                int(third),
+                int(row_height),
+            )
+            right_rect = _QRect(
+                int(content_left + 2 * third),
+                int(row_top),
+                int(third),
+                int(row_height),
+            )
+
+            prev_sym = "\u2190"  # LEFTWARDS ARROW
+            next_sym = "\u2192"  # RIGHTWARDS ARROW
+            if state == MediaPlaybackState.PLAYING:
+                centre_sym = "||"  # pause
+            else:
+                centre_sym = "\u25b6"  # play
+
+            inactive_color = QColor(200, 200, 200, 230)
+            active_color = QColor(255, 255, 255, 255)
+
+            # Side arrows
+            pen = painter.pen()
+            pen.setColor(inactive_color)
+            painter.setPen(pen)
+            painter.drawText(left_rect, Qt.AlignmentFlag.AlignCenter, prev_sym)
+            painter.drawText(right_rect, Qt.AlignmentFlag.AlignCenter, next_sym)
+
+            # Centre play/pause gets a slightly heavier weight and full white
+            # to stand out just enough without drifting in position.
+            font_centre = QFont(self._font_family, controls_font, QFont.Weight.Bold)
+            painter.setFont(font_centre)
+            pen.setColor(active_color)
+            painter.setPen(pen)
+            painter.drawText(centre_rect, Qt.AlignmentFlag.AlignCenter, centre_sym)
+        finally:
+            painter.restore()
+
+    def _start_widget_fade_in(self, duration_ms: int = 1000) -> None:
+        """Fade the entire widget in, then attach the global drop shadow."""
+
+        if duration_ms <= 0:
             try:
                 self.show()
             except Exception:
                 pass
+            if self._shadow_config is not None:
+                try:
+                    apply_widget_shadow(
+                        self,
+                        self._shadow_config,
+                        has_background_frame=self._show_background,
+                    )
+                except Exception:
+                    logger.debug("[MEDIA] Failed to apply widget shadow without fade", exc_info=True)
             return
 
         # Stop any in-flight animation.
@@ -951,20 +1109,41 @@ class MediaWidget(QLabel):
             self._widget_fade_anim = None
 
         try:
+            effect = QGraphicsOpacityEffect(self)
+            effect.setOpacity(0.0)
+            self.setGraphicsEffect(effect)
+        except Exception:
+            # If we cannot install the effect, fall back to an immediate
+            # show and try to apply the shared shadow.
+            try:
+                self.show()
+            except Exception:
+                pass
+            if self._shadow_config is not None:
+                try:
+                    apply_widget_shadow(
+                        self,
+                        self._shadow_config,
+                        has_background_frame=self._show_background,
+                    )
+                except Exception:
+                    logger.debug("[MEDIA] Failed to apply widget shadow in fallback path", exc_info=True)
+            return
+
+        self._widget_opacity_effect = effect
+
+        try:
             self.show()
         except Exception:
             pass
-
-        try:
-            effect.setOpacity(0.0)
-        except Exception:
-            return
 
         anim = QVariantAnimation(self)
         anim.setDuration(max(0, int(duration_ms)))
         anim.setStartValue(0.0)
         anim.setEndValue(1.0)
-        anim.setEasingCurve(QEasingCurve.OutQuad)
+        # OutCubic gives a slightly softer landing than OutQuad so the
+        # fade does not feel like it "snaps" in the last few frames.
+        anim.setEasingCurve(QEasingCurve.OutCubic)
 
         def _on_value_changed(value):
             try:
@@ -977,9 +1156,20 @@ class MediaWidget(QLabel):
         def _on_finished() -> None:
             self._widget_fade_anim = None
             try:
-                effect.setOpacity(1.0)
+                self.setGraphicsEffect(None)
             except Exception:
                 pass
+            self._widget_opacity_effect = None
+
+            if self._shadow_config is not None:
+                try:
+                    apply_widget_shadow(
+                        self,
+                        self._shadow_config,
+                        has_background_frame=self._show_background,
+                    )
+                except Exception:
+                    logger.debug("[MEDIA] Failed to apply widget shadow after fade", exc_info=True)
 
         anim.finished.connect(_on_finished)
         self._widget_fade_anim = anim

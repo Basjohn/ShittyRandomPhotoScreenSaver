@@ -10,6 +10,9 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 
+_VERBOSE: bool = False
+
+
 class ColoredFormatter(logging.Formatter):
     """Formatter that adds colors to console output."""
     
@@ -66,13 +69,19 @@ class ColoredFormatter(logging.Formatter):
         return super().format(record)
 
 
-def setup_logging(debug: bool = False) -> None:
+def setup_logging(debug: bool = False, verbose: bool = False) -> None:
     """
     Configure application logging with file rotation.
     
     Args:
-        debug: If True, set log level to DEBUG, otherwise INFO
+        debug: If True, set log level to DEBUG and enable console output.
+        verbose: When True, enables additional high-volume debug logs in
+            selected modules (media widget polling, raw settings dumps,
+            etc.). Verbose mode also implies debug-level logging.
     """
+    global _VERBOSE
+
+    debug_enabled = debug or verbose
     # Create logs directory
     log_dir = Path(__file__).parent.parent.parent / "logs"
     log_dir.mkdir(exist_ok=True)
@@ -80,7 +89,7 @@ def setup_logging(debug: bool = False) -> None:
     log_file = log_dir / "screensaver.log"
     
     # Configure root logger
-    level = logging.DEBUG if debug else logging.INFO
+    level = logging.DEBUG if debug_enabled else logging.INFO
     
     # Create formatter with aligned columns for logger name and level
     formatter = logging.Formatter(
@@ -100,7 +109,7 @@ def setup_logging(debug: bool = False) -> None:
     
     # Console handler (for development) - with colors in debug mode
     console_handler = logging.StreamHandler(sys.stdout)
-    if debug and sys.stdout.isatty():
+    if debug_enabled and sys.stdout.isatty():
         # Use colored formatter for terminal output
         colored_formatter = ColoredFormatter(
             '%(asctime)s - %(name)-30s - %(levelname)-8s - %(message)s',
@@ -116,12 +125,25 @@ def setup_logging(debug: bool = False) -> None:
     root_logger.setLevel(level)
     root_logger.addHandler(file_handler)
     
-    if debug:
+    if debug_enabled:
         root_logger.addHandler(console_handler)
+
+    # Tame particularly noisy third-party libraries so their DEBUG-level
+    # chatter (HTTP connection pools, asyncio internals, etc.) only shows
+    # up when explicit verbose logging is requested.
+    noisy_level = logging.DEBUG if verbose else logging.INFO
+    for name in ("urllib3", "urllib3.connectionpool", "asyncio"):
+        logging.getLogger(name).setLevel(noisy_level)
     
     # Log startup
+    _VERBOSE = bool(verbose)
+
     root_logger.info("=" * 60)
-    root_logger.info("Screensaver logging initialized (debug=%s)", debug)
+    root_logger.info(
+        "Screensaver logging initialized (debug=%s, verbose=%s)",
+        debug_enabled,
+        _VERBOSE,
+    )
     root_logger.info("=" * 60)
 
 
@@ -144,3 +166,9 @@ def get_logger(name: str) -> logging.Logger:
     """Get a logger instance with optional short-name overrides for noisy modules."""
     actual = _SHORT_NAME_OVERRIDES.get(name, name)
     return logging.getLogger(actual)
+
+
+def is_verbose_logging() -> bool:
+    """Return True when verbose debug logging is enabled globally."""
+
+    return _VERBOSE

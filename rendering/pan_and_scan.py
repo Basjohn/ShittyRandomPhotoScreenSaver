@@ -346,7 +346,10 @@ class PanAndScan:
         """
         Scale image to be larger than display for panning.
         
-        Image should be 120-150% of display size to allow room for movement.
+        Image should be at least as large as the display and ideally slightly
+        larger to allow room for movement. To preserve quality, we avoid
+        downscaling already-large images and only upscale when the source is
+        genuinely smaller than the display.
         
         Args:
             pixmap: Original image
@@ -359,36 +362,57 @@ class PanAndScan:
         if pixmap.height() == 0 or display_size.height() == 0:
             logger.error(f"Invalid dimensions for pan: display={display_size.width()}x{display_size.height()}, img={pixmap.width()}x{pixmap.height()}")
             return pixmap  # Return original
-        
-        img_ratio = pixmap.width() / pixmap.height()
-        screen_ratio = display_size.width() / display_size.height()
-        
-        # Scale to 130% of display size minimum
-        scale_factor = 1.3
-        
-        if img_ratio > screen_ratio:
-            # Image is wider - scale by height
-            target_height = int(display_size.height() * scale_factor)
-            target_width = int(target_height * img_ratio)
-        else:
-            # Image is taller - scale by width
-            target_width = int(display_size.width() * scale_factor)
-            target_height = int(target_width / img_ratio)
-        
-        # Ensure minimum size
-        target_width = max(target_width, int(display_size.width() * 1.2))
-        target_height = max(target_height, int(display_size.height() * 1.2))
-        
+
+        img_w = float(pixmap.width())
+        img_h = float(pixmap.height())
+
+        # Take the parent display's device pixel ratio into account so that
+        # pan & scan uses the same physical scaling as the main FILL path.
+        dpr = 1.0
+        try:
+            parent = getattr(self, "_parent", None)
+            if parent is not None:
+                dpr = float(getattr(parent, "_device_pixel_ratio", 1.0))
+        except Exception:
+            dpr = 1.0
+        dpr = max(1.0, dpr)
+
+        scr_w = float(display_size.width()) * dpr
+        scr_h = float(display_size.height()) * dpr
+
+        # Base scale relative to display: aim for only ~5% larger than the
+        # widget in the dominant dimension so movement is visible but the
+        # framing change from the static image is almost imperceptible.
+        base_scale = 1.05
+
+        # How much we need to scale the source to just cover the display
+        # (before adding the extra 10% margin).
+        cover_w = scr_w / max(1.0, img_w)
+        cover_h = scr_h / max(1.0, img_h)
+        cover_factor = max(cover_w, cover_h)
+
+        scale = base_scale * cover_factor
+
+        target_width = max(int(img_w * scale), int(scr_w))
+        target_height = max(int(img_h * scale), int(scr_h))
+
         from PySide6.QtCore import Qt
         scaled = pixmap.scaled(
-            target_width, target_height,
+            target_width,
+            target_height,
             Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation
+            Qt.TransformationMode.SmoothTransformation,
         )
-        
-        logger.debug(f"Scaled for pan: {pixmap.width()}x{pixmap.height()} → "
-                    f"{scaled.width()}x{scaled.height()}")
-        
+
+        logger.debug(
+            "Scaled for pan: %dx%d → %dx%d (scale=%.3f)",
+            int(img_w),
+            int(img_h),
+            scaled.width(),
+            scaled.height(),
+            scale,
+        )
+
         return scaled
     
     def _calculate_auto_speed(self) -> None:
@@ -401,7 +425,7 @@ class PanAndScan:
         # FIX: Add error logging for invalid sizes
         if not self._display_size.isValid() or not self._image_size.isValid():
             logger.error(f"Invalid sizes for pan auto-speed: display={self._display_size.width()}x{self._display_size.height()}, image={self._image_size.width()}x{self._image_size.height()}")
-            self._speed_pixels_per_second = 20.0
+            self._speed_pixels_per_second = 6.0
             return
         
         # Calculate available drift space
@@ -411,18 +435,20 @@ class PanAndScan:
         )
         
         if drift_space <= 0:
-            self._speed_pixels_per_second = 8.0  # Minimum fallback
+            # Essentially no room to move; keep motion extremely subtle.
+            self._speed_pixels_per_second = 3.0
             return
         
-        # Cover 30-50% of drift space during transition interval
-        coverage_ratio = 0.4
+        # Cover roughly 20–30% of drift space during the transition interval
+        # for a gentle but still clearly visible motion.
+        coverage_ratio = 0.25
         distance_to_cover = drift_space * coverage_ratio
         
         # Calculate speed (pixels per second) - gentle visible movement
-        self._speed_pixels_per_second = (distance_to_cover / self._transition_interval_sec) / 4.0
+        self._speed_pixels_per_second = distance_to_cover / self._transition_interval_sec
         
-        # Clamp to reasonable range: 8-25 px/s for auto
-        self._speed_pixels_per_second = max(8.0, min(25.0, self._speed_pixels_per_second))
+        # Clamp to a slower, less aggressive range for auto mode.
+        self._speed_pixels_per_second = max(3.0, min(15.0, self._speed_pixels_per_second))
         
         logger.debug(f"Auto speed calculated: {self._speed_pixels_per_second:.1f} px/s "
                     f"(drift_space={drift_space}, interval={self._transition_interval_sec}s)")

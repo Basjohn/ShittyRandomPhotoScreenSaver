@@ -112,3 +112,4 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
 ## Future Enhancements
 - Compute-pool pre-scale-to-screen (per-display DPR) ahead of time for the next image.
 - Transition sync improvements across displays using lock-free SPSC queues.
+- Additional **GL-only, compositor-backed transitions** (Peel, Rain Drops, Warp Dissolve, 3D Block Spins, Claw Marks) implemented as new transition types under the existing compositor architecture. These effects are only exposed when `display.hw_accel=True` and must either be hidden or mapped to a safe CPU fallback (e.g. Crossfade) when hardware acceleration is disabled. Detailed design and feasibility notes live in `Docs/GL_Transitions_Proposal.md`.

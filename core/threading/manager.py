@@ -12,7 +12,7 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 from utils.lockfree import SPSCQueue, TripleBuffer
 from PySide6.QtCore import QTimer, QObject, QThread, QCoreApplication, Signal
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_verbose_logging
 
 logger = get_logger(__name__)
 
@@ -267,7 +267,8 @@ class ThreadManager:
         self._enqueue_mutation(('register_active', task))
         self._enqueue_mutation(('submitted', pool_type.value))
         
-        logger.debug(f"Submitted task {task.task_id} to {pool_type.value} pool")
+        if is_verbose_logging():
+            logger.debug(f"Submitted task {task.task_id} to {pool_type.value} pool")
         return task.task_id
 
     def submit_io_task(self, func: Callable, *args, **kwargs) -> str:
