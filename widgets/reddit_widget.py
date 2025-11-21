@@ -306,13 +306,12 @@ class RedditWidget(QLabel):
                 "User-Agent": "ShittyRandomPhotoScreenSaver/1.0 (+https://github.com/Basjohn/ShittyRandomPhotoScreenSaver)",
             }
 
+            # Visible item limit (what the UI will actually show) is still
+            # derived from the configured limit, but we always fetch the same
+            # number of Reddit entries so that 4-item and 10-item modes share
+            # a common candidate pool before recency sorting.
             effective_limit = max(1, min(int(limit), 25))
-            if effective_limit <= 5:
-                fetch_limit = min(25, max(effective_limit * 3, effective_limit + 5))
-            elif effective_limit <= 10:
-                fetch_limit = min(25, max(effective_limit * 2, effective_limit + 5))
-            else:
-                fetch_limit = effective_limit
+            fetch_limit = 25
 
             params = {"limit": fetch_limit}
 
