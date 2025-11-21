@@ -79,6 +79,9 @@ GL Path: The only supported GL route uses a single `GLCompositorWidget` per disp
 - **FR-6.2**: Four tabs: Sources, Transitions, Widgets, About
 - **FR-6.3**: Instant save and apply
 - **FR-6.4**: Persistent settings
+ - **FR-6.5**: Settings dialog geometry is DPI-aware: defaults to ~60% of the primary monitor, saves/restores per-user geometry, and clamps restored bounds to the available screen so the window never opens off-screen.
+ - **FR-6.6**: Settings dialog uses an app-owned dark palette with monochrome highlights for tabs, lists, combo boxes and spin buttons; OS accent colours must not override the configured theme.
+ - **FR-6.7**: Numeric +/- controls use press-and-hold acceleration and shared visual styling across Display, Widgets and Transitions tabs.
 
 #### 7. Windows Integration
 - **FR-7.1**: Support `/s` argument (run screensaver)

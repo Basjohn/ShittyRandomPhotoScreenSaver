@@ -114,14 +114,20 @@ class WidgetsTab(QWidget):
             "QPushButton {"
             " background-color: #2a2a2a;"
             " color: #ffffff;"
-            " border: 1px solid #3a3a3a;"
             " border-radius: 4px;"
             " padding: 4px 12px;"
+            " border-top: 1px solid rgba(110, 110, 110, 0.8);"
+            " border-left: 1px solid rgba(110, 110, 110, 0.8);"
+            " border-right: 2px solid rgba(0, 0, 0, 0.75);"
+            " border-bottom: 2px solid rgba(0, 0, 0, 0.8);"
             " }"
             "QPushButton:checked {"
             " background-color: #3a3a3a;"
-            " border-color: #5c5c5c;"
             " font-weight: bold;"
+            " border-top: 2px solid rgba(0, 0, 0, 0.75);"
+            " border-left: 2px solid rgba(0, 0, 0, 0.75);"
+            " border-right: 1px solid rgba(140, 140, 140, 0.85);"
+            " border-bottom: 1px solid rgba(140, 140, 140, 0.85);"
             " }"
         )
 
@@ -748,6 +754,8 @@ class WidgetsTab(QWidget):
                 height: 12px;
                 background: #2a2a2a;
                 border-left: 1px solid #3a3a3a;
+                border-top: 1px solid #3a3a3a;
+                border-right: 1px solid #3a3a3a;
                 border-bottom: 1px solid #3a3a3a;
                 margin: 0px;
             }
@@ -758,6 +766,8 @@ class WidgetsTab(QWidget):
                 height: 12px;
                 background: #2a2a2a;
                 border-left: 1px solid #3a3a3a;
+                border-right: 1px solid #3a3a3a;
+                border-bottom: 1px solid #3a3a3a;
                 margin: 0px;
             }
             QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,

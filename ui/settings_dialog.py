@@ -57,10 +57,17 @@ class CustomTitleBar(QWidget):
         layout.setSpacing(10)
         
         # Title
-        self.title_label = QLabel("Screensaver Settings")
+        self.title_label = QLabel("SRPSS SETTINGS")
         self.title_label.setObjectName("titleBarLabel")
         title_font = QFont("Segoe UI", 11, QFont.Weight.Bold)
         self.title_label.setFont(title_font)
+        # Subtle drop shadow so the title reads crisply against bright
+        # backgrounds without overwhelming the frame shadow.
+        title_shadow = QGraphicsDropShadowEffect(self)
+        title_shadow.setBlurRadius(8)
+        title_shadow.setOffset(0, 1)
+        title_shadow.setColor(QColor(0, 0, 0, 140))
+        self.title_label.setGraphicsEffect(title_shadow)
         
         # Buttons
         self.minimize_btn = QPushButton("−")
@@ -261,7 +268,7 @@ class SettingsDialog(QDialog):
                     
                     #dialogContainer {
                         background-color: #2B2B2B;
-                        border: 2px solid #5a5a5a;
+                        border: 2px solid #9a9a9a;
                         border-radius: 10px;
                     }
                     
@@ -313,8 +320,10 @@ class SettingsDialog(QDialog):
                         border: none;
                         text-align: left;
                         padding: 10px 20px;
-                        margin: 2px;
+                        margin: 3px 5px 5px 3px; /* extra space for bottom-right shadow */
                         border-radius: 6px;
+                        border-bottom: 2px solid rgba(0, 0, 0, 0.6);
+                        border-right: 2px solid rgba(0, 0, 0, 0.7);
                     }
                     
                     #tabButton:hover {
@@ -350,13 +359,20 @@ class SettingsDialog(QDialog):
                     QComboBox {
                         background-color: rgba(45, 45, 45, 0.8);
                         color: #ffffff;
-                        border: 1px solid rgba(90, 90, 90, 0.8);
                         border-radius: 4px;
                         padding: 6px;
+                        border-top: 1px solid rgba(90, 90, 90, 0.75);
+                        border-left: 1px solid rgba(90, 90, 90, 0.75);
+                        border-right: 2px solid rgba(0, 0, 0, 0.7);
+                        border-bottom: 2px solid rgba(0, 0, 0, 0.75);
                     }
                     
-                    QComboBox:hover {
-                        border: 1px solid rgba(200, 200, 200, 0.85);
+                    QComboBox:hover,
+                    QComboBox:focus {
+                        border-top: 1px solid rgba(200, 200, 200, 0.8);
+                        border-left: 1px solid rgba(200, 200, 200, 0.8);
+                        border-right: 2px solid rgba(0, 0, 0, 0.7);
+                        border-bottom: 2px solid rgba(0, 0, 0, 0.75);
                     }
                     
                     QComboBox::drop-down {
@@ -410,19 +426,30 @@ class SettingsDialog(QDialog):
                     QPushButton {
                         background-color: rgba(60, 60, 60, 0.8);
                         color: #ffffff;
-                        border: 1px solid rgba(90, 90, 90, 0.8);
                         border-radius: 4px;
                         padding: 8px 16px;
+                        border-top: 1px solid rgba(80, 80, 80, 0.7);
+                        border-left: 1px solid rgba(80, 80, 80, 0.7);
+                        border-right: 2px solid rgba(0, 0, 0, 0.65);
+                        border-bottom: 2px solid rgba(0, 0, 0, 0.7);
                     }
                     
                     QPushButton:hover {
                         background-color: rgba(75, 75, 75, 0.8);
-                        border: 1px solid rgba(110, 110, 110, 0.8);
+                        border-top: 1px solid rgba(96, 96, 96, 0.8);
+                        border-left: 1px solid rgba(96, 96, 96, 0.8);
+                        border-right: 2px solid rgba(0, 0, 0, 0.7);
+                        border-bottom: 2px solid rgba(0, 0, 0, 0.75);
                     }
                     
                     QPushButton:pressed {
                         background-color: rgba(50, 50, 50, 0.8);
-                        border: 1px solid rgba(70, 70, 70, 0.8);
+                        border-top: 1px solid rgba(60, 60, 60, 0.75);
+                        border-left: 1px solid rgba(60, 60, 60, 0.75);
+                        border-right: 1px solid rgba(0, 0, 0, 0.65);
+                        border-bottom: 1px solid rgba(0, 0, 0, 0.65);
+                        margin-top: 1px;
+                        margin-left: 1px;
                     }
                     
                     QGroupBox {
@@ -452,13 +479,19 @@ class SettingsDialog(QDialog):
                         width: 18px;
                         height: 18px;
                         background-color: rgba(45, 45, 45, 0.8);
-                        border: 1px solid rgba(90, 90, 90, 0.8);
                         border-radius: 3px;
+                        border-top: 1px solid rgba(90, 90, 90, 0.75);
+                        border-left: 1px solid rgba(90, 90, 90, 0.75);
+                        border-right: 2px solid rgba(0, 0, 0, 0.7);
+                        border-bottom: 2px solid rgba(0, 0, 0, 0.75);
                     }
                     
                     QCheckBox::indicator:checked {
-                        background-color: rgba(210, 210, 210, 0.9);
-                        border: 1px solid rgba(210, 210, 210, 0.9);
+                        background-color: rgba(210, 210, 210, 0.85);
+                        border-top: 1px solid rgba(200, 200, 200, 0.8);
+                        border-left: 1px solid rgba(200, 200, 200, 0.8);
+                        border-right: 2px solid rgba(60, 60, 60, 0.7);
+                        border-bottom: 2px solid rgba(60, 60, 60, 0.75);
                     }
                     
                     QLabel {
@@ -708,14 +741,26 @@ class SettingsDialog(QDialog):
                 "  border-radius: 16px;"
                 "  background-color: #2f2f2f;"
                 "  color: #ffffff;"
-                "  border: 1px solid #555555;"
+                "  border-top: 1px solid rgba(120, 120, 120, 0.95);"
+                "  border-left: 1px solid rgba(120, 120, 120, 0.95);"
+                "  border-right: 2px solid rgba(0, 0, 0, 0.9);"
+                "  border-bottom: 2px solid rgba(0, 0, 0, 0.95);"
                 "}"
                 "QPushButton:hover {"
                 "  background-color: #3a3a3a;"
-                "  border-color: #777777;"
+                "  border-top: 1px solid rgba(140, 140, 140, 0.95);"
+                "  border-left: 1px solid rgba(140, 140, 140, 0.95);"
+                "  border-right: 2px solid rgba(0, 0, 0, 0.95);"
+                "  border-bottom: 2px solid rgba(0, 0, 0, 0.98);"
                 "}"
                 "QPushButton:pressed {"
                 "  background-color: #262626;"
+                "  border-top: 1px solid rgba(80, 80, 80, 0.9);"
+                "  border-left: 1px solid rgba(80, 80, 80, 0.9);"
+                "  border-right: 1px solid rgba(0, 0, 0, 0.9);"
+                "  border-bottom: 1px solid rgba(0, 0, 0, 0.9);"
+                "  margin-top: 1px;"
+                "  margin-left: 1px;"
                 "}"
             )
 

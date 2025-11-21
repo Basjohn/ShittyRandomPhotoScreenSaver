@@ -1006,6 +1006,16 @@ SETTINGS_CHANGED = "settings.changed"
 - `apply_widget_shadow(widget, config, has_background_frame)` - Apply/remove a `QGraphicsDropShadowEffect` based on the shared `widgets.shadows` settings block (enabled flag, colour, offset, blur radius, text/frame opacity). Skips widgets that already have a non-shadow graphics effect attached.
 
 ---
+### `ui/settings_dialog.py` 🟢 COMPLETE
+**Purpose**: Frameless dark-themed Settings dialog wrapping the configuration tabs (Sources, Display, Transitions, Widgets, About).  
+**Status**: ✅ Implemented  
+**Key Features**:
+- Custom title bar with window controls and a drop shadow, resizable via a bottom-right size grip.
+- App-owned dark QSS theme with monochrome highlights; Windows accent colours do not override tab, list, or combo-box selection states.
+- Per-user geometry: defaults to ~60% of the primary screen and saves/restores size and position while clamping to the visible area so the dialog never opens off-screen.
+- Hosts `SourcesTab`, `DisplayTab`, `TransitionsTab`, and `WidgetsTab` with instant-apply settings.
+
+---
 
 ## Image Sources (`sources/`)
 

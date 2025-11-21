@@ -275,6 +275,8 @@ class DisplayTab(QWidget):
                 height: 12px;
                 background: #2a2a2a;
                 border-left: 1px solid #3a3a3a;
+                border-top: 1px solid #3a3a3a;
+                border-right: 1px solid #3a3a3a;
                 border-bottom: 1px solid #3a3a3a;
                 margin: 0px;
             }
@@ -285,6 +287,8 @@ class DisplayTab(QWidget):
                 height: 12px;
                 background: #2a2a2a;
                 border-left: 1px solid #3a3a3a;
+                border-right: 1px solid #3a3a3a;
+                border-bottom: 1px solid #3a3a3a;
                 margin: 0px;
             }
             QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
