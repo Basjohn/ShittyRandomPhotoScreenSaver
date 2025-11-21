@@ -112,7 +112,7 @@ The widget should be **read-only**, performant, and respect the projects themin
 
 - If Reddit JSON fetch fails:
   - Log a clear warning with the HTTP status / exception.
-  - Show a small message in the widget: e.g. Unable to load Reddit feed (see log).
+  - DO NOT SHOW/DRAW WIDGET AT ALL
   - Do **not** spam retry; use a backoff timer.
 - If the endpoint behaviour changes dramatically (breaking parse):
   - Catch parse errors and log them.

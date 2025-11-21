@@ -3,7 +3,7 @@ Clock widget for screensaver overlay.
 
 Displays current time with configurable format, position, and styling.
 """
-from typing import Optional, Union
+from typing import Optional, Union, Dict, Any
 from datetime import datetime, timezone, timedelta
 from enum import Enum
 import math
@@ -14,10 +14,11 @@ try:
 except ImportError:
     PYTZ_AVAILABLE = False
 
-from PySide6.QtWidgets import QLabel, QWidget
-from PySide6.QtCore import QTimer, Qt, Signal
+from PySide6.QtWidgets import QLabel, QWidget, QGraphicsOpacityEffect
+from PySide6.QtCore import QTimer, Qt, Signal, QVariantAnimation, QEasingCurve
 from PySide6.QtGui import QFont, QColor, QPainter, QPen, QPaintEvent
 
+from widgets.shadow_utils import apply_widget_shadow
 from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
@@ -104,9 +105,16 @@ class ClockWidget(QLabel):
         # Display mode: digital (default) or analogue clock-face rendering.
         self._display_mode: str = "digital"
         self._show_numerals: bool = True
+        # Optional analogue-only drop shadow under the clock face and hands.
+        self._analog_face_shadow: bool = True
 
         # Last timestamp used for analogue rendering.
         self._current_dt: Optional[datetime] = None
+        self._fade_effect: Optional[QGraphicsOpacityEffect] = None
+        self._fade_anim: Optional[QVariantAnimation] = None
+        self._shadow_config: Optional[Dict[str, Any]] = None
+        self._has_faded_in: bool = False
+        self._overlay_name: str = "clock"
         
         # Setup widget
         self._setup_ui()
@@ -145,6 +153,12 @@ class ClockWidget(QLabel):
         # Initially hidden
         self.hide()
     
+    def set_shadow_config(self, config: Optional[Dict[str, Any]]) -> None:
+        self._shadow_config = config
+
+    def set_overlay_name(self, name: str) -> None:
+        self._overlay_name = str(name) or "clock"
+    
     def start(self) -> None:
         """Start clock updates."""
         if self._enabled:
@@ -160,11 +174,20 @@ class ClockWidget(QLabel):
         self._timer.start(1000)  # 1 second
         
         self._enabled = True
-        self.show()
-        if self._tz_label:
-            self._tz_label.show()
-            self._tz_label.raise_()
-        
+        parent = self.parent()
+
+        def _starter() -> None:
+            self._start_widget_fade_in(1500)
+
+        if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
+            try:
+                overlay_name = getattr(self, "_overlay_name", "clock")
+                parent.request_overlay_fade_sync(overlay_name, _starter)
+            except Exception:
+                _starter()
+        else:
+            _starter()
+
         logger.info("Clock widget started")
     
     def stop(self) -> None:
@@ -184,6 +207,117 @@ class ClockWidget(QLabel):
         self.hide()
         
         logger.debug("Clock widget stopped")
+    
+    def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:
+        if duration_ms <= 0:
+            try:
+                self.show()
+            except Exception:
+                pass
+            if self._tz_label:
+                try:
+                    self._tz_label.show()
+                    self._tz_label.raise_()
+                except Exception:
+                    pass
+            if self._shadow_config is not None:
+                try:
+                    apply_widget_shadow(
+                        self,
+                        self._shadow_config,
+                        has_background_frame=self._show_background,
+                    )
+                except Exception:
+                    pass
+            self._has_faded_in = True
+            return
+
+        try:
+            effect = self._fade_effect
+            if effect is None:
+                effect = QGraphicsOpacityEffect(self)
+                self._fade_effect = effect
+            effect.setOpacity(0.0)
+            self.setGraphicsEffect(effect)
+        except Exception:
+            try:
+                self.show()
+            except Exception:
+                pass
+            if self._tz_label:
+                try:
+                    self._tz_label.show()
+                    self._tz_label.raise_()
+                except Exception:
+                    pass
+            if self._shadow_config is not None:
+                try:
+                    apply_widget_shadow(
+                        self,
+                        self._shadow_config,
+                        has_background_frame=self._show_background,
+                    )
+                except Exception:
+                    pass
+            self._has_faded_in = True
+            return
+
+        if self.parent():
+            try:
+                self._update_position()
+            except Exception:
+                pass
+
+        try:
+            self.show()
+        except Exception:
+            pass
+        if self._tz_label:
+            try:
+                self._tz_label.show()
+                self._tz_label.raise_()
+            except Exception:
+                pass
+
+        anim = QVariantAnimation(self)
+        anim.setDuration(max(0, int(duration_ms)))
+        anim.setStartValue(0.0)
+        anim.setEndValue(1.0)
+        try:
+            anim.setEasingCurve(QEasingCurve.InOutCubic)
+        except Exception:
+            pass
+
+        def _on_value_changed(value: Any) -> None:
+            try:
+                if self._fade_effect is not None:
+                    self._fade_effect.setOpacity(float(value))
+            except Exception:
+                pass
+
+        anim.valueChanged.connect(_on_value_changed)
+
+        def _on_finished() -> None:
+            self._fade_anim = None
+            try:
+                self.setGraphicsEffect(None)
+            except Exception:
+                pass
+            self._fade_effect = None
+            if self._shadow_config is not None:
+                try:
+                    apply_widget_shadow(
+                        self,
+                        self._shadow_config,
+                        has_background_frame=self._show_background,
+                    )
+                except Exception:
+                    pass
+            self._has_faded_in = True
+
+        anim.finished.connect(_on_finished)
+        self._fade_anim = anim
+        anim.start()
     
     def is_running(self) -> bool:
         """Check if clock is running."""
@@ -509,6 +643,13 @@ class ClockWidget(QLabel):
         if self._display_mode == "analog":
             self.update()
 
+    def set_analog_face_shadow(self, enabled: bool) -> None:
+        """Enable or disable the analogue face/hand drop shadow effect."""
+
+        self._analog_face_shadow = bool(enabled)
+        if self._display_mode == "analog":
+            self.update()
+
     def set_font_family(self, family: str) -> None:
         """
         Set font family.
@@ -766,6 +907,20 @@ class ClockWidget(QLabel):
         if radius <= 0:
             return
 
+        # Optional subtle drop shadow under the analogue clock face.
+        if self._analog_face_shadow:
+            shadow_color = QColor(0, 0, 0, max(50, self._text_color.alpha() // 5))
+            shadow_pen = QPen(shadow_color)
+            shadow_pen.setWidth(2)
+            painter.setPen(shadow_pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawEllipse(
+                center_x - radius + 2,
+                center_y - radius + 2,
+                radius * 2,
+                radius * 2,
+            )
+
         # Clock face border
         face_pen = QPen(self._text_color)
         face_pen.setWidth(2)
@@ -825,11 +980,12 @@ class ClockWidget(QLabel):
             ex = center_x + int(cos_a * length)
             ey = center_y + int(sin_a * length)
 
-            shadow_color = QColor(0, 0, 0, max(60, self._text_color.alpha() // 4))
-            shadow_pen = QPen(shadow_color)
-            shadow_pen.setWidth(thickness)
-            painter.setPen(shadow_pen)
-            painter.drawLine(center_x + 2, center_y + 2, ex + 2, ey + 2)
+            if self._analog_face_shadow:
+                shadow_color = QColor(0, 0, 0, max(45, self._text_color.alpha() // 4))
+                shadow_pen = QPen(shadow_color)
+                shadow_pen.setWidth(thickness)
+                painter.setPen(shadow_pen)
+                painter.drawLine(center_x + 2, center_y + 2, ex + 2, ey + 2)
 
             hand_pen = QPen(self._text_color)
             hand_pen.setWidth(thickness)

@@ -220,8 +220,12 @@ GL Path: The only supported GL route uses a single `GLCompositorWidget` per disp
 - **Features**: Progress tracking (0.0-1.0), configurable duration, easing curves; GL overlays publish readiness flags to avoid fallback paints
 
 #### 6. Overlay Widgets
-- **Types**: ClockWidget, WeatherWidget, MediaWidget (Spotify)
-- **Features**: Position, transparency, auto-update. All overlay widgets are configured exclusively via the canonical nested `widgets` map in settings (`widgets.clock`, `widgets.clock2`, `widgets.clock3`, `widgets.weather`, `widgets.media`), which is initialised and kept up to date by `SettingsManager._set_defaults()` + `_ensure_widgets_defaults()` with **no widget-specific default helpers**. The MediaWidget is a Spotify-specific overlay on Windows that shows playback state, track/artist/album text, and optional album artwork via the centralized media controller. It hides itself entirely when no Spotify GSMTC session is available or when media APIs are unavailable, and interaction is gated by Ctrl-held / hard-exit input modes. Creation of the MediaWidget at runtime is gated strictly by `widgets.media.enabled` and the configured `widgets.media.monitor` selection.
+- **Types**: ClockWidget, WeatherWidget, MediaWidget (Spotify), RedditWidget
+- **Features**: Position, transparency, auto-update. All overlay widgets are configured exclusively via the canonical nested `widgets` map in settings (`widgets.clock`, `widgets.clock2`, `widgets.clock3`, `widgets.weather`, `widgets.media`, `widgets.reddit`), which is initialised and kept up to date by `SettingsManager._set_defaults()` + `_ensure_widgets_defaults()` with **no widget-specific default helpers**.
+
+  - The MediaWidget is a Spotify-specific overlay on Windows that shows playback state, track/artist/album text, and optional album artwork via the centralized media controller. It hides itself entirely when no Spotify GSMTC session is available or when media APIs are unavailable, and interaction is gated by Ctrl-held / hard-exit input modes. Creation of the MediaWidget at runtime is gated strictly by `widgets.media.enabled` and the configured `widgets.media.monitor` selection.
+
+  - The RedditWidget is an optional, read-only overlay that lists the top N posts from a configured subreddit using Reddit's public JSON listing endpoints (no API key). It renders a Reddit logo + `r/<subreddit>` header, followed by a compact, age-labelled list of posts (e.g. `15m Ago`, `1hr Ago`) with ellided titles. Fetching and JSON parsing run on the ThreadManager IO pool; failures keep the screensaver running and either hide the widget (no valid data yet) or continue showing the last successful sample. Interaction is gated by the same Ctrl-held / hard-exit modes as the MediaWidget: clicks on the header open the subreddit in the default browser, clicks on rows open the corresponding post URL, and both actions intentionally close the screensaver after launching the browser.
 
 #### 7. Configuration UI
 - **Main**: SettingsDialog
@@ -389,6 +393,22 @@ GL Path: The only supported GL route uses a single `GLCompositorWidget` per disp
             'border_color': [255, 255, 255, 255],
             'border_opacity': 1.0,
             'show_icons': True,
+        },
+        'reddit': {
+            'enabled': False,
+            'monitor': 'ALL',              # 'ALL' | 1 | 2 | 3
+            'position': 'Bottom Right',    # 'Top Left' | 'Top Right' | 'Bottom Left' | 'Bottom Right'
+            'subreddit': 'wallpapers',     # subreddit slug or full URL (normalised to slug)
+            'font_family': 'Segoe UI',
+            'font_size': 18,
+            'margin': 20,
+            'color': [255, 255, 255, 230], # text colour (RGBA)
+            'show_background': True,
+            'bg_opacity': 0.9,
+            'bg_color': [64, 64, 64, 255],
+            'border_color': [128, 128, 128, 255],
+            'border_opacity': 0.8,
+            'limit': 10,                   # number of posts to display (5 or 10 exposed via UI)
         },
         'media': {
             'enabled': False,

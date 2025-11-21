@@ -104,6 +104,34 @@ Checkboxes: `[ ]` = active work; `[x]` = completed or historical items retained 
 
 ## 11. Widgets, Input & GL Startup (2025-11-15 baseline)
 
+
+### 11.0 Widget Shadow Fading In On Startup. [High Priority]
+- [ ] Make all widgets fade in their shadow on startup in sync with each other and our opacity synced fade in.
+Contrary to earlier information, this IS entirely possible.
+The Method to use is similiar to the following but adjusted to our codebase and policies:
+
+You create a dummy widget behind your real widget whose only purpose is to render the shadow.
+
+Example Structure:
+
+ShadowWidget  (fake, invisible except shadow)
+   - QGraphicsDropShadowEffect (full opacity)
+MainWidget (your glass card)
+   - UI elements
+
+You animate the opacity of the shadow effect itself, or the opacity of the ShadowWidget.
+
+There is also optionally the QML approach:
+DropShadow {
+    anchors.fill: parent
+    source: mainCard
+    opacity: shadowVisible ? 1 : 0
+    Behavior on opacity { NumberAnimation { duration: 1200 } }
+}
+- [ ] Implement this for all widgets and create a test for both the fade sync and shadow sync through various scenarios, add it to our testsuite and run it.
+Remember to do this as best for our arhcitecture as possible and keep all widget startup syncing connected/smart. Use the same ms duration sync as the widget opacity fade ms, same easing ideally as well.
+
+
 ### 11.1 Spotify / Media Playback Widget (Historical baseline)
 - [x] Spotify widget implemented as a Windows 10/11 GSMTC-based Now Playing card (Spotify-only session selection), with hide-on-no-media behaviour and centralized media-control plumbing via `core/media/media_controller.py`. Layout, header/logo alignment, artwork placement, controls row, and interaction gating are now considered **baseline** and documented in detail in `Docs/07_WIDGETS_AND_UI.md` and `Docs/10_WIDGET_GUIDELINES.md`.
 
@@ -137,7 +165,7 @@ Checkboxes: `[ ]` = active work; `[x]` = completed or historical items retained 
 - [x] Fix Windows theme accent colours leaking into Settings GUI highlights; force monochrome highlights matching the app theme. *(Requires explicit approval before implementation.)*
 - [x] Revise the About section layout (heading replaced with image "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\images\\Logo.png", blurb - "C:\\Users\\Basjohn\\Documents\\AboutBlurb.txt", four external links with styled buttons shown in blurb, keep Hotkey text below links, matching alignments) and integrate the `images/Shoogle300W.png` artwork top aligned with the logo.png with responsive sizing for both (scale down only, avoid overlap with text). An exact example can be seen here "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\images\\ABOUTExample.png"
 The example shows the main content area of the tab which is the only area you need to adjust for this.
-- [MD Proposal] Add a Reddit widget that lists post titles from a configured subreddit (r/...), with configurable count, text styling, and clickable links opened in the default browser. The widget heading should use the official Reddit logo (or a transparent equivalent) alongside `r/<subreddit>` and default to showing roughly 10 items sorted by “hot”. *(Feasibility depends on acceptable, non-API-key access.)*
+- [x] Reddit widget implemented as an optional overlay listing posts from a configured subreddit (r/...), with configurable count, text styling, and clickable links opened in the default browser. The heading uses the Reddit logo + `r/<subreddit>` and defaults to a bottom-right card showing 5 or 10 items sorted by “hot”, powered by unauthenticated JSON listings. Final behaviour and settings are documented in `widgets/reddit_widget.py`, `Spec.md` and `Docs/Spec.md`.
 - [?] Add a MusicBee widget mirroring Spotify/media widget behaviour but driven by Music Bee APIs/integration, this is a seperate widget to spotify.
 - [Skip] Implement a Ctrl+right-click-and-drag custom widget positioning mode with snapping between widgets and per-widget persistent positions.
 - [Skip] Add a "Reset All Positions" control in the general widgets section to restore default widget positions across displays.

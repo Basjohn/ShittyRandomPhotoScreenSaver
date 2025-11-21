@@ -1,6 +1,6 @@
 """Display widget for OpenGL/software rendered screensaver overlays."""
 from collections import defaultdict
-from typing import Optional, Iterable, Tuple
+from typing import Optional, Iterable, Tuple, Callable, Dict
 import random
 import time
 import weakref
@@ -45,6 +45,7 @@ from transitions.gl_compositor_blinds_transition import GLCompositorBlindsTransi
 from widgets.clock_widget import ClockWidget, TimeFormat, ClockPosition
 from widgets.weather_widget import WeatherWidget, WeatherPosition
 from widgets.media_widget import MediaWidget, MediaPosition
+from widgets.reddit_widget import RedditWidget, RedditPosition
 from widgets.shadow_utils import apply_widget_shadow
 from core.logging.logger import get_logger, is_verbose_logging
 from core.logging.overlay_telemetry import record_overlay_ready
@@ -153,6 +154,7 @@ class DisplayWidget(QWidget):
         self.clock3_widget: Optional[ClockWidget] = None
         self.weather_widget: Optional[WeatherWidget] = None
         self.media_widget: Optional[MediaWidget] = None
+        self.reddit_widget: Optional[RedditWidget] = None
         self._current_transition: Optional[BaseTransition] = None
         self._current_transition_overlay_key: Optional[str] = None
         self._current_transition_started_at: float = 0.0
@@ -186,6 +188,11 @@ class DisplayWidget(QWidget):
         self._transition_watchdog_started_at: float = 0.0
         self._pending_transition_finish_args: Optional[Tuple[QPixmap, QPixmap, str, bool, Optional[QPixmap]]] = None
         self._transition_skip_count: int = 0
+        self._overlay_fade_expected: set[str] = set()
+        self._overlay_fade_pending: Dict[str, Callable[[], None]] = {}
+        self._overlay_fade_started: bool = False
+        self._overlay_fade_timeout: Optional[QTimer] = None
+        self._reddit_exit_on_click: bool = True
 
         # Central ResourceManager wiring
         self._resource_manager: Optional[ResourceManager] = resource_manager
@@ -503,6 +510,77 @@ class DisplayWidget(QWidget):
         # Global widget shadow configuration shared by all overlay widgets.
         shadows_config = widgets.get('shadows', {}) if isinstance(widgets, dict) else {}
 
+        # Reset per-display overlay fade coordination. This is only used for
+        # the initial widget fade-ins so that overlays like weather, media
+        # and Reddit can appear together. We also precompute which overlays
+        # are expected on this display *before* any of them start so that the
+        # coordinator never starts early with only the first widget.
+        self._overlay_fade_expected = set()
+        self._overlay_fade_pending = {}
+        self._overlay_fade_started = False
+        if self._overlay_fade_timeout is not None:
+            try:
+                self._overlay_fade_timeout.stop()
+                self._overlay_fade_timeout.deleteLater()
+            except Exception:
+                pass
+            self._overlay_fade_timeout = None
+
+        widgets_map = widgets if isinstance(widgets, dict) else {}
+
+        weather_settings = widgets_map.get('weather', {}) if isinstance(widgets_map, dict) else {}
+        weather_enabled = SettingsManager.to_bool(weather_settings.get('enabled', False), False)
+        weather_monitor_sel = weather_settings.get('monitor', 'ALL')
+        try:
+            weather_show_on_this = (weather_monitor_sel == 'ALL') or (
+                int(weather_monitor_sel) == (self.screen_index + 1)
+            )
+        except Exception:
+            weather_show_on_this = False
+            logger.debug(
+                "Weather widget monitor setting invalid for screen %s: %r (gated off for fade sync)",
+                self.screen_index,
+                weather_monitor_sel,
+            )
+
+        reddit_settings = widgets_map.get('reddit', {}) if isinstance(widgets_map, dict) else {}
+        reddit_enabled = SettingsManager.to_bool(reddit_settings.get('enabled', False), False)
+        reddit_monitor_sel = reddit_settings.get('monitor', 'ALL')
+        try:
+            reddit_show_on_this = (reddit_monitor_sel == 'ALL') or (
+                int(reddit_monitor_sel) == (self.screen_index + 1)
+            )
+        except Exception:
+            reddit_show_on_this = False
+            logger.debug(
+                "Reddit widget monitor setting invalid for screen %s: %r (gated off for fade sync)",
+                self.screen_index,
+                reddit_monitor_sel,
+            )
+
+        media_settings = widgets_map.get('media', {}) if isinstance(widgets_map, dict) else {}
+        media_enabled = SettingsManager.to_bool(media_settings.get('enabled', False), False)
+        media_monitor_sel = media_settings.get('monitor', 'ALL')
+        try:
+            media_show_on_this = (media_monitor_sel == 'ALL') or (
+                int(media_monitor_sel) == (self.screen_index + 1)
+            )
+        except Exception:
+            media_show_on_this = False
+            logger.debug(
+                "Media widget monitor setting invalid for screen %s: %r (gated off for fade sync)",
+                self.screen_index,
+                media_monitor_sel,
+            )
+
+        self._overlay_fade_expected = set()
+        if weather_enabled and weather_show_on_this:
+            self._overlay_fade_expected.add("weather")
+        if reddit_enabled and reddit_show_on_this:
+            self._overlay_fade_expected.add("reddit")
+        if media_enabled and media_show_on_this:
+            self._overlay_fade_expected.add("media")
+
         position_map = {
             'Top Left': ClockPosition.TOP_LEFT,
             'Top Right': ClockPosition.TOP_RIGHT,
@@ -643,11 +721,35 @@ class DisplayWidget(QWidget):
                 except Exception:
                     logger.debug("Failed to apply show_numerals for %s", settings_key, exc_info=True)
 
-                # Global widget drop shadow (shared config for all clocks).
+                # Analogue face/hand shadow toggle (main clock style only).
                 try:
-                    apply_widget_shadow(clock, shadows_config, has_background_frame=show_background)
+                    analog_shadow_val = _resolve_clock_style('analog_face_shadow', True, clock_settings, settings_key)
+                    analog_shadow = SettingsManager.to_bool(analog_shadow_val, True)
+                    if hasattr(clock, 'set_analog_face_shadow'):
+                        clock.set_analog_face_shadow(analog_shadow)
+                except Exception:
+                    logger.debug("Failed to apply analog_face_shadow for %s", settings_key, exc_info=True)
+
+                # Global widget drop shadow (shared config for all clocks). Where
+                # the clock supports coordinated fade-in, we hand off the
+                # configuration and let the widget attach the shadow once its
+                # opacity fade has completed.
+                try:
+                    if hasattr(clock, "set_shadow_config"):
+                        clock.set_shadow_config(shadows_config)
+                    else:
+                        apply_widget_shadow(clock, shadows_config, has_background_frame=show_background)
                 except Exception:
                     logger.debug("Failed to apply widget shadow to %s", settings_key, exc_info=True)
+
+                # Provide a stable overlay name so ClockWidget can register
+                # with DisplayWidget.request_overlay_fade_sync using a
+                # descriptive identifier ("clock", "clock2", "clock3").
+                try:
+                    if hasattr(clock, "set_overlay_name"):
+                        clock.set_overlay_name(settings_key)
+                except Exception:
+                    logger.debug("Failed to set overlay name for %s", settings_key, exc_info=True)
 
                 setattr(self, attr_name, clock)
 
@@ -668,21 +770,13 @@ class DisplayWidget(QWidget):
         _create_clock_widget('clock2', 'clock2_widget', 'Bottom Right', 32)
         _create_clock_widget('clock3', 'clock3_widget', 'Bottom Left', 32)
 
-        # Weather widget
-        weather_settings = widgets.get('weather', {}) if isinstance(widgets, dict) else {}
-        weather_enabled = SettingsManager.to_bool(weather_settings.get('enabled', False), False)
-        # Monitor selection for weather
-        weather_monitor_sel = weather_settings.get('monitor', 'ALL')
-        try:
-            weather_show_on_this = (weather_monitor_sel == 'ALL') or (int(weather_monitor_sel) == (self.screen_index + 1))
-        except Exception:
-            weather_show_on_this = False
-            logger.debug(
-                "Weather widget monitor setting invalid for screen %s: %r (gated off)",
-                self.screen_index,
-                weather_monitor_sel,
-            )
+        # Weather widget (uses precomputed weather_settings / weather_enabled /
+        # weather_show_on_this from the fade coordination setup above).
         if weather_enabled and weather_show_on_this:
+            try:
+                self._overlay_fade_expected.add("weather")
+            except Exception:
+                self._overlay_fade_expected = {"weather"}
             position_str = weather_settings.get('position', 'Bottom Left')
             location = weather_settings.get('location', 'London')
             font_size = weather_settings.get('font_size', 24)
@@ -780,19 +874,164 @@ class DisplayWidget(QWidget):
         else:
             logger.debug("Weather widget disabled in settings")
 
-        # Media widget
-        media_settings = widgets.get('media', {}) if isinstance(widgets, dict) else {}
-        media_enabled = SettingsManager.to_bool(media_settings.get('enabled', False), False)
-        media_monitor_sel = media_settings.get('monitor', 'ALL')
+        # Reddit widget (uses precomputed reddit_settings / reddit_enabled /
+        # reddit_show_on_this from the fade coordination setup above).
         try:
-            media_show_on_this = (media_monitor_sel == 'ALL') or (int(media_monitor_sel) == (self.screen_index + 1))
+            exit_on_click_val = reddit_settings.get('exit_on_click', True)
+            self._reddit_exit_on_click = SettingsManager.to_bool(exit_on_click_val, True)
         except Exception:
-            media_show_on_this = False
+            self._reddit_exit_on_click = True
+        # reddit_monitor_sel/reddit_show_on_this are already computed above
+
+        existing_reddit = getattr(self, 'reddit_widget', None)
+        if not (reddit_enabled and reddit_show_on_this):
+            if existing_reddit is not None:
+                try:
+                    existing_reddit.stop()
+                    existing_reddit.hide()
+                except Exception:
+                    pass
+            self.reddit_widget = None
             logger.debug(
-                "Media widget monitor setting invalid for screen %s: %r (gated off)",
+                "Reddit widget disabled in settings (screen=%s, enabled=%s, show_on_this=%s, monitor_sel=%r)",
                 self.screen_index,
-                media_monitor_sel,
+                reddit_enabled,
+                reddit_show_on_this,
+                reddit_monitor_sel,
             )
+        else:
+            try:
+                self._overlay_fade_expected.add("reddit")
+            except Exception:
+                self._overlay_fade_expected = {"reddit"}
+            position_str = reddit_settings.get('position', 'Bottom Right')
+            subreddit = reddit_settings.get('subreddit', 'wallpapers') or 'wallpapers'
+            font_size = reddit_settings.get('font_size', 18)
+            margin = reddit_settings.get('margin', 20)
+            color = reddit_settings.get('color', [255, 255, 255, 230])
+            bg_color_data = reddit_settings.get('bg_color', [64, 64, 64, 255])
+            border_color_data = reddit_settings.get('border_color', [128, 128, 128, 255])
+            border_opacity = reddit_settings.get('border_opacity', 0.8)
+            show_background = SettingsManager.to_bool(reddit_settings.get('show_background', True), True)
+            show_separators_val = reddit_settings.get('show_separators', False)
+            show_separators = SettingsManager.to_bool(show_separators_val, False)
+            bg_opacity = reddit_settings.get('bg_opacity', 0.9)
+            try:
+                limit_val = int(reddit_settings.get('limit', 10))
+            except Exception:
+                limit_val = 10
+            # Historical configs used 5 items for the low-count mode; this is
+            # now treated as a 4-item layout so that spacing and card height
+            # match the visual design.
+            if limit_val <= 5:
+                limit_val = 4
+
+            reddit_position_map = {
+                'Top Left': RedditPosition.TOP_LEFT,
+                'Top Right': RedditPosition.TOP_RIGHT,
+                'Bottom Left': RedditPosition.BOTTOM_LEFT,
+                'Bottom Right': RedditPosition.BOTTOM_RIGHT,
+            }
+            rpos = reddit_position_map.get(position_str, RedditPosition.TOP_RIGHT)
+
+            try:
+                self.reddit_widget = RedditWidget(self, subreddit=subreddit, position=rpos)
+
+                if self._thread_manager is not None and hasattr(self.reddit_widget, 'set_thread_manager'):
+                    try:
+                        self.reddit_widget.set_thread_manager(self._thread_manager)
+                    except Exception:
+                        pass
+
+                font_family = reddit_settings.get('font_family', 'Segoe UI')
+                if hasattr(self.reddit_widget, 'set_font_family'):
+                    self.reddit_widget.set_font_family(font_family)
+
+                try:
+                    self.reddit_widget.set_font_size(int(font_size))
+                except Exception:
+                    self.reddit_widget.set_font_size(18)
+
+                try:
+                    margin_val = int(margin)
+                except Exception:
+                    margin_val = 20
+                self.reddit_widget.set_margin(margin_val)
+
+                from PySide6.QtGui import QColor
+
+                try:
+                    qcolor = QColor(color[0], color[1], color[2], color[3])
+                    self.reddit_widget.set_text_color(qcolor)
+                except Exception:
+                    pass
+
+                self.reddit_widget.set_show_background(show_background)
+
+                try:
+                    self.reddit_widget.set_show_separators(show_separators)
+                except Exception:
+                    pass
+
+                # Background color
+                try:
+                    bg_r, bg_g, bg_b = bg_color_data[0], bg_color_data[1], bg_color_data[2]
+                    bg_a = bg_color_data[3] if len(bg_color_data) > 3 else 255
+                    bg_qcolor = QColor(bg_r, bg_g, bg_b, bg_a)
+                    self.reddit_widget.set_background_color(bg_qcolor)
+                except Exception:
+                    pass
+
+                # Background opacity
+                try:
+                    bg_opacity_f = float(bg_opacity)
+                except Exception:
+                    bg_opacity_f = 0.9
+                self.reddit_widget.set_background_opacity(bg_opacity_f)
+
+                # Border color and opacity
+                try:
+                    br_r, br_g, br_b = border_color_data[0], border_color_data[1], border_color_data[2]
+                    base_alpha = border_color_data[3] if len(border_color_data) > 3 else 255
+                    try:
+                        bo = float(border_opacity)
+                    except Exception:
+                        bo = 0.8
+                    bo = max(0.0, min(1.0, bo))
+                    br_a = int(bo * base_alpha)
+                    border_qcolor = QColor(br_r, br_g, br_b, br_a)
+                    self.reddit_widget.set_background_border(2, border_qcolor)
+                except Exception:
+                    pass
+
+                # Item limit and shadow config
+                try:
+                    self.reddit_widget.set_item_limit(limit_val)
+                except Exception:
+                    pass
+
+                try:
+                    if hasattr(self.reddit_widget, 'set_shadow_config'):
+                        self.reddit_widget.set_shadow_config(shadows_config)
+                    else:
+                        apply_widget_shadow(self.reddit_widget, shadows_config, has_background_frame=show_background)
+                except Exception:
+                    logger.debug("Failed to configure widget shadow for reddit widget", exc_info=True)
+
+                self.reddit_widget.raise_()
+                self.reddit_widget.start()
+                logger.info(
+                    "✅ Reddit widget started: r/%s, %s, font=%spx, limit=%s",
+                    subreddit,
+                    position_str,
+                    font_size,
+                    limit_val,
+                )
+            except Exception as e:
+                logger.error("Failed to create/configure reddit widget: %s", e, exc_info=True)
+
+        # Media widget (uses precomputed media_settings / media_enabled /
+        # media_show_on_this from the fade coordination setup above).
 
         # Detailed diagnostics so we can see exactly what the runtime settings
         # look like for the media widget on each screen, including the raw
@@ -830,6 +1069,11 @@ class DisplayWidget(QWidget):
                 media_monitor_sel,
             )
             return
+
+        try:
+            self._overlay_fade_expected.add("media")
+        except Exception:
+            self._overlay_fade_expected = {"media"}
 
         position_str = media_settings.get('position', 'Bottom Left')
         media_position_map = {
@@ -1698,6 +1942,15 @@ class DisplayWidget(QWidget):
                             mw.raise_()
                         except Exception:
                             pass
+                    # Raise Reddit widget too so it remains above transitions,
+                    # but do not force it visible here; first visibility is
+                    # owned by the widget's own fade-in path.
+                    rw = getattr(self, "reddit_widget", None)
+                    if rw is not None:
+                        try:
+                            rw.raise_()
+                        except Exception:
+                            pass
                 except Exception:
                     logger.debug("[GL COMPOSITOR] Failed to pre-warm compositor with base frame", exc_info=True)
 
@@ -1768,8 +2021,6 @@ class DisplayWidget(QWidget):
                             clock = getattr(self, attr_name, None)
                             if clock is not None:
                                 try:
-                                    if not clock.isVisible():
-                                        clock.show()
                                     clock.raise_()
                                     if hasattr(clock, '_tz_label') and clock._tz_label:
                                         clock._tz_label.raise_()
@@ -1777,17 +2028,19 @@ class DisplayWidget(QWidget):
                                     pass
                         if self.weather_widget:
                             try:
-                                if not self.weather_widget.isVisible():
-                                    self.weather_widget.show()
                                 self.weather_widget.raise_()
                             except Exception:
                                 pass
                         mw = getattr(self, "media_widget", None)
                         if mw is not None:
                             try:
-                                if not mw.isVisible():
-                                    mw.show()
                                 mw.raise_()
+                            except Exception:
+                                pass
+                        rw = getattr(self, "reddit_widget", None)
+                        if rw is not None:
+                            try:
+                                rw.raise_()
                             except Exception:
                                 pass
                         try:
@@ -1843,8 +2096,6 @@ class DisplayWidget(QWidget):
                         clock = getattr(self, attr_name, None)
                         if clock is not None:
                             try:
-                                if not clock.isVisible():
-                                    clock.show()
                                 clock.raise_()
                             except Exception:
                                 pass
@@ -1853,8 +2104,6 @@ class DisplayWidget(QWidget):
                     # label just like in the golden path (no pan) case.
                     if self.weather_widget:
                         try:
-                            if not self.weather_widget.isVisible():
-                                self.weather_widget.show()
                             self.weather_widget.raise_()
                         except Exception:
                             pass
@@ -1862,8 +2111,6 @@ class DisplayWidget(QWidget):
                     mw = getattr(self, "media_widget", None)
                     if mw is not None:
                         try:
-                            if not mw.isVisible():
-                                mw.show()
                             mw.raise_()
                         except Exception:
                             pass
@@ -1984,6 +2231,13 @@ class DisplayWidget(QWidget):
             if mw is not None:
                 try:
                     mw.raise_()
+                except Exception:
+                    pass
+
+            rw = getattr(self, "reddit_widget", None)
+            if rw is not None:
+                try:
+                    rw.raise_()
                 except Exception:
                     pass
 
@@ -2605,6 +2859,112 @@ class DisplayWidget(QWidget):
             details,
         )
 
+    def request_overlay_fade_sync(self, overlay_name: str, starter: Callable[[], None]) -> None:
+        """Register an overlay's initial fade so all widgets can fade together.
+
+        Overlays call this when they are ready to start their first fade-in.
+        We buffer the starter callbacks until either all expected overlays have
+        registered or a short timeout elapses, then run them together.
+        """
+
+        try:
+            expected = self._overlay_fade_expected
+        except Exception:
+            expected = set()
+
+        started = getattr(self, "_overlay_fade_started", False)
+        logger.debug(
+            "[OVERLAY_FADE] request_overlay_fade_sync: screen=%s overlay=%s expected=%s started=%s",
+            self.screen_index,
+            overlay_name,
+            sorted(expected) if expected else [],
+            started,
+        )
+
+        # If coordination is not active or fades already kicked off, run now.
+        if not expected or started:
+            logger.debug(
+                "[OVERLAY_FADE] %s running starter immediately (expected=%s, started=%s)",
+                overlay_name,
+                sorted(expected) if expected else [],
+                started,
+            )
+            try:
+                starter()
+            except Exception:
+                pass
+            return
+
+        pending = getattr(self, "_overlay_fade_pending", None)
+        if not isinstance(pending, dict):
+            pending = {}
+            self._overlay_fade_pending = pending
+
+        pending[overlay_name] = starter
+
+        remaining = [name for name in expected if name not in pending]
+        logger.debug(
+            "[OVERLAY_FADE] %s registered (pending=%s, remaining=%s)",
+            overlay_name,
+            sorted(pending.keys()),
+            sorted(remaining),
+        )
+        if not remaining:
+            self._start_overlay_fades(force=False)
+            return
+
+        # Arm a timeout so a misbehaving overlay cannot block all fades.
+        if self._overlay_fade_timeout is None:
+            try:
+                timeout = QTimer(self)
+                timeout.setSingleShot(True)
+
+                def _on_timeout() -> None:
+                    self._start_overlay_fades(force=True)
+
+                timeout.timeout.connect(_on_timeout)
+                timeout.start(2500)
+                self._overlay_fade_timeout = timeout
+            except Exception:
+                # If timer setup fails, just run fades immediately.
+                self._start_overlay_fades(force=True)
+
+    def _start_overlay_fades(self, force: bool = False) -> None:
+        """Kick off any pending overlay fade callbacks."""
+
+        if getattr(self, "_overlay_fade_started", False):
+            return
+        self._overlay_fade_started = True
+
+        timeout = getattr(self, "_overlay_fade_timeout", None)
+        if timeout is not None:
+            try:
+                timeout.stop()
+                timeout.deleteLater()
+            except Exception:
+                pass
+            self._overlay_fade_timeout = None
+
+        pending = getattr(self, "_overlay_fade_pending", {})
+        try:
+            starters = list(pending.values())
+            names = list(pending.keys())
+        except Exception:
+            starters = []
+            names = []
+        logger.debug(
+            "[OVERLAY_FADE] starting overlay fades (force=%s, overlays=%s)",
+            force,
+            sorted(names),
+        )
+        self._overlay_fade_pending = {}
+
+        for starter in starters:
+            try:
+                starter()
+            except Exception:
+                pass
+
     def get_overlay_stage_counts(self) -> dict[str, int]:
         """Return snapshot of overlay readiness counts (for diagnostics/tests)."""
         return dict(self._overlay_stage_counts)
@@ -2962,101 +3322,153 @@ class DisplayWidget(QWidget):
         ctrl_mode_active = self._ctrl_held or DisplayWidget._global_ctrl_held
         if self._is_hard_exit_enabled() or ctrl_mode_active:
             # In hard-exit or Ctrl-held interaction mode, route clicks over
-            # interactive widgets (e.g. media widget) to their handlers while
-            # still suppressing screensaver exit.
+            # interactive widgets (e.g. media / reddit widget). Media
+            # controls keep the screensaver active; Reddit links both open
+            # the browser and then request a clean exit.
             handled = False
+            reddit_handled = False
+
+            # Media widget (Spotify-style transport controls)
             mw = getattr(self, "media_widget", None)
             try:
-                if mw is not None and mw.isVisible():
-                    if mw.geometry().contains(event.pos()):
-                        button = event.button()
-                        try:
-                            from PySide6.QtCore import Qt as _Qt
-                        except Exception:  # pragma: no cover - import guard
-                            _Qt = Qt  # type: ignore[assignment]
+                if mw is not None and mw.isVisible() and mw.geometry().contains(event.pos()):
+                    button = event.button()
+                    try:
+                        from PySide6.QtCore import Qt as _Qt
+                    except Exception:  # pragma: no cover - import guard
+                        _Qt = Qt  # type: ignore[assignment]
 
-                        if button == _Qt.MouseButton.LeftButton:
-                            # Map left-clicks to previous / play-pause /
-                            # next based on horizontal thirds of the Spotify
-                            # widget's *text content* area (between
-                            # contentsMargins.left/right), so the visual
-                            # arrows and centre glyph match their actions
-                            # even when there is a large artwork margin on
-                            # the right.
-                            try:
-                                geom = mw.geometry()
-                                local_x = event.pos().x() - geom.x()
-                                width = max(1, mw.width())
-                                margins = mw.contentsMargins()
-                                content_left = margins.left()
-                                content_right = width - margins.right()
-                                content_width = max(1, content_right - content_left)
-                                x_in_content = local_x - content_left
-                                # Clamp so clicks slightly inside the card
-                                # margins map to the nearest control.
-                                if x_in_content < 0:
-                                    x_in_content = 0
-                                elif x_in_content > content_width:
-                                    x_in_content = content_width
-                                third = content_width / 3.0
-                                if x_in_content < third:
-                                    logger.debug(
-                                        "[MEDIA] click mapped to PREVIOUS: pos=%s geom=%s local_x=%d x_in_content=%d width=%d content_left=%d content_right=%d third=%.2f",
-                                        event.pos(),
-                                        geom,
-                                        local_x,
-                                        x_in_content,
-                                        width,
-                                        content_left,
-                                        content_right,
-                                        third,
-                                    )
-                                    mw.previous_track()
-                                elif x_in_content < 2.0 * third:
-                                    logger.debug(
-                                        "[MEDIA] click mapped to PLAY/PAUSE: pos=%s geom=%s local_x=%d x_in_content=%d width=%d content_left=%d content_right=%d third=%.2f",
-                                        event.pos(),
-                                        geom,
-                                        local_x,
-                                        x_in_content,
-                                        width,
-                                        content_left,
-                                        content_right,
-                                        third,
-                                    )
-                                    mw.play_pause()
-                                else:
-                                    logger.debug(
-                                        "[MEDIA] click mapped to NEXT: pos=%s geom=%s local_x=%d x_in_content=%d width=%d content_left=%d content_right=%d third=%.2f",
-                                        event.pos(),
-                                        geom,
-                                        local_x,
-                                        x_in_content,
-                                        width,
-                                        content_left,
-                                        content_right,
-                                        third,
-                                    )
-                                    mw.next_track()
-                                handled = True
-                            except Exception:
-                                logger.debug("[MEDIA] left-click media routing failed", exc_info=True)
-                        elif button == _Qt.MouseButton.RightButton:
-                            try:
-                                mw.next_track()
-                                handled = True
-                            except Exception:
-                                logger.debug("[MEDIA] next_track handling failed from mousePressEvent", exc_info=True)
-                        elif button == _Qt.MouseButton.MiddleButton:
-                            try:
+                    if button == _Qt.MouseButton.LeftButton:
+                        # Map left-clicks to previous / play-pause /
+                        # next based on horizontal thirds of the Spotify
+                        # widget's *text content* area (between
+                        # contentsMargins.left/right), so the visual
+                        # arrows and centre glyph match their actions
+                        # even when there is a large artwork margin on
+                        # the right.
+                        try:
+                            geom = mw.geometry()
+                            local_x = event.pos().x() - geom.x()
+                            width = max(1, mw.width())
+                            margins = mw.contentsMargins()
+                            content_left = margins.left()
+                            content_right = width - margins.right()
+                            content_width = max(1, content_right - content_left)
+                            x_in_content = local_x - content_left
+                            # Clamp so clicks slightly inside the card
+                            # margins map to the nearest control.
+                            if x_in_content < 0:
+                                x_in_content = 0
+                            elif x_in_content > content_width:
+                                x_in_content = content_width
+                            third = content_width / 3.0
+                            if x_in_content < third:
+                                logger.debug(
+                                    "[MEDIA] click mapped to PREVIOUS: pos=%s geom=%s local_x=%d x_in_content=%d width=%d content_left=%d content_right=%d third=%.2f",
+                                    event.pos(),
+                                    geom,
+                                    local_x,
+                                    x_in_content,
+                                    width,
+                                    content_left,
+                                    content_right,
+                                    third,
+                                )
                                 mw.previous_track()
-                                handled = True
-                            except Exception:
-                                logger.debug("[MEDIA] previous_track handling failed from mousePressEvent", exc_info=True)
+                            elif x_in_content < 2.0 * third:
+                                logger.debug(
+                                    "[MEDIA] click mapped to PLAY/PAUSE: pos=%s geom=%s local_x=%d x_in_content=%d width=%d content_left=%d content_right=%d third=%.2f",
+                                    event.pos(),
+                                    geom,
+                                    local_x,
+                                    x_in_content,
+                                    width,
+                                    content_left,
+                                    content_right,
+                                    third,
+                                )
+                                mw.play_pause()
+                            else:
+                                logger.debug(
+                                    "[MEDIA] click mapped to NEXT: pos=%s geom=%s local_x=%d x_in_content=%d width=%d content_left=%d content_right=%d third=%.2f",
+                                    event.pos(),
+                                    geom,
+                                    local_x,
+                                    x_in_content,
+                                    width,
+                                    content_left,
+                                    content_right,
+                                    third,
+                                )
+                                mw.next_track()
+                            handled = True
+                        except Exception:
+                            logger.debug("[MEDIA] left-click media routing failed", exc_info=True)
+                    elif button == _Qt.MouseButton.RightButton:
+                        try:
+                            mw.next_track()
+                            handled = True
+                        except Exception:
+                            logger.debug("[MEDIA] next_track handling failed from mousePressEvent", exc_info=True)
+                    elif button == _Qt.MouseButton.MiddleButton:
+                        try:
+                            mw.previous_track()
+                            handled = True
+                        except Exception:
+                            logger.debug("[MEDIA] previous_track handling failed from mousePressEvent", exc_info=True)
             except Exception:
                 logger.debug("[MEDIA] Error while routing click to media widget", exc_info=True)
 
+            # Reddit widget: map clicks to open links in the browser when
+            # interaction mode is active. Unlike media controls, Reddit
+            # clicks also close the screensaver afterwards.
+            rw = getattr(self, "reddit_widget", None)
+            try:
+                if (not handled) and rw is not None and rw.isVisible() and rw.geometry().contains(event.pos()):
+                    try:
+                        from PySide6.QtCore import QPoint as _QPoint
+                    except Exception:  # pragma: no cover - import guard
+                        _QPoint = None  # type: ignore[assignment]
+
+                    geom = rw.geometry()
+                    if _QPoint is not None:
+                        local_pos = _QPoint(event.pos().x() - geom.x(), event.pos().y() - geom.y())
+                    else:
+                        # Fallback: QRect.contains also accepts global-ish coords,
+                        # but handle_click expects something QPoint-like; pass
+                        # the original pos and let the widget ignore on failure.
+                        local_pos = event.pos()
+
+                    try:
+                        if hasattr(rw, "handle_click") and rw.handle_click(local_pos):
+                            handled = True
+                            reddit_handled = True
+                    except Exception:
+                        logger.debug("[REDDIT] click routing failed", exc_info=True)
+            except Exception:
+                logger.debug("[REDDIT] Error while routing click to reddit widget", exc_info=True)
+
             if handled:
+                if reddit_handled and getattr(self, "_reddit_exit_on_click", True):
+                    logger.info("[REDDIT] Click handled; requesting screensaver exit")
+                    try:
+                        from PySide6.QtCore import QTimer as _QTimer
+                    except Exception:  # pragma: no cover - import guard
+                        _QTimer = None  # type: ignore[assignment]
+
+                    def _do_exit_after_reddit() -> None:
+                        if not self._exiting:
+                            self._exiting = True
+                            try:
+                                self.hide()
+                            except Exception:
+                                pass
+                            self.exit_requested.emit()
+
+                    if _QTimer is not None:
+                        _QTimer.singleShot(400, _do_exit_after_reddit)
+                    else:
+                        _do_exit_after_reddit()
                 event.accept()
                 return
 
@@ -3209,6 +3621,21 @@ class DisplayWidget(QWidget):
                                 owner._show_ctrl_cursor_hint(local_pos, mode="fade_in")
                             else:
                                 owner._show_ctrl_cursor_hint(local_pos, mode="none")
+
+                            # Forward halo hover position to the Reddit
+                            # widget (if present) so it can manage its own
+                            # delayed tooltips over post titles.
+                            try:
+                                rw = getattr(owner, "reddit_widget", None)
+                                if rw is not None and rw.isVisible() and hasattr(rw, "handle_hover"):
+                                    try:
+                                        local_rw_pos = rw.mapFromGlobal(global_pos)
+                                    except Exception:
+                                        local_rw_pos = None
+                                    if local_rw_pos is not None:
+                                        rw.handle_hover(local_rw_pos, global_pos)
+                            except Exception:
+                                pass
                         except Exception:
                             pass
         except Exception:

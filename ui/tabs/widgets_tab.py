@@ -49,6 +49,10 @@ class WidgetsTab(QWidget):
         self._media_color = QColor(255, 255, 255, 230)
         self._media_bg_color = QColor(64, 64, 64, 255)
         self._media_border_color = QColor(128, 128, 128, 255)
+        # Reddit widget frame defaults mirror Spotify/media widget styling
+        self._reddit_color = QColor(255, 255, 255, 230)
+        self._reddit_bg_color = QColor(64, 64, 64, 255)
+        self._reddit_border_color = QColor(128, 128, 128, 255)
         self._media_artwork_size = 100
         self._loading = True
         self._setup_ui()
@@ -101,7 +105,7 @@ class WidgetsTab(QWidget):
         global_row.addStretch()
         layout.addLayout(global_row)
 
-        # Subtab-style toggle buttons (Clocks / Weather / Media)
+        # Subtab-style toggle buttons (Clocks / Weather / Media / Reddit)
         subtab_row = QHBoxLayout()
         self._subtab_group = QButtonGroup(self)
         self._subtab_group.setExclusive(True)
@@ -109,6 +113,7 @@ class WidgetsTab(QWidget):
         self._btn_clocks = QPushButton("Clocks")
         self._btn_weather = QPushButton("Weather")
         self._btn_media = QPushButton("Media")
+        self._btn_reddit = QPushButton("Reddit")
 
         button_style = (
             "QPushButton {"
@@ -131,7 +136,7 @@ class WidgetsTab(QWidget):
             " }"
         )
 
-        for idx, btn in enumerate((self._btn_clocks, self._btn_weather, self._btn_media)):
+        for idx, btn in enumerate((self._btn_clocks, self._btn_weather, self._btn_media, self._btn_reddit)):
             btn.setCheckable(True)
             btn.setStyleSheet(button_style)
             self._subtab_group.addButton(btn, idx)
@@ -198,6 +203,13 @@ class WidgetsTab(QWidget):
         )
         self.clock_analog_mode.stateChanged.connect(self._save_settings)
         clock_layout.addWidget(self.clock_analog_mode)
+
+        self.clock_analog_shadow = QCheckBox("Analogue Face Shadow")
+        self.clock_analog_shadow.setToolTip(
+            "Enable a subtle drop shadow under the analogue clock face and hands."
+        )
+        self.clock_analog_shadow.stateChanged.connect(self._save_settings)
+        clock_layout.addWidget(self.clock_analog_shadow)
 
         self.clock_show_numerals = QCheckBox("Show Hour Numerals (Analogue)")
         self.clock_show_numerals.stateChanged.connect(self._save_settings)
@@ -724,7 +736,188 @@ class WidgetsTab(QWidget):
         media_container_layout.setContentsMargins(0, 20, 0, 0)
         media_container_layout.addWidget(media_group)
         layout.addWidget(self._media_container)
-        
+
+        # Reddit widget group
+        reddit_group = QGroupBox("Reddit Widget")
+        reddit_layout = QVBoxLayout(reddit_group)
+
+        self.reddit_enabled = QCheckBox("Enable Reddit Widget")
+        self.reddit_enabled.setToolTip(
+            "Shows a small list of posts from a subreddit using Reddit's public JSON feed."
+        )
+        self.reddit_enabled.stateChanged.connect(self._save_settings)
+        reddit_layout.addWidget(self.reddit_enabled)
+
+        reddit_info = QLabel(
+            "Links open in your browser and only respond while Ctrl-held or hard-exit "
+            "interaction modes are active."
+        )
+        reddit_info.setWordWrap(True)
+        reddit_info.setStyleSheet("color: #aaaaaa; font-size: 11px;")
+        reddit_layout.addWidget(reddit_info)
+
+        self.reddit_exit_on_click = QCheckBox("Exit screensaver when Reddit links are opened")
+        self.reddit_exit_on_click.stateChanged.connect(self._save_settings)
+        reddit_layout.addWidget(self.reddit_exit_on_click)
+
+        # Subreddit name
+        reddit_sub_row = QHBoxLayout()
+        reddit_sub_row.addWidget(QLabel("Subreddit:"))
+        self.reddit_subreddit = QLineEdit()
+        self.reddit_subreddit.setPlaceholderText("e.g. wallpapers")
+        self.reddit_subreddit.textChanged.connect(self._save_settings)
+        reddit_sub_row.addWidget(self.reddit_subreddit)
+        reddit_layout.addLayout(reddit_sub_row)
+
+        # Item count
+        reddit_items_row = QHBoxLayout()
+        reddit_items_row.addWidget(QLabel("Items:"))
+        self.reddit_items = QComboBox()
+        # Expose a "4"-item mode (formerly labelled "5") plus a 10-item mode.
+        self.reddit_items.addItems(["4", "10"])
+        self.reddit_items.currentTextChanged.connect(self._save_settings)
+        reddit_items_row.addWidget(self.reddit_items)
+        reddit_items_row.addStretch()
+        reddit_layout.addLayout(reddit_items_row)
+
+        # Position
+        reddit_pos_row = QHBoxLayout()
+        reddit_pos_row.addWidget(QLabel("Position:"))
+        self.reddit_position = QComboBox()
+        self.reddit_position.addItems([
+            "Top Left", "Top Right",
+            "Bottom Left", "Bottom Right",
+        ])
+        self.reddit_position.currentTextChanged.connect(self._save_settings)
+        reddit_pos_row.addWidget(self.reddit_position)
+        reddit_pos_row.addStretch()
+        reddit_layout.addLayout(reddit_pos_row)
+
+        # Display (monitor selection)
+        reddit_disp_row = QHBoxLayout()
+        reddit_disp_row.addWidget(QLabel("Display:"))
+        self.reddit_monitor_combo = QComboBox()
+        self.reddit_monitor_combo.addItems(["ALL", "1", "2", "3"])
+        self.reddit_monitor_combo.currentTextChanged.connect(self._save_settings)
+        reddit_disp_row.addWidget(self.reddit_monitor_combo)
+        reddit_disp_row.addStretch()
+        reddit_layout.addLayout(reddit_disp_row)
+
+        # Font family
+        reddit_font_family_row = QHBoxLayout()
+        reddit_font_family_row.addWidget(QLabel("Font:"))
+        self.reddit_font_combo = QFontComboBox()
+        self.reddit_font_combo.setCurrentFont("Segoe UI")
+        self.reddit_font_combo.setMinimumWidth(220)
+        self.reddit_font_combo.currentFontChanged.connect(self._save_settings)
+        reddit_font_family_row.addWidget(self.reddit_font_combo)
+        reddit_font_family_row.addStretch()
+        reddit_layout.addLayout(reddit_font_family_row)
+
+        # Font size
+        reddit_font_row = QHBoxLayout()
+        reddit_font_row.addWidget(QLabel("Font Size:"))
+        self.reddit_font_size = QSpinBox()
+        self.reddit_font_size.setRange(10, 72)
+        self.reddit_font_size.setValue(18)
+        self.reddit_font_size.setAccelerated(True)
+        self.reddit_font_size.valueChanged.connect(self._save_settings)
+        reddit_font_row.addWidget(self.reddit_font_size)
+        reddit_font_row.addWidget(QLabel("px"))
+        reddit_font_row.addStretch()
+        reddit_layout.addLayout(reddit_font_row)
+
+        # Margin
+        reddit_margin_row = QHBoxLayout()
+        reddit_margin_row.addWidget(QLabel("Margin:"))
+        self.reddit_margin = QSpinBox()
+        self.reddit_margin.setRange(0, 100)
+        self.reddit_margin.setValue(20)
+        self.reddit_margin.setAccelerated(True)
+        self.reddit_margin.valueChanged.connect(self._save_settings)
+        reddit_margin_row.addWidget(self.reddit_margin)
+        reddit_margin_row.addWidget(QLabel("px"))
+        reddit_margin_row.addStretch()
+        reddit_layout.addLayout(reddit_margin_row)
+
+        # Text color
+        reddit_color_row = QHBoxLayout()
+        reddit_color_row.addWidget(QLabel("Text Color:"))
+        self.reddit_color_btn = QPushButton("Choose Color...")
+        self.reddit_color_btn.clicked.connect(self._choose_reddit_color)
+        reddit_color_row.addWidget(self.reddit_color_btn)
+        reddit_color_row.addStretch()
+        reddit_layout.addLayout(reddit_color_row)
+
+        # Background frame
+        self.reddit_show_background = QCheckBox("Show Background Frame")
+        self.reddit_show_background.stateChanged.connect(self._save_settings)
+        reddit_layout.addWidget(self.reddit_show_background)
+
+        self.reddit_show_separators = QCheckBox("Show separator lines between posts")
+        self.reddit_show_separators.stateChanged.connect(self._save_settings)
+        reddit_layout.addWidget(self.reddit_show_separators)
+
+        # Background opacity
+        reddit_opacity_row = QHBoxLayout()
+        reddit_opacity_row.addWidget(QLabel("Background Opacity:"))
+        self.reddit_bg_opacity = QSlider(Qt.Orientation.Horizontal)
+        self.reddit_bg_opacity.setMinimum(0)
+        self.reddit_bg_opacity.setMaximum(100)
+        self.reddit_bg_opacity.setValue(90)
+        self.reddit_bg_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.reddit_bg_opacity.setTickInterval(10)
+        self.reddit_bg_opacity.valueChanged.connect(self._save_settings)
+        reddit_opacity_row.addWidget(self.reddit_bg_opacity)
+        self.reddit_bg_opacity_label = QLabel("90%")
+        self.reddit_bg_opacity.valueChanged.connect(
+            lambda v: self.reddit_bg_opacity_label.setText(f"{v}%")
+        )
+        reddit_opacity_row.addWidget(self.reddit_bg_opacity_label)
+        reddit_layout.addLayout(reddit_opacity_row)
+
+        # Background color
+        reddit_bg_color_row = QHBoxLayout()
+        reddit_bg_color_row.addWidget(QLabel("Background Color:"))
+        self.reddit_bg_color_btn = QPushButton("Choose Color...")
+        self.reddit_bg_color_btn.clicked.connect(self._choose_reddit_bg_color)
+        reddit_bg_color_row.addWidget(self.reddit_bg_color_btn)
+        reddit_bg_color_row.addStretch()
+        reddit_layout.addLayout(reddit_bg_color_row)
+
+        # Border color
+        reddit_border_color_row = QHBoxLayout()
+        reddit_border_color_row.addWidget(QLabel("Border Color:"))
+        self.reddit_border_color_btn = QPushButton("Choose Color...")
+        self.reddit_border_color_btn.clicked.connect(self._choose_reddit_border_color)
+        reddit_border_color_row.addWidget(self.reddit_border_color_btn)
+        reddit_border_color_row.addStretch()
+        reddit_layout.addLayout(reddit_border_color_row)
+
+        # Border opacity
+        reddit_border_opacity_row = QHBoxLayout()
+        reddit_border_opacity_row.addWidget(QLabel("Border Opacity:"))
+        self.reddit_border_opacity = QSlider(Qt.Orientation.Horizontal)
+        self.reddit_border_opacity.setMinimum(0)
+        self.reddit_border_opacity.setMaximum(100)
+        self.reddit_border_opacity.setValue(80)
+        self.reddit_border_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.reddit_border_opacity.setTickInterval(10)
+        self.reddit_border_opacity.valueChanged.connect(self._save_settings)
+        reddit_border_opacity_row.addWidget(self.reddit_border_opacity)
+        self.reddit_border_opacity_label = QLabel("80%")
+        self.reddit_border_opacity.valueChanged.connect(
+            lambda v: self.reddit_border_opacity_label.setText(f"{v}%")
+        )
+        reddit_border_opacity_row.addWidget(self.reddit_border_opacity_label)
+        reddit_layout.addLayout(reddit_border_opacity_row)
+
+        self._reddit_container = QWidget()
+        reddit_container_layout = QVBoxLayout(self._reddit_container)
+        reddit_container_layout.setContentsMargins(0, 20, 0, 0)
+        reddit_container_layout.addWidget(reddit_group)
+        layout.addWidget(self._reddit_container)
+
         layout.addStretch()
 
         # Set scroll area widget and add to main layout
@@ -808,6 +1001,7 @@ class WidgetsTab(QWidget):
             self._clocks_container.setVisible(subtab_id == 0)
             self._weather_container.setVisible(subtab_id == 1)
             self._media_container.setVisible(subtab_id == 2)
+            self._reddit_container.setVisible(subtab_id == 3)
         except Exception:
             # If containers are not yet initialized, ignore
             pass
@@ -947,6 +1141,22 @@ class WidgetsTab(QWidget):
                 getattr(self, 'media_rounded_artwork', None),
                 getattr(self, 'media_show_header_frame', None),
                 getattr(self, 'media_show_controls', None),
+                getattr(self, 'reddit_enabled', None),
+                getattr(self, 'reddit_subreddit', None),
+                getattr(self, 'reddit_items', None),
+                getattr(self, 'reddit_position', None),
+                getattr(self, 'reddit_monitor_combo', None),
+                getattr(self, 'reddit_font_combo', None),
+                getattr(self, 'reddit_font_size', None),
+                getattr(self, 'reddit_margin', None),
+                getattr(self, 'reddit_show_background', None),
+                getattr(self, 'reddit_show_separators', None),
+                getattr(self, 'reddit_bg_opacity', None),
+                getattr(self, 'reddit_bg_color_btn', None),
+                getattr(self, 'reddit_color_btn', None),
+                getattr(self, 'reddit_border_color_btn', None),
+                getattr(self, 'reddit_border_opacity', None),
+                getattr(self, 'reddit_exit_on_click', None),
             ]:
                 if w is not None and hasattr(w, 'blockSignals'):
                     w.blockSignals(True)
@@ -988,6 +1198,10 @@ class WidgetsTab(QWidget):
             show_numerals_val = clock_config.get('show_numerals', True)
             show_numerals = SettingsManager.to_bool(show_numerals_val, True)
             self.clock_show_numerals.setChecked(show_numerals)
+
+            analog_shadow_val = clock_config.get('analog_face_shadow', True)
+            analog_shadow = SettingsManager.to_bool(analog_shadow_val, True)
+            self.clock_analog_shadow.setChecked(analog_shadow)
             
             position = clock_config.get('position', 'Top Right')
             index = self.clock_position.findText(position)
@@ -1154,6 +1368,72 @@ class WidgetsTab(QWidget):
             if midx >= 0:
                 self.media_monitor_combo.setCurrentIndex(midx)
 
+            # Load reddit settings
+            reddit_config = widgets.get('reddit', {})
+            # Widget defaults to disabled even if config is missing
+            self.reddit_enabled.setChecked(SettingsManager.to_bool(reddit_config.get('enabled', False), False))
+
+            exit_on_click_val = reddit_config.get('exit_on_click', True)
+            exit_on_click = SettingsManager.to_bool(exit_on_click_val, True)
+            self.reddit_exit_on_click.setChecked(exit_on_click)
+
+            subreddit = str(reddit_config.get('subreddit', '') or '')
+            if not subreddit:
+                subreddit = 'wallpapers'
+            self.reddit_subreddit.setText(subreddit)
+
+            limit_val = int(reddit_config.get('limit', 10))
+            # Historical configs used 5 as the low-count option; we now
+            # present this as a 4-item mode but treat any saved value
+            # <=5 as selecting the "4" entry.
+            if limit_val <= 5:
+                items_text = "4"
+            else:
+                items_text = "10"
+            idx_items = self.reddit_items.findText(items_text)
+            if idx_items >= 0:
+                self.reddit_items.setCurrentIndex(idx_items)
+
+            reddit_pos = reddit_config.get('position', 'Top Left')
+            idx_pos = self.reddit_position.findText(reddit_pos)
+            if idx_pos >= 0:
+                self.reddit_position.setCurrentIndex(idx_pos)
+
+            r_monitor_sel = reddit_config.get('monitor', 'ALL')
+            r_mon_text = str(r_monitor_sel) if isinstance(r_monitor_sel, (int, str)) else 'ALL'
+            r_idx = self.reddit_monitor_combo.findText(r_mon_text)
+            if r_idx >= 0:
+                self.reddit_monitor_combo.setCurrentIndex(r_idx)
+
+            self.reddit_font_combo.setCurrentFont(QFont(reddit_config.get('font_family', 'Segoe UI')))
+            self.reddit_font_size.setValue(reddit_config.get('font_size', 18))
+            self.reddit_margin.setValue(reddit_config.get('margin', 20))
+
+            show_bg_reddit = SettingsManager.to_bool(reddit_config.get('show_background', True), True)
+            self.reddit_show_background.setChecked(show_bg_reddit)
+            show_separators_val = reddit_config.get('show_separators', False)
+            show_separators = SettingsManager.to_bool(show_separators_val, False)
+            self.reddit_show_separators.setChecked(show_separators)
+            reddit_opacity_pct = int(reddit_config.get('bg_opacity', 0.9) * 100)
+            self.reddit_bg_opacity.setValue(reddit_opacity_pct)
+            self.reddit_bg_opacity_label.setText(f"{reddit_opacity_pct}%")
+
+            reddit_color_data = reddit_config.get('color', [255, 255, 255, 230])
+            self._reddit_color = QColor(*reddit_color_data)
+            reddit_bg_color_data = reddit_config.get('bg_color', [64, 64, 64, 255])
+            try:
+                self._reddit_bg_color = QColor(*reddit_bg_color_data)
+            except Exception:
+                self._reddit_bg_color = QColor(64, 64, 64, 255)
+            reddit_border_color_data = reddit_config.get('border_color', [128, 128, 128, 255])
+            try:
+                self._reddit_border_color = QColor(*reddit_border_color_data)
+            except Exception:
+                self._reddit_border_color = QColor(128, 128, 128, 255)
+            reddit_border_opacity_pct = int(reddit_config.get('border_opacity', 0.8) * 100)
+            self.reddit_border_opacity.setValue(reddit_border_opacity_pct)
+            self.reddit_border_opacity_label.setText(f"{reddit_border_opacity_pct}%")
+
             logger.debug("Loaded widget settings")
         finally:
             for w in blockers:
@@ -1224,6 +1504,30 @@ class WidgetsTab(QWidget):
         if color.isValid():
             self._media_border_color = color
             self._save_settings()
+
+    def _choose_reddit_color(self) -> None:
+        """Choose Reddit text color."""
+
+        color = QColorDialog.getColor(self._reddit_color, self, "Choose Reddit Color")
+        if color.isValid():
+            self._reddit_color = color
+            self._save_settings()
+
+    def _choose_reddit_bg_color(self) -> None:
+        """Choose Reddit background color."""
+
+        color = QColorDialog.getColor(self._reddit_bg_color, self, "Choose Reddit Background Color")
+        if color.isValid():
+            self._reddit_bg_color = color
+            self._save_settings()
+
+    def _choose_reddit_border_color(self) -> None:
+        """Choose Reddit border color."""
+
+        color = QColorDialog.getColor(self._reddit_border_color, self, "Choose Reddit Border Color")
+        if color.isValid():
+            self._reddit_border_color = color
+            self._save_settings()
     
     def _save_settings(self) -> None:
         """Save current settings."""
@@ -1254,6 +1558,7 @@ class WidgetsTab(QWidget):
             'border_opacity': self.clock_border_opacity.value() / 100.0,
             'display_mode': 'analog' if self.clock_analog_mode.isChecked() else 'digital',
             'show_numerals': self.clock_show_numerals.isChecked(),
+            'analog_face_shadow': self.clock_analog_shadow.isChecked(),
         }
         # Monitor selection save: 'ALL' or int
         cmon_text = self.clock_monitor_combo.currentText()
@@ -1303,6 +1608,49 @@ class WidgetsTab(QWidget):
         mmon_text = self.media_monitor_combo.currentText()
         media_config['monitor'] = mmon_text if mmon_text == 'ALL' else int(mmon_text)
 
+        reddit_limit_text = self.reddit_items.currentText().strip()
+        try:
+            reddit_limit = int(reddit_limit_text)
+        except Exception:
+            reddit_limit = 10
+
+        reddit_config = {
+            'enabled': self.reddit_enabled.isChecked(),
+            'exit_on_click': self.reddit_exit_on_click.isChecked(),
+            'subreddit': self.reddit_subreddit.text().strip() or 'wallpapers',
+            'limit': reddit_limit,
+            'position': self.reddit_position.currentText(),
+            'font_family': self.reddit_font_combo.currentFont().family(),
+            'font_size': self.reddit_font_size.value(),
+            'margin': self.reddit_margin.value(),
+            'show_background': self.reddit_show_background.isChecked(),
+            'show_separators': self.reddit_show_separators.isChecked(),
+            'bg_opacity': self.reddit_bg_opacity.value() / 100.0,
+            'color': [
+                self._reddit_color.red(),
+                self._reddit_color.green(),
+                self._reddit_color.blue(),
+                self._reddit_color.alpha(),
+            ],
+            'bg_color': [
+                self._reddit_bg_color.red(),
+                self._reddit_bg_color.green(),
+                self._reddit_bg_color.blue(),
+                self._reddit_bg_color.alpha(),
+            ],
+            'border_color': [
+                self._reddit_border_color.red(),
+                self._reddit_border_color.green(),
+                self._reddit_border_color.blue(),
+                self._reddit_border_color.alpha(),
+            ],
+            'border_opacity': self.reddit_border_opacity.value() / 100.0,
+        }
+
+        # Monitor selection save: 'ALL' or int, mirroring clock/weather/media.
+        rmon_text = self.reddit_monitor_combo.currentText()
+        reddit_config['monitor'] = rmon_text if rmon_text == 'ALL' else int(rmon_text)
+
         clock2_tz_data = self.clock2_timezone.currentData()
         clock2_timezone = clock2_tz_data if clock2_tz_data else 'UTC'
         clock2_config = {
@@ -1338,6 +1686,7 @@ class WidgetsTab(QWidget):
         existing_widgets['clock3'] = clock3_config
         existing_widgets['weather'] = weather_config
         existing_widgets['media'] = media_config
+        existing_widgets['reddit'] = reddit_config
 
         self._settings.set('widgets', existing_widgets)
         self._settings.save()

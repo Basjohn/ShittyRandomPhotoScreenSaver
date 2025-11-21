@@ -180,7 +180,18 @@ class WeatherWidget(QLabel):
             self._update_display(self._cached_data)
             self._has_displayed_valid_data = True
             self._enabled = True
-            self._fade_in()
+
+            def _starter() -> None:
+                self._fade_in()
+
+            parent = self.parent()
+            if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
+                try:
+                    parent.request_overlay_fade_sync("weather", _starter)
+                except Exception:
+                    _starter()
+            else:
+                _starter()
 
             self._fetch_weather()
             self._update_timer = QTimer(self)
@@ -310,9 +321,22 @@ class WeatherWidget(QLabel):
         if self._pending_first_show and not self._has_displayed_valid_data:
             self._pending_first_show = False
             self._has_displayed_valid_data = True
-            self._fade_in()
+
+            def _starter() -> None:
+                self._fade_in()
+
+            parent = self.parent()
+            if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
+                try:
+                    parent.request_overlay_fade_sync("weather", _starter)
+                except Exception:
+                    _starter()
+            else:
+                _starter()
         else:
-            self.show()
+            # For subsequent updates, keep using the current visibility state;
+            # the initial fade-in (if any) owns showing the widget.
+            pass
 
         self.weather_updated.emit(data)
     
@@ -700,23 +724,38 @@ class WeatherWidget(QLabel):
             if self._fade_effect is None:
                 self._fade_effect = QGraphicsOpacityEffect(self)
 
-            # Install the fade effect, overriding any previous graphics
-            # effect (e.g. a drop shadow) for the duration of the fade.
-            self.setGraphicsEffect(self._fade_effect)
-
             if self._fade_anim is not None:
                 try:
                     self._fade_anim.stop()
                 except Exception:
                     pass
 
+            # Start fully transparent before the effect is installed so we
+            # never present a 1-frame full-opacity flash.
             self._fade_effect.setOpacity(0.0)
+
+            # Install the fade effect, overriding any previous graphics
+            # effect (e.g. a drop shadow) for the duration of the fade.
+            self.setGraphicsEffect(self._fade_effect)
+
+            logger.debug(
+                "[WEATHER] _fade_in starting (has_cached=%s, show_background=%s)",
+                self._has_displayed_valid_data,
+                self._show_background,
+            )
+
             self.show()
 
             anim = QPropertyAnimation(self._fade_effect, b"opacity", self)
-            anim.setDuration(1000)
+            anim.setDuration(1500)
             anim.setStartValue(0.0)
             anim.setEndValue(1.0)
+            try:
+                from PySide6.QtCore import QEasingCurve
+
+                anim.setEasingCurve(QEasingCurve.InOutCubic)
+            except Exception:
+                pass
 
             def _on_finished() -> None:
                 # Tear down the fade effect and restore the shared shadow.
@@ -746,6 +785,7 @@ class WeatherWidget(QLabel):
             self._fade_anim.start()
         except Exception:
             # Fallback: just show and, if available, apply the shared shadow.
+            logger.debug("[WEATHER] _fade_in fallback path triggered", exc_info=True)
             try:
                 self.show()
             except Exception:

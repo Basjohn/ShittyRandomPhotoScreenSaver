@@ -81,6 +81,7 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
   - `widgets.clock2.*`, `widgets.clock3.*` (Clock 2/3): same schema as Clock 1 with independent per-monitor/timezone configuration.
   - `widgets.weather.*`: monitor ('ALL'|1|2|3), position, font, colour, optional iconography.
   - `widgets.media.*`: Spotify media widget configuration (enabled flag, target monitor, corner position, font family/size, margin, optional background frame and border, artwork size, controls/header style flags) as documented in `Docs/Spec.md`.
+  - `widgets.reddit.*`: Reddit overlay widget configuration (enabled flag, target monitor, corner position, subreddit slug, item limit, font family/size, margin, text colour, optional background frame and border with opacity, background opacity) using Reddit's unauthenticated JSON listing endpoints; widget hides itself on fetch/parse failure and only responds to clicks in Ctrl-held / hard-exit interaction modes.
   - `widgets.shadows.*`: global drop-shadow configuration shared by all overlay widgets (enabled flag, colour, offset, blur radius, text/frame opacity multipliers).
 - Settings dialog:
   - Palette: app-owned dark theme without Windows accent bleed.

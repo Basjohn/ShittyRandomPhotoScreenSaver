@@ -616,12 +616,14 @@ QDialogButtonBox {
 
 /* Tooltip styling */
 QToolTip {
-    background-color: rgba(51, 51, 51, 1.0);
+    /* 70% opaque dark grey background so tooltips float above overlays */
+    background-color: rgba(32, 32, 32, 0.7);
+    /* Fully opaque white text for maximum legibility */
     color: rgba(255, 255, 255, 1.0);
-    border: 1px solid rgba(85, 85, 85, 1.0);
+    /* Subtle but clear white border to match overlay frames */
+    border: 1px solid rgba(255, 255, 255, 1.0);
     border-radius: 4px;
     padding: 5px 10px;
-    opacity: 240;
 }
 
 /* Loading overlay */

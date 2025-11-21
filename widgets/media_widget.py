@@ -693,10 +693,22 @@ class MediaWidget(QLabel):
             self._update_position()
 
         # For the very first time the widget becomes visible we use a
-        # simple fade-in. Subsequent track changes update in-place so the
-        # card and controls do not move.
+        # simple fade-in coordinated with other overlays (weather/Reddit)
+        # via the DisplayWidget so they appear together. Subsequent track
+        # changes update in-place so the card and controls do not move.
         if not was_visible:
-            self._start_widget_fade_in(2000)
+            parent = self.parent()
+
+            def _starter() -> None:
+                self._start_widget_fade_in(1500)
+
+            if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
+                try:
+                    parent.request_overlay_fade_sync("media", _starter)
+                except Exception:
+                    _starter()
+            else:
+                _starter()
         else:
             try:
                 self.show()
@@ -1110,7 +1122,7 @@ class MediaWidget(QLabel):
         finally:
             painter.restore()
 
-    def _start_widget_fade_in(self, duration_ms: int = 1000) -> None:
+    def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:
         """Fade the entire widget in, then attach the global drop shadow."""
 
         if duration_ms <= 0:
