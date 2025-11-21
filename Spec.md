@@ -80,6 +80,8 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
   - `widgets.clock.*` (Clock 1): monitor ('ALL'|1|2|3), position, font, colour, timezone, background options.
   - `widgets.clock2.*`, `widgets.clock3.*` (Clock 2/3): same schema as Clock 1 with independent per-monitor/timezone configuration.
   - `widgets.weather.*`: monitor ('ALL'|1|2|3), position, font, colour, optional iconography.
+  - `widgets.media.*`: Spotify media widget configuration (enabled flag, target monitor, corner position, font family/size, margin, optional background frame and border, artwork size, controls/header style flags) as documented in `Docs/Spec.md`.
+  - `widgets.shadows.*`: global drop-shadow configuration shared by all overlay widgets (enabled flag, colour, offset, blur radius, text/frame opacity multipliers).
 
 ## Thread Safety & Centralization
 - All business logic threading via `ThreadManager`.
@@ -113,3 +115,6 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
 - Compute-pool pre-scale-to-screen (per-display DPR) ahead of time for the next image.
 - Transition sync improvements across displays using lock-free SPSC queues.
 - Additional **GL-only, compositor-backed transitions** (Peel, Rain Drops, Warp Dissolve, 3D Block Spins, Claw Marks) implemented as new transition types under the existing compositor architecture. These effects are only exposed when `display.hw_accel=True` and must either be hidden or mapped to a safe CPU fallback (e.g. Crossfade) when hardware acceleration is disabled. Detailed design and feasibility notes live in `Docs/GL_Transitions_Proposal.md`.
+
+**Version**: 1.0  
+**Last Updated**: Nov 21, 2025 00:30 - Canonical settings, GL compositor path, Spotify widget baseline

@@ -102,24 +102,10 @@ Checkboxes: `[ ]` = active work; `[x]` = completed or historical items retained 
 
 - `scripts/run_tests.py`
 
-## 11. Widgets, Input & GL Startup (New tasks 2025-11-15)
+## 11. Widgets, Input & GL Startup (2025-11-15 baseline)
 
-### 11.1 Spotify / Media Playback Widget (Priority: Low)
-- [x] Implement a Spotify widget using Windows 10/11 media controls (Global System Media Transport Controls / Windows Media Control API) so that it can show:
-  - Current playback state (Playing / Paused)
-  - Track title and artist
-  - Album name
-  - Album artwork as a static icon when available, with the text layout shrinking horizontally when artwork is absent.
-- [x] Hide the widget entirely when no Spotify GSMTC session is active or when media APIs/controllers are unavailable, treating this as "no media" rather than showing other players.
-- [ ] Use the official Spotify logo (or a transparency supporting equivalent) in the widget header alongside a clear "SPOTIFY" label, aligned with the app theme for good UX. The logo should be scaled to fit the header height, overall shape and customization of widget resembles our general widget designs/rules. *(Current implementation supports an optional logo from `/images`, but the final asset and UX polish remain TODO.)*
-- [x] Provide layout options equivalent to the weather widget (per-monitor selection, corner position, background on/off, margin, opacity) through the widgets settings UI.
-- [x] Add transport controls to the widget UI: Previous (`<`), Play/Pause, and Next (`>`), wired via the centralized media controller.
-- [x] Gate interactivity behind explicit user intent: transport behaviour is only invoked when either `input.hard_exit` is enabled or the Ctrl key is held down in the temporary interaction mode; in normal mode the widget remains effectively display-only and clicks still exit the screensaver.
-- [x] Centralize media-control plumbing in a reusable module (`core/media/media_controller.py`) so future widgets/features can share the same integration, including a NoOp fallback and Spotify session selection.
-- [x] If the widget cannot retrieve media information or controls it should fall back to not rendering and log failure softly, rather than raising. *(Implemented by hiding the widget when `get_current_track()` returns `None`, with controller failures logged at debug/info.)*
-- [x] Ensure the media widget is kept above GL and software transition overlays via `transitions.overlay_manager.raise_overlay()` so that Spotify text/artwork and transport controls remain visible in both software and compositor-backed modes.
-
-
+### 11.1 Spotify / Media Playback Widget (Historical baseline)
+- [x] Spotify widget implemented as a Windows 10/11 GSMTC-based Now Playing card (Spotify-only session selection), with hide-on-no-media behaviour and centralized media-control plumbing via `core/media/media_controller.py`. Layout, header/logo alignment, artwork placement, controls row, and interaction gating are now considered **baseline** and documented in detail in `Docs/07_WIDGETS_AND_UI.md` and `Docs/10_WIDGET_GUIDELINES.md`.
 
 ### 11.2 Weather Iconography (Priority: Low)
 - [ ] Replace the current simple ASCII condition tags (e.g. `[CLOUD]`, `[RAIN]`, `[SUN]`) with a more refined iconography approach (either improved ASCII that is an ASCII  based drawing that resembles the icon in question or a free-to-use icon set) that remains readable and theme-aware.
@@ -127,22 +113,22 @@ Checkboxes: `[ ]` = active work; `[x]` = completed or historical items retained 
 - [ ] Add a `show_icon`/style setting for the weather widget (with sensible defaults) and ensure drawing stays performant and flicker-free.
 
 ### 11.3 Analogue Clock Mode (Priority: Low)
-- [ ] Add an analogue display mode per clock widget (Clock 1/2/3), so each clock can independently choose between digital and analogue representations.
-- [ ] Implement an analogue clock paint path that includes:
+- [x] Add an analogue display mode per clock widget (Clock 1/2/3), so each clock can independently choose between digital and analogue representations.
+- [x] Implement an analogue clock paint path that includes:
   - Clock face circle, hour markers, and optional Roman numerals via `drawText()`.
   - Hour/minute/second hands with optional tapered/arrow shapes and a bottom-right drop shadow on the hands.
   - Smooth second-hand animation (driven by AnimationManager) rather than 1Hz ticking, with optional seconds.
   - Timezone label rendered below the analogue clock, matching existing timezone label behaviour.
-- [ ] Expose per-clock options in the Widgets tab (digital vs analogue, show numerals, show seconds, hand style) while keeping defaults close to current behaviour.
+- [x] Expose per-clock options in the Widgets tab (digital vs analogue, show numerals, show seconds, hand style) while keeping defaults close to current behaviour.
 
-### 11.4 Widget Drop Shadows (Priority: Low)
-- [ ] Introduce a global widget drop-shadow setting (default: enabled) that applies to all overlay widgets (clock(s), weather, future Spotify/media widget, etc.).
-- [ ] When shadows are enabled, render a light bottom-right shadow behind text (≈30% opacity) and a stronger shadow behind any enabled backgrounds/frames (≈70% opacity), ensuring shadows do not clip or overlap awkwardly.
-- [ ] Centralize shadow configuration (color, offset, opacity) so that widgets share a consistent look and can be tuned in one place; document behaviour and any performance considerations in Spec.md.
+### 11.4 Widget Drop Shadows (Historical baseline)
+- [x] Global widget drop-shadow setting introduced under `widgets.shadows` (default: enabled) and applied to all overlay widgets (clocks, weather, Spotify/media, etc.) via `widgets/shadow_utils.py::apply_widget_shadow`.
+- [x] Shadows use separate opacity multipliers for text-only vs framed widgets (light bottom-right shadow for text ≈30% opacity; stronger shadow for backgrounds/frames ≈70% opacity) with configurable colour, offset, and blur radius tuned for DPI-aware layouts.
+- [x] Shadow configuration is centralized and documented in `Docs/Spec.md` and `Docs/10_WIDGET_GUIDELINES.md`; performance impact is minimal and guarded by the global `widgets.shadows.enabled` toggle.
 
 ### 11.5 Settings GUI Hold-to-Repeat Controls (Priority: Low)
-- [ ] Update settings GUI +/- controls (e.g. spin-buttons for numeric values) so that holding the mouse button down continuously increments/decrements the associated setting at a sensible repeat rate, rather than requiring repeated clicks. Ensure buttons are correctly positioned for recieving presses. Most + - type buttons are slightly misaligned on the settings tab for +'s especially.
-- [ ] Ensure hold-to-repeat behaviour is consistent across all tabs (Display, Widgets, Transitions, etc.), respects min/max clamps, and does not starve the event loop or introduce visible stutter.
+- [x] Update settings GUI +/- controls (e.g. spin-buttons for numeric values) so that holding the mouse button down continuously increments/decrements the associated setting at a sensible repeat rate, rather than requiring repeated clicks. Ensure buttons are correctly positioned for recieving presses. Most + - type buttons are slightly misaligned on the settings tab for +'s especially.
+- [x] Ensure hold-to-repeat behaviour is consistent across all tabs (Display, Widgets, Transitions, etc.), respects min/max clamps, and does not starve the event loop or introduce visible stutter.
 
 ### 11.6 Long-term UI & Widgets ideas (Very low priority)
 - [ ] Add small but strong bottom-right drop shadows to most buttons where space allows (including tab buttons), matching project-wide shadow styling.

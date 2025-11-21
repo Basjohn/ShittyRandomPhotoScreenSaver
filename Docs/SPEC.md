@@ -8,7 +8,7 @@
 
 ## Project Summary
 
-A modern, feature-rich Windows screensaver built with PySide6 that displays photos from local folders or RSS feeds with advanced transitions, multi-monitor support, and overlay widgets (clock and weather).
+A modern, feature-rich Windows screensaver built with PySide6 that displays photos from local folders or RSS feeds with advanced transitions, multi-monitor support, and overlay widgets (clock, weather, and a Spotify media widget).
 
 ---
 

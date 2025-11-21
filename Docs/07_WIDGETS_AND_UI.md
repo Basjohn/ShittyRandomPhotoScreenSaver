@@ -329,7 +329,7 @@ Provide a Spotify-specific "Now Playing" overlay that surfaces track metadata an
   - Metadata line: `title · artist · album`, or `(no metadata)` when all three fields are empty.
   - Optional album artwork drawn on the left when `MediaTrackInfo.artwork` is populated.
   - Optional Spotify logo drawn on the left (from `/images/spotify_logo.png` or variants) when artwork is not available.
-- **Artwork fade-in**: The first time artwork becomes available for a track, the widget runs a short `QVariantAnimation` to fade the artwork from 0 → 1 opacity while keeping the text stable.
+- **Artwork fade-in**: When artwork appears for the first time or the track metadata changes to a different song, the widget runs a short `QVariantAnimation` to fade the artwork from 0 → 1 opacity while keeping the text stable.
 
 ### Integration & Settings
 - Implemented as `MediaWidget` in `widgets/media_widget.py`.

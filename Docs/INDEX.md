@@ -17,7 +17,7 @@
 # ShittyRandomPhotoScreenSaver - Module Index
 
 **Purpose**: Living file map of all modules, their purposes, and key classes/functions.  
-**Last Updated**: Nov 17, 2025 23:30 UTC+2 - Canonical settings + GL compositor route (Route 3)  
+**Last Updated**: Nov 21, 2025 00:30 UTC+2 - Route 3 stable, Spotify media widget + widget shadows baseline  
 **Implementation Status**: 🟢 Core Framework | 🟢 Animation | 🟢 Entry Point | 🟢 Image Sources | 🟢 Display & Rendering | 🟢 Engine | 🟠 **Transitions (GL compositor + Blinds tuned, remaining GL visuals pending review)** | 🟢 Pan & Scan | 🟢 Widgets | 🟢 UI  
 **Test Status**: Runs locally; GL compositor route and settings schema stable, transitions still require targeted visual/manual verification  
 **Note**: Update this file after any major structural changes.
@@ -983,6 +983,27 @@ SETTINGS_CHANGED = "settings.changed"
 **Tested**: 21 tests covering API integration, caching, errors, and display
 
 **Implemented**: Days 14-16
+
+---
+
+### `widgets/media_widget.py` 🟢 COMPLETE
+**Purpose**: Spotify media overlay widget (Now Playing card)  
+**Status**: ✅ Implemented, ✅ Tested (tests/test_media_widget.py)  
+**Key Classes**:
+- `MediaWidget(QLabel)` - Spotify Now Playing card
+  - Displays playback state, track title, artist, and album via `MediaTrackInfo` snapshots
+  - Shows optional album artwork on the right inside a rounded border frame
+  - Uses a Spotify header (logo glyph + SPOTIFY wordmark) aligned via `QFontMetrics`
+  - Hides itself entirely when no Spotify GSMTC session or media data is available
+  - Uses a short artwork-only fade-in animation on track changes while keeping the card/header/controls static
+  - Supports per-monitor placement, margins, optional background frame, and transport controls row (previous/play-pause/next) wired through the centralized media controller
+  - Interaction is gated via Ctrl-held / hard-exit modes, mediated by `DisplayWidget`
+
+### `widgets/shadow_utils.py` 🟢 COMPLETE
+**Purpose**: Centralized drop-shadow helper for overlay widgets  
+**Status**: ✅ Implemented  
+**Key Functions**:
+- `apply_widget_shadow(widget, config, has_background_frame)` - Apply/remove a `QGraphicsDropShadowEffect` based on the shared `widgets.shadows` settings block (enabled flag, colour, offset, blur radius, text/frame opacity). Skips widgets that already have a non-shadow graphics effect attached.
 
 ---
 
