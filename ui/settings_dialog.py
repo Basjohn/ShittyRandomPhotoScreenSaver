@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QMessageBox, QSizePolicy,
 )
 from PySide6.QtCore import Qt, QPoint, Signal, QUrl
-from PySide6.QtGui import QFont, QColor, QPixmap, QDesktopServices, QPainter, QPen
+from PySide6.QtGui import QFont, QColor, QPixmap, QDesktopServices, QPainter, QPen, QGuiApplication
 
 from core.logging.logger import get_logger
 from core.settings.settings_manager import SettingsManager
@@ -218,17 +218,19 @@ class SettingsDialog(QDialog):
             # Use saved geometry (will be applied in _restore_geometry())
             pass
         else:
-            # No saved geometry - default to 60% of primary screen
-            from PySide6.QtWidgets import QApplication
-            screen = QApplication.primaryScreen()
-            if screen:
-                geometry = screen.geometry()
+            # No saved geometry - default to ~60% of primary screen while
+            # ensuring the dialog is never created larger than the screen.
+            screen = QGuiApplication.primaryScreen()
+            if screen is not None:
+                geometry = screen.availableGeometry()
                 default_width = int(geometry.width() * 0.6)
                 default_height = int(geometry.height() * 0.6)
+                default_width = max(self.minimumWidth(), min(default_width, geometry.width()))
+                default_height = max(self.minimumHeight(), min(default_height, geometry.height()))
             else:
-                default_width = 1000
-                default_height = 700
-            
+                default_width = max(self.minimumWidth(), 1000)
+                default_height = max(self.minimumHeight(), 700)
+
             self.resize(default_width, default_height)
             logger.debug(f"No saved geometry - defaulting to 60% of screen: {default_width}x{default_height}")
         
@@ -321,7 +323,7 @@ class SettingsDialog(QDialog):
                     }
                     
                     #tabButton:checked {
-                        background-color: #0078D4;
+                        background-color: #3E3E3E;
                         color: #ffffff;
                         font-weight: bold;
                     }
@@ -342,7 +344,7 @@ class SettingsDialog(QDialog):
                     }
                     
                     QLineEdit:focus {
-                        border: 1px solid rgba(0, 120, 212, 0.8);
+                        border: 1px solid rgba(200, 200, 200, 0.85);
                     }
                     
                     QComboBox {
@@ -354,7 +356,7 @@ class SettingsDialog(QDialog):
                     }
                     
                     QComboBox:hover {
-                        border: 1px solid rgba(0, 120, 212, 0.8);
+                        border: 1px solid rgba(200, 200, 200, 0.85);
                     }
                     
                     QComboBox::drop-down {
@@ -367,7 +369,14 @@ class SettingsDialog(QDialog):
                         background-color: rgba(45, 45, 45, 0.95);
                         color: #ffffff;
                         border: 1px solid rgba(90, 90, 90, 0.8);
-                        selection-background-color: rgba(0, 120, 212, 0.8);
+                        selection-background-color: rgba(80, 80, 80, 0.95);
+                    }
+                    QAbstractItemView::item:selected {
+                        background-color: rgba(70, 70, 70, 0.9);
+                        color: #ffffff;
+                    }
+                    QAbstractItemView::item:hover {
+                        background-color: rgba(62, 62, 62, 0.9);
                     }
                     
                     QSpinBox {
@@ -379,7 +388,7 @@ class SettingsDialog(QDialog):
                     }
                     
                     QSpinBox:focus {
-                        border: 1px solid rgba(0, 120, 212, 0.8);
+                        border: 1px solid rgba(200, 200, 200, 0.85);
                     }
                     
                     QListWidget {
@@ -448,8 +457,8 @@ class SettingsDialog(QDialog):
                     }
                     
                     QCheckBox::indicator:checked {
-                        background-color: rgba(0, 120, 212, 0.8);
-                        border: 1px solid rgba(0, 120, 212, 0.8);
+                        background-color: rgba(210, 210, 210, 0.9);
+                        border: 1px solid rgba(210, 210, 210, 0.9);
                     }
                     
                     QLabel {
@@ -1073,6 +1082,41 @@ class SettingsDialog(QDialog):
         """Restore window geometry from settings."""
         geometry = self._settings.get('ui.dialog_geometry', {})
         if geometry:
-            self.move(geometry.get('x', 100), geometry.get('y', 100))
-            self.resize(geometry.get('width', 1000), geometry.get('height', 700))
-            logger.debug(f"Restored dialog geometry: {geometry}")
+            screen = None
+            try:
+                screen = QGuiApplication.primaryScreen()
+            except Exception:
+                screen = None
+
+            if screen is not None:
+                available = screen.availableGeometry()
+
+                width = int(geometry.get('width', 1000))
+                height = int(geometry.get('height', 700))
+
+                # Clamp restored size so it always fits on the current screen,
+                # while respecting the dialog's minimum size.
+                width = max(self.minimumWidth(), min(width, available.width()))
+                height = max(self.minimumHeight(), min(height, available.height()))
+
+                x = int(geometry.get('x', available.x() + (available.width() - width) // 2))
+                y = int(geometry.get('y', available.y() + (available.height() - height) // 2))
+
+                # Ensure the dialog remains fully visible on-screen.
+                x = max(available.x(), min(x, available.x() + available.width() - width))
+                y = max(available.y(), min(y, available.y() + available.height() - height))
+
+                self.resize(width, height)
+                self.move(x, y)
+                logger.debug(
+                    "Restored dialog geometry (clamped to screen): x=%s, y=%s, w=%s, h=%s",
+                    x,
+                    y,
+                    width,
+                    height,
+                )
+            else:
+                # Fallback: restore without clamping if we cannot query screens.
+                self.move(geometry.get('x', 100), geometry.get('y', 100))
+                self.resize(geometry.get('width', 1000), geometry.get('height', 700))
+                logger.debug(f"Restored dialog geometry: {geometry}")
