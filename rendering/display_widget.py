@@ -1370,6 +1370,30 @@ class DisplayWidget(QWidget):
             except Exception:
                 continue
 
+        # Ensure primary overlay widgets remain above any GL compositor or
+        # legacy transition overlays for the duration of transitions.
+        try:
+            overlays_to_raise = [
+                "media_widget",
+                "spotify_visualizer_widget",
+                "weather_widget",
+                "reddit_widget",
+            ]
+            for attr_name in overlays_to_raise:
+                try:
+                    w = getattr(self, attr_name, None)
+                except Exception:
+                    w = None
+                if w is None:
+                    continue
+                try:
+                    if w.isVisible():
+                        w.raise_()
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
     def _prewarm_gl_contexts(self) -> None:
         """
         Legacy GL overlay prewarm disabled now that compositor is the only GL path.

@@ -706,13 +706,73 @@ class SpotifyVisualizerAudioWorker(QObject):
         if peak <= 1e-6:
             return [0.0] * bands
         arr /= peak
-        positions = np.linspace(-1.0, 1.0, bands, dtype="float32")
+
+        # Soft tilt: gently suppress the very lowest bars so bass energy
+        # does not dominate the entire row, while slightly lifting
+        # mid/high bands. This is intentionally subtle; the main musical
+        # shape still comes from the FFT itself.
         try:
-            center_weight = 0.35
-            weights = 1.0 + center_weight * (1.0 - (2.0 * np.abs(positions)) ** 1.5)
-            arr *= weights
+            band_idx = np.arange(bands, dtype="float32")
+            t = band_idx / max(1.0, float(bands - 1))
+            # 0 -> ~0.45, centre -> ~0.85, right edge -> ~1.05
+            tilt = 0.45 + 0.6 * t
+            arr *= tilt
         except Exception:
             pass
+
+        positions = np.linspace(-1.0, 1.0, bands, dtype="float32")
+        try:
+            # Stronger, symmetric centre emphasis using a smooth bell.
+            # This shifts perceived energy towards the middle instead of
+            # stacking peaks on the far left.
+            sigma = 0.75
+            center_profile = np.exp(-0.5 * (positions / sigma) ** 2).astype("float32")
+            peak_profile = float(center_profile.max()) if center_profile.size else 0.0
+            if peak_profile > 1e-6:
+                center_profile /= peak_profile
+            center_weight = 0.55
+            weights = (1.0 - center_weight) + center_weight * center_profile
+            arr *= weights
+
+            # Gentle right-leaning bias: lift bars on the right-hand side
+            # and relax those on the left so the visual peak drifts a bit
+            # towards the right half of the strip.
+            bias_strength = 0.35
+            right_bias = 1.0 + bias_strength * positions
+            right_bias = np.clip(
+                right_bias,
+                1.0 - bias_strength,
+                1.0 + bias_strength,
+            )
+            arr *= right_bias
+
+            # Ensure trailing activity on the extreme bars. The left edge
+            # keeps a mild bleed from its neighbour; the rightmost bar is
+            # explicitly forced to track a fraction of the second-from-right
+            # so it never stays visually dead when its neighbour is active.
+            if bands >= 3:
+                try:
+                    left0 = float(arr[0])
+                    left1 = float(arr[1])
+                    right1 = float(arr[-2])
+
+                    edge_leak_left = 0.30
+                    right_trail_factor = 0.80
+
+                    arr[0] = left0 * (1.0 - edge_leak_left) + left1 * edge_leak_left
+
+                    # Hard guarantee: rightmost bar is at least a fixed
+                    # fraction of its neighbour, preserving motion at the
+                    # far edge even if the high-frequency band itself is
+                    # numerically small.
+                    forced_right = right1 * right_trail_factor
+                    if bands >= 2 and forced_right > float(arr[-1]):
+                        arr[-1] = forced_right
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
         peak2 = float(arr.max()) if arr.size else 0.0
         if peak2 > 1e-6:
             arr /= peak2
@@ -776,6 +836,31 @@ class SpotifyVisualizerWidget(QWidget):
     def set_shadow_config(self, config) -> None:
         self._shadow_config = config
 
+    def _update_card_style(self) -> None:
+        if self._show_background:
+            bg = QColor(self._bg_color)
+            alpha = int(255 * max(0.0, min(1.0, self._bg_opacity)))
+            bg.setAlpha(alpha)
+            self.setStyleSheet(
+                f"""
+                QWidget {{
+                    background-color: rgba({bg.red()}, {bg.green()}, {bg.blue()}, {bg.alpha()});
+                    border: {self._border_width}px solid rgba({self._card_border_color.red()}, {self._card_border_color.green()}, {self._card_border_color.blue()}, {self._card_border_color.alpha()});
+                    border-radius: 8px;
+                }}
+                """
+            )
+        else:
+            self.setStyleSheet(
+                """
+                QWidget {
+                    background-color: transparent;
+                    border: 0px solid transparent;
+                    border-radius: 8px;
+                }
+                """
+            )
+
     def set_bar_style(self, *, bg_color: QColor, bg_opacity: float, border_color: QColor, border_width: int = 2,
                       show_background: bool = True) -> None:
         self._bg_color = QColor(bg_color)
@@ -783,6 +868,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._card_border_color = QColor(border_color)
         self._border_width = max(0, int(border_width))
         self._show_background = bool(show_background)
+        self._update_card_style()
         self.update()
 
     def set_bar_colors(self, fill_color: QColor, border_color: QColor) -> None:
@@ -822,6 +908,7 @@ class SpotifyVisualizerWidget(QWidget):
         if not self._spotify_playing:
             # Drive target bars to zero; smoothing path will fade them out.
             self._target_bars = [0.0] * self._bar_count
+            self._display_bars = [0.0] * self._bar_count
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -892,11 +979,13 @@ class SpotifyVisualizerWidget(QWidget):
     def _setup_ui(self) -> None:
         try:
             self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+            self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         except Exception:
             pass
         # Slightly taller default so bars and card border have breathing
         # room and match the visual weight of other widgets.
         self.setMinimumHeight(78)
+        self._update_card_style()
 
     def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:
         if duration_ms <= 0:
@@ -911,16 +1000,10 @@ class SpotifyVisualizerWidget(QWidget):
                     has_background_frame=self._show_background,
                 )
             except Exception:
-                apply_widget_shadow(self, self._shadow_config or {}, has_background_frame=self._show_background)
-            try:
-                if is_verbose_logging():
-                    logger.debug(
-                        "[SPOTIFY_VIS] start_fade_in immediate: geom=%r, visible=%s",
-                        self.geometry(),
-                        self.isVisible(),
-                    )
-            except Exception:
-                pass
+                logger.debug(
+                    "[SPOTIFY_VIS] Failed to attach shadow in no-fade path",
+                    exc_info=True,
+                )
             return
 
         try:
@@ -930,20 +1013,26 @@ class SpotifyVisualizerWidget(QWidget):
                 has_background_frame=self._show_background,
             )
         except Exception:
+            logger.debug(
+                "[SPOTIFY_VIS] _start_widget_fade_in fallback path triggered",
+                exc_info=True,
+            )
             try:
-                apply_widget_shadow(self, self._shadow_config or {}, has_background_frame=self._show_background)
+                self.show()
             except Exception:
                 pass
-
-        try:
-            if is_verbose_logging():
-                logger.debug(
-                    "[SPOTIFY_VIS] start_fade_in: geom=%r, visible=%s",
-                    self.geometry(),
-                    self.isVisible(),
-                )
-        except Exception:
-            pass
+            if self._shadow_config is not None:
+                try:
+                    apply_widget_shadow(
+                        self,
+                        self._shadow_config,
+                        has_background_frame=self._show_background,
+                    )
+                except Exception:
+                    logger.debug(
+                        "[SPOTIFY_VIS] Failed to apply widget shadow in fallback path",
+                        exc_info=True,
+                    )
 
     def _on_tick(self) -> None:
         """Periodic UI tick scheduled via ThreadManager.
@@ -993,6 +1082,8 @@ class SpotifyVisualizerWidget(QWidget):
             self.update()
 
     def paintEvent(self, event: QPaintEvent) -> None:  # type: ignore[override]
+        super().paintEvent(event)
+
         painter = QPainter(self)
         try:
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -1033,16 +1124,6 @@ class SpotifyVisualizerWidget(QWidget):
         # Card background. Follow the same pattern as other widgets: apply
         # opacity to the fill only and keep the border colour as-is so we
         # avoid double-alpha on the outline.
-        if self._show_background:
-            bg = QColor(self._bg_color)
-            bg.setAlpha(int(255 * max(0.0, min(1.0, self._bg_opacity))))
-            painter.setBrush(bg)
-            painter.setPen(QColor(self._card_border_color))
-            radius = 8
-            painter.drawRoundedRect(rect.adjusted(0, 0, -1, -1), radius, radius)
-        else:
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.setPen(Qt.PenStyle.NoPen)
 
         # Bars
         margin_x = 8

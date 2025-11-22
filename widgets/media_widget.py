@@ -237,7 +237,7 @@ class MediaWidget(QLabel):
             return
         timer = QTimer(self)
         timer.setSingleShot(False)
-        timer.setInterval(1500)  # 1.5s poll
+        timer.setInterval(1000)  # 1.0s poll
         timer.timeout.connect(self._refresh)
         self._update_timer = timer
         self._update_timer.start()
@@ -417,6 +417,45 @@ class MediaWidget(QLabel):
         except Exception:
             logger.debug("[MEDIA] play_pause delegation failed", exc_info=True)
             return
+
+        # Optimistically flip the last known playback state so the controls
+        # row and any listeners (e.g. the Spotify visualizer) respond
+        # immediately while the GSMTC query catches up.
+        optimistic = None
+        try:
+            info = self._last_info
+        except Exception:
+            info = None
+        if isinstance(info, MediaTrackInfo):
+            try:
+                current_state = info.state
+            except Exception:
+                current_state = MediaPlaybackState.UNKNOWN
+            if current_state in (MediaPlaybackState.PLAYING, MediaPlaybackState.PAUSED):
+                new_state = (
+                    MediaPlaybackState.PAUSED
+                    if current_state == MediaPlaybackState.PLAYING
+                    else MediaPlaybackState.PLAYING
+                )
+                try:
+                    optimistic = MediaTrackInfo(
+                        title=info.title,
+                        artist=info.artist,
+                        album=info.album,
+                        album_artist=info.album_artist,
+                        state=new_state,
+                        can_play_pause=info.can_play_pause,
+                        can_next=info.can_next,
+                        can_previous=info.can_previous,
+                        artwork=info.artwork,
+                    )
+                except Exception:
+                    optimistic = None
+        if optimistic is not None:
+            try:
+                self._update_display(optimistic)
+            except Exception:
+                logger.debug("[MEDIA] play_pause optimistic update failed", exc_info=True)
 
         # After a local transport action, schedule an immediate refresh so
         # the widget (and any listeners such as the Spotify visualizer)
@@ -628,7 +667,7 @@ class MediaWidget(QLabel):
 
         header_html = (
             f"<div style='font-size:{header_font}pt; font-weight:{header_weight}; "
-            f"letter-spacing:1px; margin-left:{self._header_logo_margin + 2}px; "
+            f"letter-spacing:1px; margin-left:{self._header_logo_margin + 5}px; "
             f"color:rgba(255,255,255,255);'>SPOTIFY</div>"
         )
         # Outer wrapper just establishes spacing; individual lines carry
