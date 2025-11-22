@@ -5,3 +5,5 @@ pytz>=2023.3
 feedparser>=6.0.10
 pytest>=7.4.0
 pytest-qt>=4.2.0
+numpy>=1.23.0
+sounddevice>=0.4.6

@@ -350,6 +350,37 @@ Get-Content test_output.log -Tail 50
 - Logs show weather and clock creation only on the monitors they are configured for, and `... widget disabled in settings` entries for all others.
 - No unexpected weather network activity is logged for displays where the Weather widget is disabled.
 
+#### Route3 Scenario: Spotify Beat Visualizer (Spotify-only Gating)
+
+**Goal**: Verify that the Spotify Beat Visualizer only animates when Spotify is actively playing, inherits the Spotify/media card styling, and respects per-monitor settings.
+
+**Prerequisites**:
+- Run in debug mode: `python main.py --debug`.
+- Spotify installed on the system and capable of playing local/streamed audio.
+
+**Steps**:
+1. Open the settings dialog (`S`) from a running slideshow and go to the **Widgets → Media** subtab.
+2. Enable **Spotify Widget** and **Spotify Beat Visualizer**.
+   - Set both `monitor` selectors to `ALL` for a simple first pass.
+   - Leave the media widget position at its default (e.g. `Bottom Left`).
+3. Apply/OK and return to the slideshow.
+4. With Spotify **stopped or paused**, observe the media widget and visualizer:
+   - Media card should either be hidden or showing the last-known track state (depending on GSMTC availability).
+   - The Beat Visualizer should either remain hidden or show only near-zero-height bars (no visible motion).
+5. Start Spotify playback of any track and wait a few seconds:
+   - Confirm the media widget updates to the current track.
+   - Confirm the Beat Visualizer appears a short distance **above** the Spotify card (about 20px gap), matching its width.
+   - Bars should animate in sync with the general energy of the audio (more motion on louder/denser sections).
+6. Pause or stop Spotify playback again:
+   - Bars should smoothly decay back to an idle state (heights easing towards zero) and remain idle even if other apps play audio.
+7. Optional: change **Bar Count**, **Bar Fill Color** and **Bar Border Color/Opacity** in the Widgets tab and re-run steps 4–6:
+   - Confirm the new styling applies after settings are saved and the screensaver restarts.
+
+**Pass Criteria**:
+- Beat Visualizer only shows meaningful bar motion when Spotify is reported as `playing` by the centralized media controller; pausing/stopping Spotify causes bars to decay to zero.
+- Visualizer card background, border, and opacity remain visually locked to the Spotify/media widget card.
+- Per-monitor settings (`monitor = 'ALL'|1|2|3`) gate creation on each display: when the visualizer is disabled or targeted away from a monitor, no beat widget is constructed there.
+
 #### Route3 Perf Scenario: Prefetch Queue vs Transition Skips
 
 **Goal**: Use existing telemetry to confirm that the prefetch queue and the single-skip policy in `DisplayWidget.set_image` work together without harming pacing, and that `transition_skip_count` remains bounded for normal runs.

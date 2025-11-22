@@ -49,6 +49,9 @@ class WidgetsTab(QWidget):
         self._media_color = QColor(255, 255, 255, 230)
         self._media_bg_color = QColor(64, 64, 64, 255)
         self._media_border_color = QColor(128, 128, 128, 255)
+        # Spotify Beat Visualizer frame defaults inherit Spotify/media styling
+        self._spotify_vis_fill_color = QColor(0, 255, 128, 230)
+        self._spotify_vis_border_color = QColor(255, 255, 255, 230)
         # Reddit widget frame defaults mirror Spotify/media widget styling
         self._reddit_color = QColor(255, 255, 255, 230)
         self._reddit_bg_color = QColor(64, 64, 64, 255)
@@ -731,10 +734,68 @@ class WidgetsTab(QWidget):
         self.media_show_controls.stateChanged.connect(self._save_settings)
         media_layout.addWidget(self.media_show_controls)
 
+        # Spotify Beat Visualizer group (Spotify-only beat bars tied to
+        # the Spotify/Media widget).
+        spotify_vis_group = QGroupBox("Spotify Beat Visualizer")
+        spotify_vis_layout = QVBoxLayout(spotify_vis_group)
+
+        self.spotify_vis_enabled = QCheckBox("Enable Spotify Beat Visualizer")
+        self.spotify_vis_enabled.setToolTip(
+            "Shows a thin bar visualizer tied to Spotify playback, positioned just above the Spotify widget."
+        )
+        self.spotify_vis_enabled.stateChanged.connect(self._save_settings)
+        spotify_vis_layout.addWidget(self.spotify_vis_enabled)
+
+        spotify_vis_bar_row = QHBoxLayout()
+        spotify_vis_bar_row.addWidget(QLabel("Bar Count:"))
+        self.spotify_vis_bar_count = QSpinBox()
+        self.spotify_vis_bar_count.setRange(8, 96)
+        self.spotify_vis_bar_count.setValue(32)
+        self.spotify_vis_bar_count.setAccelerated(True)
+        self.spotify_vis_bar_count.valueChanged.connect(self._save_settings)
+        spotify_vis_bar_row.addWidget(self.spotify_vis_bar_count)
+        spotify_vis_bar_row.addWidget(QLabel("bars"))
+        spotify_vis_bar_row.addStretch()
+        spotify_vis_layout.addLayout(spotify_vis_bar_row)
+
+        spotify_vis_fill_row = QHBoxLayout()
+        spotify_vis_fill_row.addWidget(QLabel("Bar Fill Color:"))
+        self.spotify_vis_fill_color_btn = QPushButton("Choose Color...")
+        self.spotify_vis_fill_color_btn.clicked.connect(self._choose_spotify_vis_fill_color)
+        spotify_vis_fill_row.addWidget(self.spotify_vis_fill_color_btn)
+        spotify_vis_fill_row.addStretch()
+        spotify_vis_layout.addLayout(spotify_vis_fill_row)
+
+        spotify_vis_border_color_row = QHBoxLayout()
+        spotify_vis_border_color_row.addWidget(QLabel("Bar Border Color:"))
+        self.spotify_vis_border_color_btn = QPushButton("Choose Color...")
+        self.spotify_vis_border_color_btn.clicked.connect(self._choose_spotify_vis_border_color)
+        spotify_vis_border_color_row.addWidget(self.spotify_vis_border_color_btn)
+        spotify_vis_border_color_row.addStretch()
+        spotify_vis_layout.addLayout(spotify_vis_border_color_row)
+
+        spotify_vis_border_opacity_row = QHBoxLayout()
+        spotify_vis_border_opacity_row.addWidget(QLabel("Bar Border Opacity:"))
+        self.spotify_vis_border_opacity = QSlider(Qt.Orientation.Horizontal)
+        self.spotify_vis_border_opacity.setMinimum(0)
+        self.spotify_vis_border_opacity.setMaximum(100)
+        self.spotify_vis_border_opacity.setValue(85)
+        self.spotify_vis_border_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.spotify_vis_border_opacity.setTickInterval(5)
+        self.spotify_vis_border_opacity.valueChanged.connect(self._save_settings)
+        spotify_vis_border_opacity_row.addWidget(self.spotify_vis_border_opacity)
+        self.spotify_vis_border_opacity_label = QLabel("85%")
+        self.spotify_vis_border_opacity.valueChanged.connect(
+            lambda v: self.spotify_vis_border_opacity_label.setText(f"{v}%")
+        )
+        spotify_vis_border_opacity_row.addWidget(self.spotify_vis_border_opacity_label)
+        spotify_vis_layout.addLayout(spotify_vis_border_opacity_row)
+
         self._media_container = QWidget()
         media_container_layout = QVBoxLayout(self._media_container)
         media_container_layout.setContentsMargins(0, 20, 0, 0)
         media_container_layout.addWidget(media_group)
+        media_container_layout.addWidget(spotify_vis_group)
         layout.addWidget(self._media_container)
 
         # Reddit widget group
@@ -1141,6 +1202,9 @@ class WidgetsTab(QWidget):
                 getattr(self, 'media_rounded_artwork', None),
                 getattr(self, 'media_show_header_frame', None),
                 getattr(self, 'media_show_controls', None),
+                getattr(self, 'spotify_vis_enabled', None),
+                getattr(self, 'spotify_vis_bar_count', None),
+                getattr(self, 'spotify_vis_border_opacity', None),
                 getattr(self, 'reddit_enabled', None),
                 getattr(self, 'reddit_subreddit', None),
                 getattr(self, 'reddit_items', None),
@@ -1368,6 +1432,28 @@ class WidgetsTab(QWidget):
             if midx >= 0:
                 self.media_monitor_combo.setCurrentIndex(midx)
 
+            # Load Spotify Beat Visualizer settings
+            spotify_vis_config = widgets.get('spotify_visualizer', {})
+            self.spotify_vis_enabled.setChecked(spotify_vis_config.get('enabled', False))
+            bar_count = int(spotify_vis_config.get('bar_count', 32))
+            self.spotify_vis_bar_count.setValue(bar_count)
+
+            fill_color_data = spotify_vis_config.get('bar_fill_color', [0, 255, 128, 230])
+            try:
+                self._spotify_vis_fill_color = QColor(*fill_color_data)
+            except Exception:
+                self._spotify_vis_fill_color = QColor(0, 255, 128, 230)
+
+            border_color_data = spotify_vis_config.get('bar_border_color', [255, 255, 255, 230])
+            try:
+                self._spotify_vis_border_color = QColor(*border_color_data)
+            except Exception:
+                self._spotify_vis_border_color = QColor(255, 255, 255, 230)
+
+            border_opacity_pct = int(spotify_vis_config.get('bar_border_opacity', 0.85) * 100)
+            self.spotify_vis_border_opacity.setValue(border_opacity_pct)
+            self.spotify_vis_border_opacity_label.setText(f"{border_opacity_pct}%")
+
             # Load reddit settings
             reddit_config = widgets.get('reddit', {})
             # Widget defaults to disabled even if config is missing
@@ -1430,18 +1516,13 @@ class WidgetsTab(QWidget):
                 self._reddit_border_color = QColor(*reddit_border_color_data)
             except Exception:
                 self._reddit_border_color = QColor(128, 128, 128, 255)
-            reddit_border_opacity_pct = int(reddit_config.get('border_opacity', 0.8) * 100)
-            self.reddit_border_opacity.setValue(reddit_border_opacity_pct)
-            self.reddit_border_opacity_label.setText(f"{reddit_border_opacity_pct}%")
-
-            logger.debug("Loaded widget settings")
         finally:
             for w in blockers:
                 try:
                     w.blockSignals(False)
                 except Exception:
                     pass
-    
+
     def _choose_clock_color(self) -> None:
         """Choose clock text color."""
         color = QColorDialog.getColor(self._clock_color, self, "Choose Clock Color")
@@ -1500,9 +1581,34 @@ class WidgetsTab(QWidget):
 
     def _choose_media_border_color(self) -> None:
         """Choose media border color."""
+
         color = QColorDialog.getColor(self._media_border_color, self, "Choose Spotify Border Color")
         if color.isValid():
             self._media_border_color = color
+            self._save_settings()
+
+    def _choose_spotify_vis_fill_color(self) -> None:
+        """Choose Spotify Beat Visualizer bar fill color."""
+
+        color = QColorDialog.getColor(
+            self._spotify_vis_fill_color,
+            self,
+            "Choose Beat Bar Fill Color",
+        )
+        if color.isValid():
+            self._spotify_vis_fill_color = color
+            self._save_settings()
+
+    def _choose_spotify_vis_border_color(self) -> None:
+        """Choose Spotify Beat Visualizer bar border color."""
+
+        color = QColorDialog.getColor(
+            self._spotify_vis_border_color,
+            self,
+            "Choose Beat Bar Border Color",
+        )
+        if color.isValid():
+            self._spotify_vis_border_color = color
             self._save_settings()
 
     def _choose_reddit_color(self) -> None:
@@ -1608,6 +1714,24 @@ class WidgetsTab(QWidget):
         mmon_text = self.media_monitor_combo.currentText()
         media_config['monitor'] = mmon_text if mmon_text == 'ALL' else int(mmon_text)
 
+        spotify_vis_config = {
+            'enabled': self.spotify_vis_enabled.isChecked(),
+            'bar_count': self.spotify_vis_bar_count.value(),
+            'bar_fill_color': [
+                self._spotify_vis_fill_color.red(),
+                self._spotify_vis_fill_color.green(),
+                self._spotify_vis_fill_color.blue(),
+                self._spotify_vis_fill_color.alpha(),
+            ],
+            'bar_border_color': [
+                self._spotify_vis_border_color.red(),
+                self._spotify_vis_border_color.green(),
+                self._spotify_vis_border_color.blue(),
+                self._spotify_vis_border_color.alpha(),
+            ],
+            'bar_border_opacity': self.spotify_vis_border_opacity.value() / 100.0,
+        }
+
         reddit_limit_text = self.reddit_items.currentText().strip()
         try:
             reddit_limit = int(reddit_limit_text)
@@ -1686,6 +1810,7 @@ class WidgetsTab(QWidget):
         existing_widgets['clock3'] = clock3_config
         existing_widgets['weather'] = weather_config
         existing_widgets['media'] = media_config
+        existing_widgets['spotify_visualizer'] = spotify_vis_config
         existing_widgets['reddit'] = reddit_config
 
         self._settings.set('widgets', existing_widgets)

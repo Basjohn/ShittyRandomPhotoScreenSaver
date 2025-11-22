@@ -278,6 +278,15 @@ def raise_overlay(widget: QWidget, overlay: QWidget) -> None:
     except Exception:
         pass
 
+    try:
+        # Spotify Beat Visualizer should sit just above the media widget so
+        # that its bars remain visible across transitions.
+        sv = getattr(widget, "spotify_visualizer_widget", None)
+        if sv is not None:
+            sv.raise_()
+    except Exception:
+        pass
+
 
 def notify_overlay_stage(overlay: QWidget, stage: str, **details) -> None:
     """Forward overlay readiness diagnostics to the parent DisplayWidget."""

@@ -271,6 +271,16 @@ class MediaWidget(QLabel):
 
         self.move(x, y)
 
+        # Keep the Spotify Beat Visualizer anchored just above the media
+        # card whenever we recompute our own position. We duck-type the
+        # parent so MediaWidget remains reusable outside DisplayWidget.
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "_position_spotify_visualizer"):
+            try:
+                parent._position_spotify_visualizer()
+            except Exception:
+                pass
+
     # ------------------------------------------------------------------
     # Styling
     # ------------------------------------------------------------------
@@ -406,6 +416,19 @@ class MediaWidget(QLabel):
             self._controller.play_pause()
         except Exception:
             logger.debug("[MEDIA] play_pause delegation failed", exc_info=True)
+            return
+
+        # After a local transport action, schedule an immediate refresh so
+        # the widget (and any listeners such as the Spotify visualizer)
+        # reflect the new state without waiting for the next poll tick.
+        try:
+            if self._enabled:
+                if self._thread_manager is not None:
+                    self._refresh_async()
+                else:
+                    self._refresh()
+        except Exception:
+            logger.debug("[MEDIA] play_pause post-refresh failed", exc_info=True)
 
     def next_track(self) -> None:
         """Skip to next track when supported (best-effort)."""
@@ -414,6 +437,16 @@ class MediaWidget(QLabel):
             self._controller.next()
         except Exception:
             logger.debug("[MEDIA] next delegation failed", exc_info=True)
+            return
+
+        try:
+            if self._enabled:
+                if self._thread_manager is not None:
+                    self._refresh_async()
+                else:
+                    self._refresh()
+        except Exception:
+            logger.debug("[MEDIA] next post-refresh failed", exc_info=True)
 
     def previous_track(self) -> None:
         """Skip to previous track when supported (best-effort)."""
@@ -422,6 +455,16 @@ class MediaWidget(QLabel):
             self._controller.previous()
         except Exception:
             logger.debug("[MEDIA] previous delegation failed", exc_info=True)
+            return
+
+        try:
+            if self._enabled:
+                if self._thread_manager is not None:
+                    self._refresh_async()
+                else:
+                    self._refresh()
+        except Exception:
+            logger.debug("[MEDIA] previous post-refresh failed", exc_info=True)
 
     # ------------------------------------------------------------------
     # Polling and display

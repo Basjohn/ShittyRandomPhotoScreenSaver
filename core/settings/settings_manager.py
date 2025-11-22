@@ -217,6 +217,22 @@ class SettingsManager(QObject):
                     # title row to mirror the Reddit widget styling.
                     'show_header_frame': True,
                 },
+                # Spotify Beat Visualizer – thin bar visualizer paired with
+                # the Spotify media widget. This is Spotify-only by design and
+                # is positioned relative to the media widget rather than via a
+                # separate position control.
+                'spotify_visualizer': {
+                    'enabled': False,
+                    'monitor': 'ALL',
+                    # Number of vertical bars to render (24–48 recommended).
+                    'bar_count': 32,
+                    # Base fill colour for bars (RGBA) – light grey by default.
+                    'bar_fill_color': [200, 200, 200, 230],
+                    # Bar border colour (RGBA) and independent opacity scaler –
+                    # default to a crisp white outline.
+                    'bar_border_color': [255, 255, 255, 255],
+                    'bar_border_opacity': 1.0,
+                },
                 # Global widget drop-shadow configuration shared by all
                 # overlay widgets (clocks, weather, media). The Widgets tab
                 # currently exposes only an enable/disable checkbox; other

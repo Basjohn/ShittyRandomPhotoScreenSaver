@@ -46,6 +46,7 @@ from widgets.clock_widget import ClockWidget, TimeFormat, ClockPosition
 from widgets.weather_widget import WeatherWidget, WeatherPosition
 from widgets.media_widget import MediaWidget, MediaPosition
 from widgets.reddit_widget import RedditWidget, RedditPosition
+from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 from widgets.shadow_utils import apply_widget_shadow
 from core.logging.logger import get_logger, is_verbose_logging
 from core.logging.overlay_telemetry import record_overlay_ready
@@ -154,6 +155,7 @@ class DisplayWidget(QWidget):
         self.clock3_widget: Optional[ClockWidget] = None
         self.weather_widget: Optional[WeatherWidget] = None
         self.media_widget: Optional[MediaWidget] = None
+        self.spotify_visualizer_widget: Optional[SpotifyVisualizerWidget] = None
         self.reddit_widget: Optional[RedditWidget] = None
         self._current_transition: Optional[BaseTransition] = None
         self._current_transition_overlay_key: Optional[str] = None
@@ -573,6 +575,9 @@ class DisplayWidget(QWidget):
                 media_monitor_sel,
             )
 
+        spotify_vis_settings = widgets_map.get('spotify_visualizer', {}) if isinstance(widgets_map, dict) else {}
+        spotify_vis_enabled = SettingsManager.to_bool(spotify_vis_settings.get('enabled', False), False)
+
         self._overlay_fade_expected = set()
         if weather_enabled and weather_show_on_this:
             self._overlay_fade_expected.add("weather")
@@ -580,6 +585,8 @@ class DisplayWidget(QWidget):
             self._overlay_fade_expected.add("reddit")
         if media_enabled and media_show_on_this:
             self._overlay_fade_expected.add("media")
+        if media_enabled and media_show_on_this and spotify_vis_enabled:
+            self._overlay_fade_expected.add("spotify_visualizer")
 
         position_map = {
             'Top Left': ClockPosition.TOP_LEFT,
@@ -1162,13 +1169,17 @@ class DisplayWidget(QWidget):
 
             # Background color
             bg_color_data = media_settings.get('bg_color', [64, 64, 64, 255])
+            bg_qcolor = QColor(64, 64, 64, 255)
             try:
                 bg_r, bg_g, bg_b = bg_color_data[0], bg_color_data[1], bg_color_data[2]
                 bg_a = bg_color_data[3] if len(bg_color_data) > 3 else 255
                 bg_qcolor = QColor(bg_r, bg_g, bg_b, bg_a)
                 self.media_widget.set_background_color(bg_qcolor)
             except Exception:
-                pass
+                try:
+                    self.media_widget.set_background_color(bg_qcolor)
+                except Exception:
+                    pass
 
             # Background opacity
             try:
@@ -1180,6 +1191,7 @@ class DisplayWidget(QWidget):
             # Border color and opacity
             border_color_data = media_settings.get('border_color', [128, 128, 128, 255])
             border_opacity = media_settings.get('border_opacity', 0.8)
+            border_qcolor = QColor(128, 128, 128, 255)
             try:
                 br_r, br_g, br_b = (
                     border_color_data[0],
@@ -1196,7 +1208,10 @@ class DisplayWidget(QWidget):
                 border_qcolor = QColor(br_r, br_g, br_b, br_a)
                 self.media_widget.set_background_border(2, border_qcolor)
             except Exception:
-                pass
+                try:
+                    self.media_widget.set_background_border(2, border_qcolor)
+                except Exception:
+                    pass
 
             # Global widget drop shadow (shared config for all widgets).
             #
@@ -1216,6 +1231,112 @@ class DisplayWidget(QWidget):
             logger.info(
                 "✅ Media widget started: %s, font=%spx, margin=%s", position_str, font_size, margin_val
             )
+
+            # Spotify Beat Visualizer (paired with media widget).
+            existing_vis = getattr(self, 'spotify_visualizer_widget', None)
+            media_active_on_this = media_enabled and media_show_on_this
+            if not (spotify_vis_enabled and media_active_on_this):
+                if existing_vis is not None:
+                    try:
+                        existing_vis.stop()
+                        existing_vis.hide()
+                    except Exception:
+                        pass
+                self.spotify_visualizer_widget = None
+            else:
+                try:
+                    if existing_vis is None:
+                        vis = SpotifyVisualizerWidget(self, bar_count=int(spotify_vis_settings.get('bar_count', 32)))
+                        self.spotify_visualizer_widget = vis
+                    else:
+                        vis = existing_vis
+
+                    # ThreadManager for animation tick scheduling
+                    if self._thread_manager is not None and hasattr(vis, 'set_thread_manager'):
+                        try:
+                            vis.set_thread_manager(self._thread_manager)
+                        except Exception:
+                            pass
+
+                    # Anchor geometry to media widget
+                    try:
+                        vis.set_anchor_media_widget(self.media_widget)
+                    except Exception:
+                        pass
+
+                    # Card style inheritance from media widget card
+                    try:
+                        vis.set_bar_style(
+                            bg_color=bg_qcolor,
+                            bg_opacity=bg_opacity,
+                            border_color=border_qcolor,
+                            border_width=2,
+                            show_background=show_background,
+                        )
+                    except Exception:
+                        pass
+
+                    # Per-bar colours from spotify_visualizer settings
+                    from PySide6.QtGui import QColor as _QColor
+                    try:
+                        fill_color_data = spotify_vis_settings.get('bar_fill_color', [0, 255, 128, 230])
+                        fr, fg, fb = fill_color_data[0], fill_color_data[1], fill_color_data[2]
+                        fa = fill_color_data[3] if len(fill_color_data) > 3 else 230
+                        bar_fill_qcolor = _QColor(fr, fg, fb, fa)
+                    except Exception:
+                        bar_fill_qcolor = _QColor(0, 255, 128, 230)
+
+                    try:
+                        bar_border_color_data = spotify_vis_settings.get('bar_border_color', [255, 255, 255, 230])
+                        br_r, br_g, br_b = (
+                            bar_border_color_data[0],
+                            bar_border_color_data[1],
+                            bar_border_color_data[2],
+                        )
+                        base_alpha = bar_border_color_data[3] if len(bar_border_color_data) > 3 else 230
+                        try:
+                            bo = float(spotify_vis_settings.get('bar_border_opacity', 0.85))
+                        except Exception:
+                            bo = 0.85
+                        bo = max(0.0, min(1.0, bo))
+                        br_a = int(bo * base_alpha)
+                        bar_border_qcolor = _QColor(br_r, br_g, br_b, br_a)
+                    except Exception:
+                        bar_border_qcolor = _QColor(255, 255, 255, 230)
+
+                    try:
+                        vis.set_bar_colors(bar_fill_qcolor, bar_border_qcolor)
+                    except Exception:
+                        pass
+
+                    # Global widget drop shadow
+                    try:
+                        vis.set_shadow_config(shadows_config)
+                    except Exception:
+                        try:
+                            apply_widget_shadow(vis, shadows_config, has_background_frame=show_background)
+                        except Exception:
+                            pass
+
+                    # Wire Spotify media state into visualizer for behavioural gating.
+                    # Guard against duplicate connections across _setup_widgets calls.
+                    try:
+                        already_connected = getattr(vis, "_srpss_media_connected", False)
+                    except Exception:
+                        already_connected = False
+                    if not already_connected:
+                        try:
+                            self.media_widget.media_updated.connect(vis.handle_media_update)
+                            setattr(vis, "_srpss_media_connected", True)
+                        except Exception:
+                            pass
+
+                    # Initial positioning + startup
+                    self._position_spotify_visualizer()
+                    vis.start()
+                except Exception:
+                    logger.debug("Failed to create/configure Spotify Beat Visualizer widget", exc_info=True)
+
         except Exception as e:
             logger.error("Failed to create/configure media widget: %s", e, exc_info=True)
 
@@ -2429,6 +2550,54 @@ class DisplayWidget(QWidget):
         }
         return mapping.get(transition.__class__.__name__)
 
+    def _position_spotify_visualizer(self) -> None:
+        """Position Spotify Beat Visualizer just above the media widget."""
+
+        vis = getattr(self, "spotify_visualizer_widget", None)
+        media = getattr(self, "media_widget", None)
+        if vis is None or media is None:
+            return
+        try:
+            media_geom = media.geometry()
+        except Exception:
+            return
+        if media_geom.width() <= 0 or media_geom.height() <= 0:
+            return
+
+        gap = 20
+        height = max(vis.height(), vis.minimumHeight())
+        width = media_geom.width()
+        x = media_geom.left()
+        try:
+            position = getattr(media, "_position", None)
+        except Exception:
+            position = None
+
+        place_above = True
+        try:
+            if position in (MediaPosition.TOP_LEFT, MediaPosition.TOP_RIGHT):
+                place_above = False
+        except Exception:
+            place_above = True
+
+        if place_above:
+            y = media_geom.top() - gap - height
+        else:
+            y = media_geom.bottom() + gap
+
+        if y < 0:
+            y = 0
+        if x < 0:
+            x = 0
+        max_width = max(10, self.width() - x)
+        width = min(width, max_width)
+
+        try:
+            vis.setGeometry(x, y, width, height)
+            vis.raise_()
+        except Exception:
+            pass
+
     def resizeEvent(self, event: QResizeEvent) -> None:  # type: ignore[override]
         super().resizeEvent(event)
         self._device_pixel_ratio = self.windowHandle().devicePixelRatio() if self.windowHandle() else self._device_pixel_ratio
@@ -2452,6 +2621,10 @@ class DisplayWidget(QWidget):
                 logger.debug("[RENDER] Failed to refresh backend fallback overlay geometry", exc_info=True)
         try:
             self._ensure_overlay_stack(stage="resize")
+        except Exception:
+            pass
+        try:
+            self._position_spotify_visualizer()
         except Exception:
             pass
 
@@ -2632,6 +2805,21 @@ class DisplayWidget(QWidget):
         try:
             if hasattr(self, "_pan_and_scan") and self._pan_and_scan is not None:
                 self._pan_and_scan.stop()
+        except Exception:
+            pass
+        # Stop Spotify Beat Visualizer if present
+        try:
+            vis = getattr(self, "spotify_visualizer_widget", None)
+            if vis is not None:
+                try:
+                    vis.stop()
+                except Exception:
+                    pass
+                try:
+                    vis.hide()
+                except Exception:
+                    pass
+                self.spotify_visualizer_widget = None
         except Exception:
             pass
         # Stop and clean up any active transition

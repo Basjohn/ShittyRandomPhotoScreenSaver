@@ -1,0 +1,1088 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import List, Optional
+import platform
+
+from PySide6.QtCore import QObject, QRect, Qt
+from PySide6.QtGui import QColor, QPainter, QPaintEvent
+from PySide6.QtWidgets import QWidget
+
+from core.logging.logger import get_logger, is_verbose_logging
+from core.threading.manager import ThreadManager
+from utils.lockfree import TripleBuffer
+from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
+
+logger = get_logger(__name__)
+
+
+@dataclass
+class _BarFrame:
+    values: List[float]
+
+
+class SpotifyVisualizerAudioWorker(QObject):
+    """Background audio worker for Spotify Beat Visualizer.
+
+    Captures loopback audio via sounddevice and publishes FFT-derived
+    bar magnitudes into a lock-free TripleBuffer for UI consumption.
+    """
+
+    def __init__(self, bar_count: int, buffer: TripleBuffer[_BarFrame], parent: Optional[QObject] = None) -> None:
+        super().__init__(parent)
+        self._bar_count = max(1, int(bar_count))
+        self._buffer = buffer
+        self._running: bool = False
+        self._stream = None
+        self._sd = None
+        self._np = None
+        self._pa = None
+
+    def is_running(self) -> bool:
+        return self._running
+
+    def start(self) -> None:
+        if self._running:
+            return
+
+        # NumPy is required for FFT regardless of backend.
+        try:
+            import numpy as np  # type: ignore[import]
+        except Exception as exc:  # pragma: no cover - optional dependency
+            logger.info("[SPOTIFY_VIS] numpy not available: %s", exc)
+            return
+
+        self._np = np
+
+        # 1) Try PyAudioWPatch WASAPI loopback on Windows.
+        if platform.system().lower().startswith("win"):
+            try:
+                import pyaudiowpatch as pyaudio  # type: ignore[import]
+            except Exception as exc:  # pragma: no cover - optional dependency
+                if is_verbose_logging():
+                    logger.info(
+                        "[SPOTIFY_VIS] PyAudioWPatch not available, falling back to sounddevice: %s",
+                        exc,
+                    )
+                pyaudio = None  # type: ignore[assignment]
+
+            if pyaudio is not None:
+                try:
+                    pa = pyaudio.PyAudio()
+                except Exception:
+                    pa = None
+                if pa is not None:
+                    try:
+                        wasapi_info = pa.get_host_api_info_by_type(pyaudio.paWASAPI)
+                    except OSError:
+                        wasapi_info = None
+
+                    default_speakers = None
+                    if wasapi_info is not None:
+                        try:
+                            default_speakers = pa.get_device_info_by_index(
+                                wasapi_info["defaultOutputDevice"]
+                            )
+                        except Exception:
+                            default_speakers = None
+
+                    if default_speakers is not None and not default_speakers.get("isLoopbackDevice"):
+                        try:
+                            try:
+                                base_name = str(default_speakers.get("name", ""))
+                            except Exception:
+                                base_name = ""
+                            chosen = None
+                            for loopback in pa.get_loopback_device_info_generator():
+                                try:
+                                    loop_name = str(loopback.get("name", ""))
+                                except Exception:
+                                    loop_name = ""
+                                if chosen is None:
+                                    chosen = loopback
+                                if base_name and base_name in loop_name:
+                                    chosen = loopback
+                                    break
+                            default_speakers = chosen
+                        except Exception:
+                            default_speakers = None
+
+                    if default_speakers is not None:
+                        try:
+                            channels = int(default_speakers.get("maxInputChannels", 0) or 0)
+                        except Exception:
+                            channels = 0
+                        try:
+                            samplerate = int(default_speakers.get("defaultSampleRate", 48000) or 48000)
+                        except Exception:
+                            samplerate = 48000
+
+                        if channels > 0 and samplerate > 0:
+                            chunk_size = 1024
+
+                            def _pa_callback(in_data, frame_count, time_info, status_flags):
+                                try:
+                                    if not in_data:
+                                        return (in_data, pyaudio.paContinue)
+                                    np_mod = self._np
+                                    data = np_mod.frombuffer(in_data, dtype=np_mod.int16)
+                                    if data.size <= 0:
+                                        return (in_data, pyaudio.paContinue)
+                                    try:
+                                        data = data.reshape(-1, channels)
+                                    except Exception:
+                                        data = data.reshape(-1, 1)
+                                    mono = data.mean(axis=1).astype(np_mod.float32) / 32768.0
+                                    peak = 0.0
+                                    if is_verbose_logging():
+                                        try:
+                                            peak = float(np_mod.max(np_mod.abs(mono))) if mono.size else 0.0
+                                        except Exception:
+                                            peak = 0.0
+                                    fft = np_mod.abs(np_mod.fft.rfft(mono))
+                                    bars = self._fft_to_bars(fft)
+                                    self._buffer.publish(_BarFrame(values=bars))
+                                    if is_verbose_logging():
+                                        try:
+                                            logger.debug(
+                                                "[SPOTIFY_VIS] Audio callback frame (PyAudioWPatch): frames=%s peak=%.6f",
+                                                frame_count,
+                                                peak,
+                                            )
+                                        except Exception:
+                                            pass
+                                except Exception:
+                                    if is_verbose_logging():
+                                        logger.debug(
+                                            "[SPOTIFY_VIS] Audio callback failed (PyAudioWPatch)",
+                                            exc_info=True,
+                                        )
+                                return (in_data, pyaudio.paContinue)
+
+                            stream = None
+                            try:
+                                stream = pa.open(
+                                    format=pyaudio.paInt16,
+                                    channels=channels,
+                                    rate=samplerate,
+                                    frames_per_buffer=chunk_size,
+                                    input=True,
+                                    input_device_index=default_speakers["index"],
+                                    stream_callback=_pa_callback,
+                                )
+                                stream.start_stream()
+                                self._pa = pa
+                                self._stream = stream
+                                self._running = True
+                                logger.info(
+                                    "[SPOTIFY_VIS] Audio worker started via PyAudioWPatch (device=%s, name=%r, channels=%s, sr=%s, block=%s)",
+                                    default_speakers.get("index"),
+                                    default_speakers.get("name"),
+                                    channels,
+                                    samplerate,
+                                    chunk_size,
+                                )
+                                return
+                            except Exception:
+                                if is_verbose_logging():
+                                    logger.error(
+                                        "[SPOTIFY_VIS] Failed to open PyAudioWPatch WASAPI loopback",
+                                        exc_info=True,
+                                    )
+                                try:
+                                    if stream is not None:
+                                        try:
+                                            stream.stop_stream()
+                                        except Exception:
+                                            pass
+                                        try:
+                                            stream.close()
+                                        except Exception:
+                                            pass
+                                except Exception:
+                                    pass
+                                try:
+                                    pa.terminate()
+                                except Exception:
+                                    pass
+                                self._pa = None
+                                self._stream = None
+                                self._running = False
+
+        # 2) Fallback: existing sounddevice-based implementation.
+        try:
+            import sounddevice as sd  # type: ignore[import]
+        except Exception as exc:  # pragma: no cover - optional dependency
+            logger.info("[SPOTIFY_VIS] sounddevice not available: %s", exc)
+            return
+
+        self._sd = sd
+
+        # First, try to capture using WASAPI loopback on the default output
+        # device. This targets actual speaker/headphone output instead of a
+        # potentially silent microphone input. If this fails for any reason,
+        # we fall back to the generic input-device search below.
+        WasapiSettings = getattr(sd, "WasapiSettings", None)
+        if WasapiSettings is not None:
+            try:
+                hostapis = sd.query_hostapis()
+            except Exception:
+                hostapis = []
+
+            wasapi_index: Optional[int] = None
+            for idx, api in enumerate(hostapis or []):
+                try:
+                    name = str(api.get("name", "")).lower()
+                except Exception:
+                    name = ""
+                if "wasapi" in name:
+                    wasapi_index = idx
+                    break
+
+            if wasapi_index is not None:
+                default_output = -1
+                # Prefer host API's own default output device.
+                try:
+                    api_info = hostapis[wasapi_index]
+                    default_output = int(api_info.get("default_output_device", -1))
+                except Exception:
+                    default_output = -1
+
+                # Fallback: use sounddevice's global default output device,
+                # but only if it belongs to the WASAPI host API.
+                if default_output < 0:
+                    try:
+                        dev = sd.default.device
+                        cand = -1
+                        if isinstance(dev, (list, tuple)) and len(dev) >= 2:
+                            cand = int(dev[1])
+                        elif isinstance(dev, dict):
+                            cand = int(dev.get("output", -1))
+                        elif isinstance(dev, int):
+                            cand = int(dev)
+                        if cand >= 0:
+                            info = sd.query_devices(cand)
+                            if int(info.get("hostapi", -1)) == wasapi_index:
+                                default_output = cand
+                    except Exception:
+                        default_output = -1
+
+                if default_output >= 0:
+                    # Derive a sensible samplerate/channels from the output
+                    # side; WASAPI loopback mirrors the playback format.
+                    try:
+                        info = sd.query_devices(default_output, "output")
+                        samplerate = float(info.get("default_samplerate", 48000.0)) or 48000.0
+                        try:
+                            max_out = int(info.get("max_output_channels", 0) or 0)
+                        except Exception:
+                            max_out = 0
+                        channels = 2 if max_out >= 2 else 1 if max_out == 1 else 0
+                    except Exception:
+                        samplerate = 48000.0
+                        channels = 2
+
+                    if channels > 0:
+                        blocksize = 1024
+
+                        def _loopback_callback(indata, frames, time_info, status):  # type: ignore[override]
+                            # This runs on the audio thread. Keep work minimal
+                            # and lock-free.
+                            try:
+                                if indata is None or frames <= 0:
+                                    return
+                                mono = indata.mean(axis=1)
+                                np = self._np
+                                peak = 0.0
+                                if is_verbose_logging():
+                                    try:
+                                        peak = float(np.max(np.abs(mono))) if mono.size else 0.0
+                                    except Exception:
+                                        peak = 0.0
+                                fft = np.abs(np.fft.rfft(mono))
+                                bars = self._fft_to_bars(fft)
+                                self._buffer.publish(_BarFrame(values=bars))
+                                if is_verbose_logging():
+                                    try:
+                                        logger.debug(
+                                            "[SPOTIFY_VIS] Audio callback frame: frames=%s peak=%.6f",
+                                            frames,
+                                            peak,
+                                        )
+                                    except Exception:
+                                        pass
+                            except Exception:
+                                if is_verbose_logging():
+                                    logger.debug("[SPOTIFY_VIS] Audio callback failed", exc_info=True)
+
+                        try:
+                            ws = WasapiSettings(loopback=True)
+                            stream = sd.InputStream(
+                                samplerate=int(samplerate),
+                                blocksize=blocksize,
+                                channels=channels,
+                                dtype="float32",
+                                device=default_output,
+                                callback=_loopback_callback,
+                                extra_settings=ws,
+                            )
+                            stream.start()
+                            self._stream = stream
+                            self._running = True
+                            logger.info(
+                                "[SPOTIFY_VIS] Audio worker started (device=%s, channels=%s, sr=%s, block=%s, mode=wasapi_loopback)",
+                                default_output,
+                                channels,
+                                samplerate,
+                                blocksize,
+                            )
+                            return
+                        except Exception:
+                            if is_verbose_logging():
+                                logger.error(
+                                    "[SPOTIFY_VIS] Failed to open WASAPI loopback on device %s",
+                                    default_output,
+                                    exc_info=True,
+                                )
+                            # Fall through to generic input-device search.
+
+        # Build an ordered list of candidate input devices. We bias
+        # towards devices that are most likely to represent system
+        # playback (default output loopback / stereo mix style) while
+        # still falling back to any input-capable device that PortAudio
+        # accepts.
+        candidates: List[int] = []
+        primary_idx: Optional[int]
+        try:
+            primary_idx = self._select_loopback_device()
+        except Exception:
+            primary_idx = None
+
+        if primary_idx is not None:
+            candidates.append(primary_idx)
+
+        try:
+            devices = sd.query_devices()
+        except Exception:
+            devices = []
+
+        # Try to infer which input devices are tied to the default
+        # output by name/keywords so we can try those first.
+        default_output_name = ""
+        try:
+            out_info = sd.query_devices(None, "output")
+            default_output_name = str(out_info.get("name", ""))
+        except Exception:
+            default_output_name = ""
+        low_out = default_output_name.lower()
+
+        by_name: List[int] = []
+        by_keyword: List[int] = []
+        others: List[int] = []
+
+        if isinstance(devices, list):
+            for idx, dev in enumerate(devices):
+                if idx in candidates:
+                    continue
+                try:
+                    max_in = int(dev.get("max_input_channels", 0) or 0)
+                except Exception:
+                    continue
+                if max_in <= 0:
+                    continue
+
+                name = str(dev.get("name", ""))
+                lname = name.lower()
+                if low_out and low_out in lname:
+                    by_name.append(idx)
+                elif "loopback" in lname or "stereo mix" in lname or "what u hear" in lname:
+                    by_keyword.append(idx)
+                else:
+                    others.append(idx)
+
+        candidates.extend(by_name)
+        candidates.extend(by_keyword)
+        candidates.extend(others)
+
+        if not candidates:
+            logger.info("[SPOTIFY_VIS] No input-capable audio devices found; disabling visualizer")
+            return
+
+        chosen_device: Optional[int] = None
+        chosen_samplerate = 48000.0
+        chosen_channels = 2
+        valid_candidates: List[tuple[int, float, int]] = []
+
+        for idx in candidates:
+            samplerate = 48000.0
+            channels = 2
+            try:
+                info = sd.query_devices(idx, "input")
+                samplerate = float(info.get("default_samplerate", samplerate)) or samplerate
+                try:
+                    max_in = int(info.get("max_input_channels", 0) or 0)
+                except Exception:
+                    max_in = 0
+                if max_in >= 2:
+                    channels = 2
+                elif max_in == 1:
+                    channels = 1
+                else:
+                    channels = 0
+            except Exception:
+                # Fall back to conservative defaults; check_input_settings
+                # below will validate whether this device is usable.
+                samplerate = 48000.0
+                channels = 1
+
+            if channels <= 0:
+                continue
+
+            # Validate with sounddevice/PortAudio before creating the
+            # stream to avoid PortAudioError: Invalid device
+            # [PaErrorCode -9996].
+            try:
+                checker = getattr(sd, "check_input_settings", None)
+                if checker is not None:
+                    checker(
+                        device=idx,
+                        samplerate=int(samplerate),
+                        channels=channels,
+                        dtype="float32",
+                    )
+            except Exception:
+                if is_verbose_logging():
+                    logger.info(
+                        "[SPOTIFY_VIS] Rejecting candidate input device %s",
+                        idx,
+                        exc_info=True,
+                    )
+                continue
+
+            valid_candidates.append((idx, samplerate, channels))
+
+        if not valid_candidates:
+            logger.info("[SPOTIFY_VIS] No valid input device after validation; disabling visualizer")
+            return
+
+        blocksize = 1024
+
+        def _callback(indata, frames, time_info, status):  # type: ignore[override]
+            # This runs on the audio thread. Keep work minimal and lock-free.
+            try:
+                if indata is None or frames <= 0:
+                    return
+                # Mix down to mono (average of channels) for stability.
+                mono = indata.mean(axis=1)
+                np = self._np
+                peak = 0.0
+                if is_verbose_logging():
+                    try:
+                        peak = float(np.max(np.abs(mono))) if mono.size else 0.0
+                    except Exception:
+                        peak = 0.0
+                fft = np.abs(np.fft.rfft(mono))
+                bars = self._fft_to_bars(fft)
+                self._buffer.publish(_BarFrame(values=bars))
+                # Only log if verbose so the callback stays cheap.
+                if is_verbose_logging():
+                    try:
+                        logger.debug(
+                            "[SPOTIFY_VIS] Audio callback frame: frames=%s peak=%.6f",
+                            frames,
+                            peak,
+                        )
+                    except Exception:
+                        pass
+            except Exception:
+                if is_verbose_logging():
+                    logger.debug("[SPOTIFY_VIS] Audio callback failed", exc_info=True)
+        stream = None
+
+        for idx, samplerate, channels in valid_candidates:
+            try:
+                stream = sd.InputStream(
+                    samplerate=int(samplerate),
+                    blocksize=blocksize,
+                    channels=channels,
+                    dtype="float32",
+                    device=idx,
+                    callback=_callback,
+                )
+                stream.start()
+            except Exception:
+                if is_verbose_logging():
+                    logger.error(
+                        "[SPOTIFY_VIS] Failed to open candidate input device %s",
+                        idx,
+                        exc_info=True,
+                    )
+                stream = None
+                continue
+
+            chosen_device = idx
+            chosen_samplerate = samplerate
+            chosen_channels = channels
+            break
+
+        if stream is None or chosen_device is None:
+            logger.info("[SPOTIFY_VIS] No input device could be opened; disabling visualizer")
+            return
+
+        self._stream = stream
+        self._running = True
+        logger.info(
+            "[SPOTIFY_VIS] Audio worker started (device=%s, channels=%s, sr=%s, block=%s)",
+            chosen_device,
+            chosen_channels,
+            chosen_samplerate,
+            blocksize,
+        )
+
+    def stop(self) -> None:
+        if not self._running:
+            return
+        self._running = False
+        try:
+            if self._stream is not None:
+                try:
+                    stop_fn = getattr(self._stream, "stop", None)
+                    if callable(stop_fn):
+                        stop_fn()
+                    else:
+                        stop_stream = getattr(self._stream, "stop_stream", None)
+                        if callable(stop_stream):
+                            stop_stream()
+                except Exception:
+                    pass
+                try:
+                    close_fn = getattr(self._stream, "close", None)
+                    if callable(close_fn):
+                        close_fn()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        finally:
+            self._stream = None
+            try:
+                pa = getattr(self, "_pa", None)
+                if pa is not None:
+                    try:
+                        pa.terminate()
+                    except Exception:
+                        pass
+                    self._pa = None
+            except Exception:
+                pass
+            logger.info("[SPOTIFY_VIS] Audio worker stopped")
+
+    # ------------------------------------------------------------------
+    # Internals
+    # ------------------------------------------------------------------
+
+    def _select_loopback_device(self) -> Optional[int]:
+        """Best-effort selection of a WASAPI loopback device on Windows.
+
+        Prefers the default output device's loopback when available.
+        Falls back to the default input device when loopback is not
+        exposed so the widget still functions, albeit not strictly
+        output-only.
+        """
+
+        sd = self._sd
+        try:
+            hostapis = sd.query_hostapis()
+        except Exception:
+            hostapis = []
+
+        wasapi_index = None
+        for idx, api in enumerate(hostapis or []):
+            name = str(api.get("name", "")).lower()
+            if "wasapi" in name:
+                wasapi_index = idx
+                break
+
+        loopback_candidates: List[int] = []
+        try:
+            devices = sd.query_devices()
+        except Exception:
+            devices = []
+
+        for idx, dev in enumerate(devices or []):
+            host = dev.get("hostapi")
+            if wasapi_index is not None and host != wasapi_index:
+                continue
+            name = str(dev.get("name", "")).lower()
+            # Heuristic: WASAPI loopback devices often contain "loopback".
+            if "loopback" in name:
+                loopback_candidates.append(idx)
+
+        if loopback_candidates:
+            return loopback_candidates[0]
+
+        # Fallback: pick the first device with input channels if available.
+        for idx, dev in enumerate(devices or []):
+            try:
+                if int(dev.get("max_input_channels", 0)) > 0:
+                    return idx
+            except Exception:
+                continue
+
+        # Final fallback: default input device, but never return a negative
+        # index – sounddevice/PortAudio treats -1 as an invalid device.
+        try:
+            default_dev = sd.default.device
+            candidate = -1
+            if isinstance(default_dev, (list, tuple)):
+                candidate = int(default_dev[0])
+            elif isinstance(default_dev, dict):
+                candidate = int(default_dev.get("input", -1))
+            else:
+                candidate = int(default_dev)
+            if candidate >= 0:
+                return candidate
+        except Exception:
+            pass
+        return None
+
+    def _fft_to_bars(self, fft) -> List[float]:
+        np = self._np
+        if fft is None or fft.size == 0:
+            return [0.0] * self._bar_count
+
+        # Drop DC and extremely low bins.
+        mag = np.abs(fft[1:]).astype("float32")
+        n = mag.size
+        if n <= 0:
+            return [0.0] * self._bar_count
+
+        mag = np.log1p(mag)
+        try:
+            mag = mag ** 1.2
+        except Exception:
+            pass
+
+        if n > 4:
+            try:
+                kernel = np.array([0.25, 0.5, 0.25], dtype="float32")
+                mag = np.convolve(mag, kernel, mode="same")
+            except Exception:
+                pass
+
+        if n > 8:
+            try:
+                cutoff = max(1, int(n * 0.1))
+                weights = np.linspace(0.3, 1.0, cutoff, dtype="float32")
+                mag[:cutoff] *= weights
+            except Exception:
+                pass
+
+        bands = self._bar_count
+        idx = np.arange(n, dtype="float32")
+        log_idx = np.log1p(idx + 1.0)
+        start = float(log_idx[0])
+        end = float(log_idx[-1])
+        edges = np.linspace(start, end, bands + 1, dtype="float32")
+        bars: List[float] = []
+        for i in range(bands):
+            lo = edges[i]
+            hi = edges[i + 1]
+            if i == bands - 1:
+                mask = log_idx >= lo
+            else:
+                mask = (log_idx >= lo) & (log_idx < hi)
+            if not mask.any():
+                bars.append(0.0)
+                continue
+            try:
+                val = float(mag[mask].mean())
+            except Exception:
+                val = 0.0
+            bars.append(val)
+
+        arr = np.array(bars, dtype="float32")
+        peak = float(arr.max()) if arr.size else 0.0
+        if peak <= 1e-6:
+            return [0.0] * bands
+        arr /= peak
+        positions = np.linspace(-1.0, 1.0, bands, dtype="float32")
+        try:
+            center_weight = 0.35
+            weights = 1.0 + center_weight * (1.0 - (2.0 * np.abs(positions)) ** 1.5)
+            arr *= weights
+        except Exception:
+            pass
+        peak2 = float(arr.max()) if arr.size else 0.0
+        if peak2 > 1e-6:
+            arr /= peak2
+        arr = np.clip(arr, 0.0, 1.0)
+        return [float(x) for x in arr.tolist()]
+
+
+class SpotifyVisualizerWidget(QWidget):
+    """Thin bar visualizer card paired with the Spotify media widget.
+
+    The widget draws a rounded-rect card that inherits Spotify/Media
+    styling from DisplayWidget and renders a row of vertical bars whose
+    heights are driven by FFT magnitudes published by
+    SpotifyVisualizerAudioWorker.
+    """
+
+    def __init__(self, parent: Optional[QWidget] = None, bar_count: int = 32) -> None:
+        super().__init__(parent)
+
+        self._bar_count = max(1, int(bar_count))
+        self._display_bars: List[float] = [0.0] * self._bar_count
+        self._target_bars: List[float] = [0.0] * self._bar_count
+        self._smoothing: float = 0.25
+
+        self._thread_manager: Optional[ThreadManager] = None
+        self._bars_timer = None
+        self._shadow_config = None
+        self._show_background: bool = True
+
+        # Card style (mirrors Spotify/Media widget)
+        self._bg_color = QColor(16, 16, 16, 255)
+        self._bg_opacity: float = 0.7
+        self._card_border_color = QColor(255, 255, 255, 230)
+        self._border_width: int = 2
+
+        # Bar styling
+        self._bar_fill_color = QColor(200, 200, 200, 230)
+        self._bar_border_color = QColor(255, 255, 255, 255)
+        self._bar_segments: int = 13
+
+        # Behavioural gating
+        self._spotify_playing: bool = False
+        self._anchor_media: Optional[QWidget] = None
+
+        # Lock-free bar frame buffer shared with audio worker
+        self._bars_buffer: TripleBuffer[_BarFrame] = TripleBuffer()
+        self._audio_worker = SpotifyVisualizerAudioWorker(self._bar_count, self._bars_buffer, parent=self)
+
+        self._enabled: bool = False
+        self._paint_debug_logged: bool = False
+
+        self._setup_ui()
+
+    # ------------------------------------------------------------------
+    # Public configuration
+    # ------------------------------------------------------------------
+
+    def set_thread_manager(self, thread_manager: ThreadManager) -> None:
+        self._thread_manager = thread_manager
+
+    def set_shadow_config(self, config) -> None:
+        self._shadow_config = config
+
+    def set_bar_style(self, *, bg_color: QColor, bg_opacity: float, border_color: QColor, border_width: int = 2,
+                      show_background: bool = True) -> None:
+        self._bg_color = QColor(bg_color)
+        self._bg_opacity = max(0.0, min(1.0, float(bg_opacity)))
+        self._card_border_color = QColor(border_color)
+        self._border_width = max(0, int(border_width))
+        self._show_background = bool(show_background)
+        self.update()
+
+    def set_bar_colors(self, fill_color: QColor, border_color: QColor) -> None:
+        # Fill colour is applied per-bar; border colour controls the bar
+        # outline tint. Card border remains driven by set_bar_style.
+        self._bar_fill_color = QColor(fill_color)
+        self._bar_border_color = QColor(border_color)
+        self.update()
+
+    def set_anchor_media_widget(self, widget: QWidget) -> None:
+        self._anchor_media = widget
+
+    def handle_media_update(self, payload: dict) -> None:
+        """Receive Spotify media state from MediaWidget.
+
+        Expects payload from MediaWidget.media_updated with a ``state``
+        field of "playing"/"paused"/"stopped". When not playing, the
+        visualizer decays to idle even if other apps are producing audio.
+        """
+
+        try:
+            state = str(payload.get("state", "")).lower()
+        except Exception:
+            state = ""
+        prev = self._spotify_playing
+        self._spotify_playing = state == "playing"
+        if is_verbose_logging():
+            try:
+                logger.debug(
+                    "[SPOTIFY_VIS] handle_media_update: state=%r (prev_playing=%s, now_playing=%s)",
+                    state,
+                    prev,
+                    self._spotify_playing,
+                )
+            except Exception:
+                pass
+        if not self._spotify_playing:
+            # Drive target bars to zero; smoothing path will fade them out.
+            self._target_bars = [0.0] * self._bar_count
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
+    def start(self) -> None:
+        if self._enabled:
+            return
+        self._enabled = True
+
+        # Start audio capture first so the buffer can begin filling.
+        try:
+            if not self._audio_worker.is_running():
+                self._audio_worker.start()
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to start audio worker", exc_info=True)
+
+        # Schedule a recurring UI tick via ThreadManager; this avoids
+        # creating ad-hoc QTimers and keeps timing under central control.
+        if self._thread_manager is not None and self._bars_timer is None:
+            try:
+                self._bars_timer = self._thread_manager.schedule_recurring(40, self._on_tick)
+            except Exception:
+                self._bars_timer = None
+
+        parent = self.parent()
+
+        def _starter() -> None:
+            self._start_widget_fade_in(1500)
+
+        if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
+            try:
+                parent.request_overlay_fade_sync("spotify_visualizer", _starter)
+            except Exception:
+                _starter()
+        else:
+            _starter()
+
+    def stop(self) -> None:
+        if not self._enabled:
+            return
+        self._enabled = False
+
+        try:
+            self._audio_worker.stop()
+        except Exception:
+            pass
+
+        try:
+            if self._bars_timer is not None:
+                self._bars_timer.stop()
+        except Exception:
+            pass
+        self._bars_timer = None
+
+        try:
+            self.hide()
+        except Exception:
+            pass
+
+    def cleanup(self) -> None:
+        self.stop()
+
+    # ------------------------------------------------------------------
+    # UI and painting
+    # ------------------------------------------------------------------
+
+    def _setup_ui(self) -> None:
+        try:
+            self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        except Exception:
+            pass
+        # Slightly taller default so bars and card border have breathing
+        # room and match the visual weight of other widgets.
+        self.setMinimumHeight(78)
+
+    def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:
+        if duration_ms <= 0:
+            try:
+                self.show()
+            except Exception:
+                pass
+            try:
+                ShadowFadeProfile.attach_shadow(
+                    self,
+                    self._shadow_config,
+                    has_background_frame=self._show_background,
+                )
+            except Exception:
+                apply_widget_shadow(self, self._shadow_config or {}, has_background_frame=self._show_background)
+            try:
+                if is_verbose_logging():
+                    logger.debug(
+                        "[SPOTIFY_VIS] start_fade_in immediate: geom=%r, visible=%s",
+                        self.geometry(),
+                        self.isVisible(),
+                    )
+            except Exception:
+                pass
+            return
+
+        try:
+            ShadowFadeProfile.start_fade_in(
+                self,
+                self._shadow_config,
+                has_background_frame=self._show_background,
+            )
+        except Exception:
+            try:
+                apply_widget_shadow(self, self._shadow_config or {}, has_background_frame=self._show_background)
+            except Exception:
+                pass
+
+        try:
+            if is_verbose_logging():
+                logger.debug(
+                    "[SPOTIFY_VIS] start_fade_in: geom=%r, visible=%s",
+                    self.geometry(),
+                    self.isVisible(),
+                )
+        except Exception:
+            pass
+
+    def _on_tick(self) -> None:
+        """Periodic UI tick scheduled via ThreadManager.
+
+        Consumes the latest bar frame from the TripleBuffer and smoothly
+        interpolates towards it for visual stability.
+        """
+
+        if not self._enabled:
+            return
+
+        frame = self._bars_buffer.consume_latest()
+        if frame is not None and isinstance(frame.values, list):
+            vals = frame.values
+            if len(vals) != self._bar_count:
+                # Simple resize to current bar layout.
+                if len(vals) < self._bar_count:
+                    vals = vals + [0.0] * (self._bar_count - len(vals))
+                else:
+                    vals = vals[: self._bar_count]
+            self._target_bars = [max(0.0, min(1.0, float(v))) for v in vals]
+            if is_verbose_logging():
+                try:
+                    logger.debug(
+                        "[SPOTIFY_VIS] _on_tick: received frame (min=%.4f, max=%.4f)",
+                        min(self._target_bars) if self._target_bars else 0.0,
+                        max(self._target_bars) if self._target_bars else 0.0,
+                    )
+                except Exception:
+                    pass
+
+        # If Spotify is not actively playing, treat the target as idle.
+        if not self._spotify_playing:
+            self._target_bars = [0.0] * self._bar_count
+
+        changed = False
+        s = self._smoothing
+        for i in range(self._bar_count):
+            cur = self._display_bars[i]
+            tgt = self._target_bars[i]
+            nxt = cur + (tgt - cur) * s
+            if abs(nxt - cur) > 1e-3:
+                changed = True
+            self._display_bars[i] = nxt
+
+        if changed:
+            self.update()
+
+    def paintEvent(self, event: QPaintEvent) -> None:  # type: ignore[override]
+        painter = QPainter(self)
+        try:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        except Exception:
+            pass
+
+        rect = self.rect()
+        if is_verbose_logging() and not getattr(self, "_paint_debug_logged", False):
+            try:
+                anchor = self._anchor_media
+                anchor_geom_ok = bool(anchor and anchor.width() > 0 and anchor.height() > 0)
+                logger.debug(
+                    "[SPOTIFY_VIS] paintEvent: geom=(%s,%s,%s,%s) rect=(%s,%s,%s,%s) enabled=%s visible=%s spotify_playing=%s show_bg=%s anchor_geom_ok=%s",
+                    self.x(),
+                    self.y(),
+                    self.width(),
+                    self.height(),
+                    rect.x(),
+                    rect.y(),
+                    rect.width(),
+                    rect.height(),
+                    self._enabled,
+                    self.isVisible(),
+                    self._spotify_playing,
+                    self._show_background,
+                    anchor_geom_ok,
+                )
+            except Exception:
+                pass
+            try:
+                self._paint_debug_logged = True
+            except Exception:
+                pass
+        if rect.width() <= 0 or rect.height() <= 0:
+            painter.end()
+            return
+
+        # Card background. Follow the same pattern as other widgets: apply
+        # opacity to the fill only and keep the border colour as-is so we
+        # avoid double-alpha on the outline.
+        if self._show_background:
+            bg = QColor(self._bg_color)
+            bg.setAlpha(int(255 * max(0.0, min(1.0, self._bg_opacity))))
+            painter.setBrush(bg)
+            painter.setPen(QColor(self._card_border_color))
+            radius = 8
+            painter.drawRoundedRect(rect.adjusted(0, 0, -1, -1), radius, radius)
+        else:
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(Qt.PenStyle.NoPen)
+
+        # Bars
+        margin_x = 8
+        margin_y = 6
+        inner = rect.adjusted(margin_x, margin_y, -margin_x, -margin_y)
+        if inner.width() <= 0 or inner.height() <= 0:
+            painter.end()
+            return
+
+        count = self._bar_count
+        gap = 2
+        total_gap = gap * (count - 1)
+        bar_width = max(1, int((inner.width() - total_gap) / max(1, count)))
+
+        fill = QColor(self._bar_fill_color)
+        border = QColor(self._bar_border_color)
+        segments = max(1, getattr(self, "_bar_segments", 16))
+        seg_gap = 1
+        total_seg_gap = seg_gap * max(0, segments - 1)
+        seg_height = max(1, int((inner.height() - total_seg_gap) / max(1, segments)))
+
+        painter.setBrush(fill)
+        painter.setPen(border)
+
+        base_bottom = inner.bottom()
+        for i in range(count):
+            x = inner.left() + i * (bar_width + gap)
+            value = max(0.0, min(1.0, self._display_bars[i]))
+            if value <= 0.0:
+                continue
+            active = int(round(value * segments))
+            if active <= 0:
+                if self._spotify_playing and value > 0.0:
+                    active = 1
+                else:
+                    continue
+            for s in range(active):
+                seg_bottom = base_bottom - s * (seg_height + seg_gap)
+                y = seg_bottom - seg_height + 1
+                bar_rect = QRect(x, y, bar_width, seg_height)
+                painter.drawRect(bar_rect)
+
+        painter.end()
