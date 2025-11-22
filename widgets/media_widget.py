@@ -26,7 +26,7 @@ from core.media.media_controller import (
     create_media_controller,
 )
 from core.threading.manager import ThreadManager
-from widgets.shadow_utils import apply_widget_shadow
+from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
 
 logger = get_logger(__name__)
 
@@ -1124,38 +1124,35 @@ class MediaWidget(QLabel):
 
     def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:
         """Fade the entire widget in, then attach the global drop shadow."""
-
         if duration_ms <= 0:
             try:
                 self.show()
             except Exception:
                 pass
-            if self._shadow_config is not None:
-                try:
-                    apply_widget_shadow(
-                        self,
-                        self._shadow_config,
-                        has_background_frame=self._show_background,
-                    )
-                except Exception:
-                    logger.debug("[MEDIA] Failed to apply widget shadow without fade", exc_info=True)
+            try:
+                ShadowFadeProfile.attach_shadow(
+                    self,
+                    self._shadow_config,
+                    has_background_frame=self._show_background,
+                )
+            except Exception:
+                logger.debug(
+                    "[MEDIA] Failed to attach shadow in no-fade path",
+                    exc_info=True,
+                )
             return
 
-        # Stop any in-flight animation.
-        if self._widget_fade_anim is not None:
-            try:
-                self._widget_fade_anim.stop()
-            except Exception:
-                pass
-            self._widget_fade_anim = None
-
         try:
-            effect = QGraphicsOpacityEffect(self)
-            effect.setOpacity(0.0)
-            self.setGraphicsEffect(effect)
+            ShadowFadeProfile.start_fade_in(
+                self,
+                self._shadow_config,
+                has_background_frame=self._show_background,
+            )
         except Exception:
-            # If we cannot install the effect, fall back to an immediate
-            # show and try to apply the shared shadow.
+            logger.debug(
+                "[MEDIA] _start_widget_fade_in fallback path triggered",
+                exc_info=True,
+            )
             try:
                 self.show()
             except Exception:
@@ -1168,53 +1165,10 @@ class MediaWidget(QLabel):
                         has_background_frame=self._show_background,
                     )
                 except Exception:
-                    logger.debug("[MEDIA] Failed to apply widget shadow in fallback path", exc_info=True)
-            return
-
-        self._widget_opacity_effect = effect
-
-        try:
-            self.show()
-        except Exception:
-            pass
-
-        anim = QVariantAnimation(self)
-        anim.setDuration(max(0, int(duration_ms)))
-        anim.setStartValue(0.0)
-        anim.setEndValue(1.0)
-        # OutCubic gives a slightly softer landing than OutQuad so the
-        # fade does not feel like it "snaps" in the last few frames.
-        anim.setEasingCurve(QEasingCurve.InOutCubic)
-
-        def _on_value_changed(value):
-            try:
-                effect.setOpacity(float(value))
-            except Exception:
-                pass
-
-        anim.valueChanged.connect(_on_value_changed)
-
-        def _on_finished() -> None:
-            self._widget_fade_anim = None
-            try:
-                self.setGraphicsEffect(None)
-            except Exception:
-                pass
-            self._widget_opacity_effect = None
-
-            if self._shadow_config is not None:
-                try:
-                    apply_widget_shadow(
-                        self,
-                        self._shadow_config,
-                        has_background_frame=self._show_background,
+                    logger.debug(
+                        "[MEDIA] Failed to apply widget shadow in fallback path",
+                        exc_info=True,
                     )
-                except Exception:
-                    logger.debug("[MEDIA] Failed to apply widget shadow after fade", exc_info=True)
-
-        anim.finished.connect(_on_finished)
-        self._widget_fade_anim = anim
-        anim.start()
 
     def _start_artwork_fade_in(self) -> None:
         if self._artwork_anim is not None:

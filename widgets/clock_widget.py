@@ -15,10 +15,10 @@ except ImportError:
     PYTZ_AVAILABLE = False
 
 from PySide6.QtWidgets import QLabel, QWidget, QGraphicsOpacityEffect
-from PySide6.QtCore import QTimer, Qt, Signal, QVariantAnimation, QEasingCurve
+from PySide6.QtCore import QTimer, Qt, Signal, QVariantAnimation
 from PySide6.QtGui import QFont, QColor, QPainter, QPen, QPaintEvent
 
-from widgets.shadow_utils import apply_widget_shadow
+from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
 from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
@@ -220,45 +220,14 @@ class ClockWidget(QLabel):
                     self._tz_label.raise_()
                 except Exception:
                     pass
-            if self._shadow_config is not None:
-                try:
-                    apply_widget_shadow(
-                        self,
-                        self._shadow_config,
-                        has_background_frame=self._show_background,
-                    )
-                except Exception:
-                    pass
-            self._has_faded_in = True
-            return
-
-        try:
-            effect = self._fade_effect
-            if effect is None:
-                effect = QGraphicsOpacityEffect(self)
-                self._fade_effect = effect
-            effect.setOpacity(0.0)
-            self.setGraphicsEffect(effect)
-        except Exception:
             try:
-                self.show()
+                ShadowFadeProfile.attach_shadow(
+                    self,
+                    self._shadow_config,
+                    has_background_frame=self._show_background,
+                )
             except Exception:
                 pass
-            if self._tz_label:
-                try:
-                    self._tz_label.show()
-                    self._tz_label.raise_()
-                except Exception:
-                    pass
-            if self._shadow_config is not None:
-                try:
-                    apply_widget_shadow(
-                        self,
-                        self._shadow_config,
-                        has_background_frame=self._show_background,
-                    )
-                except Exception:
-                    pass
             self._has_faded_in = True
             return
 
@@ -279,45 +248,22 @@ class ClockWidget(QLabel):
             except Exception:
                 pass
 
-        anim = QVariantAnimation(self)
-        anim.setDuration(max(0, int(duration_ms)))
-        anim.setStartValue(0.0)
-        anim.setEndValue(1.0)
         try:
-            anim.setEasingCurve(QEasingCurve.InOutCubic)
+            ShadowFadeProfile.start_fade_in(
+                self,
+                self._shadow_config,
+                has_background_frame=self._show_background,
+            )
         except Exception:
-            pass
-
-        def _on_value_changed(value: Any) -> None:
             try:
-                if self._fade_effect is not None:
-                    self._fade_effect.setOpacity(float(value))
+                apply_widget_shadow(
+                    self,
+                    self._shadow_config or {},
+                    has_background_frame=self._show_background,
+                )
             except Exception:
                 pass
-
-        anim.valueChanged.connect(_on_value_changed)
-
-        def _on_finished() -> None:
-            self._fade_anim = None
-            try:
-                self.setGraphicsEffect(None)
-            except Exception:
-                pass
-            self._fade_effect = None
-            if self._shadow_config is not None:
-                try:
-                    apply_widget_shadow(
-                        self,
-                        self._shadow_config,
-                        has_background_frame=self._show_background,
-                    )
-                except Exception:
-                    pass
-            self._has_faded_in = True
-
-        anim.finished.connect(_on_finished)
-        self._fade_anim = anim
-        anim.start()
+        self._has_faded_in = True
     
     def is_running(self) -> bool:
         """Check if clock is running."""

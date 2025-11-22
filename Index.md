@@ -69,6 +69,8 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - Weather widget with per-monitor selection via settings (ALL or 1/2/3); planned QPainter-based iconography
 - widgets/media_widget.py
   - Spotify/media overlay widget driven by `core/media/media_controller.py`; per-monitor selection via `widgets.media`, corner positioning, background frame, and monochrome transport controls (Prev/Play/Pause/Next) over track metadata
+ - widgets/reddit_widget.py
+   - Reddit overlay widget showing top posts from a configured subreddit with 4- and 10-item layouts, per-monitor selection via `widgets.reddit`, shared overlay fade-in coordination, and click-through to the system browser.
 
 ## Utilities
 - utils/image_cache.py
@@ -103,6 +105,8 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - widgets.clock.monitor: 'ALL'|1|2|3
 - widgets.weather.monitor: 'ALL'|1|2|3
  - widgets.media.monitor: 'ALL'|1|2|3
+ - widgets.reddit.monitor: 'ALL'|1|2|3
+ - widgets.shadows.*: global widget shadow configuration shared by all overlay widgets
 
 ## Notes
 - DPR-aware scaling in DisplayWidget → ImageProcessor to reduce GL upload cost

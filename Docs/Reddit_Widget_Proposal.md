@@ -1,5 +1,15 @@
 # Reddit Widget Proposal
 
+## Status (2025-11-21)
+
+- Core Reddit widget is **implemented** as `widgets/reddit_widget.py`.
+- Uses Reddit's unauthenticated JSON listing endpoint for `hot` posts.
+- Supports **4-item** and **10-item** layouts; both draw from the same fetched candidate pool and are ordered newest→oldest by `created_utc`.
+- Fully integrated into the Widgets tab (enable, subreddit, item count, position, monitor selection, font/margin, background & border, separators, opacity).
+- Participates in the shared overlay fade-in system alongside Weather and Media, and uses the global `widgets.shadows` configuration for drop shadows.
+
+The rest of this document remains the design reference and may describe future enhancements that are not yet wired up (e.g. a dedicated `reddit_client` module or additional sort modes).
+
 ## 1. Goal
 
 Provide an optional overlay widget that displays the top N posts from a configured subreddit (e.g. `r/wallpapers`), styled consistently with existing widgets, and opens the users default browser to the selected post on click.
@@ -122,15 +132,29 @@ The widget should be **read-only**, performant, and respect the projects themin
 
 ## 6. Settings Schema Sketch
 
-Proposed keys (to be folded into `Spec.md` once implemented):
+Implemented keys (mirrors `Spec.md` and `widgets_tab.py`):
 
 - `widgets.reddit.enabled`: bool
+- `widgets.reddit.exit_on_click`: bool
 - `widgets.reddit.subreddit`: str (e.g. `wallpapers`)
-- `widgets.reddit.sort`: str (`hot`|`new`|`top`)  initially `hot` only
-- `widgets.reddit.limit`: int (510, default 10)
-- `widgets.reddit.position`: str (Top Left/Top Right/Bottom Left/Bottom Right)
-- `widgets.reddit.monitor`: str (`ALL`|`1`|`2`|`3`)
-- `widgets.reddit.show_scores`: bool
+- `widgets.reddit.limit`: int (stored as 4 or 10; legacy values <=5 are treated as 4)
+- `widgets.reddit.position`: str ("Top Left" | "Top Right" | "Bottom Left" | "Bottom Right")
+- `widgets.reddit.monitor`: 'ALL' | 1 | 2 | 3
+- `widgets.reddit.font_family`: str
+- `widgets.reddit.font_size`: int
+- `widgets.reddit.margin`: int
+- `widgets.reddit.show_background`: bool
+- `widgets.reddit.show_separators`: bool
+- `widgets.reddit.bg_opacity`: float 0.0–1.0
+- `widgets.reddit.color`: RGBA list `[r,g,b,a]`
+- `widgets.reddit.bg_color`: RGBA list `[r,g,b,a]`
+- `widgets.reddit.border_color`: RGBA list `[r,g,b,a]`
+- `widgets.reddit.border_opacity`: float 0.0–1.0
+
+Potential future keys (not yet implemented, but considered in the original proposal):
+
+- `widgets.reddit.sort`: str (`hot`|`new`|`top`) – currently hard-coded to `hot`.
+- `widgets.reddit.show_scores`: bool – currently omitted from the UI.
 
 ---
 

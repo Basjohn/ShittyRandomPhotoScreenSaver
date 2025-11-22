@@ -19,13 +19,13 @@ import re
 
 import requests
 
-from PySide6.QtCore import Qt, QTimer, QRect, QPoint, QUrl, QVariantAnimation, QEasingCurve
+from PySide6.QtCore import Qt, QTimer, QRect, QPoint, QUrl, QVariantAnimation
 from PySide6.QtGui import QFont, QColor, QPainter, QFontMetrics, QDesktopServices, QPixmap, QPainterPath
 from PySide6.QtWidgets import QLabel, QWidget, QToolTip, QGraphicsOpacityEffect
 
 from core.logging.logger import get_logger, is_verbose_logging
 from core.threading.manager import ThreadManager
-from widgets.shadow_utils import apply_widget_shadow
+from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
 
 logger = get_logger(__name__)
 
@@ -909,7 +909,6 @@ class RedditWidget(QLabel):
 
     def _start_widget_fade_in(self, duration_ms: int = 1000) -> None:
         logger.debug("[REDDIT] _start_widget_fade_in: duration_ms=%s", duration_ms)
-
         if duration_ms <= 0:
             if self.parent():
                 try:
@@ -920,30 +919,36 @@ class RedditWidget(QLabel):
                 self.show()
             except Exception:
                 pass
-            if self._shadow_config is not None:
-                try:
-                    apply_widget_shadow(
-                        self,
-                        self._shadow_config,
-                        has_background_frame=self._show_background,
-                    )
-                except Exception:
-                    logger.debug("[REDDIT] Failed to apply widget shadow without fade", exc_info=True)
+            try:
+                ShadowFadeProfile.attach_shadow(
+                    self,
+                    self._shadow_config,
+                    has_background_frame=self._show_background,
+                )
+            except Exception:
+                logger.debug(
+                    "[REDDIT] Failed to attach shadow without fade",
+                    exc_info=True,
+                )
             return
 
-        if self._widget_fade_anim is not None:
+        if self.parent():
             try:
-                self._widget_fade_anim.stop()
+                self._update_position()
             except Exception:
                 pass
-            self._widget_fade_anim = None
 
         try:
-            effect = QGraphicsOpacityEffect(self)
-            effect.setOpacity(0.0)
-            self.setGraphicsEffect(effect)
+            ShadowFadeProfile.start_fade_in(
+                self,
+                self._shadow_config,
+                has_background_frame=self._show_background,
+            )
         except Exception:
-            logger.debug("[REDDIT] _start_widget_fade_in fallback: opacity effect failed", exc_info=True)
+            logger.debug(
+                "[REDDIT] _start_widget_fade_in fallback: ShadowFadeProfile failed",
+                exc_info=True,
+            )
             try:
                 self.show()
             except Exception:
@@ -956,57 +961,10 @@ class RedditWidget(QLabel):
                         has_background_frame=self._show_background,
                     )
                 except Exception:
-                    logger.debug("[REDDIT] Failed to apply widget shadow in fallback path", exc_info=True)
-            return
-
-        self._widget_opacity_effect = effect
-
-        if self.parent():
-            try:
-                self._update_position()
-            except Exception:
-                pass
-
-        try:
-            self.show()
-        except Exception:
-            pass
-
-        anim = QVariantAnimation(self)
-        anim.setDuration(max(0, int(duration_ms)))
-        anim.setStartValue(0.0)
-        anim.setEndValue(1.0)
-        anim.setEasingCurve(QEasingCurve.InOutCubic)
-
-        def _on_value_changed(value):
-            try:
-                effect.setOpacity(float(value))
-            except Exception:
-                pass
-
-        anim.valueChanged.connect(_on_value_changed)
-
-        def _on_finished() -> None:
-            self._widget_fade_anim = None
-            try:
-                self.setGraphicsEffect(None)
-            except Exception:
-                pass
-            self._widget_opacity_effect = None
-
-            if self._shadow_config is not None:
-                try:
-                    apply_widget_shadow(
-                        self,
-                        self._shadow_config,
-                        has_background_frame=self._show_background,
+                    logger.debug(
+                        "[REDDIT] Failed to apply widget shadow in fallback path",
+                        exc_info=True,
                     )
-                except Exception:
-                    logger.debug("[REDDIT] Failed to apply widget shadow after fade", exc_info=True)
-
-        anim.finished.connect(_on_finished)
-        self._widget_fade_anim = anim
-        anim.start()
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)

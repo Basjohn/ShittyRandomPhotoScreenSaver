@@ -15,7 +15,7 @@ from PySide6.QtGui import QFont, QColor
 from core.logging.logger import get_logger
 from core.threading.manager import ThreadManager
 from weather.open_meteo_provider import OpenMeteoProvider
-from widgets.shadow_utils import apply_widget_shadow
+from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
 
 logger = get_logger(__name__)
 _CACHE_FILE = Path(__file__).resolve().parent / "last_weather.json"
@@ -721,68 +721,11 @@ class WeatherWidget(QLabel):
         """
 
         try:
-            if self._fade_effect is None:
-                self._fade_effect = QGraphicsOpacityEffect(self)
-
-            if self._fade_anim is not None:
-                try:
-                    self._fade_anim.stop()
-                except Exception:
-                    pass
-
-            # Start fully transparent before the effect is installed so we
-            # never present a 1-frame full-opacity flash.
-            self._fade_effect.setOpacity(0.0)
-
-            # Install the fade effect, overriding any previous graphics
-            # effect (e.g. a drop shadow) for the duration of the fade.
-            self.setGraphicsEffect(self._fade_effect)
-
-            logger.debug(
-                "[WEATHER] _fade_in starting (has_cached=%s, show_background=%s)",
-                self._has_displayed_valid_data,
-                self._show_background,
+            ShadowFadeProfile.start_fade_in(
+                self,
+                self._shadow_config,
+                has_background_frame=self._show_background,
             )
-
-            self.show()
-
-            anim = QPropertyAnimation(self._fade_effect, b"opacity", self)
-            anim.setDuration(1500)
-            anim.setStartValue(0.0)
-            anim.setEndValue(1.0)
-            try:
-                from PySide6.QtCore import QEasingCurve
-
-                anim.setEasingCurve(QEasingCurve.InOutCubic)
-            except Exception:
-                pass
-
-            def _on_finished() -> None:
-                # Tear down the fade effect and restore the shared shadow.
-                try:
-                    self.setGraphicsEffect(None)
-                except Exception:
-                    pass
-
-                self._fade_effect = None
-                self._fade_anim = None
-
-                if self._shadow_config is not None:
-                    try:
-                        apply_widget_shadow(
-                            self,
-                            self._shadow_config,
-                            has_background_frame=self._show_background,
-                        )
-                    except Exception:
-                        logger.debug(
-                            "[WEATHER] Failed to apply widget shadow after fade",
-                            exc_info=True,
-                        )
-
-            anim.finished.connect(_on_finished)
-            self._fade_anim = anim
-            self._fade_anim.start()
         except Exception:
             # Fallback: just show and, if available, apply the shared shadow.
             logger.debug("[WEATHER] _fade_in fallback path triggered", exc_info=True)

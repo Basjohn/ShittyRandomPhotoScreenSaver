@@ -10,13 +10,15 @@ from pathlib import Path
 from enum import Enum
 from PySide6.QtWidgets import QApplication, QMessageBox
 from PySide6.QtCore import Qt, QCoreApplication
-from PySide6.QtGui import QSurfaceFormat, QImageReader
+from PySide6.QtGui import QSurfaceFormat, QImageReader, QIcon
 from core.logging.logger import setup_logging, get_logger
 from core.settings.settings_manager import SettingsManager
 from core.animation import AnimationManager
 from engine.screensaver_engine import ScreensaverEngine
 from ui.settings_dialog import SettingsDialog
 from rendering.gl_format import build_surface_format
+from ui.system_tray import ScreensaverTrayIcon
+from versioning import APP_VERSION, APP_EXE_NAME
 
 logger = get_logger(__name__)
 
@@ -140,9 +142,21 @@ def run_screensaver(app: QApplication) -> int:
         Exit code
     """
     logger.info("Initializing screensaver engine")
-    
+
     # Create settings manager
     settings = SettingsManager()
+
+    # Determine whether hard-exit mode is enabled so we can optionally
+    # expose a small system tray for Settings/Exit while the saver runs.
+    hard_exit_enabled = False
+    try:
+        raw_hard_exit = settings.get('input.hard_exit', False)
+        if hasattr(SettingsManager, "to_bool"):
+            hard_exit_enabled = SettingsManager.to_bool(raw_hard_exit, False)
+        else:
+            hard_exit_enabled = bool(raw_hard_exit)
+    except Exception:
+        hard_exit_enabled = False
     
     # Check if sources are configured (using dot notation)
     folders = settings.get('sources.folders', [])
@@ -157,7 +171,6 @@ def run_screensaver(app: QApplication) -> int:
             "Please add folders or RSS feeds in the settings dialog."
         )
         return run_config(app)
-    
     # Create and start screensaver engine
     try:
         engine = ScreensaverEngine()
@@ -183,6 +196,35 @@ def run_screensaver(app: QApplication) -> int:
             )
             return run_config(app)
         
+        # Optional system tray presence in hard-exit mode.
+        tray_icon = None
+        if hard_exit_enabled:
+            try:
+                tray_icon = ScreensaverTrayIcon(app, app.windowIcon())
+            except Exception:
+                logger.debug("Failed to create system tray icon", exc_info=True)
+
+            if tray_icon is not None:
+                # Delegate to the engine's existing S-key workflow so tray
+                # Settings behaves identically to pressing S.
+                def _on_tray_settings() -> None:
+                    try:
+                        # _on_settings_requested performs a full stop →
+                        # settings dialog → restart cycle.
+                        engine._on_settings_requested()  # type: ignore[attr-defined]
+                    except Exception:
+                        logger.exception("Failed to open settings from system tray")
+
+                def _on_tray_exit() -> None:
+                    try:
+                        engine.stop()
+                    except Exception:
+                        logger.exception("Failed to stop engine from system tray")
+                    app.quit()
+
+                tray_icon.settings_requested.connect(_on_tray_settings)
+                tray_icon.exit_requested.connect(_on_tray_exit)
+
         logger.info("Screensaver engine started - entering event loop")
         return app.exec()
         
@@ -281,8 +323,21 @@ def main():
     
     # Create Qt application
     app = QApplication(sys.argv)
-    app.setApplicationName("ShittyRandomPhotoScreenSaver")
+    app.setApplicationName(APP_EXE_NAME)
     app.setOrganizationName("ShittyRandomPhotoScreenSaver")
+    try:
+        app.setApplicationVersion(APP_VERSION)
+    except Exception:
+        pass
+
+    # Apply application icon from SRPSS.ico when available so the
+    # taskbar/systray and dialogs share a consistent identity.
+    icon_path = Path(__file__).with_name("SRPSS.ico")
+    if icon_path.exists():
+        try:
+            app.setWindowIcon(QIcon(str(icon_path)))
+        except Exception:
+            logger.debug("Failed to set application icon from SRPSS.ico", exc_info=True)
     
     # Increase Qt image allocation limit from 256MB to 1GB for high-res images
     # This is per-image when loaded, not total memory for all images

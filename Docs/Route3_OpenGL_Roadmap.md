@@ -105,31 +105,12 @@ Checkboxes: `[ ]` = active work; `[x]` = completed or historical items retained 
 ## 11. Widgets, Input & GL Startup (2025-11-15 baseline)
 
 
-### 11.0 Widget Shadow Fading In On Startup. [High Priority]
-- [ ] Make all widgets fade in their shadow on startup in sync with each other and our opacity synced fade in.
-Contrary to earlier information, this IS entirely possible.
-The Method to use is similiar to the following but adjusted to our codebase and policies:
-
-You create a dummy widget behind your real widget whose only purpose is to render the shadow.
-
-Example Structure:
-
-ShadowWidget  (fake, invisible except shadow)
-   - QGraphicsDropShadowEffect (full opacity)
-MainWidget (your glass card)
-   - UI elements
-
-You animate the opacity of the shadow effect itself, or the opacity of the ShadowWidget.
-
-There is also optionally the QML approach:
-DropShadow {
-    anchors.fill: parent
-    source: mainCard
-    opacity: shadowVisible ? 1 : 0
-    Behavior on opacity { NumberAnimation { duration: 1200 } }
-}
-- [ ] Implement this for all widgets and create a test for both the fade sync and shadow sync through various scenarios, add it to our testsuite and run it.
-Remember to do this as best for our arhcitecture as possible and keep all widget startup syncing connected/smart. Use the same ms duration sync as the widget opacity fade ms, same easing ideally as well.
+### 11.0 Widget Shadow Fading In On Startup (Completed 2025-11-22)
+- [x] All overlay widgets (clocks 1/2/3, weather, media, reddit) now share a **two-stage startup animation**:
+  - A coordinated **card opacity fade-in** over ~1500ms using `InOutCubic`, driven by `DisplayWidget.request_overlay_fade_sync` so all active widgets on a display appear together.
+  - A subsequent **shadow fade** of equal duration that animates the drop shadow's colour alpha from 0 to the configured `widgets.shadows.*` opacity, using the same easing profile. Shadows are slightly enlarged/softened globally via a shared blur-radius multiplier so cards feel grounded without harsh edges.
+- [x] Behaviour is documented in `Spec.md` under `widgets.shadows.*` and in `Docs/Shadow_Fade_Rework_Plan.md` (ShadowFadeProfile design and rollout). A manual verification scenario for shadow/card fade synchronisation is recorded in `Docs/TestSuite.md` under the Route 3 scenarios.
+- Historical design note: an alternative approach using a dedicated `ShadowWidget` (dummy shadow-only widget or QML-style `DropShadow` wrapper) is retained here as a future enhancement option for more advanced shadow-only animations, but is not part of the current implementation.
 
 
 ### 11.1 Spotify / Media Playback Widget (Historical baseline)
