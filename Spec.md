@@ -102,6 +102,23 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
 - Watchdog timers accompany each GL transition; timeout cancellation required once `transition_finish` fires to avoid thread leaks.
 - Overlay Z-order is revalidated after each transition to ensure widgets (clock/weather/multi-clocks) remain visible across monitors.
 
+### Widget Overlay Behaviour (canonical reference)
+
+- Overlay widgets (clock/weather/media/Spotify visualizer/Reddit and future
+  cards) follow the patterns defined in `Docs/10_WIDGET_GUIDELINES.md` for:
+  - Card styling and typography.
+  - Coordinated fade/shadow application via `ShadowFadeProfile` and the
+    global `widgets.shadows.*` config.
+  - Integration with `DisplayWidget._setup_widgets`,
+    `DisplayWidget.request_overlay_fade_sync`,
+    `DisplayWidget._ensure_overlay_stack`, and
+    `transitions.overlay_manager.raise_overlay` so widgets stay above both the
+    base image and any GL compositor/legacy overlays for the full duration of
+    transitions.
+
+`Docs/10_WIDGET_GUIDELINES.md` is the **canonical source of truth** for overlay
+widget behaviour; this Spec only summarises the high-level contract.
+
 ## Banding & Pixmap Seeding
 - `DisplayWidget.show_on_screen` grabs a per-monitor wallpaper snapshot via `screen.grabWindow(0)` and seeds `current_pixmap`, `_seed_pixmap`, and `previous_pixmap` before GL prewarm runs. This prevents a wallpaper→black flash during startup even while overlays are initializing.
 - `DisplayWidget` seeds `current_pixmap` again as soon as a real image loads, before transition warmup, to keep the base widget drawing a valid frame while overlays warm and transitions start.

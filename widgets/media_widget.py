@@ -67,6 +67,8 @@ class MediaWidget(QLabel):
         self._enabled = False
         self._thread_manager = None
         self._refresh_in_flight = False
+        self._pending_state_override: Optional[MediaPlaybackState] = None
+        self._pending_state_timer: Optional[QTimer] = None
 
         # Styling defaults (mirrors general widget style)
         self._font_family = "Segoe UI"
@@ -422,6 +424,7 @@ class MediaWidget(QLabel):
         # row and any listeners (e.g. the Spotify visualizer) respond
         # immediately while the GSMTC query catches up.
         optimistic = None
+        new_state = None
         try:
             info = self._last_info
         except Exception:
@@ -456,18 +459,55 @@ class MediaWidget(QLabel):
                 self._update_display(optimistic)
             except Exception:
                 logger.debug("[MEDIA] play_pause optimistic update failed", exc_info=True)
+            try:
+                if new_state is not None:
+                    self._apply_pending_state_override(new_state)
+            except Exception:
+                logger.debug("[MEDIA] play_pause optimistic override failed", exc_info=True)
 
-        # After a local transport action, schedule an immediate refresh so
-        # the widget (and any listeners such as the Spotify visualizer)
-        # reflect the new state without waiting for the next poll tick.
+    def _apply_pending_state_override(self, state: MediaPlaybackState) -> None:
+        timer = self._pending_state_timer
+        if timer is not None:
+            try:
+                timer.stop()
+                timer.deleteLater()
+            except Exception:
+                pass
+            self._pending_state_timer = None
+
+        self._pending_state_override = state
+
         try:
-            if self._enabled:
-                if self._thread_manager is not None:
-                    self._refresh_async()
-                else:
-                    self._refresh()
+            self.update()
         except Exception:
-            logger.debug("[MEDIA] play_pause post-refresh failed", exc_info=True)
+            pass
+
+        if not self._enabled:
+            return
+
+        timer = QTimer(self)
+        timer.setSingleShot(True)
+        timer.setInterval(300)
+
+        def _on_timeout() -> None:
+            self._pending_state_timer = None
+            self._pending_state_override = None
+            try:
+                if self._enabled:
+                    if self._thread_manager is not None:
+                        self._refresh_async()
+                    else:
+                        self._refresh()
+            except Exception:
+                logger.debug("[MEDIA] pending state refresh failed", exc_info=True)
+            try:
+                self.update()
+            except Exception:
+                pass
+
+        timer.timeout.connect(_on_timeout)
+        self._pending_state_timer = timer
+        timer.start()
 
     def next_track(self) -> None:
         """Skip to next track when supported (best-effort)."""
@@ -1102,13 +1142,15 @@ class MediaWidget(QLabel):
             return
 
         info = self._last_info
-        if info is None:
+        if info is None and self._pending_state_override is None:
             return
 
         try:
-            state = info.state
+            base_state = info.state if info is not None else MediaPlaybackState.UNKNOWN
         except Exception:
-            state = MediaPlaybackState.UNKNOWN
+            base_state = MediaPlaybackState.UNKNOWN
+
+        state = self._pending_state_override or base_state
 
         width = self.width()
         height = self.height()

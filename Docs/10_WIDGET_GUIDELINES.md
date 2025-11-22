@@ -191,20 +191,145 @@ Any future media widget must either:
 
 ---
 
-## 6. Z‑Order & Overlay Behaviour
+## 6. Z‑Order, GL Compositor & Fade/Shadow Behaviour
 
-To ensure widgets remain visible over transitions and compositors:
+This section is the **canonical recipe** for making sure overlay widgets never
+vanish or flicker under GL transitions (including the shared `GLCompositorWidget`).
 
-- `transitions.overlay_manager.raise_overlay()` must **always** re‑raise all
-  overlay widgets (clock(s), weather, Spotify, future widgets) after creating
-  or raising transition overlays.
+If a widget (Spotify visualizer, media, weather, Reddit, clocks) ever
+disappears during a transition, debug **only these integration points** first.
 
-- `DisplayWidget` must:
-  - Call `raise_()` on each widget immediately after creation.
-  - Re‑raise the widgets after transitions and GL compositor operations.
+### 6.1 Where widgets live
 
-- Widgets should never create their own top‑level windows or overlays; they
-  live entirely inside `DisplayWidget`.
+- All overlay widgets are **direct children of `DisplayWidget`**.
+- Widgets **never** create their own `QOpenGLWidget` overlays or top‑level
+  windows.
+- GL transitions and the compositor render **behind** widgets; Z‑order is
+  maintained explicitly by `DisplayWidget` and `overlay_manager`.
+
+### 6.2 Creation & basic wiring (`DisplayWidget._setup_widgets`)
+
+For every overlay widget (clock / weather / media / Spotify visualizer /
+Reddit / future widgets), `DisplayWidget._setup_widgets` must:
+
+1. **Gate on settings**
+   - Check `widgets.<name>.enabled` and per‑monitor selection before creating.
+
+2. **Create and configure**
+   - Instantiate the widget as a child of `DisplayWidget`.
+   - Apply font, margin, background and colour settings via setters
+     (`set_font_family`, `set_font_size`, `set_margin`, `set_show_background`,
+     `set_background_color`, `set_background_opacity`, `set_background_border`).
+   - Pass the global shadow config:
+     - Prefer `widget.set_shadow_config(shadows_config)`.
+     - Fallback: `apply_widget_shadow(widget, shadows_config, has_background_frame=...)`.
+
+3. **Start + initial raise**
+   - Call `widget.raise_()` **immediately** after configuration.
+   - Call `widget.start()` to begin timers / polling.
+
+The Spotify media card + Spotify Beat Visualizer wiring in
+`rendering/display_widget.py::_setup_widgets` is the reference example.
+
+### 6.3 Coordinated fade + shadow (`request_overlay_fade_sync` + `ShadowFadeProfile`)
+
+All widgets that fade in (Weather, Media, Reddit, clocks, Spotify visualizer)
+follow the same pattern:
+
+1. In the widget’s `start()` method, register a starter callback with the
+   parent `DisplayWidget`:
+
+   - `parent.request_overlay_fade_sync("media", starter)`
+   - `parent.request_overlay_fade_sync("weather", starter)`
+   - `parent.request_overlay_fade_sync("reddit", starter)`
+   - `parent.request_overlay_fade_sync("spotify_visualizer", starter)`
+   - `parent.request_overlay_fade_sync("clock"/"clock2"/"clock3", starter)`
+
+2. In `starter`, call the widget’s fade helper, which must delegate to the
+   shared `ShadowFadeProfile`:
+
+   - Media: `MediaWidget._start_widget_fade_in()` →
+     `ShadowFadeProfile.start_fade_in(self, self._shadow_config, has_background_frame=self._show_background)`.
+   - Weather: `WeatherWidget._fade_in()` → `ShadowFadeProfile.start_fade_in(...)`.
+   - Reddit: `RedditWidget._start_widget_fade_in()` → `ShadowFadeProfile.start_fade_in(...)`.
+   - Clocks: `ClockWidget._start_widget_fade_in()` → `ShadowFadeProfile.start_fade_in(...)`.
+   - Spotify Visualizer: `SpotifyVisualizerWidget._start_widget_fade_in()` →
+     `ShadowFadeProfile.start_fade_in(...)`.
+
+3. `ShadowFadeProfile.start_fade_in` performs a **two‑stage animation**:
+   - Card opacity fade 0.0 → 1.0 using a temporary `QGraphicsOpacityEffect`.
+   - Shadow fade 0 → target alpha using a shared `QGraphicsDropShadowEffect`
+     configured from `widgets.shadows.*`.
+
+This guarantees that all widgets on a display fade in together and receive
+their drop shadows with identical timing.
+
+### 6.4 Overlay manager (`transitions.overlay_manager.raise_overlay`)
+
+For legacy GL overlays (Crossfade/Slide/Wipe/Diffuse/BlockFlip/Blinds),
+`transitions.overlay_manager.raise_overlay(display, overlay)` is responsible
+for:
+
+- Creating or reusing the GL overlay widget via `get_or_create_overlay`.
+- Setting its geometry via `set_overlay_geometry(display, overlay)`.
+- Calling `overlay.raise_()` to move the GL overlay above the base image.
+- **Re‑raising overlay widgets afterwards** so they remain on top of the GL
+  overlay.
+
+Any changes to overlay types or GL transition wiring must update
+`overlay_manager` so that, after an overlay is raised, the widgets are raised
+again in a deterministic order.
+
+### 6.5 Canonical Z‑order fix (`DisplayWidget._ensure_overlay_stack`)
+
+The final piece that prevents widgets from vanishing under the **shared GL
+compositor** is `DisplayWidget._ensure_overlay_stack(stage)`. This helper is
+called at key moments:
+
+- On screen change / resize.
+- At transition start (`stage="transition_start"`).
+- After display updates and transition finish.
+
+It must do **two things**:
+
+1. **Maintain GL/SW overlay geometry and stacking**
+
+   ```python
+   for attr_name in GL_OVERLAY_KEYS + SW_OVERLAY_KEYS:
+       overlay = getattr(self, attr_name, None)
+       if not overlay:
+           continue
+       set_overlay_geometry(self, overlay)
+       if overlay.isVisible():
+           schedule_raise_when_ready(self, overlay, stage=f"{stage}_{attr_name}")
+       else:
+           raise_overlay(self, overlay)
+   ```
+
+2. **Re‑raise real overlay widgets over the compositor**
+
+   After the loop above, `_ensure_overlay_stack` must explicitly re‑raise the
+   card widgets so they sit above both the GL compositor and any legacy
+   overlays for the entire duration of a transition:
+
+   ```python
+   for attr_name in (
+       "clock_widget", "clock2_widget", "clock3_widget",
+       "weather_widget", "media_widget",
+       "spotify_visualizer_widget", "reddit_widget",
+   ):
+       w = getattr(self, attr_name, None)
+       if w is not None and w.isVisible():
+           w.raise_()
+   ```
+
+This pattern – especially the explicit re‑raise of `media_widget` and
+`spotify_visualizer_widget` – is the **exact fix** for the historical bug
+where the Spotify Beat Visualizer (and sometimes the media card) vanished or
+only reappeared late in a GL transition.
+
+Any new overlay widget must be added to this re‑raise list once it participates
+in the shared overlay fade/shadow system.
 
 ---
 
