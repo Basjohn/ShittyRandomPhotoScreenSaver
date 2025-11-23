@@ -506,20 +506,44 @@ class DisplayManager(QObject):
     
     def cleanup(self) -> None:
         """Clean up all display widgets."""
-        logger.info(f"Cleaning up {len(self.displays)} display widgets")
-        
-        for display in self.displays:
+        count = len(self.displays)
+        logger.info("Cleaning up %d display widgets", count)
+
+        for idx, display in enumerate(self.displays):
+            try:
+                screen_index = getattr(display, "screen_index", idx)
+            except Exception:
+                screen_index = idx
+            logger.debug(
+                "Cleaning up display widget (index=%d/%d, screen_index=%s)",
+                idx,
+                count,
+                screen_index,
+            )
+
             try:
                 # Ensure per-display cleanup (pan & scan, transitions, overlays)
                 try:
                     display.clear()
                 except Exception as e:
-                    logger.debug("Display.clear() failed during cleanup: %s", e, exc_info=True)
+                    logger.debug(
+                        "Display.clear() failed during cleanup (index=%d, screen_index=%s): %s",
+                        idx,
+                        screen_index,
+                        e,
+                        exc_info=True,
+                    )
                 display.close()
                 display.deleteLater()
             except Exception as e:
-                logger.warning(f"Error closing display: {e}")
-        
+                logger.warning(
+                    "Error closing display (index=%d, screen_index=%s): %s",
+                    idx,
+                    screen_index,
+                    e,
+                    exc_info=True,
+                )
+
         self.displays.clear()
         self.current_images.clear()
         logger.info("Display manager cleanup complete")

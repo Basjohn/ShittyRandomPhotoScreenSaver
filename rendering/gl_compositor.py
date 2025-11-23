@@ -655,8 +655,8 @@ class GLCompositorWidget(QOpenGLWidget):
                         self.width(),
                         self.height(),
                     )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Slide metrics logging failed: %s", e, exc_info=True)
 
         # Reset profiling state.
         self._slide_profile_start_ts = None
@@ -796,8 +796,8 @@ class GLCompositorWidget(QOpenGLWidget):
         if self._animation_manager and self._current_anim_id:
             try:
                 self._animation_manager.cancel_animation(self._current_anim_id)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Failed to cancel current animation: %s", e, exc_info=True)
         self._current_anim_id = None
 
         new_pm: Optional[QPixmap] = None

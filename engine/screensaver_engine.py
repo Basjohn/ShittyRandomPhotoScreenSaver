@@ -862,6 +862,20 @@ class ScreensaverEngine(QObject):
             
             # Mark as not running immediately to prevent re-entry
             self._running = False
+            logger.debug("Engine stop requested (exit_app=%s)", exit_app)
+
+            # Stop background RSS refresh timer if present so no further
+            # callbacks run after teardown begins.
+            if self._rss_refresh_timer is not None:
+                try:
+                    if self._rss_refresh_timer.isActive():
+                        self._rss_refresh_timer.stop()
+                    logger.debug("RSS refresh timer stopped")
+                except RuntimeError as e:
+                    logger.debug("RSS refresh timer stop during cleanup raised: %s", e, exc_info=True)
+                except Exception as e:
+                    logger.debug("RSS refresh timer stop failed: %s", e, exc_info=True)
+                self._rss_refresh_timer = None
             
             # Stop rotation timer (do not delete here to avoid double-delete on repeated stops)
             if self._rotation_timer:
@@ -890,15 +904,41 @@ class ScreensaverEngine(QObject):
             
             # Clear and hide/cleanup displays
             if self.display_manager:
-                self.display_manager.clear_all()
+                try:
+                    try:
+                        display_count = self.display_manager.get_display_count()
+                    except Exception:
+                        display_count = len(getattr(self.display_manager, "displays", []))
+                    logger.info(
+                        "Stopping displays via DisplayManager (count=%s, exit_app=%s)",
+                        display_count,
+                        exit_app,
+                    )
+                except Exception:
+                    logger.info(
+                        "Stopping displays via DisplayManager (count=?, exit_app=%s)",
+                        exit_app,
+                    )
+
+                try:
+                    self.display_manager.clear_all()
+                except Exception as e:
+                    logger.debug("DisplayManager.clear_all() failed during stop: %s", e, exc_info=True)
+
                 if exit_app:
                     # Exiting app - full cleanup
-                    self.display_manager.cleanup()
-                    logger.debug("Displays cleared and cleaned up")
+                    try:
+                        self.display_manager.cleanup()
+                        logger.debug("Displays cleared and cleaned up")
+                    except Exception as e:
+                        logger.warning("DisplayManager.cleanup() failed during stop: %s", e, exc_info=True)
                 else:
                     # Just pausing (e.g., for settings) - hide windows
-                    self.display_manager.hide_all()
-                    logger.debug("Displays cleared and hidden")
+                    try:
+                        self.display_manager.hide_all()
+                        logger.debug("Displays cleared and hidden")
+                    except Exception as e:
+                        logger.warning("DisplayManager.hide_all() failed during stop: %s", e, exc_info=True)
             
             # Stop any pending image loads
             self._loading_in_progress = False
@@ -977,18 +1017,27 @@ class ScreensaverEngine(QObject):
 
             # Cleanup display manager
             if self.display_manager:
-                self.display_manager.cleanup()
-                logger.debug("Display manager cleaned up")
+                try:
+                    self.display_manager.cleanup()
+                    logger.debug("Display manager cleaned up")
+                except Exception as e:
+                    logger.warning("DisplayManager.cleanup() failed during engine cleanup: %s", e, exc_info=True)
             
             # Cleanup thread manager
             if self.thread_manager:
-                self.thread_manager.shutdown()
-                logger.debug("Thread manager shut down")
+                try:
+                    self.thread_manager.shutdown()
+                    logger.debug("Thread manager shut down")
+                except Exception as e:
+                    logger.warning("ThreadManager.shutdown() failed during engine cleanup: %s", e, exc_info=True)
             
             # Cleanup resource manager
             if self.resource_manager:
-                self.resource_manager.cleanup_all()
-                logger.debug("Resources cleaned up")
+                try:
+                    self.resource_manager.cleanup_all()
+                    logger.debug("Resources cleaned up")
+                except Exception as e:
+                    logger.warning("ResourceManager.cleanup_all() failed during engine cleanup: %s", e, exc_info=True)
             
             # Clear sources
             self.folder_sources.clear()

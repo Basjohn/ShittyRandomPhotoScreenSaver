@@ -205,10 +205,12 @@ class DisplayWidget(QWidget):
         # Central ThreadManager wiring (optional, provided by engine)
         self._thread_manager = thread_manager
         
-        # Setup widget
+        # Setup widget: frameless, always-on-top, and hidden from the
+        # taskbar/Alt+Tab via Tool window semantics.
         self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint |
-            Qt.WindowType.WindowStaysOnTopHint
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.Tool
         )
         self.setCursor(Qt.CursorShape.BlankCursor)
         self.setMouseTracking(True)
@@ -2682,15 +2684,15 @@ class DisplayWidget(QWidget):
             if self._gl_compositor is not None:
                 self._gl_compositor.hide()
                 self._gl_compositor.setParent(None)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Failed to tear down compositor in _on_destroyed: %s", e, exc_info=True)
         self._gl_compositor = None
         # Stop pan & scan if still active
         try:
             if hasattr(self, "_pan_and_scan") and self._pan_and_scan is not None:
                 self._pan_and_scan.stop()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[PAN&SCAN] Failed to stop pan_and_scan in _on_destroyed: %s", e, exc_info=True)
         # Stop Spotify Beat Visualizer if present
         try:
             vis = getattr(self, "spotify_visualizer_widget", None)
@@ -2704,8 +2706,8 @@ class DisplayWidget(QWidget):
                 except Exception:
                     pass
                 self.spotify_visualizer_widget = None
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Failed to stop visualizer in _on_destroyed: %s", e, exc_info=True)
         # Stop and clean up any active transition
         try:
             if self._current_transition:
@@ -2718,13 +2720,13 @@ class DisplayWidget(QWidget):
                 except Exception:
                     pass
                 self._current_transition = None
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[TRANSITION] Failed to stop/cleanup current transition in _on_destroyed: %s", e, exc_info=True)
         # Hide overlays and cancel watchdog timer
         try:
             hide_all_overlays(self)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[OVERLAYS] Failed to hide overlays in _on_destroyed: %s", e, exc_info=True)
         self._cancel_transition_watchdog()
 
     def _update_backend_fallback_overlay(self) -> None:
