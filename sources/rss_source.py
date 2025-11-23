@@ -12,7 +12,7 @@ import shutil
 from pathlib import Path
 from datetime import datetime
 from typing import List, Optional
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 from sources.base_provider import ImageProvider, ImageMetadata, ImageSourceType
 from core.logging.logger import get_logger
 
@@ -44,7 +44,8 @@ class RSSSource(ImageProvider):
                  max_cache_size_mb: int = 500,
                  timeout_seconds: int = 30,
                  save_to_disk: bool = False,
-                 save_directory: Optional[Path] = None):
+                 save_directory: Optional[Path] = None,
+                 max_images_per_refresh: Optional[int] = None):
         """
         Initialize RSS source.
         
@@ -59,6 +60,7 @@ class RSSSource(ImageProvider):
         self.feed_urls = feed_urls or list(DEFAULT_RSS_FEEDS.values())
         self.timeout = timeout_seconds
         self.max_cache_size = max_cache_size_mb * 1024 * 1024  # Convert to bytes
+        self.max_images_per_refresh = max_images_per_refresh
         
         # Setup cache directory
         if cache_dir:
@@ -113,6 +115,50 @@ class RSSSource(ImageProvider):
         # Cleanup old cache if needed
         self._cleanup_cache()
     
+    def _get_per_feed_image_limit(self) -> Optional[int]:
+        try:
+            if self.max_images_per_refresh is None:
+                return None
+            value = int(self.max_images_per_refresh)
+            # Negative values are treated as "no limit"; zero is a
+            # valid hard limit (skip this feed for the current pass).
+            if value < 0:
+                return None
+            return value
+        except Exception:
+            return None
+
+    def _resolve_feed_mode(self, feed_url: str) -> tuple[str, str, str]:
+        parsed = urlparse(feed_url)
+        scheme = parsed.scheme or "https"
+        netloc = parsed.netloc
+        path = parsed.path or "/"
+        query = parsed.query
+
+        if not netloc and path:
+            # Handle inputs like "reddit.com/..." without scheme
+            parts = path.split("/", 1)
+            candidate_host = parts[0]
+            rest = "/" + parts[1] if len(parts) > 1 else "/"
+            if "." in candidate_host:
+                netloc = candidate_host
+                path = rest or "/"
+
+        rebuilt = urlunparse((scheme, netloc, path, "", query, ""))
+
+        lowered_netloc = (netloc or "").lower()
+        lowered_path = path.lower()
+
+        if lowered_path.endswith(".json"):
+            return rebuilt, "json", feed_url
+
+        if "reddit.com" in lowered_netloc and ".rss" in lowered_path:
+            json_path = lowered_path.replace(".rss", ".json")
+            json_url = urlunparse((scheme, netloc, json_path, "", query, ""))
+            return json_url, "json", feed_url
+
+        return rebuilt, "rss", feed_url
+
     def _parse_feed(self, feed_url: str) -> None:
         """
         Parse a single RSS/Atom feed and extract images.
@@ -121,10 +167,15 @@ class RSSSource(ImageProvider):
             feed_url: URL of the feed to parse
         """
         logger.debug(f"Parsing feed: {feed_url}")
-        
+
+        request_url, mode, original_url = self._resolve_feed_mode(feed_url)
+
+        if mode == "json":
+            self._parse_json_feed(request_url, original_url)
+            return
+
         try:
-            # Parse feed
-            feed = feedparser.parse(feed_url, request_headers={
+            feed = feedparser.parse(request_url, request_headers={
                 'User-Agent': 'ShittyRandomPhotoScreenSaver/1.0'
             })
             
@@ -142,20 +193,72 @@ class RSSSource(ImageProvider):
             }
             
             logger.info(f"Feed '{feed_title}': {len(feed.entries)} entries")
-            
-            # Process each entry
+
+            limit = self._get_per_feed_image_limit()
+            added = 0
+
             for entry in feed.entries:
+                if limit is not None and added >= limit:
+                    break
                 try:
-                    self._process_entry(entry, feed_url, feed_title)
+                    if self._process_entry(entry, feed_url, feed_title):
+                        added += 1
                 except Exception as e:
                     logger.warning(f"Failed to process entry: {e}")
-                    # Continue with other entries
         
         except Exception as e:
             logger.error(f"Failed to fetch feed {feed_url}: {e}", exc_info=True)
             raise
     
-    def _process_entry(self, entry, feed_url: str, feed_title: str) -> None:
+    def _parse_json_feed(self, request_url: str, original_url: str) -> None:
+        logger.debug(f"Parsing JSON feed: {request_url}")
+
+        try:
+            response = requests.get(
+                request_url,
+                timeout=self.timeout,
+                headers={'User-Agent': 'ShittyRandomPhotoScreenSaver/1.0', 'Accept': 'application/json'},
+            )
+            response.raise_for_status()
+        except Exception as e:
+            logger.error(f"Failed to fetch JSON feed {request_url}: {e}")
+            return
+
+        try:
+            data = response.json()
+        except ValueError as e:
+            logger.error(f"Failed to decode JSON feed {request_url}: {e}")
+            return
+
+        entries = []
+        try:
+            if isinstance(data, dict) and data.get('kind') == 'Listing':
+                entries = [c.get('data', {}) for c in data.get('data', {}).get('children', []) if isinstance(c, dict)]
+        except Exception:
+            entries = []
+
+        feed_title = f"JSON Feed ({original_url})"
+        self._feed_data[original_url] = {
+            'title': feed_title,
+            'updated': '',
+            'entries_count': len(entries),
+        }
+
+        logger.info(f"JSON feed '{feed_title}': {len(entries)} entries")
+
+        limit = self._get_per_feed_image_limit()
+        added = 0
+
+        for post in entries:
+            if limit is not None and added >= limit:
+                break
+            try:
+                if self._process_reddit_json_entry(post, original_url, feed_title):
+                    added += 1
+            except Exception as e:
+                logger.warning(f"Failed to process JSON entry: {e}")
+
+    def _process_entry(self, entry, feed_url: str, feed_title: str) -> bool:
         """
         Process a single feed entry and extract image.
         
@@ -196,33 +299,116 @@ class RSSSource(ImageProvider):
         
         if not image_url:
             logger.debug(f"No image found in entry: {entry.get('title', 'Untitled')}")
-            return
+            return False
         
         # Download and cache image
         try:
             cached_path = self._download_image(image_url, entry)
-            
+
             if cached_path:
-                # Create metadata with new field names
                 metadata = ImageMetadata(
                     source_type=ImageSourceType.RSS,
                     source_id=feed_url,
-                    image_id=image_url.split('/')[-1],  # Use filename as ID
+                    image_id=image_url.split('/')[-1],
                     local_path=cached_path,
                     url=image_url,
                     title=entry.get('title', 'Untitled'),
-                    description=entry.get('summary', '')[:500],  # Limit description length
+                    description=entry.get('summary', '')[:500],
                     author=entry.get('author', feed_title),
                     created_date=self._parse_date(entry),
+                    fetched_date=datetime.utcnow(),
                     file_size=cached_path.stat().st_size if cached_path.exists() else 0,
-                    format=cached_path.suffix[1:].upper() if cached_path.suffix else 'UNKNOWN'
+                    format=cached_path.suffix[1:].upper() if cached_path.suffix else 'UNKNOWN',
                 )
-                
+
                 self._images.append(metadata)
                 logger.debug(f"Added image: {metadata.title}")
-        
+                return True
+
         except Exception as e:
             logger.warning(f"Failed to download image from {image_url}: {e}")
+
+        return False
+
+    def _process_reddit_json_entry(self, post: dict, feed_url: str, feed_title: str) -> bool:
+        if not isinstance(post, dict):
+            return False
+
+        image_url = post.get('url_overridden_by_dest') or post.get('url')
+        if not image_url:
+            return False
+
+        try:
+            parsed = urlparse(image_url)
+            path = parsed.path or ""
+            lowered = path.lower()
+            if not any(lowered.endswith(ext) for ext in (".jpg", ".jpeg", ".png", ".webp")):
+                return False
+        except Exception:
+            return False
+
+        # Light high-resolution filter: when Reddit provides preview
+        # metadata, prefer images that are at least 2560px wide. If we
+        # cannot determine a width, we keep the post (no strict filter).
+        min_width = 2560
+        try:
+            preview = post.get('preview') or {}
+            images = preview.get('images') or []
+            max_width = None
+            if images:
+                info = images[0] or {}
+                src = info.get('source') or {}
+                w = src.get('width')
+                if isinstance(w, (int, float)):
+                    max_width = int(w)
+                for res in info.get('resolutions') or []:
+                    rw = res.get('width')
+                    if isinstance(rw, (int, float)):
+                        rw_i = int(rw)
+                        if max_width is None or rw_i > max_width:
+                            max_width = rw_i
+            if max_width is not None and max_width < min_width:
+                return False
+        except Exception:
+            # If anything goes wrong while reading preview metadata,
+            # fall back to accepting the post (light filter only).
+            pass
+
+        try:
+            cached_path = self._download_image(image_url, post)
+            if not cached_path:
+                return False
+
+            created_ts = post.get('created_utc')
+            created_date = None
+            try:
+                if isinstance(created_ts, (int, float)):
+                    created_date = datetime.utcfromtimestamp(created_ts)
+            except Exception:
+                created_date = None
+
+            metadata = ImageMetadata(
+                source_type=ImageSourceType.RSS,
+                source_id=feed_url,
+                image_id=image_url.split('/')[-1],
+                local_path=cached_path,
+                url=image_url,
+                title=post.get('title', 'Untitled'),
+                description=(post.get('selftext') or "")[:500],
+                author=post.get('author', feed_title),
+                created_date=created_date,
+                fetched_date=datetime.utcnow(),
+                file_size=cached_path.stat().st_size if cached_path.exists() else 0,
+                format=cached_path.suffix[1:].upper() if cached_path.suffix else 'UNKNOWN',
+            )
+
+            self._images.append(metadata)
+            logger.debug(f"Added JSON image: {metadata.title}")
+            return True
+
+        except Exception as e:
+            logger.warning(f"Failed to download JSON image from {image_url}: {e}")
+            return False
     
     def _download_image(self, image_url: str, entry) -> Optional[Path]:
         """

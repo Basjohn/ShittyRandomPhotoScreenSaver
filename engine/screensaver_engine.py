@@ -10,13 +10,14 @@ The ScreensaverEngine is the central controller that:
 """
 import threading
 import random
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict
 from PySide6.QtCore import QObject, Signal, QTimer
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QPixmap
 
-from core.events import EventSystem
+from core.events import EventSystem, EventType
 from core.resources import ResourceManager
 from core.threading import ThreadManager
 from core.settings import SettingsManager
@@ -27,7 +28,7 @@ from engine.display_manager import DisplayManager
 from engine.image_queue import ImageQueue
 from sources.folder_source import FolderSource
 from sources.rss_source import RSSSource
-from sources.base_provider import ImageMetadata
+from sources.base_provider import ImageMetadata, ImageSourceType
 from rendering.display_modes import DisplayMode
 from ui.settings_dialog import SettingsDialog
 from utils.image_cache import ImageCache
@@ -102,6 +103,9 @@ class ScreensaverEngine(QObject):
         self._image_cache: Optional[ImageCache] = None
         self._prefetcher: Optional[ImagePrefetcher] = None
         self._prefetch_ahead: int = 5
+        # Background RSS refresh
+        self._rss_refresh_timer: Optional[QTimer] = None
+        self._rss_merge_lock = threading.Lock()
         
         logger.info("ScreensaverEngine created")
     
@@ -149,6 +153,9 @@ class ScreensaverEngine(QObject):
             
             # Subscribe to events
             self._subscribe_to_events()
+
+            # Enable background RSS refresh if applicable
+            self._start_rss_background_refresh_if_needed()
             
             logger.info("Engine initialization complete")
             return True
@@ -243,6 +250,41 @@ class ScreensaverEngine(QObject):
             rss_feeds = self.settings_manager.get('sources.rss_feeds', [])
             rss_save_to_disk = self.settings_manager.get('sources.rss_save_to_disk', False)
             rss_save_directory = self.settings_manager.get('sources.rss_save_directory', '')
+
+            # Global startup cap for RSS images: at most 8 images are
+            # downloaded across ALL RSS feeds before the screensaver
+            # starts. We divide this cap randomly among configured
+            # feeds so the mix varies between runs while staying
+            # within the global limit.
+            rss_startup_cap = 8
+            per_feed_limits: Dict[str, int] = {}
+            try:
+                if rss_feeds and rss_startup_cap > 0:
+                    feed_count = len(rss_feeds)
+                    total_slots = max(0, rss_startup_cap)
+                    per_feed_limits = {u: 0 for u in rss_feeds}
+
+                    # Ensure at least one slot for as many feeds as the
+                    # cap allows, then distribute any remaining slots
+                    # randomly to avoid stagnation.
+                    base = min(feed_count, total_slots)
+                    if base > 0:
+                        if feed_count > base:
+                            from random import sample
+                            initial = sample(rss_feeds, base)
+                        else:
+                            initial = list(rss_feeds)
+                        for u in initial:
+                            per_feed_limits[u] += 1
+                        remaining = total_slots - base
+                        import random as _rnd
+                        while remaining > 0 and rss_feeds:
+                            u = _rnd.choice(rss_feeds)
+                            per_feed_limits[u] += 1
+                            remaining -= 1
+            except Exception as e:
+                logger.debug(f"RSS startup cap distribution failed, falling back to per-feed defaults: {e}")
+                per_feed_limits = {}
             
             # Only use RSS feeds if explicitly configured by user
             for feed_url in rss_feeds:
@@ -252,11 +294,15 @@ class ScreensaverEngine(QObject):
                         rss_source = RSSSource(
                             feed_urls=[feed_url],
                             save_to_disk=True,
-                            save_directory=Path(rss_save_directory)
+                            save_directory=Path(rss_save_directory),
+                            max_images_per_refresh=per_feed_limits.get(feed_url),
                         )
                         logger.info(f"RSS source added with save-to-disk: {feed_url} -> {rss_save_directory}")
                     else:
-                        rss_source = RSSSource(feed_urls=[feed_url])
+                        rss_source = RSSSource(
+                            feed_urls=[feed_url],
+                            max_images_per_refresh=per_feed_limits.get(feed_url),
+                        )
                         logger.info(f"RSS source added: {feed_url}")
                     
                     self.rss_sources.append(rss_source)
@@ -324,6 +370,273 @@ class ScreensaverEngine(QObject):
         except Exception as e:
             logger.exception(f"Image queue build failed: {e}")
             return False
+
+    def _get_rss_background_cap(self) -> int:
+        """Return the global background cap for RSS images.
+
+        This limits how many RSS/JSON images we keep queued at any
+        given time. Defaults to 30 but can be overridden via
+        settings (``sources.rss_background_cap``).
+        """
+        try:
+            if not self.settings_manager:
+                return 30
+            raw = self.settings_manager.get('sources.rss_background_cap', 30)
+            cap = int(raw)
+            return cap if cap > 0 else 0
+        except Exception:
+            return 30
+
+    def _get_rss_stale_minutes(self) -> int:
+        """Return TTL in minutes for stale RSS images.
+
+        Defaults to 30 but can be overridden via
+        settings (``sources.rss_stale_minutes``). A value
+        <= 0 disables stale expiration.
+        """
+        try:
+            if not self.settings_manager:
+                return 30
+            raw = self.settings_manager.get('sources.rss_stale_minutes', 30)
+            minutes = int(raw)
+            return minutes if minutes > 0 else 0
+        except Exception:
+            return 30
+
+    def _start_rss_background_refresh_if_needed(self) -> None:
+        """Schedule background RSS refresh if RSS sources are present."""
+        try:
+            if not self.thread_manager or not self.image_queue or not self.rss_sources:
+                return
+            if self._rss_refresh_timer is not None:
+                return
+
+            cap = self._get_rss_background_cap()
+            if cap <= 0:
+                return
+
+            # Allow user override for refresh interval; default ~10min.
+            interval_min = 10
+            try:
+                if self.settings_manager:
+                    raw = self.settings_manager.get('sources.rss_refresh_minutes', 10)
+                    interval_min = int(raw)
+            except Exception:
+                interval_min = 10
+
+            interval_ms = max(60_000, interval_min * 60_000)
+            try:
+                self._rss_refresh_timer = self.thread_manager.schedule_recurring(
+                    interval_ms,
+                    self._background_refresh_rss,
+                )
+                logger.info(
+                    "Background RSS refresh enabled (interval=%dms, cap=%d)",
+                    interval_ms,
+                    cap,
+                )
+            except Exception as e:
+                logger.debug(f"Background RSS refresh scheduling failed: {e}")
+                self._rss_refresh_timer = None
+        except Exception as e:
+            logger.debug(f"Background RSS refresh init failed: {e}")
+
+    def _background_refresh_rss(self) -> None:
+        """Periodic background refresh for RSS/JSON sources.
+
+        Runs on the UI thread via ``ThreadManager.schedule_recurring``
+        and dispatches IO work to the thread pool.
+        """
+        try:
+            if not self._running:
+                return
+            if not (self.thread_manager and self.image_queue and self.rss_sources):
+                return
+
+            cap = self._get_rss_background_cap()
+            if cap <= 0:
+                return
+
+            try:
+                existing = self.image_queue.get_all_images()
+            except Exception:
+                existing = []
+
+            current_rss = 0
+            for m in existing:
+                try:
+                    if getattr(m, 'source_type', None) == ImageSourceType.RSS:
+                        current_rss += 1
+                except Exception:
+                    continue
+
+            if current_rss >= cap:
+                return
+
+            for src in self.rss_sources:
+                def _refresh_source(rss=src):
+                    try:
+                        rss.refresh()
+                        return rss.get_images()
+                    except Exception as e:
+                        logger.warning(f"[FALLBACK] Background RSS refresh failed for {rss}: {e}")
+                        return []
+
+                def _on_done(res):
+                    try:
+                        if not res or not getattr(res, 'success', False):
+                            if self.event_system:
+                                try:
+                                    self.event_system.publish(EventType.RSS_FAILED, data={"source": "background"}, source=self)
+                                except Exception:
+                                    pass
+                            return
+                        images = getattr(res, 'result', None) or []
+                        if not isinstance(images, list):
+                            return
+                        self._merge_rss_images_from_refresh(images)
+                    except Exception as e:
+                        logger.debug(f"Background RSS merge failed: {e}")
+
+                try:
+                    self.thread_manager.submit_io_task(_refresh_source, callback=_on_done)
+                except Exception as e:
+                    logger.debug(f"Background RSS submit failed: {e}")
+        except Exception as e:
+            logger.debug(f"Background RSS refresh tick failed: {e}")
+
+    def _merge_rss_images_from_refresh(self, images: List[ImageMetadata]) -> None:
+        """Merge refreshed RSS images into the queue under the global cap."""
+        if not images or not self.image_queue:
+            return
+
+        cap = self._get_rss_background_cap()
+        if cap <= 0:
+            return
+
+        with self._rss_merge_lock:
+            try:
+                existing = self.image_queue.get_all_images()
+            except Exception:
+                existing = []
+
+            existing_keys = set()
+            current_rss = 0
+            for m in existing:
+                try:
+                    key = str(m.local_path) if m.local_path else (m.url or "")
+                    if key:
+                        existing_keys.add(key)
+                    if getattr(m, 'source_type', None) == ImageSourceType.RSS:
+                        current_rss += 1
+                except Exception:
+                    continue
+
+            remaining = cap - current_rss
+            if remaining <= 0:
+                return
+
+            new_items: List[ImageMetadata] = []
+            for m in images:
+                try:
+                    if getattr(m, 'source_type', None) != ImageSourceType.RSS:
+                        continue
+                    key = str(m.local_path) if m.local_path else (m.url or "")
+                    if not key or key in existing_keys:
+                        continue
+                    new_items.append(m)
+                except Exception:
+                    continue
+
+            if not new_items:
+                return
+
+            try:
+                random.shuffle(new_items)
+            except Exception:
+                pass
+
+            to_add = new_items[: max(0, remaining)]
+            if not to_add:
+                return
+
+            added = 0
+            try:
+                added = self.image_queue.add_images(to_add)
+            except Exception as e:
+                logger.debug(f"Background RSS queue add failed: {e}")
+                return
+
+            removed_stale = 0
+            if added > 0:
+                stale_minutes = self._get_rss_stale_minutes()
+                if stale_minutes > 0:
+                    cutoff = datetime.utcnow() - timedelta(minutes=stale_minutes)
+
+                    try:
+                        snapshot = self.image_queue.get_all_images()
+                    except Exception:
+                        snapshot = []
+
+                    try:
+                        history_paths = set(self.image_queue.get_history(self.image_queue.history_size))
+                    except Exception:
+                        history_paths = set()
+
+                    stale_paths: List[str] = []
+                    for m in snapshot:
+                        try:
+                            if getattr(m, 'source_type', None) != ImageSourceType.RSS:
+                                continue
+                            lp = str(m.local_path) if m.local_path else None
+                            if not lp or lp in history_paths:
+                                continue
+                            ts = getattr(m, 'fetched_date', None) or getattr(m, 'created_date', None)
+                            if ts is None or not isinstance(ts, datetime):
+                                continue
+                            if ts < cutoff:
+                                stale_paths.append(lp)
+                        except Exception:
+                            continue
+
+                    if stale_paths:
+                        max_remove = min(len(stale_paths), added)
+                        for path in stale_paths[:max_remove]:
+                            try:
+                                if self.image_queue.remove_image(path):
+                                    removed_stale += 1
+                            except Exception:
+                                continue
+
+            logger.info(
+                "Background RSS refresh merged %d new images (cap=%d, removed_stale=%d)",
+                added,
+                cap,
+                removed_stale,
+            )
+
+            if self.event_system and (added > 0 or removed_stale > 0):
+                try:
+                    try:
+                        final_existing = self.image_queue.get_all_images()
+                    except Exception:
+                        final_existing = []
+
+                    total_rss = 0
+                    for m in final_existing:
+                        try:
+                            if getattr(m, 'source_type', None) == ImageSourceType.RSS:
+                                total_rss += 1
+                        except Exception:
+                            continue
+
+                    self.event_system.publish(
+                        EventType.RSS_UPDATED,
+                        data={"added": added, "removed_stale": removed_stale, "total_rss": total_rss},
+                        source=self,
+                    )
+                except Exception:
+                    pass
 
     def _initialize_cache_prefetcher(self) -> None:
         try:
@@ -560,13 +873,18 @@ class ScreensaverEngine(QObject):
                     logger.debug(f"Timer stop during cleanup raised: {e}")
                 try:
                     self._rotation_timer.deleteLater()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Rotation timer deleteLater failed during stop: %s", e, exc_info=True)
                 if self._rotation_timer_resource_id and self.resource_manager:
                     try:
                         self.resource_manager.unregister(self._rotation_timer_resource_id, force=True)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(
+                            "Failed to unregister rotation timer resource %s during stop: %s",
+                            self._rotation_timer_resource_id,
+                            e,
+                            exc_info=True,
+                        )
                     self._rotation_timer_resource_id = None
                 self._rotation_timer = None
             
@@ -606,8 +924,8 @@ class ScreensaverEngine(QObject):
                         stats.get('hit_rate_percent', 0.0),
                         stats.get('evictions', 0),
                     )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[PERF] ImageCache summary logging failed: %s", e, exc_info=True)
             
             # Only exit the Qt event loop if requested
             if exit_app:
@@ -646,15 +964,16 @@ class ScreensaverEngine(QObject):
                 if self.display_manager:
                     try:
                         dstats = self.display_manager.get_display_info()
-                    except Exception:
+                    except Exception as e:
+                        logger.debug("[PERF] Engine summary display info failed: %s", e, exc_info=True)
                         dstats = None
                 logger.info(
                     "[PERF] Engine summary: queue=%s, displays=%s",
                     qstats,
                     dstats,
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[PERF] Engine summary logging failed: %s", e, exc_info=True)
 
             # Cleanup display manager
             if self.display_manager:

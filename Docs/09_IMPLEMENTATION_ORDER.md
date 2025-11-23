@@ -475,7 +475,7 @@ This document outlines the exact order in which to implement the screensaver, wi
 ### Day 15: Weather Widget ✅ COMPLETE
 
 - [x] Create `widgets/weather_widget.py` (349 lines)
-  - [x] OpenWeatherMap API integration
+  - [x] Weather provider integration using Open-Meteo (no API key required)
   - [x] Background fetching with QThread
   - [x] 30-minute caching
   - [x] WeatherFetcher worker class
@@ -582,7 +582,6 @@ This document outlines the exact order in which to implement the screensaver, wi
   - [x] Add clock text color picker (QColorDialog)
   - [x] Add clock margin control (0-100px)
   - [x] Add weather enable checkbox
-  - [x] Add weather API key input
   - [x] Add weather location input
   - [x] Add weather position selector (4 positions)
   - [x] Add weather font size control (12-72px)
@@ -590,7 +589,6 @@ This document outlines the exact order in which to implement the screensaver, wi
   - [x] Connect to settings manager
   - [x] Implement instant save
   - [x] Signal: widgets_changed
-
 **Day 20 Status**: ✅ **Widgets Tab complete with size, font, position, and style settings!**
 
 ### Day 21: About Tab & Integration ✅ COMPLETE

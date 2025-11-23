@@ -57,7 +57,8 @@ def _coerce_int(value, default: int) -> int:
         return default
     try:
         return int(value)
-    except Exception:
+    except (TypeError, ValueError) as e:
+        logger.debug("[GL FORMAT] Failed to coerce %r to int, using default %d: %s", value, default, e, exc_info=True)
         return default
 
 
@@ -79,7 +80,12 @@ def read_surface_preferences(
             triple_value = settings_manager.get("display.prefer_triple_buffer", triple_default)
             depth_value = settings_manager.get("display.gl_depth_bits", depth_default)
             stencil_value = settings_manager.get("display.gl_stencil_bits", stencil_default)
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                "[GL FORMAT] Failed to read surface preferences from SettingsManager, using defaults: %s",
+                e,
+                exc_info=True,
+            )
             refresh_sync_value = refresh_sync_default
             triple_value = triple_default
             depth_value = depth_default
@@ -119,7 +125,8 @@ def _infer_settings_manager(widget) -> Optional["SettingsManager"]:
             parent_getter = getattr(parent, "parent", None)
             parent = parent_getter() if callable(parent_getter) else None
             depth += 1
-    except Exception:
+    except Exception as e:
+        logger.debug("[GL FORMAT] Failed to infer SettingsManager from widget ancestry: %s", e, exc_info=True)
         return None
     return None
 
@@ -138,24 +145,25 @@ def build_surface_format(
     requested_swap = QSurfaceFormat.SwapBehavior.TripleBuffer if use_triple else QSurfaceFormat.SwapBehavior.DoubleBuffer
     try:
         fmt.setSwapBehavior(requested_swap)
-    except Exception:
+    except Exception as e:
+        logger.debug("[GL FORMAT] Failed to set requested swap behaviour %s: %s", requested_swap, e, exc_info=True)
         fmt.setSwapBehavior(QSurfaceFormat.SwapBehavior.DefaultSwapBehavior)
 
     swap_interval = 1 if prefs.refresh_sync else 0
     try:
         fmt.setSwapInterval(swap_interval)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[GL FORMAT] Failed to set swap interval %s: %s", swap_interval, e, exc_info=True)
 
     try:
         fmt.setDepthBufferSize(prefs.depth_bits)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[GL FORMAT] Failed to set depth buffer size %s: %s", prefs.depth_bits, e, exc_info=True)
 
     try:
         fmt.setStencilBufferSize(prefs.stencil_bits)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[GL FORMAT] Failed to set stencil buffer size %s: %s", prefs.stencil_bits, e, exc_info=True)
 
     log_key = reason or "__default__"
     should_log = False

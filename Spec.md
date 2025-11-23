@@ -35,6 +35,18 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
 - Look-ahead: `ImageQueue.peek_many(n)` used to determine upcoming assets.
 - Skip policy: when a transition is active, prefetch defers to avoid thrash; skipped requests are logged for pacing diagnostics.
 
+## Image Sources
+
+- Folder sources:
+  - `FolderSource` scans configured `sources.folders` paths recursively (extensions filtered by `FolderSource.get_supported_extensions()`).
+  - Behaviour is unchanged by RSS work; caps/TTL never apply to folder images.
+- RSS / JSON sources:
+  - `RSSSource` consumes `sources.rss_feeds` URLs and produces `ImageMetadata` with `source_type=ImageSourceType.RSS`.
+  - Supports standard RSS/Atom feeds (via feedparser) and Reddit JSON listings with a light high‑resolution filter (prefers posts with preview width ≥ 2560px when available).
+  - Uses an on-disk cache under the temp directory and optional save‑to‑disk mirroring when `sources.rss_save_to_disk` and `sources.rss_save_directory` are configured.
+  - Startup: the engine assigns a global cap of 8 RSS images across all feeds (divided per‑feed) to avoid long startup stalls.
+  - Background: the engine enforces a global RSS background cap (`sources.rss_background_cap`, default 30) and a time‑to‑live (`sources.rss_stale_minutes`, default 30 minutes) so older, unseen RSS images are gradually replaced when new ones arrive, but only when a background refresh successfully adds replacements.
+
 ## Transitions
 - GL and CPU variants for Crossfade, Slide, Wipe, Diffuse, Block Puzzle Flip; GL-only variant for Blinds (`GLBlindsTransition`) when hardware acceleration is enabled. In addition, compositor-backed controllers (`GLCompositorCrossfadeTransition`, `GLCompositorSlideTransition`, `GLCompositorWipeTransition`, `GLCompositorBlockFlipTransition`) delegate rendering to a single `GLCompositorWidget` per display.
 - DisplayWidget injects the shared ResourceManager into every transition; overlays are created through `overlay_manager.get_or_create_overlay` so lifecycle is centralized.
@@ -67,19 +79,31 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
 - `transitions.random_always`: bool
 - `transitions.random_choice`: str
 - `transitions.slide.direction`, `transitions.slide.last_direction` (legacy flat keys maintained)
-- `transitions.wipe.direction`, `transitions.wipe.last_direction` (legacy flat keys maintained)
-- `transitions.diffuse.block_size` (int, clamped to a 4–256px range) and `transitions.diffuse.shape` (`Rectangle`|`Circle`|`Diamond`|`Plus`|`Triangle`).
-- `timing.interval`: int seconds
-- `display.same_image_all_monitors`: bool
-- Cache:
+ - `transitions.wipe.direction`, `transitions.wipe.last_direction` (legacy flat keys maintained)
+ - `transitions.diffuse.block_size` (int, clamped to a 4–256px range) and `transitions.diffuse.shape` (`Rectangle`|`Circle`|`Diamond`|`Plus`|`Triangle`).
+ - `timing.interval`: int seconds
+ - `display.same_image_all_monitors`: bool
+ - Cache:
   - `cache.prefetch_ahead` (default 5)
   - `cache.max_items` (default 24)
   - `cache.max_memory_mb` (default 1024)
   - `cache.max_concurrent` (default 2)
-- Widgets:
+ - Sources:
+  - `sources.folders` (list[str]): image folder paths, surfaced in the Sources tab.
+  - `sources.rss_feeds` (list[str]): RSS/JSON feed URLs; only feeds explicitly configured here are used by `RSSSource`.
+  - `sources.rss_save_to_disk` (bool): when true, new RSS images are mirrored into `sources.rss_save_directory` in addition to the temp cache.
+  - `sources.rss_save_directory` (str): absolute path for permanent RSS copies.
+  - `sources.rss_background_cap` (int, default 30): global cap on queued RSS/JSON images during background refresh; 0 disables the cap.
+  - `sources.rss_refresh_minutes` (int, default 10): background RSS refresh interval in minutes, clamped to at least 1 minute.
+  - `sources.rss_stale_minutes` (int, default 30): TTL for RSS images; stale entries are only removed when a refresh successfully adds replacements.
+ - Widgets:
   - `widgets.clock.*` (Clock 1): monitor ('ALL'|1|2|3), position, font, colour, timezone, background options.
   - `widgets.clock2.*`, `widgets.clock3.*` (Clock 2/3): same schema as Clock 1 with independent per-monitor/timezone configuration.
-  - `widgets.weather.*`: monitor ('ALL'|1|2|3), position, font, colour, optional iconography.
+  - `widgets.weather.*`: monitor ('ALL'|1|2|3), position, font, colour, optional iconography. **FR-5.2**: Weather widget - temperature, condition, location ✅ IMPLEMENTED (Days 14-16)
+    - Open-Meteo provider integration (no API key required), with back-compat parsing for legacy OpenWeather-style JSON in tests/mocks
+    - Background fetching with QThread
+    - 30-minute caching
+    - 4 position options
   - `widgets.media.*`: Spotify/media widget configuration (enabled flag, per-monitor selection via `monitor` ('ALL'|1|2|3), corner position, font family/size, margin, text colour, optional background frame and border with independent opacity, background opacity, artwork size, controls/header style flags). Media participates in the shared overlay fade-in coordination and uses the global widget shadow configuration once its own opacity fade completes.
   - `widgets.spotify_visualizer.*`: Spotify Beat Visualizer configuration (enabled flag, per-monitor selection via `monitor` ('ALL'|1|2|3) but positioned automatically just above the Spotify/media card, bar_count, bar_fill_color, bar_border_color, bar_border_opacity). The visualizer inherits its card background/border styling from the Spotify/media widget at runtime, participates in the shared overlay fade-in coordination via `DisplayWidget.request_overlay_fade_sync("spotify_visualizer", ...)`, attaches its drop shadow via the global widget shadow configuration, and only animates while the centralized media controller reports Spotify as actively playing.
   - `widgets.reddit.*`: Reddit overlay widget configuration (enabled flag, per-monitor selection via `monitor` ('ALL'|1|2|3), corner position, subreddit slug, item limit (4- or 10-item layouts), font family/size, margin, text colour, optional background frame and border with opacity, background opacity). The widget fetches Reddit's unauthenticated JSON listing endpoints with a fixed candidate pool (up to 25 posts), then sorts all valid entries by `created_utc` so the newest posts appear at the top; 4- and 10-item modes draw from the same sorted list and only differ by how many rows are rendered. The widget hides itself on fetch/parse failure and only responds to clicks in Ctrl-held / hard-exit interaction modes. Initial visibility is coordinated through the shared overlay fade-in system so Reddit, Weather and Media fade together per display.
@@ -139,4 +163,4 @@ widget behaviour; this Spec only summarises the high-level contract.
 - Additional **GL-only, compositor-backed transitions** (Peel, Rain Drops, Warp Dissolve, 3D Block Spins, Claw Marks) implemented as new transition types under the existing compositor architecture. These effects are only exposed when `display.hw_accel=True` and must either be hidden or mapped to a safe CPU fallback (e.g. Crossfade) when hardware acceleration is disabled. Detailed design and feasibility notes live in `Docs/GL_Transitions_Proposal.md`.
 
 **Version**: 1.0  
-**Last Updated**: Nov 21, 2025 02:45 - Canonical settings, GL compositor path, Spotify widget baseline, Settings dialog palette/sizing
+**Last Updated**: Nov 23, 2025 16:20 - Canonical settings, GL compositor path, Spotify widget baseline, Settings dialog palette/sizing, RSS JSON/caps/background refresh

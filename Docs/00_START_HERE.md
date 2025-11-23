@@ -179,10 +179,10 @@ Update it after major changes. It's not a changelog - it's a current state map.
 It's the single source of truth for what the application should be.
 
 #### 7. REUSABLE MODULES
-- Copy from `MyReuseableUtilityModules/`
-- Adapt for screensaver use
-- DO NOT EDIT originals in place
-- Delete or .gitignore when integration complete
+- Originally copied from `MyReuseableUtilityModules/` and adapted into `core/`, `utils/`, and `themes/`.
+- DO NOT edit any historical copies in-place; treat integrated modules as the canonical versions.
+- The original `MyReuseableUtilityModules/` directory has been removed/ignored after integration; this
+  section remains as a historical note on their origin.
 
 ---
 
@@ -293,8 +293,8 @@ ShittyRandomPhotoScreenSaver/
 ├── tests/                        # WILL BE CREATED
 ├── logs/                         # Created at runtime
 │
-└── MyReuseableUtilityModules/    # EXISTS - Copy modules from here
-    └── (to be deleted or .gitignored after integration)
+└── MyReuseableUtilityModules/    # Historical source of reusable modules (removed after integration)
+    └── (kept only in docs as reference)
 ```
 
 ---
@@ -465,7 +465,7 @@ The project is complete when:
 
 **Current Phase**: Planning Complete  
 **Next Step**: Begin Day 1 Implementation  
-**Reusable Modules Status**: Not yet integrated  
+**Reusable Modules Status**: Integrated (modules copied/adapted; original directory removed)  
 
 ---
 

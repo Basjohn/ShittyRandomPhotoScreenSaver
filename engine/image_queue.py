@@ -300,6 +300,15 @@ class ImageQueue:
         """
         return len(self._images)
     
+    def get_all_images(self) -> List[ImageMetadata]:
+        """Return a snapshot of all images known to the queue.
+
+        The returned list is a shallow copy and safe for callers to
+        inspect without holding queue internals.
+        """
+        with self._lock:
+            return list(self._images)
+    
     def is_empty(self) -> bool:
         """
         Check if queue is empty.

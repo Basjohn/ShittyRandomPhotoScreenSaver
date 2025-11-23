@@ -64,8 +64,7 @@ ShittyRandomPhotoScreenSaver/
 ├── widgets/                           # Overlay widgets
 │   ├── __init__.py
 │   ├── clock_widget.py               # Clock overlay
-│   ├── weather_widget.py             # Weather overlay
-│   └── weather_provider.py           # Weather API integration
+│   └── weather_widget.py             # Weather overlay
 │
 ├── ui/                                # Configuration UI
 │   ├── __init__.py
@@ -103,7 +102,7 @@ ShittyRandomPhotoScreenSaver/
 │   ├── INDEX.md
 │   └── SPEC.md
 │
-└── MyReuseableUtilityModules/         # TO BE DELETED after adaptation
+└── MyReuseableUtilityModules/         # Historical reusable modules (fully integrated; directory removed)
     └── (various modules)
 ```
 

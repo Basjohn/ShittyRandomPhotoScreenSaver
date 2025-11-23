@@ -1,6 +1,6 @@
 """Tests for weather widget."""
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from PySide6.QtWidgets import QWidget, QApplication
 from PySide6.QtGui import QColor
 from widgets.weather_widget import WeatherWidget, WeatherPosition, WeatherFetcher
@@ -141,7 +141,6 @@ def test_weather_all_positions(qapp, parent_widget):
     for position in positions:
         weather = WeatherWidget(
             parent=parent_widget,
-            api_key="test_key",
             position=position
         )
         
@@ -152,7 +151,6 @@ def test_weather_set_position(qapp, parent_widget, mock_weather_data):
     """Test changing weather position."""
     weather = WeatherWidget(
         parent=parent_widget,
-        api_key="test_key",
         position=WeatherPosition.TOP_LEFT
     )
     

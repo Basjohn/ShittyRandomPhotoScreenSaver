@@ -19,9 +19,9 @@ import re
 
 import requests
 
-from PySide6.QtCore import Qt, QTimer, QRect, QPoint, QUrl, QVariantAnimation
+from PySide6.QtCore import Qt, QTimer, QRect, QPoint, QUrl
 from PySide6.QtGui import QFont, QColor, QPainter, QFontMetrics, QDesktopServices, QPixmap, QPainterPath
-from PySide6.QtWidgets import QLabel, QWidget, QToolTip, QGraphicsOpacityEffect
+from PySide6.QtWidgets import QLabel, QWidget, QToolTip
 
 from core.logging.logger import get_logger, is_verbose_logging
 from core.threading.manager import ThreadManager
@@ -115,9 +115,7 @@ class RedditWidget(QLabel):
         self._brand_pixmap: Optional[QPixmap] = self._load_brand_pixmap()
         self._header_hit_rect: Optional[QRect] = None
 
-        # Fade and hover state
-        self._widget_fade_anim: Optional[QVariantAnimation] = None
-        self._widget_opacity_effect: Optional[QGraphicsOpacityEffect] = None
+        # Hover state and tooltip management
         self._hover_row_index: Optional[int] = None
         self._hover_timer: Optional[QTimer] = None
         self._hover_global_pos: Optional[QPoint] = None

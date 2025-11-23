@@ -67,7 +67,8 @@ class PanAndScan:
     def set_target_fps(self, fps: int) -> None:
         try:
             new_fps = max(10, min(240, int(fps)))
-        except Exception:
+        except (TypeError, ValueError) as e:
+            logger.debug("PanAndScan.set_target_fps received invalid fps %r, falling back to 60: %s", fps, e, exc_info=True)
             new_fps = 60
         if new_fps == self._fps:
             return
@@ -162,8 +163,8 @@ class PanAndScan:
         if self._resource_manager:
             try:
                 self._resource_manager.register_qt(self._timer, description="PanAndScan timer")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("PanAndScan timer registration with ResourceManager failed: %s", e, exc_info=True)
         
         logger.info(f"Pan and scan started: speed={self._speed_pixels_per_second:.1f} px/s, "
                    f"auto_speed={self._auto_speed}")
@@ -185,8 +186,8 @@ class PanAndScan:
         if self._label and self._label.isVisible():
             try:
                 self._label.hide()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("PanAndScan.stop failed to hide label: %s", e, exc_info=True)
             else:
                 did_change = True
 
@@ -208,8 +209,8 @@ class PanAndScan:
             if self._label:
                 try:
                     self._label.hide()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("PanAndScan.enable cleanup hide failed: %s", e, exc_info=True)
 
         if was_enabled != enabled:
             logger.debug(f"Pan and scan {'enabled' if enabled else 'disabled'}")
@@ -320,7 +321,8 @@ class PanAndScan:
             painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
             painter.drawPixmap(-start_x, -start_y, scaled)
             painter.end()
-        except Exception:
+        except Exception as e:
+            logger.debug("PanAndScan.build_transition_frame painter failed, returning None: %s", e, exc_info=True)
             return None
 
         # Scale to physical pixels for high-DPI screens if required
@@ -373,7 +375,8 @@ class PanAndScan:
             parent = getattr(self, "_parent", None)
             if parent is not None:
                 dpr = float(getattr(parent, "_device_pixel_ratio", 1.0))
-        except Exception:
+        except Exception as e:
+            logger.debug("PanAndScan failed to read parent device pixel ratio, using 1.0: %s", e, exc_info=True)
             dpr = 1.0
         dpr = max(1.0, dpr)
 

@@ -513,8 +513,8 @@ class DisplayManager(QObject):
                 # Ensure per-display cleanup (pan & scan, transitions, overlays)
                 try:
                     display.clear()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Display.clear() failed during cleanup: %s", e, exc_info=True)
                 display.close()
                 display.deleteLater()
             except Exception as e:

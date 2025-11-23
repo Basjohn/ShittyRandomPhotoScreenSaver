@@ -8,8 +8,8 @@ from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
 import json
-from PySide6.QtWidgets import QLabel, QWidget, QGraphicsOpacityEffect
-from PySide6.QtCore import QTimer, Qt, Signal, QThread, QObject, QPropertyAnimation
+from PySide6.QtWidgets import QLabel, QWidget
+from PySide6.QtCore import QTimer, Qt, Signal, QThread, QObject
 from PySide6.QtGui import QFont, QColor
 
 from core.logging.logger import get_logger
@@ -132,8 +132,6 @@ class WeatherWidget(QLabel):
         self._bg_color = QColor(64, 64, 64, int(255 * self._bg_opacity))  # Dark grey
         self._bg_border_width = 2
         self._bg_border_color = QColor(128, 128, 128, 200)  # Light grey border
-        self._fade_effect: Optional[QGraphicsOpacityEffect] = None
-        self._fade_anim: Optional[QPropertyAnimation] = None
         self._shadow_config: Optional[Dict[str, Any]] = None
         
         # Setup UI
@@ -712,12 +710,11 @@ class WeatherWidget(QLabel):
         self.stop()
 
     def _fade_in(self) -> None:
-        """Fade the widget in, then attach the shared drop shadow.
+        """Fade the widget in via ShadowFadeProfile, then attach the shared drop shadow.
 
-        A temporary QGraphicsOpacityEffect is installed for the fade so we
-        don't conflict with the global drop-shadow effect. Once the fade
-        completes the opacity effect is removed and the shared shadow is
-        applied.
+        The ShadowFadeProfile helper drives the opacity/shadow staging for the
+        card. On failure we fall back to an immediate show and, if configured,
+        a direct call to apply_widget_shadow.
         """
 
         try:

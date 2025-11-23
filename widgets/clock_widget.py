@@ -14,8 +14,8 @@ try:
 except ImportError:
     PYTZ_AVAILABLE = False
 
-from PySide6.QtWidgets import QLabel, QWidget, QGraphicsOpacityEffect
-from PySide6.QtCore import QTimer, Qt, Signal, QVariantAnimation
+from PySide6.QtWidgets import QLabel, QWidget
+from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtGui import QFont, QColor, QPainter, QPen, QPaintEvent
 
 from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
@@ -110,8 +110,6 @@ class ClockWidget(QLabel):
 
         # Last timestamp used for analogue rendering.
         self._current_dt: Optional[datetime] = None
-        self._fade_effect: Optional[QGraphicsOpacityEffect] = None
-        self._fade_anim: Optional[QVariantAnimation] = None
         self._shadow_config: Optional[Dict[str, Any]] = None
         self._has_faded_in: bool = False
         self._overlay_name: str = "clock"

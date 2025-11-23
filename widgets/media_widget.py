@@ -3,9 +3,10 @@
 This widget displays the current media playback state (track title,
 artist, album) using the centralized media controller abstraction.
 
-It is intentionally read-only and non-interactive in this first
-iteration; transport controls will be layered on later and gated
-behind explicit user intent (hard-exit/Ctrl-hold).
+Transport controls (play/pause, previous/next) are exposed but are
+strictly gated behind explicit user intent (Ctrl-held or hard-exit
+interaction modes) as routed by DisplayWidget; normal screensaver
+mode remains non-interactive.
 """
 from __future__ import annotations
 
@@ -14,7 +15,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtWidgets import QLabel, QWidget, QGraphicsOpacityEffect
+from PySide6.QtWidgets import QLabel, QWidget
 from PySide6.QtCore import QTimer, Qt, Signal, QVariantAnimation, QEasingCurve, QRect
 from PySide6.QtGui import QFont, QColor, QPixmap, QPainter, QPainterPath, QFontMetrics
 
@@ -99,11 +100,9 @@ class MediaWidget(QLabel):
         # Layout/controls behaviour
         self._show_controls: bool = True
 
-        # Widget-level fade effect for the first time it becomes visible.
+        # Widget-level fade state for the first time it becomes visible.
         # Subsequent track changes update in-place so the card and controls
         # remain perfectly stable.
-        self._widget_opacity_effect: Optional[QGraphicsOpacityEffect] = None
-        self._widget_fade_anim: Optional[QVariantAnimation] = None
 
         # Shared shadow configuration, passed in from DisplayWidget so we
         # can re-attach the global drop shadow after each fade.
@@ -167,15 +166,6 @@ class MediaWidget(QLabel):
 
         self._update_stylesheet()
 
-        # Install a graphics opacity effect so we can fade the entire widget
-        # in on startup / track changes without affecting siblings.
-        #
-        # Global widget shadows are also provided via QGraphicsEffect, and
-        # Qt only supports a single active effect per widget. To keep the
-        # drop-shadow consistent across all widgets we no longer attach an
-        # opacity effect here; the fade helper falls back to an immediate
-        # show when no effect is present.
-        self._widget_opacity_effect = None
         self.hide()
 
     def start(self) -> None:

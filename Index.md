@@ -87,6 +87,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - Docs/Route3_OpenGL_Roadmap.md – live checklist for stability work, must update each step
 - Docs/FlashFlickerDiagnostic.md – flicker/banding symptom tracker and mitigation history
  - Docs/10_WIDGET_GUIDELINES.md – canonical overlay widget design (card styling, fade/shadow via ShadowFadeProfile, Z-order/integration with DisplayWidget and overlay_manager, interaction gating)
+ - audits/*.md – repository-level Cleaning/Architecture/Optimization audit documents with live checklists
 
 ## Settings (selected)
 - display.refresh_sync: bool

@@ -7,6 +7,7 @@ import platform
 from PySide6.QtCore import QObject, QRect, Qt
 from PySide6.QtGui import QColor, QPainter, QPaintEvent
 from PySide6.QtWidgets import QWidget
+from shiboken6 import Shiboken
 
 from core.logging.logger import get_logger, is_verbose_logging
 from core.threading.manager import ThreadManager
@@ -1040,6 +1041,18 @@ class SpotifyVisualizerWidget(QWidget):
         Consumes the latest bar frame from the TripleBuffer and smoothly
         interpolates towards it for visual stability.
         """
+        try:
+            if not Shiboken.isValid(self):
+                try:
+                    if self._bars_timer is not None:
+                        self._bars_timer.stop()
+                except Exception:
+                    pass
+                self._bars_timer = None
+                self._enabled = False
+                return
+        except Exception:
+            return
 
         if not self._enabled:
             return

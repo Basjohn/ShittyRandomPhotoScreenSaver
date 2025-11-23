@@ -52,25 +52,6 @@ def hide_all_overlays(widget) -> None:
             pass
 
 
-def any_visible_gl_overlay_has_drawn(widget) -> bool:
-    """Return True if any GL overlay is visible and has drawn at least once."""
-    for key in GL_OVERLAY_KEYS:
-        ov = getattr(widget, key, None)
-        if ov is None:
-            continue
-        try:
-            if ov.isVisible():
-                # Some overlays expose has_drawn()
-                try:
-                    if bool(ov.has_drawn()):
-                        return True
-                except Exception:
-                    # If no has_drawn(), be conservative and do not skip base paint
-                    continue
-        except Exception:
-            continue
-    return False
-
 
 def any_gl_overlay_visible(widget) -> bool:
     """Return True if any GL overlay is currently visible (regardless of draw state)."""

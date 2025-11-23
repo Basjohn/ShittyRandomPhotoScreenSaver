@@ -1,5 +1,9 @@
 # Reusable Modules Integration Plan
 
+> **Status (Cleaning Pass)**: All listed reusable modules have already been copied and adapted into the
+> `core/`, `utils/`, and `themes/` packages. The original `MyReuseableUtilityModules/` directory has been
+> removed/ignored; this document is retained as a historical reference for how that integration was done.
+
 ## Overview
 The `MyReuseableUtilityModules/` directory contains production-tested modules from SPQDocker. These modules must be **copied and adapted** into the proper application structure, NOT edited in place.
 

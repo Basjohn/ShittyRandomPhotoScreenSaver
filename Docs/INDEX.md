@@ -333,35 +333,36 @@ SETTINGS_CHANGED = "settings.changed"
 ---
 
 ### `sources/rss_source.py` 🟢 COMPLETE
-**Purpose**: RSS feed image source with automatic caching  
+**Purpose**: RSS/JSON feed image source with automatic caching and optional save‑to‑disk  
 **Status**: ✅ Implemented (Day 5)  
 **Key Classes**:
-- `RSSSource(ImageProvider)` - RSS feed-based provider
+- `RSSSource(ImageProvider)` - RSS/JSON feed-based provider
   - `get_images()` - Get all cached images from feeds
   - `refresh()` - Refresh all feeds and download new images
-  - `add_feed(url)` - Add new RSS feed
+  - `add_feed(url)` - Add new RSS/JSON feed
   - `remove_feed(url)` - Remove feed
   - `clear_cache()` - Clear cached images
   - `_parse_feed(url)` - Parse single RSS/Atom feed
+  - `_parse_json_feed(url, original_url)` - Parse Reddit-style JSON listing feed
   - `_download_image(url)` - Download and cache image
   - `_cleanup_cache()` - LRU cleanup when cache exceeds limit
 
 **Features**:
-- Parses RSS/Atom feeds with feedparser
-- Extracts images from media:content, enclosures, img tags
-- Downloads with streaming (8KB chunks)
-- MD5-based cache filenames
-- Automatic LRU cache cleanup
-- Feed metadata tracking
-- Network timeout handling (30s default)
-- [FALLBACK] logging for failed feeds
+- Parses standard RSS/Atom feeds with feedparser and extracts images from `media:content`, enclosures, and `<img>` tags.
+- Handles Reddit JSON listings (`/top/.json?...`) with a light high‑resolution filter (prefers posts with preview width ≥ 2560px when available) and direct image URLs (`.jpg/.jpeg/.png/.webp`).
+- Downloads with streaming (8KB chunks), uses MD5-based cache filenames under a shared temp directory, and performs automatic LRU cache cleanup.
+- Populates `ImageMetadata` with `fetched_date` so the engine can expire stale RSS items during background refresh.
+- Supports optional permanent save‑to‑disk mirroring when constructed with `save_to_disk=True` and a `save_directory` from `sources.rss_save_directory`; existing cached files are not backfilled.
+- Coordinated with `ScreensaverEngine`:
+  - Startup obeys a per‑feed `max_images_per_refresh` that is allocated from a global cap of 8 RSS images across all feeds.
+  - Background refresh respects the global RSS queue cap and TTL (`sources.rss_background_cap`, `sources.rss_stale_minutes`) enforced at the engine/queue level.
 
 **Default Feeds**:
-- NASA Image of the Day
+- NASA Image of the Day  
 - NASA Breaking News  
-- Wikimedia Picture of the Day
+- Wikimedia Picture of the Day  
 
-**Implemented**: Day 5
+> Note: these defaults remain as a safe fallback in the provider but are not automatically wired by the engine; the active runtime uses only explicitly configured `sources.rss_feeds` plus curated Reddit JSON suggestions exposed through the Sources tab.
 
 ---
 
@@ -563,7 +564,7 @@ SETTINGS_CHANGED = "settings.changed"
 **Private Methods**:
   - `_initialize_core_systems()` - Setup Events, Resources, Threading, Settings
   - `_load_settings()` - Load configuration
-  - `_initialize_sources()` - Setup Folder and RSS sources
+  - `_initialize_sources()` - Setup Folder and RSS/JSON sources
   - `_build_image_queue()` - Populate queue from sources
   - `_initialize_display()` - Create and configure display manager
   - `_setup_rotation_timer()` - Configure QTimer for rotation
@@ -587,15 +588,18 @@ SETTINGS_CHANGED = "settings.changed"
 
 **Features**:
 - Automatic core system initialization
-- Default RSS sources if none configured
 - Settings-driven configuration
-- Hot-reloadable settings
 - Monitor hotplug support
 - Image rotation with configurable interval
 - Async-ready image loading
 - Comprehensive error handling with [FALLBACK] logging
 - Full lifecycle management (init → start → stop → cleanup)
 - Stop is idempotent; rotation timer only stopped (no double‑delete)
+- RSS/JSON source orchestration:
+  - Uses only explicitly configured `sources.rss_feeds` (no hidden defaults); the Sources tab can populate curated Reddit JSON feeds via the "Just Make It Work" helper.
+  - Applies a global RSS startup cap of 8 images across all feeds by assigning per-feed `max_images_per_refresh` when constructing `RSSSource` instances.
+  - Schedules background RSS/JSON refresh via `ThreadManager.schedule_recurring`, enforcing a global background RSS queue cap and stale TTL from `sources.rss_background_cap` and `sources.rss_stale_minutes`.
+  - Publishes `RSS_UPDATED` / `RSS_FAILED` events via `EventSystem` when background refresh completes or fails.
 
 **Tested**: 15 integration tests + system tests
 
@@ -948,7 +952,6 @@ SETTINGS_CHANGED = "settings.changed"
   - `start()` - Start weather updates
   - `stop()` - Stop weather updates
   - `is_running()` - Check if running
-  - `set_api_key(key)` - Set OpenWeatherMap API key
   - `set_location(location)` - Set location (city name)
   - `set_position(position)` - Set screen position
   - `set_font_size(size)` - Set font size
@@ -968,7 +971,7 @@ SETTINGS_CHANGED = "settings.changed"
 - `error_occurred(str)` - Emits error message
 
 **Features**:
-- OpenWeatherMap API integration
+- Weather provider integration via Open-Meteo (no API key required)
 - Background fetching with QThread
 - 30-minute caching to reduce API calls
 - Temperature in Celsius
@@ -1014,6 +1017,21 @@ SETTINGS_CHANGED = "settings.changed"
 - App-owned dark QSS theme with monochrome highlights; Windows accent colours do not override tab, list, or combo-box selection states.
 - Per-user geometry: defaults to ~60% of the primary screen and saves/restores size and position while clamping to the visible area so the dialog never opens off-screen.
 - Hosts `SourcesTab`, `DisplayTab`, `TransitionsTab`, and `WidgetsTab` with instant-apply settings.
+
+### `ui/tabs/sources_tab.py` 🟢 COMPLETE
+**Purpose**: Settings tab for configuring folder and RSS/JSON image sources.  
+**Status**: ✅ Implemented  
+**Key Features**:
+- Folder sources:
+  - Presents the list of configured folders bound to `sources.folders` with Add/Remove helpers.
+- RSS / JSON feed sources:
+  - Presents the list of feeds bound to `sources.rss_feeds` with Add/Remove helpers.
+  - "Clear Cache" button that clears the shared RSS cache directory used by `RSSSource`.
+  - "Just Make It Work" button that wipes existing feeds, adds a curated set of high-resolution Reddit JSON feeds (CityPorn, WaterPorn, ArchitecturePorn, EarthPorn, WQHD_Wallpaper, 4kwallpaper, SpacePorn, AbandonedPorn), and updates the session-local suggestion label text.
+  - URL validation with a custom `RssAutocorrectDialog` (styled using the same `subsettingsDialog` QSS as the rest of the app) that can normalize missing schemes and obviously broken Reddit hosts before persisting.
+- RSS save-to-disk:
+  - `Save RSS Images To Disk` checkbox bound to `sources.rss_save_to_disk`.
+  - Folder picker bound to `sources.rss_save_directory`, with signals blocked during settings load so re-opening the dialog does not re-prompt the user when a directory is already configured.
 
 ---
 
