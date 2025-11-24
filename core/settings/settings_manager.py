@@ -98,7 +98,7 @@ class SettingsManager(QObject):
             'display.show_on_monitors': 'ALL',
 
             # Timing / queue
-            'timing.interval': 25,
+            'timing.interval': 40,
             'queue.shuffle': True,
 
             # Input
@@ -107,7 +107,7 @@ class SettingsManager(QObject):
             # Transitions (canonical nested config)
             'transitions': {
                 'type': 'Wipe',
-                'duration_ms': 2215,
+                'duration_ms': 3000,
                 'easing': 'Auto',
                 'direction': 'Random',
                 'random_always': False,
@@ -205,10 +205,10 @@ class SettingsManager(QObject):
                     'bg_color': [35, 35, 35, 255],
                     'border_color': [255, 255, 255, 255],
                     'border_opacity': 1.0,
-                    # Default to showing condition icons for better at-a-glance
-                    # readability; users can still toggle this from the Widgets
-                    # tab.
-                    'show_icons': True,
+                    # Default to hiding condition icons; users can enable them
+                    # from the Widgets tab when they prefer a more graphical
+                    # presentation.
+                    'show_icons': False,
                 },
                 # Media widget defaults intentionally mirror other overlay
                 # widgets. It is disabled by default but configured with a
@@ -423,7 +423,7 @@ class SettingsManager(QObject):
                 'bg_color': [35, 35, 35, 255],
                 'border_color': [255, 255, 255, 255],
                 'border_opacity': 1.0,
-                'show_icons': True,
+                'show_icons': False,
             },
             'media': {
                 'enabled': True,

@@ -126,7 +126,7 @@ class WeatherWidget(QLabel):
         self._font_size = 24
         self._text_color = QColor(255, 255, 255, 230)
         self._margin = 20
-        self._show_icons = True
+        self._show_icons = False
         
         # Background frame settings
         self._show_background = False
@@ -531,7 +531,7 @@ class WeatherWidget(QLabel):
                 details_text = f"{tag}{temp:.0f}°C - {condition_display}"
             else:
                 details_text = f"{temp:.0f}°C - {condition_display}"
-            details_html = f"<div style='font-size:{details_pt}pt; font-weight:500;'>{details_text}</div>"
+            details_html = f"<div style='font-size:{details_pt}pt; font-weight:600;'>{details_text}</div>"
             html = f"<div style='line-height:1.0'>{city_html}{details_html}</div>"
             self.setTextFormat(Qt.TextFormat.RichText)
             self.setText(html)

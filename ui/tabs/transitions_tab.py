@@ -20,6 +20,11 @@ from core.logging.logger import get_logger
 logger = get_logger(__name__)
 
 
+class NoWheelSlider(QSlider):
+    def wheelEvent(self, event):  # type: ignore[override]
+        event.ignore()
+
+
 class TransitionsTab(QWidget):
     """Transitions configuration tab."""
     
@@ -106,7 +111,7 @@ class TransitionsTab(QWidget):
         duration_layout = QVBoxLayout(duration_group)
         duration_row = QHBoxLayout()
         duration_row.addWidget(QLabel("Duration (short → long):"))
-        self.duration_slider = QSlider(Qt.Orientation.Horizontal)
+        self.duration_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.duration_slider.setRange(100, 10000)  # store milliseconds directly
         self.duration_slider.setSingleStep(100)
         self.duration_slider.setPageStep(500)

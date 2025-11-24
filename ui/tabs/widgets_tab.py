@@ -21,6 +21,11 @@ from widgets.timezone_utils import get_local_timezone, get_common_timezones
 logger = get_logger(__name__)
 
 
+class NoWheelSlider(QSlider):
+    def wheelEvent(self, event):  # type: ignore[override]
+        event.ignore()
+
+
 class WidgetsTab(QWidget):
     """Widgets configuration tab."""
     
@@ -296,7 +301,7 @@ class WidgetsTab(QWidget):
         # Background opacity
         opacity_row = QHBoxLayout()
         opacity_row.addWidget(QLabel("Background Opacity:"))
-        self.clock_bg_opacity = QSlider(Qt.Orientation.Horizontal)
+        self.clock_bg_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
         self.clock_bg_opacity.setMinimum(0)
         self.clock_bg_opacity.setMaximum(100)
         self.clock_bg_opacity.setValue(90)
@@ -330,7 +335,7 @@ class WidgetsTab(QWidget):
         # Background border opacity
         clock_border_opacity_row = QHBoxLayout()
         clock_border_opacity_row.addWidget(QLabel("Border Opacity:"))
-        self.clock_border_opacity = QSlider(Qt.Orientation.Horizontal)
+        self.clock_border_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
         self.clock_border_opacity.setMinimum(0)
         self.clock_border_opacity.setMaximum(100)
         self.clock_border_opacity.setValue(80)
@@ -505,7 +510,7 @@ class WidgetsTab(QWidget):
         # Background opacity
         weather_opacity_row = QHBoxLayout()
         weather_opacity_row.addWidget(QLabel("Background Opacity:"))
-        self.weather_bg_opacity = QSlider(Qt.Orientation.Horizontal)
+        self.weather_bg_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
         self.weather_bg_opacity.setMinimum(0)
         self.weather_bg_opacity.setMaximum(100)
         self.weather_bg_opacity.setValue(90)
@@ -539,7 +544,7 @@ class WidgetsTab(QWidget):
         # Border opacity (independent from background opacity)
         weather_border_opacity_row = QHBoxLayout()
         weather_border_opacity_row.addWidget(QLabel("Border Opacity:"))
-        self.weather_border_opacity = QSlider(Qt.Orientation.Horizontal)
+        self.weather_border_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
         self.weather_border_opacity.setMinimum(0)
         self.weather_border_opacity.setMaximum(100)
         self.weather_border_opacity.setValue(80)
@@ -653,7 +658,7 @@ class WidgetsTab(QWidget):
 
         media_opacity_row = QHBoxLayout()
         media_opacity_row.addWidget(QLabel("Background Opacity:"))
-        self.media_bg_opacity = QSlider(Qt.Orientation.Horizontal)
+        self.media_bg_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
         self.media_bg_opacity.setMinimum(0)
         self.media_bg_opacity.setMaximum(100)
         self.media_bg_opacity.setValue(90)
@@ -686,7 +691,7 @@ class WidgetsTab(QWidget):
 
         media_border_opacity_row = QHBoxLayout()
         media_border_opacity_row.addWidget(QLabel("Border Opacity:"))
-        self.media_border_opacity = QSlider(Qt.Orientation.Horizontal)
+        self.media_border_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
         self.media_border_opacity.setMinimum(0)
         self.media_border_opacity.setMaximum(100)
         self.media_border_opacity.setValue(80)
@@ -776,7 +781,7 @@ class WidgetsTab(QWidget):
 
         spotify_vis_border_opacity_row = QHBoxLayout()
         spotify_vis_border_opacity_row.addWidget(QLabel("Bar Border Opacity:"))
-        self.spotify_vis_border_opacity = QSlider(Qt.Orientation.Horizontal)
+        self.spotify_vis_border_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
         self.spotify_vis_border_opacity.setMinimum(0)
         self.spotify_vis_border_opacity.setMaximum(100)
         self.spotify_vis_border_opacity.setValue(85)
@@ -922,7 +927,7 @@ class WidgetsTab(QWidget):
         # Background opacity
         reddit_opacity_row = QHBoxLayout()
         reddit_opacity_row.addWidget(QLabel("Background Opacity:"))
-        self.reddit_bg_opacity = QSlider(Qt.Orientation.Horizontal)
+        self.reddit_bg_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
         self.reddit_bg_opacity.setMinimum(0)
         self.reddit_bg_opacity.setMaximum(100)
         self.reddit_bg_opacity.setValue(90)
@@ -958,15 +963,18 @@ class WidgetsTab(QWidget):
         # Border opacity
         reddit_border_opacity_row = QHBoxLayout()
         reddit_border_opacity_row.addWidget(QLabel("Border Opacity:"))
-        self.reddit_border_opacity = QSlider(Qt.Orientation.Horizontal)
+        self.reddit_border_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
         self.reddit_border_opacity.setMinimum(0)
         self.reddit_border_opacity.setMaximum(100)
-        self.reddit_border_opacity.setValue(80)
+        # Canonical default is 100% (1.0) to match SettingsManager
+        # defaults; this will be overridden on load when a saved value
+        # exists.
+        self.reddit_border_opacity.setValue(100)
         self.reddit_border_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.reddit_border_opacity.setTickInterval(10)
         self.reddit_border_opacity.valueChanged.connect(self._save_settings)
         reddit_border_opacity_row.addWidget(self.reddit_border_opacity)
-        self.reddit_border_opacity_label = QLabel("80%")
+        self.reddit_border_opacity_label = QLabel("100%")
         self.reddit_border_opacity.valueChanged.connect(
             lambda v: self.reddit_border_opacity_label.setText(f"{v}%")
         )
@@ -1291,7 +1299,7 @@ class WidgetsTab(QWidget):
             self.weather_font_combo.setCurrentFont(QFont(weather_config.get('font_family', 'Segoe UI')))
             self.weather_font_size.setValue(weather_config.get('font_size', 24))
             self.weather_show_background.setChecked(weather_config.get('show_background', False))
-            show_icons = SettingsManager.to_bool(weather_config.get('show_icons', True), True)
+            show_icons = SettingsManager.to_bool(weather_config.get('show_icons', False), False)
             self.weather_show_icons.setChecked(show_icons)
             weather_opacity_pct = int(weather_config.get('bg_opacity', 0.9) * 100)
             self.weather_bg_opacity.setValue(weather_opacity_pct)
@@ -1471,6 +1479,10 @@ class WidgetsTab(QWidget):
             reddit_opacity_pct = int(reddit_config.get('bg_opacity', 1.0) * 100)
             self.reddit_bg_opacity.setValue(reddit_opacity_pct)
             self.reddit_bg_opacity_label.setText(f"{reddit_opacity_pct}%")
+
+            reddit_border_opacity_pct = int(reddit_config.get('border_opacity', 1.0) * 100)
+            self.reddit_border_opacity.setValue(reddit_border_opacity_pct)
+            self.reddit_border_opacity_label.setText(f"{reddit_border_opacity_pct}%")
 
             reddit_color_data = reddit_config.get('color', [255, 255, 255, 230])
             self._reddit_color = QColor(*reddit_color_data)

@@ -161,14 +161,9 @@ class CornerSizeGrip(QSizeGrip):
                 painter.drawLine(x1, y1, x2, y2)
 
 
-class ResetDefaultsDialog(QDialog):
+class ResetDefaultsDialog(QWidget):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
-        self.setWindowFlags(
-            Qt.WindowType.ToolTip
-            | Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowSystemMenuHint
-        )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
         outer_layout = QVBoxLayout(self)
@@ -234,10 +229,22 @@ class ResetDefaultsDialog(QDialog):
         parent = self.parentWidget()
         if parent is not None:
             try:
-                geom = parent.frameGeometry()
+                # Center the toast within the parent dialog's client rect so
+                # it always appears above the content without creating a
+                # separate native window.
+                geom = parent.rect()
                 self.move(geom.center() - self.rect().center())
+                self.raise_()
             except Exception:
                 pass
+
+    def accept(self) -> None:
+        """Close the toast when acknowledged or after timeout."""
+        self.close()
+
+    def reject(self) -> None:
+        """Treat rejection the same as acceptance for this toast."""
+        self.close()
 
 
 class SettingsDialog(QDialog):
@@ -295,8 +302,11 @@ class SettingsDialog(QDialog):
         # Minimum size tuned to the reference layout so that all tabs
         # (especially About/Widgets) render without clipping. The width
         # is intentionally generous so the About header artwork and
-        # blurb/buttons fit side-by-side without crowding.
-        self.setMinimumSize(1280, 610)
+        # blurb/buttons fit side-by-side without crowding. The height is
+        # slightly taller than the original 610px baseline so the About
+        # card and hotkeys section have comfortable breathing room even
+        # immediately after a Reset To Defaults.
+        self.setMinimumSize(1280, 700)
         
         # Check if we have saved geometry first; if not, create the dialog at
         # the designed minimum size so layout matches the reference exactly.
@@ -885,6 +895,15 @@ class SettingsDialog(QDialog):
         button_row.addStretch()
         layout.addLayout(button_row)
 
+        self.reset_notice_label = QLabel("Settings reverted to defaults!")
+        self.reset_notice_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self.reset_notice_label.setStyleSheet(
+            "color: #ffffff; font-size: 11px; padding: 4px 10px; "
+            "background-color: rgba(16, 16, 16, 230); border-radius: 6px;"
+        )
+        self.reset_notice_label.setVisible(False)
+        layout.addWidget(self.reset_notice_label)
+
         return widget
 
     def _update_about_header_images(self) -> None:
@@ -1077,17 +1096,13 @@ class SettingsDialog(QDialog):
             except Exception:
                 logger.debug("Failed to reload settings tabs after reset_to_defaults", exc_info=True)
 
-            # Ensure the live dialog snaps back to the designed default
-            # footprint after a full reset so the user does not have to
-            # reopen Settings to see the intended layout.
             try:
-                self.resize(self.minimumWidth(), self.minimumHeight())
+                notice = getattr(self, "reset_notice_label", None)
+                if notice is not None:
+                    notice.setVisible(True)
+                    QTimer.singleShot(2000, lambda: notice.setVisible(False))
             except Exception:
-                pass
-
-            # Show the single styled dialog confirming the reset.
-            dialog = ResetDefaultsDialog(self)
-            dialog.show()
+                logger.debug("Failed to show reset notice label", exc_info=True)
         except Exception as exc:
             logger.exception("Failed to reset settings to defaults: %s", exc)
             QMessageBox.warning(

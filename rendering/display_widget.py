@@ -873,8 +873,10 @@ class DisplayWidget(QWidget):
                     self.weather_widget.set_background_border(2, border_qcolor)
                 except Exception:
                     pass
-                # Show/hide condition icons
-                show_icons = SettingsManager.to_bool(weather_settings.get('show_icons', True), True)
+                # Show/hide condition icons; default to OFF so the textual
+                # summary is the primary signal unless the user explicitly
+                # enables icons in the Widgets tab.
+                show_icons = SettingsManager.to_bool(weather_settings.get('show_icons', False), False)
                 if hasattr(self.weather_widget, 'set_show_icons'):
                     self.weather_widget.set_show_icons(show_icons)
 
