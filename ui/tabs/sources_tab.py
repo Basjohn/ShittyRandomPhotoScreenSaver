@@ -198,7 +198,10 @@ class SourcesTab(QWidget):
         self.rss_save_dir_btn.setVisible(rss_save_enabled)
         
         logger.debug(f"Loaded {len(folders)} folders and {len(rss_feeds)} RSS feeds")
-    
+
+    def _load_settings(self) -> None:
+        self._load_sources()
+
     def _add_folder(self) -> None:
         """Add folder source."""
         folder = QFileDialog.getExistingDirectory(

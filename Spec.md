@@ -52,6 +52,7 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
 - DisplayWidget injects the shared ResourceManager into every transition; overlays are created through `overlay_manager.get_or_create_overlay` so lifecycle is centralized.
 - GL overlays remain persistent and pre-warmed via `overlay_manager.prepare_gl_overlay` / `DisplayWidget._prewarm_gl_contexts` to avoid first-use flicker on legacy GL paths, while compositor-backed transitions render through `GLCompositorWidget` instead of per-transition QOpenGLWidget overlays.
 - Diffuse supports multiple shapes (`Rectangle`, `Circle`, `Diamond`, `Plus`, `Triangle`) with a validated block-size range (min 4px) shared between CPU and GL paths and enforced by the Transitions tab UI.
+- Durations: a global `transitions.duration_ms` provides the baseline duration for all transition types, while `transitions.durations["<Type>"]` (e.g. `"Slide"`, `"Wipe"`, `"Diffuse"`, `"Block Puzzle Flip"`) stores optional per-type overrides. The Transitions tab slider is bound to the active type and persists its value into `durations` while keeping `duration_ms` up to date for legacy consumers.
 - Non-repeating random selection:
   - Engine sets `transitions.random_choice` per rotation.
   - Slide: cardinal-only directions; stored as `transitions.slide.direction` and last as `transitions.slide.last_direction` (legacy fallback maintained).
@@ -80,6 +81,8 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
 - `transitions.random_choice`: str
 - `transitions.slide.direction`, `transitions.slide.last_direction` (legacy flat keys maintained)
  - `transitions.wipe.direction`, `transitions.wipe.last_direction` (legacy flat keys maintained)
+ - `transitions.duration_ms`: int global default transition duration in milliseconds.
+ - `transitions.durations`: mapping of transition type name → per-type duration in milliseconds (e.g. `{"Crossfade": 1300, "Slide": 2000, ...}`) used by the Transitions tab and `DisplayWidget` to make durations independent per transition.
  - `transitions.diffuse.block_size` (int, clamped to a 4–256px range) and `transitions.diffuse.shape` (`Rectangle`|`Circle`|`Diamond`|`Plus`|`Triangle`).
  - `timing.interval`: int seconds
  - `display.same_image_all_monitors`: bool
@@ -139,6 +142,7 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
     `transitions.overlay_manager.raise_overlay` so widgets stay above both the
     base image and any GL compositor/legacy overlays for the full duration of
     transitions.
+  - Recurring overlay timers (clock/weather/media/Reddit) are created via `widgets.overlay_timers.create_overlay_timer`, which prefers `ThreadManager.schedule_recurring` with ResourceManager tracking and falls back to widget-local `QTimer` instances when no ThreadManager is attached. This keeps timer lifecycle unified with the rest of the engine.
 
 `Docs/10_WIDGET_GUIDELINES.md` is the **canonical source of truth** for overlay
 widget behaviour; this Spec only summarises the high-level contract.

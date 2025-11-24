@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QLabel, QStackedWidget, QGraphicsDropShadowEffect, QSizeGrip,
     QMessageBox, QSizePolicy,
 )
-from PySide6.QtCore import Qt, QPoint, Signal, QUrl
+from PySide6.QtCore import Qt, QPoint, Signal, QUrl, QTimer
 from PySide6.QtGui import QFont, QColor, QPixmap, QDesktopServices, QPainter, QPen, QGuiApplication
 
 from core.logging.logger import get_logger
@@ -161,6 +161,85 @@ class CornerSizeGrip(QSizeGrip):
                 painter.drawLine(x1, y1, x2, y2)
 
 
+class ResetDefaultsDialog(QDialog):
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setWindowFlags(
+            Qt.WindowType.ToolTip
+            | Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowSystemMenuHint
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+
+        card = QWidget(self)
+        card.setObjectName("resetDefaultsDialogCard")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(0, 0, 0, 0)
+        card_layout.setSpacing(0)
+
+        title_bar = CustomTitleBar(card)
+        title_bar.title_label.setText("Reset To Defaults")
+        title_bar.minimize_btn.hide()
+        title_bar.maximize_btn.hide()
+        title_bar.close_clicked.connect(self.reject)
+        card_layout.addWidget(title_bar)
+
+        body = QWidget(card)
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(24, 20, 24, 20)
+        body_layout.setSpacing(16)
+
+        # Simple confirmation text shown after settings have already been
+        # reverted to their canonical defaults.
+        message = QLabel("Settings reverted to defaults!")
+        message.setWordWrap(True)
+        message.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        body_layout.addWidget(message)
+
+        buttons_row = QHBoxLayout()
+        buttons_row.addStretch()
+        ok_btn = QPushButton("OK")
+        ok_btn.clicked.connect(self.accept)
+        buttons_row.addWidget(ok_btn)
+        body_layout.addLayout(buttons_row)
+
+        card_layout.addWidget(body)
+
+        shadow = QGraphicsDropShadowEffect(card)
+        shadow.setBlurRadius(20)
+        shadow.setXOffset(0)
+        shadow.setYOffset(0)
+        shadow.setColor(QColor(0, 0, 0, 180))
+        card.setGraphicsEffect(shadow)
+
+        card.setStyleSheet(
+            "QWidget#resetDefaultsDialogCard {"
+            "background-color: rgba(16, 16, 16, 230);"
+            "border-radius: 10px;"
+            "}"
+        )
+
+        outer_layout.addWidget(card)
+        self.adjustSize()
+
+        # Auto-dismiss after a short delay so this behaves like a toast.
+        QTimer.singleShot(2000, self.accept)
+
+    def showEvent(self, event) -> None:  # type: ignore[override]
+        super().showEvent(event)
+        parent = self.parentWidget()
+        if parent is not None:
+            try:
+                geom = parent.frameGeometry()
+                self.move(geom.center() - self.rect().center())
+            except Exception:
+                pass
+
+
 class SettingsDialog(QDialog):
     """
     Main settings dialog with gorgeous UI.
@@ -213,33 +292,26 @@ class SettingsDialog(QDialog):
         # Enable transparency for drop shadow
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         
-        # Minimum size (kept modest so the dialog remains usable on
-        # 1080p displays while still providing enough room for the
-        # richer tabs like Sources and About).
-        self.setMinimumSize(800, 500)
+        # Minimum size tuned to the reference layout so that all tabs
+        # (especially About/Widgets) render without clipping. The width
+        # is intentionally generous so the About header artwork and
+        # blurb/buttons fit side-by-side without crowding.
+        self.setMinimumSize(1280, 610)
         
-        # Check if we have saved geometry first
+        # Check if we have saved geometry first; if not, create the dialog at
+        # the designed minimum size so layout matches the reference exactly.
         saved_geometry = self._settings.get('ui.dialog_geometry', {})
         
         if saved_geometry and 'width' in saved_geometry and 'height' in saved_geometry:
-            # Use saved geometry (will be applied in _restore_geometry())
+            # Use saved geometry (will be applied in _restore_geometry()).
             pass
         else:
-            # No saved geometry - default to ~60% of primary screen while
-            # ensuring the dialog is never created larger than the screen.
-            screen = QGuiApplication.primaryScreen()
-            if screen is not None:
-                geometry = screen.availableGeometry()
-                default_width = int(geometry.width() * 0.6)
-                default_height = int(geometry.height() * 0.6)
-                default_width = max(self.minimumWidth(), min(default_width, geometry.width()))
-                default_height = max(self.minimumHeight(), min(default_height, geometry.height()))
-            else:
-                default_width = max(self.minimumWidth(), 1000)
-                default_height = max(self.minimumHeight(), 700)
-
-            self.resize(default_width, default_height)
-            logger.debug(f"No saved geometry - defaulting to 60% of screen: {default_width}x{default_height}")
+            self.resize(self.minimumWidth(), self.minimumHeight())
+            logger.debug(
+                "No saved geometry - defaulting to minimum size: %sx%s",
+                self.minimumWidth(),
+                self.minimumHeight(),
+            )
         
         # Drop shadow effect (no global windowOpacity so controls stay fully opaque)
         shadow = QGraphicsDropShadowEffect(self)
@@ -986,34 +1058,36 @@ class SettingsDialog(QDialog):
         logger.debug(f"Switched to tab {index}")
 
     def _on_reset_to_defaults_clicked(self) -> None:
-        """Reset all application settings back to defaults with confirmation."""
-
-        reply = QMessageBox.question(
-            self,
-            "Reset To Defaults",
-            (
-                "This will reset all settings to their default values.\n\n"
-                "You will need to close this dialog and restart the screensaver "
-                "for all changes to fully apply.\n\nContinue?"
-            ),
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-
-        if reply != QMessageBox.StandardButton.Yes:
-            return
-
+        """Reset all application settings back to defaults and show a styled notice."""
         try:
             self._settings.reset_to_defaults()
-            QMessageBox.information(
-                self,
-                "Defaults Restored",
-                (
-                    "Settings have been reset to defaults.\n\n"
-                    "Please close this dialog and restart the screensaver to "
-                    "reload all settings."
-                ),
-            )
+
+            # Reload all tabs so the UI reflects the new canonical defaults
+            # immediately, avoiding a confusing mismatch between on-disk
+            # configuration and visible controls.
+            try:
+                if hasattr(self, "sources_tab"):
+                    self.sources_tab._load_settings()  # type: ignore[attr-defined]
+                if hasattr(self, "display_tab"):
+                    self.display_tab._load_settings()  # type: ignore[attr-defined]
+                if hasattr(self, "transitions_tab"):
+                    self.transitions_tab._load_settings()  # type: ignore[attr-defined]
+                if hasattr(self, "widgets_tab"):
+                    self.widgets_tab._load_settings()  # type: ignore[attr-defined]
+            except Exception:
+                logger.debug("Failed to reload settings tabs after reset_to_defaults", exc_info=True)
+
+            # Ensure the live dialog snaps back to the designed default
+            # footprint after a full reset so the user does not have to
+            # reopen Settings to see the intended layout.
+            try:
+                self.resize(self.minimumWidth(), self.minimumHeight())
+            except Exception:
+                pass
+
+            # Show the single styled dialog confirming the reset.
+            dialog = ResetDefaultsDialog(self)
+            dialog.show()
         except Exception as exc:
             logger.exception("Failed to reset settings to defaults: %s", exc)
             QMessageBox.warning(
@@ -1161,7 +1235,9 @@ class SettingsDialog(QDialog):
                     height,
                 )
             else:
-                # Fallback: restore without clamping if we cannot query screens.
+                # Fallback: restore without clamping if we cannot query
+                # screens. Honour the dialog's minimum size when defaults
+                # are used so we do not shrink below the designed layout.
                 self.move(geometry.get('x', 100), geometry.get('y', 100))
-                self.resize(geometry.get('width', 1000), geometry.get('height', 700))
+                self.resize(geometry.get('width', 1024), geometry.get('height', 610))
                 logger.debug(f"Restored dialog geometry: {geometry}")

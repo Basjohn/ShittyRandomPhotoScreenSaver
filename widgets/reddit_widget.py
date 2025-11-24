@@ -16,6 +16,9 @@ from typing import Optional, List, Dict, Any
 from datetime import timedelta
 import time
 import re
+import sys
+import ctypes
+from ctypes import wintypes
 
 import requests
 
@@ -26,6 +29,7 @@ from PySide6.QtWidgets import QLabel, QWidget, QToolTip
 from core.logging.logger import get_logger, is_verbose_logging
 from core.threading.manager import ThreadManager
 from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
+from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 
 logger = get_logger(__name__)
 
@@ -84,6 +88,7 @@ class RedditWidget(QLabel):
 
         self._thread_manager: Optional[ThreadManager] = None
         self._update_timer: Optional[QTimer] = None
+        self._update_timer_handle: Optional[OverlayTimerHandle] = None
         self._enabled: bool = False
 
         # Cached posts and click hit-rects
@@ -178,6 +183,13 @@ class RedditWidget(QLabel):
         if not self._enabled:
             return
 
+        if self._update_timer_handle is not None:
+            try:
+                self._update_timer_handle.stop()
+            except Exception:
+                pass
+            self._update_timer_handle = None
+
         if self._update_timer is not None:
             try:
                 self._update_timer.stop()
@@ -193,6 +205,17 @@ class RedditWidget(QLabel):
             self.hide()
         except Exception:
             pass
+
+    def cleanup(self) -> None:
+        logger.debug("Cleaning up Reddit widget")
+        self.stop()
+        try:
+            if self._hover_timer is not None:
+                self._hover_timer.stop()
+                self._hover_timer.deleteLater()
+        except Exception:
+            pass
+        self._hover_timer = None
 
     def is_running(self) -> bool:
         return self._enabled
@@ -280,10 +303,17 @@ class RedditWidget(QLabel):
     # ------------------------------------------------------------------
 
     def _schedule_timer(self) -> None:
-        if self._update_timer is None:
-            self._update_timer = QTimer(self)
-            self._update_timer.timeout.connect(self._fetch_feed)
-        self._update_timer.start(int(self._refresh_interval.total_seconds() * 1000))
+        if self._update_timer_handle is not None:
+            # Timer already running; nothing to do.
+            return
+
+        interval_ms = int(self._refresh_interval.total_seconds() * 1000)
+        handle = create_overlay_timer(self, interval_ms, self._fetch_feed, description="RedditWidget refresh")
+        self._update_timer_handle = handle
+        try:
+            self._update_timer = getattr(handle, "_timer", None)
+        except Exception:
+            self._update_timer = None
 
     def _fetch_feed(self) -> None:
         """Request subreddit listing via ThreadManager or synchronously.
@@ -722,6 +752,7 @@ class RedditWidget(QLabel):
             try:
                 QDesktopServices.openUrl(QUrl(url))
                 logger.info("[REDDIT] Opened subreddit %s", url)
+                _try_bring_reddit_window_to_front()
                 return True
             except Exception:
                 logger.debug("[REDDIT] Failed to open subreddit URL %s", url, exc_info=True)
@@ -732,6 +763,7 @@ class RedditWidget(QLabel):
                 try:
                     QDesktopServices.openUrl(QUrl(url))
                     logger.info("[REDDIT] Opened %s", url)
+                    _try_bring_reddit_window_to_front()
                     return True
                 except Exception:
                     logger.debug("[REDDIT] Failed to open URL %s", url, exc_info=True)
@@ -847,14 +879,8 @@ class RedditWidget(QLabel):
             slack_total = max(0, int(target) - int(used_total))
             if slack_total > 0:
                 extra_per_gap = slack_total // max(1, rows - 1)
-                # Allow a larger gap for 4-item layouts but keep a hard cap
-                # so things do not look exaggerated.
-                max_comfy_gap = 18
-                new_gap = min(
-                    max_comfy_gap,
-                    int(self._row_vertical_spacing) + int(extra_per_gap),
-                )
-                self._row_vertical_spacing = max(0, new_gap)
+                self._row_vertical_spacing += max(0, extra_per_gap)
+        
 
                 used_inner = (
                     header_height
@@ -1208,3 +1234,67 @@ class RedditWidget(QLabel):
         # Final cleanup
         slug = slug.strip("/ ")
         return slug
+
+
+def _try_bring_reddit_window_to_front() -> None:
+    """Best-effort attempt to foreground a browser window with 'reddit' in title.
+
+    Windows-only; no-op on other platforms. All failures are silent to avoid
+    introducing new focus or flicker problems.
+    """
+
+    if sys.platform != "win32":  # pragma: no cover - platform guard
+        return
+
+    try:
+        user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+    except Exception:
+        return
+
+    try:
+        EnumWindowsProc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    except Exception:
+        return
+
+    try:
+        user32.EnumWindows.argtypes = [EnumWindowsProc, wintypes.LPARAM]
+        user32.IsWindowVisible.argtypes = [wintypes.HWND]
+        user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+        user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    except Exception:
+        return
+
+    candidates: list[wintypes.HWND] = []
+
+    @EnumWindowsProc
+    def _enum_proc(hwnd: wintypes.HWND, lparam: wintypes.LPARAM) -> bool:  # noqa: ARG001
+        try:
+            if not user32.IsWindowVisible(hwnd):
+                return True
+            length = user32.GetWindowTextLengthW(hwnd)
+            if length <= 0:
+                return True
+            buf = ctypes.create_unicode_buffer(length + 1)
+            user32.GetWindowTextW(hwnd, buf, length + 1)
+            title = buf.value or ""
+            if "reddit" in title.lower():
+                candidates.append(hwnd)
+        except Exception:
+            # Enum callbacks must not raise; keep scanning.
+            return True
+        return True
+
+    try:
+        user32.EnumWindows(_enum_proc, 0)
+    except Exception:
+        return
+
+    if not candidates:
+        return
+
+    hwnd = candidates[0]
+    try:
+        user32.SetForegroundWindow(hwnd)
+    except Exception:
+        # Foreground requests may fail silently depending on OS policy.
+        return

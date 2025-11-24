@@ -16,6 +16,7 @@ from core.logging.logger import get_logger
 from core.threading.manager import ThreadManager
 from weather.open_meteo_provider import OpenMeteoProvider
 from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
+from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 
 logger = get_logger(__name__)
 _CACHE_FILE = Path(__file__).resolve().parent / "last_weather.json"
@@ -104,6 +105,7 @@ class WeatherWidget(QLabel):
         self._position = position
         self._update_timer: Optional[QTimer] = None
         self._retry_timer: Optional[QTimer] = None
+        self._update_timer_handle: Optional[OverlayTimerHandle] = None
         self._enabled = False
         
         # Caching
@@ -192,9 +194,13 @@ class WeatherWidget(QLabel):
                 _starter()
 
             self._fetch_weather()
-            self._update_timer = QTimer(self)
-            self._update_timer.timeout.connect(self._fetch_weather)
-            self._update_timer.start(30 * 60 * 1000)
+            interval_ms = 30 * 60 * 1000
+            handle = create_overlay_timer(self, interval_ms, self._fetch_weather, description="WeatherWidget refresh")
+            self._update_timer_handle = handle
+            try:
+                self._update_timer = getattr(handle, "_timer", None)
+            except Exception:
+                self._update_timer = None
 
             logger.info("Weather widget started (using cached data)")
             return
@@ -203,9 +209,13 @@ class WeatherWidget(QLabel):
         self._pending_first_show = True
 
         self._fetch_weather()
-        self._update_timer = QTimer(self)
-        self._update_timer.timeout.connect(self._fetch_weather)
-        self._update_timer.start(30 * 60 * 1000)
+        interval_ms = 30 * 60 * 1000
+        handle = create_overlay_timer(self, interval_ms, self._fetch_weather, description="WeatherWidget refresh")
+        self._update_timer_handle = handle
+        try:
+            self._update_timer = getattr(handle, "_timer", None)
+        except Exception:
+            self._update_timer = None
 
         self._enabled = True
 
@@ -216,7 +226,14 @@ class WeatherWidget(QLabel):
         if not self._enabled:
             return
         
-        if self._update_timer:
+        if self._update_timer_handle is not None:
+            try:
+                self._update_timer_handle.stop()
+            except Exception:
+                pass
+            self._update_timer_handle = None
+
+        if self._update_timer is not None:
             try:
                 self._update_timer.stop()
                 self._update_timer.deleteLater()
@@ -232,9 +249,15 @@ class WeatherWidget(QLabel):
             self._retry_timer = None
         
         # Stop fetch thread if running
-        if self._fetch_thread and self._fetch_thread.isRunning():
-            self._fetch_thread.quit()
-            self._fetch_thread.wait()
+        if self._fetch_thread:
+            try:
+                if self._fetch_thread.isRunning():
+                    self._fetch_thread.quit()
+                    self._fetch_thread.wait()
+            except Exception:
+                pass
+            self._fetch_thread = None
+            self._fetcher = None
 
         self._enabled = False
         self._pending_first_show = False
@@ -259,17 +282,21 @@ class WeatherWidget(QLabel):
             self._start_fetch_thread()
 
     def _start_fetch_thread(self) -> None:
-        self._fetch_thread = QThread()
-        self._fetcher = WeatherFetcher(self._location)
-        self._fetcher.moveToThread(self._fetch_thread)
+        thread = QThread(self)
+        fetcher = WeatherFetcher(self._location)
+        fetcher.moveToThread(thread)
 
-        self._fetch_thread.started.connect(self._fetcher.fetch)
-        self._fetcher.data_fetched.connect(self._on_weather_fetched)
-        self._fetcher.error_occurred.connect(self._on_fetch_error)
-        self._fetcher.data_fetched.connect(self._fetch_thread.quit)
-        self._fetcher.error_occurred.connect(self._fetch_thread.quit)
+        thread.started.connect(fetcher.fetch)
+        fetcher.data_fetched.connect(self._on_weather_fetched)
+        fetcher.error_occurred.connect(self._on_fetch_error)
+        fetcher.data_fetched.connect(thread.quit)
+        fetcher.error_occurred.connect(thread.quit)
+        thread.finished.connect(thread.deleteLater)
 
-        self._fetch_thread.start()
+        self._fetch_thread = thread
+        self._fetcher = fetcher
+
+        thread.start()
 
     def _fetch_via_thread_manager(self) -> None:
         tm = self._thread_manager

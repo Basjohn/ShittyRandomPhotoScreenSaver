@@ -71,6 +71,8 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - Spotify/media overlay widget driven by `core/media/media_controller.py`; per-monitor selection via `widgets.media`, corner positioning, background frame, and monochrome transport controls (Prev/Play/Pause/Next) over track metadata
  - widgets/reddit_widget.py
    - Reddit overlay widget showing top posts from a configured subreddit with 4- and 10-item layouts, per-monitor selection via `widgets.reddit`, shared overlay fade-in coordination, and click-through to the system browser.
+ - widgets/overlay_timers.py
+   - Centralised overlay timer helper providing `create_overlay_timer()` and `OverlayTimerHandle` for recurring UI-thread timers (clock/weather/media/Reddit). Prefers `ThreadManager.schedule_recurring` with ResourceManager tracking and falls back to a widget-local `QTimer` when no ThreadManager is available.
 
 ## Utilities
 - utils/image_cache.py
@@ -96,8 +98,10 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - transitions.type
 - transitions.random_always: bool
 - transitions.random_choice: str
-- transitions.slide.direction, transitions.last_slide_direction (legacy)
-- transitions.wipe.direction, transitions.last_wipe_direction (legacy)
+- transitions.duration_ms: int (global default duration in milliseconds for transitions)
+- transitions.durations: map of transition type name → duration_ms used for per-transition duration independence (e.g. Crossfade/Slide/Wipe/Diffuse/Block Puzzle Flip/Blinds)
+- transitions.slide.direction, transitions.slide.last_direction (legacy flat keys maintained for back-compat; nested `transitions['slide']['direction']` is the canonical form)
+- transitions.wipe.direction, transitions.wipe.last_direction (legacy flat keys maintained for back-compat; nested `transitions['wipe']['direction']` is the canonical form)
 - timing.interval: int seconds
 - display.same_image_all_monitors: bool
 - cache.prefetch_ahead: int (default 5)

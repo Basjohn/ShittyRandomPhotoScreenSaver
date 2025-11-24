@@ -68,9 +68,18 @@ class SettingsManager(QObject):
         """Set default values if not already present."""
         defaults = {
             # Sources
-            'sources.folders': [],
+            'sources.folders': [
+                'C:/Users/Basjohn/Documents/[4] WALLPAPERS/PERSONALSET',
+            ],
             'sources.rss_feeds': [],
             'sources.mode': 'folders',  # 'folders' | 'rss' | 'both'
+            # RSS/JSON background controls and save-to-disk behaviour.
+            'sources.rss_save_to_disk': False,
+            'sources.rss_save_directory': '',
+            # Global background RSS queue cap and TTL/refresh configuration.
+            'sources.rss_background_cap': 30,
+            'sources.rss_refresh_minutes': 10,
+            'sources.rss_stale_minutes': 30,
             
             # Display
             'display.mode': 'fill',  # 'fill' | 'fit' | 'shrink'
@@ -85,26 +94,30 @@ class SettingsManager(QObject):
             'display.pan_speed': 3.0,
             'display.sharpen_downscale': False,
             'display.same_image_all_monitors': False,
+            # Main display selection – canonical key: ALL monitors by default.
             'display.show_on_monitors': 'ALL',
 
             # Timing / queue
-            'timing.interval': 10,
+            'timing.interval': 25,
             'queue.shuffle': True,
+
+            # Input
+            'input.hard_exit': False,
 
             # Transitions (canonical nested config)
             'transitions': {
                 'type': 'Wipe',
-                'duration_ms': 1300,
+                'duration_ms': 2215,
                 'easing': 'Auto',
                 'direction': 'Random',
                 'random_always': False,
                 'block_flip': {
-                    'rows': 4,
-                    'cols': 6,
+                    'rows': 12,
+                    'cols': 24,
                 },
                 'diffuse': {
-                    'block_size': 50,
-                    'shape': 'Rectangle',
+                    'block_size': 18,
+                    'shape': 'Diamond',
                 },
                 'slide': {
                     'direction': 'Random',
@@ -126,29 +139,33 @@ class SettingsManager(QObject):
                     'position': 'Top Right',
                     'show_seconds': True,
                     'timezone': 'local',
-                    'show_timezone': False,
+                    'show_timezone': True,
                     'font_family': 'Segoe UI',
                     'font_size': 48,
                     'margin': 20,
                     'show_background': True,
                     'bg_opacity': 0.7,
-                    'bg_color': [64, 64, 64, 255],
+                    'bg_color': [35, 35, 35, 255],
                     'color': [255, 255, 255, 230],
                     'border_color': [255, 255, 255, 255],
                     'border_opacity': 1.0,
                     # Display mode: 'digital' (existing behaviour) or 'analog'.
-                    'display_mode': 'digital',
+                    'display_mode': 'analog',
                     # When in analogue mode, controls whether hour numerals
                     # (1–12) are rendered around the clock face.
                     'show_numerals': True,
+                    # Enable analogue face shadow by default.
+                    'analog_face_shadow': True,
                 },
                 'clock2': {
+                    # Exception: Clock 2 disabled by default.
                     'enabled': False,
-                    'monitor': 'ALL',
+                    'monitor': 2,
                     'format': '24h',
                     'position': 'Bottom Right',
                     'show_seconds': False,
-                    'timezone': 'UTC',
+                    # Exception: default timezone = local.
+                    'timezone': 'local',
                     'show_timezone': True,
                     'font_family': 'Segoe UI',
                     'font_size': 32,
@@ -158,12 +175,14 @@ class SettingsManager(QObject):
                     'show_numerals': True,
                 },
                 'clock3': {
+                    # Exception: Clock 3 disabled by default.
                     'enabled': False,
                     'monitor': 'ALL',
                     'format': '24h',
                     'position': 'Bottom Left',
                     'show_seconds': False,
-                    'timezone': 'UTC+01:00',
+                    # Exception: default timezone = local.
+                    'timezone': 'local',
                     'show_timezone': True,
                     'font_family': 'Segoe UI',
                     'font_size': 32,
@@ -173,18 +192,22 @@ class SettingsManager(QObject):
                     'show_numerals': True,
                 },
                 'weather': {
-                    'enabled': False,
-                    'monitor': 'ALL',
-                    'position': 'Bottom Left',
-                    'location': 'London',
+                    'enabled': True,
+                    'monitor': 1,
+                    'position': 'Top Left',
+                    # Exception: default location = New York.
+                    'location': 'New York',
                     'font_family': 'Segoe UI',
                     'font_size': 24,
                     'color': [255, 255, 255, 230],
                     'show_background': True,
                     'bg_opacity': 0.7,
-                    'bg_color': [64, 64, 64, 255],
+                    'bg_color': [35, 35, 35, 255],
                     'border_color': [255, 255, 255, 255],
                     'border_opacity': 1.0,
+                    # Default to showing condition icons for better at-a-glance
+                    # readability; users can still toggle this from the Widgets
+                    # tab.
                     'show_icons': True,
                 },
                 # Media widget defaults intentionally mirror other overlay
@@ -192,8 +215,8 @@ class SettingsManager(QObject):
                 # Bottom Left position and a visible background frame so that
                 # enabling it in the UI immediately produces a clear overlay.
                 'media': {
-                    'enabled': False,
-                    'monitor': 'ALL',
+                    'enabled': True,
+                    'monitor': 1,
                     'position': 'Bottom Left',
                     'font_family': 'Segoe UI',
                     'font_size': 20,
@@ -202,7 +225,7 @@ class SettingsManager(QObject):
                     'show_background': True,
                     'bg_opacity': 0.7,
                     # Darker Spotify-style card background by default.
-                    'bg_color': [16, 16, 16, 255],
+                    'bg_color': [35, 35, 35, 255],
                     'border_color': [255, 255, 255, 255],
                     'border_opacity': 1.0,
                     # Artwork/controls behaviour
@@ -222,16 +245,41 @@ class SettingsManager(QObject):
                 # is positioned relative to the media widget rather than via a
                 # separate position control.
                 'spotify_visualizer': {
-                    'enabled': False,
+                    'enabled': True,
                     'monitor': 'ALL',
-                    # Number of vertical bars to render (24–48 recommended).
-                    'bar_count': 32,
-                    # Base fill colour for bars (RGBA) – light grey by default.
-                    'bar_fill_color': [200, 200, 200, 230],
-                    # Bar border colour (RGBA) and independent opacity scaler –
-                    # default to a crisp white outline.
+                    # Number of vertical bars to render.
+                    'bar_count': 16,
+                    # Base fill colour for bars (RGBA).
+                    'bar_fill_color': [24, 24, 24, 255],
+                    # Bar border colour (RGBA) and independent opacity scaler.
                     'bar_border_color': [255, 255, 255, 255],
                     'bar_border_opacity': 1.0,
+                },
+                # Reddit widget defaults – disabled by default, but when
+                # enabled the card appears in the bottom-right corner with a
+                # dark background and full-opacity border, using the "all"
+                # subreddit and a compact font size.
+                'reddit': {
+                    'enabled': False,
+                    # Default to primary display only so the widget does not
+                    # appear on all screens out of the box.
+                    'monitor': 1,
+                    'position': 'Bottom Right',
+                    'subreddit': 'all',
+                    'font_family': 'Segoe UI',
+                    'font_size': 14,
+                    'margin': 20,
+                    'color': [255, 255, 255, 230],
+                    'show_background': True,
+                    'bg_opacity': 1.0,
+                    'bg_color': [35, 35, 35, 255],
+                    'border_color': [255, 255, 255, 255],
+                    'border_opacity': 1.0,
+                    # Default to visible separators between posts for the
+                    # compact card layout.
+                    'show_separators': True,
+                    'limit': 10,
+                    'exit_on_click': True,
                 },
                 # Global widget drop-shadow configuration shared by all
                 # overlay widgets (clocks, weather, media). The Widgets tab
@@ -301,6 +349,139 @@ class SettingsManager(QObject):
 
             if changed or not isinstance(raw_widgets, dict):
                 self._settings.setValue('widgets', widgets)
+
+    def get_widget_defaults(self, section: str) -> Dict[str, Any]:
+        """Return the canonical default config for a widget section.
+
+        This helper mirrors the structures used in ``_set_defaults()`` for the
+        ``widgets`` map but does not read from or modify QSettings, so it is
+        safe for UI code to call when it needs a fresh baseline.
+        """
+
+        widgets_defaults: Dict[str, Any] = {
+            'clock': {
+                'enabled': True,
+                'monitor': 1,
+                'format': '24h',
+                'position': 'Top Right',
+                'show_seconds': True,
+                'timezone': 'local',
+                'show_timezone': True,
+                'font_family': 'Segoe UI',
+                'font_size': 48,
+                'margin': 20,
+                'show_background': True,
+                'bg_opacity': 0.7,
+                'bg_color': [35, 35, 35, 255],
+                'color': [255, 255, 255, 230],
+                'border_color': [255, 255, 255, 255],
+                'border_opacity': 1.0,
+                'display_mode': 'analog',
+                'show_numerals': True,
+                'analog_face_shadow': True,
+            },
+            'clock2': {
+                'enabled': False,
+                'monitor': 2,
+                'format': '24h',
+                'position': 'Bottom Right',
+                'show_seconds': False,
+                'timezone': 'local',
+                'show_timezone': True,
+                'font_family': 'Segoe UI',
+                'font_size': 32,
+                'margin': 20,
+                'color': [255, 255, 255, 230],
+                'display_mode': 'digital',
+                'show_numerals': True,
+            },
+            'clock3': {
+                'enabled': False,
+                'monitor': 'ALL',
+                'format': '24h',
+                'position': 'Bottom Left',
+                'show_seconds': False,
+                'timezone': 'local',
+                'show_timezone': True,
+                'font_family': 'Segoe UI',
+                'font_size': 32,
+                'margin': 20,
+                'color': [255, 255, 255, 230],
+                'display_mode': 'digital',
+                'show_numerals': True,
+            },
+            'weather': {
+                'enabled': True,
+                'monitor': 1,
+                'position': 'Top Left',
+                'location': 'New York',
+                'font_family': 'Segoe UI',
+                'font_size': 24,
+                'color': [255, 255, 255, 230],
+                'show_background': True,
+                'bg_opacity': 0.7,
+                'bg_color': [35, 35, 35, 255],
+                'border_color': [255, 255, 255, 255],
+                'border_opacity': 1.0,
+                'show_icons': True,
+            },
+            'media': {
+                'enabled': True,
+                'monitor': 1,
+                'position': 'Bottom Left',
+                'font_family': 'Segoe UI',
+                'font_size': 20,
+                'margin': 20,
+                'color': [255, 255, 255, 230],
+                'show_background': True,
+                'bg_opacity': 0.7,
+                'bg_color': [35, 35, 35, 255],
+                'border_color': [255, 255, 255, 255],
+                'border_opacity': 1.0,
+                'artwork_size': 200,
+                'rounded_artwork_border': True,
+                'show_controls': True,
+                'show_header_frame': True,
+            },
+            'spotify_visualizer': {
+                'enabled': True,
+                'monitor': 'ALL',
+                'bar_count': 16,
+                'bar_fill_color': [24, 24, 24, 255],
+                'bar_border_color': [255, 255, 255, 255],
+                'bar_border_opacity': 1.0,
+            },
+            'reddit': {
+                'enabled': False,
+                'monitor': 1,
+                'position': 'Bottom Right',
+                'subreddit': 'all',
+                'font_family': 'Segoe UI',
+                'font_size': 14,
+                'margin': 20,
+                'color': [255, 255, 255, 230],
+                'show_background': True,
+                'bg_opacity': 1.0,
+                'bg_color': [35, 35, 35, 255],
+                'border_color': [255, 255, 255, 255],
+                'border_opacity': 1.0,
+                'show_separators': True,
+                'limit': 10,
+                'exit_on_click': True,
+            },
+            'shadows': {
+                'enabled': True,
+                'color': [0, 0, 0, 255],
+                'offset': [4, 4],
+                'blur_radius': 18,
+                'text_opacity': 0.3,
+                'frame_opacity': 0.7,
+            },
+        }
+
+        key = str(section) if section is not None else ''
+        base = widgets_defaults.get(key, {})
+        return dict(base) if isinstance(base, Mapping) else {}
                 
     def get(self, key: str, default: Any = None) -> Any:
         """

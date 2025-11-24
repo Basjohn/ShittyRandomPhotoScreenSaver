@@ -383,6 +383,19 @@ class DisplayManager(QObject):
         """
         return [display.get_screen_info() for display in self.displays]
     
+    def has_running_transition(self) -> bool:
+        """Return True if any display currently has a running transition."""
+        try:
+            for display in self.displays:
+                try:
+                    if hasattr(display, "has_running_transition") and display.has_running_transition():
+                        return True
+                except Exception:
+                    continue
+        except Exception:
+            return False
+        return False
+    
     # --- Phase 3: Multi-Display Synchronization (Lock-Free) ---
     
     def enable_transition_sync(self, enabled: bool = True) -> None:

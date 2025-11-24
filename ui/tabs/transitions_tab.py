@@ -40,6 +40,7 @@ class TransitionsTab(QWidget):
         # Maintain per-transition direction selections in-memory (default: Random)
         self._dir_slide: str = "Random"
         self._dir_wipe: str = "Random"
+        self._duration_by_type = {}
         self._setup_ui()
         self._load_settings()
         
@@ -292,6 +293,33 @@ class TransitionsTab(QWidget):
         if not isinstance(transitions_config, dict):
             transitions_config = {}
 
+        default_duration_raw = transitions_config.get('duration_ms', 2215)
+        try:
+            default_duration = int(default_duration_raw)
+        except Exception:
+            default_duration = 1300
+
+        durations_cfg = transitions_config.get('durations', {})
+        if not isinstance(durations_cfg, dict):
+            durations_cfg = {}
+
+        type_keys = [
+            "Crossfade",
+            "Slide",
+            "Wipe",
+            "Diffuse",
+            "Block Puzzle Flip",
+            "Blinds",
+        ]
+        self._duration_by_type = {}
+        for name in type_keys:
+            raw = durations_cfg.get(name, default_duration)
+            try:
+                value = int(raw)
+            except Exception:
+                value = default_duration
+            self._duration_by_type[name] = value
+
         # Block signals while we apply settings to avoid recursive saves with stale state
         blockers = []
         for w in [
@@ -316,12 +344,7 @@ class TransitionsTab(QWidget):
             if index >= 0:
                 self.transition_combo.setCurrentIndex(index)
             
-            # Load duration (default 1300ms - Bug Fix #5)
-            duration_raw = transitions_config.get('duration_ms', 1300)
-            try:
-                duration = int(duration_raw)
-            except Exception:
-                duration = 1300
+            duration = self._duration_by_type.get(transition_type, default_duration)
             self.duration_slider.setValue(duration)
             self.duration_value_label.setText(f"{duration} ms")
             
@@ -350,13 +373,13 @@ class TransitionsTab(QWidget):
             
             # Load block flip settings
             block_flip = transitions_config.get('block_flip', {})
-            self.grid_rows_spin.setValue(block_flip.get('rows', 4))
-            self.grid_cols_spin.setValue(block_flip.get('cols', 6))
+            self.grid_rows_spin.setValue(block_flip.get('rows', 12))
+            self.grid_cols_spin.setValue(block_flip.get('cols', 24))
             
             # Load diffuse settings
             diffuse = transitions_config.get('diffuse', {})
-            self.block_size_spin.setValue(diffuse.get('block_size', 50))
-            shape = diffuse.get('shape', 'Rectangle')
+            self.block_size_spin.setValue(diffuse.get('block_size', 18))
+            shape = diffuse.get('shape', 'Diamond')
             index = self.diffuse_shape_combo.findText(shape)
             if index >= 0:
                 self.diffuse_shape_combo.setCurrentIndex(index)
@@ -377,6 +400,17 @@ class TransitionsTab(QWidget):
         # If a GL-only transition was selected while HW is off, revert to Crossfade
         self._enforce_gl_only_selection()
         self._update_specific_settings()
+        cur_type = self.transition_combo.currentText()
+        try:
+            value = self._duration_by_type.get(cur_type, self.duration_slider.value())
+        except Exception:
+            value = self.duration_slider.value()
+        try:
+            self.duration_slider.blockSignals(True)
+            self.duration_slider.setValue(value)
+            self.duration_value_label.setText(f"{value} ms")
+        finally:
+            self.duration_slider.blockSignals(False)
         self._save_settings()
     
     def _update_specific_settings(self) -> None:
@@ -489,9 +523,15 @@ class TransitionsTab(QWidget):
         elif cur_type == "Wipe":
             self._dir_wipe = cur_dir
 
+        cur_duration = self.duration_slider.value()
+        try:
+            self._duration_by_type[cur_type] = cur_duration
+        except Exception:
+            pass
+
         config = {
             'type': cur_type,
-            'duration_ms': self.duration_slider.value(),
+            'duration_ms': cur_duration,
             'easing': self.easing_combo.currentText(),
             'random_always': self.random_checkbox.isChecked(),
             'block_flip': {
@@ -502,6 +542,7 @@ class TransitionsTab(QWidget):
                 'block_size': self.block_size_spin.value(),
                 'shape': self.diffuse_shape_combo.currentText()
             },
+            'durations': dict(self._duration_by_type),
             # New nested per-transition direction settings
             'slide': {
                 'direction': self._dir_slide,
@@ -526,4 +567,9 @@ class TransitionsTab(QWidget):
     def _on_duration_changed(self, value: int) -> None:
         """Update label and persist duration to settings."""
         self.duration_value_label.setText(f"{value} ms")
+        try:
+            cur_type = self.transition_combo.currentText()
+            self._duration_by_type[cur_type] = value
+        except Exception:
+            pass
         self._save_settings()

@@ -24,8 +24,8 @@ class ColoredFormatter(logging.Formatter):
         'ERROR': '\033[31m',       # Red
         'CRITICAL': '\033[35m',    # Magenta
     }
-    FALLBACK_COLOR = '\033[38;5;208m'   # Orange for fallback warnings
-    PREWARM_COLOR = '\033[38;5;135m'    # Purple for prewarm/flicker diagnostics
+    FALLBACK_COLOR = '\033[95m'        # Bright magenta/pink for any [FALLBACK]
+    PREWARM_COLOR = '\033[38;5;135m'   # Purple for prewarm/flicker diagnostics
     RESET = '\033[0m'
     BOLD = '\033[1m'
     
@@ -42,16 +42,18 @@ class ColoredFormatter(logging.Formatter):
                       or 'Seed pixmap' in msg_text)
         
         # Color the entire line
-        if record.levelname in self.COLORS:
-            if is_fallback and record.levelname == 'WARNING':
-                # Use orange for fallback warnings instead of regular yellow
-                color = self.FALLBACK_COLOR
-            elif is_prewarm:
-                # Use dedicated purple for prewarm/flicker diagnostics
-                color = self.PREWARM_COLOR
-            else:
-                color = self.COLORS[record.levelname]
-            
+        color = None
+        if is_fallback:
+            # Highlight any fallback path in a distinct bright color so they
+            # stand out regardless of level.
+            color = self.FALLBACK_COLOR
+        elif is_prewarm:
+            # Use dedicated purple for prewarm/flicker diagnostics
+            color = self.PREWARM_COLOR
+        elif record.levelname in self.COLORS:
+            color = self.COLORS[record.levelname]
+
+        if color is not None:
             # Color the level name in bold
             record.levelname = f"{self.BOLD}{color}{record.levelname}{self.RESET}"
             # Format the message

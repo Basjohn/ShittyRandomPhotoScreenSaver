@@ -13,6 +13,7 @@ from core.logging.logger import get_logger, is_verbose_logging
 from core.threading.manager import ThreadManager
 from utils.lockfree import TripleBuffer
 from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
+from utils.profiler import profile
 
 logger = get_logger(__name__)
 
@@ -38,6 +39,11 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._sd = None
         self._np = None
         self._pa = None
+        self._band_cache_key = None
+        self._band_log_idx = None
+        self._band_bins = None
+        self._weight_bands = None
+        self._weight_factors = None
 
     def is_running(self) -> bool:
         return self._running
@@ -649,134 +655,131 @@ class SpotifyVisualizerAudioWorker(QObject):
 
     def _fft_to_bars(self, fft) -> List[float]:
         np = self._np
-        if fft is None or fft.size == 0:
+        if fft is None:
             return [0.0] * self._bar_count
 
-        # Drop DC and extremely low bins.
-        mag = np.abs(fft[1:]).astype("float32")
-        n = mag.size
+        try:
+            mag = fft[1:]
+            if mag.size == 0:
+                return [0.0] * self._bar_count
+            if np.iscomplexobj(mag):
+                mag = np.abs(mag)
+            mag = mag.astype("float32", copy=False)
+        except Exception:
+            return [0.0] * self._bar_count
+
+        n = int(mag.size)
         if n <= 0:
             return [0.0] * self._bar_count
 
-        mag = np.log1p(mag)
+        bands = int(self._bar_count)
+        if bands <= 0:
+            return []
+
         try:
-            mag = mag ** 1.2
+            mag = np.log1p(mag)
+            try:
+                mag = mag ** 1.2
+            except Exception:
+                pass
+
+            if n > 4:
+                try:
+                    kernel = np.array([0.25, 0.5, 0.25], dtype="float32")
+                    mag = np.convolve(mag, kernel, mode="same")
+                except Exception:
+                    pass
+
+            if n > 8:
+                try:
+                    cutoff = max(1, int(n * 0.1))
+                    weights = np.linspace(0.3, 1.0, cutoff, dtype="float32")
+                    mag[:cutoff] *= weights
+                except Exception:
+                    pass
         except Exception:
-            pass
+            return [0.0] * bands
 
-        if n > 4:
-            try:
-                kernel = np.array([0.25, 0.5, 0.25], dtype="float32")
-                mag = np.convolve(mag, kernel, mode="same")
-            except Exception:
-                pass
+        cache_key = (n, bands)
+        try:
+            if getattr(self, "_band_cache_key", None) != cache_key:
+                idx = np.arange(n, dtype="float32")
+                log_idx = np.log1p(idx + 1.0)
+                start = float(log_idx[0])
+                end = float(log_idx[-1])
+                edges = np.linspace(start, end, bands + 1, dtype="float32")
+                bins = edges[1:-1]
+                self._band_cache_key = cache_key
+                self._band_log_idx = log_idx
+                self._band_bins = bins
+            log_idx = self._band_log_idx
+            bins = self._band_bins
+            if log_idx is None or bins is None:
+                return [0.0] * bands
+            band_idx = np.digitize(log_idx, bins, right=False)
+            sums = np.bincount(band_idx, weights=mag, minlength=bands)
+            counts = np.bincount(band_idx, minlength=bands)
+            bars_arr = np.divide(
+                sums,
+                counts,
+                out=np.zeros_like(sums, dtype="float32"),
+                where=counts > 0,
+            )
+        except Exception:
+            return [0.0] * bands
 
-        if n > 8:
-            try:
-                cutoff = max(1, int(n * 0.1))
-                weights = np.linspace(0.3, 1.0, cutoff, dtype="float32")
-                mag[:cutoff] *= weights
-            except Exception:
-                pass
-
-        bands = self._bar_count
-        idx = np.arange(n, dtype="float32")
-        log_idx = np.log1p(idx + 1.0)
-        start = float(log_idx[0])
-        end = float(log_idx[-1])
-        edges = np.linspace(start, end, bands + 1, dtype="float32")
-        bars: List[float] = []
-        for i in range(bands):
-            lo = edges[i]
-            hi = edges[i + 1]
-            if i == bands - 1:
-                mask = log_idx >= lo
-            else:
-                mask = (log_idx >= lo) & (log_idx < hi)
-            if not mask.any():
-                bars.append(0.0)
-                continue
-            try:
-                val = float(mag[mask].mean())
-            except Exception:
-                val = 0.0
-            bars.append(val)
-
-        arr = np.array(bars, dtype="float32")
+        arr = bars_arr.astype("float32", copy=False)
         peak = float(arr.max()) if arr.size else 0.0
         if peak <= 1e-6:
             return [0.0] * bands
-        arr /= peak
+        arr = arr / peak
 
-        # Soft tilt: gently suppress the very lowest bars so bass energy
-        # does not dominate the entire row, while slightly lifting
-        # mid/high bands. This is intentionally subtle; the main musical
-        # shape still comes from the FFT itself.
         try:
-            band_idx = np.arange(bands, dtype="float32")
-            t = band_idx / max(1.0, float(bands - 1))
-            # 0 -> ~0.45, centre -> ~0.85, right edge -> ~1.05
-            tilt = 0.45 + 0.6 * t
-            arr *= tilt
+            if getattr(self, "_weight_bands", None) != bands:
+                positions = np.linspace(-1.0, 1.0, bands, dtype="float32")
+                band_idx_f = np.arange(bands, dtype="float32")
+                t = band_idx_f / max(1.0, float(bands - 1))
+                tilt = 0.45 + 0.6 * t
+                sigma = 0.75
+                center_profile = np.exp(-0.5 * (positions / sigma) ** 2).astype("float32")
+                peak_profile = float(center_profile.max()) if center_profile.size else 0.0
+                if peak_profile > 1e-6:
+                    center_profile = center_profile / peak_profile
+                center_weight = 0.55
+                base_weights = (1.0 - center_weight) + center_weight * center_profile
+                bias_strength = 0.35
+                right_bias = 1.0 + bias_strength * positions
+                right_bias = np.clip(
+                    right_bias,
+                    1.0 - bias_strength,
+                    1.0 + bias_strength,
+                )
+                total_weights = base_weights * tilt * right_bias
+                self._weight_bands = bands
+                self._weight_factors = total_weights.astype("float32", copy=False)
+            weights = self._weight_factors
+            if weights is not None and weights.size == arr.size:
+                arr *= weights
         except Exception:
             pass
 
-        positions = np.linspace(-1.0, 1.0, bands, dtype="float32")
         try:
-            # Stronger, symmetric centre emphasis using a smooth bell.
-            # This shifts perceived energy towards the middle instead of
-            # stacking peaks on the far left.
-            sigma = 0.75
-            center_profile = np.exp(-0.5 * (positions / sigma) ** 2).astype("float32")
-            peak_profile = float(center_profile.max()) if center_profile.size else 0.0
-            if peak_profile > 1e-6:
-                center_profile /= peak_profile
-            center_weight = 0.55
-            weights = (1.0 - center_weight) + center_weight * center_profile
-            arr *= weights
-
-            # Gentle right-leaning bias: lift bars on the right-hand side
-            # and relax those on the left so the visual peak drifts a bit
-            # towards the right half of the strip.
-            bias_strength = 0.35
-            right_bias = 1.0 + bias_strength * positions
-            right_bias = np.clip(
-                right_bias,
-                1.0 - bias_strength,
-                1.0 + bias_strength,
-            )
-            arr *= right_bias
-
-            # Ensure trailing activity on the extreme bars. The left edge
-            # keeps a mild bleed from its neighbour; the rightmost bar is
-            # explicitly forced to track a fraction of the second-from-right
-            # so it never stays visually dead when its neighbour is active.
             if bands >= 3:
-                try:
-                    left0 = float(arr[0])
-                    left1 = float(arr[1])
-                    right1 = float(arr[-2])
-
-                    edge_leak_left = 0.30
-                    right_trail_factor = 0.80
-
-                    arr[0] = left0 * (1.0 - edge_leak_left) + left1 * edge_leak_left
-
-                    # Hard guarantee: rightmost bar is at least a fixed
-                    # fraction of its neighbour, preserving motion at the
-                    # far edge even if the high-frequency band itself is
-                    # numerically small.
-                    forced_right = right1 * right_trail_factor
-                    if bands >= 2 and forced_right > float(arr[-1]):
-                        arr[-1] = forced_right
-                except Exception:
-                    pass
+                left0 = float(arr[0])
+                left1 = float(arr[1])
+                right1 = float(arr[-2])
+                edge_leak_left = 0.30
+                right_trail_factor = 0.80
+                arr[0] = left0 * (1.0 - edge_leak_left) + left1 * edge_leak_left
+                forced_right = right1 * right_trail_factor
+                if bands >= 2 and forced_right > float(arr[-1]):
+                    arr[-1] = forced_right
         except Exception:
             pass
 
         peak2 = float(arr.max()) if arr.size else 0.0
         if peak2 > 1e-6:
-            arr /= peak2
+            arr = arr / peak2
         arr = np.clip(arr, 0.0, 1.0)
         return [float(x) for x in arr.tolist()]
 
@@ -817,6 +820,7 @@ class SpotifyVisualizerWidget(QWidget):
         # Behavioural gating
         self._spotify_playing: bool = False
         self._anchor_media: Optional[QWidget] = None
+        self._has_seen_media: bool = False
 
         # Lock-free bar frame buffer shared with audio worker
         self._bars_buffer: TripleBuffer[_BarFrame] = TripleBuffer()
@@ -824,6 +828,17 @@ class SpotifyVisualizerWidget(QWidget):
 
         self._enabled: bool = False
         self._paint_debug_logged: bool = False
+
+        # Geometry cache for paintEvent to avoid per-frame recomputation of
+        # bar/segment layout. Rebuilt on resize or when bar_count/segments
+        # change.
+        self._geom_cache_rect: Optional[QRect] = None
+        self._geom_cache_bar_count: int = self._bar_count
+        self._geom_cache_segments: int = self._bar_segments
+        self._geom_bar_x: List[int] = []
+        self._geom_seg_y: List[int] = []
+        self._geom_bar_width: int = 0
+        self._geom_seg_height: int = 0
 
         self._setup_ui()
 
@@ -896,6 +911,23 @@ class SpotifyVisualizerWidget(QWidget):
             state = ""
         prev = self._spotify_playing
         self._spotify_playing = state == "playing"
+
+        first_media = not self._has_seen_media
+        if first_media:
+            self._has_seen_media = True
+            parent = self.parent()
+
+            def _starter() -> None:
+                self._start_widget_fade_in(1500)
+
+            if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
+                try:
+                    parent.request_overlay_fade_sync("spotify_visualizer", _starter)
+                except Exception:
+                    _starter()
+            else:
+                _starter()
+
         if is_verbose_logging():
             try:
                 logger.debug(
@@ -920,6 +952,11 @@ class SpotifyVisualizerWidget(QWidget):
             return
         self._enabled = True
 
+        try:
+            self.hide()
+        except Exception:
+            pass
+
         # Start audio capture first so the buffer can begin filling.
         try:
             if not self._audio_worker.is_running():
@@ -934,19 +971,6 @@ class SpotifyVisualizerWidget(QWidget):
                 self._bars_timer = self._thread_manager.schedule_recurring(40, self._on_tick)
             except Exception:
                 self._bars_timer = None
-
-        parent = self.parent()
-
-        def _starter() -> None:
-            self._start_widget_fade_in(1500)
-
-        if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
-            try:
-                parent.request_overlay_fade_sync("spotify_visualizer", _starter)
-            except Exception:
-                _starter()
-        else:
-            _starter()
 
     def stop(self) -> None:
         if not self._enabled:
@@ -1035,6 +1059,54 @@ class SpotifyVisualizerWidget(QWidget):
                         exc_info=True,
                     )
 
+    def _rebuild_geometry_cache(self, rect: QRect) -> None:
+        """Recompute cached bar/segment layout for the current geometry."""
+
+        count = self._bar_count
+        segments = max(1, getattr(self, "_bar_segments", 16))
+        if rect.width() <= 0 or rect.height() <= 0 or count <= 0:
+            self._geom_cache_rect = QRect()
+            self._geom_cache_bar_count = count
+            self._geom_cache_segments = segments
+            self._geom_bar_x = []
+            self._geom_seg_y = []
+            self._geom_bar_width = 0
+            self._geom_seg_height = 0
+            return
+
+        margin_x = 8
+        margin_y = 6
+        inner = rect.adjusted(margin_x, margin_y, -margin_x, -margin_y)
+        if inner.width() <= 0 or inner.height() <= 0:
+            self._geom_cache_rect = inner
+            self._geom_cache_bar_count = count
+            self._geom_cache_segments = segments
+            self._geom_bar_x = []
+            self._geom_seg_y = []
+            self._geom_bar_width = 0
+            self._geom_seg_height = 0
+            return
+
+        gap = 2
+        total_gap = gap * (count - 1) if count > 1 else 0
+        bar_width = max(1, int((inner.width() - total_gap) / max(1, count)))
+        x0 = inner.left()
+        bar_x = [x0 + i * (bar_width + gap) for i in range(count)]
+
+        seg_gap = 1
+        total_seg_gap = seg_gap * max(0, segments - 1)
+        seg_height = max(1, int((inner.height() - total_seg_gap) / max(1, segments)))
+        base_bottom = inner.bottom()
+        seg_y = [base_bottom - s * (seg_height + seg_gap) - seg_height + 1 for s in range(segments)]
+
+        self._geom_cache_rect = inner
+        self._geom_cache_bar_count = count
+        self._geom_cache_segments = segments
+        self._geom_bar_x = bar_x
+        self._geom_seg_y = seg_y
+        self._geom_bar_width = bar_width
+        self._geom_seg_height = seg_height
+
     def _on_tick(self) -> None:
         """Periodic UI tick scheduled via ThreadManager.
 
@@ -1057,42 +1129,41 @@ class SpotifyVisualizerWidget(QWidget):
         if not self._enabled:
             return
 
-        frame = self._bars_buffer.consume_latest()
-        if frame is not None and isinstance(frame.values, list):
-            vals = frame.values
-            if len(vals) != self._bar_count:
-                # Simple resize to current bar layout.
-                if len(vals) < self._bar_count:
-                    vals = vals + [0.0] * (self._bar_count - len(vals))
-                else:
-                    vals = vals[: self._bar_count]
-            self._target_bars = [max(0.0, min(1.0, float(v))) for v in vals]
-            if is_verbose_logging():
-                try:
-                    logger.debug(
-                        "[SPOTIFY_VIS] _on_tick: received frame (min=%.4f, max=%.4f)",
-                        min(self._target_bars) if self._target_bars else 0.0,
-                        max(self._target_bars) if self._target_bars else 0.0,
-                    )
-                except Exception:
-                    pass
+        with profile("SPOTIFY_VIS_TICK", threshold_ms=5.0, log_level="DEBUG"):
+            frame = self._bars_buffer.consume_latest()
+            if frame is not None and isinstance(frame.values, list):
+                vals = frame.values
+                if len(vals) != self._bar_count:
+                    if len(vals) < self._bar_count:
+                        vals = vals + [0.0] * (self._bar_count - len(vals))
+                    else:
+                        vals = vals[: self._bar_count]
+                self._target_bars = [max(0.0, min(1.0, float(v))) for v in vals]
+                if is_verbose_logging():
+                    try:
+                        logger.debug(
+                            "[SPOTIFY_VIS] _on_tick: received frame (min=%.4f, max=%.4f)",
+                            min(self._target_bars) if self._target_bars else 0.0,
+                            max(self._target_bars) if self._target_bars else 0.0,
+                        )
+                    except Exception:
+                        pass
 
-        # If Spotify is not actively playing, treat the target as idle.
-        if not self._spotify_playing:
-            self._target_bars = [0.0] * self._bar_count
+            if not self._spotify_playing:
+                self._target_bars = [0.0] * self._bar_count
 
-        changed = False
-        s = self._smoothing
-        for i in range(self._bar_count):
-            cur = self._display_bars[i]
-            tgt = self._target_bars[i]
-            nxt = cur + (tgt - cur) * s
-            if abs(nxt - cur) > 1e-3:
-                changed = True
-            self._display_bars[i] = nxt
+            changed = False
+            s = self._smoothing
+            for i in range(self._bar_count):
+                cur = self._display_bars[i]
+                tgt = self._target_bars[i]
+                nxt = cur + (tgt - cur) * s
+                if abs(nxt - cur) > 1e-3:
+                    changed = True
+                self._display_bars[i] = nxt
 
-        if changed:
-            self.update()
+            if changed:
+                self.update()
 
     def paintEvent(self, event: QPaintEvent) -> None:  # type: ignore[override]
         super().paintEvent(event)
@@ -1134,49 +1205,63 @@ class SpotifyVisualizerWidget(QWidget):
             painter.end()
             return
 
-        # Card background. Follow the same pattern as other widgets: apply
-        # opacity to the fill only and keep the border colour as-is so we
-        # avoid double-alpha on the outline.
+        with profile("SPOTIFY_VIS_PAINT", threshold_ms=5.0, log_level="DEBUG"):
+            # Card background is handled by the stylesheet; painting focuses on
+            # the bar geometry only. Use a cached layout to avoid recomputing
+            # per-frame integer geometry.
 
-        # Bars
-        margin_x = 8
-        margin_y = 6
-        inner = rect.adjusted(margin_x, margin_y, -margin_x, -margin_y)
-        if inner.width() <= 0 or inner.height() <= 0:
-            painter.end()
-            return
+            segments = max(1, getattr(self, "_bar_segments", 16))
+            if (
+                self._geom_cache_rect is None
+                or self._geom_cache_rect.width() != rect.width()
+                or self._geom_cache_rect.height() != rect.height()
+                or self._geom_cache_bar_count != self._bar_count
+                or self._geom_cache_segments != segments
+            ):
+                self._rebuild_geometry_cache(rect)
 
-        count = self._bar_count
-        gap = 2
-        total_gap = gap * (count - 1)
-        bar_width = max(1, int((inner.width() - total_gap) / max(1, count)))
+            inner = self._geom_cache_rect
+            bar_x = self._geom_bar_x
+            seg_y = self._geom_seg_y
+            bar_width = self._geom_bar_width
+            seg_height = self._geom_seg_height
+            if (
+                inner is None
+                or inner.width() <= 0
+                or inner.height() <= 0
+                or not bar_x
+                or not seg_y
+                or bar_width <= 0
+                or seg_height <= 0
+            ):
+                painter.end()
+                return
 
-        fill = QColor(self._bar_fill_color)
-        border = QColor(self._bar_border_color)
-        segments = max(1, getattr(self, "_bar_segments", 16))
-        seg_gap = 1
-        total_seg_gap = seg_gap * max(0, segments - 1)
-        seg_height = max(1, int((inner.height() - total_seg_gap) / max(1, segments)))
+            count = self._bar_count
+            count = min(count, len(bar_x))
 
-        painter.setBrush(fill)
-        painter.setPen(border)
+            fill = QColor(self._bar_fill_color)
+            border = QColor(self._bar_border_color)
+            max_segments = min(segments, len(seg_y))
 
-        base_bottom = inner.bottom()
-        for i in range(count):
-            x = inner.left() + i * (bar_width + gap)
-            value = max(0.0, min(1.0, self._display_bars[i]))
-            if value <= 0.0:
-                continue
-            active = int(round(value * segments))
-            if active <= 0:
-                if self._spotify_playing and value > 0.0:
-                    active = 1
-                else:
+            painter.setBrush(fill)
+            painter.setPen(border)
+
+            for i in range(count):
+                x = bar_x[i]
+                value = max(0.0, min(1.0, self._display_bars[i]))
+                if value <= 0.0:
                     continue
-            for s in range(active):
-                seg_bottom = base_bottom - s * (seg_height + seg_gap)
-                y = seg_bottom - seg_height + 1
-                bar_rect = QRect(x, y, bar_width, seg_height)
-                painter.drawRect(bar_rect)
+                active = int(round(value * segments))
+                if active <= 0:
+                    if self._spotify_playing and value > 0.0:
+                        active = 1
+                    else:
+                        continue
+                active = min(active, max_segments)
+                for s in range(active):
+                    y = seg_y[s]
+                    bar_rect = QRect(x, y, bar_width, seg_height)
+                    painter.drawRect(bar_rect)
 
-        painter.end()
+            painter.end()

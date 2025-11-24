@@ -205,15 +205,17 @@ class DisplayWidget(QWidget):
         # Central ThreadManager wiring (optional, provided by engine)
         self._thread_manager = thread_manager
         
-        # Setup widget: frameless, always-on-top, and hidden from the
-        # taskbar/Alt+Tab via Tool window semantics.
+        # Setup widget: frameless, always-on-top display window.
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.Tool
         )
         self.setCursor(Qt.CursorShape.BlankCursor)
         self.setMouseTracking(True)
+        try:
+            self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        except Exception:
+            pass
         # Ensure we can keep the Ctrl halo moving even when the cursor is over
         # child widgets (clocks, weather, etc.) by observing global mouse
         # move events.
@@ -334,6 +336,17 @@ class DisplayWidget(QWidget):
         self.show()
         try:
             self.raise_()
+        except Exception:
+            pass
+        try:
+            self.activateWindow()
+            try:
+                self.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
+            except Exception:
+                try:
+                    self.setFocus()
+                except Exception:
+                    pass
         except Exception:
             pass
         self._handle_screen_change(screen)
@@ -785,8 +798,12 @@ class DisplayWidget(QWidget):
                 self._overlay_fade_expected.add("weather")
             except Exception:
                 self._overlay_fade_expected = {"weather"}
-            position_str = weather_settings.get('position', 'Bottom Left')
-            location = weather_settings.get('location', 'London')
+            # Canonical defaults for missing keys mirror
+            # SettingsManager._set_defaults() / get_widget_defaults('weather').
+            position_str = weather_settings.get('position', 'Top Left')
+            # Placeholder location is "New York"; WidgetsTab will perform a
+            # one-shot timezone-based override when appropriate.
+            location = weather_settings.get('location', 'New York')
             font_size = weather_settings.get('font_size', 24)
             color = weather_settings.get('color', [255, 255, 255, 230])
             
@@ -797,7 +814,7 @@ class DisplayWidget(QWidget):
                 'Bottom Left': WeatherPosition.BOTTOM_LEFT,
                 'Bottom Right': WeatherPosition.BOTTOM_RIGHT,
             }
-            position = weather_position_map.get(position_str, WeatherPosition.BOTTOM_LEFT)
+            position = weather_position_map.get(position_str, WeatherPosition.TOP_LEFT)
             
             try:
                 self.weather_widget = WeatherWidget(self, location, position)
@@ -822,12 +839,12 @@ class DisplayWidget(QWidget):
 
                 # Background/frame customization
                 show_background = SettingsManager.to_bool(
-                    weather_settings.get('show_background', False), False
+                    weather_settings.get('show_background', True), True
                 )
                 self.weather_widget.set_show_background(show_background)
 
                 # Background color (RGB+alpha), default matches WeatherWidget internal default
-                bg_color_data = weather_settings.get('bg_color', [64, 64, 64, 255])
+                bg_color_data = weather_settings.get('bg_color', [35, 35, 35, 255])
                 try:
                     bg_r, bg_g, bg_b = bg_color_data[0], bg_color_data[1], bg_color_data[2]
                     bg_a = bg_color_data[3] if len(bg_color_data) > 3 else 255
@@ -837,12 +854,12 @@ class DisplayWidget(QWidget):
                     pass
 
                 # Background opacity (scales alpha regardless of bg_color alpha)
-                bg_opacity = weather_settings.get('bg_opacity', 0.9)
+                bg_opacity = weather_settings.get('bg_opacity', 0.7)
                 self.weather_widget.set_background_opacity(bg_opacity)
 
                 # Border color and opacity (independent from background opacity)
-                border_color_data = weather_settings.get('border_color', [128, 128, 128, 255])
-                border_opacity = weather_settings.get('border_opacity', 0.8)
+                border_color_data = weather_settings.get('border_color', [255, 255, 255, 255])
+                border_opacity = weather_settings.get('border_opacity', 1.0)
                 try:
                     br_r, br_g, br_b = (
                         border_color_data[0],
@@ -914,16 +931,16 @@ class DisplayWidget(QWidget):
                 self._overlay_fade_expected = {"reddit"}
             position_str = reddit_settings.get('position', 'Bottom Right')
             subreddit = reddit_settings.get('subreddit', 'wallpapers') or 'wallpapers'
-            font_size = reddit_settings.get('font_size', 18)
+            font_size = reddit_settings.get('font_size', 14)
             margin = reddit_settings.get('margin', 20)
             color = reddit_settings.get('color', [255, 255, 255, 230])
-            bg_color_data = reddit_settings.get('bg_color', [64, 64, 64, 255])
-            border_color_data = reddit_settings.get('border_color', [128, 128, 128, 255])
-            border_opacity = reddit_settings.get('border_opacity', 0.8)
+            bg_color_data = reddit_settings.get('bg_color', [35, 35, 35, 255])
+            border_color_data = reddit_settings.get('border_color', [255, 255, 255, 255])
+            border_opacity = reddit_settings.get('border_opacity', 1.0)
             show_background = SettingsManager.to_bool(reddit_settings.get('show_background', True), True)
-            show_separators_val = reddit_settings.get('show_separators', False)
-            show_separators = SettingsManager.to_bool(show_separators_val, False)
-            bg_opacity = reddit_settings.get('bg_opacity', 0.9)
+            show_separators_val = reddit_settings.get('show_separators', True)
+            show_separators = SettingsManager.to_bool(show_separators_val, True)
+            bg_opacity = reddit_settings.get('bg_opacity', 1.0)
             try:
                 limit_val = int(reddit_settings.get('limit', 10))
             except Exception:
@@ -1542,11 +1559,24 @@ class DisplayWidget(QWidget):
             random_mode = False
             random_choice_value = None
 
-        duration_ms_raw = transitions_settings.get('duration_ms', 1300)
+        base_duration_raw = transitions_settings.get('duration_ms', 1300)
         try:
-            duration_ms = int(duration_ms_raw)
+            base_duration_ms = int(base_duration_raw)
         except Exception:
-            duration_ms = 1300
+            base_duration_ms = 1300
+
+        duration_ms = base_duration_ms
+        try:
+            durations_cfg = transitions_settings.get('durations', {})
+            if isinstance(durations_cfg, dict):
+                per_type_raw = durations_cfg.get(transition_type)
+                if per_type_raw is not None:
+                    try:
+                        duration_ms = int(per_type_raw)
+                    except Exception:
+                        duration_ms = base_duration_ms
+        except Exception:
+            duration_ms = base_duration_ms
 
         try:
             easing_str = transitions_settings.get('easing') or 'Auto'
@@ -2708,6 +2738,57 @@ class DisplayWidget(QWidget):
                 self.spotify_visualizer_widget = None
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to stop visualizer in _on_destroyed: %s", e, exc_info=True)
+        # Stop Media widget if present
+        try:
+            mw = getattr(self, "media_widget", None)
+            if mw is not None:
+                try:
+                    cleanup = getattr(mw, "cleanup", None)
+                    if callable(cleanup):
+                        cleanup()
+                except Exception:
+                    pass
+                try:
+                    mw.hide()
+                except Exception:
+                    pass
+                self.media_widget = None
+        except Exception as e:
+            logger.debug("[MEDIA] Failed to stop media widget in _on_destroyed: %s", e, exc_info=True)
+        # Stop Weather widget if present
+        try:
+            ww = getattr(self, "weather_widget", None)
+            if ww is not None:
+                try:
+                    cleanup = getattr(ww, "cleanup", None)
+                    if callable(cleanup):
+                        cleanup()
+                except Exception:
+                    pass
+                try:
+                    ww.hide()
+                except Exception:
+                    pass
+                self.weather_widget = None
+        except Exception as e:
+            logger.debug("[WEATHER] Failed to stop weather widget in _on_destroyed: %s", e, exc_info=True)
+        # Stop Reddit widget if present
+        try:
+            rw = getattr(self, "reddit_widget", None)
+            if rw is not None:
+                try:
+                    cleanup = getattr(rw, "cleanup", None)
+                    if callable(cleanup):
+                        cleanup()
+                except Exception:
+                    pass
+                try:
+                    rw.hide()
+                except Exception:
+                    pass
+                self.reddit_widget = None
+        except Exception as e:
+            logger.debug("[REDDIT] Failed to stop Reddit widget in _on_destroyed: %s", e, exc_info=True)
         # Stop and clean up any active transition
         try:
             if self._current_transition:
@@ -2947,22 +3028,24 @@ class DisplayWidget(QWidget):
             expected = set()
 
         started = getattr(self, "_overlay_fade_started", False)
-        logger.debug(
-            "[OVERLAY_FADE] request_overlay_fade_sync: screen=%s overlay=%s expected=%s started=%s",
-            self.screen_index,
-            overlay_name,
-            sorted(expected) if expected else [],
-            started,
-        )
-
-        # If coordination is not active or fades already kicked off, run now.
-        if not expected or started:
+        if is_verbose_logging():
             logger.debug(
-                "[OVERLAY_FADE] %s running starter immediately (expected=%s, started=%s)",
+                "[OVERLAY_FADE] request_overlay_fade_sync: screen=%s overlay=%s expected=%s started=%s",
+                self.screen_index,
                 overlay_name,
                 sorted(expected) if expected else [],
                 started,
             )
+
+        # If coordination is not active or fades already kicked off, run now.
+        if not expected or started:
+            if is_verbose_logging():
+                logger.debug(
+                    "[OVERLAY_FADE] %s running starter immediately (expected=%s, started=%s)",
+                    overlay_name,
+                    sorted(expected) if expected else [],
+                    started,
+                )
             try:
                 starter()
             except Exception:
@@ -2977,12 +3060,13 @@ class DisplayWidget(QWidget):
         pending[overlay_name] = starter
 
         remaining = [name for name in expected if name not in pending]
-        logger.debug(
-            "[OVERLAY_FADE] %s registered (pending=%s, remaining=%s)",
-            overlay_name,
-            sorted(pending.keys()),
-            sorted(remaining),
-        )
+        if is_verbose_logging():
+            logger.debug(
+                "[OVERLAY_FADE] %s registered (pending=%s, remaining=%s)",
+                overlay_name,
+                sorted(pending.keys()),
+                sorted(remaining),
+            )
         if not remaining:
             self._start_overlay_fades(force=False)
             return
@@ -3397,8 +3481,9 @@ class DisplayWidget(QWidget):
         if self._is_hard_exit_enabled() or ctrl_mode_active:
             # In hard-exit or Ctrl-held interaction mode, route clicks over
             # interactive widgets (e.g. media / reddit widget). Media
-            # controls keep the screensaver active; Reddit links both open
-            # the browser and then request a clean exit.
+            # controls keep the screensaver active; Reddit links open the
+            # browser and may optionally request a clean exit depending on
+            # settings and hard-exit mode.
             handled = False
             reddit_handled = False
 
@@ -3494,8 +3579,10 @@ class DisplayWidget(QWidget):
                 logger.debug("[MEDIA] Error while routing click to media widget", exc_info=True)
 
             # Reddit widget: map clicks to open links in the browser when
-            # interaction mode is active. Unlike media controls, Reddit
-            # clicks also close the screensaver afterwards.
+            # interaction mode is active. When hard-exit is disabled,
+            # Reddit clicks can also trigger a clean exit (controlled by
+            # the per-widget "exit_on_click" setting). In hard-exit mode
+            # the screensaver always remains active after the click.
             rw = getattr(self, "reddit_widget", None)
             try:
                 if (not handled) and rw is not None and rw.isVisible() and rw.geometry().contains(event.pos()):
@@ -3523,7 +3610,19 @@ class DisplayWidget(QWidget):
                 logger.debug("[REDDIT] Error while routing click to reddit widget", exc_info=True)
 
             if handled:
+                # Optionally request a clean exit after Reddit clicks when
+                # hard-exit mode is disabled and the widget is configured
+                # to exit-on-click.
+                should_exit = False
                 if reddit_handled and getattr(self, "_reddit_exit_on_click", True):
+                    try:
+                        hard_exit_enabled = self._is_hard_exit_enabled()
+                    except Exception:
+                        hard_exit_enabled = False
+                    if not hard_exit_enabled:
+                        should_exit = True
+
+                if should_exit:
                     logger.info("[REDDIT] Click handled; requesting screensaver exit")
                     try:
                         from PySide6.QtCore import QTimer as _QTimer

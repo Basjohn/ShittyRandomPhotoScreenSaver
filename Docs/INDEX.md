@@ -184,8 +184,9 @@ SETTINGS_CHANGED = "settings.changed"
   - `load()` - Load from disk
   - `on_changed(key, handler)` - Change notification
   - `reset_to_defaults()` - Reset all settings
+  - `get_widget_defaults(section)` - Return canonical defaults for a widget section (`clock`, `clock2`, `clock3`, `weather`, `media`, `spotify_visualizer`, `reddit`, `shadows`).
 
-**Features**: Automatic defaults using the canonical nested settings schema (`display`, `transitions`, `timing`, `widgets`, `input`), including the full `widgets` map (`clock`, `clock2`, `clock3`, `weather`, `media`) maintained centrally via `_set_defaults()` + `_ensure_widgets_defaults`, change notifications, and QSettings persistence. Legacy flat settings keys (e.g. `transitions.type`, `widgets.clock_*`) are migration-only and not used by the active runtime pipeline.  
+**Features**: Automatic defaults using the canonical nested settings schema (`display`, `transitions`, `timing`, `widgets`, `input`), including the full `widgets` map (`clock`, `clock2`, `clock3`, `weather`, `media`, `spotify_visualizer`, `reddit`, `shadows`) maintained centrally via `_set_defaults()` + `_ensure_widgets_defaults`, change notifications, and QSettings persistence. Legacy flat settings keys (e.g. `transitions.type`, `widgets.clock_*`) are migration-only and not used by the active runtime pipeline.  
 **Adapted From**: `MyReuseableUtilityModules/core/settings/settings_manager.py`  
 **Tests**: `tests/test_settings.py`, `tests/test_widgets_tab.py`, `tests/test_widgets_media_integration.py`
 
@@ -195,12 +196,15 @@ SETTINGS_CHANGED = "settings.changed"
 **Purpose**: Centralized logging configuration  
 **Status**: ✅ Implemented  
 **Key Functions**:
-- `setup_logging(debug=False)` - Configure application logging with file rotation
+- `setup_logging(debug=False, verbose=False)` - Configure application logging with file rotation and optional verbose mode
 - `ColoredFormatter` - ANSI colored console output for debug mode
 
 **Features**: 
 - Rotating file handler (10MB, 5 backups)
-- Colored console output in debug mode (cyan=DEBUG, green=INFO, yellow=WARNING, red=ERROR, magenta=CRITICAL)
+- Colored console output in debug mode (cyan=DEBUG, green=INFO, yellow=WARNING, red=ERROR, magenta=CRITICAL), with special highlighting:
+  - Any `[FALLBACK]` message is rendered in a distinct bright magenta/pink regardless of level.
+  - Prewarm/flicker diagnostics (e.g. `[PREWARM]`, "flicker", "Seed pixmap") are rendered in purple.
+- High-volume overlay fade and shadow fade diagnostics (`[OVERLAY_FADE]`, `[SHADOW_FADE]`) are gated behind `is_verbose_logging()` so normal debug runs are not spammed.
 - Logs stored in `logs/screensaver.log`
 
 **Key Loggers**:
@@ -977,6 +981,7 @@ SETTINGS_CHANGED = "settings.changed"
 - Temperature in Celsius
 - Weather condition display
 - Location display
+- Default configuration uses "New York" as a placeholder location; on first load of the Widgets tab, when this placeholder is still present, the tab attempts to derive a closer default city from the local timezone (e.g. `Africa/Johannesburg` → `Johannesburg`) and persists that override back into the canonical `widgets.weather.location` setting.
 - 4 position options
 - QTimer updates every 30 minutes
 - Error handling with fallback to cache

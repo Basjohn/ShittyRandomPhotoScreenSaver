@@ -18,6 +18,7 @@ from typing import Optional
 from PySide6.QtWidgets import QLabel, QWidget
 from PySide6.QtCore import QTimer, Qt, Signal, QVariantAnimation, QEasingCurve, QRect
 from PySide6.QtGui import QFont, QColor, QPixmap, QPainter, QPainterPath, QFontMetrics
+from shiboken6 import Shiboken
 
 from core.logging.logger import get_logger, is_verbose_logging
 from core.media.media_controller import (
@@ -28,6 +29,7 @@ from core.media.media_controller import (
 )
 from core.threading.manager import ThreadManager
 from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
+from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 
 logger = get_logger(__name__)
 
@@ -65,6 +67,7 @@ class MediaWidget(QLabel):
         self._controller: BaseMediaController = controller or create_media_controller()
 
         self._update_timer: Optional[QTimer] = None
+        self._update_timer_handle: Optional[OverlayTimerHandle] = None
         self._enabled = False
         self._thread_manager = None
         self._refresh_in_flight = False
@@ -193,6 +196,13 @@ class MediaWidget(QLabel):
             return
 
         self._enabled = False
+        if self._update_timer_handle is not None:
+            try:
+                self._update_timer_handle.stop()
+            except Exception:
+                pass
+            self._update_timer_handle = None
+
         if self._update_timer is not None:
             try:
                 self._update_timer.stop()
@@ -225,14 +235,14 @@ class MediaWidget(QLabel):
     # Position & layout
     # ------------------------------------------------------------------
     def _ensure_timer(self) -> None:
-        if self._update_timer is not None:
+        if self._update_timer_handle is not None:
             return
-        timer = QTimer(self)
-        timer.setSingleShot(False)
-        timer.setInterval(1000)  # 1.0s poll
-        timer.timeout.connect(self._refresh)
-        self._update_timer = timer
-        self._update_timer.start()
+        handle = create_overlay_timer(self, 1000, self._refresh, description="MediaWidget poll")
+        self._update_timer_handle = handle
+        try:
+            self._update_timer = getattr(handle, "_timer", None)
+        except Exception:
+            self._update_timer = None
 
     def _update_position(self) -> None:
         if not self.parent():
@@ -612,6 +622,32 @@ class MediaWidget(QLabel):
             self._refresh_in_flight = False
 
     def _update_display(self, info: Optional[MediaTrackInfo]) -> None:
+        # Lifetime guard: async callbacks may fire after the widget has been
+        # destroyed. Bail out early and stop timers/handles if the underlying
+        # Qt object is no longer valid.
+        try:
+            if not Shiboken.isValid(self):
+                if getattr(self, "_update_timer_handle", None) is not None:
+                    try:
+                        self._update_timer_handle.stop()  # type: ignore[union-attr]
+                    except Exception:
+                        pass
+                    self._update_timer_handle = None  # type: ignore[assignment]
+
+                if getattr(self, "_update_timer", None) is not None:
+                    try:
+                        self._update_timer.stop()  # type: ignore[union-attr]
+                        self._update_timer.deleteLater()  # type: ignore[union-attr]
+                    except Exception:
+                        pass
+                    self._update_timer = None  # type: ignore[assignment]
+
+                self._enabled = False
+                self._refresh_in_flight = False
+                return
+        except Exception:
+            return
+
         # Cache last track snapshot for diagnostics/interaction
         prev_info = self._last_info
         self._last_info = info

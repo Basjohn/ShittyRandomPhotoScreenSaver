@@ -17,8 +17,10 @@ except ImportError:
 from PySide6.QtWidgets import QLabel, QWidget
 from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtGui import QFont, QColor, QPainter, QPen, QPaintEvent
+from shiboken6 import Shiboken
 
 from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
+from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
@@ -80,6 +82,7 @@ class ClockWidget(QLabel):
         self._show_seconds = show_seconds
         self._show_timezone = show_timezone
         self._timer: Optional[QTimer] = None
+        self._timer_handle: Optional[OverlayTimerHandle] = None
         self._enabled = False
         
         # Separate label for timezone
@@ -165,12 +168,16 @@ class ClockWidget(QLabel):
         
         # Update immediately
         self._update_time()
-        
-        # Start timer (update every second)
-        self._timer = QTimer(self)
-        self._timer.timeout.connect(self._update_time)
-        self._timer.start(1000)  # 1 second
-        
+
+        # Start recurring updates via the centralized overlay timer helper.
+        # Keep the legacy QTimer attribute for compatibility with any
+        # existing diagnostics/tests while routing creation through
+        # create_overlay_timer so timers participate in ThreadManager /
+        # ResourceManager tracking when available.
+        handle = create_overlay_timer(self, 1000, self._update_time, description="ClockWidget tick")
+        self._timer_handle = handle
+        self._timer = getattr(handle, "_timer", None)
+
         self._enabled = True
         parent = self.parent()
 
@@ -193,7 +200,14 @@ class ClockWidget(QLabel):
         if not self._enabled:
             return
         
-        if self._timer:
+        if self._timer_handle is not None:
+            try:
+                self._timer_handle.stop()
+            except Exception:
+                pass
+            self._timer_handle = None
+
+        if self._timer is not None:
             try:
                 self._timer.stop()
                 self._timer.deleteLater()
@@ -394,6 +408,28 @@ class ClockWidget(QLabel):
     
     def _update_time(self) -> None:
         """Update displayed time."""
+        try:
+            if not Shiboken.isValid(self):
+                if getattr(self, "_timer_handle", None) is not None:
+                    try:
+                        self._timer_handle.stop()  # type: ignore[union-attr]
+                    except Exception:
+                        pass
+                    self._timer_handle = None  # type: ignore[assignment]
+
+                if getattr(self, "_timer", None) is not None:
+                    try:
+                        self._timer.stop()  # type: ignore[union-attr]
+                        self._timer.deleteLater()  # type: ignore[union-attr]
+                    except Exception:
+                        pass
+                    self._timer = None  # type: ignore[assignment]
+
+                self._enabled = False
+                return
+        except Exception:
+            return
+
         # Get current time in specified timezone
         if self._timezone is None:
             now = datetime.now()
@@ -853,7 +889,7 @@ class ClockWidget(QLabel):
 
         # Optional subtle drop shadow under the analogue clock face.
         if self._analog_face_shadow:
-            shadow_color = QColor(0, 0, 0, max(50, self._text_color.alpha() // 5))
+            shadow_color = QColor(0, 0, 0, max(75, self._text_color.alpha() // 3))
             shadow_pen = QPen(shadow_color)
             shadow_pen.setWidth(2)
             painter.setPen(shadow_pen)
@@ -914,6 +950,16 @@ class ClockWidget(QLabel):
                 text = roman_map.get(hour, str(hour))
                 tw = numeral_metrics.horizontalAdvance(text)
                 th = numeral_metrics.height()
+
+                # Subtle drop shadow for numerals, matching the analogue
+                # face/hand shadow so the entire dial reads as a single
+                # lit element.
+                if self._analog_face_shadow:
+                    numeral_shadow = QColor(0, 0, 0, max(65, self._text_color.alpha() // 3))
+                    painter.setPen(QPen(numeral_shadow))
+                    painter.drawText(tx - tw // 2 + 1, ty + th // 4 + 1, text)
+
+                painter.setPen(QPen(self._text_color))
                 painter.drawText(tx - tw // 2, ty + th // 4, text)
 
         # Helper to draw a hand with a subtle bottom-right shadow.
@@ -925,7 +971,7 @@ class ClockWidget(QLabel):
             ey = center_y + int(sin_a * length)
 
             if self._analog_face_shadow:
-                shadow_color = QColor(0, 0, 0, max(45, self._text_color.alpha() // 4))
+                shadow_color = QColor(0, 0, 0, max(55, self._text_color.alpha() // 3))
                 shadow_pen = QPen(shadow_color)
                 shadow_pen.setWidth(thickness)
                 painter.setPen(shadow_pen)

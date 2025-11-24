@@ -147,6 +147,11 @@ class GLCompositorWidget(QOpenGLWidget):
         self._slide_profile_frame_count: int = 0
         self._slide_profile_min_dt: float = 0.0
         self._slide_profile_max_dt: float = 0.0
+        self._wipe_profile_start_ts: Optional[float] = None
+        self._wipe_profile_last_ts: Optional[float] = None
+        self._wipe_profile_frame_count: int = 0
+        self._wipe_profile_min_dt: float = 0.0
+        self._wipe_profile_max_dt: float = 0.0
 
         # Animation plumbing: compositor does not own AnimationManager, but we
         # keep the current animation id so the caller can cancel if needed.
@@ -271,6 +276,12 @@ class GLCompositorWidget(QOpenGLWidget):
         )
         self._animation_manager = animation_manager
         self._current_easing = easing
+
+        self._wipe_profile_start_ts = time.time()
+        self._wipe_profile_last_ts = None
+        self._wipe_profile_frame_count = 0
+        self._wipe_profile_min_dt = 0.0
+        self._wipe_profile_max_dt = 0.0
 
         # Cancel any previous animation on this compositor.
         if self._current_anim_id and self._animation_manager:
@@ -685,9 +696,54 @@ class GLCompositorWidget(QOpenGLWidget):
             return
         p = max(0.0, min(1.0, float(progress)))
         self._wipe.progress = p
+
+        now = time.time()
+        if self._wipe_profile_start_ts is None:
+            self._wipe_profile_start_ts = now
+        if self._wipe_profile_last_ts is not None:
+            dt = now - self._wipe_profile_last_ts
+            if dt > 0.0:
+                if self._wipe_profile_min_dt == 0.0 or dt < self._wipe_profile_min_dt:
+                    self._wipe_profile_min_dt = dt
+                if dt > self._wipe_profile_max_dt:
+                    self._wipe_profile_max_dt = dt
+        self._wipe_profile_last_ts = now
+        self._wipe_profile_frame_count += 1
         self.update()
 
     def _on_wipe_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
+        try:
+            if (
+                self._wipe_profile_start_ts is not None
+                and self._wipe_profile_last_ts is not None
+                and self._wipe_profile_frame_count > 0
+            ):
+                elapsed = max(0.0, self._wipe_profile_last_ts - self._wipe_profile_start_ts)
+                if elapsed > 0.0:
+                    duration_ms = elapsed * 1000.0
+                    avg_fps = self._wipe_profile_frame_count / elapsed
+                    min_dt_ms = self._wipe_profile_min_dt * 1000.0 if self._wipe_profile_min_dt > 0.0 else 0.0
+                    max_dt_ms = self._wipe_profile_max_dt * 1000.0 if self._wipe_profile_max_dt > 0.0 else 0.0
+                    logger.info(
+                        "[PERF] [GL COMPOSITOR] Wipe metrics: duration=%.1fms, frames=%d, "
+                        "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, size=%dx%d",
+                        duration_ms,
+                        self._wipe_profile_frame_count,
+                        avg_fps,
+                        min_dt_ms,
+                        max_dt_ms,
+                        self.width(),
+                        self.height(),
+                    )
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Wipe metrics logging failed: %s", e, exc_info=True)
+
+        self._wipe_profile_start_ts = None
+        self._wipe_profile_last_ts = None
+        self._wipe_profile_frame_count = 0
+        self._wipe_profile_min_dt = 0.0
+        self._wipe_profile_max_dt = 0.0
+
         # Snap to final state: base pixmap becomes the new image, transition ends.
         if self._wipe is not None:
             try:
@@ -946,15 +1002,14 @@ class GLCompositorWidget(QOpenGLWidget):
                 h = target.height()
 
                 t = max(0.0, min(1.0, st.progress))
-
-                def lerp(a: QPoint, b: QPoint, t: float) -> QPoint:
-                    return QPoint(
-                        int(a.x() + (b.x() - a.x()) * t),
-                        int(a.y() + (b.y() - a.y()) * t),
-                    )
-
-                old_pos = lerp(st.old_start, st.old_end, t)
-                new_pos = lerp(st.new_start, st.new_end, t)
+                old_pos = QPoint(
+                    int(st.old_start.x() + (st.old_end.x() - st.old_start.x()) * t),
+                    int(st.old_start.y() + (st.old_end.y() - st.old_start.y()) * t),
+                )
+                new_pos = QPoint(
+                    int(st.new_start.x() + (st.new_end.x() - st.new_start.x()) * t),
+                    int(st.new_start.y() + (st.new_end.y() - st.new_start.y()) * t),
+                )
 
                 if st.old_pixmap and not st.old_pixmap.isNull():
                     painter.setOpacity(1.0)

@@ -365,21 +365,6 @@ class DisplayTab(QWidget):
                 except Exception:
                     selected_monitors = set()
 
-            # Legacy compatibility: if nothing parsed, fall back to
-            # display.monitor_selection.
-            if not show_all and not selected_monitors:
-                legacy = self._settings.get('display.monitor_selection', 'all')
-                if legacy == 'all':
-                    show_all = True
-                elif legacy == 'primary':
-                    selected_monitors = {1}
-                elif isinstance(legacy, str) and legacy.startswith('monitor_'):
-                    try:
-                        num = int(legacy.split('_')[1])
-                        selected_monitors = {num}
-                    except Exception:
-                        show_all = True
-
             self.show_all_check.setChecked(show_all)
 
             # Apply selection to per-monitor checkboxes, respecting available screens
@@ -396,7 +381,7 @@ class DisplayTab(QWidget):
                         cb.setChecked(idx in selected_monitors)
             
             # Same image toggle
-            same_image = self._settings.get('display.same_image_all_monitors', True)
+            same_image = self._settings.get('display.same_image_all_monitors', False)
             # Convert to bool (settings may return string "true"/"false")
             if isinstance(same_image, str):
                 same_image = same_image.lower() == 'true'
@@ -412,7 +397,7 @@ class DisplayTab(QWidget):
                 self.mode_combo.setCurrentIndex(2)
             
             # Timing
-            interval = self._settings.get('timing.interval', 10)
+            interval = self._settings.get('timing.interval', 25)
             self.interval_spin.setValue(int(interval))
             
             shuffle_raw = self._settings.get('queue.shuffle', True)
@@ -493,20 +478,6 @@ class DisplayTab(QWidget):
             show_value = selected
 
         self._settings.set('display.show_on_monitors', show_value)
-
-        # Legacy display.monitor_selection best-effort mapping (for tests/old logs)
-        if show_value == 'ALL':
-            monitor_setting = 'all'
-        elif isinstance(show_value, list) and len(show_value) == 1:
-            only = show_value[0]
-            if only == 1:
-                monitor_setting = 'primary'
-            else:
-                monitor_setting = f'monitor_{only}'
-        else:
-            monitor_setting = 'all'
-
-        self._settings.set('display.monitor_selection', monitor_setting)
         
         # Same image toggle
         self._settings.set('display.same_image_all_monitors', self.same_image_check.isChecked())

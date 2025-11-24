@@ -32,7 +32,7 @@ class TestDisplayTab:
     def test_display_tab_loads_settings(self, qt_app, display_tab):
         """Test that DisplayTab loads settings correctly."""
         # Set some settings
-        display_tab.settings_manager.set('display.monitor_selection', 'all')
+        display_tab.settings_manager.set('display.show_on_monitors', 'ALL')
         display_tab.settings_manager.set('display.same_image_all_monitors', True)
         display_tab.settings_manager.set('display.mode', 'fill')
         display_tab.settings_manager.set('timing.interval', 10)
@@ -50,15 +50,12 @@ class TestDisplayTab:
         new_tab.deleteLater()
     
     def test_display_tab_saves_monitor_selection(self, qt_app, display_tab):
-        """Test saving monitor selection setting."""
-        # Simulate user changing monitor selection
-        # (This would normally be done through UI interaction)
-        
-        # Set directly and verify it saves
-        display_tab.settings_manager.set('display.monitor_selection', 'primary')
-        
-        value = display_tab.settings_manager.get('display.monitor_selection', 'all')
-        assert value == 'primary'
+        """Test saving monitor selection setting using canonical key."""
+        # Simulate user changing monitor selection via the canonical setting
+        display_tab.settings_manager.set('display.show_on_monitors', [1])
+
+        value = display_tab.settings_manager.get('display.show_on_monitors', 'ALL')
+        assert value == [1]
     
     def test_display_tab_saves_display_mode(self, qt_app, display_tab):
         """Test saving display mode setting."""
@@ -141,7 +138,7 @@ class TestDisplayTab:
         """
         # Set all display-related settings
         test_settings = {
-            'display.monitor_selection': 'monitor_1',
+            'display.show_on_monitors': 'ALL',
             'display.same_image_all_monitors': False,
             'display.mode': 'fit',
             'timing.interval': 15,
@@ -178,8 +175,8 @@ class TestDisplayTab:
         tab = DisplayTab(fresh_settings)
         
         # Check defaults
-        monitor = fresh_settings.get('display.monitor_selection', 'all')
-        assert monitor == 'all'
+        monitor = fresh_settings.get('display.show_on_monitors', 'ALL')
+        assert monitor == 'ALL'
         
         mode = fresh_settings.get('display.mode', 'fill')
         assert mode == 'fill'

@@ -31,30 +31,33 @@ class TestWidgetsTab:
     def test_widgets_tab_default_values(self, qt_app):
         """Default widget settings match canonical SettingsManager defaults."""
         mgr = SettingsManager(organization="Test", application="WidgetsTabTest")
-        # Ensure a clean slate so _set_defaults() applies canonical defaults
-        mgr.clear()
+        # Ensure a clean slate and then re-apply canonical defaults so the
+        # nested `widgets` map reflects SettingsManager._set_defaults().
+        mgr.reset_to_defaults()
 
         tab = WidgetsTab(mgr)
 
         # Clock defaults: enabled on monitor 1, Top Right, 24h, seconds on,
-        # background frame enabled with 90% opacity.
+        # analogue mode with background frame enabled at 70% opacity.
         assert tab.clock_enabled.isChecked() is True
         assert tab.clock_position.currentText() == "Top Right"
         assert tab.clock_format.currentText() == "24 Hour"
         assert tab.clock_seconds.isChecked() is True
         assert tab.clock_show_background.isChecked() is True
-        assert tab.clock_bg_opacity.value() == 90
+        assert tab.clock_bg_opacity.value() == 70
         # Monitor selection stored as integer 1 in settings → combo shows "1"
         assert tab.clock_monitor_combo.currentText() == "1"
 
-        # Weather defaults: disabled, but styled and ready when user enables.
-        assert tab.weather_enabled.isChecked() is False
-        assert tab.weather_location.text() == "London"
-        assert tab.weather_position.currentText() == "Bottom Left"
-        # Style defaults: background on, icons on, 90% opacity
+        # Weather defaults: enabled on monitor 1 with a Top Left layout and a
+        # non-empty location (placeholder "New York" or a timezone-derived
+        # city), styled with background and icons enabled at 70% opacity.
+        assert tab.weather_enabled.isChecked() is True
+        assert tab.weather_position.currentText() == "Top Left"
+        loc = tab.weather_location.text()
+        assert isinstance(loc, str) and loc
         assert tab.weather_show_background.isChecked() is True
         assert tab.weather_show_icons.isChecked() is True
-        assert tab.weather_bg_opacity.value() == 90
+        assert tab.weather_bg_opacity.value() == 70
 
         tab.deleteLater()
         mgr.clear()

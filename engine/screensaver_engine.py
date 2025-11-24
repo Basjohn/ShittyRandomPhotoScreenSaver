@@ -667,9 +667,16 @@ class ScreensaverEngine(QObject):
             self._prefetcher.prefetch_paths(paths)
             if paths:
                 logger.debug(f"Prefetch scheduled for {len(paths)} upcoming images")
+                # Avoid heavy UI-side conversions while transitions are active.
+                skip_heavy_ui_work = False
+                try:
+                    if self.display_manager and hasattr(self.display_manager, "has_running_transition"):
+                        skip_heavy_ui_work = self.display_manager.has_running_transition()
+                except Exception:
+                    skip_heavy_ui_work = False
                 # UI warmup: convert first cached QImage to QPixmap to reduce on-demand conversion
                 try:
-                    if self.thread_manager and self._image_cache:
+                    if not skip_heavy_ui_work and self.thread_manager and self._image_cache:
                         first = paths[0]
                         def _ui_convert():
                             try:
@@ -688,7 +695,7 @@ class ScreensaverEngine(QObject):
                 # Pre-scale proposal: safely compute scaled QImages for distinct display sizes (multi-monitor safe)
                 # Optional and removable; computes only for the next image to limit memory.
                 try:
-                    if self.thread_manager and self._image_cache:
+                    if not skip_heavy_ui_work and self.thread_manager and self._image_cache:
                         first_path = paths[0]
                         sizes = self._get_distinct_display_sizes()
                         for (w, h) in sizes:
@@ -1390,7 +1397,7 @@ class ScreensaverEngine(QObject):
         try:
             app = QApplication.instance()
             if app:
-                animations = AnimationManager()
+                animations = AnimationManager(resource_manager=self.resource_manager)
                 dialog = SettingsDialog(self.settings_manager, animations)
                 # FIX: Use result or mark as intentionally ignored
                 _ = dialog.exec()  # Result intentionally ignored - dialog handles its own state

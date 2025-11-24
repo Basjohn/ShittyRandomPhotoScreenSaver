@@ -1077,82 +1077,6 @@ class WidgetsTab(QWidget):
                 widgets = dict(widgets_value)
             else:
                 widgets = {}
-            migrated = False
-
-            if 'clock' not in widgets or not isinstance(widgets.get('clock'), dict) or not widgets.get('clock'):
-                legacy_clock = {}
-                if self._settings.contains('widgets.clock_enabled'):
-                    legacy_clock['enabled'] = self._settings.get_bool('widgets.clock_enabled', False)
-                legacy_format = self._settings.get('widgets.clock_format', None)
-                if legacy_format:
-                    legacy_clock['format'] = str(legacy_format).lower()
-                legacy_tz = self._settings.get('widgets.clock_timezone', None)
-                if legacy_tz:
-                    legacy_clock['timezone'] = legacy_tz
-                legacy_pos = self._settings.get('widgets.clock_position', None)
-                if legacy_pos:
-                    try:
-                        pos_str = str(legacy_pos).replace('-', ' ')
-                        pos_str = pos_str.title()
-                        legacy_clock['position'] = pos_str
-                    except Exception:
-                        pass
-                legacy_transparency = self._settings.get('widgets.clock_transparency', None)
-                if legacy_transparency is not None:
-                    try:
-                        alpha = float(legacy_transparency)
-                    except Exception:
-                        alpha = 0.8
-                    legacy_clock['bg_opacity'] = alpha
-                    legacy_clock['show_background'] = alpha > 0.0
-                if legacy_clock:
-                    existing_clock = widgets.get('clock')
-                    if isinstance(existing_clock, dict):
-                        for k, v in legacy_clock.items():
-                            if k not in existing_clock:
-                                existing_clock[k] = v
-                        widgets['clock'] = existing_clock
-                    else:
-                        widgets['clock'] = legacy_clock
-                    migrated = True
-
-            if 'weather' not in widgets or not isinstance(widgets.get('weather'), dict) or not widgets.get('weather'):
-                legacy_weather = {}
-                if self._settings.contains('widgets.weather_enabled'):
-                    legacy_weather['enabled'] = self._settings.get_bool('widgets.weather_enabled', False)
-                legacy_loc = self._settings.get('widgets.weather_location', None)
-                if legacy_loc:
-                    legacy_weather['location'] = legacy_loc
-                legacy_wpos = self._settings.get('widgets.weather_position', None)
-                if legacy_wpos:
-                    try:
-                        wpos_str = str(legacy_wpos).replace('-', ' ')
-                        wpos_str = wpos_str.title()
-                        legacy_weather['position'] = wpos_str
-                    except Exception:
-                        pass
-                legacy_wtrans = self._settings.get('widgets.weather_transparency', None)
-                if legacy_wtrans is not None:
-                    try:
-                        walpha = float(legacy_wtrans)
-                    except Exception:
-                        walpha = 0.8
-                    legacy_weather['bg_opacity'] = walpha
-                    legacy_weather['show_background'] = walpha > 0.0
-                if legacy_weather:
-                    existing_weather = widgets.get('weather')
-                    if isinstance(existing_weather, dict):
-                        for k, v in legacy_weather.items():
-                            if k not in existing_weather:
-                                existing_weather[k] = v
-                        widgets['weather'] = existing_weather
-                    else:
-                        widgets['weather'] = legacy_weather
-                    migrated = True
-
-            if migrated:
-                self._settings.set('widgets', widgets)
-                self._settings.save()
 
             for w in [
                 getattr(self, 'widget_shadows_enabled', None),
@@ -1329,9 +1253,35 @@ class WidgetsTab(QWidget):
 
             # Load weather settings
             weather_config = widgets.get('weather', {})
+
+            # If the location is still the canonical placeholder ("New York"),
+            # try to derive a closer default from the local timezone. This is
+            # a one-shot override on load; once a user has picked a specific
+            # city it will be preserved.
+            try:
+                raw_loc = str(weather_config.get('location', 'New York') or 'New York')
+                if raw_loc == 'New York':
+                    tz = get_local_timezone()
+                    derived_city = None
+                    if isinstance(tz, str) and '/' in tz:
+                        # Use the last component of Region/City as a best-effort
+                        # city name (e.g. "Africa/Johannesburg" -> "Johannesburg").
+                        candidate = tz.split('/')[-1].strip()
+                        candidate = candidate.replace('_', ' ')
+                        if candidate and candidate.lower() not in {"local", "utc"}:
+                            derived_city = candidate
+
+                    if derived_city:
+                        weather_config['location'] = derived_city
+                        widgets['weather'] = weather_config
+                        self._settings.set('widgets', widgets)
+                        self._settings.save()
+            except Exception:
+                logger.debug("Failed to auto-derive weather location from timezone", exc_info=True)
+
             self.weather_enabled.setChecked(weather_config.get('enabled', False))
             # No API key needed with Open-Meteo!
-            self.weather_location.setText(weather_config.get('location', 'London'))
+            self.weather_location.setText(weather_config.get('location', 'New York'))
             
             weather_pos = weather_config.get('position', 'Bottom Left')
             index = self.weather_position.findText(weather_pos)
@@ -1454,9 +1404,27 @@ class WidgetsTab(QWidget):
             self.spotify_vis_border_opacity.setValue(border_opacity_pct)
             self.spotify_vis_border_opacity_label.setText(f"{border_opacity_pct}%")
 
-            # Load reddit settings
+            # Load reddit settings. If the reddit section is missing or empty
+            # (older configs), fall back to the canonical defaults from
+            # SettingsManager so Reset to Defaults produces the expected
+            # bottom-right, compact card with an "all" feed.
             reddit_config = widgets.get('reddit', {})
-            # Widget defaults to disabled even if config is missing
+            if not isinstance(reddit_config, dict) or not reddit_config:
+                try:
+                    # Prefer the canonical defaults exposed by the active
+                    # SettingsManager instance so UI stays in sync with
+                    # SettingsManager._set_defaults.
+                    getter = getattr(self._settings, 'get_widget_defaults', None)
+                    if callable(getter):
+                        section = getter('reddit')
+                        if isinstance(section, dict) and section:
+                            reddit_config = section
+                except Exception:
+                    # Fall back to an empty dict – subsequent UI code will
+                    # still apply reasonable hard-coded defaults.
+                    reddit_config = {}
+
+            # Widget defaults to disabled even if config is present
             self.reddit_enabled.setChecked(SettingsManager.to_bool(reddit_config.get('enabled', False), False))
 
             exit_on_click_val = reddit_config.get('exit_on_click', True)
@@ -1480,42 +1448,42 @@ class WidgetsTab(QWidget):
             if idx_items >= 0:
                 self.reddit_items.setCurrentIndex(idx_items)
 
-            reddit_pos = reddit_config.get('position', 'Top Left')
+            reddit_pos = reddit_config.get('position', 'Bottom Right')
             idx_pos = self.reddit_position.findText(reddit_pos)
             if idx_pos >= 0:
                 self.reddit_position.setCurrentIndex(idx_pos)
 
-            r_monitor_sel = reddit_config.get('monitor', 'ALL')
-            r_mon_text = str(r_monitor_sel) if isinstance(r_monitor_sel, (int, str)) else 'ALL'
+            r_monitor_sel = reddit_config.get('monitor', 1)
+            r_mon_text = str(r_monitor_sel) if isinstance(r_monitor_sel, (int, str)) else '1'
             r_idx = self.reddit_monitor_combo.findText(r_mon_text)
             if r_idx >= 0:
                 self.reddit_monitor_combo.setCurrentIndex(r_idx)
 
-            self.reddit_font_combo.setCurrentFont(QFont(reddit_config.get('font_family', 'Segoe UI')))
-            self.reddit_font_size.setValue(reddit_config.get('font_size', 18))
+            reddit_font_size_data = reddit_config.get('font_size', 14)
+            self.reddit_font_size.setValue(reddit_font_size_data)
             self.reddit_margin.setValue(reddit_config.get('margin', 20))
 
             show_bg_reddit = SettingsManager.to_bool(reddit_config.get('show_background', True), True)
             self.reddit_show_background.setChecked(show_bg_reddit)
-            show_separators_val = reddit_config.get('show_separators', False)
-            show_separators = SettingsManager.to_bool(show_separators_val, False)
+            show_separators_val = reddit_config.get('show_separators', True)
+            show_separators = SettingsManager.to_bool(show_separators_val, True)
             self.reddit_show_separators.setChecked(show_separators)
-            reddit_opacity_pct = int(reddit_config.get('bg_opacity', 0.9) * 100)
+            reddit_opacity_pct = int(reddit_config.get('bg_opacity', 1.0) * 100)
             self.reddit_bg_opacity.setValue(reddit_opacity_pct)
             self.reddit_bg_opacity_label.setText(f"{reddit_opacity_pct}%")
 
             reddit_color_data = reddit_config.get('color', [255, 255, 255, 230])
             self._reddit_color = QColor(*reddit_color_data)
-            reddit_bg_color_data = reddit_config.get('bg_color', [64, 64, 64, 255])
+            reddit_bg_color_data = reddit_config.get('bg_color', [35, 35, 35, 255])
             try:
                 self._reddit_bg_color = QColor(*reddit_bg_color_data)
             except Exception:
-                self._reddit_bg_color = QColor(64, 64, 64, 255)
-            reddit_border_color_data = reddit_config.get('border_color', [128, 128, 128, 255])
+                self._reddit_bg_color = QColor(35, 35, 35, 255)
+            reddit_border_color_data = reddit_config.get('border_color', [255, 255, 255, 255])
             try:
                 self._reddit_border_color = QColor(*reddit_border_color_data)
             except Exception:
-                self._reddit_border_color = QColor(128, 128, 128, 255)
+                self._reddit_border_color = QColor(255, 255, 255, 255)
         finally:
             for w in blockers:
                 try:

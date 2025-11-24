@@ -79,7 +79,7 @@ GL Path: The only supported GL route uses a single `GLCompositorWidget` per disp
 - **FR-6.2**: Four tabs: Sources, Transitions, Widgets, About
 - **FR-6.3**: Instant save and apply
 - **FR-6.4**: Persistent settings
- - **FR-6.5**: Settings dialog geometry is DPI-aware: defaults to ~60% of the primary monitor, saves/restores per-user geometry, and clamps restored bounds to the available screen so the window never opens off-screen.
+ - **FR-6.5**: Settings dialog geometry is DPI-aware: defaults to a fixed, DPI-scaled minimum of 1280×610 on first open/reset, then saves/restores per-user geometry and clamps restored bounds to the available screen so the window never opens off-screen.
  - **FR-6.6**: Settings dialog uses an app-owned dark palette with monochrome highlights for tabs, lists, combo boxes and spin buttons; OS accent colours must not override the configured theme.
  - **FR-6.7**: Numeric +/- controls use press-and-hold acceleration and shared visual styling across Display, Widgets and Transitions tabs.
 
@@ -380,39 +380,50 @@ GL Path: The only supported GL route uses a single `GLCompositorWidget` per disp
             'show_numerals': True,
         },
         'weather': {
-            'enabled': False,
-            'monitor': 'ALL',              # 'ALL' | 1 | 2 | 3
-            'position': 'Bottom Left',
-            'location': 'London',
+            # Enabled by default with a Top Left layout and a placeholder
+            # location of "New York". On first run/reset, the Widgets tab
+            # derives a closer city name from the local timezone when
+            # possible (e.g. "Africa/Johannesburg" -> "Johannesburg").
+            'enabled': True,
+            'monitor': 1,                  # primary monitor by default
+            'position': 'Top Left',
+            'location': 'New York',
             'font_family': 'Segoe UI',
             'font_size': 24,
             'color': [255, 255, 255, 230],
             'show_background': True,
             'bg_opacity': 0.7,
-            'bg_color': [64, 64, 64, 255],
+            'bg_color': [35, 35, 35, 255],
             'border_color': [255, 255, 255, 255],
             'border_opacity': 1.0,
             'show_icons': True,
         },
         'reddit': {
+            # Disabled by default; when enabled, shows a compact card in the
+            # bottom-right corner of the primary monitor using the "all"
+            # feed, full background opacity, and visible separators.
             'enabled': False,
-            'monitor': 'ALL',              # 'ALL' | 1 | 2 | 3
+            'monitor': 1,
             'position': 'Bottom Right',    # 'Top Left' | 'Top Right' | 'Bottom Left' | 'Bottom Right'
-            'subreddit': 'wallpapers',     # subreddit slug or full URL (normalised to slug)
+            'subreddit': 'all',            # subreddit slug or full URL (normalised to slug)
             'font_family': 'Segoe UI',
-            'font_size': 18,
+            'font_size': 14,
             'margin': 20,
             'color': [255, 255, 255, 230], # text colour (RGBA)
             'show_background': True,
-            'bg_opacity': 0.9,
-            'bg_color': [64, 64, 64, 255],
-            'border_color': [128, 128, 128, 255],
-            'border_opacity': 0.8,
-            'limit': 10,                   # number of posts to display (5 or 10 exposed via UI)
+            'bg_opacity': 1.0,
+            'bg_color': [35, 35, 35, 255],
+            'border_color': [255, 255, 255, 255],
+            'border_opacity': 1.0,
+            'show_separators': True,
+            'limit': 10,                   # number of posts to display (4/10 exposed via UI)
+            'exit_on_click': True,
         },
         'media': {
-            'enabled': False,
-            'monitor': 'ALL',              # 'ALL' | 1 | 2 | 3
+            # Spotify media widget: enabled by default but only shown when
+            # Spotify playback is active on the configured monitor.
+            'enabled': True,
+            'monitor': 1,                  # primary monitor by default
             'position': 'Bottom Left',
             'font_family': 'Segoe UI',
             'font_size': 20,
@@ -420,7 +431,7 @@ GL Path: The only supported GL route uses a single `GLCompositorWidget` per disp
             'show_background': True,
             'bg_opacity': 0.7,
             'color': [255, 255, 255, 230],
-            'bg_color': [16, 16, 16, 255],
+            'bg_color': [35, 35, 35, 255],
             'border_color': [255, 255, 255, 255],
             'border_opacity': 1.0,
             # Artwork and controls behaviour (Spotify widget baseline)
@@ -498,10 +509,10 @@ These policies are **normative**: new code, tests, and docs must follow them unl
 ### 5. Widgets & Configuration Patterns
 
 - **Nested widget configuration**
-  - All overlay widgets use the `widgets` nested dict for configuration (`widgets.clock`, `widgets.clock2`, `widgets.clock3`, `widgets.weather`, future widgets).
+  - All overlay widgets use the `widgets` nested dict for configuration (`widgets.clock`, `widgets.clock2`, `widgets.clock3`, `widgets.weather`, `widgets.media`, `widgets.spotify_visualizer`, `widgets.reddit`, and future widgets).
   - Each widget configuration must include at minimum: `enabled`, `monitor`, `position`, font family/size, text color, `show_background`, `bg_color`, `bg_opacity`, `border_color`, and `border_opacity` where frames are supported.
 - **Single canonical defaults path for widgets**
-  - Default values and migration of widget configuration **must** flow through `SettingsManager._set_defaults()` and `_ensure_widgets_defaults()` so that new widget sections (e.g. media) are added in one place without per-widget helpers.
+  - Default values and migration of widget configuration **must** flow through `SettingsManager._set_defaults()` and `_ensure_widgets_defaults()` so that new widget sections (e.g. media, spotify_visualizer, reddit) are added in one place without per-widget helpers. The `SettingsManager.get_widget_defaults(section)` helper exposes these canonical defaults to UI code without reading from QSettings.
   - No new widget-specific default/migration helpers (e.g. `_ensure_media_defaults`) may be introduced; legacy flat keys are migrated only inside UI/tab loaders where necessary.
 - **Consistent theming**
   - Widget styling should follow the shared dark theme (e.g. dark grey background + white text with alpha) and prefer QSS/theme-based styling over inline palette changes, unless a specific behaviour requires programmatic styling.
@@ -712,7 +723,7 @@ ShittyRandomPhotoScreenSaver/
 **Main functionality is prioritized over fallbacks.**
 - Fallbacks are allowed but not prioritized
 - Fallbacks MUST log with distinct styling:
-  - Console: Yellow/Orange colored warnings
+  - Console: Distinct ANSI-coloured output (bright magenta/pink for `[FALLBACK]` messages regardless of level, purple for prewarm/flicker diagnostics)
   - Log file: `[FALLBACK]` prefix with WARNING level
   - Include reason why fallback triggered
   - Include what main functionality failed

@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QWidget, QGraphicsDropShadowEffect, QGraphicsOpaci
 from PySide6.QtCore import QVariantAnimation, QEasingCurve
 from PySide6.QtGui import QColor
 
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_verbose_logging
 
 logger = get_logger(__name__)
 
@@ -323,12 +323,13 @@ class ShadowFadeProfile:
             effect.setOpacity(0.0)
             widget.setGraphicsEffect(effect)
 
-            logger.debug(
-                "[SHADOW_FADE] start_fade_in widget=%r duration=%sms easing=%s",
-                widget,
-                cls.DURATION_MS,
-                cls.EASING,
-            )
+            if is_verbose_logging():
+                logger.debug(
+                    "[SHADOW_FADE] start_fade_in widget=%r duration=%sms easing=%s",
+                    widget,
+                    cls.DURATION_MS,
+                    cls.EASING,
+                )
 
             try:
                 widget.show()
@@ -374,17 +375,19 @@ class ShadowFadeProfile:
                 try:
                     cls._start_shadow_fade(widget, cfg, has_background_frame=has_background_frame)
                 except Exception:
-                    logger.debug(
-                        "[SHADOW_FADE] Failed to start shadow fade for %r",
-                        widget,
-                        exc_info=True,
-                    )
+                    if is_verbose_logging():
+                        logger.debug(
+                            "[SHADOW_FADE] Failed to start shadow fade for %r",
+                            widget,
+                            exc_info=True,
+                        )
 
             anim.finished.connect(_on_finished)
             setattr(widget, "_shadowfade_anim", anim)
             anim.start()
         except Exception:
-            logger.debug("[SHADOW_FADE] start_fade_in fallback path triggered for %r", widget, exc_info=True)
+            if is_verbose_logging():
+                logger.debug("[SHADOW_FADE] start_fade_in fallback path triggered for %r", widget, exc_info=True)
             try:
                 widget.show()
             except Exception:
