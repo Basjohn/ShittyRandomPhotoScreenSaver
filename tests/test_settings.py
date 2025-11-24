@@ -1,7 +1,4 @@
-"""
-Tests for SettingsManager.
-"""
-import pytest
+"""Tests for SettingsManager."""
 from core.settings import SettingsManager
 
 
@@ -38,6 +35,35 @@ def test_default_values(qt_app):
     assert manager.contains("transitions")
     
     manager.clear()
+
+
+def test_widget_defaults_helper_matches_schema(qt_app):
+    """get_widget_defaults sections should mirror the widgets schema in _set_defaults.
+
+    This is a light invariant test to catch accidental drift between the
+    canonical defaults map and the helper used by UI code.
+    """
+    manager = SettingsManager(organization="Test", application="ScreensaverTest")
+
+    # Force canonical defaults to be present in the underlying QSettings.
+    manager.reset_to_defaults()
+
+    widgets_value = manager.get("widgets", {})
+    assert isinstance(widgets_value, dict)
+
+    for section in ["clock", "clock2", "clock3", "weather", "media", "spotify_visualizer", "reddit", "shadows"]:
+        helper_defaults = manager.get_widget_defaults(section)
+        assert isinstance(helper_defaults, dict)
+
+        schema_section = widgets_value.get(section, {})
+        assert isinstance(schema_section, dict)
+
+        # Every key exposed by get_widget_defaults must exist in the
+        # canonical widgets map (and share the same type of value).
+        for key, helper_val in helper_defaults.items():
+            assert key in schema_section
+            schema_val = schema_section[key]
+            assert type(schema_val) is type(helper_val)
 
 
 def test_on_changed_handler(qt_app):

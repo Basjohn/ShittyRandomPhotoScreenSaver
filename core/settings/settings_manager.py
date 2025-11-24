@@ -255,12 +255,13 @@ class SettingsManager(QObject):
                     'bar_border_color': [255, 255, 255, 255],
                     'bar_border_opacity': 1.0,
                 },
-                # Reddit widget defaults – disabled by default, but when
-                # enabled the card appears in the bottom-right corner with a
+                # Reddit widget defaults – enabled by default so users see a
+                # small feed out of the box. The card appears in the
+                # bottom-right corner with a
                 # dark background and full-opacity border, using the "all"
                 # subreddit and a compact font size.
                 'reddit': {
-                    'enabled': False,
+                    'enabled': True,
                     # Default to primary display only so the widget does not
                     # appear on all screens out of the box.
                     'monitor': 1,
@@ -452,7 +453,7 @@ class SettingsManager(QObject):
                 'bar_border_opacity': 1.0,
             },
             'reddit': {
-                'enabled': False,
+                'enabled': True,
                 'monitor': 1,
                 'position': 'Bottom Right',
                 'subreddit': 'all',

@@ -298,11 +298,12 @@ class TransitionsTab(QWidget):
         if not isinstance(transitions_config, dict):
             transitions_config = {}
 
-        default_duration_raw = transitions_config.get('duration_ms', 2215)
+        # Canonical global default duration matches SettingsManager._set_defaults().
+        default_duration_raw = transitions_config.get('duration_ms', 3000)
         try:
             default_duration = int(default_duration_raw)
         except Exception:
-            default_duration = 1300
+            default_duration = 3000
 
         durations_cfg = transitions_config.get('durations', {})
         if not isinstance(durations_cfg, dict):

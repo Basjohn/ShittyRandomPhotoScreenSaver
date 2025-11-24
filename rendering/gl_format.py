@@ -37,19 +37,35 @@ class SurfacePreferences:
 
 
 def _coerce_bool(value, default: bool) -> bool:
-    if value is None:
-        return default
-    if isinstance(value, str):
-        value = value.strip().lower()
-        if value in {"true", "1", "yes", "on"}:
-            return True
-        if value in {"false", "0", "no", "off"}:
-            return False
-        return default
+    """Normalise a settings value to bool using SettingsManager semantics.
+
+    When core.settings.settings_manager is importable, this delegates to
+    SettingsManager.to_bool so GL surface preferences are interpreted
+    identically to the rest of the application. In early-startup or
+    test-only contexts where importing SettingsManager would be unsafe,
+    it falls back to a local implementation with the same rules.
+    """
+
     try:
-        return bool(value)
+        from core.settings.settings_manager import SettingsManager as _SM  # type: ignore
+
+        return _SM.to_bool(value, default)
     except Exception:
-        return default
+        if value is None:
+            return default
+        if isinstance(value, str):
+            v = value.strip().lower()
+            if v in {"true", "1", "yes", "on"}:
+                return True
+            if v in {"false", "0", "no", "off"}:
+                return False
+            return default
+        if isinstance(value, (int, float)):
+            return bool(value)
+        try:
+            return bool(value)
+        except Exception:
+            return default
 
 
 def _coerce_int(value, default: int) -> int:

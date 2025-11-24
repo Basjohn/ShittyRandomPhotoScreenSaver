@@ -28,6 +28,7 @@ yarn-error.log*
 audits/
 temp/
 settings/
+docs/
 
 # IDE and editor files
 .vscode/
@@ -45,6 +46,9 @@ Desktop.ini
 
 # Custom: reusable utility modules you don’t want tracked
 MyReuseableUtilityModules/
+build/
+release/
+dist/
 
 # Optional: ignore environment or credentials files
 .env.local

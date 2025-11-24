@@ -56,7 +56,7 @@ class TestWidgetsTab:
         loc = tab.weather_location.text()
         assert isinstance(loc, str) and loc
         assert tab.weather_show_background.isChecked() is True
-        assert tab.weather_show_icons.isChecked() is True
+        assert tab.weather_show_icons.isChecked() is False
         assert tab.weather_bg_opacity.value() == 70
 
         tab.deleteLater()

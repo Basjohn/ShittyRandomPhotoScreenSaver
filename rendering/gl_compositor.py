@@ -640,56 +640,73 @@ class GLCompositorWidget(QOpenGLWidget):
         self.update()
 
     def _on_slide_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
-        # Emit a concise profiling summary for slide transitions.
-        # The log line is tagged with "[PERF] [GL COMPOSITOR]" for easy
-        # discovery/disablement when preparing production builds.
+        """Handle completion of compositor-driven slide transitions.
+
+        This callback may fire after the underlying QOpenGLWidget has been
+        deleted (e.g. during test teardown). All QWidget/QObject calls are
+        therefore wrapped defensively to avoid RuntimeError bubbling out of
+        the Qt event loop.
+        """
+
         try:
-            if (
-                self._slide_profile_start_ts is not None
-                and self._slide_profile_last_ts is not None
-                and self._slide_profile_frame_count > 0
-            ):
-                elapsed = max(0.0, self._slide_profile_last_ts - self._slide_profile_start_ts)
-                if elapsed > 0.0:
-                    duration_ms = elapsed * 1000.0
-                    avg_fps = self._slide_profile_frame_count / elapsed
-                    min_dt_ms = self._slide_profile_min_dt * 1000.0 if self._slide_profile_min_dt > 0.0 else 0.0
-                    max_dt_ms = self._slide_profile_max_dt * 1000.0 if self._slide_profile_max_dt > 0.0 else 0.0
-                    logger.info(
-                        "[PERF] [GL COMPOSITOR] Slide metrics: duration=%.1fms, frames=%d, "
-                        "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, size=%dx%d",
-                        duration_ms,
-                        self._slide_profile_frame_count,
-                        avg_fps,
-                        min_dt_ms,
-                        max_dt_ms,
-                        self.width(),
-                        self.height(),
-                    )
+            # Emit a concise profiling summary for slide transitions.
+            # The log line is tagged with "[PERF] [GL COMPOSITOR]" for easy
+            # discovery/disablement when preparing production builds.
+            try:
+                if (
+                    self._slide_profile_start_ts is not None
+                    and self._slide_profile_last_ts is not None
+                    and self._slide_profile_frame_count > 0
+                ):
+                    elapsed = max(0.0, self._slide_profile_last_ts - self._slide_profile_start_ts)
+                    if elapsed > 0.0:
+                        duration_ms = elapsed * 1000.0
+                        avg_fps = self._slide_profile_frame_count / elapsed
+                        min_dt_ms = self._slide_profile_min_dt * 1000.0 if self._slide_profile_min_dt > 0.0 else 0.0
+                        max_dt_ms = self._slide_profile_max_dt * 1000.0 if self._slide_profile_max_dt > 0.0 else 0.0
+                        logger.info(
+                            "[PERF] [GL COMPOSITOR] Slide metrics: duration=%.1fms, frames=%d, "
+                            "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, size=%dx%d",
+                            duration_ms,
+                            self._slide_profile_frame_count,
+                            avg_fps,
+                            min_dt_ms,
+                            max_dt_ms,
+                            self.width(),
+                            self.height(),
+                        )
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Slide metrics logging failed: %s", e, exc_info=True)
+
+            # Reset profiling state.
+            self._slide_profile_start_ts = None
+            self._slide_profile_last_ts = None
+            self._slide_profile_frame_count = 0
+            self._slide_profile_min_dt = 0.0
+            self._slide_profile_max_dt = 0.0
+
+            # Snap to final state: base pixmap becomes the new image, transition ends.
+            if self._slide is not None:
+                try:
+                    self._base_pixmap = self._slide.new_pixmap
+                except Exception:
+                    pass
+            self._slide = None
+            self._current_anim_id = None
+
+            try:
+                self.update()
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Slide complete update failed (likely after deletion): %s", e, exc_info=True)
+
+            if on_finished:
+                try:
+                    on_finished()
+                except Exception:
+                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
         except Exception as e:
-            logger.debug("[GL COMPOSITOR] Slide metrics logging failed: %s", e, exc_info=True)
-
-        # Reset profiling state.
-        self._slide_profile_start_ts = None
-        self._slide_profile_last_ts = None
-        self._slide_profile_frame_count = 0
-        self._slide_profile_min_dt = 0.0
-        self._slide_profile_max_dt = 0.0
-
-        # Snap to final state: base pixmap becomes the new image, transition ends.
-        if self._slide is not None:
-            try:
-                self._base_pixmap = self._slide.new_pixmap
-            except Exception:
-                pass
-        self._slide = None
-        self._current_anim_id = None
-        self.update()
-        if on_finished:
-            try:
-                on_finished()
-            except Exception:
-                logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
+            # Final safeguard so no exception escapes the Qt event loop.
+            logger.debug("[GL COMPOSITOR] Slide complete handler failed: %s", e, exc_info=True)
 
     def _on_wipe_update(self, progress: float) -> None:
         if self._wipe is None:
@@ -712,52 +729,62 @@ class GLCompositorWidget(QOpenGLWidget):
         self.update()
 
     def _on_wipe_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
+        """Handle completion of compositor-driven wipe transitions."""
+
         try:
-            if (
-                self._wipe_profile_start_ts is not None
-                and self._wipe_profile_last_ts is not None
-                and self._wipe_profile_frame_count > 0
-            ):
-                elapsed = max(0.0, self._wipe_profile_last_ts - self._wipe_profile_start_ts)
-                if elapsed > 0.0:
-                    duration_ms = elapsed * 1000.0
-                    avg_fps = self._wipe_profile_frame_count / elapsed
-                    min_dt_ms = self._wipe_profile_min_dt * 1000.0 if self._wipe_profile_min_dt > 0.0 else 0.0
-                    max_dt_ms = self._wipe_profile_max_dt * 1000.0 if self._wipe_profile_max_dt > 0.0 else 0.0
-                    logger.info(
-                        "[PERF] [GL COMPOSITOR] Wipe metrics: duration=%.1fms, frames=%d, "
-                        "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, size=%dx%d",
-                        duration_ms,
-                        self._wipe_profile_frame_count,
-                        avg_fps,
-                        min_dt_ms,
-                        max_dt_ms,
-                        self.width(),
-                        self.height(),
-                    )
+            try:
+                if (
+                    self._wipe_profile_start_ts is not None
+                    and self._wipe_profile_last_ts is not None
+                    and self._wipe_profile_frame_count > 0
+                ):
+                    elapsed = max(0.0, self._wipe_profile_last_ts - self._wipe_profile_start_ts)
+                    if elapsed > 0.0:
+                        duration_ms = elapsed * 1000.0
+                        avg_fps = self._wipe_profile_frame_count / elapsed
+                        min_dt_ms = self._wipe_profile_min_dt * 1000.0 if self._wipe_profile_min_dt > 0.0 else 0.0
+                        max_dt_ms = self._wipe_profile_max_dt * 1000.0 if self._wipe_profile_max_dt > 0.0 else 0.0
+                        logger.info(
+                            "[PERF] [GL COMPOSITOR] Wipe metrics: duration=%.1fms, frames=%d, "
+                            "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, size=%dx%d",
+                            duration_ms,
+                            self._wipe_profile_frame_count,
+                            avg_fps,
+                            min_dt_ms,
+                            max_dt_ms,
+                            self.width(),
+                            self.height(),
+                        )
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Wipe metrics logging failed: %s", e, exc_info=True)
+
+            self._wipe_profile_start_ts = None
+            self._wipe_profile_last_ts = None
+            self._wipe_profile_frame_count = 0
+            self._wipe_profile_min_dt = 0.0
+            self._wipe_profile_max_dt = 0.0
+
+            # Snap to final state: base pixmap becomes the new image, transition ends.
+            if self._wipe is not None:
+                try:
+                    self._base_pixmap = self._wipe.new_pixmap
+                except Exception:
+                    pass
+            self._wipe = None
+            self._current_anim_id = None
+
+            try:
+                self.update()
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Wipe complete update failed (likely after deletion): %s", e, exc_info=True)
+
+            if on_finished:
+                try:
+                    on_finished()
+                except Exception:
+                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
         except Exception as e:
-            logger.debug("[GL COMPOSITOR] Wipe metrics logging failed: %s", e, exc_info=True)
-
-        self._wipe_profile_start_ts = None
-        self._wipe_profile_last_ts = None
-        self._wipe_profile_frame_count = 0
-        self._wipe_profile_min_dt = 0.0
-        self._wipe_profile_max_dt = 0.0
-
-        # Snap to final state: base pixmap becomes the new image, transition ends.
-        if self._wipe is not None:
-            try:
-                self._base_pixmap = self._wipe.new_pixmap
-            except Exception:
-                pass
-        self._wipe = None
-        self._current_anim_id = None
-        self.update()
-        if on_finished:
-            try:
-                on_finished()
-            except Exception:
-                logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
+            logger.debug("[GL COMPOSITOR] Wipe complete handler failed: %s", e, exc_info=True)
 
     def _on_blockflip_update(self, progress: float) -> None:
         if self._blockflip is None:
@@ -767,54 +794,80 @@ class GLCompositorWidget(QOpenGLWidget):
         self.update()
 
     def _on_blockflip_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
-        # Snap to final state: base pixmap becomes the new image, transition ends.
-        if self._blockflip is not None:
+        """Completion handler for compositor-driven block flip transitions."""
+
+        try:
+            # Snap to final state: base pixmap becomes the new image, transition ends.
+            if self._blockflip is not None:
+                try:
+                    self._base_pixmap = self._blockflip.new_pixmap
+                except Exception:
+                    pass
+            self._blockflip = None
+            self._current_anim_id = None
+
             try:
-                self._base_pixmap = self._blockflip.new_pixmap
-            except Exception:
-                pass
-        self._blockflip = None
-        self._current_anim_id = None
-        self.update()
-        if on_finished:
-            try:
-                on_finished()
-            except Exception:
-                logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
+                self.update()
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Blockflip complete update failed (likely after deletion): %s", e, exc_info=True)
+
+            if on_finished:
+                try:
+                    on_finished()
+                except Exception:
+                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Blockflip complete handler failed: %s", e, exc_info=True)
 
     def _on_diffuse_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
         """Completion handler for compositor-driven diffuse transitions."""
 
-        if self._diffuse is not None:
+        try:
+            if self._diffuse is not None:
+                try:
+                    self._base_pixmap = self._diffuse.new_pixmap
+                except Exception:
+                    pass
+            self._diffuse = None
+            self._current_anim_id = None
+
             try:
-                self._base_pixmap = self._diffuse.new_pixmap
-            except Exception:
-                pass
-        self._diffuse = None
-        self._current_anim_id = None
-        self.update()
-        if on_finished:
-            try:
-                on_finished()
-            except Exception:
-                logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
+                self.update()
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Diffuse complete update failed (likely after deletion): %s", e, exc_info=True)
+
+            if on_finished:
+                try:
+                    on_finished()
+                except Exception:
+                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Diffuse complete handler failed: %s", e, exc_info=True)
 
     def _on_blinds_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
         """Completion handler for compositor-driven blinds transitions."""
 
-        if self._blinds is not None:
+        try:
+            if self._blinds is not None:
+                try:
+                    self._base_pixmap = self._blinds.new_pixmap
+                except Exception:
+                    pass
+            self._blinds = None
+            self._current_anim_id = None
+
             try:
-                self._base_pixmap = self._blinds.new_pixmap
-            except Exception:
-                pass
-        self._blinds = None
-        self._current_anim_id = None
-        self.update()
-        if on_finished:
-            try:
-                on_finished()
-            except Exception:
-                logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
+                self.update()
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Blinds complete update failed (likely after deletion): %s", e, exc_info=True)
+
+            if on_finished:
+                try:
+                    on_finished()
+                except Exception:
+                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Blinds complete handler failed: %s", e, exc_info=True)
 
     def set_blockflip_region(self, region: Optional[QRegion]) -> None:
         """Update the reveal region for an in-flight block flip transition."""

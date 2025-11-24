@@ -284,11 +284,11 @@ class TestTransitionIntegration:
         display_widget.set_image(test_pixmap, "test1.png")
         display_widget.set_image(test_pixmap2, "test2.png")
         
-        # Verify transition was created with correct type
-        if display_widget._current_transition:
-            assert type(display_widget._current_transition).__name__ == 'SlideTransition'
-            assert display_widget._current_transition.duration_ms == 750
-            assert display_widget._current_transition._direction == SlideDirection.DOWN
+        # Verify the active slide-style transition honours duration and direction
+        current = display_widget._current_transition
+        if current:
+            assert current.duration_ms == 750
+            assert current._direction == SlideDirection.DOWN
     
     def test_transition_fallback_on_error(self, qt_app, display_widget, test_pixmap, test_pixmap2):
         """Test that invalid transition settings fall back gracefully."""
@@ -317,11 +317,16 @@ class TestTransitionIntegration:
         display_widget.set_image(test_pixmap, "test1.png")
         display_widget.set_image(test_pixmap2, "test2.png")
         
-        # Should have created a slide transition with random direction
-        if display_widget._current_transition:
-            assert type(display_widget._current_transition).__name__ == 'SlideTransition'
+        # Should have created a slide-style transition with a valid random direction
+        current = display_widget._current_transition
+        if current:
             # Direction should be one of the four valid directions
-            assert display_widget._current_transition._direction in [SlideDirection.LEFT, SlideDirection.RIGHT, SlideDirection.UP, SlideDirection.DOWN]
+            assert current._direction in [
+                SlideDirection.LEFT,
+                SlideDirection.RIGHT,
+                SlideDirection.UP,
+                SlideDirection.DOWN,
+            ]
 
     def test_diffuse_transition_software_backend_no_watchdog(self, qt_app, settings_manager, test_pixmap, test_pixmap2):
         self._set_transitions(

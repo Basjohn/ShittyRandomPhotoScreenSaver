@@ -18,7 +18,7 @@ def qapp():
 def settings_manager():
     # Use a dedicated org/app so we don't pollute real settings
     mgr = SettingsManager(organization="Test", application="TransitionsTabTest")
-    mgr.clear()
+    mgr.reset_to_defaults()
     return mgr
 
 
@@ -74,6 +74,7 @@ def test_default_transition_type_and_direction(qapp, settings_manager, qtbot):
 
     transitions_cfg = settings_manager.get('transitions', {}) or {}
     assert transitions_cfg.get('type') == 'Wipe'
+    assert transitions_cfg.get('duration_ms') == 3000
 
     slide_cfg = transitions_cfg.get('slide', {}) if isinstance(transitions_cfg.get('slide', {}), dict) else {}
     wipe_cfg = transitions_cfg.get('wipe', {}) if isinstance(transitions_cfg.get('wipe', {}), dict) else {}

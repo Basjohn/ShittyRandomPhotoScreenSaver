@@ -396,8 +396,8 @@ class DisplayTab(QWidget):
             elif mode == 'shrink':
                 self.mode_combo.setCurrentIndex(2)
             
-            # Timing
-            interval = self._settings.get('timing.interval', 25)
+            # Timing – use canonical default (40s) when key is missing.
+            interval = self._settings.get('timing.interval', 40)
             self.interval_spin.setValue(int(interval))
             
             shuffle_raw = self._settings.get('queue.shuffle', True)

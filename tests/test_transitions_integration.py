@@ -7,9 +7,8 @@ and that they trigger automatically during normal rotation.
 import pytest
 import time
 from pathlib import Path
-from PySide6.QtWidgets import QApplication, QLabel
+from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QPixmap
-from PySide6.QtCore import QSize, QTimer
 import sys
 
 from transitions.crossfade_transition import CrossfadeTransition
@@ -44,8 +43,13 @@ def test_images():
 @pytest.fixture
 def settings_manager(tmp_path):
     """Create settings manager for tests."""
-    settings_file = tmp_path / "test_settings.json"
-    manager = SettingsManager(str(settings_file))
+    # Use a dedicated organization/application pair so this suite has an
+    # isolated QSettings store, rather than attempting to pass a file path
+    # into SettingsManager (its constructor expects org/app, not a path).
+    manager = SettingsManager(
+        organization="Test",
+        application="TransitionsIntegrationTest",
+    )
 
     # Configure for testing
     manager.set('display.pan_and_scan', True)

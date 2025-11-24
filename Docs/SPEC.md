@@ -1,7 +1,7 @@
 # ShittyRandomPhotoScreenSaver - Technical Specification
 
 **Version**: 1.0  
-**Last Updated**: Nov 17, 2025 23:30 - Canonical settings + GL compositor path  
+**Last Updated**: Nov 24, 2025 15:30 - Canonical settings + GL compositor path + default intervals  
 **Status**: Architecture solid; GL compositor route and settings schema stabilised; GL transition visuals (Diffuse/Wipe/BlockPuzzle) still pending final tuning
 
 ---
@@ -79,7 +79,7 @@ GL Path: The only supported GL route uses a single `GLCompositorWidget` per disp
 - **FR-6.2**: Four tabs: Sources, Transitions, Widgets, About
 - **FR-6.3**: Instant save and apply
 - **FR-6.4**: Persistent settings
- - **FR-6.5**: Settings dialog geometry is DPI-aware: defaults to a fixed, DPI-scaled minimum of 1280×610 on first open/reset, then saves/restores per-user geometry and clamps restored bounds to the available screen so the window never opens off-screen.
+ - **FR-6.5**: Settings dialog geometry is DPI-aware: defaults to a fixed, DPI-scaled minimum of 1280×700 on first open/reset, then saves/restores per-user geometry and clamps restored bounds to the available screen so the window never opens off-screen.
  - **FR-6.6**: Settings dialog uses an app-owned dark palette with monochrome highlights for tabs, lists, combo boxes and spin buttons; OS accent colours must not override the configured theme.
  - **FR-6.7**: Numeric +/- controls use press-and-hold acceleration and shared visual styling across Display, Widgets and Transitions tabs.
 
@@ -294,7 +294,7 @@ GL Path: The only supported GL route uses a single `GLCompositorWidget` per disp
 
     'transitions': {
         'type': 'Wipe',                    # 'Crossfade' | 'Slide' | 'Wipe' | 'Diffuse' | 'Block Puzzle Flip' | 'Blinds'
-        'duration_ms': 1300,               # int milliseconds
+        'duration_ms': 3000,               # int milliseconds (canonical default)
         'easing': 'Auto',                  # 'Auto' | 'Linear' | 'InQuad' | 'OutQuad' | ...
         'direction': 'Random',             # Global direction hint (Slide/Wipe); usually 'Random'
         'random_always': False,            # When True, always choose a new random direction
@@ -317,7 +317,7 @@ GL Path: The only supported GL route uses a single `GLCompositorWidget` per disp
     },
 
     'timing': {
-        'interval': 10,                    # int seconds between images
+        'interval': 40,                    # int seconds between images (canonical default)
     },
 
     'input': {
@@ -384,6 +384,8 @@ GL Path: The only supported GL route uses a single `GLCompositorWidget` per disp
             # location of "New York". On first run/reset, the Widgets tab
             # derives a closer city name from the local timezone when
             # possible (e.g. "Africa/Johannesburg" -> "Johannesburg").
+            # Condition icons are OFF by default; users can enable them from
+            # the Widgets tab when they prefer a more graphical presentation.
             'enabled': True,
             'monitor': 1,                  # primary monitor by default
             'position': 'Top Left',
@@ -396,7 +398,7 @@ GL Path: The only supported GL route uses a single `GLCompositorWidget` per disp
             'bg_color': [35, 35, 35, 255],
             'border_color': [255, 255, 255, 255],
             'border_opacity': 1.0,
-            'show_icons': True,
+            'show_icons': False,
         },
         'reddit': {
             # Disabled by default; when enabled, shows a compact card in the

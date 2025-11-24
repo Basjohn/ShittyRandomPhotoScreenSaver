@@ -77,8 +77,8 @@ def test_settings_dialog_creation(qapp, settings_manager, animation_manager):
     
     assert dialog is not None
     assert dialog.windowFlags() & Qt.WindowType.FramelessWindowHint
-    assert dialog.minimumSize().width() == 900
-    assert dialog.minimumSize().height() == 600
+    assert dialog.minimumSize().width() == 1280
+    assert dialog.minimumSize().height() == 700
 
 
 def test_settings_dialog_has_title_bar(qapp, settings_manager, animation_manager):

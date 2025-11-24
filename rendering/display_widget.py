@@ -2110,7 +2110,9 @@ class DisplayWidget(QWidget):
                         self._image_label.setScaledContents(False)
                     self._pan_and_scan.enable(True)
 
-                    transition_interval = self.settings_manager.get('timing.interval', 10)
+                    # Use the same canonical timing interval default (40s) when
+                    # the key is missing so pan & scan pacing matches rotation.
+                    transition_interval = self.settings_manager.get('timing.interval', 40)
                     auto_speed = self.settings_manager.get('display.pan_auto_speed', True)
                     manual_speed = self.settings_manager.get('display.pan_speed', 3.0)
 
@@ -2225,8 +2227,9 @@ class DisplayWidget(QWidget):
                 self._image_label.setScaledContents(False)
             self._pan_and_scan.enable(True)
 
-            # Get pan and scan settings
-            transition_interval = self.settings_manager.get('timing.interval', 10)
+            # Get pan and scan settings – use canonical 40s default when the
+            # interval key is absent so behaviour is consistent across paths.
+            transition_interval = self.settings_manager.get('timing.interval', 40)
             auto_speed = self.settings_manager.get('display.pan_auto_speed', True)
             manual_speed = self.settings_manager.get('display.pan_speed', 3.0)
 
@@ -3360,33 +3363,72 @@ class DisplayWidget(QWidget):
             event.accept()
             return
         
-        # Hotkeys
+        # Global media keys should never be treated as exit keys; they are
+        # reserved for controlling media only (Route3 §4.2).
+        media_keys = {
+            Qt.Key.Key_MediaPlay,
+            Qt.Key.Key_MediaPause,
+            Qt.Key.Key_MediaNext,
+            Qt.Key.Key_MediaPrevious,
+            Qt.Key.Key_VolumeUp,
+            Qt.Key.Key_VolumeDown,
+            Qt.Key.Key_VolumeMute,
+        }
+        if key in media_keys:
+            logger.debug("Media key %s pressed - ignoring for exit", key)
+            event.ignore()
+            return
+
+        # Determine current interaction/exit mode.
+        ctrl_mode_active = self._ctrl_held or DisplayWidget._global_ctrl_held
+        hard_exit_enabled = False
+        try:
+            hard_exit_enabled = self._is_hard_exit_enabled()
+        except Exception:
+            hard_exit_enabled = False
+
+        # Hotkeys (always available regardless of hard-exit/ctrl state).
         if key_text == 'z':
             logger.info("Z key pressed - previous image requested")
             self.previous_requested.emit()
             event.accept()
-        elif key_text == 'x':
+            return
+        if key_text == 'x':
             logger.info("X key pressed - next image requested")
             self.next_requested.emit()
             event.accept()
-        elif key_text == 'c':
+            return
+        if key_text == 'c':
             logger.info("C key pressed - cycle transition requested")
             self.cycle_transition_requested.emit()
             event.accept()
-        elif key_text == 's':
+            return
+        if key_text == 's':
             logger.info("S key pressed - settings requested")
             self.settings_requested.emit()
             event.accept()
-        # Exit keys
-        elif key == Qt.Key.Key_Escape or key == Qt.Key.Key_Q:
-            logger.info(f"Exit key pressed: {key}, requesting exit")
+            return
+
+        # Exit keys (Esc/Q) should always be honoured.
+        if key in (Qt.Key.Key_Escape, Qt.Key.Key_Q):
+            logger.info("Exit key pressed (%s), requesting exit", key)
             self._exiting = True
             self.exit_requested.emit()
             event.accept()
-        # FIX: Don't exit on any key - only specific hotkeys and exit keys
-        else:
-            logger.debug(f"Unknown key pressed: {key} - ignoring")
+            return
+
+        # In hard-exit mode or Ctrl interaction mode, non-hotkey keys are
+        # ignored so that only explicit exit keys or hotkeys take effect.
+        if hard_exit_enabled or ctrl_mode_active:
+            logger.debug("Key %s ignored due to hard-exit/Ctrl interaction mode", key)
             event.ignore()
+            return
+
+        # Normal mode (no hard-exit, Ctrl not held): any other key exits.
+        logger.info("Non-hotkey key pressed (%s) in normal mode - requesting exit", key)
+        self._exiting = True
+        self.exit_requested.emit()
+        event.accept()
 
     def keyReleaseEvent(self, event: QKeyEvent) -> None:
         key = event.key()

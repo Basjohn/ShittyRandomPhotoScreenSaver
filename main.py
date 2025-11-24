@@ -361,10 +361,11 @@ def main():
             exit_code = run_config(app)
             
         elif mode == ScreensaverMode.PREVIEW:
-            logger.info(f"Starting preview mode (hwnd={preview_hwnd})")
-            # TODO: Show preview in parent window
-            logger.warning("PREVIEW mode not yet implemented")
-            logger.info("Exiting (preview not yet implemented)")
+            logger.info(f"Starting preview mode (hwnd={preview_hwnd}) - running full-screen preview")
+            # For now we treat preview as a normal full-screen run, ignoring
+            # the host hwnd. This keeps behaviour simple and predictable
+            # while still honouring Windows' /p entry point.
+            exit_code = run_screensaver(app)
         
     except Exception as e:
         logger.exception(f"Fatal error in main: {e}")
