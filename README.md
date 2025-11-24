@@ -1,8 +1,12 @@
 # ShittyRandomPhotoScreenSaver (SRPSS)
+<img width="625" height="202" alt="How dare you hover your cursor here!" src="https://github.com/user-attachments/assets/cbc989a9-a057-49ae-a23a-750d92f6f37c" />
 
 ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows (W10/W11) screensaver that is suprisingly less shit than the majority of ancient decrepid screensavers around today.
+![ShittyRandomPhotoScreenSaverS](https://github.com/user-attachments/assets/41e1e70f-1bfa-4934-b470-3753aaebfc96)
 
 ---
+
+Shitty Showcase where I cut off the Spotify controls in recording.
 
 ## Features
 
