@@ -3368,6 +3368,7 @@ class DisplayWidget(QWidget):
         media_keys = {
             Qt.Key.Key_MediaPlay,
             Qt.Key.Key_MediaPause,
+            Qt.Key.Key_MediaTogglePlayPause,
             Qt.Key.Key_MediaNext,
             Qt.Key.Key_MediaPrevious,
             Qt.Key.Key_VolumeUp,

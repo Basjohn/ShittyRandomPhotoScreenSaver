@@ -50,10 +50,21 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     
     logger.debug(f"Command-line arguments: {sys.argv}")
     logger.debug(f"Filtered arguments: {args}")
-    
-    # Default to run mode if no arguments (besides program name)
+
+    # Detect whether we are running as a frozen executable (.exe/.scr)
+    # or as a plain Python script.
+    is_frozen = bool(getattr(sys, 'frozen', False))
+
+    # Default mode depends on environment:
+    #  - Script runs (python main.py) default to RUN for convenience.
+    #  - Frozen builds (SRPSS.exe/SRPSS.scr) default to CONFIG to avoid
+    #    surprising full-screen runs when selected in the Windows dialog
+    #    or double-clicked.
     if len(args) == 1:
-        logger.info("No arguments provided, defaulting to RUN mode")
+        if is_frozen:
+            logger.info("No arguments provided in frozen build, defaulting to CONFIG mode")
+            return ScreensaverMode.CONFIG, None
+        logger.info("No arguments provided in script mode, defaulting to RUN mode")
         return ScreensaverMode.RUN, None
     
     # Get the first argument (after program name)
@@ -83,9 +94,13 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
             logger.warning("PREVIEW mode selected but no window handle provided")
             return ScreensaverMode.PREVIEW, None
     
-    # Unknown argument - default to run
+    # Unknown argument – default mode depends on environment so we never
+    # "surprise run" a frozen build while keeping script usage simple.
     else:
-        logger.warning(f"Unknown argument: {arg}, defaulting to RUN mode")
+        if is_frozen:
+            logger.warning(f"Unknown argument: {arg}, defaulting to CONFIG mode (frozen)")
+            return ScreensaverMode.CONFIG, None
+        logger.warning(f"Unknown argument: {arg}, defaulting to RUN mode (script)")
         return ScreensaverMode.RUN, None
 
 
@@ -96,6 +111,11 @@ def is_script_mode() -> bool:
     Returns:
         True if running as .py script, False if compiled .exe/.scr
     """
+    # PyInstaller and similar bundlers set sys.frozen on the runtime
+    # executable; treat any such environment as non-script.
+    if bool(getattr(sys, 'frozen', False)):
+        return False
+
     # Check if running from a .py file or if __file__ exists
     return hasattr(sys, 'ps1') or (
         hasattr(sys.modules['__main__'], '__file__') and
@@ -361,11 +381,11 @@ def main():
             exit_code = run_config(app)
             
         elif mode == ScreensaverMode.PREVIEW:
-            logger.info(f"Starting preview mode (hwnd={preview_hwnd}) - running full-screen preview")
-            # For now we treat preview as a normal full-screen run, ignoring
-            # the host hwnd. This keeps behaviour simple and predictable
-            # while still honouring Windows' /p entry point.
-            exit_code = run_screensaver(app)
+            logger.info(f"Starting preview mode (hwnd={preview_hwnd})")
+            # TODO: Embed preview into the host window. For now we do not
+            # start a full-screen run here to avoid surprising the user when
+            # the Screen Saver dialog requests a small thumbnail preview.
+            logger.warning("PREVIEW mode not yet implemented (no window shown)")
         
     except Exception as e:
         logger.exception(f"Fatal error in main: {e}")
