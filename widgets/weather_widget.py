@@ -7,6 +7,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
+import os
 import json
 from PySide6.QtWidgets import QLabel, QWidget
 from PySide6.QtCore import QTimer, Qt, Signal, QThread, QObject
@@ -19,7 +20,11 @@ from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 
 logger = get_logger(__name__)
-_CACHE_FILE = Path(__file__).resolve().parent / "last_weather.json"
+# Store the weather cache in the user's home directory so it is stable
+# across script, PyInstaller, and Nuitka onefile runs. Writing next to the
+# module (e.g. in a onefile temp extraction directory) can fail or be
+# ephemeral; the home directory is always present and writable.
+_CACHE_FILE = Path(os.path.expanduser("~")) / ".srpss_last_weather.json"
 
 
 class WeatherPosition(Enum):

@@ -106,6 +106,17 @@ class WindowsGlobalMediaController(BaseMediaController):
 
     def _init_winrt(self) -> None:
         try:  # pragma: no cover - exercised indirectly via widget tests
+            # Warm up dependent WinRT namespaces so that frozen builds
+            # (e.g. Nuitka onefile) include the full dependency tree.
+            try:
+                import winrt.windows.foundation  # type: ignore[import]
+                import winrt.windows.foundation.collections  # type: ignore[import]
+            except Exception:
+                # Absence of the foundation namespace will be handled by the
+                # main import block below, which falls back to a no-op
+                # controller when WinRT is not available.
+                pass
+
             from winrt.windows.media.control import (
                 GlobalSystemMediaTransportControlsSessionManager as MediaManager,
                 GlobalSystemMediaTransportControlsSessionPlaybackStatus as PlaybackStatus,

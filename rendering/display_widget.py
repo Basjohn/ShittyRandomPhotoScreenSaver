@@ -651,6 +651,14 @@ class DisplayWidget(QWidget):
                 logger.debug("%s widget disabled in settings", settings_key)
                 return
 
+            # Clock overlays participate in per-display fade coordination so
+            # that even a single clock on a secondary display fades in using
+            # the shared overlay mechanism.
+            try:
+                self._overlay_fade_expected.add(settings_key)
+            except Exception:
+                self._overlay_fade_expected = {settings_key}
+
             raw_format = _resolve_clock_style('format', '12h', clock_settings, settings_key)
             time_format = TimeFormat.TWELVE_HOUR if raw_format == '12h' else TimeFormat.TWENTY_FOUR_HOUR
 
@@ -3073,7 +3081,10 @@ class DisplayWidget(QWidget):
                 sorted(remaining),
             )
         if not remaining:
-            self._start_overlay_fades(force=False)
+            try:
+                QTimer.singleShot(0, lambda: self._start_overlay_fades(force=False))
+            except Exception:
+                self._start_overlay_fades(force=False)
             return
 
         # Arm a timeout so a misbehaving overlay cannot block all fades.
@@ -3375,8 +3386,31 @@ class DisplayWidget(QWidget):
             Qt.Key.Key_VolumeDown,
             Qt.Key.Key_VolumeMute,
         }
-        if key in media_keys:
-            logger.debug("Media key %s pressed - ignoring for exit", key)
+
+        # On Windows, some keyboards map play/pause combos and other media
+        # keys in ways that do not always surface as the Qt.Key_Media*
+        # enums above. Guard against those by also checking the native
+        # virtual-key code range used for media keys.
+        native_vk = None
+        try:
+            if hasattr(event, "nativeVirtualKey"):
+                native_vk = int(event.nativeVirtualKey() or 0)
+        except Exception:
+            native_vk = None
+
+        # Common Windows VK_* codes for media and volume keys.
+        media_vk_codes = {
+            0xAD,  # VK_VOLUME_MUTE
+            0xAE,  # VK_VOLUME_DOWN
+            0xAF,  # VK_VOLUME_UP
+            0xB0,  # VK_MEDIA_NEXT_TRACK
+            0xB1,  # VK_MEDIA_PREV_TRACK
+            0xB2,  # VK_MEDIA_STOP
+            0xB3,  # VK_MEDIA_PLAY_PAUSE
+        }
+
+        if key in media_keys or (native_vk in media_vk_codes):
+            logger.debug("Media key pressed - ignoring for exit (key=%s, native_vk=%s)", key, native_vk)
             event.ignore()
             return
 

@@ -68,15 +68,19 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
         return ScreensaverMode.RUN, None
     
     # Get the first argument (after program name)
-    arg = args[1].lower()
-    
+    raw_arg = args[1]
+    arg = raw_arg.lower().strip()
+
     # Run screensaver (Windows /s only). For convenience, -s/--s open settings.
     if arg == '/s':
         logger.info("RUN mode selected")
         return ScreensaverMode.RUN, None
     
-    # Configuration dialog
-    elif arg in ('/c', '-c', '-s', '--s'):
+    # Configuration dialog. Windows may pass "/c" or "/c:####" (with a
+    # parent window handle); treat any "/c*" pattern as CONFIG mode so the
+    # Screen Saver Settings "Settings" button never accidentally runs the
+    # saver full-screen.
+    elif arg.startswith('/c') or arg in ('-c', '-s', '--s'):
         logger.info("CONFIG mode selected")
         return ScreensaverMode.CONFIG, None
     

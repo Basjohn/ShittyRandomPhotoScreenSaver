@@ -65,6 +65,10 @@ class MediaWidget(QLabel):
 
         self._position = position
         self._controller: BaseMediaController = controller or create_media_controller()
+        try:
+            logger.info("[MEDIA_WIDGET] Using controller: %s", type(self._controller).__name__)
+        except Exception:
+            pass
 
         self._update_timer: Optional[QTimer] = None
         self._update_timer_handle: Optional[OverlayTimerHandle] = None

@@ -84,8 +84,25 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
     global _VERBOSE
 
     debug_enabled = debug or verbose
-    # Create logs directory
-    log_dir = Path(__file__).parent.parent.parent / "logs"
+    # Create logs directory. In frozen builds (Nuitka/PyInstaller) we prefer
+    # a logs/ directory next to the executable so users can easily find it.
+    base_dir = Path(__file__).parent.parent.parent
+    try:
+        import sys as _sys
+        import builtins as _builtins
+
+        frozen = bool(getattr(_sys, "frozen", False))  # type: ignore[attr-defined]
+        # Nuitka sets a module-level __compiled__ flag rather than sys.frozen.
+        nuitka_compiled = bool(getattr(_builtins, "__compiled__", False))
+
+        if frozen or nuitka_compiled:
+            exe_path = Path(getattr(_sys, "executable", "") or "")
+            if exe_path.exists():
+                base_dir = exe_path.parent
+    except Exception:
+        pass
+
+    log_dir = base_dir / "logs"
     log_dir.mkdir(exist_ok=True)
     
     log_file = log_dir / "screensaver.log"

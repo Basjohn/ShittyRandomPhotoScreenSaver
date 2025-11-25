@@ -13,7 +13,7 @@ from typing import Tuple
 
 APP_NAME: str = "ShittyRandomPhotoScreenSaver"
 APP_EXE_NAME: str = "SRPSS"
-APP_VERSION: str = "1.0.0"
+APP_VERSION: str = "1.0.1"
 APP_DESCRIPTION: str = "ShittyRandomPhotoScreenSaver - Random Image Screensaver with several transitions, OpenGL acceleration, support for disk, rss and json sources all at once."
 APP_COMPANY: str = "Jayde Ver Elst"
 
