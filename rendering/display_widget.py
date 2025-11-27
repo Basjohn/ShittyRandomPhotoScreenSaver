@@ -4,6 +4,7 @@ from typing import Optional, Iterable, Tuple, Callable, Dict
 import random
 import time
 import weakref
+import sys
 try:
     from OpenGL import GL  # type: ignore[import]
 except ImportError:  # pragma: no cover - optional dependency
@@ -204,12 +205,21 @@ class DisplayWidget(QWidget):
                 self._resource_manager = None
         # Central ThreadManager wiring (optional, provided by engine)
         self._thread_manager = thread_manager
-        
-        # Setup widget: frameless, always-on-top display window.
-        self.setWindowFlags(
+
+        # Setup widget: frameless, always-on-top display window. For the MC
+        # build (SRPSS_MC), also mark the window as a tool window so it does
+        # not appear in the taskbar or standard Alt+Tab.
+        flags = (
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
         )
+        try:
+            exe0 = str(getattr(sys, "argv", [""])[0]).lower()
+            if "srpss_mc" in exe0 or "srpss mc" in exe0 or "main_mc.py" in exe0:
+                flags |= Qt.WindowType.Tool
+        except Exception:
+            pass
+        self.setWindowFlags(flags)
         self.setCursor(Qt.CursorShape.BlankCursor)
         self.setMouseTracking(True)
         try:

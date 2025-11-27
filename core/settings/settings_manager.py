@@ -5,6 +5,7 @@ Uses QSettings for persistent storage. Simplified from SPQDocker reusable module
 """
 from typing import Any, Callable, Dict, List, Mapping
 import threading
+import sys
 from PySide6.QtCore import QSettings, QObject, Signal
 from core.logging.logger import get_logger, is_verbose_logging
 
@@ -32,8 +33,21 @@ class SettingsManager(QObject):
             application: Application name for QSettings
         """
         super().__init__()
-        
-        self._settings = QSettings(organization, application)
+
+        app_name = application
+        try:
+            if application == "Screensaver":
+                exe_name = str(getattr(sys, "argv", [""])[0]).lower()
+                if (
+                    "srpss mc" in exe_name
+                    or "srpss_mc" in exe_name
+                    or "main_mc.py" in exe_name
+                ):
+                    app_name = "Screensaver_MC"
+        except Exception:
+            pass
+
+        self._settings = QSettings(organization, app_name)
         self._lock = threading.RLock()
         self._change_handlers: Dict[str, List[Callable]] = {}
 

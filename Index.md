@@ -13,6 +13,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - EventSystem pub/sub (thread-safe)
 - core/settings/settings_manager.py
   - SettingsManager (get/set, dot-notation)
+  - Maps application name "Screensaver" to "Screensaver_MC" when running under the MC executable (e.g. `SRPSS MC`, `SRPSS_MC`, `main_mc.py`) so QSettings are isolated between the normal screensaver and MC profiles.
 - core/animation/animator.py
   - AnimationManager and easing types
 
@@ -27,9 +28,21 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - ImageQueue with RLock, shuffle/history, wraparound
   - peek() and peek_many(n) for prefetch look-ahead
 
+## Entry Points & Variants
+- main.py
+  - Primary screensaver entry point used by SRPSS.scr/SRPSS.exe.
+  - Uses SettingsManager with application name "Screensaver" for QSettings.
+- main_mc.py
+  - Manual Controller (MC) variant: same engine and widgets but launched as a normal app (PyInstaller `SRPSS MC` / Nuitka `SRPSS_MC`).
+  - Uses a separate QSettings application name "Screensaver_MC" so MC settings never conflict with the normal screensaver profile.
+  - MC-only runtime behaviour:
+    - Forces `input.hard_exit=True` at startup so the saver cannot be exited accidentally by mouse movement unless explicitly reconfigured in the MC profile.
+    - While Windows is configured to use SRPSS.scr as the active screensaver, calls `SetThreadExecutionState` to prevent the system screensaver/power idle from triggering while MC is running; normal screensaver builds never change system-wide idle behaviour.
+    - Marks the fullscreen DisplayWidget window as a Qt.Tool window in MC builds, keeping it out of the taskbar and standard Alt+Tab while remaining top-most on all displays.
+
 ## Rendering
 - rendering/display_widget.py
-  - Borderless fullscreen (frameless, always-on-top per monitor) image presentation, DPR-aware scaling
+  - Borderless fullscreen (frameless, always-on-top per monitor) image presentation, DPR-aware scaling. In MC builds the same DisplayWidget also adds the Qt.Tool flag so the window is hidden from the taskbar/standard Alt+Tab while retaining fullscreen/top-most behaviour.
   - Creates transitions based on settings (GL and CPU variants, including GL-only Blinds when HW accel is enabled)
   - Injects shared ResourceManager into transitions; seeds base pixmap pre/post transition and on startup to avoid black frames (wallpaper snapshot seeding + previous-pixmap fallback)
   - Uses lazy GL overlay initialization via `overlay_manager.prepare_gl_overlay` instead of a global startup prewarm; manages widgets Z-order, logs per-stage telemetry, handles transition watchdog timers
@@ -68,7 +81,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - widgets/weather_widget.py
   - Weather widget with per-monitor selection via settings (ALL or 1/2/3); planned QPainter-based iconography
 - widgets/media_widget.py
-  - Spotify/media overlay widget driven by `core/media/media_controller.py`; per-monitor selection via `widgets.media`, corner positioning, background frame, and monochrome transport controls (Prev/Play/Pause/Next) over track metadata
+  - Spotify/media overlay widget driven by `core/media/media_controller.py`; per-monitor selection via `widgets.media`, corner positioning, background frame, and monochrome transport controls (Prev/Play/Pause/Next) over track metadata. Artwork uses a square frame for album covers and adapts to non-square thumbnails (e.g. Spotify video stills) by widening/tallening the card frame while still using a cover-style crop (no letterboxing/pillarboxing) so video-shaped assets respect their aspect ratio without changing existing album-art styling.
  - widgets/reddit_widget.py
    - Reddit overlay widget showing top posts from a configured subreddit with 4- and 10-item layouts, per-monitor selection via `widgets.reddit`, shared overlay fade-in coordination, and click-through to the system browser.
  - widgets/overlay_timers.py

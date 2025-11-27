@@ -909,11 +909,48 @@ class MediaWidget(QLabel):
                         dpr = 1.0
                     scale_dpr = max(1.0, dpr)
 
+                    # Base square frame for album artwork.
                     frame_w = size
                     frame_h = size
-                    target_px = int(size * scale_dpr)
-                    # Scale-to-fill inside the square frame while preserving
-                    # aspect ratio (object-fit: cover). We scale with
+
+                    # For clearly non-square artwork (e.g. Spotify video
+                    # thumbnails), widen the frame towards the source aspect
+                    # ratio while still using the existing cover-style
+                    # scaling. This keeps album covers square but allows
+                    # video-shaped frames to feel less distorted without
+                    # introducing letterboxing.
+                    try:
+                        src_w = float(pm.width())
+                        src_h = float(pm.height())
+                        aspect = src_w / src_h if (src_w > 0.0 and src_h > 0.0) else 1.0
+                    except Exception:
+                        aspect = 1.0
+
+                    if aspect > 0.0:
+                        # Treat anything significantly wider than tall as a
+                        # "video"-ish frame. We keep the existing square
+                        # behaviour for near-1:1 artwork so album covers are
+                        # untouched.
+                        if aspect >= 1.4:
+                            # Grow width up to a reasonable multiple of the
+                            # base size, but clamp to the card width so we
+                            # never bleed past the left text column.
+                            natural_w = int(size * min(aspect, 2.4))
+                            max_card_w = max(48, self.width() - 80)
+                            frame_w = max(48, min(natural_w, max_card_w))
+                            frame_h = size
+                        elif aspect <= 0.7:
+                            # Very tall artwork (rare in practice) – invert
+                            # the logic so we extend height while keeping the
+                            # base width.
+                            natural_h = int(size * min(1.0 / max(aspect, 0.1), 2.4))
+                            max_card_h = max(48, self.height() - 80)
+                            frame_h = max(48, min(natural_h, max_card_h))
+
+                    max_dim = max(frame_w, frame_h)
+                    target_px = int(max_dim * scale_dpr)
+                    # Scale-to-fill inside the frame while preserving aspect
+                    # ratio (object-fit: cover). We scale with
                     # KeepAspectRatioByExpanding and then centre the pixmap
                     # behind the frame, letting the clip path define the
                     # visible region.

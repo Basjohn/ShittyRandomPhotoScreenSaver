@@ -14,6 +14,17 @@ Single source of truth for architecture and key decisions.
 - ResourceManager tracks Qt objects for deterministic cleanup.
 - SettingsManager provides dot-notation access, persisted across runs.
 
+## Runtime Variants
+- Normal screensaver build:
+  - Entry: `main.py`, deployed as `SRPSS.scr` / `SRPSS.exe`.
+  - Uses QSettings organization `ShittyRandomPhotoScreenSaver` and application `Screensaver`.
+- Manual Controller (MC) build:
+  - Entry: `main_mc.py`, deployed as `SRPSS_MC.exe` (Nuitka) / `SRPSS MC.exe` (PyInstaller).
+  - Uses the same organization but a separate QSettings application name `Screensaver_MC` so MC configuration is isolated from the normal screensaver profile.
+  - At startup, forces `input.hard_exit=True` in the MC profile so mouse movement/clicks do not exit unless the user explicitly relaxes this in MC settings.
+  - While Windows is configured to use SRPSS.scr as the active screensaver, calls `SetThreadExecutionState(ES_CONTINUOUS | ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED)` for the lifetime of the MC session so the system screensaver and display sleep are suppressed only while MC is running.
+  - The fullscreen DisplayWidget window is also given the Qt.Tool flag in MC builds, keeping it out of the taskbar and the standard Alt+Tab list while remaining top-most fullscreen on all configured displays.
+
 ## Image Pipeline
 1) Queue selects next `ImageMetadata`.
 2) Prefetcher decodes next N images to `QImage` on IO threads and stores in `ImageCache`.
@@ -75,7 +86,7 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
 - `display.refresh_sync`: bool
 - `display.hw_accel`: bool
 - `display.mode`: fill|fit|shrink
-- `input.hard_exit`: bool (when true, mouse movement/clicks do not exit; only ESC/Q and hotkeys remain active). Additionally, while the Ctrl key is held, `DisplayWidget` temporarily suppresses mouse-move and left-click exit even when `input.hard_exit` is false, allowing interaction with widgets without persisting a hard-exit setting change.
+- `input.hard_exit`: bool (when true, mouse movement/clicks do not exit; only ESC/Q and hotkeys remain active). Additionally, while the Ctrl key is held, `DisplayWidget` temporarily suppresses mouse-move and left-click exit even when `input.hard_exit` is false, allowing interaction with widgets without persisting a hard-exit setting change. MC builds default this setting to true at startup in their own QSettings profile, while the normal screensaver build respects the saved value.
 - `transitions.type`: Crossfade|Slide|Wipe|Diffuse|Block Puzzle Flip|Blinds
 - `transitions.random_always`: bool
 - `transitions.random_choice`: str
@@ -107,7 +118,7 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
     - Background fetching with QThread
     - 30-minute caching
     - 4 position options
-  - `widgets.media.*`: Spotify/media widget configuration (enabled flag, per-monitor selection via `monitor` ('ALL'|1|2|3), corner position, font family/size, margin, text colour, optional background frame and border with independent opacity, background opacity, artwork size, controls/header style flags). Media participates in the shared overlay fade-in coordination and uses the global widget shadow configuration once its own opacity fade completes.
+  - `widgets.media.*`: Spotify/media widget configuration (enabled flag, per-monitor selection via `monitor` ('ALL'|1|2|3), corner position, font family/size, margin, text colour, optional background frame and border with independent opacity, background opacity, artwork size, controls/header style flags). Media participates in the shared overlay fade-in coordination and uses the global widget shadow configuration once its own opacity fade completes. Artwork uses a square frame for album covers and adapts to non-square thumbnails (e.g. Spotify video stills) by adjusting the card frame towards the source aspect ratio while preserving cover-style scaling (no letterboxing/pillarboxing).
   - `widgets.spotify_visualizer.*`: Spotify Beat Visualizer configuration (enabled flag, per-monitor selection via `monitor` ('ALL'|1|2|3) but positioned automatically just above the Spotify/media card, bar_count, bar_fill_color, bar_border_color, bar_border_opacity). The visualizer inherits its card background/border styling from the Spotify/media widget at runtime, participates in the shared overlay fade-in coordination via `DisplayWidget.request_overlay_fade_sync("spotify_visualizer", ...)`, attaches its drop shadow via the global widget shadow configuration, and only animates while the centralized media controller reports Spotify as actively playing.
   - `widgets.reddit.*`: Reddit overlay widget configuration (enabled flag, per-monitor selection via `monitor` ('ALL'|1|2|3), corner position, subreddit slug, item limit (4- or 10-item layouts), font family/size, margin, text colour, optional background frame and border with opacity, background opacity). The widget fetches Reddit's unauthenticated JSON listing endpoints with a fixed candidate pool (up to 25 posts), then sorts all valid entries by `created_utc` so the newest posts appear at the top; 4- and 10-item modes draw from the same sorted list and only differ by how many rows are rendered. The widget hides itself on fetch/parse failure and only responds to clicks in Ctrl-held / hard-exit interaction modes. Initial visibility is coordinated through the shared overlay fade-in system so Reddit, Weather and Media fade together per display.
   - `widgets.shadows.*`: global drop-shadow configuration shared by all overlay widgets (enabled flag, colour, offset, blur radius, text/frame opacity multipliers). Individual widgets perform a two-stage startup animation: first a coordinated card opacity fade-in (driven by the overlay fade synchronizer), then a shadow fade where the drop shadow grows smoothly from transparent to its configured opacity using the same global duration/easing. Shadows are slightly enlarged/softened via a shared blur-radius multiplier so all widgets share a consistent halo.
