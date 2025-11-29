@@ -142,6 +142,13 @@ class SettingsManager(QObject):
                 'peel': {
                     'direction': 'Random',
                 },
+                'blockspin': {
+                    # Optional multi-slab grid wave for 3D Block Spins. When
+                    # disabled the effect renders a single full-frame slab.
+                    'use_grid': False,
+                    # Cardinal wave direction across the grid.
+                    'direction': 'Left to Right',
+                },
                 # Per-transition pool membership for random/switch behaviour.
                 # When a type is marked False it will not be selected by the
                 # engine's random rotation logic nor by the C-key transition

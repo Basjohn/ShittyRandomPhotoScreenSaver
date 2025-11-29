@@ -61,8 +61,6 @@ def test_gl_compositor_blockspin_no_underlay_and_no_black(qapp):
 
     trans = GLCompositorBlockSpinTransition(
         duration_ms=800,
-        grid_rows=4,
-        grid_cols=6,
         easing="Auto",
     )
 

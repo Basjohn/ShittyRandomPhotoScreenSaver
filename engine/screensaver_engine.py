@@ -98,7 +98,7 @@ class ScreensaverEngine(QObject):
             "Diffuse",
             "Block Puzzle Flip",
             "3D Block Spins",
-            "Rain Drops",
+            "Ripple",  # formerly "Rain Drops"
             "Warp Dissolve",
             "Claw Marks",
             "Shuffle",
@@ -124,7 +124,7 @@ class ScreensaverEngine(QObject):
         """
         try:
             logger.info("=" * 60)
-            logger.info("Initializing Screensaver Engine")
+            logger.info("Initializing Screensaver Engine 🚦🚦🚦🚦🚦")
             logger.info("=" * 60)
             
             # Initialize core systems
@@ -1278,7 +1278,9 @@ class ScreensaverEngine(QObject):
             # Available transition types; include GL-only when HW is enabled and
             # restrict to those enabled in the per-transition pool map.
             base_types = ["Crossfade", "Slide", "Wipe", "Diffuse", "Block Puzzle Flip"]
-            gl_only_types = ["Blinds", "Peel", "3D Block Spins", "Rain Drops", "Warp Dissolve", "Claw Marks", "Shuffle"]
+            # Treat legacy 'Rain Drops' entries as equivalent to 'Ripple' when
+            # evaluating GL-only pools.
+            gl_only_types = ["Blinds", "Peel", "3D Block Spins", "Ripple", "Rain Drops", "Warp Dissolve", "Claw Marks", "Shuffle"]
 
             try:
                 raw_hw = self.settings_manager.get('display.hw_accel', False)
@@ -1383,7 +1385,7 @@ class ScreensaverEngine(QObject):
 
         raw_hw = self.settings_manager.get('display.hw_accel', False)
         hw = SettingsManager.to_bool(raw_hw, False)
-        gl_only = {"Blinds", "Peel", "3D Block Spins", "Rain Drops", "Warp Dissolve", "Claw Marks", "Shuffle"}
+        gl_only = {"Blinds", "Peel", "3D Block Spins", "Ripple", "Rain Drops", "Warp Dissolve", "Claw Marks", "Shuffle"}
 
         transitions_config = self.settings_manager.get('transitions', {})
         if not isinstance(transitions_config, dict):

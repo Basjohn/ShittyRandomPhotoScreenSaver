@@ -46,6 +46,7 @@ class TransitionsTab(QWidget):
         self._dir_slide: str = "Random"
         self._dir_wipe: str = "Random"
         self._dir_peel: str = "Random"
+        self._dir_blockspin: str = "Left to Right"
         # Per-transition pool membership for random/switch behaviour.
         self._pool_by_type = {}
         self._duration_by_type = {}
@@ -94,7 +95,7 @@ class TransitionsTab(QWidget):
             "Diffuse",
             "Block Puzzle Flip",
             "3D Block Spins",    # GL-only
-            "Rain Drops",        # GL-only
+            "Ripple",            # GL-only (formerly Rain Drops)
             "Warp Dissolve",     # GL-only
             "Claw Marks",        # GL-only
             "Shuffle",           # GL-only
@@ -208,6 +209,27 @@ class TransitionsTab(QWidget):
         flip_layout.addLayout(grid_row)
         
         layout.addWidget(self.flip_group)
+
+        # 3D Block Spins specific settings (single-slab only, no grid)
+        self.blockspin_group = QGroupBox("3D Block Spins Settings")
+        blockspin_layout = QVBoxLayout(self.blockspin_group)
+
+        bs_row = QHBoxLayout()
+        bs_row.addWidget(QLabel("Direction:"))
+        self.blockspin_direction_combo = QComboBox()
+        self.blockspin_direction_combo.addItems([
+            "Left to Right",
+            "Right to Left",
+            "Top to Bottom",
+            "Bottom to Top",
+            "Random",
+        ])
+        self.blockspin_direction_combo.currentTextChanged.connect(self._save_settings)
+        bs_row.addWidget(self.blockspin_direction_combo)
+        bs_row.addStretch()
+        blockspin_layout.addLayout(bs_row)
+
+        layout.addWidget(self.blockspin_group)
         
         # Diffuse specific settings
         self.diffuse_group = QGroupBox("Diffuse Settings")
@@ -337,7 +359,7 @@ class TransitionsTab(QWidget):
             "Diffuse",
             "Block Puzzle Flip",
             "3D Block Spins",
-            "Rain Drops",
+            "Ripple",       # UI label for the former Rain Drops transition
             "Warp Dissolve",
             "Claw Marks",
             "Shuffle",
@@ -345,7 +367,12 @@ class TransitionsTab(QWidget):
         ]
         self._duration_by_type = {}
         for name in type_keys:
-            raw = durations_cfg.get(name, default_duration)
+            # Migrate any legacy "Rain Drops" duration to the new "Ripple"
+            # label when no explicit Ripple entry exists.
+            if name == "Ripple":
+                raw = durations_cfg.get("Ripple", durations_cfg.get("Rain Drops", default_duration))
+            else:
+                raw = durations_cfg.get(name, default_duration)
             try:
                 value = int(raw)
             except Exception:
@@ -357,7 +384,10 @@ class TransitionsTab(QWidget):
             pool_cfg = {}
         self._pool_by_type = {}
         for name in type_keys:
-            raw_flag = pool_cfg.get(name, True)
+            if name == "Ripple":
+                raw_flag = pool_cfg.get("Ripple", pool_cfg.get("Rain Drops", True))
+            else:
+                raw_flag = pool_cfg.get(name, True)
             try:
                 enabled = SettingsManager.to_bool(raw_flag, True)
             except Exception:
@@ -375,6 +405,7 @@ class TransitionsTab(QWidget):
             getattr(self, 'easing_combo', None),
             getattr(self, 'grid_rows_spin', None),
             getattr(self, 'grid_cols_spin', None),
+            getattr(self, 'blockspin_direction_combo', None),
             getattr(self, 'block_size_spin', None),
             getattr(self, 'diffuse_shape_combo', None),
         ]:
@@ -385,6 +416,9 @@ class TransitionsTab(QWidget):
         try:
             # Load transition type (default to Wipe to match SettingsManager defaults)
             transition_type = transitions_config.get('type', 'Wipe')
+            # Map legacy "Rain Drops" type to the new "Ripple" label.
+            if transition_type == 'Rain Drops':
+                transition_type = 'Ripple'
             index = self.transition_combo.findText(transition_type)
             if index >= 0:
                 self.transition_combo.setCurrentIndex(index)
@@ -404,14 +438,17 @@ class TransitionsTab(QWidget):
             slide_cfg = transitions_config.get('slide', {}) if isinstance(transitions_config.get('slide', {}), dict) else {}
             wipe_cfg = transitions_config.get('wipe', {}) if isinstance(transitions_config.get('wipe', {}), dict) else {}
             peel_cfg = transitions_config.get('peel', {}) if isinstance(transitions_config.get('peel', {}), dict) else {}
+            blockspin_cfg = transitions_config.get('blockspin', {}) if isinstance(transitions_config.get('blockspin', {}), dict) else {}
 
             slide_dir = slide_cfg.get('direction', 'Random') or 'Random'
             wipe_dir = wipe_cfg.get('direction', 'Random') or 'Random'
             peel_dir = peel_cfg.get('direction', 'Random') or 'Random'
+            blockspin_dir = blockspin_cfg.get('direction', 'Random') or 'Random'
 
             self._dir_slide = slide_dir
             self._dir_wipe = wipe_dir
             self._dir_peel = peel_dir
+            self._dir_blockspin = blockspin_dir
             
             # Load easing
             easing = transitions_config.get('easing', 'Auto')
@@ -430,7 +467,16 @@ class TransitionsTab(QWidget):
             block_flip = transitions_config.get('block_flip', {})
             self.grid_rows_spin.setValue(block_flip.get('rows', 12))
             self.grid_cols_spin.setValue(block_flip.get('cols', 24))
-            
+
+            # Load 3D Block Spins settings
+            try:
+                idx = self.blockspin_direction_combo.findText(self._dir_blockspin)
+                if idx < 0:
+                    idx = 0
+                self.blockspin_direction_combo.setCurrentIndex(max(0, idx))
+            except Exception:
+                pass
+
             # Load diffuse settings
             diffuse = transitions_config.get('diffuse', {})
             self.block_size_spin.setValue(diffuse.get('block_size', 18))
@@ -544,12 +590,15 @@ class TransitionsTab(QWidget):
         # Show/hide diffuse settings
         self.diffuse_group.setVisible(transition == "Diffuse")
 
+        # Show/hide 3D Block Spins settings
+        self.blockspin_group.setVisible(transition == "3D Block Spins")
+
     def _refresh_hw_dependent_options(self) -> None:
         """Grey out GL-only transitions when HW acceleration is disabled."""
         try:
             from PySide6.QtCore import Qt
             hw = self._settings.get_bool('display.hw_accel', True)
-            gl_only = ["Blinds", "Peel", "3D Block Spins", "Rain Drops", "Warp Dissolve", "Claw Marks", "Shuffle"]
+            gl_only = ["Blinds", "Peel", "3D Block Spins", "Ripple", "Warp Dissolve", "Claw Marks", "Shuffle"]
             for name in gl_only:
                 idx = self.transition_combo.findText(name)
                 if idx >= 0:
@@ -573,7 +622,7 @@ class TransitionsTab(QWidget):
         """If a GL-only transition is selected with HW off, switch to Crossfade and persist."""
         hw = self._settings.get_bool('display.hw_accel', True)
         cur = self.transition_combo.currentText()
-        gl_only = {"Blinds", "Peel", "3D Block Spins", "Rain Drops", "Warp Dissolve", "Claw Marks", "Shuffle"}
+        gl_only = {"Blinds", "Peel", "3D Block Spins", "Ripple", "Warp Dissolve", "Claw Marks", "Shuffle"}
         if cur in gl_only and not hw:
             idx = self.transition_combo.findText("Crossfade")
             if idx >= 0:
@@ -600,6 +649,13 @@ class TransitionsTab(QWidget):
             self._dir_wipe = cur_dir
         elif cur_type == "Peel":
             self._dir_peel = cur_dir
+
+        # 3D Block Spins use their own controls; always capture the latest
+        # choices from that group.
+        try:
+            self._dir_blockspin = self.blockspin_direction_combo.currentText() or "Left to Right"
+        except Exception:
+            pass
 
         cur_duration = self.duration_slider.value()
         try:
@@ -641,6 +697,9 @@ class TransitionsTab(QWidget):
             },
             'peel': {
                 'direction': self._dir_peel,
+            },
+            'blockspin': {
+                'direction': self._dir_blockspin,
             },
         }
         

@@ -76,7 +76,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - transitions/gl_compositor_peel_transition.py
   - Compositor-backed GL-only Peel transition (strip-based peel of the old image over the new image). Direction stored under `transitions.peel.direction`.
 - transitions/gl_compositor_blockspin_transition.py
-  - Compositor-backed GL-only 3D Block Spins transition reusing the Block Puzzle grid.
+  - Compositor-backed GL-only 3D Block Spins transition rendering a single full-frame 3D slab (front/back/side faces) with directional axis control (LEFT/RIGHT spin around Y, UP/DOWN spin around X); legacy Block Puzzle grid settings are no longer used.
 - transitions/gl_compositor_raindrops_transition.py
   - Compositor-backed GL-only Rain Drops transition using a raindrop-like diffuse region to reveal the new image.
 - transitions/gl_compositor_warp_transition.py

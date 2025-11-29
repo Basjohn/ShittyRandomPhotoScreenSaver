@@ -31,8 +31,8 @@ def _setup_pytest_logging() -> logging.Logger:
     if not any(isinstance(h, RotatingFileHandler) for h in logger.handlers):
         handler = RotatingFileHandler(
             log_file,
-            maxBytes=5 * 1024 * 1024,
-            backupCount=3,
+            maxBytes=1 * 1024 * 1024,
+            backupCount=5,
             encoding="utf-8",
         )
         formatter = logging.Formatter(

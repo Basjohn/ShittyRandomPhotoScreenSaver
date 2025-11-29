@@ -24,7 +24,7 @@ class ColoredFormatter(logging.Formatter):
         'ERROR': '\033[31m',       # Red
         'CRITICAL': '\033[35m',    # Magenta
     }
-    FALLBACK_COLOR = '\033[95m'        # Bright magenta/pink for any [FALLBACK]
+    FALLBACK_COLOR = '\033[38;5;208m'
     PREWARM_COLOR = '\033[38;5;135m'   # Purple for prewarm/flicker diagnostics
     RESET = '\033[0m'
     BOLD = '\033[1m'
@@ -69,6 +69,97 @@ class ColoredFormatter(logging.Formatter):
         record.levelname = original_levelname
         record.msg = original_msg
         return super().format(record)
+
+
+class SuppressingStreamHandler(logging.StreamHandler):
+    """Stream handler that suppresses consecutive duplicate sources.
+
+    Repeated DEBUG/INFO lines from the same logger/level are collapsed into a
+    single summary line like "[N Suppressed: CHECK LOG]" while file logs
+    remain unaffected.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._last_name: str | None = None
+        self._last_level: int | None = None
+        self._suppress_count: int = 0
+        self._last_record: logging.LogRecord | None = None
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            self._emit_with_suppression(record)
+        except Exception:
+            self.handleError(record)
+
+    def _emit_with_suppression(self, record: logging.LogRecord) -> None:
+        if record.levelno >= logging.WARNING:
+            self._flush_summary()
+            super().emit(record)
+            self._last_name = None
+            self._last_level = None
+            self._suppress_count = 0
+            self._last_record = None
+            return
+
+        name = record.name
+        level = record.levelno
+
+        if self._last_name is None:
+            super().emit(record)
+            self._last_name = name
+            self._last_level = level
+            self._suppress_count = 0
+            self._last_record = record
+            return
+
+        if name == self._last_name and level == self._last_level:
+            self._suppress_count += 1
+            if self._last_record is None:
+                self._last_record = record
+            return
+
+        self._flush_summary()
+        super().emit(record)
+        self._last_name = name
+        self._last_level = level
+        self._suppress_count = 0
+        self._last_record = record
+
+    def _flush_summary(self) -> None:
+        if self._suppress_count <= 0 or self._last_record is None:
+            self._suppress_count = 0
+            self._last_record = None
+            return
+
+        last = self._last_record
+        msg = f"[{self._suppress_count} Suppressed: CHECK LOG]"
+        summary = logging.LogRecord(
+            last.name,
+            last.levelno,
+            last.pathname,
+            last.lineno,
+            msg,
+            args=None,
+            exc_info=None,
+        )
+        summary.created = last.created
+        summary.msecs = last.msecs
+        summary.relativeCreated = last.relativeCreated
+        summary.thread = last.thread
+        summary.threadName = last.threadName
+        summary.process = last.process
+        summary.processName = last.processName
+        super().emit(summary)
+
+        self._suppress_count = 0
+        self._last_record = None
+
+    def close(self) -> None:
+        try:
+            self._flush_summary()
+        finally:
+            super().close()
 
 
 def setup_logging(debug: bool = False, verbose: bool = False) -> None:
@@ -116,27 +207,29 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     
-    # File handler with rotation (10MB max, keep 5 backups)
+    # File handler with rotation (1MB max, keep 5 backups)
     file_handler = RotatingFileHandler(
         log_file,
-        maxBytes=10 * 1024 * 1024,  # 10MB
+        maxBytes=1 * 1024 * 1024,
         backupCount=5,
         encoding='utf-8'
     )
     file_handler.setFormatter(formatter)
     file_handler.setLevel(level)
     
-    # Console handler (for development) - with colors in debug mode
-    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler = SuppressingStreamHandler(sys.stdout)
     if debug_enabled and sys.stdout.isatty():
-        # Use colored formatter for terminal output
         colored_formatter = ColoredFormatter(
             '%(asctime)s - %(name)-30s - %(levelname)-8s - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
+            datefmt='%H:%M:%S',
         )
         console_handler.setFormatter(colored_formatter)
     else:
-        console_handler.setFormatter(formatter)
+        console_formatter = logging.Formatter(
+            '%(asctime)s - %(name)-30s - %(levelname)-8s - %(message)s',
+            datefmt='%H:%M:%S',
+        )
+        console_handler.setFormatter(console_formatter)
     console_handler.setLevel(level)
     
     # Configure root logger

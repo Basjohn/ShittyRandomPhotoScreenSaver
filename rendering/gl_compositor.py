@@ -146,6 +146,25 @@ class _GLPipelineState:
     u_aspect_loc: int = -1
     u_old_tex_loc: int = -1
     u_new_tex_loc: int = -1
+    u_spec_dir_loc: int = -1
+    u_axis_mode_loc: int = -1
+    # Per-tile placement for the 3D Block Spins slab when rendering a grid of
+    # cards. These are optional and default to a single full-frame slab when
+    # unset.
+    u_block_rect_loc: int = -1
+    u_block_uv_rect_loc: int = -1
+
+    # Cached uniform locations for the Ripple (raindrops) shader program.
+    raindrops_u_progress: int = -1
+    raindrops_u_resolution: int = -1
+    raindrops_u_old_tex: int = -1
+    raindrops_u_new_tex: int = -1
+
+    # Cached uniform locations for the Warp Dissolve shader program.
+    warp_u_progress: int = -1
+    warp_u_resolution: int = -1
+    warp_u_old_tex: int = -1
+    warp_u_new_tex: int = -1
 
     # Simple flags to indicate whether the pipeline was initialized
     # successfully inside the current GL context.
@@ -156,16 +175,15 @@ class _GLPipelineState:
 class BlockSpinState:
     """State for a compositor-driven block spin transition.
 
-    Block spins share the same logical grid as BlockFlip but approximate a
-    3D flip by shrinking tile width over time. The compositor always draws the
-    new image as the background and overlays animated tiles from either the old
-    or new image depending on local phase.
+    GLSL-backed Block Spins render a single thin 3D slab that flips the old
+    image to the new one over a black void, with edge-only specular highlights.
+    The grid-based variant has been removed; direction + progress fully define
+    the animation.
     """
 
     old_pixmap: Optional[QPixmap]
     new_pixmap: Optional[QPixmap]
-    rows: int
-    cols: int
+    direction: SlideDirection = SlideDirection.LEFT
     progress: float = 0.0  # 0..1
 
 
@@ -827,18 +845,17 @@ class GLCompositorWidget(QOpenGLWidget):
         old_pixmap: Optional[QPixmap],
         new_pixmap: QPixmap,
         *,
-        rows: int,
-        cols: int,
         duration_ms: int,
         easing: EasingCurve,
         animation_manager: AnimationManager,
+        direction: SlideDirection = SlideDirection.LEFT,
         on_finished: Optional[Callable[[], None]] = None,
     ) -> Optional[str]:
-        """Begin a block spin using the compositor.
+        """Begin a 3D block spin using the compositor.
 
-        Block spins share the same logical grid as BlockFlip but approximate a
-        3D flip by shrinking tile width over time. Geometry is computed inside
-        the compositor from the provided row/column counts.
+        The GLSL path renders a single thin 3D slab that flips from the old
+        image to the new one over a black void. Legacy grid parameters have
+        been removed; direction and progress fully define the animation.
         """
 
         if not new_pixmap or new_pixmap.isNull():
@@ -876,8 +893,7 @@ class GLCompositorWidget(QOpenGLWidget):
         self._blockspin = BlockSpinState(
             old_pixmap=old_pixmap,
             new_pixmap=new_pixmap,
-            rows=max(1, int(rows)),
-            cols=max(1, int(cols)),
+            direction=direction,
             progress=0.0,
         )
         self._animation_manager = animation_manager
@@ -1573,10 +1589,10 @@ class GLCompositorWidget(QOpenGLWidget):
         self._raindrops = None
         self._peel = None
 
-        # Ensure any blockspin textures are freed when a transition is
+        # Ensure any transition textures are freed when a transition is
         # cancelled so we do not leak VRAM across many rotations.
         try:
-            self._release_blockspin_textures()
+            self._release_transition_textures()
         except Exception:
             logger.debug("[GL COMPOSITOR] Failed to release blockspin textures on cancel", exc_info=True)
         self.update()
@@ -1640,13 +1656,22 @@ class GLCompositorWidget(QOpenGLWidget):
             self._gl_pipeline.u_aspect_loc = gl.glGetUniformLocation(program, "u_aspect")
             self._gl_pipeline.u_old_tex_loc = gl.glGetUniformLocation(program, "uOldTex")
             self._gl_pipeline.u_new_tex_loc = gl.glGetUniformLocation(program, "uNewTex")
+            self._gl_pipeline.u_block_rect_loc = gl.glGetUniformLocation(program, "u_blockRect")
+            self._gl_pipeline.u_block_uv_rect_loc = gl.glGetUniformLocation(program, "u_blockUvRect")
+            self._gl_pipeline.u_spec_dir_loc = gl.glGetUniformLocation(program, "u_specDir")
+            self._gl_pipeline.u_axis_mode_loc = gl.glGetUniformLocation(program, "u_axisMode")
 
-            # Compile the Raindrops shader program when GL is available. On
-            # failure we disable shader usage for this session so that all
-            # shader-backed transitions fall back to the compositor's
+            # Compile the Ripple (raindrops) shader program when GL is
+            # available. On failure we disable shader usage for this session so
+            # that all shader-backed transitions fall back to the compositor's
             # QPainter-based paths (Group A → Group B).
             try:
-                self._gl_pipeline.raindrops_program = self._create_raindrops_program()
+                rp = self._create_raindrops_program()
+                self._gl_pipeline.raindrops_program = rp
+                self._gl_pipeline.raindrops_u_progress = gl.glGetUniformLocation(rp, "u_progress")
+                self._gl_pipeline.raindrops_u_resolution = gl.glGetUniformLocation(rp, "u_resolution")
+                self._gl_pipeline.raindrops_u_old_tex = gl.glGetUniformLocation(rp, "uOldTex")
+                self._gl_pipeline.raindrops_u_new_tex = gl.glGetUniformLocation(rp, "uNewTex")
             except Exception:
                 logger.debug("[GL SHADER] Failed to initialize raindrops shader program", exc_info=True)
                 self._gl_pipeline.raindrops_program = 0
@@ -1655,7 +1680,12 @@ class GLCompositorWidget(QOpenGLWidget):
                 return
 
             try:
-                self._gl_pipeline.warp_program = self._create_warp_program()
+                wp = self._create_warp_program()
+                self._gl_pipeline.warp_program = wp
+                self._gl_pipeline.warp_u_progress = gl.glGetUniformLocation(wp, "u_progress")
+                self._gl_pipeline.warp_u_resolution = gl.glGetUniformLocation(wp, "u_resolution")
+                self._gl_pipeline.warp_u_old_tex = gl.glGetUniformLocation(wp, "uOldTex")
+                self._gl_pipeline.warp_u_new_tex = gl.glGetUniformLocation(wp, "uNewTex")
             except Exception:
                 logger.debug("[GL SHADER] Failed to initialize warp shader program", exc_info=True)
                 self._gl_pipeline.warp_program = 0
@@ -1811,7 +1841,7 @@ class GLCompositorWidget(QOpenGLWidget):
         try:
             is_valid = getattr(self, "isValid", None)
             if callable(is_valid) and not is_valid():
-                self._release_blockspin_textures()
+                self._release_transition_textures()
                 self._gl_pipeline.basic_program = 0
                 self._gl_pipeline.raindrops_program = 0
                 self._gl_pipeline.warp_program = 0
@@ -1829,7 +1859,7 @@ class GLCompositorWidget(QOpenGLWidget):
         try:
             self.makeCurrent()
         except Exception:
-            self._release_blockspin_textures()
+            self._release_transition_textures()
             self._gl_pipeline.basic_program = 0
             self._gl_pipeline.raindrops_program = 0
             self._gl_pipeline.warp_program = 0
@@ -1843,7 +1873,7 @@ class GLCompositorWidget(QOpenGLWidget):
             return
 
         try:
-            self._release_blockspin_textures()
+            self._release_transition_textures()
 
             try:
                 if self._gl_pipeline.basic_program:
@@ -1924,13 +1954,25 @@ layout(location = 2) in vec2 aUv;
 out vec2 vUv;
 out vec3 vNormal;
 out vec3 vViewDir;
+out float vEdgeX;
 flat out int vFaceKind;  // 1=front, 2=back, 3=side
 
 uniform float u_angle;
 uniform float u_aspect;
+uniform vec4 u_blockRect;   // xy = clip min, zw = clip max
+uniform vec4 u_blockUvRect; // xy = uv min,  zw = uv max
+uniform float u_specDir;    // -1 or +1, matches fragment shader
+uniform int u_axisMode;
 
 void main() {
-    vUv = aUv;
+    // Preserve the local X coordinate as a thickness parameter for side
+    // faces while remapping UVs into the per-tile rectangle.
+    float edgeCoord = aUv.x;
+    vEdgeX = edgeCoord;
+
+    // Remap local UVs into the per-tile UV rectangle so that a grid of slabs
+    // each samples its own portion of the image pair.
+    vUv = mix(u_blockUvRect.xy, u_blockUvRect.zw, aUv);
 
     // Classify faces in object space so texture mapping is stable regardless
     // of the current rotation.
@@ -1952,8 +1994,21 @@ void main() {
        -sa,  0.0, ca
     );
 
-    vec3 pos = rotY * aPos;
-    vec3 normal = normalize(rotY * aNormal);
+    mat3 rotX = mat3(
+        1.0, 0.0, 0.0,
+        0.0,  ca, -sa,
+        0.0,  sa,  ca
+    );
+
+    vec3 pos;
+    vec3 normal;
+    if (u_axisMode == 1) {
+        pos = rotX * aPos;
+        normal = normalize(rotX * aNormal);
+    } else {
+        pos = rotY * aPos;
+        normal = normalize(rotY * aNormal);
+    }
 
     // Orthographic-style projection: treat the rotated slab as sitting in
     // clip space so that when it faces the camera it fills the viewport
@@ -1961,13 +2016,24 @@ void main() {
     vNormal = normal;
     vViewDir = vec3(0.0, 0.0, 1.0);
 
-    float scale = 1.0;
     // Use -pos.z so the face nearest the camera always wins the depth test:
     // at angle 0 the front (old image) is in front, at angle pi the back
     // (new image) is in front. This avoids sudden flips when the CPU swaps
     // the base pixmap at transition start/end.
     float z_clip = -pos.z * 0.5;  // small but non-zero depth for proper occlusion
-    gl_Position = vec4(pos.x * scale, pos.y * scale, z_clip, 1.0);
+
+    // Map the rotated slab into the caller-supplied block rect in clip space.
+    // When rendering a single full-frame slab the rect covers the entire
+    // viewport (-1..1 in both axes); in grid mode each tile uses a smaller
+    // rect.
+    float nx = pos.x * 0.5 + 0.5;
+    float ny = pos.y * 0.5 + 0.5;
+    float x_clip = mix(u_blockRect.x, u_blockRect.z, nx);
+    float y_clip = mix(u_blockRect.y, u_blockRect.w, ny);
+
+    // Add axis mode uniform for BlockSpin
+    // uniform int u_axisMode;  // 0 = Y, 1 = X
+    gl_Position = vec4(x_clip, y_clip, z_clip, 1.0);
 }
 """
 
@@ -1975,6 +2041,7 @@ void main() {
 in vec2 vUv;
 in vec3 vNormal;
 in vec3 vViewDir;
+in float vEdgeX;
 flat in int vFaceKind;  // 1=front, 2=back, 3=side
 out vec4 FragColor;
 
@@ -1982,52 +2049,84 @@ uniform sampler2D uOldTex;
 uniform sampler2D uNewTex;
 uniform float u_angle;
 uniform float u_aspect;
+uniform float u_specDir;  // -1 or +1, controls highlight travel direction
+uniform int u_axisMode;   // 0 = Y-axis spin, 1 = X-axis spin
 
 void main() {
     // Qt images are stored top-to-bottom, whereas OpenGL's texture
     // coordinates assume (0,0) at the bottom-left. Flip the V coordinate so
     // the sampled image appears upright.
     vec2 uv_front = vec2(vUv.x, 1.0 - vUv.y);
-    vec2 uv_back  = vec2(1.0 - vUv.x, 1.0 - vUv.y); // horizontally flipped
+
+    // For horizontal (Y-axis) spins we mirror the back face horizontally so
+    // that when the card flips left/right the new image appears with the
+    // same orientation as a plain 2D draw. For vertical (X-axis) spins the
+    // geometric rotation inverts the slab in Y, so we sample with the raw
+    // UVs to keep the new image upright.
+    vec2 uv_back;
+    if (u_axisMode == 0) {
+        uv_back = vec2(1.0 - vUv.x, 1.0 - vUv.y);  // horizontal spin
+    } else {
+        uv_back = vec2(vUv.x, vUv.y);              // vertical spin
+    }
 
     vec3 n = normalize(vNormal);
     vec3 viewDir = normalize(vViewDir);
     vec3 lightDir = normalize(vec3(-0.15, 0.35, 0.9));
 
-    // Normalised spin progress 0..1 from angle 0..pi and a smooth
-    // highlight envelope so specular accents fade in near the middle of the
-    // spin and disappear at the endpoints. This avoids sudden white bands
-    // the instant the transition starts or completes.
-    float t = clamp(u_angle / 3.14159265, 0.0, 1.0);
-    // Start the highlight a bit earlier but still keep it fully suppressed
-    // right at the endpoints.
-    float highlightPhase = smoothstep(0.16, 0.30, t) * smoothstep(0.16, 0.30, 1.0 - t);
+    // Normalised spin progress 0..1 from angle 0..pi and an edge-biased
+    // highlight envelope so specular accents are strongest near the start
+    // and end of the spin (slab faces most flush) and softest around the
+    // midpoint. A complementary mid-spin phase is used for the white rim
+    // outline so it appears when the slab is most edge-on. Use the absolute
+    // angle so LEFT/RIGHT and UP/DOWN directions share the same envelope.
+    float t = clamp(abs(u_angle) / 3.14159265, 0.0, 1.0);
+    float edgeFactor = abs(t - 0.5) * 2.0;  // 0 at mid-spin, 1 at edges
+    float highlightPhase = edgeFactor * edgeFactor;
+    float midPhase = (1.0 - edgeFactor);
+    midPhase = midPhase * midPhase;
 
     vec3 color;
 
     if (vFaceKind == 3) {
-        // Side faces: darker glass core with a narrow, moving specular band
-        // along the thickness so the edge reads as glossy without turning
-        // into a solid white column. The band position is driven by the
-        // global rotation angle so it appears to slide across the edge over
-        // the course of the spin.
-        vec3 base = vec3(0.06);
+        // Side faces: darker glass core with a moving specular band across
+        // the slab thickness, plus a very thin white outline along the rim
+        // when the slab is most edge-on.
+        vec3 base = vec3(0.0);
         vec3 halfVec = normalize(lightDir + viewDir);
         float ndh = max(dot(n, halfVec), 0.0);
 
-        // Side faces use vUv.x in [0,1] to represent thickness from the
-        // front edge to the back edge. Move the highlight band centre from
-        // near one side to the other over the spin.
-        float bandCenter = mix(0.2, 0.8, t);
-        float bandHalfWidth = 0.028;  // ~30% wider band for a slightly thicker line
-        float d = abs(vUv.x - bandCenter);
-        float bandMask = 1.0 - smoothstep(bandHalfWidth, bandHalfWidth * 1.4, d);
+        // Side faces use the original local X coordinate in [0,1] to
+        // represent slab thickness from one edge to the other, independent
+        // of any grid tiling. Move the highlight band centre from one edge
+        // to the opposite edge over the spin, clamped far enough inside the
+        // edges so the thicker band never leaves the face.
+        float edgeT = (u_specDir < 0.0) ? (1.0 - t) : t;
+        float bandHalfWidth = 0.09;  // thicker band for a more readable sheen
+        float bandCenter = mix(bandHalfWidth, 1.0 - bandHalfWidth, edgeT);
+        float d = abs(vEdgeX - bandCenter);
+        float bandMask = 1.0 - smoothstep(bandHalfWidth, bandHalfWidth * 1.6, d);
 
-        float spec = pow(ndh, 18.0) * bandMask * highlightPhase;
-        // Allow the peak to approach pure white while remaining clamped so
-        // it never explodes beyond the side face.
-        float edgeSpec = min(1.0, 1.05 * spec);
-        color = base + vec3(edgeSpec);
+        // Stronger, brighter specular so the edge sheen is clearly visible
+        // and approaches white at its apex without blowing out the face.
+        float spec = pow(ndh, 6.0) * bandMask * highlightPhase;
+        float edgeSpec = clamp(4.0 * spec, 0.0, 1.0);
+        color = mix(base, vec3(1.0), edgeSpec);
+
+        // Thin white outline hugging the side-face rim. This uses both the
+        // preserved local thickness coordinate (vEdgeX) and the tile UV's
+        // vertical coordinate so the border tracks the outer rectangle of
+        // the slab. It is only active around mid-spin so it never appears
+        // on the very first/last frames.
+        float xEdge = min(vEdgeX, 1.0 - vEdgeX);
+        float yEdge = min(vUv.y, 1.0 - vUv.y);
+        float edgeDist = min(xEdge, yEdge);
+        float outlineMask = 1.0 - smoothstep(0.02, 0.08, edgeDist);
+        float outlinePhase = outlineMask * midPhase;
+        if (outlinePhase > 0.0) {
+            float outlineStrength = clamp(1.2 * outlinePhase, 0.0, 1.0);
+            color = mix(color, vec3(1.0), outlineStrength);
+        }
     } else {
         // Front/back faces: map old/new images directly to their respective
         // geometry so the card ends exactly on the new image without
@@ -2043,7 +2142,7 @@ void main() {
         // unshaded. Gate this with the same highlightPhase so we do not get
         // bright rims on the very first/last frames.
         float xN = vUv.x * 2.0 - 1.0;
-        float rim = smoothstep(0.975, 0.995, abs(xN));  // even narrower rim
+        float rim = 0.0;
         if (rim > 0.0 && highlightPhase > 0.0) {
             vec3 halfVec = normalize(lightDir + viewDir);
             float ndh = max(dot(n, halfVec), 0.0);
@@ -2206,7 +2305,10 @@ void main() {
     centered.x *= aspect;
     float r = length(centered);
 
-    float maxR = 0.9;
+    // Use the true maximum radius from the centre to the furthest corner so
+    // the ripple cleanly reaches the image corners without leaving a thin
+    // untransitioned band.
+    float maxR = length(vec2(0.5 * aspect, 0.5));
     float rNorm = clamp(r / maxR, 0.0, 1.0);
     float front = t;
 
@@ -2234,8 +2336,8 @@ void main() {
     // Reveal the NEW image from the centre outward. Points that the wave
     // front has already passed transition to the new image, and a gentle
     // global fade near the end guarantees we finish fully on the new frame.
-    float localMix = smoothstep(0.0, 0.15, front - rNorm);
-    float globalMix = smoothstep(0.9, 1.0, t);
+    float localMix = smoothstep(-0.04, 0.18, front - rNorm);
+    float globalMix = smoothstep(0.78, 0.95, t);
     float newMix = clamp(max(localMix, globalMix), 0.0, 1.0);
 
     vec4 mixed = mix(base, newColor, newMix);
@@ -2303,27 +2405,28 @@ void main() {
             return False
         return True
 
-    def _can_use_warp_shader(self) -> bool:
+    def _can_use_simple_shader(self, state: object, program_id: int) -> bool:
+        """Shared capability check for simple fullscreen quad shaders.
+
+        Used by Ripple (raindrops) and Warp Dissolve, which both draw a
+        single quad over the full compositor surface.
+        """
+
         if self._gl_disabled_for_session or gl is None:
             return False
         if self._gl_pipeline is None or not self._gl_pipeline.initialized:
             return False
-        if self._warp is None:
+        if state is None:
             return False
-        if not getattr(self._gl_pipeline, "warp_program", 0):
+        if not program_id:
             return False
         return True
 
+    def _can_use_warp_shader(self) -> bool:
+        return self._can_use_simple_shader(self._warp, getattr(self._gl_pipeline, "warp_program", 0))
+
     def _can_use_raindrops_shader(self) -> bool:
-        if self._gl_disabled_for_session or gl is None:
-            return False
-        if self._gl_pipeline is None or not self._gl_pipeline.initialized:
-            return False
-        if self._raindrops is None:
-            return False
-        if not self._gl_pipeline.raindrops_program:
-            return False
-        return True
+        return self._can_use_simple_shader(self._raindrops, self._gl_pipeline.raindrops_program)
 
     def _upload_texture_from_pixmap(self, pixmap: QPixmap) -> int:
         """Upload a QPixmap as a GL texture and return its id.
@@ -2388,7 +2491,7 @@ void main() {
 
         return tex_id
 
-    def _release_blockspin_textures(self) -> None:
+    def _release_transition_textures(self) -> None:
         if gl is None or self._gl_pipeline is None:
             return
         for tex_id in (self._gl_pipeline.old_tex_id, self._gl_pipeline.new_tex_id):
@@ -2406,20 +2509,20 @@ void main() {
         if old_pixmap is None or old_pixmap.isNull() or new_pixmap is None or new_pixmap.isNull():
             return False
 
-        self._release_blockspin_textures()
+        self._release_transition_textures()
 
         try:
             self._gl_pipeline.old_tex_id = self._upload_texture_from_pixmap(old_pixmap)
             self._gl_pipeline.new_tex_id = self._upload_texture_from_pixmap(new_pixmap)
         except Exception:
             logger.debug("[GL SHADER] Failed to upload transition textures", exc_info=True)
-            self._release_blockspin_textures()
+            self._release_transition_textures()
             self._gl_disabled_for_session = True
             self._use_shaders = False
             return False
 
         if not self._gl_pipeline.old_tex_id or not self._gl_pipeline.new_tex_id:
-            self._release_blockspin_textures()
+            self._release_transition_textures()
             return False
         return True
 
@@ -2456,19 +2559,26 @@ void main() {
         w = max(1, target.width())
         h = max(1, target.height())
 
-        p = max(0.0, min(1.0, float(self._blockspin.progress)))
-        # Keep the slab perfectly front-facing for the first few percent of
-        # the timeline and perfectly back-facing for the last few percent so
-        # there is no visible jump at the moment the transition starts or
-        # completes. The actual spin is compressed into the middle of the
-        # interval.
-        if p <= 0.03:
-            spin = 0.0
-        elif p >= 0.97:
-            spin = 1.0
-        else:
-            spin = (p - 0.03) / 0.94
-        angle = math.pi * spin
+        st = self._blockspin
+        base_p = max(0.0, min(1.0, float(st.progress)))
+
+        def _spin_from_progress(p: float) -> float:
+            """Map 0..1 timeline to spin progress with eased endpoints.
+
+            The curve lingers slightly near 0/1 and crosses 0.5 more quickly
+            so slabs spend less time edge-on and more time close to face-on.
+            """
+
+            if p <= 0.03:
+                return 0.0
+            if p >= 0.97:
+                return 1.0
+
+            t = (p - 0.03) / 0.94
+            # Smoothstep-style easing: 0..1 -> 0..1 with low slope at the
+            # endpoints and higher slope around the midpoint.
+            return t * t * (3.0 - 2.0 * t)
+
         aspect = float(w) / float(h)
 
         gl.glViewport(0, 0, vp_w, vp_h)
@@ -2478,19 +2588,31 @@ void main() {
         gl.glEnable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_TRUE)
 
-        # Clear to a dark neutral background so the spinning slab appears over
-        # a void rather than the next image, while still avoiding
-        # "mostly black" frames in automated tests.
-        gl.glClearColor(0.08, 0.08, 0.08, 1.0)
+        # Clear to a mathematically black background so the spinning slab and
+        # its rim/sheens stand out crisply against the void.
+        gl.glClearColor(0.0, 0.0, 0.0, 1.0)
         gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
 
         # Then draw the rotating slab (box) on top using the card-flip program.
         gl.glUseProgram(self._gl_pipeline.basic_program)
         try:
-            if self._gl_pipeline.u_angle_loc != -1:
-                gl.glUniform1f(self._gl_pipeline.u_angle_loc, float(angle))
             if self._gl_pipeline.u_aspect_loc != -1:
                 gl.glUniform1f(self._gl_pipeline.u_aspect_loc, float(aspect))
+
+            axis_mode = 0
+            if st.direction in (SlideDirection.UP, SlideDirection.DOWN):
+                axis_mode = 1
+            if self._gl_pipeline.u_axis_mode_loc != -1:
+                gl.glUniform1i(self._gl_pipeline.u_axis_mode_loc, int(axis_mode))
+
+            # Specular line travel direction: by default move from left edge
+            # to right edge over the course of the spin; flip for RIGHT/DOWN
+            # directions so the line traverses in the opposite sense.
+            spin_dir = 1.0
+            if st.direction in (SlideDirection.RIGHT, SlideDirection.DOWN):
+                spin_dir = -1.0
+            if self._gl_pipeline.u_spec_dir_loc != -1:
+                gl.glUniform1f(self._gl_pipeline.u_spec_dir_loc, float(spin_dir))
 
             # Bind textures.
             if self._gl_pipeline.u_old_tex_loc != -1:
@@ -2504,14 +2626,35 @@ void main() {
 
             # Prefer the dedicated box mesh for a true 3D slab; fall back to
             # the fullscreen quad if the box geometry was not created.
-            if getattr(self._gl_pipeline, "box_vao", 0) and getattr(self._gl_pipeline, "box_vertex_count", 0) > 0:
-                gl.glBindVertexArray(self._gl_pipeline.box_vao)
-                gl.glDrawArrays(gl.GL_TRIANGLES, 0, int(self._gl_pipeline.box_vertex_count))
-                gl.glBindVertexArray(0)
-            else:
-                gl.glBindVertexArray(self._gl_pipeline.quad_vao)
-                gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-                gl.glBindVertexArray(0)
+            use_box = getattr(self._gl_pipeline, "box_vao", 0) and getattr(self._gl_pipeline, "box_vertex_count", 0) > 0
+
+            # Configure a helper to issue a single slab draw with caller-supplied
+            # angle and placement.
+            def _draw_slab(angle_rad: float, block_rect: tuple[float, float, float, float], uv_rect: tuple[float, float, float, float]) -> None:
+                if self._gl_pipeline.u_angle_loc != -1:
+                    gl.glUniform1f(self._gl_pipeline.u_angle_loc, float(angle_rad))
+                if self._gl_pipeline.u_block_rect_loc != -1:
+                    gl.glUniform4f(self._gl_pipeline.u_block_rect_loc, *[float(v) for v in block_rect])
+                if self._gl_pipeline.u_block_uv_rect_loc != -1:
+                    gl.glUniform4f(self._gl_pipeline.u_block_uv_rect_loc, *[float(v) for v in uv_rect])
+
+                if use_box:
+                    gl.glBindVertexArray(self._gl_pipeline.box_vao)
+                    gl.glDrawArrays(gl.GL_TRIANGLES, 0, int(self._gl_pipeline.box_vertex_count))
+                    gl.glBindVertexArray(0)
+                else:
+                    gl.glBindVertexArray(self._gl_pipeline.quad_vao)
+                    gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+                    gl.glBindVertexArray(0)
+
+            # Single full-frame slab. Direction is applied as a sign on the
+            # spin so LEFT/RIGHT and UP/DOWN produce mirrored rotations while
+            # still ending on the same final orientation.
+            spin = _spin_from_progress(base_p)
+            angle = math.pi * spin * spin_dir
+            full_rect = (-1.0, -1.0, 1.0, 1.0)
+            full_uv = (0.0, 0.0, 1.0, 1.0)
+            _draw_slab(angle, full_rect, full_uv)
         finally:
             gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
             gl.glActiveTexture(gl.GL_TEXTURE0)
@@ -2536,25 +2679,20 @@ void main() {
 
         gl.glUseProgram(self._gl_pipeline.warp_program)
         try:
-            loc_progress = gl.glGetUniformLocation(self._gl_pipeline.warp_program, "u_progress")
-            if loc_progress != -1:
-                gl.glUniform1f(loc_progress, float(p))
+            if self._gl_pipeline.warp_u_progress != -1:
+                gl.glUniform1f(self._gl_pipeline.warp_u_progress, float(p))
 
-            loc_res = gl.glGetUniformLocation(self._gl_pipeline.warp_program, "u_resolution")
-            if loc_res != -1:
-                gl.glUniform2f(loc_res, float(vp_w), float(vp_h))
+            if self._gl_pipeline.warp_u_resolution != -1:
+                gl.glUniform2f(self._gl_pipeline.warp_u_resolution, float(vp_w), float(vp_h))
 
-            loc_old = gl.glGetUniformLocation(self._gl_pipeline.warp_program, "uOldTex")
-            loc_new = gl.glGetUniformLocation(self._gl_pipeline.warp_program, "uNewTex")
-
-            if loc_old != -1:
+            if self._gl_pipeline.warp_u_old_tex != -1:
                 gl.glActiveTexture(gl.GL_TEXTURE0)
                 gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.old_tex_id)
-                gl.glUniform1i(loc_old, 0)
-            if loc_new != -1:
+                gl.glUniform1i(self._gl_pipeline.warp_u_old_tex, 0)
+            if self._gl_pipeline.warp_u_new_tex != -1:
                 gl.glActiveTexture(gl.GL_TEXTURE1)
                 gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.new_tex_id)
-                gl.glUniform1i(loc_new, 1)
+                gl.glUniform1i(self._gl_pipeline.warp_u_new_tex, 1)
 
             gl.glBindVertexArray(self._gl_pipeline.quad_vao)
             gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
@@ -2584,27 +2722,21 @@ void main() {
 
         gl.glUseProgram(self._gl_pipeline.raindrops_program)
         try:
-            # Per-frame uniforms. Locations are queried dynamically to keep the
-            # pipeline dataclass simple while we iterate on the shader.
-            loc_progress = gl.glGetUniformLocation(self._gl_pipeline.raindrops_program, "u_progress")
-            if loc_progress != -1:
-                gl.glUniform1f(loc_progress, float(p))
+            # Per-frame uniforms now use cached locations from _GLPipelineState.
+            if self._gl_pipeline.raindrops_u_progress != -1:
+                gl.glUniform1f(self._gl_pipeline.raindrops_u_progress, float(p))
 
-            loc_res = gl.glGetUniformLocation(self._gl_pipeline.raindrops_program, "u_resolution")
-            if loc_res != -1:
-                gl.glUniform2f(loc_res, float(vp_w), float(vp_h))
+            if self._gl_pipeline.raindrops_u_resolution != -1:
+                gl.glUniform2f(self._gl_pipeline.raindrops_u_resolution, float(vp_w), float(vp_h))
 
-            loc_old = gl.glGetUniformLocation(self._gl_pipeline.raindrops_program, "uOldTex")
-            loc_new = gl.glGetUniformLocation(self._gl_pipeline.raindrops_program, "uNewTex")
-
-            if loc_old != -1:
+            if self._gl_pipeline.raindrops_u_old_tex != -1:
                 gl.glActiveTexture(gl.GL_TEXTURE0)
                 gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.old_tex_id)
-                gl.glUniform1i(loc_old, 0)
-            if loc_new != -1:
+                gl.glUniform1i(self._gl_pipeline.raindrops_u_old_tex, 0)
+            if self._gl_pipeline.raindrops_u_new_tex != -1:
                 gl.glActiveTexture(gl.GL_TEXTURE1)
                 gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.new_tex_id)
-                gl.glUniform1i(loc_new, 1)
+                gl.glUniform1i(self._gl_pipeline.raindrops_u_new_tex, 1)
 
             gl.glBindVertexArray(self._gl_pipeline.quad_vao)
             gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)

@@ -1,8 +1,10 @@
 """GL compositor-driven 3D Block Spins transition.
 
-This transition delegates all rendering to the shared GLCompositorWidget. It
-owns only timing and grid configuration and drives the compositor via its
-block-spin API (start_block_spin) to approximate a 3D flip per tile.
+This transition delegates all rendering to the shared :class:`GLCompositorWidget`.
+The controller owns only timing and direction and drives the compositor via its
+block-spin API (:meth:`start_block_spin`). Historical grid parameters are still
+accepted by the constructor for compatibility but are not used to render a grid
+of tiles; the GLSL path currently renders a single full-frame 3D slab.
 """
 from __future__ import annotations
 
@@ -15,6 +17,7 @@ from core.logging.logger import get_logger
 from core.animation.types import EasingCurve
 
 from transitions.base_transition import BaseTransition, TransitionState
+from transitions.slide_transition import SlideDirection
 from rendering.gl_compositor import GLCompositorWidget
 
 
@@ -24,21 +27,21 @@ logger = get_logger(__name__)
 class GLCompositorBlockSpinTransition(BaseTransition):
     """GPU-backed 3D Block Spins targeting the shared GL compositor widget.
 
-    The controller mirrors the grid configuration of the compositor-backed
-    Block Puzzle Flip but renders a faux-3D spin by shrinking tile width over
-    time. All actual drawing happens inside GLCompositorWidget.
+    The controller carries only duration and direction; all actual drawing
+    happens inside :class:`GLCompositorWidget`, which renders a single thin 3D
+    slab over a black void. ``grid_rows``/``grid_cols`` and ``use_grid`` are
+    kept for legacy configuration compatibility but no longer enable a tile
+    grid – the compositor always renders a single slab.
     """
 
     def __init__(
         self,
         duration_ms: int = 3000,
-        grid_rows: int = 4,
-        grid_cols: int = 6,
         easing: str = "Auto",
+        direction: SlideDirection = SlideDirection.LEFT,
     ) -> None:
         super().__init__(duration_ms)
-        self._rows = grid_rows
-        self._cols = grid_cols
+        self._direction: SlideDirection = direction
         self._widget: Optional[QWidget] = None
         self._compositor: Optional[GLCompositorWidget] = None
         self._animation_id: Optional[str] = None
@@ -101,21 +104,19 @@ class GLCompositorBlockSpinTransition(BaseTransition):
         self._animation_id = comp.start_block_spin(
             old_pixmap,
             new_pixmap,
-            rows=self._rows,
-            cols=self._cols,
             duration_ms=self.duration_ms,
             easing=easing_curve,
             animation_manager=am,
+            direction=self._direction,
             on_finished=_on_finished,
         )
 
         self._set_state(TransitionState.RUNNING)
         self.started.emit()
         logger.info(
-            "GLCompositorBlockSpinTransition started (%dms, grid=%dx%d)",
+            "GLCompositorBlockSpinTransition started (%dms, dir=%s)",
             self.duration_ms,
-            self._cols,
-            self._rows,
+            getattr(self._direction, "value", self._direction),
         )
         return True
 

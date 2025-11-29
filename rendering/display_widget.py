@@ -26,7 +26,6 @@ from PySide6.QtGui import (
 from shiboken6 import Shiboken
 from rendering.display_modes import DisplayMode
 from rendering.image_processor import ImageProcessor
-from rendering.pan_and_scan import PanAndScan
 from rendering.gl_compositor import GLCompositorWidget
 from transitions.base_transition import BaseTransition
 from transitions import (
@@ -166,8 +165,6 @@ class DisplayWidget(QWidget):
         self._current_transition: Optional[BaseTransition] = None
         self._current_transition_overlay_key: Optional[str] = None
         self._current_transition_started_at: float = 0.0
-        self._image_label: Optional[QLabel] = None  # For pan and scan
-        self._pan_and_scan = PanAndScan(self)
         self._screen = None  # Store screen reference for DPI
         self._device_pixel_ratio = 1.0  # DPI scaling factor
         self._initial_mouse_pos = None  # Track mouse movement for exit
@@ -486,17 +483,6 @@ class DisplayWidget(QWidget):
             self._target_fps = target
             logger.info(f"Detected refresh rate: {detected} Hz, target animation FPS: {self._target_fps}")
         
-        try:
-            pan_cap = 0
-            if self.settings_manager:
-                try:
-                    pan_cap = int(self.settings_manager.get('pan_and_scan.max_fps', 0))
-                except Exception:
-                    pan_cap = 0
-            eff_pan_fps = min(self._target_fps, pan_cap) if pan_cap > 0 else self._target_fps
-            self._pan_and_scan.set_target_fps(eff_pan_fps)
-        except Exception:
-            pass
         try:
             am = getattr(self, "_animation_manager", None)
             if am is not None and hasattr(am, 'set_target_fps'):
@@ -1887,8 +1873,8 @@ class DisplayWidget(QWidget):
                 self._log_transition_selection(requested_type, 'Diffuse', random_mode, random_choice_value)
                 return transition
 
-            if transition_type == 'Rain Drops':
-                # Rain Drops is implemented as a compositor-driven variant of
+            if transition_type in ('Rain Drops', 'Ripple'):
+                # Ripple is implemented as a compositor-driven variant of
                 # the diffuse mask using circular, expanding droplets. It is
                 # GL-only and falls back to a simple crossfade when GPU
                 # acceleration or the compositor is unavailable.
@@ -1907,7 +1893,7 @@ class DisplayWidget(QWidget):
                     transition = CrossfadeTransition(duration_ms, easing_str)
 
                 transition.set_resource_manager(self._resource_manager)
-                label = 'Rain Drops' if hw_accel else 'Crossfade'
+                label = 'Ripple' if hw_accel else 'Crossfade'
                 self._log_transition_selection(requested_type, label, random_mode, random_choice_value)
                 return transition
 
@@ -1968,17 +1954,29 @@ class DisplayWidget(QWidget):
                 return transition
 
             if transition_type == '3D Block Spins':
-                block_flip_settings = transitions_settings.get('block_flip', {}) if isinstance(transitions_settings.get('block_flip', {}), dict) else {}
-                rows_raw = block_flip_settings.get('rows', 4)
-                cols_raw = block_flip_settings.get('cols', 6)
-                try:
-                    rows = int(rows_raw)
-                except Exception:
-                    rows = 4
-                try:
-                    cols = int(cols_raw)
-                except Exception:
-                    cols = 6
+                # Direction configuration for the single-slab 3D Block Spins
+                # transition. Grid mode has been removed; the shader always
+                # renders a single full-frame slab driven by this direction.
+                blockspin_settings = transitions_settings.get('blockspin', {}) if isinstance(transitions_settings.get('blockspin', {}), dict) else {}
+                dir_str = blockspin_settings.get('direction', 'Random') or 'Random'
+
+                # Map UI string to SlideDirection, with Random choosing a
+                # random cardinal direction at selection time.
+                if dir_str == 'Random':
+                    dir_choice = random.choice([
+                        SlideDirection.LEFT,
+                        SlideDirection.RIGHT,
+                        SlideDirection.UP,
+                        SlideDirection.DOWN,
+                    ])
+                else:
+                    direction_map = {
+                        'Left to Right': SlideDirection.LEFT,
+                        'Right to Left': SlideDirection.RIGHT,
+                        'Top to Bottom': SlideDirection.DOWN,
+                        'Bottom to Top': SlideDirection.UP,
+                    }
+                    dir_choice = direction_map.get(dir_str, SlideDirection.LEFT)
 
                 if hw_accel:
                     try:
@@ -1987,7 +1985,7 @@ class DisplayWidget(QWidget):
                         logger.debug("[GL COMPOSITOR] Failed to ensure compositor during block spins selection", exc_info=True)
                     use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
                     if use_compositor:
-                        transition = GLCompositorBlockSpinTransition(duration_ms, rows, cols, easing_str)
+                        transition = GLCompositorBlockSpinTransition(duration_ms, easing_str, dir_choice)
                     else:
                         # When compositor cannot be used, prefer a CPU Crossfade
                         # fallback instead of attempting a partial block spins
@@ -2241,13 +2239,10 @@ class DisplayWidget(QWidget):
                     # base pixmap on the old image while the GLSL spin runs so
                     # we do not briefly jump to the new image before the
                     # transition actually starts.
-                    from transitions.gl_compositor_blockspin_transition import (
-                        GLCompositorBlockSpinTransition,
-                    )
 
                     comp = getattr(self, "_gl_compositor", None)
                     if (
-                        isinstance(transition, GLCompositorBlockSpinTransition)
+                        transition.__class__.__name__ == "GLCompositorBlockSpinTransition"
                         and isinstance(comp, GLCompositorWidget)
                         and previous_pixmap_ref is not None
                         and not previous_pixmap_ref.isNull()
