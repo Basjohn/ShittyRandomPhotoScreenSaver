@@ -95,6 +95,7 @@ Checkboxes: `[ ]` = active work; `[x]` = completed or historical items retained 
 - [x] **Milestone C:** Post-settings and non-GL banding eliminated on all monitors; reproduction recipes recorded and guarded by tests (including software-backend scenarios).
 - [x] **Milestone D:** Software transitions (Diffuse, Block Puzzle Flip) run to completion without watchdog timeouts or stalls under the software backend, with coverage tests in place. *(Guarded by `test_diffuse_transition_software_backend_no_watchdog` and `test_block_flip_transition_software_backend_no_watchdog` in `tests/test_transition_integration.py`, which force the software backend and assert clean completion with the transition watchdog armed.)*
 - [x] **Milestone E:** Full GL and GLSL diagnostics suite automated (scripts + docs updated).
+- [x] **Milestone F:** Compositor-backed GLSL Block Spins implemented as a single thin 3D slab (box mesh) with depth-tested front/back faces and neutral glass edges, using the card-flip shader pipeline and degrading cleanly to a compositor-side crossfade when shader usage is disabled for the session.
 
 ## 10. References & Supporting Docs
 - `Docs/TestSuite.md`

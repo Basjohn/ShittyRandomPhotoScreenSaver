@@ -478,6 +478,8 @@ These policies are **normative**: new code, tests, and docs must follow them unl
 - **Single accelerated path (Route 3)**
   - The only supported GL path is the compositor route using `GLCompositorWidget` and the backend registry in `rendering/backends`. Per-transition GL overlays are considered legacy and must not be used for new features.
   - Software transitions are retained as a fallback when GL is unavailable or misconfigured.
+  - `GLCompositorWidget` owns the GLSL shader pipeline (card-flip program, fullscreen quad VAO/VBO, Block Spins textures) and must create/destroy all GL resources inside its `initializeGL()` / `cleanup()` lifecycle hooks.
+  - `DisplayWidget._on_destroyed` is responsible for calling `GLCompositorWidget.cleanup()` before unparenting the compositor; `ScreensaverEngine.cleanup()` then calls `ResourceManager.shutdown()` so remaining Qt objects and resources are finalised deterministically.
 - **Flicker-free requirement**
   - The display pipeline must avoid visual flicker and banding at all costs:
     - `DisplayWidget` must preserve the last rendered pixmap across transitions, errors, and restarts.

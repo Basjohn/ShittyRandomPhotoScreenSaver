@@ -43,6 +43,12 @@ from transitions.gl_compositor_slide_transition import GLCompositorSlideTransiti
 from transitions.gl_compositor_wipe_transition import GLCompositorWipeTransition
 from transitions.gl_compositor_blockflip_transition import GLCompositorBlockFlipTransition
 from transitions.gl_compositor_blinds_transition import GLCompositorBlindsTransition
+from transitions.gl_compositor_peel_transition import GLCompositorPeelTransition
+from transitions.gl_compositor_blockspin_transition import GLCompositorBlockSpinTransition
+from transitions.gl_compositor_raindrops_transition import GLCompositorRainDropsTransition
+from transitions.gl_compositor_warp_transition import GLCompositorWarpTransition
+from transitions.gl_compositor_clawmarks_transition import GLCompositorClawMarksTransition
+from transitions.gl_compositor_shuffle_transition import GLCompositorShuffleTransition
 from widgets.clock_widget import ClockWidget, TimeFormat, ClockPosition
 from widgets.weather_widget import WeatherWidget, WeatherPosition
 from widgets.media_widget import MediaWidget, MediaPosition
@@ -1740,6 +1746,132 @@ class DisplayWidget(QWidget):
                 self._log_transition_selection(requested_type, 'Wipe', random_mode, random_choice_value)
                 return transition
 
+            if transition_type == 'Peel':
+                peel_settings = transitions_settings.get('peel', {}) if isinstance(transitions_settings.get('peel', {}), dict) else {}
+                peel_dir_str = peel_settings.get('direction', 'Random') or 'Random'
+
+                direction_map = {
+                    'Left to Right': SlideDirection.LEFT,
+                    'Right to Left': SlideDirection.RIGHT,
+                    'Top to Bottom': SlideDirection.DOWN,
+                    'Bottom to Top': SlideDirection.UP,
+                }
+
+                rnd_always = SettingsManager.to_bool(transitions_settings.get('random_always', False), False)
+
+                if peel_dir_str == 'Random' and not rnd_always:
+                    all_dirs = [
+                        SlideDirection.LEFT,
+                        SlideDirection.RIGHT,
+                        SlideDirection.UP,
+                        SlideDirection.DOWN,
+                    ]
+                    last_dir = peel_settings.get('last_direction')
+                    str_to_enum = {
+                        'Left to Right': SlideDirection.LEFT,
+                        'Right to Left': SlideDirection.RIGHT,
+                        'Top to Bottom': SlideDirection.DOWN,
+                        'Bottom to Top': SlideDirection.UP,
+                    }
+                    last_enum = str_to_enum.get(last_dir) if isinstance(last_dir, str) else None
+                    candidates = [d for d in all_dirs if d != last_enum] if last_enum in all_dirs else all_dirs
+                    direction = random.choice(candidates) if candidates else random.choice(all_dirs)
+                    enum_to_str = {
+                        SlideDirection.LEFT: 'Left to Right',
+                        SlideDirection.RIGHT: 'Right to Left',
+                        SlideDirection.DOWN: 'Top to Bottom',
+                        SlideDirection.UP: 'Bottom to Top',
+                    }
+                    try:
+                        peel_settings['last_direction'] = enum_to_str.get(direction, 'Left to Right')
+                        transitions_settings['peel'] = peel_settings
+                        self.settings_manager.set('transitions', transitions_settings)
+                    except Exception:
+                        pass
+                else:
+                    direction = direction_map.get(peel_dir_str, SlideDirection.LEFT)
+
+                strips = 12  # Moderate default strip count for a smooth peel
+
+                if hw_accel:
+                    try:
+                        self._ensure_gl_compositor()
+                    except Exception:
+                        logger.debug("[GL COMPOSITOR] Failed to ensure compositor during peel selection", exc_info=True)
+                    use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
+                    if use_compositor:
+                        transition = GLCompositorPeelTransition(duration_ms, direction, strips, easing_str)
+                    else:
+                        # When compositor cannot be used, prefer a CPU
+                        # Crossfade fallback instead of attempting a partial
+                        # peel implementation.
+                        transition = CrossfadeTransition(duration_ms, easing_str)
+                else:
+                    transition = CrossfadeTransition(duration_ms, easing_str)
+
+                transition.set_resource_manager(self._resource_manager)
+                label = 'Peel' if hw_accel else 'Crossfade'
+                self._log_transition_selection(requested_type, label, random_mode, random_choice_value)
+                return transition
+
+            if transition_type == 'Shuffle':
+                # Shuffle is implemented as a compositor-driven variant of a
+                # block-based diffuse mask. Square blocks of the new image
+                # slide in from a random edge with a soft stacking effect.
+                # It is GL-only and falls back to a simple crossfade when GPU
+                # acceleration or the compositor is unavailable.
+
+                diffuse_settings = transitions_settings.get('diffuse', {}) if isinstance(transitions_settings.get('diffuse', {}), dict) else {}
+                block_size_raw = diffuse_settings.get('block_size', 50)
+                try:
+                    block_size = int(block_size_raw)
+                except Exception:
+                    block_size = 50
+
+                direction_str = 'Random'
+
+                if hw_accel:
+                    try:
+                        self._ensure_gl_compositor()
+                    except Exception:
+                        logger.debug("[GL COMPOSITOR] Failed to ensure compositor during shuffle selection", exc_info=True)
+                    use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
+                    if use_compositor:
+                        transition = GLCompositorShuffleTransition(duration_ms, block_size, direction_str, easing_str)
+                    else:
+                        transition = CrossfadeTransition(duration_ms, easing_str)
+                else:
+                    transition = CrossfadeTransition(duration_ms, easing_str)
+
+                transition.set_resource_manager(self._resource_manager)
+                label = 'Shuffle' if hw_accel else 'Crossfade'
+                self._log_transition_selection(requested_type, label, random_mode, random_choice_value)
+                return transition
+
+            if transition_type == 'Warp Dissolve':
+                # Warp Dissolve is implemented as a compositor-driven banded
+                # warp of the old image over a stable new image. It is GL-only
+                # and falls back to a simple crossfade when GPU acceleration
+                # or the compositor is unavailable.
+
+                if hw_accel:
+                    try:
+                        self._ensure_gl_compositor()
+                    except Exception:
+                        logger.debug("[GL COMPOSITOR] Failed to ensure compositor during warp dissolve selection", exc_info=True)
+                    use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
+                    if use_compositor:
+                        transition = GLCompositorWarpTransition(duration_ms, easing_str)
+                    else:
+                        transition = CrossfadeTransition(duration_ms, easing_str)
+                else:
+                    transition = CrossfadeTransition(duration_ms, easing_str)
+
+                transition.set_resource_manager(self._resource_manager)
+                label = 'Warp Dissolve' if hw_accel else 'Crossfade'
+                self._log_transition_selection(requested_type, label, random_mode, random_choice_value)
+                return transition
+
             if transition_type == 'Diffuse':
                 diffuse_settings = transitions_settings.get('diffuse', {}) if isinstance(transitions_settings.get('diffuse', {}), dict) else {}
                 block_size_raw = diffuse_settings.get('block_size', 50)
@@ -1753,6 +1885,54 @@ class DisplayWidget(QWidget):
 
                 transition.set_resource_manager(self._resource_manager)
                 self._log_transition_selection(requested_type, 'Diffuse', random_mode, random_choice_value)
+                return transition
+
+            if transition_type == 'Rain Drops':
+                # Rain Drops is implemented as a compositor-driven variant of
+                # the diffuse mask using circular, expanding droplets. It is
+                # GL-only and falls back to a simple crossfade when GPU
+                # acceleration or the compositor is unavailable.
+
+                if hw_accel:
+                    try:
+                        self._ensure_gl_compositor()
+                    except Exception:
+                        logger.debug("[GL COMPOSITOR] Failed to ensure compositor during rain drops selection", exc_info=True)
+                    use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
+                    if use_compositor:
+                        transition = GLCompositorRainDropsTransition(duration_ms, easing_str)
+                    else:
+                        transition = CrossfadeTransition(duration_ms, easing_str)
+                else:
+                    transition = CrossfadeTransition(duration_ms, easing_str)
+
+                transition.set_resource_manager(self._resource_manager)
+                label = 'Rain Drops' if hw_accel else 'Crossfade'
+                self._log_transition_selection(requested_type, label, random_mode, random_choice_value)
+                return transition
+
+            if transition_type == 'Claw Marks':
+                # Claw Marks is implemented as a compositor-driven variant of
+                # the diffuse mask using a handful of diagonal scratch bands.
+                # It is GL-only and falls back to a simple crossfade when GPU
+                # acceleration or the compositor is unavailable.
+
+                if hw_accel:
+                    try:
+                        self._ensure_gl_compositor()
+                    except Exception:
+                        logger.debug("[GL COMPOSITOR] Failed to ensure compositor during claw marks selection", exc_info=True)
+                    use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
+                    if use_compositor:
+                        transition = GLCompositorClawMarksTransition(duration_ms, easing_str)
+                    else:
+                        transition = CrossfadeTransition(duration_ms, easing_str)
+                else:
+                    transition = CrossfadeTransition(duration_ms, easing_str)
+
+                transition.set_resource_manager(self._resource_manager)
+                label = 'Claw Marks' if hw_accel else 'Crossfade'
+                self._log_transition_selection(requested_type, label, random_mode, random_choice_value)
                 return transition
 
             if transition_type == 'Block Puzzle Flip':
@@ -1785,6 +1965,40 @@ class DisplayWidget(QWidget):
 
                 transition.set_resource_manager(self._resource_manager)
                 self._log_transition_selection(requested_type, 'Block Puzzle Flip', random_mode, random_choice_value)
+                return transition
+
+            if transition_type == '3D Block Spins':
+                block_flip_settings = transitions_settings.get('block_flip', {}) if isinstance(transitions_settings.get('block_flip', {}), dict) else {}
+                rows_raw = block_flip_settings.get('rows', 4)
+                cols_raw = block_flip_settings.get('cols', 6)
+                try:
+                    rows = int(rows_raw)
+                except Exception:
+                    rows = 4
+                try:
+                    cols = int(cols_raw)
+                except Exception:
+                    cols = 6
+
+                if hw_accel:
+                    try:
+                        self._ensure_gl_compositor()
+                    except Exception:
+                        logger.debug("[GL COMPOSITOR] Failed to ensure compositor during block spins selection", exc_info=True)
+                    use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
+                    if use_compositor:
+                        transition = GLCompositorBlockSpinTransition(duration_ms, rows, cols, easing_str)
+                    else:
+                        # When compositor cannot be used, prefer a CPU Crossfade
+                        # fallback instead of attempting a partial block spins
+                        # implementation.
+                        transition = CrossfadeTransition(duration_ms, easing_str)
+                else:
+                    transition = CrossfadeTransition(duration_ms, easing_str)
+
+                transition.set_resource_manager(self._resource_manager)
+                label = '3D Block Spins' if hw_accel else 'Crossfade'
+                self._log_transition_selection(requested_type, label, random_mode, random_choice_value)
                 return transition
 
             if transition_type == 'Blinds':
@@ -2022,6 +2236,29 @@ class DisplayWidget(QWidget):
                 transition = self._create_transition()
                 if transition:
                     self._current_transition = transition
+
+                    # For compositor-backed 3D Block Spins, keep the compositor
+                    # base pixmap on the old image while the GLSL spin runs so
+                    # we do not briefly jump to the new image before the
+                    # transition actually starts.
+                    from transitions.gl_compositor_blockspin_transition import (
+                        GLCompositorBlockSpinTransition,
+                    )
+
+                    comp = getattr(self, "_gl_compositor", None)
+                    if (
+                        isinstance(transition, GLCompositorBlockSpinTransition)
+                        and isinstance(comp, GLCompositorWidget)
+                        and previous_pixmap_ref is not None
+                        and not previous_pixmap_ref.isNull()
+                    ):
+                        try:
+                            comp.set_base_pixmap(previous_pixmap_ref)
+                        except Exception:
+                            logger.debug(
+                                "[GL COMPOSITOR] Failed to seed base pixmap for block spins",
+                                exc_info=True,
+                            )
 
                     if previous_pixmap_ref:
                         self.previous_pixmap = previous_pixmap_ref
@@ -2735,6 +2972,12 @@ class DisplayWidget(QWidget):
         # Ensure compositor is torn down cleanly
         try:
             if self._gl_compositor is not None:
+                try:
+                    cleanup = getattr(self._gl_compositor, "cleanup", None)
+                    if callable(cleanup):
+                        cleanup()
+                except Exception as e:
+                    logger.debug("[GL COMPOSITOR] Cleanup failed in _on_destroyed: %s", e, exc_info=True)
                 self._gl_compositor.hide()
                 self._gl_compositor.setParent(None)
         except Exception as e:

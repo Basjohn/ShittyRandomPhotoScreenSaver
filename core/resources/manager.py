@@ -15,7 +15,7 @@ import threading
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
 
 from .types import CleanupProtocol, ResourceInfo, ResourceType
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_verbose_logging
 
 T = TypeVar('T')
 
@@ -104,7 +104,11 @@ class ResourceManager:
             def _finalize(rid: str) -> None:
                 if not self._initialized or self._shutdown:
                     return
-                self._logger.debug(f"Finalizing resource {rid}")
+                # In non-verbose mode we skip the per-resource debug line to
+                # keep logs readable; the real work still happens in
+                # _finalize_resource.
+                if is_verbose_logging():
+                    self._logger.debug(f"Finalizing resource {rid}")
                 self._finalize_resource(rid)
             
             try:
@@ -306,10 +310,13 @@ class ResourceManager:
         """Called when a resource is garbage collected."""
         with self._lock:
             if resource_id in self._cleanup_handlers:
-                # Resource was GC'd but handler still exists
+                # Resource was GC'd but handler still exists. The detailed
+                # per-id debug message is only useful when running in verbose
+                # diagnostics mode; for normal debug runs we keep logs tight.
                 self._cleanup_handlers.pop(resource_id, None)
                 self._resources.pop(resource_id, None)
-                self._logger.debug(f"Resource {resource_id} was garbage collected")
+                if is_verbose_logging():
+                    self._logger.debug(f"Resource {resource_id} was garbage collected")
     
     def get_all_resources(self) -> List[ResourceInfo]:
         """Get information about all registered resources."""

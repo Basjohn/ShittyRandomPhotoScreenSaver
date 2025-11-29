@@ -59,18 +59,34 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
   - Background: the engine enforces a global RSS background cap (`sources.rss_background_cap`, default 30) and a time‑to‑live (`sources.rss_stale_minutes`, default 30 minutes) so older, unseen RSS images are gradually replaced when new ones arrive, but only when a background refresh successfully adds replacements.
 
 ## Transitions
-- GL and CPU variants for Crossfade, Slide, Wipe, Diffuse, Block Puzzle Flip; GL-only variant for Blinds (`GLBlindsTransition`) when hardware acceleration is enabled. In addition, compositor-backed controllers (`GLCompositorCrossfadeTransition`, `GLCompositorSlideTransition`, `GLCompositorWipeTransition`, `GLCompositorBlockFlipTransition`) delegate rendering to a single `GLCompositorWidget` per display.
-- DisplayWidget injects the shared ResourceManager into every transition; overlays are created through `overlay_manager.get_or_create_overlay` so lifecycle is centralized.
-- GL overlays remain persistent and pre-warmed via `overlay_manager.prepare_gl_overlay` / `DisplayWidget._prewarm_gl_contexts` to avoid first-use flicker on legacy GL paths, while compositor-backed transitions render through `GLCompositorWidget` instead of per-transition QOpenGLWidget overlays.
-- Diffuse supports multiple shapes (`Rectangle`, `Circle`, `Diamond`, `Plus`, `Triangle`) with a validated block-size range (min 4px) shared between CPU and GL paths and enforced by the Transitions tab UI.
-- Durations: a global `transitions.duration_ms` provides the baseline duration for all transition types, while `transitions.durations["<Type>"]` (e.g. `"Slide"`, `"Wipe"`, `"Diffuse"`, `"Block Puzzle Flip"`) stores optional per-type overrides. The Transitions tab slider is bound to the active type and persists its value into `durations` while keeping `duration_ms` up to date for legacy consumers.
+- GL and CPU variants for Crossfade, Slide, Wipe, Diffuse, Block Puzzle Flip; GL-only variant for Blinds (`GLBlindsTransition`) when hardware acceleration is enabled.
+- Compositor-backed controllers (`GLCompositorCrossfadeTransition`, `GLCompositorSlideTransition`, `GLCompositorWipeTransition`, `GLCompositorBlockFlipTransition`, `GLCompositorBlindsTransition`, `GLCompositorDiffuseTransition`) delegate rendering to a single `GLCompositorWidget` per display instead of per-transition `QOpenGLWidget` overlays.
+- Additional **GL-only, compositor-backed transitions** are implemented as first-class types:
+  - **Peel** (`GLCompositorPeelTransition`) – strip-based peel of the old image in a cardinal direction over the new image.
+  - **3D Block Spins** (`GLCompositorBlockSpinTransition`) – GL-only 3D slab spin driven by the Block Puzzle grid settings: a single thin depth-tested box mesh flips from the old image (front face) to the new image (back face) with neutral glass edges; when the shader path is disabled for the session, this type degrades to a compositor-side crossfade.
+  - **Rain Drops** (`GLCompositorRainDropsTransition`) – circular droplets expanding across the frame via the diffuse region path.
+  - **Warp Dissolve** (`WarpState` + `GLCompositorWarpTransition`) – banded horizontal warp of the old image over a stable new image, fading out over time.
+  - **Claw Marks** (`GLCompositorClawMarksTransition`) – a small set of diagonal scratch bands that grow to reveal the new image using the diffuse region API.
+  - **Shuffle** (`GLCompositorShuffleTransition`) – block-based reveal where blocks of the new image slide in from a chosen/random edge; implemented as a moving diffuse region.
+- DisplayWidget injects the shared ResourceManager into every transition. Legacy GL overlays are created through `overlay_manager.get_or_create_overlay` so lifecycle is centralized, while compositor-backed transitions render exclusively through `GLCompositorWidget`.
+- GL overlays remain persistent and pre-warmed via `overlay_manager.prepare_gl_overlay` / `DisplayWidget._prewarm_gl_contexts` to avoid first-use flicker on legacy GL paths; compositor-backed transitions reuse the same per-display compositor widget and never create additional GL surfaces.
+- Diffuse supports multiple shapes (`Rectangle`, `Circle`, `Diamond`, `Plus`, `Triangle`) with a validated block-size range (min 4px) shared between CPU and GL paths and enforced by the Transitions tab UI. Shuffle reuses the diffuse block-size setting to size its grid cells.
+- Durations: a global `transitions.duration_ms` provides the baseline duration for all transition types, while `transitions.durations["<Type>"]` (e.g. `"Slide"`, `"Wipe"`, `"Diffuse"`, `"Block Puzzle Flip"`, `"Blinds"`, `"Peel"`, `"3D Block Spins"`, `"Rain Drops"`, `"Warp Dissolve"`, `"Claw Marks"`, `"Shuffle"`) stores optional per-type overrides. The Transitions tab slider is bound to the active type and persists its value into `durations` while keeping `duration_ms` up to date for legacy consumers.
+- Per-transition pool membership:
+  - `transitions.pool` is a map of transition type name → bool.
+  - Random rotation and C-key cycling only consider types whose pool flag is true.
+  - Pool membership never affects explicit selection via the settings UI.
+- GL-only gating:
+  - GL-only types (Blinds, Peel, 3D Block Spins, Rain Drops, Warp Dissolve, Claw Marks, Shuffle) are only instantiated on the compositor/GL paths when `display.hw_accel=True` and the compositor is available.
+  - When hardware acceleration is disabled, the Transitions tab disables these types and the engine maps any request for them to a safe CPU fallback (currently Crossfade).
+  - Shader-backed variants (Group A, e.g. GLSL Block Spins and future Rain Drops / Warp / Claws ports) run on top of the compositor and, on any shader failure, degrade to the existing QPainter compositor transitions (Group B); only when the compositor or GL backend is unavailable does the engine fall back to pure software transitions (Group C).
 - Non-repeating random selection:
-  - Engine sets `transitions.random_choice` per rotation.
+  - Engine sets `transitions.random_choice` per rotation, filtered through `transitions.pool` and GL-only gating.
   - Slide: cardinal-only directions; stored as `transitions.slide.direction` and last as `transitions.slide.last_direction` (legacy fallback maintained).
   - Wipe: includes diagonals; stored as `transitions.wipe.direction` and last as `transitions.wipe.last_direction` (legacy fallback maintained).
   - UI 'Random direction' respected when `random_always` is false.
   - Manual selection or hotkey cycling must clear `transitions.random_choice` cache immediately so the chosen type instantiates next rotation.
-  - Random selection disabled when `transitions.random_always=False`; engine respects explicit `transitions.type` from settings/GUI.
+  - Random selection is disabled when `transitions.random_always=False`; engine then respects explicit `transitions.type` from settings/GUI.
 
 ## Performance Notes
 - All decoding happens off UI thread.
@@ -87,17 +103,18 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
 - `display.hw_accel`: bool
 - `display.mode`: fill|fit|shrink
 - `input.hard_exit`: bool (when true, mouse movement/clicks do not exit; only ESC/Q and hotkeys remain active). Additionally, while the Ctrl key is held, `DisplayWidget` temporarily suppresses mouse-move and left-click exit even when `input.hard_exit` is false, allowing interaction with widgets without persisting a hard-exit setting change. MC builds default this setting to true at startup in their own QSettings profile, while the normal screensaver build respects the saved value.
-- `transitions.type`: Crossfade|Slide|Wipe|Diffuse|Block Puzzle Flip|Blinds
+- `transitions.type`: Crossfade|Slide|Wipe|Diffuse|Block Puzzle Flip|Blinds|Peel|"3D Block Spins"|"Rain Drops"|"Warp Dissolve"|"Claw Marks"|Shuffle
 - `transitions.random_always`: bool
-- `transitions.random_choice`: str
-- `transitions.slide.direction`, `transitions.slide.last_direction` (legacy flat keys maintained)
- - `transitions.wipe.direction`, `transitions.wipe.last_direction` (legacy flat keys maintained)
- - `transitions.duration_ms`: int global default transition duration in milliseconds.
- - `transitions.durations`: mapping of transition type name → per-type duration in milliseconds (e.g. `{"Crossfade": 1300, "Slide": 2000, ...}`) used by the Transitions tab and `DisplayWidget` to make durations independent per transition.
- - `transitions.diffuse.block_size` (int, clamped to a 4–256px range) and `transitions.diffuse.shape` (`Rectangle`|`Circle`|`Diamond`|`Plus`|`Triangle`).
- - `timing.interval`: int seconds
- - `display.same_image_all_monitors`: bool
- - Cache:
+- `transitions.random_choice`: str (current random pick for this rotation; cleared on manual type changes)
+- `transitions.slide.direction`, `transitions.slide.last_direction` (legacy flat keys maintained).
+- `transitions.wipe.direction`, `transitions.wipe.last_direction` (legacy flat keys maintained).
+- `transitions.duration_ms`: int global default transition duration in milliseconds.
+- `transitions.durations`: mapping of transition type name → per-type duration in milliseconds (e.g. `{"Crossfade": 1300, "Slide": 2000, ...}`) used by the Transitions tab and `DisplayWidget` to make durations independent per transition.
+- `transitions.diffuse.block_size` (int, clamped to a 4–256px range) and `transitions.diffuse.shape` (`Rectangle`|`Circle`|`Diamond`|`Plus`|`Triangle`). The same block-size is reused by Shuffle to size its GL grid.
+- `transitions.pool`: mapping of transition type name → bool controlling whether a type participates in engine random rotation and C-key cycling (explicit selection is always allowed regardless of this flag).
+- `timing.interval`: int seconds
+- `display.same_image_all_monitors`: bool
+- Cache:
   - `cache.prefetch_ahead` (default 5)
   - `cache.max_items` (default 24)
   - `cache.max_memory_mb` (default 1024)
@@ -175,7 +192,7 @@ widget behaviour; this Spec only summarises the high-level contract.
 ## Future Enhancements
 - Compute-pool pre-scale-to-screen (per-display DPR) ahead of time for the next image.
 - Transition sync improvements across displays using lock-free SPSC queues.
-- Additional **GL-only, compositor-backed transitions** (Peel, Rain Drops, Warp Dissolve, 3D Block Spins, Claw Marks) implemented as new transition types under the existing compositor architecture. These effects are only exposed when `display.hw_accel=True` and must either be hidden or mapped to a safe CPU fallback (e.g. Crossfade) when hardware acceleration is disabled. Detailed design and feasibility notes live in `Docs/GL_Transitions_Proposal.md`.
+- Additional tuning of the **GL-only, compositor-backed transitions** (Peel, Rain Drops, Warp Dissolve, 3D Block Spins, Claw Marks, Shuffle) based on visual QA and user feedback (e.g. strip counts, band amplitudes, droplet density, scratch thickness, shuffle block size/density). Detailed design notes remain in `Docs/GL_Transitions_Proposal.md` and are kept consistent with this Spec.
 
-**Version**: 1.0  
-**Last Updated**: Nov 23, 2025 16:20 - Canonical settings, GL compositor path, Spotify widget baseline, Settings dialog palette/sizing, RSS JSON/caps/background refresh
+**Version**: 1.1  
+**Last Updated**: Nov 27, 2025 19:36 - Compositor-backed GL-only transitions (Peel, 3D Block Spins, Rain Drops, Warp Dissolve, Claw Marks, Shuffle), per-transition pool gating, updated transitions/settings documentation

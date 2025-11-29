@@ -45,6 +45,9 @@ class TransitionsTab(QWidget):
         # Maintain per-transition direction selections in-memory (default: Random)
         self._dir_slide: str = "Random"
         self._dir_wipe: str = "Random"
+        self._dir_peel: str = "Random"
+        # Per-transition pool membership for random/switch behaviour.
+        self._pool_by_type = {}
         self._duration_by_type = {}
         self._setup_ui()
         self._load_settings()
@@ -87,9 +90,15 @@ class TransitionsTab(QWidget):
             "Crossfade",
             "Slide",
             "Wipe",
+            "Peel",              # GL-only, directional
             "Diffuse",
             "Block Puzzle Flip",
-            "Blinds",  # GL-only
+            "3D Block Spins",    # GL-only
+            "Rain Drops",        # GL-only
+            "Warp Dissolve",     # GL-only
+            "Claw Marks",        # GL-only
+            "Shuffle",           # GL-only
+            "Blinds",            # GL-only
         ])
         self.transition_combo.currentTextChanged.connect(self._on_transition_changed)
         type_row.addWidget(self.transition_combo)
@@ -103,6 +112,17 @@ class TransitionsTab(QWidget):
         random_row.addWidget(self.random_checkbox)
         random_row.addStretch()
         type_layout.addLayout(random_row)
+
+        # Per-transition pool membership: controls whether the selected
+        # transition participates in the engine's random rotation and C-key
+        # cycling. Explicit selection via the dropdown remains available
+        # regardless of this flag.
+        pool_row = QHBoxLayout()
+        self.pool_checkbox = QCheckBox("Include in switch/random pool")
+        self.pool_checkbox.stateChanged.connect(self._save_settings)
+        pool_row.addWidget(self.pool_checkbox)
+        pool_row.addStretch()
+        type_layout.addLayout(pool_row)
         
         layout.addWidget(type_group)
         
@@ -313,8 +333,14 @@ class TransitionsTab(QWidget):
             "Crossfade",
             "Slide",
             "Wipe",
+            "Peel",
             "Diffuse",
             "Block Puzzle Flip",
+            "3D Block Spins",
+            "Rain Drops",
+            "Warp Dissolve",
+            "Claw Marks",
+            "Shuffle",
             "Blinds",
         ]
         self._duration_by_type = {}
@@ -326,11 +352,24 @@ class TransitionsTab(QWidget):
                 value = default_duration
             self._duration_by_type[name] = value
 
+        pool_cfg = transitions_config.get('pool', {})
+        if not isinstance(pool_cfg, dict):
+            pool_cfg = {}
+        self._pool_by_type = {}
+        for name in type_keys:
+            raw_flag = pool_cfg.get(name, True)
+            try:
+                enabled = SettingsManager.to_bool(raw_flag, True)
+            except Exception:
+                enabled = True
+            self._pool_by_type[name] = bool(enabled)
+
         # Block signals while we apply settings to avoid recursive saves with stale state
         blockers = []
         for w in [
             getattr(self, 'transition_combo', None),
             getattr(self, 'random_checkbox', None),
+            getattr(self, 'pool_checkbox', None),
             getattr(self, 'duration_slider', None),
             getattr(self, 'direction_combo', None),
             getattr(self, 'easing_combo', None),
@@ -353,16 +392,26 @@ class TransitionsTab(QWidget):
             duration = self._duration_by_type.get(transition_type, default_duration)
             self.duration_slider.setValue(duration)
             self.duration_value_label.setText(f"{duration} ms")
+
+            # Load per-transition pool membership for the current type
+            current_pool = self._pool_by_type.get(transition_type, True)
+            try:
+                self.pool_checkbox.setChecked(bool(current_pool))
+            except Exception:
+                pass
             
             # Load per-transition directions (nested)
             slide_cfg = transitions_config.get('slide', {}) if isinstance(transitions_config.get('slide', {}), dict) else {}
             wipe_cfg = transitions_config.get('wipe', {}) if isinstance(transitions_config.get('wipe', {}), dict) else {}
+            peel_cfg = transitions_config.get('peel', {}) if isinstance(transitions_config.get('peel', {}), dict) else {}
 
             slide_dir = slide_cfg.get('direction', 'Random') or 'Random'
             wipe_dir = wipe_cfg.get('direction', 'Random') or 'Random'
+            peel_dir = peel_cfg.get('direction', 'Random') or 'Random'
 
             self._dir_slide = slide_dir
             self._dir_wipe = wipe_dir
+            self._dir_peel = peel_dir
             
             # Load easing
             easing = transitions_config.get('easing', 'Auto')
@@ -417,14 +466,23 @@ class TransitionsTab(QWidget):
             self.duration_value_label.setText(f"{value} ms")
         finally:
             self.duration_slider.blockSignals(False)
+
+        # Update pool checkbox to reflect stored membership for this type
+        try:
+            self.pool_checkbox.blockSignals(True)
+            enabled = self._pool_by_type.get(cur_type, True)
+            self.pool_checkbox.setChecked(bool(enabled))
+        finally:
+            self.pool_checkbox.blockSignals(False)
+
         self._save_settings()
     
     def _update_specific_settings(self) -> None:
         """Update visibility of transition-specific settings."""
         transition = self.transition_combo.currentText()
 
-        # Show/hide direction for directional transitions (Slide/Wipe only)
-        show_direction = transition in ["Slide", "Wipe"]
+        # Show/hide direction for directional transitions (Slide/Wipe/Peel only)
+        show_direction = transition in ["Slide", "Wipe", "Peel"]
         self.direction_group.setVisible(show_direction)
 
         # Populate direction options per transition
@@ -463,9 +521,20 @@ class TransitionsTab(QWidget):
                     if idx < 0:
                         idx = self.direction_combo.findText("Random") if self._dir_wipe == "Random" else 0
                     self.direction_combo.setCurrentIndex(max(0, idx))
-                else:
-                    # Diffuse currently uses direction group visibility only
-                    self.direction_combo.addItems(["Left to Right", "Right to Left", "Random"])  # conservative default
+                elif transition == "Peel":
+                    # Peel: same cardinal directions model as Slide
+                    peel_items = [
+                        "Left to Right",
+                        "Right to Left",
+                        "Top to Bottom",
+                        "Bottom to Top",
+                        "Random",
+                    ]
+                    self.direction_combo.addItems(peel_items)
+                    idx = self.direction_combo.findText(self._dir_peel)
+                    if idx < 0:
+                        idx = self.direction_combo.findText("Random") if self._dir_peel == "Random" else 0
+                    self.direction_combo.setCurrentIndex(max(0, idx))
             finally:
                 self.direction_combo.blockSignals(False)
 
@@ -480,7 +549,7 @@ class TransitionsTab(QWidget):
         try:
             from PySide6.QtCore import Qt
             hw = self._settings.get_bool('display.hw_accel', True)
-            gl_only = ["Blinds"]
+            gl_only = ["Blinds", "Peel", "3D Block Spins", "Rain Drops", "Warp Dissolve", "Claw Marks", "Shuffle"]
             for name in gl_only:
                 idx = self.transition_combo.findText(name)
                 if idx >= 0:
@@ -504,7 +573,8 @@ class TransitionsTab(QWidget):
         """If a GL-only transition is selected with HW off, switch to Crossfade and persist."""
         hw = self._settings.get_bool('display.hw_accel', True)
         cur = self.transition_combo.currentText()
-        if cur in {"Blinds"} and not hw:
+        gl_only = {"Blinds", "Peel", "3D Block Spins", "Rain Drops", "Warp Dissolve", "Claw Marks", "Shuffle"}
+        if cur in gl_only and not hw:
             idx = self.transition_combo.findText("Crossfade")
             if idx >= 0:
                 self.transition_combo.blockSignals(True)
@@ -515,7 +585,7 @@ class TransitionsTab(QWidget):
                 self._save_settings()
         if not hw:
             cached_choice = self._settings.get('transitions.random_choice', None)
-            if isinstance(cached_choice, str) and cached_choice in {"Blinds"}:
+            if isinstance(cached_choice, str) and cached_choice in gl_only:
                 self._settings.remove('transitions.random_choice')
                 self._settings.remove('transitions.last_random_choice')
     
@@ -528,10 +598,22 @@ class TransitionsTab(QWidget):
             self._dir_slide = cur_dir
         elif cur_type == "Wipe":
             self._dir_wipe = cur_dir
+        elif cur_type == "Peel":
+            self._dir_peel = cur_dir
 
         cur_duration = self.duration_slider.value()
         try:
             self._duration_by_type[cur_type] = cur_duration
+        except Exception:
+            pass
+
+        # Update in-memory per-type pool membership
+        try:
+            cur_pool = self.pool_checkbox.isChecked()
+        except Exception:
+            cur_pool = True
+        try:
+            self._pool_by_type[cur_type] = bool(cur_pool)
         except Exception:
             pass
 
@@ -549,12 +631,16 @@ class TransitionsTab(QWidget):
                 'shape': self.diffuse_shape_combo.currentText()
             },
             'durations': dict(self._duration_by_type),
+            'pool': dict(self._pool_by_type),
             # New nested per-transition direction settings
             'slide': {
                 'direction': self._dir_slide,
             },
             'wipe': {
                 'direction': self._dir_wipe,
+            },
+            'peel': {
+                'direction': self._dir_peel,
             },
         }
         

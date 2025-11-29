@@ -43,9 +43,15 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 ## Rendering
 - rendering/display_widget.py
   - Borderless fullscreen (frameless, always-on-top per monitor) image presentation, DPR-aware scaling. In MC builds the same DisplayWidget also adds the Qt.Tool flag so the window is hidden from the taskbar/standard Alt+Tab while retaining fullscreen/top-most behaviour.
-  - Creates transitions based on settings (GL and CPU variants, including GL-only Blinds when HW accel is enabled)
+  - Creates transitions based on settings (CPU, legacy GL overlays, and compositor-backed GL variants, including GL-only Blinds when HW accel is enabled).
   - Injects shared ResourceManager into transitions; seeds base pixmap pre/post transition and on startup to avoid black frames (wallpaper snapshot seeding + previous-pixmap fallback)
   - Uses lazy GL overlay initialization via `overlay_manager.prepare_gl_overlay` instead of a global startup prewarm; manages widgets Z-order, logs per-stage telemetry, handles transition watchdog timers
+ - rendering/gl_compositor.py
+  - `GLCompositorWidget`: single per-display GL surface responsible for drawing the base image and all compositor-backed GL transitions (Crossfade, Slide, Wipe, Block Puzzle Flip, Blinds, Diffuse, plus the GL-only Peel, 3D Block Spins, Rain Drops, Warp Dissolve, Claw Marks, Shuffle).
+  - Hosts the Route 3 GLSL shader pipeline (OpenGL 4.1+ via PyOpenGL when available), including a shared card-flip program and geometry for both a fullscreen quad and a dedicated 3D box mesh. The BlockSpin shader path renders the image as a thin depth-tested slab (front/back/side faces) with neutral glass edges and specular highlights using this box mesh.
+  - Owns the GLSL program/geometry state in a private pipeline container and exposes `cleanup()` to tear down programs, buffers, and Block Spins textures; `DisplayWidget` calls this from its destruction path so ResourceManager-driven shutdown leaves no dangling GL objects.
+  - Maintains lightweight per-transition state dataclasses (CrossfadeState, SlideState, WipeState, BlockFlipState, BlockSpinState, BlindsState, DiffuseState, PeelState, WarpState) and exposes `start_*` helpers driven by the shared AnimationManager.
+  - Legacy per-transition GL overlays remain supported but new GL-only transitions route through this compositor instead of creating additional `QOpenGLWidget` instances.
 - rendering/image_processor.py
   - Scaling/cropping for FILL/FIT/SHRINK, optional Lanczos via PIL
 - rendering/pan_and_scan.py
@@ -58,16 +64,27 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - BaseTransition with centralized animation
 - transitions/overlay_manager.py
   - Persistent overlay helpers (`get_or_create_overlay`, `prepare_gl_overlay`, diagnostics/raise helpers) registering with shared ResourceManager; logs swap downgrades and readiness telemetry
-- transitions/crossfade_transition.py, transitions/gl_crossfade_transition.py
-- transitions/slide_transition.py, transitions/gl_slide_transition.py
-- transitions/wipe_transition.py, transitions/gl_wipe_transition.py
+- transitions/crossfade_transition.py, transitions/gl_crossfade_transition.py, transitions/gl_compositor_crossfade_transition.py
+- transitions/slide_transition.py, transitions/gl_slide_transition.py, transitions/gl_compositor_slide_transition.py
+- transitions/wipe_transition.py, transitions/gl_wipe_transition.py, transitions/gl_compositor_wipe_transition.py
   - Slide/Wipe directions stored independently in settings; Slide is cardinals only, Wipe includes diagonals
-  - Wipe random direction honored; non-repeating when Random is selected in UI
-- transitions/diffuse_transition.py, transitions/gl_diffuse_transition.py
-  - Diffuse shapes: Rectangle, Circle, Diamond, Plus, Triangle; block size clamped (min 4px) and shared between CPU/GL
-- transitions/block_puzzle_flip_transition.py, transitions/gl_block_puzzle_flip_transition.py
-- transitions/gl_blinds.py
-  - GL-only Blinds transition using a persistent overlay; participates in GL prewarm and requires hardware acceleration
+- transitions/diffuse_transition.py, transitions/gl_diffuse_transition.py, transitions/gl_compositor_diffuse_transition.py
+  - Diffuse shapes: Rectangle, Circle, Diamond, Plus, Triangle; block size clamped (min 4px) and shared between CPU/GL; compositor-backed diffuse and Shuffle reuse the same block-size.
+- transitions/block_puzzle_flip_transition.py, transitions/gl_block_puzzle_flip_transition.py, transitions/gl_compositor_blockflip_transition.py
+- transitions/gl_blinds.py, transitions/gl_compositor_blinds_transition.py
+  - GL-only Blinds transition using either a legacy overlay or the compositor; participates in GL prewarm and requires hardware acceleration.
+- transitions/gl_compositor_peel_transition.py
+  - Compositor-backed GL-only Peel transition (strip-based peel of the old image over the new image). Direction stored under `transitions.peel.direction`.
+- transitions/gl_compositor_blockspin_transition.py
+  - Compositor-backed GL-only 3D Block Spins transition reusing the Block Puzzle grid.
+- transitions/gl_compositor_raindrops_transition.py
+  - Compositor-backed GL-only Rain Drops transition using a raindrop-like diffuse region to reveal the new image.
+- transitions/gl_compositor_warp_transition.py
+  - Compositor-backed GL-only Warp Dissolve transition using a banded horizontal warp of the old image over a stable new image.
+- transitions/gl_compositor_clawmarks_transition.py
+  - Compositor-backed GL-only Claw Marks transition using a handful of diagonal scratch-like bands via the diffuse region API.
+- transitions/gl_compositor_shuffle_transition.py
+  - Compositor-backed GL-only Shuffle transition: blocks of the new image slide in from a chosen/random edge using a moving diffuse region.
 
 ## Sources
 - sources/base_provider.py
@@ -108,13 +125,14 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - display.refresh_sync: bool
 - display.hw_accel: bool
 - display.mode: fill|fit|shrink
-- transitions.type
+- transitions.type (includes all CPU and GL/compositor-backed transition types such as Crossfade, Slide, Wipe, Diffuse, Block Puzzle Flip, Blinds, Peel, 3D Block Spins, Rain Drops, Warp Dissolve, Claw Marks, Shuffle)
 - transitions.random_always: bool
 - transitions.random_choice: str
 - transitions.duration_ms: int (global default duration in milliseconds for transitions)
-- transitions.durations: map of transition type name → duration_ms used for per-transition duration independence (e.g. Crossfade/Slide/Wipe/Diffuse/Block Puzzle Flip/Blinds)
+- transitions.durations: map of transition type name → duration_ms used for per-transition duration independence (e.g. Crossfade/Slide/Wipe/Diffuse/Block Puzzle Flip/Blinds/Peel/3D Block Spins/Rain Drops/Warp Dissolve/Claw Marks/Shuffle)
 - transitions.slide.direction, transitions.slide.last_direction (legacy flat keys maintained for back-compat; nested `transitions['slide']['direction']` is the canonical form)
 - transitions.wipe.direction, transitions.wipe.last_direction (legacy flat keys maintained for back-compat; nested `transitions['wipe']['direction']` is the canonical form)
+- transitions.pool: map of transition type name → bool controlling whether a type participates in random rotation and C-key cycling (explicit selection remains allowed regardless of this flag; GL-only types still respect `display.hw_accel`).
 - timing.interval: int seconds
 - display.same_image_all_monitors: bool
 - cache.prefetch_ahead: int (default 5)

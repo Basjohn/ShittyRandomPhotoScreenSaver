@@ -94,8 +94,14 @@ class ScreensaverEngine(QObject):
             "Crossfade",
             "Slide",
             "Wipe",
+            "Peel",
             "Diffuse",
             "Block Puzzle Flip",
+            "3D Block Spins",
+            "Rain Drops",
+            "Warp Dissolve",
+            "Claw Marks",
+            "Shuffle",
             "Blinds",
         ]
         self._current_transition_index: int = 0  # Will sync with settings in initialize()
@@ -1269,15 +1275,42 @@ class ScreensaverEngine(QObject):
             rnd = SettingsManager.to_bool(raw_rnd, False)
             if not rnd:
                 return
-            # Available transition types; include GL-only when HW is enabled
-            available = ["Crossfade", "Slide", "Wipe", "Diffuse", "Block Puzzle Flip"]
+            # Available transition types; include GL-only when HW is enabled and
+            # restrict to those enabled in the per-transition pool map.
+            base_types = ["Crossfade", "Slide", "Wipe", "Diffuse", "Block Puzzle Flip"]
+            gl_only_types = ["Blinds", "Peel", "3D Block Spins", "Rain Drops", "Warp Dissolve", "Claw Marks", "Shuffle"]
+
             try:
                 raw_hw = self.settings_manager.get('display.hw_accel', False)
                 hw = SettingsManager.to_bool(raw_hw, False)
-                if hw:
-                    available.append("Blinds")
             except Exception:
-                pass
+                hw = False
+
+            pool_cfg = transitions.get('pool', {}) if isinstance(transitions.get('pool', {}), dict) else {}
+
+            def _in_pool(name: str) -> bool:
+                try:
+                    raw_flag = pool_cfg.get(name, True)
+                    return bool(SettingsManager.to_bool(raw_flag, True))
+                except Exception:
+                    return True
+
+            available: List[str] = []
+            for name in base_types:
+                if not _in_pool(name):
+                    continue
+                available.append(name)
+
+            if hw:
+                for name in gl_only_types:
+                    if not _in_pool(name):
+                        continue
+                    available.append(name)
+
+            if not available:
+                # Fallback: always ensure at least Crossfade is available so
+                # misconfigured pool settings cannot break rotation entirely.
+                available = ["Crossfade"]
             # Avoid immediate repeats of transition type
             last_type = self.settings_manager.get('transitions.last_random_choice', None)
             candidates = [t for t in available if t != last_type] if last_type in available else available
@@ -1350,15 +1383,30 @@ class ScreensaverEngine(QObject):
 
         raw_hw = self.settings_manager.get('display.hw_accel', False)
         hw = SettingsManager.to_bool(raw_hw, False)
-        gl_only = {"Blinds"}
+        gl_only = {"Blinds", "Peel", "3D Block Spins", "Rain Drops", "Warp Dissolve", "Claw Marks", "Shuffle"}
 
-        # Cycle to next transition honoring HW capabilities
+        transitions_config = self.settings_manager.get('transitions', {})
+        if not isinstance(transitions_config, dict):
+            transitions_config = {}
+        pool_cfg = transitions_config.get('pool', {}) if isinstance(transitions_config.get('pool', {}), dict) else {}
+
+        def _in_pool(name: str) -> bool:
+            try:
+                raw_flag = pool_cfg.get(name, True)
+                return bool(SettingsManager.to_bool(raw_flag, True))
+            except Exception:
+                return True
+
+        # Cycle to next transition honoring HW capabilities and per-type pool
+        # membership. Types excluded from the pool will not be selected when
+        # cycling, but remain available for explicit selection via settings.
         for _ in range(len(self._transition_types)):
             self._current_transition_index = (self._current_transition_index + 1) % len(self._transition_types)
             candidate = self._transition_types[self._current_transition_index]
-            if hw or candidate not in gl_only:
-                new_transition = candidate
-                break
+            if (not hw and candidate in gl_only) or not _in_pool(candidate):
+                continue
+            new_transition = candidate
+            break
         else:
             # Fallback to Crossfade if somehow no valid transition found
             new_transition = "Crossfade"

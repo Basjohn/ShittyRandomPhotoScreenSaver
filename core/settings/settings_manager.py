@@ -139,6 +139,28 @@ class SettingsManager(QObject):
                 'wipe': {
                     'direction': 'Random',
                 },
+                'peel': {
+                    'direction': 'Random',
+                },
+                # Per-transition pool membership for random/switch behaviour.
+                # When a type is marked False it will not be selected by the
+                # engine's random rotation logic nor by the C-key transition
+                # cycling, but it remains available for explicit selection in
+                # the UI dropdown.
+                'pool': {
+                    'Crossfade': True,
+                    'Slide': True,
+                    'Wipe': True,
+                    'Peel': True,
+                    'Diffuse': True,
+                    'Block Puzzle Flip': True,
+                    '3D Block Spins': True,
+                    'Rain Drops': True,
+                    'Warp Dissolve': True,
+                    'Claw Marks': True,
+                    'Shuffle': True,
+                    'Blinds': True,
+                },
             },
 
             # Widgets (canonical nested config). The actual stored "widgets"
