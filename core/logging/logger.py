@@ -104,6 +104,19 @@ class SuppressingStreamHandler(logging.StreamHandler):
 
         name = record.name
         level = record.levelno
+        try:
+            msg_text = record.getMessage()
+        except Exception:
+            msg_text = str(record.msg)
+
+        if "🔴" in msg_text or "Initializing Screensaver Engine" in msg_text:
+            self._flush_summary()
+            super().emit(record)
+            self._last_name = name
+            self._last_level = level
+            self._suppress_count = 0
+            self._last_record = record
+            return
 
         if self._last_name is None:
             super().emit(record)
@@ -133,7 +146,26 @@ class SuppressingStreamHandler(logging.StreamHandler):
             return
 
         last = self._last_record
-        msg = f"[{self._suppress_count} Suppressed: CHECK LOG]"
+        # Build a compact summary. For PERF lines that already contain
+        # metrics like "avg_fps=78.5" we try to surface that token so
+        # grouped telemetry is still somewhat informative in the console.
+        avg_suffix = ""
+        try:
+            text = last.getMessage()
+        except Exception:
+            text = str(last.msg)
+        if "[PERF]" in text and "avg_fps=" in text:
+            try:
+                idx = text.find("avg_fps=")
+                if idx != -1:
+                    # Take the avg_fps token up to the next comma or end.
+                    tail = text[idx:].split(",", 1)[0].strip()
+                    if tail:
+                        avg_suffix = f", {tail}"
+            except Exception:
+                avg_suffix = ""
+
+        msg = f"[{self._suppress_count} Suppressed: CHECK LOG{avg_suffix}]"
         summary = logging.LogRecord(
             last.name,
             last.levelno,

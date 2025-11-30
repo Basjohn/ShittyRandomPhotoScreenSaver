@@ -97,13 +97,45 @@ class GLCompositorClawMarksTransition(BaseTransition):
                 exc_info=True,
             )
 
+        # Drive via shared AnimationManager, preferring the GLSL Shooting
+        # Stars path when available and falling back to the existing
+        # diffuse-region implementation otherwise.
+        easing_curve = self._resolve_easing()
+        am = self._get_animation_manager(widget)
+
+        def _on_finished_shader() -> None:
+            self._on_anim_complete()
+
+        shader_anim_id: Optional[str] = None
+        try:
+            shader_anim_id = comp.start_shooting_stars(
+                old_pixmap,
+                new_pixmap,
+                duration_ms=self.duration_ms,
+                easing=easing_curve,
+                animation_manager=am,
+                on_finished=_on_finished_shader,
+            )
+        except Exception:
+            logger.debug(
+                "[GL COMPOSITOR] Failed to start shader-based Shooting Stars; falling back to diffuse region API",
+                exc_info=True,
+            )
+
+        if shader_anim_id:
+            self._animation_id = shader_anim_id
+            self._set_state(TransitionState.RUNNING)
+            self.started.emit()
+            logger.info(
+                "GLCompositorClawMarksTransition started (shader, %dms)",
+                self.duration_ms,
+            )
+            return True
+
+        # Fallback: build diagonal claws and drive the diffuse API as before.
         width = max(1, widget.width())
         height = max(1, widget.height())
         self._build_claws(width, height)
-
-        # Drive via shared AnimationManager using the diffuse API.
-        easing_curve = self._resolve_easing()
-        am = self._get_animation_manager(widget)
 
         def _update(progress: float) -> None:
             self._on_anim_update(progress)
@@ -124,7 +156,7 @@ class GLCompositorClawMarksTransition(BaseTransition):
         self._set_state(TransitionState.RUNNING)
         self.started.emit()
         logger.info(
-            "GLCompositorClawMarksTransition started (%dms, claws=%d)",
+            "GLCompositorClawMarksTransition started (diffuse, %dms, claws=%d)",
             self.duration_ms,
             len(self._claws),
         )

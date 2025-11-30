@@ -9,7 +9,7 @@ try:
     from OpenGL import GL  # type: ignore[import]
 except ImportError:  # pragma: no cover - optional dependency
     GL = None
-from PySide6.QtWidgets import QWidget, QLabel, QApplication
+from PySide6.QtWidgets import QWidget, QApplication
 from PySide6.QtCore import Qt, Signal, QSize, QTimer, QPropertyAnimation, QVariantAnimation, QEasingCurve, QEvent
 from PySide6.QtGui import (
     QPixmap,
@@ -46,7 +46,6 @@ from transitions.gl_compositor_peel_transition import GLCompositorPeelTransition
 from transitions.gl_compositor_blockspin_transition import GLCompositorBlockSpinTransition
 from transitions.gl_compositor_raindrops_transition import GLCompositorRainDropsTransition
 from transitions.gl_compositor_warp_transition import GLCompositorWarpTransition
-from transitions.gl_compositor_clawmarks_transition import GLCompositorClawMarksTransition
 from transitions.gl_compositor_shuffle_transition import GLCompositorShuffleTransition
 from widgets.clock_widget import ClockWidget, TimeFormat, ClockPosition
 from widgets.weather_widget import WeatherWidget, WeatherPosition
@@ -1898,27 +1897,13 @@ class DisplayWidget(QWidget):
                 return transition
 
             if transition_type == 'Claw Marks':
-                # Claw Marks is implemented as a compositor-driven variant of
-                # the diffuse mask using a handful of diagonal scratch bands.
-                # It is GL-only and falls back to a simple crossfade when GPU
-                # acceleration or the compositor is unavailable.
+                # Claw Marks / Shooting Stars has been removed as a transition
+                # type. Any legacy requests for this label are now mapped to a
+                # safe Crossfade so existing settings do not break.
 
-                if hw_accel:
-                    try:
-                        self._ensure_gl_compositor()
-                    except Exception:
-                        logger.debug("[GL COMPOSITOR] Failed to ensure compositor during claw marks selection", exc_info=True)
-                    use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
-                    if use_compositor:
-                        transition = GLCompositorClawMarksTransition(duration_ms, easing_str)
-                    else:
-                        transition = CrossfadeTransition(duration_ms, easing_str)
-                else:
-                    transition = CrossfadeTransition(duration_ms, easing_str)
-
+                transition = CrossfadeTransition(duration_ms, easing_str)
                 transition.set_resource_manager(self._resource_manager)
-                label = 'Claw Marks' if hw_accel else 'Crossfade'
-                self._log_transition_selection(requested_type, label, random_mode, random_choice_value)
+                self._log_transition_selection(requested_type, 'Crossfade', random_mode, random_choice_value)
                 return transition
 
             if transition_type == 'Block Puzzle Flip':
@@ -2089,15 +2074,11 @@ class DisplayWidget(QWidget):
         # Get quality settings (force-disable Lanczos; keep sharpen)
         use_lanczos = False
         sharpen = False
-        pan_and_scan_enabled = False
         if self.settings_manager:
             # Lanczos intentionally ignored due to distortion; keep False
             sharpen = self.settings_manager.get('display.sharpen_downscale', False)
             if isinstance(sharpen, str):
                 sharpen = sharpen.lower() == 'true'
-            pan_and_scan_enabled = self.settings_manager.get('display.pan_and_scan', False)
-            if isinstance(pan_and_scan_enabled, str):
-                pan_and_scan_enabled = pan_and_scan_enabled.lower() == 'true'
         
         # CRITICAL FIX: Transitions ALWAYS use screen-fitted pixmaps
         # Pan & scan scaling happens AFTER transition finishes
@@ -2110,15 +2091,12 @@ class DisplayWidget(QWidget):
             sharpen
         )
 
-        # Keep original pixmap for pan & scan (used only after transition
-        # completes so that the transition itself always operates on the
-        # standard screen-fitted frame).
+        # Keep original pixmap for any future processing separate from the
+        # screen-fitted frame used for transitions.
         original_pixmap = pixmap
 
         # For both GL and software transitions we now always present the
-        # processed, screen-fitted pixmap. Pan & scan uses the original
-        # pixmap in a separate QLabel overlay that starts only after the
-        # transition has finished, avoiding any mid-transition jumps.
+        # processed, screen-fitted pixmap.
         new_pixmap = processed_pixmap
         
         self._animation_manager = None
@@ -2142,13 +2120,6 @@ class DisplayWidget(QWidget):
                 transition_to_stop.cleanup()
             except Exception as e:
                 logger.warning(f"Error stopping transition: {e}")
-        
-        # CRITICAL: ALWAYS stop pan & scan and hide label before ANY transition
-        # This prevents visual artifacts from previous image's pan & scan overlapping new transition
-        self._pan_and_scan.stop()
-        if self._image_label:
-            self._image_label.hide()
-            logger.debug("[BUG FIX #2] Pan & scan label hidden before transition")
         
         # Cache previous pixmap reference before we mutate current_pixmap
         previous_pixmap_ref = self.current_pixmap
@@ -2265,34 +2236,22 @@ class DisplayWidget(QWidget):
                     # after this widget is destroyed.
                     self_ref = weakref.ref(self)
 
-                    pan_preview = None
-                    if pan_and_scan_enabled and self._pan_and_scan is not None:
-                        try:
-                            pan_preview = self._pan_and_scan.build_transition_frame(
-                                original_pixmap,
-                                self.size(),
-                                self._device_pixel_ratio,
-                            )
-                        except Exception:
-                            pan_preview = None
-
                     self._pending_transition_finish_args = (
                         processed_pixmap,
                         original_pixmap,
                         image_path,
-                        pan_and_scan_enabled,
-                        pan_preview,
+                        False,
+                        None,
                     )
 
                     def _finish_handler(np=processed_pixmap, op=original_pixmap,
-                                        ip=image_path, pse=pan_and_scan_enabled,
-                                        preview=None, ref=self_ref):
+                                        ip=image_path, ref=self_ref):
                         widget = ref()
                         if widget is None or not Shiboken.isValid(widget):
                             return
                         try:
-                            widget._pending_transition_finish_args = (np, op, ip, pse, preview)
-                            widget._on_transition_finished(np, op, ip, pse, preview)
+                            widget._pending_transition_finish_args = (np, op, ip, False, None)
+                            widget._on_transition_finished(np, op, ip, False, None)
                         finally:
                             widget._pending_transition_finish_args = None
 
@@ -2302,8 +2261,7 @@ class DisplayWidget(QWidget):
                     self._current_transition_started_at = time.monotonic()
                     if overlay_key:
                         self._overlay_timeouts[overlay_key] = self._current_transition_started_at
-                    new_pixmap_for_transition = pan_preview or new_pixmap
-                    success = transition.start(self.previous_pixmap, new_pixmap_for_transition, self)
+                    success = transition.start(self.previous_pixmap, new_pixmap, self)
                     if success:
                         self._start_transition_watchdog(overlay_key, transition)
                         for attr_name in ("clock_widget", "clock2_widget", "clock3_widget"):
@@ -2353,65 +2311,7 @@ class DisplayWidget(QWidget):
                 self._cancel_transition_watchdog()
                 # No transition - display immediately
                 self.previous_pixmap = None
-
-                if pan_and_scan_enabled:
-                    if not self._image_label:
-                        self._image_label = QLabel(self)
-                        self._image_label.setScaledContents(False)
-                    self._pan_and_scan.enable(True)
-
-                    # Use the same canonical timing interval default (40s) when
-                    # the key is missing so pan & scan pacing matches rotation.
-                    transition_interval = self.settings_manager.get('timing.interval', 40)
-                    auto_speed = self.settings_manager.get('display.pan_auto_speed', True)
-                    manual_speed = self.settings_manager.get('display.pan_speed', 3.0)
-
-                    if isinstance(auto_speed, str):
-                        auto_speed = auto_speed.lower() == 'true'
-
-                    self._pan_and_scan.set_auto_speed(auto_speed, float(transition_interval))
-                    if not auto_speed:
-                        self._pan_and_scan.set_speed(float(manual_speed))
-
-                    try:
-                        init_off = self._pan_and_scan.preview_offset(original_pixmap, self.size())
-                        self._pan_and_scan.set_initial_offset(init_off)
-                    except Exception:
-                        pass
-                    self._pan_and_scan.set_image(original_pixmap, self._image_label, self.size())
-
-                    self._image_label.show()
-                    self._image_label.raise_()
-
-                    for attr_name in ("clock_widget", "clock2_widget", "clock3_widget"):
-                        clock = getattr(self, attr_name, None)
-                        if clock is not None:
-                            try:
-                                clock.raise_()
-                            except Exception:
-                                pass
-
-                    # Ensure weather widget, if present, stays above the pan
-                    # label just like in the golden path (no pan) case.
-                    if self.weather_widget:
-                        try:
-                            self.weather_widget.raise_()
-                        except Exception:
-                            pass
-
-                    mw = getattr(self, "media_widget", None)
-                    if mw is not None:
-                        try:
-                            mw.raise_()
-                        except Exception:
-                            pass
-
-                    self._pan_and_scan.start()
-                else:
-                    self._pan_and_scan.enable(False)
-                    if self._image_label:
-                        self._image_label.hide()
-                    self.update()
+                self.update()
                 if GL is None:
                     try:
                         self._mark_all_overlays_ready(GL_OVERLAY_KEYS, stage="software_display")
@@ -2470,90 +2370,8 @@ class DisplayWidget(QWidget):
             self._updates_blocked_until_seed = False
         self.previous_pixmap = None
 
-        # Start pan and scan if enabled (use original uncropped pixmap)
-        if pan_enabled:
-            if not self._image_label:
-                self._image_label = QLabel(self)
-                self._image_label.setScaledContents(False)
-            self._pan_and_scan.enable(True)
-
-            # Get pan and scan settings – use canonical 40s default when the
-            # interval key is absent so behaviour is consistent across paths.
-            transition_interval = self.settings_manager.get('timing.interval', 40)
-            auto_speed = self.settings_manager.get('display.pan_auto_speed', True)
-            manual_speed = self.settings_manager.get('display.pan_speed', 3.0)
-
-            if isinstance(auto_speed, str):
-                auto_speed = auto_speed.lower() == 'true'
-
-            self._pan_and_scan.set_auto_speed(auto_speed, float(transition_interval))
-            if not auto_speed:
-                self._pan_and_scan.set_speed(float(manual_speed))
-
-            # CRITICAL: Use original_pixmap for pan & scan, not the processed one
-            # This prevents the zoom effect where the image suddenly changes size
-            try:
-                init_off = self._pan_and_scan.preview_offset(original_pixmap, self.size())
-                self._pan_and_scan.set_initial_offset(init_off)
-            except Exception:
-                pass
-            self._pan_and_scan.set_image(original_pixmap, self._image_label, self.size())
-
-            # Ensure label is visible and on top
-            self._image_label.show()
-            self._image_label.raise_()
-
-            # Keep widgets above pan & scan
-            for attr_name in ("clock_widget", "clock2_widget", "clock3_widget"):
-                clock = getattr(self, attr_name, None)
-                if clock is not None:
-                    try:
-                        clock.raise_()
-                        if hasattr(clock, '_tz_label') and clock._tz_label:
-                            clock._tz_label.raise_()
-                    except Exception:
-                        pass
-            if self.weather_widget:
-                try:
-                    self.weather_widget.raise_()
-                except Exception:
-                    pass
-
-            mw = getattr(self, "media_widget", None)
-            if mw is not None:
-                try:
-                    mw.raise_()
-                except Exception:
-                    pass
-
-            rw = getattr(self, "reddit_widget", None)
-            if rw is not None:
-                try:
-                    rw.raise_()
-                except Exception:
-                    pass
-
-            self._pan_and_scan.start()
-        else:
-            self._pan_and_scan.enable(False)
-            if self._image_label:
-                self._image_label.hide()
-            # Ensure widgets stay visible after transition
-            for attr_name in ("clock_widget", "clock2_widget", "clock3_widget"):
-                clock = getattr(self, attr_name, None)
-                if clock is not None:
-                    try:
-                        clock.raise_()
-                        if hasattr(clock, '_tz_label') and clock._tz_label:
-                            clock._tz_label.raise_()
-                    except Exception:
-                        pass
-            if self.weather_widget:
-                try:
-                    self.weather_widget.raise_()
-                except Exception:
-                    pass
-            self.update()
+        # Pan & Scan has been removed; simply ensure overlays are correct and
+        # the new image is displayed.
 
         # After the display reflects the new pixmap (and optional pan), clean up
         # Ensure base repaint is flushed before we remove any overlay to avoid flicker
@@ -2572,12 +2390,6 @@ class DisplayWidget(QWidget):
                 logger.warning("Error cleaning up transition: %s", exc)
 
         logger.debug("Transition completed, image displayed: %s", image_path)
-        if pan_enabled and self._image_label:
-            try:
-                self._image_label.show()
-                self._image_label.raise_()
-            except Exception:
-                pass
         self.image_displayed.emit(image_path)
         self._pending_transition_finish_args = None
 
@@ -2978,12 +2790,6 @@ class DisplayWidget(QWidget):
         except Exception as e:
             logger.debug("[GL COMPOSITOR] Failed to tear down compositor in _on_destroyed: %s", e, exc_info=True)
         self._gl_compositor = None
-        # Stop pan & scan if still active
-        try:
-            if hasattr(self, "_pan_and_scan") and self._pan_and_scan is not None:
-                self._pan_and_scan.stop()
-        except Exception as e:
-            logger.debug("[PAN&SCAN] Failed to stop pan_and_scan in _on_destroyed: %s", e, exc_info=True)
         # Stop Spotify Beat Visualizer if present
         try:
             vis = getattr(self, "spotify_visualizer_widget", None)
@@ -3133,8 +2939,6 @@ class DisplayWidget(QWidget):
     
     def clear(self) -> None:
         """Clear displayed image and stop any transitions."""
-        # Stop pan and scan
-        self._pan_and_scan.stop()
         if self._current_transition:
             transition_to_stop = self._current_transition
             self._current_transition = None  # Clear reference first

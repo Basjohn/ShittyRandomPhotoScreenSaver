@@ -115,6 +115,20 @@ class RaindropsState:
 
 
 @dataclass
+class ShootingStarsState:
+    """State for a shader-driven Shooting Stars (claws) transition.
+
+    This models a field of streak-like "shooting stars" rendered entirely in
+    GLSL. The compositor draws the effect using a fullscreen quad shader;
+    controllers only provide the old/new pixmaps and timeline progress.
+    """
+
+    old_pixmap: Optional[QPixmap]
+    new_pixmap: Optional[QPixmap]
+    progress: float = 0.0  # 0..1
+
+
+@dataclass
 class _GLPipelineState:
     """Minimal shader pipeline state for GL-backed transitions.
 
@@ -165,6 +179,16 @@ class _GLPipelineState:
     warp_u_resolution: int = -1
     warp_u_old_tex: int = -1
     warp_u_new_tex: int = -1
+
+    # Cached uniform locations for the Shooting Stars (claws) shader program.
+    claws_u_progress: int = -1
+    claws_u_resolution: int = -1
+    claws_u_old_tex: int = -1
+    claws_u_new_tex: int = -1
+    claws_u_density: int = -1
+    claws_u_direction: int = -1
+    claws_u_length: int = -1
+    claws_u_width: int = -1
 
     # Simple flags to indicate whether the pipeline was initialized
     # successfully inside the current GL context.
@@ -270,6 +294,7 @@ class GLCompositorWidget(QOpenGLWidget):
         self._diffuse: Optional[DiffuseState] = None
         self._raindrops: Optional[RaindropsState] = None
         self._peel: Optional[PeelState] = None
+        self._shooting_stars: Optional[ShootingStarsState] = None
 
         # Profiling for compositor-driven slide transitions (Route3 §6.4).
         # Metrics are logged with the "[PERF] [GL COMPOSITOR]" tag so
@@ -284,6 +309,20 @@ class GLCompositorWidget(QOpenGLWidget):
         self._wipe_profile_frame_count: int = 0
         self._wipe_profile_min_dt: float = 0.0
         self._wipe_profile_max_dt: float = 0.0
+        # Lightweight profiling for shader-backed Warp and Raindrops (Ripple)
+        # transitions. These follow the same pattern as slide/wipe so that
+        # future tuning can rely on comparable `[PERF] [GL COMPOSITOR]`
+        # summaries without affecting visual behaviour.
+        self._warp_profile_start_ts: Optional[float] = None
+        self._warp_profile_last_ts: Optional[float] = None
+        self._warp_profile_frame_count: int = 0
+        self._warp_profile_min_dt: float = 0.0
+        self._warp_profile_max_dt: float = 0.0
+        self._raindrops_profile_start_ts: Optional[float] = None
+        self._raindrops_profile_last_ts: Optional[float] = None
+        self._raindrops_profile_frame_count: int = 0
+        self._raindrops_profile_min_dt: float = 0.0
+        self._raindrops_profile_max_dt: float = 0.0
 
         # Animation plumbing: compositor does not own AnimationManager, but we
         # keep the current animation id so the caller can cancel if needed.
@@ -538,6 +577,100 @@ class GLCompositorWidget(QOpenGLWidget):
             easing=easing,
             update_callback=self._on_raindrops_update,
             on_complete=lambda: self._on_raindrops_complete(on_finished),
+        )
+        self._current_anim_id = anim_id
+        return anim_id
+
+    def start_shooting_stars(
+        self,
+        old_pixmap: Optional[QPixmap],
+        new_pixmap: QPixmap,
+        *,
+        duration_ms: int,
+        easing: EasingCurve,
+        animation_manager: AnimationManager,
+        on_finished: Optional[Callable[[], None]] = None,
+    ) -> Optional[str]:
+        """Begin a shader-driven Shooting Stars (claws) transition.
+
+        This path is only used when the GLSL pipeline and claws shader are
+        available; callers are expected to fall back to the existing
+        compositor-based Claw Marks implementation when this returns ``None``.
+        """
+
+        if not new_pixmap or new_pixmap.isNull():
+            logger.error("[GL COMPOSITOR] Invalid new pixmap for shooting stars")
+            return None
+
+        # Only use this path when the GLSL pipeline and claws shader are
+        # actually available. Callers are expected to fall back to the
+        # compositor's diffuse implementation when this returns ``None``.
+        if (
+            self._gl_disabled_for_session
+            or gl is None
+            or self._gl_pipeline is None
+            or not self._gl_pipeline.initialized
+            or not getattr(self._gl_pipeline, "claws_program", 0)
+        ):
+            return None
+
+        # If there is no old image, simply set the base pixmap and repaint.
+        if old_pixmap is None or old_pixmap.isNull():
+            logger.debug("[GL COMPOSITOR] No old image; showing new image immediately (shooting stars)")
+            self._crossfade = None
+            self._slide = None
+            self._wipe = None
+            self._warp = None
+            self._blockflip = None
+            self._blockspin = None
+            self._blinds = None
+            self._diffuse = None
+            self._raindrops = None
+            self._peel = None
+            self._shooting_stars = None
+            self._base_pixmap = new_pixmap
+            self.update()
+            if on_finished:
+                try:
+                    on_finished()
+                except Exception:
+                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
+            return None
+
+        # Shooting Stars is mutually exclusive with other transitions.
+        self._crossfade = None
+        self._slide = None
+        self._wipe = None
+        self._warp = None
+        self._blockflip = None
+        self._blockspin = None
+        self._blinds = None
+        self._diffuse = None
+        self._raindrops = None
+        self._peel = None
+        self._shooting_stars = None
+        self._shooting_stars = ShootingStarsState(
+            old_pixmap=old_pixmap,
+            new_pixmap=new_pixmap,
+            progress=0.0,
+        )
+        self._animation_manager = animation_manager
+        self._current_easing = easing
+
+        # Cancel any previous animation on this compositor.
+        if self._current_anim_id and self._animation_manager:
+            try:
+                self._animation_manager.cancel_animation(self._current_anim_id)
+            except Exception:
+                pass
+            self._current_anim_id = None
+
+        duration_sec = max(0.001, duration_ms / 1000.0)
+        anim_id = animation_manager.animate_custom(
+            duration=duration_sec,
+            easing=easing,
+            update_callback=self._on_shooting_stars_update,
+            on_complete=lambda: self._on_shooting_stars_complete(on_finished),
         )
         self._current_anim_id = anim_id
         return anim_id
@@ -1270,6 +1403,19 @@ class GLCompositorWidget(QOpenGLWidget):
             return
         p = max(0.0, min(1.0, float(progress)))
         self._warp.progress = p
+        # Profiling: track frame timing for warp dissolve.
+        now = time.time()
+        if self._warp_profile_start_ts is None:
+            self._warp_profile_start_ts = now
+        if self._warp_profile_last_ts is not None:
+            dt = now - self._warp_profile_last_ts
+            if dt > 0.0:
+                if self._warp_profile_min_dt == 0.0 or dt < self._warp_profile_min_dt:
+                    self._warp_profile_min_dt = dt
+                if dt > self._warp_profile_max_dt:
+                    self._warp_profile_max_dt = dt
+        self._warp_profile_last_ts = now
+        self._warp_profile_frame_count += 1
         self.update()
 
     def _on_raindrops_update(self, progress: float) -> None:
@@ -1279,6 +1425,28 @@ class GLCompositorWidget(QOpenGLWidget):
             return
         p = max(0.0, min(1.0, float(progress)))
         self._raindrops.progress = p
+        # Profiling: track frame timing for the Ripple/Raindrops shader path.
+        now = time.time()
+        if self._raindrops_profile_start_ts is None:
+            self._raindrops_profile_start_ts = now
+        if self._raindrops_profile_last_ts is not None:
+            dt = now - self._raindrops_profile_last_ts
+            if dt > 0.0:
+                if self._raindrops_profile_min_dt == 0.0 or dt < self._raindrops_profile_min_dt:
+                    self._raindrops_profile_min_dt = dt
+                if dt > self._raindrops_profile_max_dt:
+                    self._raindrops_profile_max_dt = dt
+        self._raindrops_profile_last_ts = now
+        self._raindrops_profile_frame_count += 1
+        self.update()
+
+    def _on_shooting_stars_update(self, progress: float) -> None:
+        """Update handler for shader-driven Shooting Stars transitions."""
+
+        if self._shooting_stars is None:
+            return
+        p = max(0.0, min(1.0, float(progress)))
+        self._shooting_stars.progress = p
         self.update()
 
     def _on_blockspin_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
@@ -1310,6 +1478,54 @@ class GLCompositorWidget(QOpenGLWidget):
         """Completion handler for compositor-driven warp dissolve transitions."""
 
         try:
+            # Emit a concise profiling summary for warp dissolve, mirroring
+            # the existing Slide/Wipe `[PERF] [GL COMPOSITOR]` metrics.
+            try:
+                if (
+                    self._warp_profile_start_ts is not None
+                    and self._warp_profile_last_ts is not None
+                    and self._warp_profile_frame_count > 0
+                ):
+                    elapsed = max(0.0, self._warp_profile_last_ts - self._warp_profile_start_ts)
+                    if elapsed > 0.0:
+                        duration_ms = elapsed * 1000.0
+                        avg_fps = self._warp_profile_frame_count / elapsed
+                        min_dt_ms = (
+                            self._warp_profile_min_dt * 1000.0
+                            if self._warp_profile_min_dt > 0.0
+                            else 0.0
+                        )
+                        max_dt_ms = (
+                            self._warp_profile_max_dt * 1000.0
+                            if self._warp_profile_max_dt > 0.0
+                            else 0.0
+                        )
+                        logger.info(
+                            "[PERF] [GL COMPOSITOR] Warp metrics: duration=%.1fms, frames=%d, "
+                            "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, size=%dx%d",
+                            duration_ms,
+                            self._warp_profile_frame_count,
+                            avg_fps,
+                            min_dt_ms,
+                            max_dt_ms,
+                            self.width(),
+                            self.height(),
+                        )
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Warp metrics logging failed: %s", e, exc_info=True)
+
+            # Reset profiling state.
+            self._warp_profile_start_ts = None
+            self._warp_profile_last_ts = None
+            self._warp_profile_frame_count = 0
+            self._warp_profile_min_dt = 0.0
+            self._warp_profile_max_dt = 0.0
+
+            try:
+                self._release_transition_textures()
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Failed to release transition textures on warp complete: %s", e, exc_info=True)
+
             if self._warp is not None:
                 try:
                     self._base_pixmap = self._warp.new_pixmap
@@ -1335,6 +1551,55 @@ class GLCompositorWidget(QOpenGLWidget):
         """Completion handler for shader-driven raindrops transitions."""
 
         try:
+            # Emit a concise profiling summary for the Ripple/Raindrops shader
+            # path so future fidelity-oriented tuning has FPS telemetry without
+            # altering the effect itself.
+            try:
+                if (
+                    self._raindrops_profile_start_ts is not None
+                    and self._raindrops_profile_last_ts is not None
+                    and self._raindrops_profile_frame_count > 0
+                ):
+                    elapsed = max(0.0, self._raindrops_profile_last_ts - self._raindrops_profile_start_ts)
+                    if elapsed > 0.0:
+                        duration_ms = elapsed * 1000.0
+                        avg_fps = self._raindrops_profile_frame_count / elapsed
+                        min_dt_ms = (
+                            self._raindrops_profile_min_dt * 1000.0
+                            if self._raindrops_profile_min_dt > 0.0
+                            else 0.0
+                        )
+                        max_dt_ms = (
+                            self._raindrops_profile_max_dt * 1000.0
+                            if self._raindrops_profile_max_dt > 0.0
+                            else 0.0
+                        )
+                        logger.info(
+                            "[PERF] [GL COMPOSITOR] Raindrops metrics: duration=%.1fms, frames=%d, "
+                            "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, size=%dx%d",
+                            duration_ms,
+                            self._raindrops_profile_frame_count,
+                            avg_fps,
+                            min_dt_ms,
+                            max_dt_ms,
+                            self.width(),
+                            self.height(),
+                        )
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Raindrops metrics logging failed: %s", e, exc_info=True)
+
+            # Reset profiling state.
+            self._raindrops_profile_start_ts = None
+            self._raindrops_profile_last_ts = None
+            self._raindrops_profile_frame_count = 0
+            self._raindrops_profile_min_dt = 0.0
+            self._raindrops_profile_max_dt = 0.0
+
+            try:
+                self._release_transition_textures()
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Failed to release transition textures on raindrops complete: %s", e, exc_info=True)
+
             if self._raindrops is not None:
                 try:
                     self._base_pixmap = self._raindrops.new_pixmap
@@ -1359,6 +1624,35 @@ class GLCompositorWidget(QOpenGLWidget):
                     logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
         except Exception as e:
             logger.debug("[GL COMPOSITOR] Raindrops complete handler failed: %s", e, exc_info=True)
+
+    def _on_shooting_stars_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
+        """Completion handler for shader-driven Shooting Stars transitions."""
+
+        try:
+            if self._shooting_stars is not None:
+                try:
+                    self._base_pixmap = self._shooting_stars.new_pixmap
+                except Exception:
+                    pass
+            self._shooting_stars = None
+            self._current_anim_id = None
+
+            try:
+                self.update()
+            except Exception as e:
+                logger.debug(
+                    "[GL COMPOSITOR] Shooting Stars complete update failed (likely after deletion): %s",
+                    e,
+                    exc_info=True,
+                )
+
+            if on_finished:
+                try:
+                    on_finished()
+                except Exception:
+                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Shooting Stars complete handler failed: %s", e, exc_info=True)
 
     def _on_peel_update(self, progress: float) -> None:
         """Update handler for compositor-driven peel transitions."""
@@ -1575,6 +1869,12 @@ class GLCompositorWidget(QOpenGLWidget):
             except Exception:
                 new_pm = None
 
+        if new_pm is None and self._shooting_stars is not None:
+            try:
+                new_pm = self._shooting_stars.new_pixmap
+            except Exception:
+                new_pm = None
+
         if snap_to_new and new_pm is not None:
             self._base_pixmap = new_pm
 
@@ -1689,6 +1989,28 @@ class GLCompositorWidget(QOpenGLWidget):
             except Exception:
                 logger.debug("[GL SHADER] Failed to initialize warp shader program", exc_info=True)
                 self._gl_pipeline.warp_program = 0
+                self._gl_disabled_for_session = True
+                self._use_shaders = False
+                return
+
+            # Compile the Shooting Stars (claws) shader program. On failure we
+            # disable shader usage for this session so that all shader-backed
+            # transitions fall back to the compositor's QPainter-based paths
+            # (Group A → Group B).
+            try:
+                cp = self._create_claws_program()
+                self._gl_pipeline.claws_program = cp
+                self._gl_pipeline.claws_u_progress = gl.glGetUniformLocation(cp, "u_progress")
+                self._gl_pipeline.claws_u_resolution = gl.glGetUniformLocation(cp, "u_resolution")
+                self._gl_pipeline.claws_u_old_tex = gl.glGetUniformLocation(cp, "uOldTex")
+                self._gl_pipeline.claws_u_new_tex = gl.glGetUniformLocation(cp, "uNewTex")
+                self._gl_pipeline.claws_u_density = gl.glGetUniformLocation(cp, "u_density")
+                self._gl_pipeline.claws_u_direction = gl.glGetUniformLocation(cp, "u_direction")
+                self._gl_pipeline.claws_u_length = gl.glGetUniformLocation(cp, "u_length")
+                self._gl_pipeline.claws_u_width = gl.glGetUniformLocation(cp, "u_width")
+            except Exception:
+                logger.debug("[GL SHADER] Failed to initialize claws/shooting-stars shader program", exc_info=True)
+                self._gl_pipeline.claws_program = 0
                 self._gl_disabled_for_session = True
                 self._use_shaders = False
                 return
@@ -2216,23 +2538,58 @@ void main() {
 
     float t = clamp(u_progress, 0.0, 1.0);
 
-    // Horizontal band-based warp similar to the QPainter implementation.
-    float y = uv.y;
-    float base = y * 6.28318530718; // 2*pi
-    float wave = sin(base + t * 6.0) * cos(base * 1.3);
+    // Normalised, aspect-corrected coordinates around the image centre.
+    float aspect = u_resolution.x / max(u_resolution.y, 1.0);
+    vec2 centered = uv - vec2(0.5, 0.5);
+    centered.x *= aspect;
 
-    // Match CPU amplitude of ~3% of the width, fading as t -> 1.
-    float offsetNorm = 0.03 * (1.0 - t);
-    vec2 warpedUv = uv;
-    warpedUv.x += wave * offsetNorm;
-    warpedUv.x = clamp(warpedUv.x, 0.0, 1.0);
+    float r = length(centered);
+    float maxR = length(vec2(0.5 * aspect, 0.5));
+    float rNorm = clamp(r / maxR, 0.0, 1.0);
 
-    vec4 warpedOld = texture(uOldTex, warpedUv);
+    // Angle in polar space.
+    float theta = atan(centered.y, centered.x);
 
-    // Old image fades slightly faster than nominal timeline.
-    float fade = max(0.0, 1.0 - t * 1.25);
+    // Swirl strength: 0 at t=0/1, strongest at t=0.5 and near the centre. We
+    // allow up to roughly one full rotation at the very centre so the motion
+    // reads as a true vortex rather than a gentle wobble.
+    float swirlPhase = sin(t * 3.14159265);        // 0 at 0/1, 1 at 0.5
+    float swirlStrength = 2.0 * 3.14159265;        // ~1 full turn at peak
+    float radialFalloff = (1.0 - rNorm) * (1.0 - rNorm);
+    float swirl = swirlPhase * swirlStrength * radialFalloff;
 
-    vec4 color = mix(newColor, warpedOld, fade);
+    // Old image spirals into the centre and contracts slightly so it feels
+    // like it is being pulled down a drain.
+    float thetaOld = theta + swirl;
+    float contract = 1.0 - 0.35 * t * (1.0 - rNorm);
+    float rOld = r * contract;
+    vec2 dirOld = vec2(cos(thetaOld), sin(thetaOld));
+    dirOld.x /= aspect;
+    vec2 uvOld = vec2(0.5, 0.5) + dirOld * rOld;
+    uvOld = clamp(uvOld, vec2(0.0), vec2(1.0));
+    vec4 warpedOld = texture(uOldTex, uvOld);
+
+    // New image emerges from the same vortex with a gentler counter-twist.
+    float swirlNew = swirl * 0.6;
+    float thetaNew = theta - swirlNew;
+    // Keep the new image slightly compressed early on so it appears to grow
+    // out of the centre, then relax back to full size by the end.
+    float expand = 0.7 + 0.3 * t;
+    float rNew = r * expand;
+    vec2 dirNew = vec2(cos(thetaNew), sin(thetaNew));
+    dirNew.x /= aspect;
+    vec2 uvNew = vec2(0.5, 0.5) + dirNew * rNew;
+    uvNew = clamp(uvNew, vec2(0.0), vec2(1.0));
+    vec4 warpedNew = texture(uNewTex, uvNew);
+
+    // Centre of the frame reveals the new image earlier; the outer regions
+    // follow slightly later, and a global fade ensures we land cleanly on the
+    // final frame without lingering old-image noise.
+    float centreReveal = smoothstep(0.0, 0.8, t) * smoothstep(0.25, 0.0, rNorm);
+    float globalMix = smoothstep(0.0, 1.0, t);
+    float mixFactor = clamp(max(globalMix, centreReveal), 0.0, 1.0);
+
+    vec4 color = mix(warpedOld, warpedNew, mixFactor);
 
     FragColor = color;
 }
@@ -2375,6 +2732,123 @@ void main() {
 
         return int(program)
 
+    def _create_claws_program(self) -> int:
+        """Compile and link the shader program used for Shooting Stars (claws)."""
+
+        if gl is None:
+            raise RuntimeError("OpenGL context not available for shader program")
+
+        vs_source = """#version 410 core
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec2 aUv;
+
+out vec2 vUv;
+
+void main() {
+    vUv = aUv;
+    gl_Position = vec4(aPos, 0.0, 1.0);
+}
+"""
+
+        fs_source = """#version 410 core
+in vec2 vUv;
+out vec4 FragColor;
+
+uniform sampler2D uOldTex;
+uniform sampler2D uNewTex;
+uniform float u_progress;
+uniform vec2 u_resolution;
+uniform float u_density;
+uniform vec2 u_direction;
+uniform float u_length;
+uniform float u_width;
+
+float hash1(float n) {
+    return fract(sin(n) * 43758.5453123);
+}
+
+void main() {
+    vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
+
+    vec4 oldColor = texture(uOldTex, uv);
+    vec4 newColor = texture(uNewTex, uv);
+
+    float t = clamp(u_progress, 0.0, 1.0);
+
+    vec2 dir = u_direction;
+    if (length(dir) < 1e-3) {
+        dir = normalize(vec2(0.8, -1.0));
+    } else {
+        dir = normalize(dir);
+    }
+    vec2 perpDir = vec2(-dir.y, dir.x);
+
+    vec2 p = uv - vec2(0.5, 0.5);
+    float along = dot(p, dir) + 0.5;
+    float across = dot(p, perpDir) + 0.5;
+
+    float density = max(u_density, 1.0);
+    float stripeIndex = floor(across * density);
+    float stripeLocal = fract(across * density) - 0.5;
+
+    float rnd = hash1(stripeIndex * 37.0 + 13.0);
+    float start = rnd * 0.7;
+    float span = 0.25 + rnd * 0.25;
+    float localT = (t - start) / max(span, 1e-3);
+
+    float streakMask = 0.0;
+    if (localT > 0.0 && localT < 1.0) {
+        float head = localT * (1.1 + rnd * 0.3);
+        float halfLen = u_length;
+        float distAlong = along - head;
+        float core = 1.0 - smoothstep(halfLen, halfLen * 1.6, abs(distAlong));
+
+        float halfWidth = u_width;
+        float distAcross = stripeLocal;
+        float widthMask = 1.0 - smoothstep(halfWidth, halfWidth * 1.6, abs(distAcross));
+
+        streakMask = clamp(core * widthMask, 0.0, 1.0);
+    }
+
+    float globalMix = smoothstep(0.75, 1.0, t);
+    float baseMix = max(globalMix, t);
+    vec4 base = mix(oldColor, newColor, baseMix);
+
+    if (streakMask > 0.0) {
+        float starMix = clamp(0.6 + 0.4 * t, 0.0, 1.0);
+        vec4 streakCol = mix(base, newColor, starMix);
+        streakCol.rgb += vec3(0.35) * streakMask;
+        base = mix(base, streakCol, streakMask);
+    }
+
+    FragColor = base;
+}
+"""
+
+        vert = self._compile_shader(vs_source, gl.GL_VERTEX_SHADER)
+        try:
+            frag = self._compile_shader(fs_source, gl.GL_FRAGMENT_SHADER)
+        except Exception:
+            gl.glDeleteShader(vert)
+            raise
+
+        try:
+            program = gl.glCreateProgram()
+            gl.glAttachShader(program, vert)
+            gl.glAttachShader(program, frag)
+            gl.glLinkProgram(program)
+            status = gl.glGetProgramiv(program, gl.GL_LINK_STATUS)
+            if status != gl.GL_TRUE:
+                log = gl.glGetProgramInfoLog(program)
+                logger.debug("[GL SHADER] Failed to link claws program: %r", log)
+                gl.glDeleteProgram(program)
+                raise RuntimeError(f"Failed to link claws program: {log!r}")
+        finally:
+            gl.glDeleteShader(vert)
+            gl.glDeleteShader(frag)
+
+        return int(program)
+
     def _compile_shader(self, source: str, shader_type: int) -> int:
         """Compile a single GLSL shader and return its id."""
 
@@ -2408,8 +2882,8 @@ void main() {
     def _can_use_simple_shader(self, state: object, program_id: int) -> bool:
         """Shared capability check for simple fullscreen quad shaders.
 
-        Used by Ripple (raindrops) and Warp Dissolve, which both draw a
-        single quad over the full compositor surface.
+        Used by Ripple (raindrops), Warp Dissolve and Shooting Stars, which
+        all draw a single quad over the full compositor surface.
         """
 
         if self._gl_disabled_for_session or gl is None:
@@ -2427,6 +2901,9 @@ void main() {
 
     def _can_use_raindrops_shader(self) -> bool:
         return self._can_use_simple_shader(self._raindrops, self._gl_pipeline.raindrops_program)
+
+    def _can_use_claws_shader(self) -> bool:
+        return self._can_use_simple_shader(self._shooting_stars, getattr(self._gl_pipeline, "claws_program", 0))
 
     def _upload_texture_from_pixmap(self, pixmap: QPixmap) -> int:
         """Upload a QPixmap as a GL texture and return its id.
@@ -2536,6 +3013,30 @@ void main() {
         if self._blockspin is None:
             return False
         st = self._blockspin
+        return self._prepare_pair_textures(st.old_pixmap, st.new_pixmap)
+
+    def _prepare_warp_textures(self) -> bool:
+        if not self._can_use_warp_shader():
+            return False
+        if self._gl_pipeline is None:
+            return False
+        if self._gl_pipeline.old_tex_id and self._gl_pipeline.new_tex_id:
+            return True
+        if self._warp is None:
+            return False
+        st = self._warp
+        return self._prepare_pair_textures(st.old_pixmap, st.new_pixmap)
+
+    def _prepare_raindrops_textures(self) -> bool:
+        if not self._can_use_raindrops_shader():
+            return False
+        if self._gl_pipeline is None:
+            return False
+        if self._gl_pipeline.old_tex_id and self._gl_pipeline.new_tex_id:
+            return True
+        if self._raindrops is None:
+            return False
+        st = self._raindrops
         return self._prepare_pair_textures(st.old_pixmap, st.new_pixmap)
 
     def _get_viewport_size(self) -> tuple[int, int]:
@@ -2659,6 +3160,60 @@ void main() {
             gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
             gl.glActiveTexture(gl.GL_TEXTURE0)
             gl.glUseProgram(0)
+
+    def _paint_claws_shader(self, target: QRect) -> None:
+        if not self._can_use_claws_shader() or self._gl_pipeline is None or self._shooting_stars is None:
+            return
+        st = self._shooting_stars
+        if not st.old_pixmap or st.old_pixmap.isNull() or not st.new_pixmap or st.new_pixmap.isNull():
+            return
+        if not self._prepare_pair_textures(st.old_pixmap, st.new_pixmap):
+            return
+
+        vp_w, vp_h = self._get_viewport_size()
+        p = max(0.0, min(1.0, float(st.progress)))
+
+        gl.glViewport(0, 0, vp_w, vp_h)
+        gl.glDisable(gl.GL_DEPTH_TEST)
+
+        gl.glUseProgram(self._gl_pipeline.claws_program)
+        try:
+            if self._gl_pipeline.claws_u_progress != -1:
+                gl.glUniform1f(self._gl_pipeline.claws_u_progress, float(p))
+
+            if self._gl_pipeline.claws_u_resolution != -1:
+                gl.glUniform2f(self._gl_pipeline.claws_u_resolution, float(vp_w), float(vp_h))
+
+            stripe_count = float(max(10.0, min(32.0, vp_w / 96.0)))
+            if self._gl_pipeline.claws_u_density != -1:
+                gl.glUniform1f(self._gl_pipeline.claws_u_density, stripe_count)
+
+            if self._gl_pipeline.claws_u_direction != -1:
+                gl.glUniform2f(self._gl_pipeline.claws_u_direction, 0.9, -0.45)
+
+            if self._gl_pipeline.claws_u_length != -1:
+                gl.glUniform1f(self._gl_pipeline.claws_u_length, 0.35)
+
+            if self._gl_pipeline.claws_u_width != -1:
+                width = 0.18 / max(stripe_count, 1.0)
+                gl.glUniform1f(self._gl_pipeline.claws_u_width, float(width))
+
+            if self._gl_pipeline.claws_u_old_tex != -1:
+                gl.glActiveTexture(gl.GL_TEXTURE0)
+                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.old_tex_id)
+                gl.glUniform1i(self._gl_pipeline.claws_u_old_tex, 0)
+            if self._gl_pipeline.claws_u_new_tex != -1:
+                gl.glActiveTexture(gl.GL_TEXTURE1)
+                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.new_tex_id)
+                gl.glUniform1i(self._gl_pipeline.claws_u_new_tex, 1)
+
+            gl.glBindVertexArray(self._gl_pipeline.quad_vao)
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+            gl.glBindVertexArray(0)
+        finally:
+            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
+            gl.glActiveTexture(gl.GL_TEXTURE0)
+            gl.glUseProgram(0)
             gl.glDisable(gl.GL_DEPTH_TEST)
 
     def _paint_warp_shader(self, target: QRect) -> None:
@@ -2667,7 +3222,7 @@ void main() {
         st = self._warp
         if not st.old_pixmap or st.old_pixmap.isNull() or not st.new_pixmap or st.new_pixmap.isNull():
             return
-        if not self._prepare_pair_textures(st.old_pixmap, st.new_pixmap):
+        if not self._prepare_warp_textures():
             return
 
         vp_w, vp_h = self._get_viewport_size()
@@ -2708,7 +3263,7 @@ void main() {
         st = self._raindrops
         if not st.old_pixmap or st.old_pixmap.isNull() or not st.new_pixmap or st.new_pixmap.isNull():
             return
-        if not self._prepare_pair_textures(st.old_pixmap, st.new_pixmap):
+        if not self._prepare_raindrops_textures():
             # Texture upload helper currently uses the shared old/new texture
             # slots; on failure we simply skip the shader path.
             return
@@ -2780,6 +3335,26 @@ void main() {
                 )
                 logger.debug(
                     "[GL COMPOSITOR] Shader raindrops path failed; disabling shader pipeline",
+                    exc_info=True,
+                )
+                self._gl_disabled_for_session = True
+                self._use_shaders = False
+
+        # Shooting Stars (claws) shader path: when enabled and the GLSL
+        # pipeline is available, draw the streak field entirely in GLSL. On
+        # failure we disable shader usage for the session and fall back to the
+        # compositor's existing QPainter-based transitions.
+        if self._shooting_stars is not None and self._can_use_claws_shader():
+            try:
+                self._paint_claws_shader(target)
+                return
+            except Exception:
+                logger.debug(
+                    "[GL SHADER] Shader shooting-stars path failed; disabling shader pipeline",
+                    exc_info=True,
+                )
+                logger.debug(
+                    "[GL COMPOSITOR] Shader shooting-stars path failed; disabling shader pipeline",
                     exc_info=True,
                 )
                 self._gl_disabled_for_session = True

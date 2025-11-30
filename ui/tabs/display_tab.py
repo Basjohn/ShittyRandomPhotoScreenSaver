@@ -157,48 +157,7 @@ class DisplayTab(QWidget):
         
         layout.addWidget(quality_group)
         
-        # Pan and scan group
-        pan_group = QGroupBox("Pan and Scan")
-        pan_layout = QVBoxLayout(pan_group)
-        
-        # Pan and scan explanation
-        pan_label = QLabel(
-            "Adds subtle movement to static images. The image will be larger than the display\n"
-            "and drift slowly in random directions, creating a dynamic effect."
-        )
-        pan_label.setWordWrap(True)
-        pan_label.setStyleSheet("color: #aaaaaa; font-size: 11px;")
-        pan_layout.addWidget(pan_label)
-        
-        self.pan_check = QCheckBox("Enable pan and scan effect (Experimental)")
-        self.pan_check.setChecked(False)
-        self.pan_check.stateChanged.connect(self._save_settings)
-        pan_layout.addWidget(self.pan_check)
-        
-        # Speed settings
-        speed_row = QHBoxLayout()
-        self.pan_auto_check = QCheckBox("Auto speed (based on transition interval)")
-        self.pan_auto_check.setChecked(True)
-        self.pan_auto_check.stateChanged.connect(self._on_pan_auto_changed)
-        speed_row.addWidget(self.pan_auto_check)
-        pan_layout.addLayout(speed_row)
-        
-        # Manual speed
-        manual_speed_row = QHBoxLayout()
-        manual_speed_row.addWidget(QLabel("Manual speed:"))
-        self.pan_speed_spin = QSpinBox()
-        self.pan_speed_spin.setRange(1, 50)
-        self.pan_speed_spin.setSingleStep(1)
-        self.pan_speed_spin.setAccelerated(True)
-        self.pan_speed_spin.setSuffix(" px/s")
-        self.pan_speed_spin.setValue(5)
-        self.pan_speed_spin.setEnabled(False)  # Disabled by default (auto mode)
-        self.pan_speed_spin.valueChanged.connect(self._save_settings)
-        manual_speed_row.addWidget(self.pan_speed_spin)
-        manual_speed_row.addStretch()
-        pan_layout.addLayout(manual_speed_row)
-        
-        layout.addWidget(pan_group)
+        # Pan and Scan has been removed in v1.2; no dedicated UI group remains.
 
         # Renderer backend group
         backend_group = QGroupBox("Renderer Backend")
@@ -332,9 +291,6 @@ class DisplayTab(QWidget):
         self.interval_spin.blockSignals(True)
         self.shuffle_check.blockSignals(True)
         self.sharpen_check.blockSignals(True)
-        self.pan_check.blockSignals(True)
-        self.pan_auto_check.blockSignals(True)
-        self.pan_speed_spin.blockSignals(True)
         # Also block performance toggles to avoid saving defaults while loading
         self.refresh_sync_check.blockSignals(True)
         self.backend_combo.blockSignals(True)
@@ -409,19 +365,6 @@ class DisplayTab(QWidget):
             sharpen = SettingsManager.to_bool(sharpen_raw, False)
             self.sharpen_check.setChecked(sharpen)
             
-            # Pan and scan
-            pan_enabled_raw = self._settings.get('display.pan_and_scan', False)
-            pan_enabled = SettingsManager.to_bool(pan_enabled_raw, False)
-            self.pan_check.setChecked(pan_enabled)
-            
-            pan_auto_raw = self._settings.get('display.pan_auto_speed', True)
-            pan_auto = SettingsManager.to_bool(pan_auto_raw, True)
-            self.pan_auto_check.setChecked(pan_auto)
-            
-            pan_speed = self._settings.get('display.pan_speed', 3.0)
-            self.pan_speed_spin.setValue(int(pan_speed))
-            self.pan_speed_spin.setEnabled(not pan_auto)
-            
             # Refresh rate sync
             refresh_sync = self._settings.get_bool('display.refresh_sync', True)
             self.refresh_sync_check.setChecked(refresh_sync)
@@ -443,7 +386,7 @@ class DisplayTab(QWidget):
                 index = 0
             self.backend_combo.setCurrentIndex(index)
 
-            logger.debug(f"Loaded display settings: sharpen={sharpen}, pan={pan_enabled}")
+            logger.debug(f"Loaded display settings: sharpen={sharpen}")
         finally:
             # Re-enable signals
             self.same_image_check.blockSignals(False)
@@ -451,9 +394,6 @@ class DisplayTab(QWidget):
             self.interval_spin.blockSignals(False)
             self.shuffle_check.blockSignals(False)
             self.sharpen_check.blockSignals(False)
-            self.pan_check.blockSignals(False)
-            self.pan_auto_check.blockSignals(False)
-            self.pan_speed_spin.blockSignals(False)
             self.refresh_sync_check.blockSignals(False)
             self.backend_combo.blockSignals(False)
             self.hard_exit_check.blockSignals(False)
@@ -495,11 +435,6 @@ class DisplayTab(QWidget):
         sharpen = self.sharpen_check.isChecked()
         self._settings.set('display.sharpen_downscale', sharpen)
         
-        # Pan and scan
-        self._settings.set('display.pan_and_scan', self.pan_check.isChecked())
-        self._settings.set('display.pan_auto_speed', self.pan_auto_check.isChecked())
-        self._settings.set('display.pan_speed', self.pan_speed_spin.value())
-        
         # Performance
         self._settings.set('display.refresh_sync', self.refresh_sync_check.isChecked())
 
@@ -517,15 +452,8 @@ class DisplayTab(QWidget):
         logger.info(
             f"Saved display settings: mode={mode_map.get(mode_index, 'fill')}, "
             f"sharpen={sharpen}, "
-            f"same_image={self.same_image_check.isChecked()}, "
-            f"pan_and_scan={self.pan_check.isChecked()}"
+            f"same_image={self.same_image_check.isChecked()}"
         )
-    
-    def _on_pan_auto_changed(self) -> None:
-        """Handle pan auto speed checkbox change."""
-        is_auto = self.pan_auto_check.isChecked()
-        self.pan_speed_spin.setEnabled(not is_auto)
-        self._save_settings()
 
     def _on_show_on_changed(self) -> None:
         """Handle changes to the monitor "Show On" checkboxes."""

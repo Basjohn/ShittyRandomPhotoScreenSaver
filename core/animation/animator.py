@@ -267,6 +267,16 @@ class AnimationManager(QObject):
         self._animations: Dict[str, Animation] = {}
         self._animation_groups: Dict[str, AnimationGroupConfig] = {}
         self._last_update_time: Optional[float] = None
+
+        # Lightweight profiling state for `[PERF] [ANIM]` metrics. These are
+        # reset each time the manager's timer starts and logged once when it
+        # stops so callers can correlate effective FPS and dt jitter with
+        # higher-level transition metrics.
+        self._profile_start_ts: Optional[float] = None
+        self._profile_last_ts: Optional[float] = None
+        self._profile_frame_count: int = 0
+        self._profile_min_dt: float = 0.0
+        self._profile_max_dt: float = 0.0
         
         # Update timer
         self._timer = QTimer()
@@ -309,7 +319,16 @@ class AnimationManager(QObject):
     def start(self) -> None:
         """Start the animation manager's update loop."""
         if not self._timer.isActive():
-            self._last_update_time = time.time()
+            now = time.time()
+            self._last_update_time = now
+            # Reset profiling for this run so `[PERF] [ANIM]` metrics reflect a
+            # single continuous active period.
+            self._profile_start_ts = now
+            self._profile_last_ts = None
+            self._profile_frame_count = 0
+            self._profile_min_dt = 0.0
+            self._profile_max_dt = 0.0
+
             self._timer.start()
             logger.debug("AnimationManager started")
     
@@ -317,6 +336,7 @@ class AnimationManager(QObject):
         """Stop the animation manager's update loop."""
         if self._timer.isActive():
             self._timer.stop()
+            self._log_profile_summary()
             logger.debug("AnimationManager stopped")
     
     def cleanup(self) -> None:
@@ -519,28 +539,78 @@ class AnimationManager(QObject):
         # Stop timer if no animations left
         if not self._animations and self._timer.isActive():
             self.stop()
-    
+
     def _on_animation_cancelled(self, animation_id: str) -> None:
         """Handle animation cancellation."""
         # Already handled in cancel_animation
         pass
-    
+
     def _update_all(self) -> None:
         """Update all active animations (called by timer)."""
         current_time = time.time()
-        
+
         if self._last_update_time is None:
             self._last_update_time = current_time
             return
-        
+
         delta_time = current_time - self._last_update_time
         self._last_update_time = current_time
-        
+
+        # Profiling: track timing characteristics without altering behaviour.
+        if self._profile_start_ts is None:
+            self._profile_start_ts = current_time
+        if delta_time > 0.0:
+            if self._profile_min_dt == 0.0 or delta_time < self._profile_min_dt:
+                self._profile_min_dt = delta_time
+            if delta_time > self._profile_max_dt:
+                self._profile_max_dt = delta_time
+        self._profile_last_ts = current_time
+        self._profile_frame_count += 1
+
         # Update all animations
-        completed_ids = []
         for anim_id, animator in list(self._animations.items()):
-            still_running = animator.update(delta_time)
-            if not still_running:
-                completed_ids.append(anim_id)
-        
-        # Note: Completed animations are removed via signal handlers
+            animator.update(delta_time)
+
+    def _log_profile_summary(self) -> None:
+        """Emit a concise `[PERF] [ANIM]` summary for the last active run."""
+
+        try:
+            if (
+                self._profile_start_ts is not None
+                and self._profile_last_ts is not None
+                and self._profile_frame_count > 0
+            ):
+                elapsed = max(0.0, self._profile_last_ts - self._profile_start_ts)
+                if elapsed > 0.0:
+                    duration_ms = elapsed * 1000.0
+                    avg_fps = self._profile_frame_count / elapsed
+                    min_dt_ms = (
+                        self._profile_min_dt * 1000.0
+                        if self._profile_min_dt > 0.0
+                        else 0.0
+                    )
+                    max_dt_ms = (
+                        self._profile_max_dt * 1000.0
+                        if self._profile_max_dt > 0.0
+                        else 0.0
+                    )
+                    logger.info(
+                        "[PERF] [ANIM] AnimationManager metrics: duration=%.1fms, "
+                        "frames=%d, avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, "
+                        "active_count=%d, fps_target=%d",
+                        duration_ms,
+                        self._profile_frame_count,
+                        avg_fps,
+                        min_dt_ms,
+                        max_dt_ms,
+                        self.get_active_count(),
+                        self.fps,
+                    )
+        except Exception as e:
+            logger.debug("[ANIM] Metrics logging failed: %s", e, exc_info=True)
+        finally:
+            self._profile_start_ts = None
+            self._profile_last_ts = None
+            self._profile_frame_count = 0
+            self._profile_min_dt = 0.0
+            self._profile_max_dt = 0.0

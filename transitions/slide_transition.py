@@ -94,32 +94,11 @@ class SlideTransition(BaseTransition):
             # Get widget dimensions
             width = widget.width()
             height = widget.height()
-            
-            # Pre-fit old to widget; new aligns with Pan&Scan preview when enabled
+
+            # Pre-fit old and new pixmaps to widget; Pan & Scan preview has been
+            # removed so transitions always use the standard fitted frames.
             fitted_old = self._fit_pixmap_to_widget(old_pixmap, widget)
-            use_pan_preview = False
-            preview_scaled = None
-            try:
-                sm = getattr(widget, 'settings_manager', None)
-                if sm is not None:
-                    pan_enabled = sm.get('display.pan_and_scan', False)
-                    if isinstance(pan_enabled, str):
-                        pan_enabled = pan_enabled.lower() in ('true', '1', 'yes')
-                    if pan_enabled and hasattr(widget, '_pan_and_scan'):
-                        preview_scaled = widget._pan_and_scan.preview_scale(new_pixmap, widget.size())
-                        use_pan_preview = preview_scaled is not None
-            except Exception:
-                use_pan_preview = False
-            if use_pan_preview and preview_scaled is not None:
-                try:
-                    dpr = getattr(widget, "_device_pixel_ratio", widget.devicePixelRatioF())
-                except Exception:
-                    dpr = 1.0
-                try:
-                    preview_scaled.setDevicePixelRatio(dpr)
-                except Exception:
-                    pass
-            fitted_new = self._fit_pixmap_to_widget(new_pixmap, widget) if not use_pan_preview else preview_scaled
+            fitted_new = self._fit_pixmap_to_widget(new_pixmap, widget)
 
             # Create labels for old and new images
             self._old_label = QLabel(widget)

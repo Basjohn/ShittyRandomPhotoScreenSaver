@@ -59,14 +59,13 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
   - Background: the engine enforces a global RSS background cap (`sources.rss_background_cap`, default 30) and a time‑to‑live (`sources.rss_stale_minutes`, default 30 minutes) so older, unseen RSS images are gradually replaced when new ones arrive, but only when a background refresh successfully adds replacements.
 
 ## Transitions
-- GL and CPU variants for Crossfade, Slide, Wipe, Diffuse, Block Puzzle Flip; GL-only variant for Blinds (`GLBlindsTransition`) when hardware acceleration is enabled.
+- GL and CPU variants for Crossfade, Slide, Wipe, Block Puzzle Flip; GL-only variant for Blinds (`GLBlindsTransition`) when hardware acceleration is enabled. Diffuse currently runs as a CPU-only effect (`DiffuseTransition`); an older compositor-backed diffuse-region implementation (`GLCompositorDiffuseTransition`) exists but is not used in production after earlier stability/pixmap-exposure issues, and a future GLSL-based Diffuse shader is planned instead.
 - Compositor-backed controllers (`GLCompositorCrossfadeTransition`, `GLCompositorSlideTransition`, `GLCompositorWipeTransition`, `GLCompositorBlockFlipTransition`, `GLCompositorBlindsTransition`, `GLCompositorDiffuseTransition`) delegate rendering to a single `GLCompositorWidget` per display instead of per-transition `QOpenGLWidget` overlays.
 -- Additional **GL-only, compositor-backed transitions** are implemented as first-class types:
   - **Peel** (`GLCompositorPeelTransition`) – strip-based peel of the old image in a cardinal direction over the new image.
   - **3D Block Spins** (`GLCompositorBlockSpinTransition`) – GL-only single-slab 3D spin rendered by the compositor: a single thin depth-tested box mesh fills the viewport and flips from the old image (front face) to the new image (back face) with neutral glass edges and specular highlights. Spin axis is controlled by direction (LEFT/RIGHT spin around the Y axis, UP/DOWN spin around the X axis) via a shared card-flip shader (`u_axisMode`, `u_angle`, `u_specDir`); legacy Block Puzzle grid settings are no longer used.
   - **Ripple** (`GLCompositorRainDropsTransition`) – radial ripple effect rendered entirely in GLSL, with a diffuse-region fallback path.
   - **Warp Dissolve** (`WarpState` + `GLCompositorWarpTransition`) – banded horizontal warp of the old image over a stable new image, fading out over time.
-  - **Claw Marks** (`GLCompositorClawMarksTransition`) – a small set of diagonal scratch bands that grow to reveal the new image using the diffuse region API.
   - **Shuffle** (`GLCompositorShuffleTransition`) – block-based reveal where blocks of the new image slide in from a chosen/random edge; implemented as a moving diffuse region.
 - DisplayWidget injects the shared ResourceManager into every transition. Legacy GL overlays are created through `overlay_manager.get_or_create_overlay` so lifecycle is centralized, while compositor-backed transitions render exclusively through `GLCompositorWidget`.
 - GL overlays remain persistent and pre-warmed via `overlay_manager.prepare_gl_overlay` / `DisplayWidget._prewarm_gl_contexts` to avoid first-use flicker on legacy GL paths; compositor-backed transitions reuse the same per-display compositor widget and never create additional GL surfaces.
@@ -77,9 +76,9 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
   - Random rotation and C-key cycling only consider types whose pool flag is true.
   - Pool membership never affects explicit selection via the settings UI.
 - GL-only gating:
-  - GL-only types (Blinds, Peel, 3D Block Spins, Rain Drops, Warp Dissolve, Claw Marks, Shuffle) are only instantiated on the compositor/GL paths when `display.hw_accel=True` and the compositor is available.
+  - GL-only types (Blinds, Peel, 3D Block Spins, Ripple, Warp Dissolve, Shuffle) are only instantiated on the compositor/GL paths when `display.hw_accel=True` and the compositor is available.
   - When hardware acceleration is disabled, the Transitions tab disables these types and the engine maps any request for them to a safe CPU fallback (currently Crossfade).
-  - Shader-backed variants (Group A, e.g. GLSL Block Spins and future Rain Drops / Warp / Claws ports) run on top of the compositor and, on any shader failure, degrade to the existing QPainter compositor transitions (Group B); only when the compositor or GL backend is unavailable does the engine fall back to pure software transitions (Group C).
+  - Shader-backed variants (Group A, e.g. GLSL Block Spins and future Rain Drops / Warp / Claws ports) run on top of the compositor. On any shader initialisation or runtime failure, the engine disables shader usage for the remainder of the session and demotes all subsequent shader-backed requests to the existing QPainter compositor transitions (Group B). Only when the compositor or GL backend is unavailable for the session does the engine fall back to pure software transitions (Group C). Per-transition "try GLSL and silently fall back" paths are avoided; group demotion is explicit and session-scoped.
 - Non-repeating random selection:
   - Engine sets `transitions.random_choice` per rotation, filtered through `transitions.pool` and GL-only gating.
   - Slide: cardinal-only directions; stored as `transitions.slide.direction` and last as `transitions.slide.last_direction` (legacy fallback maintained).
@@ -96,6 +95,8 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
   - `GL_WIPE_PREPAINT`
   - `GL_WIPE_REPAINT_FRAME`
   - `[PERF] [GL COMPOSITOR] Slide metrics` (per-transition summary: duration, frame count, avg_fps, dt_min/dt_max, compositor size) emitted by `GLCompositorWidget` for compositor-driven Slide to validate timing on mixed-refresh setups.
+  - `[PERF] [GL COMPOSITOR] Wipe metrics` with the same fields for compositor-driven Wipe transitions.
+  - `[PERF] [GL COMPOSITOR] Warp metrics` and `[PERF] [GL COMPOSITOR] Raindrops metrics` for the GLSL-based Warp Dissolve and Ripple (raindrops) paths, using the same duration/frame/avg_fps/min/max/size structure so all GLSL-backed transitions share a comparable telemetry format.
 - If spikes persist, consider compute-pool pre-scale-to-screen ahead of time as a future enhancement.
 
 ## Settings
@@ -103,13 +104,13 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
 - `display.hw_accel`: bool
 - `display.mode`: fill|fit|shrink
 - `input.hard_exit`: bool (when true, mouse movement/clicks do not exit; only ESC/Q and hotkeys remain active). Additionally, while the Ctrl key is held, `DisplayWidget` temporarily suppresses mouse-move and left-click exit even when `input.hard_exit` is false, allowing interaction with widgets without persisting a hard-exit setting change. MC builds default this setting to true at startup in their own QSettings profile, while the normal screensaver build respects the saved value.
-- `transitions.type`: Crossfade|Slide|Wipe|Diffuse|Block Puzzle Flip|Blinds|Peel|"3D Block Spins"|"Ripple"|"Warp Dissolve"|"Claw Marks"|Shuffle
+- `transitions.type`: Crossfade|Slide|Wipe|Diffuse|Block Puzzle Flip|Blinds|Peel|"3D Block Spins"|"Ripple"|"Warp Dissolve"|Shuffle
 - `transitions.random_always`: bool
 - `transitions.random_choice`: str (current random pick for this rotation; cleared on manual type changes)
 - `transitions.slide.direction`, `transitions.slide.last_direction` (legacy flat keys maintained).
 - `transitions.wipe.direction`, `transitions.wipe.last_direction` (legacy flat keys maintained).
 - `transitions.duration_ms`: int global default transition duration in milliseconds.
-- `transitions.durations`: mapping of transition type name → per-type duration in milliseconds (e.g. `{"Crossfade": 1300, "Slide": 2000, ...}`) used by the Transitions tab and `DisplayWidget` to make durations independent per transition.
+- `transitions.durations`: mapping of transition type name → per-type duration in milliseconds (e.g. `{"Crossfade": 1300, "Slide": 2000, "Ripple": 7000, ...}`) used by the Transitions tab and `DisplayWidget` to make durations independent per transition. Legacy settings keys using the label `"Rain Drops"` are migrated to `"Ripple"` at load time.
 - `transitions.diffuse.block_size` (int, clamped to a 4–256px range) and `transitions.diffuse.shape` (`Rectangle`|`Circle`|`Diamond`|`Plus`|`Triangle`). The same block-size is reused by Shuffle to size its GL grid.
 - `transitions.pool`: mapping of transition type name → bool controlling whether a type participates in engine random rotation and C-key cycling (explicit selection is always allowed regardless of this flag).
 - `timing.interval`: int seconds
@@ -188,11 +189,12 @@ widget behaviour; this Spec only summarises the high-level contract.
 - `Docs/FlashFlickerDiagnostic.md` tracks symptoms, triggers, and mitigation experiments; roadmap items link back for traceability.
 - High-verbosity debug sessions require log rotation (size/time bound) to avoid disk pressure.
 - Telemetry counters record transition type requested vs. instantiated, cache hits/misses, and transition skips while in progress.
+ - Console debug output uses a suppressing stream handler that groups consecutive INFO/DEBUG lines from the same logger into `[N Suppressed: CHECK LOG...]` summaries while leaving file logs untouched. The high-visibility `Initializing Screensaver Engine 🚦🚦🚦🚦🚦` banner is exempt from grouping so it always appears once per run, and when multiple `[PERF]` lines with `avg_fps=...` are collapsed, the summary includes the trailing `avg_fps` token to keep grouped telemetry readable in the console.
 
 ## Future Enhancements
 - Compute-pool pre-scale-to-screen (per-display DPR) ahead of time for the next image.
 - Transition sync improvements across displays using lock-free SPSC queues.
-- Additional tuning of the **GL-only, compositor-backed transitions** (Peel, Rain Drops, Warp Dissolve, 3D Block Spins, Claw Marks, Shuffle) based on visual QA and user feedback (e.g. strip counts, band amplitudes, droplet density, scratch thickness, shuffle block size/density). Detailed design notes remain in `Docs/GL_Transitions_Proposal.md` and are kept consistent with this Spec.
+- Additional tuning of the **GL-only, compositor-backed transitions** (Peel, Ripple, Warp Dissolve, 3D Block Spins, Shuffle) based on visual QA and user feedback (e.g. strip counts, band amplitudes, droplet density, shuffle block size/density). Detailed design notes remain in `Docs/GL_Transitions_Proposal.md` and are kept consistent with this Spec.
 
 **Version**: 1.2  
 **Last Updated**: Nov 30, 2025 00:47 - 3D Block Spins migrated to a single-slab axis-based GL compositor design (LEFT/RIGHT = Y-axis, UP/DOWN = X-axis) with corrected DOWN orientation; Spec/Index and v1.2 roadmap documentation updated accordingly.

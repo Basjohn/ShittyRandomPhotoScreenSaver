@@ -110,6 +110,7 @@ def _update_transitions(
     settings_manager.set('transitions', cfg)
 
 
+@pytest.mark.skip(reason="Pan & Scan feature removed in v1.2; DisplayWidget no longer exposes _pan_and_scan.")
 def test_crossfade_with_pan_and_scan(app, test_images, settings_manager):
     """Test that crossfade transition works with pan & scan enabled."""
     if len(test_images) < 2:
@@ -174,6 +175,7 @@ def test_crossfade_with_pan_and_scan(app, test_images, settings_manager):
     widget.close()
 
 
+@pytest.mark.skip(reason="Pan & Scan feature removed in v1.2; DisplayWidget no longer exposes _pan_and_scan.")
 def test_diffuse_with_pan_and_scan(app, test_images, settings_manager):
     """Test that diffuse transition works with pan & scan enabled."""
     if len(test_images) < 2:
@@ -237,6 +239,7 @@ def test_diffuse_with_pan_and_scan(app, test_images, settings_manager):
     widget.close()
 
 
+@pytest.mark.skip(reason="Pan & Scan feature removed in v1.2; DisplayWidget no longer exposes _pan_and_scan.")
 def test_pan_and_scan_no_zoom_after_transition(app, test_images, settings_manager):
     """Test that pan & scan doesn't cause zoom effect after transition completes."""
     if len(test_images) < 2:

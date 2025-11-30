@@ -113,6 +113,7 @@ def test_pixmap_blue():
     return QPixmap.fromImage(image)
 
 
+@pytest.mark.skip(reason="Pan & Scan feature removed in v1.2; runtime no longer wires pan & scan into DisplayWidget.")
 def test_pan_scan_stopped_before_transition(qapp, display_widget, test_pixmap_red, test_pixmap_blue, qtbot):
     """
     BUG FIX #2 TEST: Verify pan & scan is stopped and label hidden before transition starts.
@@ -144,6 +145,7 @@ def test_pan_scan_stopped_before_transition(qapp, display_widget, test_pixmap_re
     qtbot.wait(600)
 
 
+@pytest.mark.skip(reason="Pan & Scan feature removed in v1.2; runtime no longer wires pan & scan into DisplayWidget.")
 def test_diffuse_with_pan_scan(qapp, display_widget, test_pixmap_red, test_pixmap_blue, qtbot, settings_manager):
     """
     BUG FIX #3 TEST: Verify diffuse transition works with pan & scan.
@@ -177,6 +179,7 @@ def test_diffuse_with_pan_scan(qapp, display_widget, test_pixmap_red, test_pixma
             f"Diffuse transition with {shape} did not finish"
 
 
+@pytest.mark.skip(reason="Pan & Scan feature removed in v1.2; runtime no longer wires pan & scan into DisplayWidget.")
 def test_block_puzzle_with_pan_scan(qapp, display_widget, test_pixmap_red, test_pixmap_blue, qtbot, settings_manager):
     """
     BUG FIX #2 TEST: Verify block puzzle flip works with pan & scan.
@@ -201,6 +204,7 @@ def test_block_puzzle_with_pan_scan(qapp, display_widget, test_pixmap_red, test_
     qtbot.wait(2500)
 
 
+@pytest.mark.skip(reason="Pan & Scan feature removed in v1.2; runtime no longer wires pan & scan into DisplayWidget.")
 def test_transition_uses_pan_preview_frame(qapp, display_widget, test_pixmap_red, test_pixmap_blue,
                                            qtbot, settings_manager, monkeypatch):
     """Ensure the transition consumes the pan preview frame to avoid post-transition jump."""
@@ -231,6 +235,7 @@ def test_transition_uses_pan_preview_frame(qapp, display_widget, test_pixmap_red
         "Displayed pixmap does not match the pan preview frame"
 
 
+@pytest.mark.skip(reason="Pan & Scan feature removed in v1.2; runtime no longer wires pan & scan into DisplayWidget.")
 def test_wipe_with_pan_scan(qapp, display_widget, test_pixmap_red, test_pixmap_blue, qtbot, settings_manager):
     """
     BUG FIX #0 TEST: Verify wipe transition works with pan & scan.
@@ -268,6 +273,7 @@ def test_crossfade_duration(qapp, settings_manager):
     assert True, "Code default is 1300ms in display_widget.py line 207"
 
 
+@pytest.mark.skip(reason="Pan & Scan feature removed in v1.2; runtime no longer wires pan & scan into DisplayWidget.")
 def test_pan_scan_cleanup_between_images(qapp, display_widget, test_pixmap_red, test_pixmap_blue, qtbot):
     """
     Verify pan & scan is properly cleaned up and restarted between images.
@@ -290,6 +296,7 @@ def test_pan_scan_cleanup_between_images(qapp, display_widget, test_pixmap_red, 
             "Pan & scan label should be visible after transition completes"
 
 
+@pytest.mark.skip(reason="Pan & Scan feature removed in v1.2; runtime no longer wires pan & scan into DisplayWidget.")
 def test_all_transitions_with_pan_scan(qapp, display_widget, test_pixmap_red, test_pixmap_blue, qtbot, settings_manager):
     """
     Integration test: Verify ALL transitions work with pan & scan enabled.

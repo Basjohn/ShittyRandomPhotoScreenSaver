@@ -103,9 +103,6 @@ class SettingsManager(QObject):
             'display.gl_depth_bits': 24,
             'display.gl_stencil_bits': 8,
             'display.render_backend_mode': 'opengl',
-            'display.pan_and_scan': False,
-            'display.pan_auto_speed': True,
-            'display.pan_speed': 3.0,
             'display.sharpen_downscale': False,
             'display.same_image_all_monitors': False,
             # Main display selection – canonical key: ALL monitors by default.
@@ -164,7 +161,6 @@ class SettingsManager(QObject):
                     '3D Block Spins': True,
                     'Rain Drops': True,
                     'Warp Dissolve': True,
-                    'Claw Marks': True,
                     'Shuffle': True,
                     'Blinds': True,
                 },

@@ -1,17 +1,15 @@
-"""Tests for pan & scan animator."""
+"""Tests for pan & scan animator (removed in v1.2).
+
+This module is kept only as historical documentation of the old Ken Burns
+effect; all tests are skipped because the runtime no longer ships the
+animator or Pan & Scan feature.
+"""
 import pytest
-from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QRectF
-from rendering.pan_scan_animator import PanScanAnimator, PanDirection
 
-
-@pytest.fixture
-def qapp():
-    """Create QApplication for tests."""
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    yield app
+pytest.skip(
+    "Pan & Scan animator removed in v1.2; module retained only as historical reference.",
+    allow_module_level=True,
+)
 
 
 def test_pan_direction_enum():
