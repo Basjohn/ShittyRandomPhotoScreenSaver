@@ -12,7 +12,7 @@ import threading
 import random
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple
 from PySide6.QtCore import QObject, Signal, QTimer
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QPixmap
@@ -21,7 +21,7 @@ from core.events import EventSystem, EventType
 from core.resources import ResourceManager
 from core.threading import ThreadManager
 from core.settings import SettingsManager
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.animation import AnimationManager
 
 from engine.display_manager import DisplayManager
@@ -90,6 +90,9 @@ class ScreensaverEngine(QObject):
         self._current_image: Optional[ImageMetadata] = None
         self._loading_in_progress: bool = False
         self._loading_lock = threading.Lock()  # FIX: Protect loading flag from race conditions
+        # Canonical list of transition types used for C-key cycling. Legacy
+        # "Claw Marks" entries have been fully removed from the engine and are
+        # mapped to "Crossfade" at selection time for back-compat only.
         self._transition_types: List[str] = [
             "Crossfade",
             "Slide",
@@ -100,7 +103,6 @@ class ScreensaverEngine(QObject):
             "3D Block Spins",
             "Ripple",  # formerly "Rain Drops"
             "Warp Dissolve",
-            "Claw Marks",
             "Shuffle",
             "Blinds",
         ]
@@ -706,6 +708,12 @@ class ScreensaverEngine(QObject):
                         sizes = self._get_distinct_display_sizes()
                         for (w, h) in sizes:
                             scaled_key = f"{first_path}|scaled:{w}x{h}"
+                            # Skip work if a scaled variant is already cached for this size.
+                            try:
+                                if self._image_cache.contains(scaled_key):
+                                    continue
+                            except Exception:
+                                pass
                             def _compute_prescale_wh(width=w, height=h, src_path=first_path, cache_key=scaled_key):
                                 """Compute-task: scale cached QImage to a target size and store in cache.
                                 Safe to remove if not needed. Avoids doing the heavy scale on the next frame.
@@ -959,26 +967,27 @@ class ScreensaverEngine(QObject):
             self.stopped.emit()
             logger.info("Screensaver engine stopped")
 
-            # Emit a concise image cache summary for profiling (Route3 §6.4).
+            # Emit a concise image cache summary for profiling.
             # Tagged with "[PERF] ImageCache" so production builds can grep and
             # gate/strip this debug telemetry if desired.
-            try:
-                if self._image_cache is not None:
-                    stats = self._image_cache.get_stats()
-                    logger.info(
-                        "[PERF] ImageCache: items=%d/%d, mem=%.1f/%.0fMB, hits=%d, "
-                        "misses=%d, hit_rate=%.1f%%%%, evictions=%d",
-                        stats.get('item_count', 0),
-                        stats.get('max_items', 0),
-                        stats.get('memory_usage_mb', 0.0),
-                        stats.get('max_memory_mb', 0.0),
-                        stats.get('hits', 0),
-                        stats.get('misses', 0),
-                        stats.get('hit_rate_percent', 0.0),
-                        stats.get('evictions', 0),
-                    )
-            except Exception as e:
-                logger.debug("[PERF] ImageCache summary logging failed: %s", e, exc_info=True)
+            if is_perf_metrics_enabled():
+                try:
+                    if self._image_cache is not None:
+                        stats = self._image_cache.get_stats()
+                        logger.info(
+                            "[PERF] ImageCache: items=%d/%d, mem=%.1f/%.0fMB, hits=%d, "
+                            "misses=%d, hit_rate=%.1f%%%%, evictions=%d",
+                            stats.get('item_count', 0),
+                            stats.get('max_items', 0),
+                            stats.get('memory_usage_mb', 0.0),
+                            stats.get('max_memory_mb', 0.0),
+                            stats.get('hits', 0),
+                            stats.get('misses', 0),
+                            stats.get('hit_rate_percent', 0.0),
+                            stats.get('evictions', 0),
+                        )
+                except Exception as e:
+                    logger.debug("[PERF] ImageCache summary logging failed: %s", e, exc_info=True)
             
             # Only exit the Qt event loop if requested
             if exit_app:
@@ -1005,28 +1014,29 @@ class ScreensaverEngine(QObject):
                 self.stop()
 
             # Emit a concise summary tying together queue stats and transition skips
-            # (Route3 §6.4: prefetch vs transition skip pacing diagnostics).
+            # for prefetch vs transition-skip pacing diagnostics.
             # Tagged with "[PERF] Engine summary" so production builds can grep
             # and gate/strip this debug telemetry if desired.
-            try:
-                if self.image_queue:
-                    qstats = self.image_queue.get_stats()
-                else:
-                    qstats = None
-                dstats = None
-                if self.display_manager:
-                    try:
-                        dstats = self.display_manager.get_display_info()
-                    except Exception as e:
-                        logger.debug("[PERF] Engine summary display info failed: %s", e, exc_info=True)
-                        dstats = None
-                logger.info(
-                    "[PERF] Engine summary: queue=%s, displays=%s",
-                    qstats,
-                    dstats,
-                )
-            except Exception as e:
-                logger.debug("[PERF] Engine summary logging failed: %s", e, exc_info=True)
+            if is_perf_metrics_enabled():
+                try:
+                    if self.image_queue:
+                        qstats = self.image_queue.get_stats()
+                    else:
+                        qstats = None
+                    dstats = None
+                    if self.display_manager:
+                        try:
+                            dstats = self.display_manager.get_display_info()
+                        except Exception as e:
+                            logger.debug("[PERF] Engine summary display info failed: %s", e, exc_info=True)
+                            dstats = None
+                    logger.info(
+                        "[PERF] Engine summary: queue=%s, displays=%s",
+                        qstats,
+                        dstats,
+                    )
+                except Exception as e:
+                    logger.debug("[PERF] Engine summary logging failed: %s", e, exc_info=True)
 
             # Cleanup display manager
             if self.display_manager:
@@ -1148,6 +1158,10 @@ class ScreensaverEngine(QObject):
                         elif scaled_cached is not None:
                             try:
                                 scaled_pm = QPixmap.fromImage(scaled_cached)
+                                if scaled_pm is not None and not scaled_pm.isNull():
+                                    # Promote the cached entry to QPixmap so future
+                                    # loads do not need to repeat the conversion.
+                                    self._image_cache.put(scaled_key, scaled_pm)
                             except Exception:
                                 scaled_pm = None
                 except Exception:
@@ -1161,6 +1175,10 @@ class ScreensaverEngine(QObject):
                     elif cached is not None:
                         try:
                             pixmap = QPixmap.fromImage(cached)  # must be on UI thread
+                            if pixmap is not None and not pixmap.isNull():
+                                # Promote base image cache entry to QPixmap for
+                                # future reuse at this size.
+                                self._image_cache.put(image_path, pixmap)
                         except Exception:
                             pixmap = QPixmap()
                     else:
@@ -1279,8 +1297,9 @@ class ScreensaverEngine(QObject):
             # restrict to those enabled in the per-transition pool map.
             base_types = ["Crossfade", "Slide", "Wipe", "Diffuse", "Block Puzzle Flip"]
             # Treat legacy 'Rain Drops' entries as equivalent to 'Ripple' when
-            # evaluating GL-only pools.
-            gl_only_types = ["Blinds", "Peel", "3D Block Spins", "Ripple", "Rain Drops", "Warp Dissolve", "Claw Marks", "Shuffle"]
+            # evaluating GL-only pools. "Claw Marks" has been removed from the
+            # runtime and is no longer part of the random pool.
+            gl_only_types = ["Blinds", "Peel", "3D Block Spins", "Ripple", "Rain Drops", "Warp Dissolve", "Shuffle"]
 
             try:
                 raw_hw = self.settings_manager.get('display.hw_accel', False)
@@ -1362,6 +1381,40 @@ class ScreensaverEngine(QObject):
         except Exception:
             return None
         return None
+
+    def _get_distinct_display_sizes(self) -> List[Tuple[int, int]]:
+        """Return distinct (width, height) pairs for all displays for prescaling.
+
+        This is used by the prefetch pipeline to decide which `|scaled:WxH` keys
+        to generate via COMPUTE tasks. It is intentionally conservative and
+        returns logical widget sizes rather than attempting to second-guess DPR;
+        `DisplayWidget` continues to handle device-pixel scaling when it
+        prepares the final pixmap for each screen.
+        """
+
+        sizes: List[Tuple[int, int]] = []
+        seen: set[Tuple[int, int]] = set()
+        try:
+            dm = self.display_manager
+            if not dm or not getattr(dm, 'displays', None):
+                return sizes
+            for d in dm.displays:
+                try:
+                    w, h = d.width(), d.height()
+                except Exception:
+                    continue
+                if w <= 0 or h <= 0:
+                    continue
+                key = (w, h)
+                if key in seen:
+                    continue
+                seen.add(key)
+                sizes.append(key)
+        except Exception:
+            # On any unexpected error fall back to an empty list; prescaling is
+            # strictly an optimisation and must never break image loading.
+            return []
+        return sizes
     
     def _on_previous_requested(self) -> None:
         """Handle previous image request (Z key)."""
@@ -1385,7 +1438,7 @@ class ScreensaverEngine(QObject):
 
         raw_hw = self.settings_manager.get('display.hw_accel', False)
         hw = SettingsManager.to_bool(raw_hw, False)
-        gl_only = {"Blinds", "Peel", "3D Block Spins", "Ripple", "Rain Drops", "Warp Dissolve", "Claw Marks", "Shuffle"}
+        gl_only = {"Blinds", "Peel", "3D Block Spins", "Ripple", "Rain Drops", "Warp Dissolve", "Shuffle"}
 
         transitions_config = self.settings_manager.get('transitions', {})
         if not isinstance(transitions_config, dict):

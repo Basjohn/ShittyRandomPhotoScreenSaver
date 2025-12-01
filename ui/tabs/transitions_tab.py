@@ -414,9 +414,13 @@ class TransitionsTab(QWidget):
         try:
             # Load transition type (default to Wipe to match SettingsManager defaults)
             transition_type = transitions_config.get('type', 'Wipe')
-            # Map legacy "Rain Drops" type to the new "Ripple" label.
+            # Map legacy labels to their modern equivalents.
             if transition_type == 'Rain Drops':
                 transition_type = 'Ripple'
+            elif transition_type == 'Claw Marks':
+                # Claw Marks was removed as a transition; treat any saved
+                # configuration as Crossfade for backwards compatibility.
+                transition_type = 'Crossfade'
             index = self.transition_combo.findText(transition_type)
             if index >= 0:
                 self.transition_combo.setCurrentIndex(index)

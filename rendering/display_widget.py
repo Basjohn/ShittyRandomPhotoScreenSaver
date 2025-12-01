@@ -1919,6 +1919,62 @@ class DisplayWidget(QWidget):
                 except Exception:
                     cols = 6
 
+                # Direction bias: reuse the Slide cardinal direction model so
+                # Block Puzzle Flip can emit a wave that respects the selected
+                # edge (Left/Right/Top/Bottom). When no usable direction is
+                # configured we fall back to the original fully-random order.
+                blockflip_direction: Optional[SlideDirection] = None
+                try:
+                    slide_cfg = transitions_settings.get('slide', {}) if isinstance(transitions_settings.get('slide', {}), dict) else {}
+                    dir_str = slide_cfg.get('direction', 'Random') or 'Random'
+
+                    direction_map = {
+                        'Left to Right': SlideDirection.LEFT,
+                        'Right to Left': SlideDirection.RIGHT,
+                        'Top to Bottom': SlideDirection.DOWN,
+                        'Bottom to Top': SlideDirection.UP,
+                    }
+
+                    rnd_always = SettingsManager.to_bool(transitions_settings.get('random_always', False), False)
+
+                    if dir_str == 'Random' and not rnd_always:
+                        # Mirror the Slide transition's non-repeating random
+                        # selection so BlockFlip shares the same edge bias.
+                        all_dirs = [
+                            SlideDirection.LEFT,
+                            SlideDirection.RIGHT,
+                            SlideDirection.UP,
+                            SlideDirection.DOWN,
+                        ]
+                        last_dir = slide_cfg.get('last_direction')
+                        str_to_enum = {
+                            'Left to Right': SlideDirection.LEFT,
+                            'Right to Left': SlideDirection.RIGHT,
+                            'Top to Bottom': SlideDirection.DOWN,
+                            'Bottom to Top': SlideDirection.UP,
+                        }
+                        last_enum = str_to_enum.get(last_dir) if isinstance(last_dir, str) else None
+                        candidates = [d for d in all_dirs if d != last_enum] if last_enum in all_dirs else all_dirs
+                        blockflip_direction = random.choice(candidates) if candidates else random.choice(all_dirs)
+
+                        enum_to_str = {
+                            SlideDirection.LEFT: 'Left to Right',
+                            SlideDirection.RIGHT: 'Right to Left',
+                            SlideDirection.DOWN: 'Top to Bottom',
+                            SlideDirection.UP: 'Bottom to Top',
+                        }
+                        try:
+                            slide_cfg['last_direction'] = enum_to_str.get(blockflip_direction, 'Left to Right')
+                            transitions_settings['slide'] = slide_cfg
+                            self.settings_manager.set('transitions', transitions_settings)
+                        except Exception:
+                            pass
+                    else:
+                        blockflip_direction = direction_map.get(dir_str, None)
+                except Exception:
+                    # On any error, keep direction bias disabled for this run.
+                    blockflip_direction = None
+
                 if hw_accel:
                     try:
                         self._ensure_gl_compositor()
@@ -1926,13 +1982,13 @@ class DisplayWidget(QWidget):
                         logger.debug("[GL COMPOSITOR] Failed to ensure compositor during block flip selection", exc_info=True)
                     use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
                     if use_compositor:
-                        transition = GLCompositorBlockFlipTransition(duration_ms, rows, cols)
+                        transition = GLCompositorBlockFlipTransition(duration_ms, rows, cols, flip_duration_ms=500, direction=blockflip_direction)
                     else:
                         # Prefer CPU BlockPuzzleFlipTransition over the legacy GL
                         # overlay path when the compositor cannot be used.
-                        transition = BlockPuzzleFlipTransition(duration_ms, rows, cols)
+                        transition = BlockPuzzleFlipTransition(duration_ms, rows, cols, flip_duration_ms=500, direction=blockflip_direction)
                 else:
-                    transition = BlockPuzzleFlipTransition(duration_ms, rows, cols)
+                    transition = BlockPuzzleFlipTransition(duration_ms, rows, cols, flip_duration_ms=500, direction=blockflip_direction)
 
                 transition.set_resource_manager(self._resource_manager)
                 self._log_transition_selection(requested_type, 'Block Puzzle Flip', random_mode, random_choice_value)
@@ -3427,7 +3483,7 @@ class DisplayWidget(QWidget):
             return
         
         # Global media keys should never be treated as exit keys; they are
-        # reserved for controlling media only (Route3 §4.2).
+        # reserved for controlling media only.
         media_keys = {
             Qt.Key.Key_MediaPlay,
             Qt.Key.Key_MediaPause,

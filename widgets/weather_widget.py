@@ -9,9 +9,11 @@ from enum import Enum
 from pathlib import Path
 import os
 import json
+import math
 from PySide6.QtWidgets import QLabel, QWidget
 from PySide6.QtCore import QTimer, Qt, Signal, QThread, QObject
-from PySide6.QtGui import QFont, QColor
+from PySide6.QtGui import QFont, QColor, QPainter, QPixmap
+from PySide6.QtSvg import QSvgRenderer
 
 from core.logging.logger import get_logger
 from core.threading.manager import ThreadManager
@@ -132,6 +134,14 @@ class WeatherWidget(QLabel):
         self._text_color = QColor(255, 255, 255, 230)
         self._margin = 20
         self._show_icons = False
+
+        # Icon rendering state (Basmilius line-weather icons in images/weather).
+        self._icon_pixmap: Optional[QPixmap] = None
+        self._icon_name: Optional[str] = None
+        self._icon_phase: float = 0.0
+        self._icon_timer_handle: Optional[OverlayTimerHandle] = None
+        # Resolve project root from this module and point at images/weather.
+        self._icon_base_dir: Path = Path(__file__).resolve().parent.parent / "images" / "weather"
         
         # Background frame settings
         self._show_background = False
@@ -252,6 +262,13 @@ class WeatherWidget(QLabel):
             except RuntimeError:
                 pass
             self._retry_timer = None
+
+        if self._icon_timer_handle is not None:
+            try:
+                self._icon_timer_handle.stop()
+            except Exception:
+                pass
+            self._icon_timer_handle = None
         
         # Stop fetch thread if running
         if self._fetch_thread:
@@ -519,25 +536,32 @@ class WeatherWidget(QLabel):
             details_pt = max(6, self._font_size - 2)
             city_html = f"<div style='font-size:{city_pt}pt; font-weight:700;'>{location_display}</div>"
             c_lower = str(condition).lower()
-            tag = ""
-            if self._show_icons:
-                if "thunder" in c_lower or "storm" in c_lower:
-                    tag = "[STORM] "
-                elif "snow" in c_lower or "sleet" in c_lower:
-                    tag = "[SNOW] "
-                elif "rain" in c_lower or "drizzle" in c_lower or "shower" in c_lower:
-                    tag = "[RAIN] "
-                elif "sun" in c_lower or "clear" in c_lower:
-                    tag = "[SUN] "
-                elif "cloud" in c_lower or "overcast" in c_lower:
-                    tag = "[CLOUD] "
 
-            if self._show_icons and tag:
-                details_text = f"{tag}{temp:.0f}°C - {condition_display}"
-            else:
-                details_text = f"{temp:.0f}°C - {condition_display}"
+            # Resolve an appropriate SVG icon from images/weather when icons
+            # are enabled. Icons are rendered in monochrome; any intrinsic
+            # SVG animation is handled by the renderer, we do not drive
+            # additional manual motion here.
+            self._icon_pixmap = None
+            self._icon_name = None
+            self._icon_phase = 0.0
+            if self._show_icons:
+                icon_path = self._resolve_icon_path(c_lower)
+                if icon_path is not None:
+                    self._icon_pixmap = self._load_icon_pixmap(icon_path)
+                    if self._icon_pixmap is not None:
+                        self._icon_name = icon_path.name
+                    # Static icons only; no manual bobbing/animation.
+
+            details_text = f"{temp:.0f}°C - {condition_display}"
             details_html = f"<div style='font-size:{details_pt}pt; font-weight:600;'>{details_text}</div>"
-            html = f"<div style='line-height:1.0'>{city_html}{details_html}</div>"
+            indent_px = 0
+            if self._show_icons and self._icon_pixmap is not None:
+                indent_px = self._icon_pixmap.width() + 12
+
+            html = (
+                f"<div style='line-height:1.0; margin-right:{indent_px}px'>"
+                f"{city_html}{details_html}</div>"
+            )
             self.setTextFormat(Qt.TextFormat.RichText)
             self.setText(html)
             
@@ -551,6 +575,134 @@ class WeatherWidget(QLabel):
         except Exception as e:
             logger.exception(f"Error updating weather display: {e}")
             self.setText("Weather: Error")
+
+    def _resolve_icon_path(self, condition_lower: str) -> Optional[Path]:
+        """Map a normalized condition string to a Basmilius SVG icon path.
+
+        The mapping is deliberately approximate; when no specific match is
+        found, we fall back to "not-available.svg" if present.
+        """
+
+        base = self._icon_base_dir
+        try:
+            if not base.exists():
+                return None
+        except Exception:
+            return None
+
+        # Rough day/night detection from local time; perfect accuracy is not
+        # required here, only a sensible default for choosing day/night icons.
+        try:
+            hour = datetime.now().hour
+            is_night = hour < 6 or hour >= 20
+        except Exception:
+            is_night = False
+
+        c = condition_lower
+        candidates: list[str] = []
+
+        if "thunder" in c or "storm" in c:
+            candidates = [
+                "thunderstorms",
+                "thunderstorm",
+                "lightning-bolt",
+            ]
+        elif "snow" in c or "sleet" in c or "blizzard" in c:
+            candidates = [
+                "partly-cloudy-night-snow" if is_night else "partly-cloudy-day-snow",
+                "snow",
+            ]
+        elif "rain" in c or "drizzle" in c or "shower" in c:
+            candidates = [
+                "partly-cloudy-night-rain" if is_night else "partly-cloudy-day-rain",
+                "drizzle",
+                "rain",
+            ]
+        elif "fog" in c or "mist" in c:
+            candidates = [
+                "fog-night" if is_night else "fog-day",
+                "fog",
+                "mist",
+            ]
+        elif "haze" in c or "smoke" in c or "dust" in c:
+            candidates = [
+                "haze-night" if is_night else "haze-day",
+                "smoke",
+                "dust",
+            ]
+        elif "cloud" in c or "overcast" in c:
+            candidates = [
+                "overcast-night" if is_night else "overcast-day",
+                "cloudy",
+                "overcast",
+                "partly-cloudy-night" if is_night else "partly-cloudy-day",
+            ]
+        elif "clear" in c or "sun" in c:
+            candidates = ["clear-night" if is_night else "clear-day"]
+
+        # Always fall back to a neutral placeholder if present.
+        candidates.append("not-available")
+
+        for name in candidates:
+            path = base / f"{name}.svg"
+            if path.exists():
+                return path
+        return None
+
+    def _load_icon_pixmap(self, path: Path) -> Optional[QPixmap]:
+        """Load and tint a weather SVG icon as a monochrome QPixmap."""
+
+        try:
+            size = max(16, int(self._font_size * 1.4))
+            renderer = QSvgRenderer(str(path))
+            if not renderer.isValid():
+                return None
+
+            pm = QPixmap(size, size)
+            pm.fill(Qt.GlobalColor.transparent)
+
+            painter = QPainter(pm)
+            try:
+                renderer.render(painter)
+                painter.setCompositionMode(QPainter.CompositionMode_SourceIn)
+                painter.fillRect(pm.rect(), self._text_color)
+            finally:
+                painter.end()
+
+            return pm
+        except Exception:
+            logger.debug("Failed to load weather icon from %s", path, exc_info=True)
+            return None
+
+    def _ensure_icon_timer(self) -> None:
+        """Start a very slow icon animation timer if not already running."""
+
+        if self._icon_timer_handle is not None:
+            return
+
+        # Very slow animation: small phase steps at a modest interval so the
+        # motion is barely noticeable.
+        interval_ms = 120
+        self._icon_timer_handle = create_overlay_timer(
+            self,
+            interval_ms,
+            self._tick_icon_animation,
+            description="WeatherWidget icon animation",
+        )
+
+    def _stop_icon_timer(self) -> None:
+        if self._icon_timer_handle is None:
+            return
+        try:
+            self._icon_timer_handle.stop()
+        except Exception:
+            pass
+        self._icon_timer_handle = None
+
+    def _tick_icon_animation(self) -> None:
+        if not self._show_icons or self._icon_pixmap is None:
+            return
+        # Manual animation disabled; keep icons static.
     
     def _update_position(self) -> None:
         """Update widget position based on settings."""
@@ -740,6 +892,39 @@ class WeatherWidget(QLabel):
         """Clean up resources."""
         logger.debug("Cleaning up weather widget")
         self.stop()
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        """Paint text via QLabel then overlay the monochrome weather icon."""
+
+        super().paintEvent(event)
+
+        if not self._show_icons or self._icon_pixmap is None:
+            return
+
+        try:
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+            pm = self._icon_pixmap
+            size = pm.size()
+            width = self.width()
+            height = self.height()
+            margin = 8
+            amplitude = max(2, int(size.height() * 0.10))
+            if amplitude > margin // 2:
+                amplitude = max(1, margin // 2)
+            offset_y = int(math.sin(self._icon_phase * 2.0 * math.pi) * amplitude)
+            base_y = height - size.height() - margin
+            y = base_y - amplitude + offset_y
+            x = width - size.width() - margin
+
+            painter.drawPixmap(x, max(0, y), pm)
+        except Exception:
+            logger.debug("[WEATHER] Icon paint failed", exc_info=True)
+        finally:
+            try:
+                painter.end()
+            except Exception:
+                pass
 
     def _fade_in(self) -> None:
         """Fade the widget in via ShadowFadeProfile, then attach the shared drop shadow.

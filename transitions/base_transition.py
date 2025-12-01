@@ -11,7 +11,7 @@ from PySide6.QtCore import QObject, Signal, Qt
 from PySide6.QtGui import QPixmap, QPainter
 from PySide6.QtWidgets import QWidget
 
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_perf_metrics_enabled
 
 if TYPE_CHECKING:  # pragma: no cover - imported for typing only
     from core.resources.manager import ResourceManager
@@ -186,6 +186,9 @@ class BaseTransition(QObject, metaclass=QABCMeta):
         to locate or disable transition profiling when preparing production
         builds.
         """
+        if not is_perf_metrics_enabled():
+            return
+
         self._start_time = time.time()
         logger.debug(f"[PERF] {self.__class__.__name__} started")
     
@@ -195,6 +198,9 @@ class BaseTransition(QObject, metaclass=QABCMeta):
         See :meth:`_mark_start` for notes on PERF logging and production
         gating.
         """
+        if not is_perf_metrics_enabled():
+            return
+
         if self._start_time is not None:
             self._end_time = time.time()
             elapsed_ms = (self._end_time - self._start_time) * 1000

@@ -65,12 +65,12 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
   - **Peel** (`GLCompositorPeelTransition`) – strip-based peel of the old image in a cardinal direction over the new image.
   - **3D Block Spins** (`GLCompositorBlockSpinTransition`) – GL-only single-slab 3D spin rendered by the compositor: a single thin depth-tested box mesh fills the viewport and flips from the old image (front face) to the new image (back face) with neutral glass edges and specular highlights. Spin axis is controlled by direction (LEFT/RIGHT spin around the Y axis, UP/DOWN spin around the X axis) via a shared card-flip shader (`u_axisMode`, `u_angle`, `u_specDir`); legacy Block Puzzle grid settings are no longer used.
   - **Ripple** (`GLCompositorRainDropsTransition`) – radial ripple effect rendered entirely in GLSL, with a diffuse-region fallback path.
-  - **Warp Dissolve** (`WarpState` + `GLCompositorWarpTransition`) – banded horizontal warp of the old image over a stable new image, fading out over time.
+  - **Warp Dissolve** (`WarpState` + `GLCompositorWarpTransition`) – shared vortex-style dissolve where the old and new images participate in a single whirlpool that intensifies mid-transition and then unwhirls back to the final frame.
   - **Shuffle** (`GLCompositorShuffleTransition`) – block-based reveal where blocks of the new image slide in from a chosen/random edge; implemented as a moving diffuse region.
 - DisplayWidget injects the shared ResourceManager into every transition. Legacy GL overlays are created through `overlay_manager.get_or_create_overlay` so lifecycle is centralized, while compositor-backed transitions render exclusively through `GLCompositorWidget`.
 - GL overlays remain persistent and pre-warmed via `overlay_manager.prepare_gl_overlay` / `DisplayWidget._prewarm_gl_contexts` to avoid first-use flicker on legacy GL paths; compositor-backed transitions reuse the same per-display compositor widget and never create additional GL surfaces.
 - Diffuse supports multiple shapes (`Rectangle`, `Circle`, `Diamond`, `Plus`, `Triangle`) with a validated block-size range (min 4px) shared between CPU and GL paths and enforced by the Transitions tab UI. Shuffle reuses the diffuse block-size setting to size its grid cells.
-- Durations: a global `transitions.duration_ms` provides the baseline duration for all transition types, while `transitions.durations["<Type>"]` (e.g. `"Slide"`, `"Wipe"`, `"Diffuse"`, `"Block Puzzle Flip"`, `"Blinds"`, `"Peel"`, `"3D Block Spins"`, `"Rain Drops"`, `"Warp Dissolve"`, `"Claw Marks"`, `"Shuffle"`) stores optional per-type overrides. The Transitions tab slider is bound to the active type and persists its value into `durations` while keeping `duration_ms` up to date for legacy consumers.
+- Durations: a global `transitions.duration_ms` provides the baseline duration for all transition types, while `transitions.durations["<Type>"]` (e.g. `"Slide"`, `"Wipe"`, `"Diffuse"`, `"Block Puzzle Flip"`, `"Blinds"`, `"Peel"`, `"3D Block Spins"`, `"Rain Drops"`, `"Warp Dissolve"`, `"Shuffle"`) stores optional per-type overrides. The Transitions tab slider is bound to the active type and persists its value into `durations` while keeping `duration_ms` up to date for legacy consumers.
 - Per-transition pool membership:
   - `transitions.pool` is a map of transition type name → bool.
   - Random rotation and C-key cycling only consider types whose pool flag is true.
@@ -90,14 +90,17 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
 ## Performance Notes
 - All decoding happens off UI thread.
 - DPR-aware pre-scaling reduces GL upload pressure.
+- Image prefetch + prescale pipeline:
+  - `ImagePrefetcher` decodes upcoming images into `QImage` on IO threads and stores them in `ImageCache`.
+  - A COMPUTE-pool prescale step uses `ThreadManager.submit_compute_task` to scale the first upcoming image to distinct display sizes and caches them under `"path|scaled:WxH"` keys as `QImage`.
+  - When displaying, `ScreensaverEngine._load_image_task` prefers these prescaled entries and promotes them to `QPixmap` on the UI thread, writing the pixmaps back into `ImageCache` so subsequent loads avoid repeated conversions.
 - Profiling keys:
   - `GL_SLIDE_PREPAINT`
   - `GL_WIPE_PREPAINT`
   - `GL_WIPE_REPAINT_FRAME`
-  - `[PERF] [GL COMPOSITOR] Slide metrics` (per-transition summary: duration, frame count, avg_fps, dt_min/dt_max, compositor size) emitted by `GLCompositorWidget` for compositor-driven Slide to validate timing on mixed-refresh setups.
-  - `[PERF] [GL COMPOSITOR] Wipe metrics` with the same fields for compositor-driven Wipe transitions.
-  - `[PERF] [GL COMPOSITOR] Warp metrics` and `[PERF] [GL COMPOSITOR] Raindrops metrics` for the GLSL-based Warp Dissolve and Ripple (raindrops) paths, using the same duration/frame/avg_fps/min/max/size structure so all GLSL-backed transitions share a comparable telemetry format.
-- If spikes persist, consider compute-pool pre-scale-to-screen ahead of time as a future enhancement.
+  - `[PERF] [GL COMPOSITOR] <Name> metrics` summary lines for **all** compositor-driven transitions (Slide, Wipe, Blinds, Peel, Block Puzzle Flip, Ripple/Raindrops, Warp Dissolve, Shuffle, Block Spins, legacy GLSL Claws when enabled). Each line reports `duration`, `frames`, `avg_fps`, `dt_min`, `dt_max`, and compositor `size` and is emitted once per transition completion by `GLCompositorWidget` when PERF metrics are enabled.
+  - A central `PERF_METRICS_ENABLED` flag, exposed via `core.logging.logger.is_perf_metrics_enabled()`, gates all high-volume PERF math and logging so production/retail GUI builds can disable telemetry cost entirely while preserving behaviour when enabled.
+- If spikes persist, further expand compute-pool pre-scale-to-screen (including DPR-specific variants) as a future enhancement.
 
 ## Settings
 - `display.refresh_sync`: bool
@@ -181,20 +184,22 @@ widget behaviour; this Spec only summarises the high-level contract.
 - `DisplayWidget` seeds `current_pixmap` again as soon as a real image loads, before transition warmup, to keep the base widget drawing a valid frame while overlays warm and transitions start.
 - `paintEvent` prefers `current_pixmap`, then `_seed_pixmap`, and finally `previous_pixmap` (when no error is set), only falling back to a pure black fill when no pixmap is available. This keeps startup and fallback paths visually continuous.
 - After closing the settings dialog, force reseed and unblock updates before transitions resume (multi-monitor specific).
-- `_has_rendered_first_frame` gates transitions only for the initial frame; settings reopen must reset this guard.
-
 ## Diagnostics & Telemetry
 - Structured logging captures overlay readiness stages, swap behavior, and watchdog activity.
-- `Docs/Route3_OpenGL_Roadmap.md` acts as live checklist; every change must update both roadmap and `audits/AUDIT_OpenGL_Stability.md`.
+- `audits/v1_2 ROADMAP.md` and `audits/AUDIT_*.md` act as the live checklists for OpenGL stability and performance work; significant changes to GL/compositor behaviour should be reflected there alongside this Spec.
 - `Docs/FlashFlickerDiagnostic.md` tracks symptoms, triggers, and mitigation experiments; roadmap items link back for traceability.
-- High-verbosity debug sessions require log rotation (size/time bound) to avoid disk pressure.
-- Telemetry counters record transition type requested vs. instantiated, cache hits/misses, and transition skips while in progress.
+ - High-verbosity debug sessions require log rotation (size/time bound) to avoid disk pressure.
+ - Telemetry counters record transition type requested vs. instantiated, cache hits/misses, and transition skips while in progress.
+ - Animation timing for **all** transitions (CPU and GL/compositor) is centralised through per-display `AnimationManager` instances driven by a `PreciseTimer`-backed loop; transitions use `[PERF] [ANIM]` metrics (duration, frames, avg_fps, dt_min/max, fps_target) as the canonical timing signal rather than ad-hoc timers.
+ - Background work (IO/COMPUTE) is routed through the central `ThreadManager` pools wherever possible; any remaining direct `QThread`/`QTimer` usages outside `core.threading.manager` are explicitly logged fallbacks (e.g. widget-level weather fetch when ThreadManager is unavailable) rather than parallel primary paths.
  - Console debug output uses a suppressing stream handler that groups consecutive INFO/DEBUG lines from the same logger into `[N Suppressed: CHECK LOG...]` summaries while leaving file logs untouched. The high-visibility `Initializing Screensaver Engine 🚦🚦🚦🚦🚦` banner is exempt from grouping so it always appears once per run, and when multiple `[PERF]` lines with `avg_fps=...` are collapsed, the summary includes the trailing `avg_fps` token to keep grouped telemetry readable in the console.
+ - A central PERF switch is configured in `core.logging.logger`: `PERF_METRICS_ENABLED` defaults to true for development, can be overridden by the `SRPSS_PERF_METRICS` environment variable (`0/false/off/no` vs `1/true/on/yes`), and, in frozen builds, is finalised at startup by a small `<exe-stem>.perf.cfg` file written next to the executable by the build scripts (`scripts/build_nuitka*.ps1`). GUI/retail builds typically write `0` to disable PERF metrics, while console/debug builds write `1` to keep full telemetry enabled.
 
 ## Future Enhancements
-- Compute-pool pre-scale-to-screen (per-display DPR) ahead of time for the next image.
+- Further expand compute-pool pre-scale-to-screen (per-display DPR) ahead of time for the next image and potentially cache DPR-specific scaled variants when memory allows.
 - Transition sync improvements across displays using lock-free SPSC queues.
-- Additional tuning of the **GL-only, compositor-backed transitions** (Peel, Ripple, Warp Dissolve, 3D Block Spins, Shuffle) based on visual QA and user feedback (e.g. strip counts, band amplitudes, droplet density, shuffle block size/density). Detailed design notes remain in `Docs/GL_Transitions_Proposal.md` and are kept consistent with this Spec.
+- Additional tuning of the **GL-only, compositor-backed transitions** (Peel, Ripple, Warp Dissolve, 3D Block Spins, Shuffle) based on visual QA and user feedback (e.g. strip counts, band amplitudes, droplet density, shuffle block size/density). Shuffle is being migrated to a GLSL **Shuffle mask** rendered on a fullscreen quad (hashed block grid, per-block jitter, direction-aware reveal) so the hot path no longer depends on large `QRegion` unions; if the Shuffle shader pipeline is unavailable for a session, Shuffle is disabled and requests are downgraded to existing Group C CPU transitions (Wipe/Slide/Crossfade/Blockflip/Diffuse) rather than a dedicated CPU Shuffle variant. Detailed design notes remain in `Docs/GL_Transitions_Proposal.md` and are kept consistent with this Spec.
+- Optional Slide edge spark FX (GL/compositor-backed) where slide edges emit short-lived sparks with direction-aware angles and Auto/Blue/Orange colour modes; Auto samples a dominant edge colour and offsets it for visibility. This effect is strictly opt-in and must respect per-display clipping so it never bleeds across monitors.
 
 **Version**: 1.2  
-**Last Updated**: Nov 30, 2025 00:47 - 3D Block Spins migrated to a single-slab axis-based GL compositor design (LEFT/RIGHT = Y-axis, UP/DOWN = X-axis) with corrected DOWN orientation; Spec/Index and v1.2 roadmap documentation updated accordingly.
+**Last Updated**: Dec 1, 2025 15:55 - PERF metrics architecture documented: `PERF_METRICS_ENABLED` / `is_perf_metrics_enabled()` centrally gate all high-volume PERF math and logging based on `SRPSS_PERF_METRICS` and `<exe-stem>.perf.cfg`, and all GL compositor-driven transitions now emit a unified `[PERF] [GL COMPOSITOR] <Name> metrics` summary line on completion when metrics are enabled.

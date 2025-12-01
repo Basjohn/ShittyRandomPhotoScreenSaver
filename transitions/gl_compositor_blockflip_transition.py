@@ -7,6 +7,7 @@ its block-flip API (set_blockflip_region / start_block_flip).
 from __future__ import annotations
 
 import random
+import math
 from typing import Optional, List
 
 from PySide6.QtCore import QRect
@@ -17,6 +18,7 @@ from core.logging.logger import get_logger
 from core.animation.types import EasingCurve
 
 from transitions.base_transition import BaseTransition, TransitionState
+from transitions.slide_transition import SlideDirection
 from rendering.gl_compositor import GLCompositorWidget
 
 
@@ -47,6 +49,7 @@ class GLCompositorBlockFlipTransition(BaseTransition):
         grid_rows: int = 4,
         grid_cols: int = 6,
         flip_duration_ms: int = 500,
+        direction: Optional[SlideDirection] = None,
     ) -> None:
         super().__init__(duration_ms)
         self._grid_rows = grid_rows
@@ -59,6 +62,9 @@ class GLCompositorBlockFlipTransition(BaseTransition):
         self._total_duration_ms: int = max(1, int(duration_ms + flip_duration_ms))
         self._total_dur_sec: float = max(0.001, self._total_duration_ms / 1000.0)
         self._last_progress: float = 0.0
+        # Optional direction bias so the compositor-backed Block Puzzle Flip
+        # follows the same edge-originated wave model as the CPU variant.
+        self._direction: Optional[SlideDirection] = direction
 
     def get_expected_duration_ms(self) -> int:
         total = getattr(self, "_total_duration_ms", None)
@@ -217,7 +223,47 @@ class GLCompositorBlockFlipTransition(BaseTransition):
                 y = row * block_height
                 w = block_width if col < effective_cols - 1 else (width - x)
                 h = block_height if row < effective_rows - 1 else (height - y)
-                self._blocks.append(_CompositorFlipBlock(QRect(x, y, w, h)))
+
+                block = _CompositorFlipBlock(QRect(x, y, w, h))
+
+                # Apply the same optional direction bias as the CPU
+                # BlockPuzzleFlipTransition: encode an edge-originated wave in
+                # start_threshold while preserving a small amount of jitter so
+                # the motion does not look too mechanical.
+                if self._direction is not None:
+                    base = 0.0
+                    # Horizontal bias (Left/Right)
+                    if self._direction == SlideDirection.LEFT:
+                        # "Left to Right" – start at the left edge.
+                        if effective_cols > 1:
+                            base = col / float(effective_cols - 1)
+                    elif self._direction == SlideDirection.RIGHT:
+                        # "Right to Left" – start at the right edge.
+                        if effective_cols > 1:
+                            base = (effective_cols - 1 - col) / float(effective_cols - 1)
+                    # Vertical bias (Top/Bottom)
+                    elif self._direction == SlideDirection.DOWN:
+                        # "Top to Bottom" – start at the top edge.
+                        if effective_rows > 1:
+                            base = row / float(effective_rows - 1)
+                    elif self._direction == SlideDirection.UP:
+                        # "Bottom to Top" – start at the bottom edge.
+                        if effective_rows > 1:
+                            base = (effective_rows - 1 - row) / float(effective_rows - 1)
+
+                    span = max(effective_cols, effective_rows)
+                    jitter_span = 0.0
+                    if span > 0:
+                        jitter_span = 0.35 / float(span)
+                    if jitter_span > 0.0:
+                        base += random.uniform(-jitter_span, jitter_span)
+                    if base < 0.0:
+                        base = 0.0
+                    elif base > 1.0:
+                        base = 1.0
+                    block.start_threshold = base
+
+                self._blocks.append(block)
 
     def _on_anim_update(self, progress: float) -> None:
         if self._state != TransitionState.RUNNING or self._compositor is None:
@@ -259,8 +305,12 @@ class GLCompositorBlockFlipTransition(BaseTransition):
             bp = max(0.0, min(1.0, block.flip_progress))
             if bp <= 0.0:
                 continue
+            # Match the CPU BlockPuzzleFlipTransition easing so the visual
+            # reveal curve is consistent between compositor and QPainter
+            # paths.
+            eased = 0.5 - 0.5 * math.cos(math.pi * bp)
             r = block.rect
-            reveal_w = max(1, int(r.width() * bp))
+            reveal_w = max(1, int(r.width() * eased))
             dx = r.x() + (r.width() - reveal_w) // 2
             reveal_rect = QRect(dx, r.y(), reveal_w, r.height())
             region = region.united(QRegion(reveal_rect))

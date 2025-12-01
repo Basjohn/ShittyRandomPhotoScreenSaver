@@ -22,7 +22,7 @@ from PySide6.QtCore import Qt, QPoint, QRect
 from PySide6.QtGui import QPainter, QPixmap, QRegion, QImage
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.animation.types import EasingCurve
 from core.animation.animator import AnimationManager
 from rendering.gl_format import apply_widget_surface_format
@@ -45,6 +45,24 @@ class CrossfadeState:
 
     old_pixmap: Optional[QPixmap]
     new_pixmap: Optional[QPixmap]
+    progress: float = 0.0  # 0..1
+
+
+@dataclass
+class ShuffleShaderState:
+    """State for a shader-driven Shuffle transition.
+
+    This models a fullscreen Shuffle mask rendered in GLSL. The compositor
+    drives the effect on a single quad using a logical block grid and a
+    per-block jitter field; controllers provide the old/new pixmaps,
+    grid dimensions and edge direction.
+    """
+
+    old_pixmap: Optional[QPixmap]
+    new_pixmap: Optional[QPixmap]
+    cols: int
+    rows: int
+    edge: str
     progress: float = 0.0  # 0..1
 
 
@@ -150,6 +168,7 @@ class _GLPipelineState:
     raindrops_program: int = 0
     warp_program: int = 0
     claws_program: int = 0
+    shuffle_program: int = 0
 
     # Textures for the current pair of images being blended/transitioned.
     old_tex_id: int = 0
@@ -179,6 +198,14 @@ class _GLPipelineState:
     warp_u_resolution: int = -1
     warp_u_old_tex: int = -1
     warp_u_new_tex: int = -1
+
+    # Cached uniform locations for the Shuffle shader program.
+    shuffle_u_progress: int = -1
+    shuffle_u_resolution: int = -1
+    shuffle_u_old_tex: int = -1
+    shuffle_u_new_tex: int = -1
+    shuffle_u_grid: int = -1
+    shuffle_u_direction: int = -1
 
     # Cached uniform locations for the Shooting Stars (claws) shader program.
     claws_u_progress: int = -1
@@ -292,11 +319,12 @@ class GLCompositorWidget(QOpenGLWidget):
         self._blockspin: Optional[BlockSpinState] = None
         self._blinds: Optional[BlindsState] = None
         self._diffuse: Optional[DiffuseState] = None
+        self._shuffle: Optional[ShuffleShaderState] = None
         self._raindrops: Optional[RaindropsState] = None
         self._peel: Optional[PeelState] = None
         self._shooting_stars: Optional[ShootingStarsState] = None
 
-        # Profiling for compositor-driven slide transitions (Route3 §6.4).
+        # Profiling for compositor-driven slide transitions.
         # Metrics are logged with the "[PERF] [GL COMPOSITOR]" tag so
         # production builds can grep and gate/strip this telemetry if needed.
         self._slide_profile_start_ts: Optional[float] = None
@@ -323,6 +351,44 @@ class GLCompositorWidget(QOpenGLWidget):
         self._raindrops_profile_frame_count: int = 0
         self._raindrops_profile_min_dt: float = 0.0
         self._raindrops_profile_max_dt: float = 0.0
+        self._shuffle_profile_start_ts: Optional[float] = None
+        self._shuffle_profile_last_ts: Optional[float] = None
+        self._shuffle_profile_frame_count: int = 0
+        self._shuffle_profile_min_dt: float = 0.0
+        self._shuffle_profile_max_dt: float = 0.0
+        self._blockspin_profile_start_ts: Optional[float] = None
+        self._blockspin_profile_last_ts: Optional[float] = None
+        self._blockspin_profile_frame_count: int = 0
+        self._blockspin_profile_min_dt: float = 0.0
+        self._blockspin_profile_max_dt: float = 0.0
+        self._shooting_profile_start_ts: Optional[float] = None
+        self._shooting_profile_last_ts: Optional[float] = None
+        self._shooting_profile_frame_count: int = 0
+        self._shooting_profile_min_dt: float = 0.0
+        self._shooting_profile_max_dt: float = 0.0
+        # Lightweight profiling for additional compositor-driven transitions
+        # (Peel, BlockFlip, Diffuse, Blinds) so their GPU cost can be
+        # compared against the core Slide/Wipe/Warp metrics.
+        self._peel_profile_start_ts: Optional[float] = None
+        self._peel_profile_last_ts: Optional[float] = None
+        self._peel_profile_frame_count: int = 0
+        self._peel_profile_min_dt: float = 0.0
+        self._peel_profile_max_dt: float = 0.0
+        self._blockflip_profile_start_ts: Optional[float] = None
+        self._blockflip_profile_last_ts: Optional[float] = None
+        self._blockflip_profile_frame_count: int = 0
+        self._blockflip_profile_min_dt: float = 0.0
+        self._blockflip_profile_max_dt: float = 0.0
+        self._diffuse_profile_start_ts: Optional[float] = None
+        self._diffuse_profile_last_ts: Optional[float] = None
+        self._diffuse_profile_frame_count: int = 0
+        self._diffuse_profile_min_dt: float = 0.0
+        self._diffuse_profile_max_dt: float = 0.0
+        self._blinds_profile_start_ts: Optional[float] = None
+        self._blinds_profile_last_ts: Optional[float] = None
+        self._blinds_profile_frame_count: int = 0
+        self._blinds_profile_min_dt: float = 0.0
+        self._blinds_profile_max_dt: float = 0.0
 
         # Animation plumbing: compositor does not own AnimationManager, but we
         # keep the current animation id so the caller can cancel if needed.
@@ -577,6 +643,107 @@ class GLCompositorWidget(QOpenGLWidget):
             easing=easing,
             update_callback=self._on_raindrops_update,
             on_complete=lambda: self._on_raindrops_complete(on_finished),
+        )
+        self._current_anim_id = anim_id
+        return anim_id
+
+    def start_shuffle_shader(
+        self,
+        old_pixmap: Optional[QPixmap],
+        new_pixmap: QPixmap,
+        *,
+        cols: int,
+        rows: int,
+        edge: str,
+        duration_ms: int,
+        easing: EasingCurve,
+        animation_manager: AnimationManager,
+        on_finished: Optional[Callable[[], None]] = None,
+    ) -> Optional[str]:
+        """Begin a shader-driven Shuffle transition between two pixmaps.
+
+        This path is only used when the GLSL pipeline and Shuffle shader are
+        available; callers are expected to fall back to the existing
+        compositor-based Shuffle (diffuse/QRegion) implementation or further
+        down to Group C CPU transitions when this method returns ``None``.
+        """
+
+        if not new_pixmap or new_pixmap.isNull():
+            logger.error("[GL COMPOSITOR] Invalid new pixmap for shuffle")
+            return None
+
+        logger.debug("[GL SHADER] Shuffle shader path disabled; using diffuse/QRegion fallback")
+        return None
+
+        # If there is no old image, simply set the base pixmap and repaint.
+        if old_pixmap is None or old_pixmap.isNull():
+            logger.debug("[GL COMPOSITOR] No old image; showing new image immediately (shuffle shader)")
+            self._crossfade = None
+            self._slide = None
+            self._wipe = None
+            self._warp = None
+            self._blockflip = None
+            self._blockspin = None
+            self._blinds = None
+            self._diffuse = None
+            self._raindrops = None
+            self._peel = None
+            self._shuffle = None
+            self._shooting_stars = None
+            self._base_pixmap = new_pixmap
+            self.update()
+            if on_finished:
+                try:
+                    on_finished()
+                except Exception:
+                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
+            return None
+
+        # Shuffle shader is mutually exclusive with other transitions.
+        self._crossfade = None
+        self._slide = None
+        self._wipe = None
+        self._warp = None
+        self._blockflip = None
+        self._blockspin = None
+        self._blinds = None
+        self._diffuse = None
+        self._raindrops = None
+        self._peel = None
+        self._shuffle = None
+        self._shooting_stars = None
+        self._shuffle = ShuffleShaderState(
+            old_pixmap=old_pixmap,
+            new_pixmap=new_pixmap,
+            cols=max(1, int(cols)),
+            rows=max(1, int(rows)),
+            edge=edge or "L2R",
+            progress=0.0,
+        )
+        self._animation_manager = animation_manager
+        self._current_easing = easing
+
+        # Reset per-transition profiling state.
+        self._shuffle_profile_start_ts = None
+        self._shuffle_profile_last_ts = None
+        self._shuffle_profile_frame_count = 0
+        self._shuffle_profile_min_dt = 0.0
+        self._shuffle_profile_max_dt = 0.0
+
+        # Cancel any previous animation on this compositor.
+        if self._current_anim_id and self._animation_manager:
+            try:
+                self._animation_manager.cancel_animation(self._current_anim_id)
+            except Exception:
+                pass
+            self._current_anim_id = None
+
+        duration_sec = max(0.001, duration_ms / 1000.0)
+        anim_id = animation_manager.animate_custom(
+            duration=duration_sec,
+            easing=easing,
+            update_callback=self._on_shuffle_update,
+            on_complete=lambda: self._on_shuffle_complete(on_finished),
         )
         self._current_anim_id = anim_id
         return anim_id
@@ -887,6 +1054,13 @@ class GLCompositorWidget(QOpenGLWidget):
         self._animation_manager = animation_manager
         self._current_easing = easing
 
+        # Reset peel profiling state for this transition.
+        self._peel_profile_start_ts = None
+        self._peel_profile_last_ts = None
+        self._peel_profile_frame_count = 0
+        self._peel_profile_min_dt = 0.0
+        self._peel_profile_max_dt = 0.0
+
         # Cancel any previous animation on this compositor.
         if self._current_anim_id and self._animation_manager:
             try:
@@ -963,11 +1137,36 @@ class GLCompositorWidget(QOpenGLWidget):
                 pass
             self._current_anim_id = None
 
+        # Reset BlockFlip profiling state and wrap the caller's
+        # update_callback so we can track frame timing without changing the
+        # visual effect.
+        self._blockflip_profile_start_ts = None
+        self._blockflip_profile_last_ts = None
+        self._blockflip_profile_frame_count = 0
+        self._blockflip_profile_min_dt = 0.0
+        self._blockflip_profile_max_dt = 0.0
+
+        def _blockflip_profiled_update(progress: float, *, _inner=update_callback) -> None:
+            if is_perf_metrics_enabled():
+                now = time.time()
+                if self._blockflip_profile_start_ts is None:
+                    self._blockflip_profile_start_ts = now
+                if self._blockflip_profile_last_ts is not None:
+                    dt = now - self._blockflip_profile_last_ts
+                    if dt > 0.0:
+                        if self._blockflip_profile_min_dt == 0.0 or dt < self._blockflip_profile_min_dt:
+                            self._blockflip_profile_min_dt = dt
+                        if dt > self._blockflip_profile_max_dt:
+                            self._blockflip_profile_max_dt = dt
+                self._blockflip_profile_last_ts = now
+                self._blockflip_profile_frame_count += 1
+            _inner(progress)
+
         duration_sec = max(0.001, duration_ms / 1000.0)
         anim_id = animation_manager.animate_custom(
             duration=duration_sec,
             easing=easing,
-            update_callback=update_callback,
+            update_callback=_blockflip_profiled_update,
             on_complete=lambda: self._on_blockflip_complete(on_finished),
         )
         self._current_anim_id = anim_id
@@ -1112,11 +1311,35 @@ class GLCompositorWidget(QOpenGLWidget):
                 pass
             self._current_anim_id = None
 
+        # Reset Diffuse profiling state and wrap the caller's update
+        # callback for timing.
+        self._diffuse_profile_start_ts = None
+        self._diffuse_profile_last_ts = None
+        self._diffuse_profile_frame_count = 0
+        self._diffuse_profile_min_dt = 0.0
+        self._diffuse_profile_max_dt = 0.0
+
+        def _diffuse_profiled_update(progress: float, *, _inner=update_callback) -> None:
+            if is_perf_metrics_enabled():
+                now = time.time()
+                if self._diffuse_profile_start_ts is None:
+                    self._diffuse_profile_start_ts = now
+                if self._diffuse_profile_last_ts is not None:
+                    dt = now - self._diffuse_profile_last_ts
+                    if dt > 0.0:
+                        if self._diffuse_profile_min_dt == 0.0 or dt < self._diffuse_profile_min_dt:
+                            self._diffuse_profile_min_dt = dt
+                        if dt > self._diffuse_profile_max_dt:
+                            self._diffuse_profile_max_dt = dt
+                self._diffuse_profile_last_ts = now
+                self._diffuse_profile_frame_count += 1
+            _inner(progress)
+
         duration_sec = max(0.001, duration_ms / 1000.0)
         anim_id = animation_manager.animate_custom(
             duration=duration_sec,
             easing=easing,
-            update_callback=update_callback,
+            update_callback=_diffuse_profiled_update,
             on_complete=lambda: self._on_diffuse_complete(on_finished),
         )
         self._current_anim_id = anim_id
@@ -1182,11 +1405,35 @@ class GLCompositorWidget(QOpenGLWidget):
                 pass
             self._current_anim_id = None
 
+        # Reset Blinds profiling state and wrap the caller's update callback
+        # for timing.
+        self._blinds_profile_start_ts = None
+        self._blinds_profile_last_ts = None
+        self._blinds_profile_frame_count = 0
+        self._blinds_profile_min_dt = 0.0
+        self._blinds_profile_max_dt = 0.0
+
+        def _blinds_profiled_update(progress: float, *, _inner=update_callback) -> None:
+            if is_perf_metrics_enabled():
+                now = time.time()
+                if self._blinds_profile_start_ts is None:
+                    self._blinds_profile_start_ts = now
+                if self._blinds_profile_last_ts is not None:
+                    dt = now - self._blinds_profile_last_ts
+                    if dt > 0.0:
+                        if self._blinds_profile_min_dt == 0.0 or dt < self._blinds_profile_min_dt:
+                            self._blinds_profile_min_dt = dt
+                        if dt > self._blinds_profile_max_dt:
+                            self._blinds_profile_max_dt = dt
+                self._blinds_profile_last_ts = now
+                self._blinds_profile_frame_count += 1
+            _inner(progress)
+
         duration_sec = max(0.001, duration_ms / 1000.0)
         anim_id = animation_manager.animate_custom(
             duration=duration_sec,
             easing=easing,
-            update_callback=update_callback,
+            update_callback=_blinds_profiled_update,
             on_complete=lambda: self._on_blinds_complete(on_finished),
         )
         self._current_anim_id = anim_id
@@ -1226,19 +1473,22 @@ class GLCompositorWidget(QOpenGLWidget):
         p = max(0.0, min(1.0, float(progress)))
         self._slide.progress = p
 
-        # Profiling: track frame timing for compositor-driven slide.
-        now = time.time()
-        if self._slide_profile_start_ts is None:
-            self._slide_profile_start_ts = now
-        if self._slide_profile_last_ts is not None:
-            dt = now - self._slide_profile_last_ts
-            if dt > 0.0:
-                if self._slide_profile_min_dt == 0.0 or dt < self._slide_profile_min_dt:
-                    self._slide_profile_min_dt = dt
-                if dt > self._slide_profile_max_dt:
-                    self._slide_profile_max_dt = dt
-        self._slide_profile_last_ts = now
-        self._slide_profile_frame_count += 1
+        # Profiling: track frame timing for compositor-driven slide when
+        # PERF metrics are enabled. Disabled builds skip timing work
+        # entirely while still running the visual transition.
+        if is_perf_metrics_enabled():
+            now = time.time()
+            if self._slide_profile_start_ts is None:
+                self._slide_profile_start_ts = now
+            if self._slide_profile_last_ts is not None:
+                dt = now - self._slide_profile_last_ts
+                if dt > 0.0:
+                    if self._slide_profile_min_dt == 0.0 or dt < self._slide_profile_min_dt:
+                        self._slide_profile_min_dt = dt
+                    if dt > self._slide_profile_max_dt:
+                        self._slide_profile_max_dt = dt
+            self._slide_profile_last_ts = now
+            self._slide_profile_frame_count += 1
 
         self.update()
 
@@ -1252,34 +1502,35 @@ class GLCompositorWidget(QOpenGLWidget):
         """
 
         try:
-            # Emit a concise profiling summary for slide transitions.
-            # The log line is tagged with "[PERF] [GL COMPOSITOR]" for easy
-            # discovery/disablement when preparing production builds.
-            try:
-                if (
-                    self._slide_profile_start_ts is not None
-                    and self._slide_profile_last_ts is not None
-                    and self._slide_profile_frame_count > 0
-                ):
-                    elapsed = max(0.0, self._slide_profile_last_ts - self._slide_profile_start_ts)
-                    if elapsed > 0.0:
-                        duration_ms = elapsed * 1000.0
-                        avg_fps = self._slide_profile_frame_count / elapsed
-                        min_dt_ms = self._slide_profile_min_dt * 1000.0 if self._slide_profile_min_dt > 0.0 else 0.0
-                        max_dt_ms = self._slide_profile_max_dt * 1000.0 if self._slide_profile_max_dt > 0.0 else 0.0
-                        logger.info(
-                            "[PERF] [GL COMPOSITOR] Slide metrics: duration=%.1fms, frames=%d, "
-                            "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, size=%dx%d",
-                            duration_ms,
-                            self._slide_profile_frame_count,
-                            avg_fps,
-                            min_dt_ms,
-                            max_dt_ms,
-                            self.width(),
-                            self.height(),
-                        )
-            except Exception as e:
-                logger.debug("[GL COMPOSITOR] Slide metrics logging failed: %s", e, exc_info=True)
+            if is_perf_metrics_enabled():
+                # Emit a concise profiling summary for slide transitions.
+                # The log line is tagged with "[PERF] [GL COMPOSITOR]" for easy
+                # discovery/disablement when preparing production builds.
+                try:
+                    if (
+                        self._slide_profile_start_ts is not None
+                        and self._slide_profile_last_ts is not None
+                        and self._slide_profile_frame_count > 0
+                    ):
+                        elapsed = max(0.0, self._slide_profile_last_ts - self._slide_profile_start_ts)
+                        if elapsed > 0.0:
+                            duration_ms = elapsed * 1000.0
+                            avg_fps = self._slide_profile_frame_count / elapsed
+                            min_dt_ms = self._slide_profile_min_dt * 1000.0 if self._slide_profile_min_dt > 0.0 else 0.0
+                            max_dt_ms = self._slide_profile_max_dt * 1000.0 if self._slide_profile_max_dt > 0.0 else 0.0
+                            logger.info(
+                                "[PERF] [GL COMPOSITOR] Slide metrics: duration=%.1fms, frames=%d, "
+                                "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, size=%dx%d",
+                                duration_ms,
+                                self._slide_profile_frame_count,
+                                avg_fps,
+                                min_dt_ms,
+                                max_dt_ms,
+                                self.width(),
+                                self.height(),
+                            )
+                except Exception as e:
+                    logger.debug("[GL COMPOSITOR] Slide metrics logging failed: %s", e, exc_info=True)
 
             # Reset profiling state.
             self._slide_profile_start_ts = None
@@ -1317,49 +1568,51 @@ class GLCompositorWidget(QOpenGLWidget):
         p = max(0.0, min(1.0, float(progress)))
         self._wipe.progress = p
 
-        now = time.time()
-        if self._wipe_profile_start_ts is None:
-            self._wipe_profile_start_ts = now
-        if self._wipe_profile_last_ts is not None:
-            dt = now - self._wipe_profile_last_ts
-            if dt > 0.0:
-                if self._wipe_profile_min_dt == 0.0 or dt < self._wipe_profile_min_dt:
-                    self._wipe_profile_min_dt = dt
-                if dt > self._wipe_profile_max_dt:
-                    self._wipe_profile_max_dt = dt
-        self._wipe_profile_last_ts = now
-        self._wipe_profile_frame_count += 1
+        if is_perf_metrics_enabled():
+            now = time.time()
+            if self._wipe_profile_start_ts is None:
+                self._wipe_profile_start_ts = now
+            if self._wipe_profile_last_ts is not None:
+                dt = now - self._wipe_profile_last_ts
+                if dt > 0.0:
+                    if self._wipe_profile_min_dt == 0.0 or dt < self._wipe_profile_min_dt:
+                        self._wipe_profile_min_dt = dt
+                    if dt > self._wipe_profile_max_dt:
+                        self._wipe_profile_max_dt = dt
+            self._wipe_profile_last_ts = now
+            self._wipe_profile_frame_count += 1
         self.update()
 
     def _on_wipe_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
         """Handle completion of compositor-driven wipe transitions."""
 
         try:
-            try:
-                if (
-                    self._wipe_profile_start_ts is not None
-                    and self._wipe_profile_last_ts is not None
-                    and self._wipe_profile_frame_count > 0
-                ):
-                    elapsed = max(0.0, self._wipe_profile_last_ts - self._wipe_profile_start_ts)
-                    if elapsed > 0.0:
-                        duration_ms = elapsed * 1000.0
-                        avg_fps = self._wipe_profile_frame_count / elapsed
-                        min_dt_ms = self._wipe_profile_min_dt * 1000.0 if self._wipe_profile_min_dt > 0.0 else 0.0
-                        max_dt_ms = self._wipe_profile_max_dt * 1000.0 if self._wipe_profile_max_dt > 0.0 else 0.0
-                        logger.info(
-                            "[PERF] [GL COMPOSITOR] Wipe metrics: duration=%.1fms, frames=%d, "
-                            "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, size=%dx%d",
-                            duration_ms,
-                            self._wipe_profile_frame_count,
-                            avg_fps,
-                            min_dt_ms,
-                            max_dt_ms,
-                            self.width(),
-                            self.height(),
-                        )
-            except Exception as e:
-                logger.debug("[GL COMPOSITOR] Wipe metrics logging failed: %s", e, exc_info=True)
+            if is_perf_metrics_enabled():
+                try:
+                    if (
+                        self._wipe_profile_start_ts is not None
+                        and self._wipe_profile_last_ts is not None
+                        and self._wipe_profile_frame_count > 0
+                    ):
+                        elapsed = max(0.0, self._wipe_profile_last_ts - self._wipe_profile_start_ts)
+                        if elapsed > 0.0:
+                            duration_ms = elapsed * 1000.0
+                            avg_fps = self._wipe_profile_frame_count / elapsed
+                            min_dt_ms = self._wipe_profile_min_dt * 1000.0 if self._wipe_profile_min_dt > 0.0 else 0.0
+                            max_dt_ms = self._wipe_profile_max_dt * 1000.0 if self._wipe_profile_max_dt > 0.0 else 0.0
+                            logger.info(
+                                "[PERF] [GL COMPOSITOR] Wipe metrics: duration=%.1fms, frames=%d, "
+                                "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, size=%dx%d",
+                                duration_ms,
+                                self._wipe_profile_frame_count,
+                                avg_fps,
+                                min_dt_ms,
+                                max_dt_ms,
+                                self.width(),
+                                self.height(),
+                            )
+                except Exception as e:
+                    logger.debug("[GL COMPOSITOR] Wipe metrics logging failed: %s", e, exc_info=True)
 
             self._wipe_profile_start_ts = None
             self._wipe_profile_last_ts = None
@@ -1394,6 +1647,19 @@ class GLCompositorWidget(QOpenGLWidget):
             return
         p = max(0.0, min(1.0, float(progress)))
         self._blockspin.progress = p
+        if is_perf_metrics_enabled():
+            now = time.time()
+            if self._blockspin_profile_start_ts is None:
+                self._blockspin_profile_start_ts = now
+            if self._blockspin_profile_last_ts is not None:
+                dt = now - self._blockspin_profile_last_ts
+                if dt > 0.0:
+                    if self._blockspin_profile_min_dt == 0.0 or dt < self._blockspin_profile_min_dt:
+                        self._blockspin_profile_min_dt = dt
+                    if dt > self._blockspin_profile_max_dt:
+                        self._blockspin_profile_max_dt = dt
+            self._blockspin_profile_last_ts = now
+            self._blockspin_profile_frame_count += 1
         self.update()
 
     def _on_warp_update(self, progress: float) -> None:
@@ -1404,18 +1670,19 @@ class GLCompositorWidget(QOpenGLWidget):
         p = max(0.0, min(1.0, float(progress)))
         self._warp.progress = p
         # Profiling: track frame timing for warp dissolve.
-        now = time.time()
-        if self._warp_profile_start_ts is None:
-            self._warp_profile_start_ts = now
-        if self._warp_profile_last_ts is not None:
-            dt = now - self._warp_profile_last_ts
-            if dt > 0.0:
-                if self._warp_profile_min_dt == 0.0 or dt < self._warp_profile_min_dt:
-                    self._warp_profile_min_dt = dt
-                if dt > self._warp_profile_max_dt:
-                    self._warp_profile_max_dt = dt
-        self._warp_profile_last_ts = now
-        self._warp_profile_frame_count += 1
+        if is_perf_metrics_enabled():
+            now = time.time()
+            if self._warp_profile_start_ts is None:
+                self._warp_profile_start_ts = now
+            if self._warp_profile_last_ts is not None:
+                dt = now - self._warp_profile_last_ts
+                if dt > 0.0:
+                    if self._warp_profile_min_dt == 0.0 or dt < self._warp_profile_min_dt:
+                        self._warp_profile_min_dt = dt
+                    if dt > self._warp_profile_max_dt:
+                        self._warp_profile_max_dt = dt
+            self._warp_profile_last_ts = now
+            self._warp_profile_frame_count += 1
         self.update()
 
     def _on_raindrops_update(self, progress: float) -> None:
@@ -1426,18 +1693,19 @@ class GLCompositorWidget(QOpenGLWidget):
         p = max(0.0, min(1.0, float(progress)))
         self._raindrops.progress = p
         # Profiling: track frame timing for the Ripple/Raindrops shader path.
-        now = time.time()
-        if self._raindrops_profile_start_ts is None:
-            self._raindrops_profile_start_ts = now
-        if self._raindrops_profile_last_ts is not None:
-            dt = now - self._raindrops_profile_last_ts
-            if dt > 0.0:
-                if self._raindrops_profile_min_dt == 0.0 or dt < self._raindrops_profile_min_dt:
-                    self._raindrops_profile_min_dt = dt
-                if dt > self._raindrops_profile_max_dt:
-                    self._raindrops_profile_max_dt = dt
-        self._raindrops_profile_last_ts = now
-        self._raindrops_profile_frame_count += 1
+        if is_perf_metrics_enabled():
+            now = time.time()
+            if self._raindrops_profile_start_ts is None:
+                self._raindrops_profile_start_ts = now
+            if self._raindrops_profile_last_ts is not None:
+                dt = now - self._raindrops_profile_last_ts
+                if dt > 0.0:
+                    if self._raindrops_profile_min_dt == 0.0 or dt < self._raindrops_profile_min_dt:
+                        self._raindrops_profile_min_dt = dt
+                    if dt > self._raindrops_profile_max_dt:
+                        self._raindrops_profile_max_dt = dt
+            self._raindrops_profile_last_ts = now
+            self._raindrops_profile_frame_count += 1
         self.update()
 
     def _on_shooting_stars_update(self, progress: float) -> None:
@@ -1447,12 +1715,89 @@ class GLCompositorWidget(QOpenGLWidget):
             return
         p = max(0.0, min(1.0, float(progress)))
         self._shooting_stars.progress = p
+        if is_perf_metrics_enabled():
+            now = time.time()
+            if self._shooting_profile_start_ts is None:
+                self._shooting_profile_start_ts = now
+            if self._shooting_profile_last_ts is not None:
+                dt = now - self._shooting_profile_last_ts
+                if dt > 0.0:
+                    if self._shooting_profile_min_dt == 0.0 or dt < self._shooting_profile_min_dt:
+                        self._shooting_profile_min_dt = dt
+                    if dt > self._shooting_profile_max_dt:
+                        self._shooting_profile_max_dt = dt
+            self._shooting_profile_last_ts = now
+            self._shooting_profile_frame_count += 1
+        self.update()
+
+    def _on_shuffle_update(self, progress: float) -> None:
+        """Update handler for shader-driven Shuffle transitions."""
+
+        if self._shuffle is None:
+            return
+        p = max(0.0, min(1.0, float(progress)))
+        self._shuffle.progress = p
+        # Profiling: track frame timing for the Shuffle shader path.
+        if is_perf_metrics_enabled():
+            now = time.time()
+            if self._shuffle_profile_start_ts is None:
+                self._shuffle_profile_start_ts = now
+            if self._shuffle_profile_last_ts is not None:
+                dt = now - self._shuffle_profile_last_ts
+                if dt > 0.0:
+                    if self._shuffle_profile_min_dt == 0.0 or dt < self._shuffle_profile_min_dt:
+                        self._shuffle_profile_min_dt = dt
+                    if dt > self._shuffle_profile_max_dt:
+                        self._shuffle_profile_max_dt = dt
+            self._shuffle_profile_last_ts = now
+            self._shuffle_profile_frame_count += 1
         self.update()
 
     def _on_blockspin_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
         """Completion handler for compositor-driven block spin transitions."""
 
         try:
+            if is_perf_metrics_enabled():
+                try:
+                    if (
+                        self._blockspin_profile_start_ts is not None
+                        and self._blockspin_profile_last_ts is not None
+                        and self._blockspin_profile_frame_count > 0
+                    ):
+                        elapsed = max(0.0, self._blockspin_profile_last_ts - self._blockspin_profile_start_ts)
+                        if elapsed > 0.0:
+                            duration_ms = elapsed * 1000.0
+                            avg_fps = self._blockspin_profile_frame_count / elapsed
+                            min_dt_ms = (
+                                self._blockspin_profile_min_dt * 1000.0
+                                if self._blockspin_profile_min_dt > 0.0
+                                else 0.0
+                            )
+                            max_dt_ms = (
+                                self._blockspin_profile_max_dt * 1000.0
+                                if self._blockspin_profile_max_dt > 0.0
+                                else 0.0
+                            )
+                            logger.info(
+                                "[PERF] [GL COMPOSITOR] BlockSpin metrics: duration=%.1fms, frames=%d, "
+                                "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, size=%dx%d",
+                                duration_ms,
+                                self._blockspin_profile_frame_count,
+                                avg_fps,
+                                min_dt_ms,
+                                max_dt_ms,
+                                self.width(),
+                                self.height(),
+                            )
+                except Exception as e:
+                    logger.debug("[GL COMPOSITOR] BlockSpin metrics logging failed: %s", e, exc_info=True)
+
+            self._blockspin_profile_start_ts = None
+            self._blockspin_profile_last_ts = None
+            self._blockspin_profile_frame_count = 0
+            self._blockspin_profile_min_dt = 0.0
+            self._blockspin_profile_max_dt = 0.0
+
             if self._blockspin is not None:
                 try:
                     self._base_pixmap = self._blockspin.new_pixmap
@@ -1480,39 +1825,40 @@ class GLCompositorWidget(QOpenGLWidget):
         try:
             # Emit a concise profiling summary for warp dissolve, mirroring
             # the existing Slide/Wipe `[PERF] [GL COMPOSITOR]` metrics.
-            try:
-                if (
-                    self._warp_profile_start_ts is not None
-                    and self._warp_profile_last_ts is not None
-                    and self._warp_profile_frame_count > 0
-                ):
-                    elapsed = max(0.0, self._warp_profile_last_ts - self._warp_profile_start_ts)
-                    if elapsed > 0.0:
-                        duration_ms = elapsed * 1000.0
-                        avg_fps = self._warp_profile_frame_count / elapsed
-                        min_dt_ms = (
-                            self._warp_profile_min_dt * 1000.0
-                            if self._warp_profile_min_dt > 0.0
-                            else 0.0
-                        )
-                        max_dt_ms = (
-                            self._warp_profile_max_dt * 1000.0
-                            if self._warp_profile_max_dt > 0.0
-                            else 0.0
-                        )
-                        logger.info(
-                            "[PERF] [GL COMPOSITOR] Warp metrics: duration=%.1fms, frames=%d, "
-                            "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, size=%dx%d",
-                            duration_ms,
-                            self._warp_profile_frame_count,
-                            avg_fps,
-                            min_dt_ms,
-                            max_dt_ms,
-                            self.width(),
-                            self.height(),
-                        )
-            except Exception as e:
-                logger.debug("[GL COMPOSITOR] Warp metrics logging failed: %s", e, exc_info=True)
+            if is_perf_metrics_enabled():
+                try:
+                    if (
+                        self._warp_profile_start_ts is not None
+                        and self._warp_profile_last_ts is not None
+                        and self._warp_profile_frame_count > 0
+                    ):
+                        elapsed = max(0.0, self._warp_profile_last_ts - self._warp_profile_start_ts)
+                        if elapsed > 0.0:
+                            duration_ms = elapsed * 1000.0
+                            avg_fps = self._warp_profile_frame_count / elapsed
+                            min_dt_ms = (
+                                self._warp_profile_min_dt * 1000.0
+                                if self._warp_profile_min_dt > 0.0
+                                else 0.0
+                            )
+                            max_dt_ms = (
+                                self._warp_profile_max_dt * 1000.0
+                                if self._warp_profile_max_dt > 0.0
+                                else 0.0
+                            )
+                            logger.info(
+                                "[PERF] [GL COMPOSITOR] Warp metrics: duration=%.1fms, frames=%d, "
+                                "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, size=%dx%d",
+                                duration_ms,
+                                self._warp_profile_frame_count,
+                                avg_fps,
+                                min_dt_ms,
+                                max_dt_ms,
+                                self.width(),
+                                self.height(),
+                            )
+                except Exception as e:
+                    logger.debug("[GL COMPOSITOR] Warp metrics logging failed: %s", e, exc_info=True)
 
             # Reset profiling state.
             self._warp_profile_start_ts = None
@@ -1554,39 +1900,40 @@ class GLCompositorWidget(QOpenGLWidget):
             # Emit a concise profiling summary for the Ripple/Raindrops shader
             # path so future fidelity-oriented tuning has FPS telemetry without
             # altering the effect itself.
-            try:
-                if (
-                    self._raindrops_profile_start_ts is not None
-                    and self._raindrops_profile_last_ts is not None
-                    and self._raindrops_profile_frame_count > 0
-                ):
-                    elapsed = max(0.0, self._raindrops_profile_last_ts - self._raindrops_profile_start_ts)
-                    if elapsed > 0.0:
-                        duration_ms = elapsed * 1000.0
-                        avg_fps = self._raindrops_profile_frame_count / elapsed
-                        min_dt_ms = (
-                            self._raindrops_profile_min_dt * 1000.0
-                            if self._raindrops_profile_min_dt > 0.0
-                            else 0.0
-                        )
-                        max_dt_ms = (
-                            self._raindrops_profile_max_dt * 1000.0
-                            if self._raindrops_profile_max_dt > 0.0
-                            else 0.0
-                        )
-                        logger.info(
-                            "[PERF] [GL COMPOSITOR] Raindrops metrics: duration=%.1fms, frames=%d, "
-                            "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, size=%dx%d",
-                            duration_ms,
-                            self._raindrops_profile_frame_count,
-                            avg_fps,
-                            min_dt_ms,
-                            max_dt_ms,
-                            self.width(),
-                            self.height(),
-                        )
-            except Exception as e:
-                logger.debug("[GL COMPOSITOR] Raindrops metrics logging failed: %s", e, exc_info=True)
+            if is_perf_metrics_enabled():
+                try:
+                    if (
+                        self._raindrops_profile_start_ts is not None
+                        and self._raindrops_profile_last_ts is not None
+                        and self._raindrops_profile_frame_count > 0
+                    ):
+                        elapsed = max(0.0, self._raindrops_profile_last_ts - self._raindrops_profile_start_ts)
+                        if elapsed > 0.0:
+                            duration_ms = elapsed * 1000.0
+                            avg_fps = self._raindrops_profile_frame_count / elapsed
+                            min_dt_ms = (
+                                self._raindrops_profile_min_dt * 1000.0
+                                if self._raindrops_profile_min_dt > 0.0
+                                else 0.0
+                            )
+                            max_dt_ms = (
+                                self._raindrops_profile_max_dt * 1000.0
+                                if self._raindrops_profile_max_dt > 0.0
+                                else 0.0
+                            )
+                            logger.info(
+                                "[PERF] [GL COMPOSITOR] Raindrops metrics: duration=%.1fms, frames=%d, "
+                                "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, size=%dx%d",
+                                duration_ms,
+                                self._raindrops_profile_frame_count,
+                                avg_fps,
+                                min_dt_ms,
+                                max_dt_ms,
+                                self.width(),
+                                self.height(),
+                            )
+                except Exception as e:
+                    logger.debug("[GL COMPOSITOR] Raindrops metrics logging failed: %s", e, exc_info=True)
 
             # Reset profiling state.
             self._raindrops_profile_start_ts = None
@@ -1625,10 +1972,129 @@ class GLCompositorWidget(QOpenGLWidget):
         except Exception as e:
             logger.debug("[GL COMPOSITOR] Raindrops complete handler failed: %s", e, exc_info=True)
 
+    def _on_shuffle_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
+        """Completion handler for shader-driven Shuffle transitions."""
+
+        try:
+            # Emit a concise profiling summary for the Shuffle shader so future
+            # tuning has telemetry without altering visuals.
+            if is_perf_metrics_enabled():
+                try:
+                    if (
+                        self._shuffle_profile_start_ts is not None
+                        and self._shuffle_profile_last_ts is not None
+                        and self._shuffle_profile_frame_count > 0
+                    ):
+                        elapsed = max(0.0, self._shuffle_profile_last_ts - self._shuffle_profile_start_ts)
+                        if elapsed > 0.0:
+                            duration_ms = elapsed * 1000.0
+                            avg_fps = self._shuffle_profile_frame_count / elapsed
+                            min_dt_ms = (
+                                self._shuffle_profile_min_dt * 1000.0
+                                if self._shuffle_profile_min_dt > 0.0
+                                else 0.0
+                            )
+                            max_dt_ms = (
+                                self._shuffle_profile_max_dt * 1000.0
+                                if self._shuffle_profile_max_dt > 0.0
+                                else 0.0
+                            )
+                            logger.info(
+                                "[PERF] [GL COMPOSITOR] Shuffle metrics: duration=%.1fms, frames=%d, "
+                                "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, size=%dx%d",
+                                duration_ms,
+                                self._shuffle_profile_frame_count,
+                                avg_fps,
+                                min_dt_ms,
+                                max_dt_ms,
+                                self.width(),
+                                self.height(),
+                            )
+                except Exception as e:
+                    logger.debug("[GL COMPOSITOR] Shuffle metrics logging failed: %s", e, exc_info=True)
+
+            # Reset profiling state.
+            self._shuffle_profile_start_ts = None
+            self._shuffle_profile_last_ts = None
+            self._shuffle_profile_frame_count = 0
+            self._shuffle_profile_min_dt = 0.0
+            self._shuffle_profile_max_dt = 0.0
+
+            try:
+                self._release_transition_textures()
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Failed to release transition textures on shuffle complete: %s", e, exc_info=True)
+
+            if self._shuffle is not None:
+                try:
+                    self._base_pixmap = self._shuffle.new_pixmap
+                except Exception:
+                    pass
+            self._shuffle = None
+            self._current_anim_id = None
+
+            try:
+                self.update()
+            except Exception as e:
+                logger.debug(
+                    "[GL COMPOSITOR] Shuffle complete update failed (likely after deletion): %s",
+                    e,
+                    exc_info=True,
+                )
+
+            if on_finished:
+                try:
+                    on_finished()
+                except Exception:
+                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Shuffle complete handler failed: %s", e, exc_info=True)
+
     def _on_shooting_stars_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
         """Completion handler for shader-driven Shooting Stars transitions."""
 
         try:
+            if is_perf_metrics_enabled():
+                try:
+                    if (
+                        self._shooting_profile_start_ts is not None
+                        and self._shooting_profile_last_ts is not None
+                        and self._shooting_profile_frame_count > 0
+                    ):
+                        elapsed = max(0.0, self._shooting_profile_last_ts - self._shooting_profile_start_ts)
+                        if elapsed > 0.0:
+                            duration_ms = elapsed * 1000.0
+                            avg_fps = self._shooting_profile_frame_count / elapsed
+                            min_dt_ms = (
+                                self._shooting_profile_min_dt * 1000.0
+                                if self._shooting_profile_min_dt > 0.0
+                                else 0.0
+                            )
+                            max_dt_ms = (
+                                self._shooting_profile_max_dt * 1000.0
+                                if self._shooting_profile_max_dt > 0.0
+                                else 0.0
+                            )
+                            logger.info(
+                                "[PERF] [GL COMPOSITOR] ShootingStars metrics: duration=%.1fms, frames=%d, "
+                                "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, size=%dx%d",
+                                duration_ms,
+                                self._shooting_profile_frame_count,
+                                avg_fps,
+                                min_dt_ms,
+                                max_dt_ms,
+                                self.width(),
+                                self.height(),
+                            )
+                except Exception as e:
+                    logger.debug("[GL COMPOSITOR] ShootingStars metrics logging failed: %s", e, exc_info=True)
+
+            self._shooting_profile_start_ts = None
+            self._shooting_profile_last_ts = None
+            self._shooting_profile_frame_count = 0
+            self._shooting_profile_min_dt = 0.0
+            self._shooting_profile_max_dt = 0.0
+
             if self._shooting_stars is not None:
                 try:
                     self._base_pixmap = self._shooting_stars.new_pixmap
@@ -1661,12 +2127,66 @@ class GLCompositorWidget(QOpenGLWidget):
             return
         p = max(0.0, min(1.0, float(progress)))
         self._peel.progress = p
+        if is_perf_metrics_enabled():
+            now = time.time()
+            if self._peel_profile_start_ts is None:
+                self._peel_profile_start_ts = now
+            if self._peel_profile_last_ts is not None:
+                dt = now - self._peel_profile_last_ts
+                if dt > 0.0:
+                    if self._peel_profile_min_dt == 0.0 or dt < self._peel_profile_min_dt:
+                        self._peel_profile_min_dt = dt
+                    if dt > self._peel_profile_max_dt:
+                        self._peel_profile_max_dt = dt
+            self._peel_profile_last_ts = now
+            self._peel_profile_frame_count += 1
         self.update()
 
     def _on_peel_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
         """Completion handler for compositor-driven peel transitions."""
 
         try:
+            if is_perf_metrics_enabled():
+                try:
+                    if (
+                        self._peel_profile_start_ts is not None
+                        and self._peel_profile_last_ts is not None
+                        and self._peel_profile_frame_count > 0
+                    ):
+                        elapsed = max(0.0, self._peel_profile_last_ts - self._peel_profile_start_ts)
+                        if elapsed > 0.0:
+                            duration_ms = elapsed * 1000.0
+                            avg_fps = self._peel_profile_frame_count / elapsed
+                            min_dt_ms = (
+                                self._peel_profile_min_dt * 1000.0
+                                if self._peel_profile_min_dt > 0.0
+                                else 0.0
+                            )
+                            max_dt_ms = (
+                                self._peel_profile_max_dt * 1000.0
+                                if self._peel_profile_max_dt > 0.0
+                                else 0.0
+                            )
+                            logger.info(
+                                "[PERF] [GL COMPOSITOR] Peel metrics: duration=%.1fms, frames=%d, "
+                                "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, size=%dx%d",
+                                duration_ms,
+                                self._peel_profile_frame_count,
+                                avg_fps,
+                                min_dt_ms,
+                                max_dt_ms,
+                                self.width(),
+                                self.height(),
+                            )
+                except Exception as e:
+                    logger.debug("[GL COMPOSITOR] Peel metrics logging failed: %s", e, exc_info=True)
+
+            self._peel_profile_start_ts = None
+            self._peel_profile_last_ts = None
+            self._peel_profile_frame_count = 0
+            self._peel_profile_min_dt = 0.0
+            self._peel_profile_max_dt = 0.0
+
             if self._peel is not None:
                 try:
                     self._base_pixmap = self._peel.new_pixmap
@@ -1699,6 +2219,47 @@ class GLCompositorWidget(QOpenGLWidget):
         """Completion handler for compositor-driven block flip transitions."""
 
         try:
+            if is_perf_metrics_enabled():
+                try:
+                    if (
+                        self._blockflip_profile_start_ts is not None
+                        and self._blockflip_profile_last_ts is not None
+                        and self._blockflip_profile_frame_count > 0
+                    ):
+                        elapsed = max(0.0, self._blockflip_profile_last_ts - self._blockflip_profile_start_ts)
+                        if elapsed > 0.0:
+                            duration_ms = elapsed * 1000.0
+                            avg_fps = self._blockflip_profile_frame_count / elapsed
+                            min_dt_ms = (
+                                self._blockflip_profile_min_dt * 1000.0
+                                if self._blockflip_profile_min_dt > 0.0
+                                else 0.0
+                            )
+                            max_dt_ms = (
+                                self._blockflip_profile_max_dt * 1000.0
+                                if self._blockflip_profile_max_dt > 0.0
+                                else 0.0
+                            )
+                            logger.info(
+                                "[PERF] [GL COMPOSITOR] BlockFlip metrics: duration=%.1fms, frames=%d, "
+                                "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, size=%dx%d",
+                                duration_ms,
+                                self._blockflip_profile_frame_count,
+                                avg_fps,
+                                min_dt_ms,
+                                max_dt_ms,
+                                self.width(),
+                                self.height(),
+                            )
+                except Exception as e:
+                    logger.debug("[GL COMPOSITOR] BlockFlip metrics logging failed: %s", e, exc_info=True)
+
+            self._blockflip_profile_start_ts = None
+            self._blockflip_profile_last_ts = None
+            self._blockflip_profile_frame_count = 0
+            self._blockflip_profile_min_dt = 0.0
+            self._blockflip_profile_max_dt = 0.0
+
             # Snap to final state: base pixmap becomes the new image, transition ends.
             if self._blockflip is not None:
                 try:
@@ -1725,6 +2286,47 @@ class GLCompositorWidget(QOpenGLWidget):
         """Completion handler for compositor-driven diffuse transitions."""
 
         try:
+            if is_perf_metrics_enabled():
+                try:
+                    if (
+                        self._diffuse_profile_start_ts is not None
+                        and self._diffuse_profile_last_ts is not None
+                        and self._diffuse_profile_frame_count > 0
+                    ):
+                        elapsed = max(0.0, self._diffuse_profile_last_ts - self._diffuse_profile_start_ts)
+                        if elapsed > 0.0:
+                            duration_ms = elapsed * 1000.0
+                            avg_fps = self._diffuse_profile_frame_count / elapsed
+                            min_dt_ms = (
+                                self._diffuse_profile_min_dt * 1000.0
+                                if self._diffuse_profile_min_dt > 0.0
+                                else 0.0
+                            )
+                            max_dt_ms = (
+                                self._diffuse_profile_max_dt * 1000.0
+                                if self._diffuse_profile_max_dt > 0.0
+                                else 0.0
+                            )
+                            logger.info(
+                                "[PERF] [GL COMPOSITOR] Diffuse metrics: duration=%.1fms, frames=%d, "
+                                "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, size=%dx%d",
+                                duration_ms,
+                                self._diffuse_profile_frame_count,
+                                avg_fps,
+                                min_dt_ms,
+                                max_dt_ms,
+                                self.width(),
+                                self.height(),
+                            )
+                except Exception as e:
+                    logger.debug("[GL COMPOSITOR] Diffuse metrics logging failed: %s", e, exc_info=True)
+
+            self._diffuse_profile_start_ts = None
+            self._diffuse_profile_last_ts = None
+            self._diffuse_profile_frame_count = 0
+            self._diffuse_profile_min_dt = 0.0
+            self._diffuse_profile_max_dt = 0.0
+
             if self._diffuse is not None:
                 try:
                     self._base_pixmap = self._diffuse.new_pixmap
@@ -1750,6 +2352,47 @@ class GLCompositorWidget(QOpenGLWidget):
         """Completion handler for compositor-driven blinds transitions."""
 
         try:
+            if is_perf_metrics_enabled():
+                try:
+                    if (
+                        self._blinds_profile_start_ts is not None
+                        and self._blinds_profile_last_ts is not None
+                        and self._blinds_profile_frame_count > 0
+                    ):
+                        elapsed = max(0.0, self._blinds_profile_last_ts - self._blinds_profile_start_ts)
+                        if elapsed > 0.0:
+                            duration_ms = elapsed * 1000.0
+                            avg_fps = self._blinds_profile_frame_count / elapsed
+                            min_dt_ms = (
+                                self._blinds_profile_min_dt * 1000.0
+                                if self._blinds_profile_min_dt > 0.0
+                                else 0.0
+                            )
+                            max_dt_ms = (
+                                self._blinds_profile_max_dt * 1000.0
+                                if self._blinds_profile_max_dt > 0.0
+                                else 0.0
+                            )
+                            logger.info(
+                                "[PERF] [GL COMPOSITOR] Blinds metrics: duration=%.1fms, frames=%d, "
+                                "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, size=%dx%d",
+                                duration_ms,
+                                self._blinds_profile_frame_count,
+                                avg_fps,
+                                min_dt_ms,
+                                max_dt_ms,
+                                self.width(),
+                                self.height(),
+                            )
+                except Exception as e:
+                    logger.debug("[GL COMPOSITOR] Blinds metrics logging failed: %s", e, exc_info=True)
+
+            self._blinds_profile_start_ts = None
+            self._blinds_profile_last_ts = None
+            self._blinds_profile_frame_count = 0
+            self._blinds_profile_min_dt = 0.0
+            self._blinds_profile_max_dt = 0.0
+
             if self._blinds is not None:
                 try:
                     self._base_pixmap = self._blinds.new_pixmap
@@ -1875,6 +2518,12 @@ class GLCompositorWidget(QOpenGLWidget):
             except Exception:
                 new_pm = None
 
+        if new_pm is None and self._shuffle is not None:
+            try:
+                new_pm = self._shuffle.new_pixmap
+            except Exception:
+                new_pm = None
+
         if snap_to_new and new_pm is not None:
             self._base_pixmap = new_pm
 
@@ -1989,6 +2638,27 @@ class GLCompositorWidget(QOpenGLWidget):
             except Exception:
                 logger.debug("[GL SHADER] Failed to initialize warp shader program", exc_info=True)
                 self._gl_pipeline.warp_program = 0
+                self._gl_disabled_for_session = True
+                self._use_shaders = False
+                return
+
+            # Compile the Shuffle shader program. On failure we disable shader
+            # usage for this session so that all shader-backed transitions fall
+            # back to the compositor's QPainter-based paths (Group A  Group C
+            # downgrade via existing CPU transitions rather than a CPU Shuffle
+            # variant).
+            try:
+                sp = self._create_shuffle_program()
+                self._gl_pipeline.shuffle_program = sp
+                self._gl_pipeline.shuffle_u_progress = gl.glGetUniformLocation(sp, "u_progress")
+                self._gl_pipeline.shuffle_u_resolution = gl.glGetUniformLocation(sp, "u_resolution")
+                self._gl_pipeline.shuffle_u_old_tex = gl.glGetUniformLocation(sp, "uOldTex")
+                self._gl_pipeline.shuffle_u_new_tex = gl.glGetUniformLocation(sp, "uNewTex")
+                self._gl_pipeline.shuffle_u_grid = gl.glGetUniformLocation(sp, "u_grid")
+                self._gl_pipeline.shuffle_u_direction = gl.glGetUniformLocation(sp, "u_direction")
+            except Exception:
+                logger.debug("[GL SHADER] Failed to initialize shuffle shader program", exc_info=True)
+                self._gl_pipeline.shuffle_program = 0
                 self._gl_disabled_for_session = True
                 self._use_shaders = False
                 return
@@ -2204,6 +2874,8 @@ class GLCompositorWidget(QOpenGLWidget):
                     gl.glDeleteProgram(int(self._gl_pipeline.raindrops_program))
                 if getattr(self._gl_pipeline, "warp_program", 0):
                     gl.glDeleteProgram(int(self._gl_pipeline.warp_program))
+                if getattr(self._gl_pipeline, "shuffle_program", 0):
+                    gl.glDeleteProgram(int(self._gl_pipeline.shuffle_program))
                 if getattr(self._gl_pipeline, "claws_program", 0):
                     gl.glDeleteProgram(int(self._gl_pipeline.claws_program))
             except Exception:
@@ -2240,6 +2912,7 @@ class GLCompositorWidget(QOpenGLWidget):
             self._gl_pipeline.basic_program = 0
             self._gl_pipeline.raindrops_program = 0
             self._gl_pipeline.warp_program = 0
+            self._gl_pipeline.shuffle_program = 0
             self._gl_pipeline.claws_program = 0
             self._gl_pipeline.quad_vbo = 0
             self._gl_pipeline.quad_vao = 0
@@ -2502,6 +3175,134 @@ void main() {
 
         return int(program)
 
+    def _create_shuffle_program(self) -> int:
+        """Compile and link the shader program used for Shuffle mask."""
+
+        if gl is None:
+            raise RuntimeError("OpenGL context not available for shader program")
+
+        vs_source = """#version 410 core
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec2 aUv;
+
+out vec2 vUv;
+
+void main() {
+    vUv = aUv;
+    gl_Position = vec4(aPos, 0.0, 1.0);
+}
+"""
+
+        fs_source = """#version 410 core
+in vec2 vUv;
+out vec4 FragColor;
+
+uniform sampler2D uOldTex;
+uniform sampler2D uNewTex;
+uniform float u_progress;
+uniform vec2 u_resolution;
+uniform vec2 u_grid;        // (cols, rows)
+uniform vec2 u_direction;   // slide direction, cardinal (e.g. (1,0), (-1,0), (0,1), (0,-1))
+
+float hash1(float n) {
+    return fract(sin(n) * 43758.5453123);
+}
+
+void main() {
+    // Flip V to match Qt's top-left image origin.
+    vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
+
+    vec4 oldColor = texture(uOldTex, uv);
+    vec4 newColor = texture(uNewTex, uv);
+
+    float t = clamp(u_progress, 0.0, 1.0);
+
+    // Logical block grid in UV space.
+    vec2 grid = max(u_grid, vec2(1.0));
+    vec2 cell = clamp(floor(uv * grid), vec2(0.0), grid - vec2(1.0));
+    float cols = grid.x;
+    float rows = grid.y;
+    float cellIndex = cell.y * cols + cell.x;
+
+    // Per-block jitter: staggered start so blocks do not all move in
+    // perfect lock-step. We mirror the diffuse-based Shuffle semantics by
+    // varying only the start time per block and letting the wavefront run
+    // across the screen, rather than also randomising the span.
+    float rnd = hash1(cellIndex * 37.0 + 13.0);
+    float start = rnd * 0.7;
+    float local = (t - start) / max(1.0 - start, 1e-3);
+    local = clamp(local, 0.0, 1.0);
+
+    // Local UV within the block.
+    vec2 cellOrigin = cell / grid;
+    vec2 cellSize = vec2(1.0) / grid;
+    vec2 uvLocal = (uv - cellOrigin) / cellSize; // 0..1 inside block
+
+    // Direction-aware axis so that the reveal always starts at axis = 0
+    // regardless of the global direction.
+    vec2 dir = u_direction;
+    if (length(dir) < 1e-3) {
+        dir = vec2(1.0, 0.0);
+    } else {
+        dir = normalize(dir);
+    }
+
+    float axis;
+    if (abs(dir.x) > abs(dir.y)) {
+        // Horizontal motion
+        axis = uvLocal.x;
+        if (dir.x < 0.0) {
+            axis = 1.0 - axis;
+        }
+    } else {
+        // Vertical motion
+        axis = uvLocal.y;
+        if (dir.y < 0.0) {
+            axis = 1.0 - axis;
+        }
+    }
+
+    // Soft front so the edge of each block reads as a moving band rather than
+    // a hard 1px line.
+    float front = local;
+    float feather = 0.18;
+    float blockMask = smoothstep(front - feather, front, axis);
+
+    // Late global tail: only in the final few percent do we force any
+    // remaining straggler blocks fully onto the new image, avoiding an
+    // early, harsh swap while still guaranteeing a clean landing.
+    float globalTail = smoothstep(0.96, 1.0, t);
+    float mixFactor = clamp(max(blockMask, globalTail), 0.0, 1.0);
+
+    vec4 color = mix(oldColor, newColor, mixFactor);
+    FragColor = color;
+}
+"""
+
+        vert = self._compile_shader(vs_source, gl.GL_VERTEX_SHADER)
+        try:
+            frag = self._compile_shader(fs_source, gl.GL_FRAGMENT_SHADER)
+        except Exception:
+            gl.glDeleteShader(vert)
+            raise
+
+        try:
+            program = gl.glCreateProgram()
+            gl.glAttachShader(program, vert)
+            gl.glAttachShader(program, frag)
+            gl.glLinkProgram(program)
+            status = gl.glGetProgramiv(program, gl.GL_LINK_STATUS)
+            if status != gl.GL_TRUE:
+                log = gl.glGetProgramInfoLog(program)
+                logger.debug("[GL SHADER] Failed to link shuffle program: %r", log)
+                gl.glDeleteProgram(program)
+                raise RuntimeError(f"Failed to link shuffle program: {log!r}")
+        finally:
+            gl.glDeleteShader(vert)
+            gl.glDeleteShader(frag)
+
+        return int(program)
+
     def _create_warp_program(self) -> int:
         """Compile and link the shader program used for Warp Dissolve."""
 
@@ -2550,44 +3351,55 @@ void main() {
     // Angle in polar space.
     float theta = atan(centered.y, centered.x);
 
-    // Swirl strength: 0 at t=0/1, strongest at t=0.5 and near the centre. We
-    // allow up to roughly one full rotation at the very centre so the motion
-    // reads as a true vortex rather than a gentle wobble.
-    float swirlPhase = sin(t * 3.14159265);        // 0 at 0/1, 1 at 0.5
-    float swirlStrength = 2.0 * 3.14159265;        // ~1 full turn at peak
-    float radialFalloff = (1.0 - rNorm) * (1.0 - rNorm);
+    // Strong vortex: peak twist at t=0.5 and near the centre. Allow up to
+    // ~1.65 turns at the core so the motion clearly reads as a whirlpool.
+    float swirlPhase = sin(t * 3.14159265);          // 0 at 0/1, 1 at 0.5
+    float swirlStrength = 3.3 * 3.14159265;          // ~10% stronger than 1.5
+    float radialFalloff = (1.0 - rNorm);
+    radialFalloff *= radialFalloff;                  // bias towards centre
+    // Suppress twist in a thin border near the outer edge to avoid visible
+    // bending of the very top/left edges on wide aspect ratios.
+    float edgeMask = 1.0 - smoothstep(0.94, 1.0, rNorm);
+    radialFalloff *= edgeMask;
     float swirl = swirlPhase * swirlStrength * radialFalloff;
 
-    // Old image spirals into the centre and contracts slightly so it feels
-    // like it is being pulled down a drain.
-    float thetaOld = theta + swirl;
-    float contract = 1.0 - 0.35 * t * (1.0 - rNorm);
-    float rOld = r * contract;
+    // Shared swirl field that gradually unwinds as we approach the end of the
+    // transition so the new image relaxes back to its original orientation.
+    float unwhirl = smoothstep(0.6, 1.0, t);
+    float sharedSwirl = swirl * (1.0 - 0.75 * unwhirl);
+
+    // OLD image - fully participates in the vortex.
+    float thetaOld = theta + sharedSwirl;
+    float rOld = r * (1.0 - 0.45 * t * (1.0 - rNorm));
     vec2 dirOld = vec2(cos(thetaOld), sin(thetaOld));
     dirOld.x /= aspect;
     vec2 uvOld = vec2(0.5, 0.5) + dirOld * rOld;
     uvOld = clamp(uvOld, vec2(0.0), vec2(1.0));
     vec4 warpedOld = texture(uOldTex, uvOld);
 
-    // New image emerges from the same vortex with a gentler counter-twist.
-    float swirlNew = swirl * 0.6;
-    float thetaNew = theta - swirlNew;
-    // Keep the new image slightly compressed early on so it appears to grow
-    // out of the centre, then relax back to full size by the end.
-    float expand = 0.7 + 0.3 * t;
-    float rNew = r * expand;
+    // NEW image - equally twisted into the same vortex, then gently unwound as
+    // we approach t=1 so the final frame is stable. Retain a mild zoom-in
+    // early on but guarantee that we land exactly on the original framing
+    // once the unwhirl phase has completed.
+    float thetaNew = theta + sharedSwirl;
+    float zoomPhase = 0.85 + 0.25 * t;
+    float zoom = mix(zoomPhase, 1.0, unwhirl);
+    float rNew = r * zoom;
     vec2 dirNew = vec2(cos(thetaNew), sin(thetaNew));
     dirNew.x /= aspect;
     vec2 uvNew = vec2(0.5, 0.5) + dirNew * rNew;
     uvNew = clamp(uvNew, vec2(0.0), vec2(1.0));
     vec4 warpedNew = texture(uNewTex, uvNew);
 
-    // Centre of the frame reveals the new image earlier; the outer regions
-    // follow slightly later, and a global fade ensures we land cleanly on the
-    // final frame without lingering old-image noise.
-    float centreReveal = smoothstep(0.0, 0.8, t) * smoothstep(0.25, 0.0, rNorm);
-    float globalMix = smoothstep(0.0, 1.0, t);
-    float mixFactor = clamp(max(globalMix, centreReveal), 0.0, 1.0);
+    // Mixing: fade into a shared vortex, then unwhirl to the final frame.
+    //  - Centre reveals first once the vortex has formed
+    //  - Outer ring follows a bit later
+    //  - Global tail guarantees a clean landing on the new image
+    // Slightly earlier phases (~10%) so the dissolve feels a bit snappier.
+    float centrePhase = smoothstep(0.16, 0.41, t) * (1.0 - rNorm);
+    float ringPhase = smoothstep(0.27, 0.63, t) * smoothstep(0.15, 1.0, rNorm);
+    float tailPhase = smoothstep(0.72, 0.94, t);
+    float mixFactor = clamp(max(max(centrePhase, ringPhase), tailPhase), 0.0, 1.0);
 
     vec4 color = mix(warpedOld, warpedNew, mixFactor);
 
@@ -2902,8 +3714,16 @@ void main() {
     def _can_use_raindrops_shader(self) -> bool:
         return self._can_use_simple_shader(self._raindrops, self._gl_pipeline.raindrops_program)
 
+    def _can_use_shuffle_shader(self) -> bool:
+        return self._can_use_simple_shader(self._shuffle, getattr(self._gl_pipeline, "shuffle_program", 0))
+
     def _can_use_claws_shader(self) -> bool:
-        return self._can_use_simple_shader(self._shooting_stars, getattr(self._gl_pipeline, "claws_program", 0))
+        # Shooting Stars / Claw Marks shader path is hard-disabled. The user
+        # has elected to remove this effect, and any remaining "Claw Marks"
+        # requests are routed through a CPU crossfade instead. Keeping this
+        # function returning False ensures the GLSL claws program is never
+        # used even if it is still compiled in the pipeline.
+        return False
 
     def _upload_texture_from_pixmap(self, pixmap: QPixmap) -> int:
         """Upload a QPixmap as a GL texture and return its id.
@@ -3037,6 +3857,18 @@ void main() {
         if self._raindrops is None:
             return False
         st = self._raindrops
+        return self._prepare_pair_textures(st.old_pixmap, st.new_pixmap)
+
+    def _prepare_shuffle_textures(self) -> bool:
+        if not self._can_use_shuffle_shader():
+            return False
+        if self._gl_pipeline is None:
+            return False
+        if self._gl_pipeline.old_tex_id and self._gl_pipeline.new_tex_id:
+            return True
+        if self._shuffle is None:
+            return False
+        st = self._shuffle
         return self._prepare_pair_textures(st.old_pixmap, st.new_pixmap)
 
     def _get_viewport_size(self) -> tuple[int, int]:
@@ -3214,6 +4046,72 @@ void main() {
             gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
             gl.glActiveTexture(gl.GL_TEXTURE0)
             gl.glUseProgram(0)
+
+    def _paint_shuffle_shader(self, target: QRect) -> None:
+        if not self._can_use_shuffle_shader() or self._gl_pipeline is None or self._shuffle is None:
+            return
+        st = self._shuffle
+        if not st.old_pixmap or st.old_pixmap.isNull() or not st.new_pixmap or st.new_pixmap.isNull():
+            return
+        if not self._prepare_shuffle_textures():
+            return
+
+        vp_w, vp_h = self._get_viewport_size()
+
+        float_cols = float(max(1, int(st.cols)))
+        float_rows = float(max(1, int(st.rows)))
+        p = max(0.0, min(1.0, float(st.progress)))
+
+        gl.glViewport(0, 0, vp_w, vp_h)
+        gl.glDisable(gl.GL_DEPTH_TEST)
+
+        gl.glUseProgram(self._gl_pipeline.shuffle_program)
+        try:
+            if self._gl_pipeline.shuffle_u_progress != -1:
+                gl.glUniform1f(self._gl_pipeline.shuffle_u_progress, float(p))
+
+            if self._gl_pipeline.shuffle_u_resolution != -1:
+                gl.glUniform2f(self._gl_pipeline.shuffle_u_resolution, float(vp_w), float(vp_h))
+
+            if self._gl_pipeline.shuffle_u_grid != -1:
+                gl.glUniform2f(self._gl_pipeline.shuffle_u_grid, float_cols, float_rows)
+
+            # Map encoded edge string to a simple cardinal direction vector.
+            dx = 1.0
+            dy = 0.0
+            edge = st.edge or "L2R"
+            if edge == "L2R":
+                dx = 1.0
+                dy = 0.0
+            elif edge == "R2L":
+                dx = -1.0
+                dy = 0.0
+            elif edge == "T2B":
+                dx = 0.0
+                dy = 1.0
+            elif edge == "B2T":
+                dx = 0.0
+                dy = -1.0
+            if self._gl_pipeline.shuffle_u_direction != -1:
+                gl.glUniform2f(self._gl_pipeline.shuffle_u_direction, float(dx), float(dy))
+
+            if self._gl_pipeline.shuffle_u_old_tex != -1:
+                gl.glActiveTexture(gl.GL_TEXTURE0)
+                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.old_tex_id)
+                gl.glUniform1i(self._gl_pipeline.shuffle_u_old_tex, 0)
+            if self._gl_pipeline.shuffle_u_new_tex != -1:
+                gl.glActiveTexture(gl.GL_TEXTURE1)
+                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.new_tex_id)
+                gl.glUniform1i(self._gl_pipeline.shuffle_u_new_tex, 1)
+
+            gl.glBindVertexArray(self._gl_pipeline.quad_vao)
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+            gl.glBindVertexArray(0)
+        finally:
+            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
+            gl.glActiveTexture(gl.GL_TEXTURE0)
+            gl.glUseProgram(0)
+            gl.glDisable(gl.GL_DEPTH_TEST)
             gl.glDisable(gl.GL_DEPTH_TEST)
 
     def _paint_warp_shader(self, target: QRect) -> None:
@@ -3340,6 +4238,26 @@ void main() {
                 self._gl_disabled_for_session = True
                 self._use_shaders = False
 
+        # Shuffle shader path: when enabled and the GLSL pipeline is
+        # available, draw the Shuffle mask entirely in GLSL. On failure we
+        # disable shader usage for the session and fall back to the
+        # compositor's existing QPainter-based transitions for this run.
+        if self._shuffle is not None and self._can_use_shuffle_shader():
+            try:
+                self._paint_shuffle_shader(target)
+                return
+            except Exception:
+                logger.debug(
+                    "[GL SHADER] Shader shuffle path failed; disabling shader pipeline",
+                    exc_info=True,
+                )
+                logger.debug(
+                    "[GL COMPOSITOR] Shader shuffle path failed; disabling shader pipeline",
+                    exc_info=True,
+                )
+                self._gl_disabled_for_session = True
+                self._use_shaders = False
+
         # Shooting Stars (claws) shader path: when enabled and the GLSL
         # pipeline is available, draw the streak field entirely in GLSL. On
         # failure we disable shader usage for the session and fall back to the
@@ -3450,9 +4368,18 @@ void main() {
                     if not rect.intersects(target):
                         continue
 
+                    # Opacity falloff: keep strips opaque in the early part of
+                    # their lifetime, then fade them out as they drift away so
+                    # they do not "snap" off-screen.
+                    float_alpha = 1.0
+                    if local > 0.5:
+                        float_alpha = 1.0 - min(1.0, (local - 0.5) / 0.5)
+                    if float_alpha <= 0.0:
+                        continue
+
                     painter.save()
                     painter.setClipRect(rect)
-                    painter.setOpacity(1.0)
+                    painter.setOpacity(float_alpha)
                     try:
                         # Translate the painter so the strip carries its
                         # original content with it rather than sampling new

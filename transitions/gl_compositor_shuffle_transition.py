@@ -28,6 +28,10 @@ class _ShuffleBlock:
     def __init__(self, rect: QRect, threshold: float) -> None:
         self.rect = rect
         self.threshold = max(0.0, min(1.0, float(threshold)))
+        # Mark blocks as completed once they are fully revealed so we can
+        # avoid recomputing their contribution to the diffuse region on
+        # every subsequent frame.
+        self.completed: bool = False
 
 
 class GLCompositorShuffleTransition(BaseTransition):
@@ -109,25 +113,55 @@ class GLCompositorShuffleTransition(BaseTransition):
         self._height = height
         self._build_blocks(width, height)
 
-        # Drive via shared AnimationManager using the diffuse API.
+        # Drive via shared AnimationManager. Prefer the shader-based Shuffle
+        # path when available; otherwise fall back to the existing
+        # compositor-backed diffuse implementation.
         easing_curve = self._resolve_easing()
         am = self._get_animation_manager(widget)
 
-        def _update(progress: float) -> None:
-            self._on_anim_update(progress)
+        # Derive logical grid dimensions to feed into the shader so its block
+        # layout matches the compositor's diffuse grid.
+        bs = max(32, min(self._block_size, min(width, height)))
+        cols = max(1, (width + bs - 1) // bs)
+        rows = max(1, (height + bs - 1) // bs)
 
         def _on_finished() -> None:
             self._on_anim_complete()
 
-        self._animation_id = comp.start_diffuse(
-            old_pixmap,
-            new_pixmap,
-            duration_ms=self.duration_ms,
-            easing=easing_curve,
-            animation_manager=am,
-            update_callback=_update,
-            on_finished=_on_finished,
-        )
+        anim_id: Optional[str] = None
+        try:
+            anim_id = comp.start_shuffle_shader(
+                old_pixmap,
+                new_pixmap,
+                cols=cols,
+                rows=rows,
+                edge=self._edge,
+                duration_ms=self.duration_ms,
+                easing=easing_curve,
+                animation_manager=am,
+                on_finished=_on_finished,
+            )
+        except Exception:
+            logger.debug("[GL COMPOSITOR] start_shuffle_shader failed; falling back to diffuse", exc_info=True)
+            anim_id = None
+
+        if anim_id is None:
+            # Shader path unavailable: use the existing diffuse/QRegion-based
+            # path while keeping the same timing and block layout.
+            def _update(progress: float) -> None:
+                self._on_anim_update(progress)
+
+            anim_id = comp.start_diffuse(
+                old_pixmap,
+                new_pixmap,
+                duration_ms=self.duration_ms,
+                easing=easing_curve,
+                animation_manager=am,
+                update_callback=_update,
+                on_finished=_on_finished,
+            )
+
+        self._animation_id = anim_id
 
         self._set_state(TransitionState.RUNNING)
         self.started.emit()
@@ -185,6 +219,8 @@ class GLCompositorShuffleTransition(BaseTransition):
         """Create a grid of shuffle blocks covering the widget area."""
 
         self._blocks = []
+        # Reset region so the first update builds from a clean slate.
+        self._region = QRegion()
         # Clamp effective block size for performance while preserving user intent.
         bs = max(32, min(self._block_size, min(width, height)))
 
@@ -223,13 +259,23 @@ class GLCompositorShuffleTransition(BaseTransition):
             return
 
         p = max(0.0, min(1.0, float(progress)))
-
-        region = QRegion()
+        # Start from the previously accumulated region so we do not need to
+        # rebuild contributions from blocks that have already been fully
+        # revealed. This keeps the visual behaviour (monotonic reveal) while
+        # reducing the cost of QRegion unions late in the animation.
+        region = self._region
         finished = 0
         width = max(1, self._width)
         height = max(1, self._height)
 
         for block in self._blocks:
+            # Skip expensive region work for blocks that have already fully
+            # completed in earlier frames; we only need to count them towards
+            # overall completion.
+            if getattr(block, "completed", False):
+                finished += 1
+                continue
+
             # Spread start times so multiple blocks move at once but avoid
             # uniform row/column activation.
             start = block.threshold * 0.7
@@ -239,6 +285,7 @@ class GLCompositorShuffleTransition(BaseTransition):
             if local >= 1.0:
                 local = 1.0
                 finished += 1
+                block.completed = True
                 rect = block.rect
                 region = region.united(QRegion(rect))
                 continue

@@ -47,7 +47,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - Injects shared ResourceManager into transitions; seeds base pixmap pre/post transition and on startup to avoid black frames (wallpaper snapshot seeding + previous-pixmap fallback)
   - Uses lazy GL overlay initialization via `overlay_manager.prepare_gl_overlay` instead of a global startup prewarm; manages widgets Z-order, logs per-stage telemetry, handles transition watchdog timers
  - rendering/gl_compositor.py
-  - `GLCompositorWidget`: single per-display GL surface responsible for drawing the base image and all compositor-backed GL transitions (Crossfade, Slide, Wipe, Block Puzzle Flip, Blinds, Diffuse, plus the GL-only Peel, 3D Block Spins, Rain Drops, Warp Dissolve, Claw Marks, Shuffle).
+  - `GLCompositorWidget`: single per-display GL surface responsible for drawing the base image and all compositor-backed GL transitions (Crossfade, Slide, Wipe, Block Puzzle Flip, Blinds, Diffuse, plus the GL-only Peel, 3D Block Spins, Rain Drops, Warp Dissolve, Shuffle).
   - Hosts the Route 3 GLSL shader pipeline (OpenGL 4.1+ via PyOpenGL when available), including a shared card-flip program and geometry for both a fullscreen quad and a dedicated 3D box mesh. The pipeline currently powers the 3D Block Spins slab shader and the initial Warp Dissolve / Ripple (Rain Drops) effects; the BlockSpin shader path renders the image as a thin depth-tested slab (front/back/side faces) with neutral glass edges and specular highlights using this box mesh.
   - Owns the GLSL program/geometry state in a private pipeline container and exposes `cleanup()` to tear down programs, buffers, and Block Spins textures; `DisplayWidget` calls this from its destruction path so ResourceManager-driven shutdown leaves no dangling GL objects.
   - Maintains lightweight per-transition state dataclasses (CrossfadeState, SlideState, WipeState, BlockFlipState, BlockSpinState, BlindsState, DiffuseState, PeelState, WarpState) and exposes `start_*` helpers driven by the shared AnimationManager.
@@ -106,7 +106,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - utils/image_cache.py
   - Thread-safe LRU (QImage/QPixmap), memory-bound, eviction
 - utils/image_prefetcher.py
-  - IO-thread decode to QImage; prefetch N ahead; inflight tracking
+  - IO-thread decode to QImage; prefetch N ahead; inflight tracking and optional compute-pool prescale of the first upcoming image to distinct display sizes via `ThreadManager.submit_compute_task`, storing results in `ImageCache` under `"path|scaled:WxH"` keys.
 - utils/profiler.py
 - utils/lockfree/spsc_queue.py
 - utils/monitors.py
@@ -114,7 +114,6 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 ## Docs
 - Docs/TestSuite.md – canonical tests
 - Docs/AUDIT_*.md – technical audits
-- Docs/Route3_OpenGL_Roadmap.md – live checklist for stability work, must update each step
 - Docs/FlashFlickerDiagnostic.md – flicker/banding symptom tracker and mitigation history
  - Docs/10_WIDGET_GUIDELINES.md – canonical overlay widget design (card styling, fade/shadow via ShadowFadeProfile, Z-order/integration with DisplayWidget and overlay_manager, interaction gating)
  - audits/*.md – repository-level Cleaning/Architecture/Optimization audit documents with live checklists
@@ -123,11 +122,11 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - display.refresh_sync: bool
 - display.hw_accel: bool
 - display.mode: fill|fit|shrink
-- transitions.type (includes all CPU and GL/compositor-backed transition types such as Crossfade, Slide, Wipe, Diffuse, Block Puzzle Flip, Blinds, Peel, 3D Block Spins, Rain Drops, Warp Dissolve, Claw Marks, Shuffle)
+- transitions.type (includes all CPU and GL/compositor-backed transition types such as Crossfade, Slide, Wipe, Diffuse, Block Puzzle Flip, Blinds, Peel, 3D Block Spins, Rain Drops, Warp Dissolve, Shuffle)
 - transitions.random_always: bool
 - transitions.random_choice: str
 - transitions.duration_ms: int (global default duration in milliseconds for transitions)
-- transitions.durations: map of transition type name → duration_ms used for per-transition duration independence (e.g. Crossfade/Slide/Wipe/Diffuse/Block Puzzle Flip/Blinds/Peel/3D Block Spins/Rain Drops/Warp Dissolve/Claw Marks/Shuffle)
+- transitions.durations: map of transition type name → duration_ms used for per-transition duration independence (e.g. Crossfade/Slide/Wipe/Diffuse/Block Puzzle Flip/Blinds/Peel/3D Block Spins/Rain Drops/Warp Dissolve/Shuffle)
 - transitions.slide.direction, transitions.slide.last_direction (legacy flat keys maintained for back-compat; nested `transitions['slide']['direction']` is the canonical form)
 - transitions.wipe.direction, transitions.wipe.last_direction (legacy flat keys maintained for back-compat; nested `transitions['wipe']['direction']` is the canonical form)
 - transitions.pool: map of transition type name → bool controlling whether a type participates in random rotation and C-key cycling (explicit selection remains allowed regardless of this flag; GL-only types still respect `display.hw_accel`).

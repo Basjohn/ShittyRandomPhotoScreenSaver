@@ -7,7 +7,7 @@ NO raw QPropertyAnimation or QTimer should be used outside this module.
 import time
 import uuid
 from typing import Any, Dict, Optional, Callable, TYPE_CHECKING
-from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtCore import QObject, QTimer, Signal, Qt
 from core.animation.types import (
     AnimationState, EasingCurve,
     PropertyAnimationConfig, CustomAnimationConfig, AnimationGroupConfig
@@ -280,6 +280,7 @@ class AnimationManager(QObject):
         
         # Update timer
         self._timer = QTimer()
+        self._timer.setTimerType(Qt.TimerType.PreciseTimer)
         self._timer.setInterval(int(self.frame_time * 1000))  # Convert to milliseconds
         self._timer.timeout.connect(self._update_all)
         # Register timer with ResourceManager for lifecycle tracking

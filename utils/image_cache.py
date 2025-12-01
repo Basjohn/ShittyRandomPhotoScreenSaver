@@ -40,7 +40,7 @@ class ImageCache:
         
         self._cache: OrderedDict[str, Union[QImage, QPixmap]] = OrderedDict()
         self._current_memory = 0
-        # Lightweight telemetry counters (Route3 §6.4: cache profiling)
+        # Lightweight telemetry counters for cache profiling.
         self._hit_count: int = 0
         self._miss_count: int = 0
         self._evict_count: int = 0

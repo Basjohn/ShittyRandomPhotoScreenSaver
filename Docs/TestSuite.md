@@ -1,7 +1,7 @@
 # Test Suite Documentation
-
+Document is more than 10days old, update for current architecture!
 **Purpose**: Canonical reference for all test modules, test cases, and testing procedures.  
-**Last Updated**: Nov 18, 2025 - Route3 scenarios (Ctrl mode, transition cycling, overlay tools)  
+**Last Updated**: Nov 18, 2025 - Scenario coverage (Ctrl mode, transition cycling, overlay tools)  
 **Test Count**: 343 tests across 25+ modules  
 **Pass Rate**: 97.1% (333 passing, 5 failing, 5 skipped)  
 **Recent**: Transition factory now honours SettingsManager overrides; `Shiboken.isValid` guard prevents teardown crashes during tests (pyqt slot callbacks).
@@ -289,7 +289,7 @@ Get-Content test_output.log -Tail 50
 - Clock and weather widget display
 - Configuration UI workflows
 
-#### Route3 Scenario: Transition Cycling + Manual Overrides (BlockFlip lock-in)
+#### Scenario: Transition Cycling + Manual Overrides (BlockFlip lock-in)
 
 **Goal**: Verify that cycling transitions with `C` and then applying manual overrides in the settings dialog does **not** leave the engine stuck on Block Puzzle Flip (or any prior random choice), and that settings/telemetry stay in sync.
 
@@ -320,7 +320,7 @@ Get-Content test_output.log -Tail 50
 - `transitions.random_choice` and `transitions.last_random_choice` are cleared whenever a specific type is chosen or cycled to, as reflected in `SettingsManager` DEBUG logs.
 - `Transition cycled to:` messages and on-screen transitions remain in sync across multiple cycles and settings changes.
 
-#### Route3 Scenario: Multi-Monitor Widgets & UI (Clocks & Weather)
+#### Scenario: Multi-Monitor Widgets & UI (Clocks & Weather)
 
 **Goal**: Verify that clock and weather widgets respect per-monitor configuration (enable/disable and target monitor), and that no widgets appear or fetch data on monitors where they are disabled.
 
@@ -350,7 +350,7 @@ Get-Content test_output.log -Tail 50
 - Logs show weather and clock creation only on the monitors they are configured for, and `... widget disabled in settings` entries for all others.
 - No unexpected weather network activity is logged for displays where the Weather widget is disabled.
 
-#### Route3 Scenario: Spotify Beat Visualizer (Spotify-only Gating)
+#### Scenario: Spotify Beat Visualizer (Spotify-only Gating)
 
 **Goal**: Verify that the Spotify Beat Visualizer only animates when Spotify is actively playing, inherits the Spotify/media card styling, and respects per-monitor settings.
 
@@ -381,7 +381,7 @@ Get-Content test_output.log -Tail 50
 - Visualizer card background, border, and opacity remain visually locked to the Spotify/media widget card.
 - Per-monitor settings (`monitor = 'ALL'|1|2|3`) gate creation on each display: when the visualizer is disabled or targeted away from a monitor, no beat widget is constructed there.
 
-#### Route3 Perf Scenario: Prefetch Queue vs Transition Skips
+#### Perf Scenario: Prefetch Queue vs Transition Skips
 
 **Goal**: Use existing telemetry to confirm that the prefetch queue and the single-skip policy in `DisplayWidget.set_image` work together without harming pacing, and that `transition_skip_count` remains bounded for normal runs.
 

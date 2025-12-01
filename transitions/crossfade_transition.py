@@ -14,6 +14,7 @@ from transitions.base_transition import BaseTransition, TransitionState
 from transitions.overlay_manager import (
     get_or_create_overlay,
     notify_overlay_stage,
+    raise_overlay,
     schedule_raise_when_ready,
     set_overlay_geometry,
 )
@@ -171,10 +172,18 @@ class CrossfadeTransition(BaseTransition):
             notify_overlay_stage(overlay, "prepaint_start")
             overlay.setVisible(True)
             try:
+                # repaint() is synchronous for QWidget, so once this returns
+                # the overlay has drawn at least one frame and can be safely
+                # raised without additional readiness polling.
                 overlay.repaint()
             except Exception:
                 pass
-            schedule_raise_when_ready(widget, overlay, stage="initial_raise_sw")
+            try:
+                raise_overlay(widget, overlay)
+                notify_overlay_stage(overlay, "initial_raise_sw", status="ready", wait_ms="0.00")
+            except Exception:
+                # As a fallback, keep the legacy async raise path.
+                schedule_raise_when_ready(widget, overlay, stage="initial_raise_sw")
 
             # Drive via centralized AnimationManager
             am = self._get_animation_manager(widget)

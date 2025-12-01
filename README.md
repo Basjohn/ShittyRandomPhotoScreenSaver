@@ -159,4 +159,8 @@ Version information is centralised in `versioning.py` and used by both runtime a
 - Executable name: `SRPSS`
 - Version string: `APP_VERSION`
 
+## Credits
+
+- Weather icons: [Basmilius Weather Icons – Line](https://basmilius.github.io/weather-icons/index-line.html)
+
 This README focuses on wasting your time.

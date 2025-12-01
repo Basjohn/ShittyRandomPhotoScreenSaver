@@ -275,6 +275,15 @@ class ThreadManager:
         """Convenience method for IO pool submissions"""
         return self.submit_task(ThreadPoolType.IO, func, *args, **kwargs)
 
+    def submit_compute_task(self, func: Callable, *args, **kwargs) -> str:
+        """Convenience method for COMPUTE pool submissions.
+
+        This is primarily used for CPU-heavy work such as image processing
+        and pre-scaling so callers do not need to reference ThreadPoolType
+        directly.
+        """
+        return self.submit_task(ThreadPoolType.COMPUTE, func, *args, **kwargs)
+
     def get_task_result(self, task_id: str, timeout: Optional[float] = None) -> TaskResult:
         """Get the result of a specific task"""
         task = self._active_tasks.get(task_id)

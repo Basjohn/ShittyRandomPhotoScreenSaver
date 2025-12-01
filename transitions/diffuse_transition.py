@@ -5,7 +5,7 @@ Reveals new image by randomly fading in blocks over time.
 """
 import random
 from typing import Optional, List
-from PySide6.QtCore import QTimer, QPointF, QRectF, Qt
+from PySide6.QtCore import QPointF, QRectF, Qt
 from core.animation.types import EasingCurve
 from PySide6.QtGui import QPixmap, QPainter, QColor, QPolygonF
 from PySide6.QtWidgets import QWidget, QLabel
@@ -42,7 +42,6 @@ class DiffuseTransition(BaseTransition):
         self._widget: Optional[QWidget] = None
         self._old_label: Optional[QLabel] = None
         self._new_label: Optional[QLabel] = None
-        self._timer: Optional[QTimer] = None  # legacy fallback (should be unused)
         self._animation_id: Optional[str] = None
         self._elapsed_ms = 0
         self._fps = 60

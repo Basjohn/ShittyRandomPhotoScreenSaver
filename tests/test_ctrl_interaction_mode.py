@@ -112,8 +112,8 @@ def test_ctrl_held_global_across_multiple_widgets(qt_app, settings_manager, qtbo
 def test_media_keys_do_not_exit_screensaver(qt_app, settings_manager, qtbot, media_key):
     """Media keys should never be treated as exit keys by DisplayWidget.
 
-    This guards Route3 §4.2: local and global media keys should only control
-    media and must not cause the screensaver to exit.
+    This guards the invariant that local and global media keys should only
+    control media and must not cause the screensaver to exit.
     """
     widget = DisplayWidget(
         screen_index=0,

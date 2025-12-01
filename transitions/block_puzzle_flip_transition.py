@@ -5,14 +5,16 @@ Creates a grid of blocks that flip from old image to new image
 with 3D rotation effect. This is the STAR FEATURE transition.
 """
 import random
+import math
 from typing import Optional, List
-from PySide6.QtCore import QTimer, QRect, Qt
-from PySide6.QtGui import QPixmap, QPainter
+from PySide6.QtCore import QRect, Qt
+from PySide6.QtGui import QPixmap, QPainter, QPainterPath
 from PySide6.QtWidgets import QWidget
 
 from transitions.base_transition import BaseTransition, TransitionState
 from core.animation.types import EasingCurve
 from core.logging.logger import get_logger
+from .slide_transition import SlideDirection
 
 logger = get_logger(__name__)
 
@@ -67,20 +69,110 @@ class _BlockFlipWidget(QWidget):
             
             # Draw new image for each flipped block
             if self._new and not self._new.isNull():
+                direction = getattr(self, "_direction", None)
                 for block in self._blocks:
                     progress = max(0.0, min(1.0, block.flip_progress))
                     if progress <= 0.0:
                         continue
-                    
-                    # Create clip region for this block's reveal
+
+                    eased = 0.5 - 0.5 * math.cos(math.pi * progress)
+
+                    # Base rectangular reveal used for non-directional mode
+                    # and as the final full-block clip once the flip has
+                    # completed.
                     r = block.rect
-                    reveal_w = max(1, int(r.width() * progress))
+                    reveal_w = max(1, int(r.width() * eased))
                     dx = r.x() + (r.width() - reveal_w) // 2
                     reveal_rect = QRect(dx, r.y(), reveal_w, r.height())
-                    
-                    # Clip to this block's reveal area
+
                     p.save()
-                    p.setClipRect(reveal_rect)
+                    # Triangle prototype: when a direction is configured and
+                    # the block has not yet fully completed, use a triangular
+                    # clip aligned with the wave direction so each block
+                    # appears as a wedge pointing along the reveal.
+                    use_triangle = (
+                        direction is not None
+                        and hasattr(direction, "__class__")
+                        and progress < 0.999
+                    )
+                    if use_triangle:
+                        path = QPainterPath()
+                        if direction == SlideDirection.LEFT:
+                            # Wave travels left→right, base on left edge.
+                            x0 = r.x()
+                            y0 = r.y()
+                            x1 = r.x()
+                            y1 = r.y() + r.height()
+                            apex_x = r.x() + int(r.width() * eased)
+                            if apex_x < r.x():
+                                apex_x = r.x()
+                            if apex_x > r.x() + r.width():
+                                apex_x = r.x() + r.width()
+                            apex_y = r.y() + r.height() // 2
+                            path.moveTo(x0, y0)
+                            path.lineTo(x1, y1)
+                            path.lineTo(apex_x, apex_y)
+                            path.closeSubpath()
+                        elif direction == SlideDirection.RIGHT:
+                            # Wave travels right→left, base on right edge.
+                            right_x = r.x() + r.width()
+                            x0 = right_x
+                            y0 = r.y()
+                            x1 = right_x
+                            y1 = r.y() + r.height()
+                            apex_x = right_x - int(r.width() * eased)
+                            if apex_x < r.x():
+                                apex_x = r.x()
+                            if apex_x > right_x:
+                                apex_x = right_x
+                            apex_y = r.y() + r.height() // 2
+                            path.moveTo(x0, y0)
+                            path.lineTo(x1, y1)
+                            path.lineTo(apex_x, apex_y)
+                            path.closeSubpath()
+                        elif direction == SlideDirection.DOWN:
+                            # Wave travels top→bottom, base on top edge.
+                            x0 = r.x()
+                            y0 = r.y()
+                            x1 = r.x() + r.width()
+                            y1 = r.y()
+                            apex_y = r.y() + int(r.height() * eased)
+                            if apex_y < r.y():
+                                apex_y = r.y()
+                            if apex_y > r.y() + r.height():
+                                apex_y = r.y() + r.height()
+                            apex_x = r.x() + r.width() // 2
+                            path.moveTo(x0, y0)
+                            path.lineTo(x1, y1)
+                            path.lineTo(apex_x, apex_y)
+                            path.closeSubpath()
+                        elif direction == SlideDirection.UP:
+                            # Wave travels bottom→top, base on bottom edge.
+                            bottom_y = r.y() + r.height()
+                            x0 = r.x()
+                            y0 = bottom_y
+                            x1 = r.x() + r.width()
+                            y1 = bottom_y
+                            apex_y = bottom_y - int(r.height() * eased)
+                            if apex_y < r.y():
+                                apex_y = r.y()
+                            if apex_y > bottom_y:
+                                apex_y = bottom_y
+                            apex_x = r.x() + r.width() // 2
+                            path.moveTo(x0, y0)
+                            path.lineTo(x1, y1)
+                            path.lineTo(apex_x, apex_y)
+                            path.closeSubpath()
+                        else:
+                            path = QPainterPath()
+
+                        if not path.isEmpty():
+                            p.setClipPath(path)
+                        else:
+                            p.setClipRect(reveal_rect)
+                    else:
+                        p.setClipRect(reveal_rect)
+
                     p.setOpacity(1.0)
                     p.drawPixmap(target, self._new)
                     p.restore()
@@ -96,8 +188,14 @@ class BlockPuzzleFlipTransition(BaseTransition):
     Blocks flip in random order with configurable timing.
     """
     
-    def __init__(self, duration_ms: int = 3000, grid_rows: int = 4, 
-                 grid_cols: int = 6, flip_duration_ms: int = 500):
+    def __init__(
+        self,
+        duration_ms: int = 3000,
+        grid_rows: int = 4,
+        grid_cols: int = 6,
+        flip_duration_ms: int = 500,
+        direction: Optional[SlideDirection] = None,
+    ) -> None:
         """
         Initialize block puzzle flip transition.
         
@@ -118,10 +216,11 @@ class BlockPuzzleFlipTransition(BaseTransition):
         self._blocks: List[FlipBlock] = []
         self._flip_order: List[int] = []
         self._current_flip_index = 0
-        self._timer: Optional[QTimer] = None  # legacy
-        self._flip_timer: Optional[QTimer] = None  # legacy
         self._animation_id: Optional[str] = None
         self._overlay: Optional[_BlockFlipWidget] = None
+        # Optional direction bias reused from the Slide direction model so
+        # blocks can flip in a wave from the chosen edge when configured.
+        self._direction: Optional[SlideDirection] = direction
         
         logger.debug(f"BlockPuzzleFlipTransition created (duration={duration_ms}ms, "
                     f"grid={grid_rows}x{grid_cols}, flip_duration={flip_duration_ms}ms)")
@@ -191,6 +290,7 @@ class BlockPuzzleFlipTransition(BaseTransition):
             if overlay is None or not isinstance(overlay, _BlockFlipWidget):
                 logger.debug("[SW BLOCK] Creating persistent QPainter overlay")
                 overlay = _BlockFlipWidget(widget, old_pixmap, new_pixmap, self._blocks)
+                setattr(overlay, "_direction", self._direction)
                 overlay.setGeometry(0, 0, width, height)
                 setattr(widget, "_srpss_sw_blockflip_overlay", overlay)
                 if self._resource_manager:
@@ -204,6 +304,7 @@ class BlockPuzzleFlipTransition(BaseTransition):
                 overlay._old = old_pixmap
                 overlay._new = new_pixmap
                 overlay.set_blocks(self._blocks)
+                setattr(overlay, "_direction", self._direction)
                 overlay.setGeometry(0, 0, width, height)
             
             # Show overlay
@@ -342,6 +443,48 @@ class BlockPuzzleFlipTransition(BaseTransition):
                 
                 rect = QRect(x, y, w, h)
                 block = FlipBlock(rect)
+
+                # Apply an optional direction bias so blocks begin flipping in
+                # a wave from the selected edge (Left/Right/Top/Bottom), while
+                # retaining slight jitter so the effect does not look overly
+                # mechanical. When no direction is configured we keep the
+                # original fully-random thresholds.
+                if self._direction is not None:
+                    base = 0.0
+                    # Horizontal bias (Left/Right)
+                    if self._direction == SlideDirection.LEFT:
+                        # "Left to Right" – start at the left edge.
+                        if effective_cols > 1:
+                            base = col / float(effective_cols - 1)
+                    elif self._direction == SlideDirection.RIGHT:
+                        # "Right to Left" – start at the right edge.
+                        if effective_cols > 1:
+                            base = (effective_cols - 1 - col) / float(effective_cols - 1)
+                    # Vertical bias (Top/Bottom)
+                    elif self._direction == SlideDirection.DOWN:
+                        # "Top to Bottom" – start at the top edge.
+                        if effective_rows > 1:
+                            base = row / float(effective_rows - 1)
+                    elif self._direction == SlideDirection.UP:
+                        # "Bottom to Top" – start at the bottom edge.
+                        if effective_rows > 1:
+                            base = (effective_rows - 1 - row) / float(effective_rows - 1)
+
+                    # Small jitter so neighbouring blocks do not all start at
+                    # exactly the same moment; scaled by grid density so the
+                    # wavefront remains visually coherent.
+                    span = max(effective_cols, effective_rows)
+                    jitter_span = 0.0
+                    if span > 0:
+                        jitter_span = 0.18 / float(span)
+                    if jitter_span > 0.0:
+                        base += random.uniform(-jitter_span, jitter_span)
+                    if base < 0.0:
+                        base = 0.0
+                    elif base > 1.0:
+                        base = 1.0
+                    block.start_threshold = base
+
                 self._blocks.append(block)
 
         # Ensure full coverage (edges clamped in creation)

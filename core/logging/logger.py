@@ -5,12 +5,24 @@ Uses rotating file handler with logs stored in logs/ directory.
 Includes colored console output for debug mode.
 """
 import logging
+import os
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 
 _VERBOSE: bool = False
+_PERF_METRICS_ENABLED: bool = True
+
+_env_perf = os.getenv("SRPSS_PERF_METRICS")
+if _env_perf is not None:
+    try:
+        if str(_env_perf).strip().lower() in ("0", "false", "off", "no"):
+            _PERF_METRICS_ENABLED = False
+        elif str(_env_perf).strip().lower() in ("1", "true", "on", "yes"):
+            _PERF_METRICS_ENABLED = True
+    except Exception:
+        _PERF_METRICS_ENABLED = True
 
 
 class ColoredFormatter(logging.Formatter):
@@ -204,7 +216,7 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
             selected modules (media widget polling, raw settings dumps,
             etc.). Verbose mode also implies debug-level logging.
     """
-    global _VERBOSE
+    global _VERBOSE, _PERF_METRICS_ENABLED
 
     debug_enabled = debug or verbose
     # Create logs directory. In frozen builds (Nuitka/PyInstaller) we prefer
@@ -222,6 +234,18 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
             exe_path = Path(getattr(_sys, "executable", "") or "")
             if exe_path.exists():
                 base_dir = exe_path.parent
+                try:
+                    cfg_name = exe_path.stem + ".perf.cfg"
+                    cfg_path = exe_path.parent / cfg_name
+                    if cfg_path.exists():
+                        raw = cfg_path.read_text(encoding="utf-8").strip().lower()
+                        if raw in ("0", "false", "off", "no"):
+                            _PERF_METRICS_ENABLED = False
+                        elif raw in ("1", "true", "on", "yes"):
+                            _PERF_METRICS_ENABLED = True
+                except Exception:
+                    # On any failure, keep existing _PERF_METRICS_ENABLED value.
+                    pass
     except Exception:
         pass
 
@@ -316,3 +340,9 @@ def is_verbose_logging() -> bool:
     """Return True when verbose debug logging is enabled globally."""
 
     return _VERBOSE
+
+
+def is_perf_metrics_enabled() -> bool:
+    """Return True when PERF metrics/telemetry are enabled globally."""
+
+    return _PERF_METRICS_ENABLED
