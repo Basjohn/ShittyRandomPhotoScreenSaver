@@ -707,6 +707,51 @@ pytest tests/ --tb=short || exit 1
 
 ---
 
+### 24. `tests/test_spotify_visualizer_widget.py` – Spotify Beat Visualiser
+
+**Module Purpose**: Guard the architecture and basic performance characteristics of the Spotify Beat Visualiser after the GL compositor move and beat-pipeline refactor.
+
+**Test Count**: 2 tests  
+**Status**: ✅ All passing
+
+**Critical Tests:**
+- `test_spotify_visualizer_tick_uses_compute_bars` – Confirms `SpotifyVisualizerWidget._on_tick` consumes `_AudioFrame` objects from the shared `TripleBuffer` and delegates bar computation to `SpotifyVisualizerAudioWorker.compute_bars_from_samples`, enforcing that FFT/band mapping lives in the measured UI tick path rather than the high-frequency audio callback.
+- `test_spotify_visualizer_compute_bars_reasonable_runtime` – Coarse runtime regression guard for `compute_bars_from_samples`: repeatedly computes bars for random audio samples and asserts the batch finishes within a generous time bound, catching accidental GIL-heavy work migrating into per-sample Python loops.
+
+**Purpose**: Provide a focused regression harness for the Spotify beat pipeline so future refactors cannot silently reintroduce the “Spotify playing → transitions collapse to ~20 FPS” choke.
+
+---
+
+### 25. `tests/test_overlay_timers.py` – Overlay Timer Helpers
+
+**Module Purpose**: Validate centralised overlay timer creation for widgets using `widgets.overlay_timers`.
+
+**Test Count**: 2 tests  
+**Status**: ✅ All passing
+
+**Critical Tests:**
+- `test_overlay_timer_uses_thread_manager_when_available` – Ensures `create_overlay_timer` calls `ThreadManager.schedule_recurring(...)` when a `_thread_manager` is present and that `OverlayTimerHandle` correctly reflects active/stop state.
+- `test_overlay_timer_falls_back_to_qtimer_without_thread_manager` – Ensures a widget-local `QTimer` is used when no `ThreadManager` is available and that the timer fires at least once before being stopped via the handle.
+
+**Purpose**: Lock in the centralised timer architecture for overlay widgets so future refactors cannot silently reintroduce orphan QTimers that bypass ThreadManager/ResourceManager tracking.
+
+---
+
+### 26. `tests/test_logging_console_encoding.py` – Console Encoding Robustness
+
+**Module Purpose**: Guard against `UnicodeEncodeError` from console handlers on narrow encodings while preserving rich Unicode output in file logs.
+
+**Test Count**: 2 tests  
+**Status**: ✅ All passing
+
+**Critical Tests:**
+- `test_console_handler_replaces_unencodable_characters_narrow_encodings` – Simulates cp1252/latin-1 console streams and asserts that `SuppressingStreamHandler` degrades arrows/emoji into replacement characters instead of raising when the console cannot represent them.
+- `test_console_handler_preserves_unicode_on_utf8_console` – Asserts that UTF-8 console streams still display the full Unicode message with no replacement, keeping debug readability high on modern terminals.
+
+**Purpose**: Provide a regression harness for the console encoding roadmap item so future logging changes cannot reintroduce cp1252 `UnicodeEncodeError` issues during interactive debug sessions.
+
+---
+
 ## Test Summary
 
 **Current Status** (Nov 6, 2025 - Integration Tests Added):

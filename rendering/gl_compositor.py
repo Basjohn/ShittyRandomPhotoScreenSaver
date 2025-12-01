@@ -19,7 +19,7 @@ import math
 import ctypes
 
 from PySide6.QtCore import Qt, QPoint, QRect
-from PySide6.QtGui import QPainter, QPixmap, QRegion, QImage
+from PySide6.QtGui import QPainter, QPixmap, QRegion, QImage, QColor
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
@@ -768,6 +768,13 @@ class GLCompositorWidget(QOpenGLWidget):
         if not new_pixmap or new_pixmap.isNull():
             logger.error("[GL COMPOSITOR] Invalid new pixmap for shooting stars")
             return None
+
+        # The user has elected to fully retire the Shooting Stars / Claw Marks
+        # effect. The GLSL claws path is therefore hard-disabled and callers
+        # are expected to fall back to a compositor/crossfade implementation
+        # when this method returns ``None``.
+        logger.debug("[GL SHADER] Shooting Stars shader path disabled; using safe fallback")
+        return None
 
         # Only use this path when the GLSL pipeline and claws shader are
         # actually available. Callers are expected to fall back to the
@@ -2571,6 +2578,50 @@ class GLCompositorWidget(QOpenGLWidget):
                     fmt.swapInterval(),
                 )
 
+            # Log adapter information and detect obvious software GL drivers so
+            # shader-backed paths can be disabled proactively. QPainter-based
+            # compositor transitions remain available as the safe fallback.
+            if gl is not None:
+                try:
+                    vendor_bytes = gl.glGetString(gl.GL_VENDOR)
+                    renderer_bytes = gl.glGetString(gl.GL_RENDERER)
+                    version_bytes = gl.glGetString(gl.GL_VERSION)
+
+                    def _decode_gl_string(val: object) -> str:
+                        if isinstance(val, (bytes, bytearray)):
+                            try:
+                                return val.decode("ascii", "ignore")
+                            except Exception:
+                                return ""
+                        return str(val) if val is not None else ""
+
+                    vendor = _decode_gl_string(vendor_bytes)
+                    renderer = _decode_gl_string(renderer_bytes)
+                    version_str = _decode_gl_string(version_bytes)
+                    logger.info(
+                        "[GL COMPOSITOR] OpenGL adapter: vendor=%s, renderer=%s, version=%s",
+                        vendor or "?",
+                        renderer or "?",
+                        version_str or "?",
+                    )
+
+                    combo = f"{vendor} {renderer}".lower()
+                    software_markers = (
+                        "gdi generic",
+                        "microsoft basic render driver",
+                        "software rasterizer",
+                        "llvmpipe",
+                    )
+                    if any(m in combo for m in software_markers):
+                        logger.warning(
+                            "[GL COMPOSITOR] Software OpenGL implementation detected; "
+                            "disabling shader pipeline for this session"
+                        )
+                        self._gl_disabled_for_session = True
+                        self._use_shaders = False
+                except Exception:
+                    logger.debug("[GL COMPOSITOR] Failed to query OpenGL adapter strings", exc_info=True)
+
             # Prepare an empty pipeline container tied to this context and, if
             # possible, compile the shared card-flip shader program and quad
             # geometry. The pipeline remains disabled for rendering until
@@ -4199,6 +4250,72 @@ void main() {
             gl.glActiveTexture(gl.GL_TEXTURE0)
             gl.glUseProgram(0)
 
+    def _paint_debug_overlay(self, painter: QPainter) -> None:
+        if not is_perf_metrics_enabled():
+            return
+
+        active_label = None
+        line1 = ""
+        line2 = ""
+
+        if (
+            self._slide is not None
+            and self._slide_profile_start_ts is not None
+            and self._slide_profile_last_ts is not None
+            and self._slide_profile_frame_count > 0
+        ):
+            elapsed = self._slide_profile_last_ts - self._slide_profile_start_ts
+            if elapsed > 0.0:
+                fps = self._slide_profile_frame_count / elapsed
+                active_label = "Slide"
+                line1 = f"{active_label} t={self._slide.progress:.2f}"
+                dt_min_ms = self._slide_profile_min_dt * 1000.0 if self._slide_profile_min_dt > 0.0 else 0.0
+                dt_max_ms = self._slide_profile_max_dt * 1000.0 if self._slide_profile_max_dt > 0.0 else 0.0
+                line2 = f"{fps:.1f} fps  dt_min={dt_min_ms:.1f}ms  dt_max={dt_max_ms:.1f}ms"
+
+        if (
+            active_label is None
+            and self._wipe is not None
+            and self._wipe_profile_start_ts is not None
+            and self._wipe_profile_last_ts is not None
+            and self._wipe_profile_frame_count > 0
+        ):
+            elapsed = self._wipe_profile_last_ts - self._wipe_profile_start_ts
+            if elapsed > 0.0:
+                fps = self._wipe_profile_frame_count / elapsed
+                active_label = "Wipe"
+                line1 = f"{active_label} t={self._wipe.progress:.2f}"
+                dt_min_ms = self._wipe_profile_min_dt * 1000.0 if self._wipe_profile_min_dt > 0.0 else 0.0
+                dt_max_ms = self._wipe_profile_max_dt * 1000.0 if self._wipe_profile_max_dt > 0.0 else 0.0
+                line2 = f"{fps:.1f} fps  dt_min={dt_min_ms:.1f}ms  dt_max={dt_max_ms:.1f}ms"
+
+        if not active_label:
+            return
+
+        painter.save()
+        try:
+            text = line1 if not line2 else line1 + "\n" + line2
+            fm = painter.fontMetrics()
+            lines = text.split("\n")
+            max_width = 0
+            for s in lines:
+                w = fm.horizontalAdvance(s)
+                if w > max_width:
+                    max_width = w
+            line_height = fm.height()
+            margin = 6
+            rect_height = line_height * len(lines) + margin * 2
+            rect_width = max_width + margin * 2
+            rect = QRect(margin, margin, rect_width, rect_height)
+            painter.fillRect(rect, QColor(0, 0, 0, 160))
+            painter.setPen(Qt.GlobalColor.white)
+            y = margin + fm.ascent()
+            for s in lines:
+                painter.drawText(margin + 4, y, s)
+                y += line_height
+        finally:
+            painter.restore()
+
     def paintGL(self) -> None:  # type: ignore[override]
         target = self.rect()
 
@@ -4448,6 +4565,7 @@ void main() {
                     painter.restore()
 
                     y += band_height
+                self._paint_debug_overlay(painter)
                 return
 
             # If a block spin is active and the GLSL path is unavailable, fall
@@ -4465,10 +4583,12 @@ void main() {
                 if t <= 0.0:
                     painter.setOpacity(1.0)
                     painter.drawPixmap(target, st.old_pixmap)
+                    self._paint_debug_overlay(painter)
                     return
                 if t >= 1.0:
                     painter.setOpacity(1.0)
                     painter.drawPixmap(target, st.new_pixmap)
+                    self._paint_debug_overlay(painter)
                     return
 
                 painter.setOpacity(1.0)
@@ -4493,6 +4613,7 @@ void main() {
                     painter.setOpacity(1.0)
                     painter.drawPixmap(target, st.new_pixmap)
                     painter.restore()
+                self._paint_debug_overlay(painter)
                 return
 
             # If a blinds transition is active, draw old fully and new clipped
@@ -4509,6 +4630,7 @@ void main() {
                     painter.setOpacity(1.0)
                     painter.drawPixmap(target, st.new_pixmap)
                     painter.restore()
+                self._paint_debug_overlay(painter)
                 return
 
             if self._diffuse is not None:
@@ -4546,6 +4668,7 @@ void main() {
                         painter.setOpacity(1.0)
                         painter.drawPixmap(target, st.new_pixmap)
                         painter.restore()
+                self._paint_debug_overlay(painter)
                 return
 
             # If a slide is active, draw both images at interpolated positions.
@@ -4572,6 +4695,7 @@ void main() {
                     painter.setOpacity(1.0)
                     new_rect = QRect(new_pos.x(), new_pos.y(), w, h)
                     painter.drawPixmap(new_rect, st.new_pixmap)
+                self._paint_debug_overlay(painter)
                 return
 
             # If a crossfade is active, draw old + new with interpolated opacity.
@@ -4583,6 +4707,7 @@ void main() {
                 if cf.new_pixmap and not cf.new_pixmap.isNull():
                     painter.setOpacity(cf.progress)
                     painter.drawPixmap(target, cf.new_pixmap)
+                self._paint_debug_overlay(painter)
                 return
 
             # No active transition -> draw base pixmap if present.
@@ -4592,5 +4717,7 @@ void main() {
             else:
                 # As a last resort, fill black.
                 painter.fillRect(target, Qt.GlobalColor.black)
+
+            self._paint_debug_overlay(painter)
         finally:
             painter.end()

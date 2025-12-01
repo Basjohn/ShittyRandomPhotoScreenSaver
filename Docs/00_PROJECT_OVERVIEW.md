@@ -61,6 +61,29 @@ Build a modern, feature-rich Windows screensaver application using PySide6 that 
 - **Threading**: Lock-free concurrent architecture
 - **Platform**: Windows 11
 
+## Rendering Architecture & Performance
+
+- **Single GL Compositor per display**
+  - Each display hosts one `GLCompositorWidget` that renders the base image and all GL-backed transitions (Slide, Wipe, Peel, Block Puzzle Flip, Ripple/Raindrops, Warp Dissolve, Shuffle, GL Crossfade).
+  - Legacy per-transition GL overlay widgets are being retired in favour of this single compositor surface.
+
+- **CPU fallbacks remain authoritative**
+  - CPU Crossfade/Slide/Wipe/Diffuse remain the safe fallback paths when GL or the compositor is unavailable for a session.
+  - If a shader-backed transition fails, only the shader path is disabled for that run; composited QPainter transitions continue to render.
+
+- **Claw Marks / Shooting Stars status**
+  - The GLSL Shooting Stars / Claw Marks transition has been evaluated and removed from the active transition pool.
+  - Its shader path is hard-disabled in the compositor; any legacy requests for this transition are routed through a safe Crossfade.
+
+- **Shuffle shader regression handling**
+  - The experimental GLSL Shuffle path is currently disabled due to visual/regression issues.
+  - Shuffle continues to run via the compositor-backed diffuse/QRegion implementation while the shader is refactored or formally retired.
+
+- **PERF metrics and on-screen overlay**
+  - GL and animation timing are tracked via `[PERF] [GL COMPOSITOR]` and `[PERF] [ANIM]` log lines (duration, frames, avg_fps, dt_min/max, size).
+  - A small optional on-screen FPS/debug overlay is available in the compositor to visualise real frame pacing during development.
+  - All PERF logging and the overlay are gated by the global performance toggle so production builds can disable this instrumentation entirely.
+
 ## Quality Assurance
 - Unit tests for all core modules
 - Logging-first policy (terminal output unreliable)

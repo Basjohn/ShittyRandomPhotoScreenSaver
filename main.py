@@ -11,7 +11,7 @@ from enum import Enum
 from PySide6.QtWidgets import QApplication, QMessageBox
 from PySide6.QtCore import Qt, QCoreApplication
 from PySide6.QtGui import QSurfaceFormat, QImageReader, QIcon
-from core.logging.logger import setup_logging, get_logger
+from core.logging.logger import setup_logging, get_logger, get_log_dir
 from core.settings.settings_manager import SettingsManager
 from core.animation import AnimationManager
 from engine.screensaver_engine import ScreensaverEngine
@@ -378,11 +378,41 @@ def main():
     try:
         if mode == ScreensaverMode.RUN:
             logger.info("Starting screensaver in RUN mode")
-            exit_code = run_screensaver(app)
+            profile_flag = os.getenv("SRPSS_PROFILE_CPU", "").strip().lower()
+            if profile_flag in ("1", "true", "on", "yes"):
+                import cProfile
+
+                profiler = cProfile.Profile()
+                profiler.enable()
+                exit_code = run_screensaver(app)
+                profiler.disable()
+                try:
+                    profile_path = get_log_dir() / "screensaver_run.pstats"
+                    profiler.dump_stats(str(profile_path))
+                    logger.info("[PERF] [CPU] cProfile stats written to %s", profile_path)
+                except Exception:
+                    logger.debug("[PERF] [CPU] Failed to write cProfile stats", exc_info=True)
+            else:
+                exit_code = run_screensaver(app)
             
         elif mode == ScreensaverMode.CONFIG:
             logger.info("Starting configuration dialog")
-            exit_code = run_config(app)
+            profile_flag = os.getenv("SRPSS_PROFILE_CPU", "").strip().lower()
+            if profile_flag in ("1", "true", "on", "yes"):
+                import cProfile
+
+                profiler = cProfile.Profile()
+                profiler.enable()
+                exit_code = run_config(app)
+                profiler.disable()
+                try:
+                    profile_path = get_log_dir() / "screensaver_config.pstats"
+                    profiler.dump_stats(str(profile_path))
+                    logger.info("[PERF] [CPU] cProfile stats written to %s", profile_path)
+                except Exception:
+                    logger.debug("[PERF] [CPU] Failed to write cProfile stats", exc_info=True)
+            else:
+                exit_code = run_config(app)
             
         elif mode == ScreensaverMode.PREVIEW:
             logger.info(f"Starting preview mode (hwnd={preview_hwnd})")

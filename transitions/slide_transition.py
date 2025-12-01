@@ -91,6 +91,9 @@ class SlideTransition(BaseTransition):
                 self._show_image_immediately()
                 return True
             
+            # Begin telemetry tracking for animated slide
+            self._mark_start()
+
             # Get widget dimensions
             width = widget.width()
             height = widget.height()
@@ -331,6 +334,8 @@ class SlideTransition(BaseTransition):
         except Exception:
             pass
         logger.debug("Slide animation finished")
+        # End telemetry tracking for successful completion
+        self._mark_end()
         self._set_state(TransitionState.FINISHED)
         self._emit_progress(1.0)
         self.finished.emit()

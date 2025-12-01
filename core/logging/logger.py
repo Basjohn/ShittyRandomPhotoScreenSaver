@@ -13,6 +13,10 @@ from pathlib import Path
 
 _VERBOSE: bool = False
 _PERF_METRICS_ENABLED: bool = True
+# Base directory for logs and related artefacts. This is initialised to the
+# project root by default and updated by setup_logging() for frozen builds so
+# helpers like get_log_dir() always point at the effective runtime location.
+_BASE_DIR: Path = Path(__file__).parent.parent.parent
 
 _env_perf = os.getenv("SRPSS_PERF_METRICS")
 if _env_perf is not None:
@@ -107,7 +111,7 @@ class SuppressingStreamHandler(logging.StreamHandler):
     def _emit_with_suppression(self, record: logging.LogRecord) -> None:
         if record.levelno >= logging.WARNING:
             self._flush_summary()
-            super().emit(record)
+            self._emit_record(record)
             self._last_name = None
             self._last_level = None
             self._suppress_count = 0
@@ -123,7 +127,7 @@ class SuppressingStreamHandler(logging.StreamHandler):
 
         if "🔴" in msg_text or "Initializing Screensaver Engine" in msg_text:
             self._flush_summary()
-            super().emit(record)
+            self._emit_record(record)
             self._last_name = name
             self._last_level = level
             self._suppress_count = 0
@@ -131,7 +135,7 @@ class SuppressingStreamHandler(logging.StreamHandler):
             return
 
         if self._last_name is None:
-            super().emit(record)
+            self._emit_record(record)
             self._last_name = name
             self._last_level = level
             self._suppress_count = 0
@@ -145,11 +149,48 @@ class SuppressingStreamHandler(logging.StreamHandler):
             return
 
         self._flush_summary()
-        super().emit(record)
+        self._emit_record(record)
         self._last_name = name
         self._last_level = level
         self._suppress_count = 0
         self._last_record = record
+
+    def _emit_record(self, record: logging.LogRecord) -> None:
+        """Emit a single record to the underlying stream with Unicode-safe fallback.
+
+        File handlers always receive the original record; this handler is only
+        responsible for console output. When the console encoding cannot represent
+        some characters (e.g. Windows cp1252 vs arrows/emoji), we degrade the
+        console line using replacement characters instead of raising a logging
+        error while keeping file logs intact.
+        """
+
+        try:
+            msg = self.format(record)
+            stream = self.stream
+            if stream is None:
+                return
+            text = msg + self.terminator
+            try:
+                stream.write(text)
+            except UnicodeEncodeError:
+                try:
+                    encoding = getattr(stream, "encoding", None) or "ascii"
+                    safe_text = text.encode(encoding, errors="replace").decode(
+                        encoding, errors="replace"
+                    )
+                    stream.write(safe_text)
+                except Exception:
+                    # As a last resort, drop the console write; file logs still
+                    # contain the full Unicode record.
+                    return
+            try:
+                stream.flush()
+            except Exception:
+                # Ignore flush errors for console output.
+                pass
+        except Exception:
+            self.handleError(record)
 
     def _flush_summary(self) -> None:
         if self._suppress_count <= 0 or self._last_record is None:
@@ -206,6 +247,17 @@ class SuppressingStreamHandler(logging.StreamHandler):
             super().close()
 
 
+def get_log_dir() -> Path:
+    """Return the directory used for log files.
+
+    setup_logging() should be called once at startup so that _BASE_DIR is
+    updated for frozen builds and the returned path matches the location used
+    by the active RotatingFileHandler.
+    """
+
+    return _BASE_DIR / "logs"
+
+
 def setup_logging(debug: bool = False, verbose: bool = False) -> None:
     """
     Configure application logging with file rotation.
@@ -221,7 +273,9 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
     debug_enabled = debug or verbose
     # Create logs directory. In frozen builds (Nuitka/PyInstaller) we prefer
     # a logs/ directory next to the executable so users can easily find it.
-    base_dir = Path(__file__).parent.parent.parent
+    global _VERBOSE, _PERF_METRICS_ENABLED, _BASE_DIR
+
+    base_dir = _BASE_DIR
     try:
         import sys as _sys
         import builtins as _builtins
@@ -249,7 +303,11 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
     except Exception:
         pass
 
-    log_dir = base_dir / "logs"
+    # Persist the resolved base_dir so helpers like get_log_dir() can return
+    # a consistent location for logs and profiling artefacts.
+    _BASE_DIR = base_dir
+
+    log_dir = get_log_dir()
     log_dir.mkdir(exist_ok=True)
     
     log_file = log_dir / "screensaver.log"

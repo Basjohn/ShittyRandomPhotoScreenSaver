@@ -46,12 +46,14 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - Creates transitions based on settings (CPU, legacy GL overlays, and compositor-backed GL variants, including GL-only Blinds when HW accel is enabled).
   - Injects shared ResourceManager into transitions; seeds base pixmap pre/post transition and on startup to avoid black frames (wallpaper snapshot seeding + previous-pixmap fallback)
   - Uses lazy GL overlay initialization via `overlay_manager.prepare_gl_overlay` instead of a global startup prewarm; manages widgets Z-order, logs per-stage telemetry, handles transition watchdog timers
- - rendering/gl_compositor.py
+- rendering/gl_compositor.py
   - `GLCompositorWidget`: single per-display GL surface responsible for drawing the base image and all compositor-backed GL transitions (Crossfade, Slide, Wipe, Block Puzzle Flip, Blinds, Diffuse, plus the GL-only Peel, 3D Block Spins, Rain Drops, Warp Dissolve, Shuffle).
   - Hosts the Route 3 GLSL shader pipeline (OpenGL 4.1+ via PyOpenGL when available), including a shared card-flip program and geometry for both a fullscreen quad and a dedicated 3D box mesh. The pipeline currently powers the 3D Block Spins slab shader and the initial Warp Dissolve / Ripple (Rain Drops) effects; the BlockSpin shader path renders the image as a thin depth-tested slab (front/back/side faces) with neutral glass edges and specular highlights using this box mesh.
   - Owns the GLSL program/geometry state in a private pipeline container and exposes `cleanup()` to tear down programs, buffers, and Block Spins textures; `DisplayWidget` calls this from its destruction path so ResourceManager-driven shutdown leaves no dangling GL objects.
   - Maintains lightweight per-transition state dataclasses (CrossfadeState, SlideState, WipeState, BlockFlipState, BlockSpinState, BlindsState, DiffuseState, PeelState, WarpState) and exposes `start_*` helpers driven by the shared AnimationManager.
   - Legacy per-transition GL overlays remain supported but new GL-only transitions route through this compositor instead of creating additional `QOpenGLWidget` instances.
+  - On `initializeGL`, logs the OpenGL adapter vendor/renderer/version and disables the shader pipeline for obvious software GL implementations (for example, GDI Generic, Microsoft Basic Render Driver, llvmpipe), keeping compositor QPainter transitions and CPU fallbacks as the safe paths on those stacks.
+  - When PERF metrics are enabled (`core.logging.logger.is_perf_metrics_enabled()` / `PERF_METRICS_ENABLED`), emits `[PERF] [GL COMPOSITOR] <Name> metrics` summary lines for compositor-driven transitions and can optionally draw a small FPS/debug overlay for Slide/Wipe-style effects; both are disabled entirely when PERF metrics are turned off in retail builds.
 - rendering/image_processor.py
   - Scaling/cropping for FILL/FIT/SHRINK, optional Lanczos via PIL
 - rendering/display_modes.py
@@ -80,9 +82,9 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - transitions/gl_compositor_warp_transition.py
   - Compositor-backed GL-only Warp Dissolve transition using a banded horizontal warp of the old image over a stable new image.
 - transitions/gl_compositor_clawmarks_transition.py
-  - Compositor-backed GL-only Claw Marks transition using a handful of diagonal scratch-like bands via the diffuse region API.
+  - Legacy compositor-backed GL-only Claw Marks / Shooting Stars transition. This effect has been removed from the active transition pool and its GLSL "claws" shader path is hard-disabled; the module is kept only as a reference and any legacy requests are mapped to a safe Crossfade-style fallback instead of a dedicated Claw transition.
 - transitions/gl_compositor_shuffle_transition.py
-  - Compositor-backed GL-only Shuffle transition: blocks of the new image slide in from a chosen/random edge using a moving diffuse region.
+  - Compositor-backed GL-only Shuffle transition: blocks of the new image slide in from a chosen/random edge using a moving diffuse region. The controller also hosts an experimental GLSL Shuffle mask shader which is currently disabled due to visual regression; the compositor diffuse-region implementation remains the production Shuffle path.
 
 ## Sources
 - sources/base_provider.py

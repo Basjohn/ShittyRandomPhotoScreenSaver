@@ -3,13 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional
 import platform
+import time
 
 from PySide6.QtCore import QObject, QRect, Qt
 from PySide6.QtGui import QColor, QPainter, QPaintEvent
 from PySide6.QtWidgets import QWidget
 from shiboken6 import Shiboken
 
-from core.logging.logger import get_logger, is_verbose_logging
+from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.threading.manager import ThreadManager
 from utils.lockfree import TripleBuffer
 from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
@@ -19,8 +20,8 @@ logger = get_logger(__name__)
 
 
 @dataclass
-class _BarFrame:
-    values: List[float]
+class _AudioFrame:
+    samples: object
 
 
 class SpotifyVisualizerAudioWorker(QObject):
@@ -30,7 +31,7 @@ class SpotifyVisualizerAudioWorker(QObject):
     bar magnitudes into a lock-free TripleBuffer for UI consumption.
     """
 
-    def __init__(self, bar_count: int, buffer: TripleBuffer[_BarFrame], parent: Optional[QObject] = None) -> None:
+    def __init__(self, bar_count: int, buffer: TripleBuffer[_AudioFrame], parent: Optional[QObject] = None) -> None:
         super().__init__(parent)
         self._bar_count = max(1, int(bar_count))
         self._buffer = buffer
@@ -146,9 +147,10 @@ class SpotifyVisualizerAudioWorker(QObject):
                                             peak = float(np_mod.max(np_mod.abs(mono))) if mono.size else 0.0
                                         except Exception:
                                             peak = 0.0
-                                    fft = np_mod.abs(np_mod.fft.rfft(mono))
-                                    bars = self._fft_to_bars(fft)
-                                    self._buffer.publish(_BarFrame(values=bars))
+                                    if mono.size > 2048:
+                                        mono = mono[-2048:]
+                                    mono = mono.astype(np_mod.float32, copy=False)
+                                    self._buffer.publish(_AudioFrame(samples=mono.copy()))
                                     if is_verbose_logging():
                                         try:
                                             logger.debug(
@@ -306,9 +308,10 @@ class SpotifyVisualizerAudioWorker(QObject):
                                         peak = float(np.max(np.abs(mono))) if mono.size else 0.0
                                     except Exception:
                                         peak = 0.0
-                                fft = np.abs(np.fft.rfft(mono))
-                                bars = self._fft_to_bars(fft)
-                                self._buffer.publish(_BarFrame(values=bars))
+                                if mono.size > 2048:
+                                    mono = mono[-2048:]
+                                mono = mono.astype("float32", copy=False)
+                                self._buffer.publish(_AudioFrame(samples=mono.copy()))
                                 if is_verbose_logging():
                                     try:
                                         logger.debug(
@@ -488,9 +491,10 @@ class SpotifyVisualizerAudioWorker(QObject):
                         peak = float(np.max(np.abs(mono))) if mono.size else 0.0
                     except Exception:
                         peak = 0.0
-                fft = np.abs(np.fft.rfft(mono))
-                bars = self._fft_to_bars(fft)
-                self._buffer.publish(_BarFrame(values=bars))
+                if mono.size > 2048:
+                    mono = mono[-2048:]
+                mono = mono.astype("float32", copy=False)
+                self._buffer.publish(_AudioFrame(samples=mono.copy()))
                 # Only log if verbose so the callback stays cheap.
                 if is_verbose_logging():
                     try:
@@ -783,6 +787,44 @@ class SpotifyVisualizerAudioWorker(QObject):
         arr = np.clip(arr, 0.0, 1.0)
         return [float(x) for x in arr.tolist()]
 
+    def compute_bars_from_samples(self, samples) -> Optional[List[float]]:
+        np_mod = self._np
+        if np_mod is None or samples is None:
+            return None
+        try:
+            mono = samples
+            if hasattr(mono, "ndim") and mono.ndim > 1:
+                try:
+                    mono = mono.reshape(-1)
+                except Exception:
+                    return None
+            try:
+                mono = mono.astype("float32", copy=False)
+            except Exception:
+                pass
+            size = getattr(mono, "size", 0)
+            if size <= 0:
+                return None
+            if size > 2048:
+                mono = mono[-2048:]
+            fft = np_mod.abs(np_mod.fft.rfft(mono))
+            bars = self._fft_to_bars(fft)
+            if not isinstance(bars, list):
+                return None
+            target = int(self._bar_count)
+            if target <= 0:
+                return None
+            if len(bars) != target:
+                if len(bars) < target:
+                    bars = bars + [0.0] * (target - len(bars))
+                else:
+                    bars = bars[:target]
+            return [max(0.0, min(1.0, float(v))) for v in bars]
+        except Exception:
+            if is_verbose_logging():
+                logger.debug("[SPOTIFY_VIS] compute_bars_from_samples failed", exc_info=True)
+            return None
+
 
 class SpotifyVisualizerWidget(QWidget):
     """Thin bar visualizer card paired with the Spotify media widget.
@@ -823,11 +865,39 @@ class SpotifyVisualizerWidget(QWidget):
         self._has_seen_media: bool = False
 
         # Lock-free bar frame buffer shared with audio worker
-        self._bars_buffer: TripleBuffer[_BarFrame] = TripleBuffer()
+        self._bars_buffer: TripleBuffer[_AudioFrame] = TripleBuffer()
         self._audio_worker = SpotifyVisualizerAudioWorker(self._bar_count, self._bars_buffer, parent=self)
+
+        # Background FFT/band-mapping pipeline (compute thread). The audio
+        # worker publishes raw mono samples into _bars_buffer; a compute
+        # task turns those into bar magnitudes and publishes them here so
+        # the UI tick only performs lightweight smoothing and painting.
+        self._bars_result_buffer: TripleBuffer[List[float]] = TripleBuffer()
+        self._compute_task_active: bool = False
 
         self._enabled: bool = False
         self._paint_debug_logged: bool = False
+
+        # Lightweight PERF profiling state for widget activity so we can
+        # correlate Spotify playing state with Transition/FPS behaviour.
+        self._perf_tick_start_ts: Optional[float] = None
+        self._perf_tick_last_ts: Optional[float] = None
+        self._perf_tick_frame_count: int = 0
+        self._perf_tick_min_dt: float = 0.0
+        self._perf_tick_max_dt: float = 0.0
+
+        self._perf_paint_start_ts: Optional[float] = None
+        self._perf_paint_last_ts: Optional[float] = None
+        self._perf_paint_frame_count: int = 0
+        self._perf_paint_min_dt: float = 0.0
+        self._perf_paint_max_dt: float = 0.0
+
+        # Last time we emitted a PERF snapshot while running. This allows us
+        # to log Spotify visualiser activity periodically even if the widget
+        # is never explicitly stopped/cleaned up (for example, if the
+        # screensaver exits abruptly), so logs still capture its effective
+        # update/paint rate alongside compositor and animation metrics.
+        self._perf_last_log_ts: Optional[float] = None
 
         # Geometry cache for paintEvent to avoid per-frame recomputation of
         # bar/segment layout. Rebuilt on resize or when bar_count/segments
@@ -989,6 +1059,11 @@ class SpotifyVisualizerWidget(QWidget):
             pass
         self._bars_timer = None
 
+        # Emit a concise PERF summary for this widget's activity during the
+        # last enabled period so we can see its effective update/paint rate
+        # and dt jitter alongside compositor and animation metrics.
+        self._log_perf_snapshot(reset=True)
+
         try:
             self.hide()
         except Exception:
@@ -1129,29 +1204,74 @@ class SpotifyVisualizerWidget(QWidget):
         if not self._enabled:
             return
 
-        with profile("SPOTIFY_VIS_TICK", threshold_ms=5.0, log_level="DEBUG"):
-            frame = self._bars_buffer.consume_latest()
-            if frame is not None and isinstance(frame.values, list):
-                vals = frame.values
-                if len(vals) != self._bar_count:
-                    if len(vals) < self._bar_count:
-                        vals = vals + [0.0] * (self._bar_count - len(vals))
-                    else:
-                        vals = vals[: self._bar_count]
-                self._target_bars = [max(0.0, min(1.0, float(v))) for v in vals]
-                if is_verbose_logging():
-                    try:
-                        logger.debug(
-                            "[SPOTIFY_VIS] _on_tick: received frame (min=%.4f, max=%.4f)",
-                            min(self._target_bars) if self._target_bars else 0.0,
-                            max(self._target_bars) if self._target_bars else 0.0,
-                        )
-                    except Exception:
-                        pass
+        if is_perf_metrics_enabled():
+            try:
+                now = time.time()
+                if self._perf_tick_start_ts is None:
+                    self._perf_tick_start_ts = now
+                if self._perf_tick_last_ts is not None:
+                    dt = now - self._perf_tick_last_ts
+                    if dt > 0.0:
+                        if self._perf_tick_min_dt == 0.0 or dt < self._perf_tick_min_dt:
+                            self._perf_tick_min_dt = dt
+                        if dt > self._perf_tick_max_dt:
+                            self._perf_tick_max_dt = dt
+                self._perf_tick_last_ts = now
+                self._perf_tick_frame_count += 1
 
+                # Periodically emit a PERF snapshot while running so that
+                # logs capture the visualiser's effective tick/paint rate
+                # even if the widget is never explicitly stopped.
+                if self._perf_last_log_ts is None or (now - self._perf_last_log_ts) >= 5.0:
+                    self._log_perf_snapshot(reset=False)
+                    self._perf_last_log_ts = now
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Tick PERF accounting failed", exc_info=True)
+
+        tm = self._thread_manager
+
+        with profile("SPOTIFY_VIS_TICK", threshold_ms=5.0, log_level="DEBUG"):
+            # 1) Consume latest raw audio frame and either schedule a
+            #    compute task (normal path) or compute inline (fallback
+            #    when no ThreadManager is available, e.g. in tests).
+            frame = self._bars_buffer.consume_latest()
+            if frame is not None:
+                samples = getattr(frame, "samples", None)
+                if samples is not None:
+                    if tm is not None:
+                        if not getattr(self, "_compute_task_active", False):
+                            self._schedule_compute_bars_task(samples)
+                    else:
+                        bars = self._audio_worker.compute_bars_from_samples(samples)
+                        if isinstance(bars, list):
+                            self._target_bars = bars
+                            if is_verbose_logging():
+                                try:
+                                    logger.debug(
+                                        "[SPOTIFY_VIS] _on_tick: received frame (min=%.4f, max=%.4f)",
+                                        min(self._target_bars) if self._target_bars else 0.0,
+                                        max(self._target_bars) if self._target_bars else 0.0,
+                                    )
+                                except Exception:
+                                    pass
+
+            # 2) When running with a ThreadManager, prefer bars produced
+            #    by the compute task so the UI tick remains lightweight.
+            if tm is not None:
+                try:
+                    bars_from_compute = self._bars_result_buffer.consume_latest()
+                except Exception:
+                    bars_from_compute = None
+                if isinstance(bars_from_compute, list):
+                    self._target_bars = bars_from_compute
+
+            # 3) Spotify state gating – drive bars towards idle when not
+            #    playing regardless of upstream audio activity.
             if not self._spotify_playing:
                 self._target_bars = [0.0] * self._bar_count
 
+            # 4) Smooth display bars towards the current target and
+            #    request a repaint when anything changed.
             changed = False
             s = self._smoothing
             for i in range(self._bar_count):
@@ -1164,6 +1284,43 @@ class SpotifyVisualizerWidget(QWidget):
 
             if changed:
                 self.update()
+
+    def _schedule_compute_bars_task(self, samples: object) -> None:
+        """Offload FFT/band-mapping work to the compute thread pool.
+
+        A single outstanding compute task is allowed at a time; new audio
+        frames will be picked up on the next tick once the current job
+        completes, keeping CPU usage bounded while still following the
+        latest audio.
+        """
+
+        tm = self._thread_manager
+        if tm is None:
+            return
+
+        self._compute_task_active = True
+
+        def _job(local_samples=samples):
+            return self._audio_worker.compute_bars_from_samples(local_samples)
+
+        def _on_result(result) -> None:
+            try:
+                self._compute_task_active = False
+                success = getattr(result, "success", True)
+                bars = getattr(result, "result", None)
+                if not success:
+                    return
+                if isinstance(bars, list):
+                    self._bars_result_buffer.publish(bars)
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] compute task callback failed", exc_info=True)
+
+        try:
+            tm.submit_compute_task(_job, callback=_on_result)
+        except Exception:
+            # If scheduling fails, clear the flag so we can try again
+            # on a future tick without permanently stalling the worker.
+            self._compute_task_active = False
 
     def paintEvent(self, event: QPaintEvent) -> None:  # type: ignore[override]
         super().paintEvent(event)
@@ -1204,6 +1361,27 @@ class SpotifyVisualizerWidget(QWidget):
         if rect.width() <= 0 or rect.height() <= 0:
             painter.end()
             return
+
+        if is_perf_metrics_enabled():
+            try:
+                now = time.time()
+                if self._perf_paint_start_ts is None:
+                    self._perf_paint_start_ts = now
+                if self._perf_paint_last_ts is not None:
+                    dt = now - self._perf_paint_last_ts
+                    if dt > 0.0:
+                        if self._perf_paint_min_dt == 0.0 or dt < self._perf_paint_min_dt:
+                            self._perf_paint_min_dt = dt
+                        if dt > self._perf_paint_max_dt:
+                            self._perf_paint_max_dt = dt
+                self._perf_paint_last_ts = now
+                self._perf_paint_frame_count += 1
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Paint PERF accounting failed", exc_info=True)
+
+        # Note: paintEvent itself does not trigger PERF snapshots; these are
+        # driven from the tick path so that tick/paint metrics share a common
+        # time window and appear as a paired summary in logs.
 
         with profile("SPOTIFY_VIS_PAINT", threshold_ms=5.0, log_level="DEBUG"):
             # Card background is handled by the stylesheet; painting focuses on
@@ -1265,3 +1443,75 @@ class SpotifyVisualizerWidget(QWidget):
                     painter.drawRect(bar_rect)
 
             painter.end()
+
+    def _log_perf_snapshot(self, reset: bool = False) -> None:
+        """Emit a PERF metrics snapshot for the current tick/paint window.
+
+        When ``reset`` is True, internal counters are cleared afterwards so
+        subsequent snapshots start a fresh window (used on widget stop).
+        When ``reset`` is False, counters are left intact so that periodic
+        logging during runtime does not disturb the measurement window.
+        """
+
+        if not is_perf_metrics_enabled():
+            return
+
+        try:
+            if (
+                self._perf_tick_start_ts is not None
+                and self._perf_tick_last_ts is not None
+                and self._perf_tick_frame_count > 0
+            ):
+                elapsed = max(0.0, self._perf_tick_last_ts - self._perf_tick_start_ts)
+                if elapsed > 0.0:
+                    duration_ms = elapsed * 1000.0
+                    avg_fps = self._perf_tick_frame_count / elapsed
+                    min_dt_ms = self._perf_tick_min_dt * 1000.0 if self._perf_tick_min_dt > 0.0 else 0.0
+                    max_dt_ms = self._perf_tick_max_dt * 1000.0 if self._perf_tick_max_dt > 0.0 else 0.0
+                    logger.info(
+                        "[PERF] [SPOTIFY_VIS] Tick metrics: duration=%.1fms, frames=%d, avg_fps=%.1f, "
+                        "dt_min=%.2fms, dt_max=%.2fms, bar_count=%d",
+                        duration_ms,
+                        self._perf_tick_frame_count,
+                        avg_fps,
+                        min_dt_ms,
+                        max_dt_ms,
+                        self._bar_count,
+                    )
+
+            if (
+                self._perf_paint_start_ts is not None
+                and self._perf_paint_last_ts is not None
+                and self._perf_paint_frame_count > 0
+            ):
+                elapsed_p = max(0.0, self._perf_paint_last_ts - self._perf_paint_start_ts)
+                if elapsed_p > 0.0:
+                    duration_ms_p = elapsed_p * 1000.0
+                    avg_fps_p = self._perf_paint_frame_count / elapsed_p
+                    min_dt_ms_p = self._perf_paint_min_dt * 1000.0 if self._perf_paint_min_dt > 0.0 else 0.0
+                    max_dt_ms_p = self._perf_paint_max_dt * 1000.0 if self._perf_paint_max_dt > 0.0 else 0.0
+                    logger.info(
+                        "[PERF] [SPOTIFY_VIS] Paint metrics: duration=%.1fms, frames=%d, avg_fps=%.1f, "
+                        "dt_min=%.2fms, dt_max=%.2fms, bar_count=%d",
+                        duration_ms_p,
+                        self._perf_paint_frame_count,
+                        avg_fps_p,
+                        min_dt_ms_p,
+                        max_dt_ms_p,
+                        self._bar_count,
+                    )
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] PERF metrics logging failed", exc_info=True)
+        finally:
+            if reset:
+                self._perf_tick_start_ts = None
+                self._perf_tick_last_ts = None
+                self._perf_tick_frame_count = 0
+                self._perf_tick_min_dt = 0.0
+                self._perf_tick_max_dt = 0.0
+                self._perf_paint_start_ts = None
+                self._perf_paint_last_ts = None
+                self._perf_paint_frame_count = 0
+                self._perf_paint_min_dt = 0.0
+                self._perf_paint_max_dt = 0.0
+

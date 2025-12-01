@@ -149,6 +149,9 @@ class CrossfadeTransition(BaseTransition):
                 self._show_image_immediately()
                 return True
             
+            # Begin telemetry tracking for animated crossfade
+            self._mark_start()
+
             # Reuse or create persistent CPU overlay on the widget
             existing = getattr(widget, "_srpss_sw_xfade_overlay", None)
             overlay = get_or_create_overlay(
@@ -272,6 +275,8 @@ class CrossfadeTransition(BaseTransition):
         if self._state != TransitionState.RUNNING:
             return
         logger.debug("Crossfade transition finished")
+        # End telemetry tracking for successful completion
+        self._mark_end()
         if self._overlay:
             try:
                 self._overlay.set_alpha(1.0)

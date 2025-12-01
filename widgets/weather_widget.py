@@ -9,7 +9,6 @@ from enum import Enum
 from pathlib import Path
 import os
 import json
-import math
 from PySide6.QtWidgets import QLabel, QWidget
 from PySide6.QtCore import QTimer, Qt, Signal, QThread, QObject
 from PySide6.QtGui import QFont, QColor, QPainter, QPixmap
@@ -538,9 +537,7 @@ class WeatherWidget(QLabel):
             c_lower = str(condition).lower()
 
             # Resolve an appropriate SVG icon from images/weather when icons
-            # are enabled. Icons are rendered in monochrome; any intrinsic
-            # SVG animation is handled by the renderer, we do not drive
-            # additional manual motion here.
+            # are enabled. Icons are rendered in monochrome.
             self._icon_pixmap = None
             self._icon_name = None
             self._icon_phase = 0.0
@@ -550,7 +547,6 @@ class WeatherWidget(QLabel):
                     self._icon_pixmap = self._load_icon_pixmap(icon_path)
                     if self._icon_pixmap is not None:
                         self._icon_name = icon_path.name
-                    # Static icons only; no manual bobbing/animation.
 
             details_text = f"{temp:.0f}°C - {condition_display}"
             details_html = f"<div style='font-size:{details_pt}pt; font-weight:600;'>{details_text}</div>"
@@ -567,6 +563,12 @@ class WeatherWidget(QLabel):
             
             # Adjust size
             self.adjustSize()
+            if self._show_icons and self._icon_pixmap is not None:
+                try:
+                    extra_w = self._icon_pixmap.width() + 12
+                    self.resize(self.width() + extra_w, self.height())
+                except Exception:
+                    pass
             
             # Update position
             if self.parent():
@@ -653,7 +655,7 @@ class WeatherWidget(QLabel):
         """Load and tint a weather SVG icon as a monochrome QPixmap."""
 
         try:
-            size = max(16, int(self._font_size * 1.4))
+            size = max(16, int(self._font_size * 1.8))
             renderer = QSvgRenderer(str(path))
             if not renderer.isValid():
                 return None
@@ -702,7 +704,7 @@ class WeatherWidget(QLabel):
     def _tick_icon_animation(self) -> None:
         if not self._show_icons or self._icon_pixmap is None:
             return
-        # Manual animation disabled; keep icons static.
+        # Manual icon animation disabled; icons remain static.
     
     def _update_position(self) -> None:
         """Update widget position based on settings."""
@@ -909,15 +911,9 @@ class WeatherWidget(QLabel):
             width = self.width()
             height = self.height()
             margin = 8
-            amplitude = max(2, int(size.height() * 0.10))
-            if amplitude > margin // 2:
-                amplitude = max(1, margin // 2)
-            offset_y = int(math.sin(self._icon_phase * 2.0 * math.pi) * amplitude)
-            base_y = height - size.height() - margin
-            y = base_y - amplitude + offset_y
             x = width - size.width() - margin
-
-            painter.drawPixmap(x, max(0, y), pm)
+            y = height - size.height() - margin
+            painter.drawPixmap(x, y, pm)
         except Exception:
             logger.debug("[WEATHER] Icon paint failed", exc_info=True)
         finally:

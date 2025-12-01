@@ -187,6 +187,9 @@ class WipeTransition(BaseTransition):
             self._show_image_immediately(widget)
             return True
         
+        # Begin telemetry tracking for animated wipe
+        self._mark_start()
+
         # Two-label pattern (like Crossfade): old below, new above with mask
         self._old_label = QLabel(widget)
         self._old_label.setGeometry(0, 0, widget.width(), widget.height())
@@ -321,6 +324,8 @@ class WipeTransition(BaseTransition):
             except RuntimeError:
                 pass
         
+        # End telemetry tracking for successful completion
+        self._mark_end()
         self._set_state(TransitionState.FINISHED)
         self._emit_progress(1.0)
         self.finished.emit()

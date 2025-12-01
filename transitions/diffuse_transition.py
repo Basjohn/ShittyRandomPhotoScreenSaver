@@ -90,6 +90,9 @@ class DiffuseTransition(BaseTransition):
                 self._show_image_immediately()
                 return True
             
+            # Begin telemetry tracking for animated diffuse
+            self._mark_start()
+
             # DEBUG: Verify pixmaps have valid content
             logger.debug(f"[DIFFUSE] OLD PIXMAP: {old_pixmap.width()}x{old_pixmap.height()}, isNull={old_pixmap.isNull()}, depth={old_pixmap.depth()}")
             logger.debug(f"[DIFFUSE] NEW PIXMAP: {new_pixmap.width()}x{new_pixmap.height()}, isNull={new_pixmap.isNull()}, depth={new_pixmap.depth()}")
@@ -361,6 +364,8 @@ class DiffuseTransition(BaseTransition):
             except RuntimeError:
                 pass
         
+        # End telemetry tracking for successful completion
+        self._mark_end()
         self._set_state(TransitionState.FINISHED)
         self._emit_progress(1.0)
         self.finished.emit()

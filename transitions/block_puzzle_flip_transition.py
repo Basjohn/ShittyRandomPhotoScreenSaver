@@ -265,6 +265,9 @@ class BlockPuzzleFlipTransition(BaseTransition):
                 self._show_image_immediately()
                 return True
             
+            # Begin telemetry tracking for animated block puzzle flip
+            self._mark_start()
+
             # Get widget dimensions
             width = widget.width()
             height = widget.height()
@@ -617,6 +620,8 @@ class BlockPuzzleFlipTransition(BaseTransition):
             except RuntimeError:
                 pass
         
+        # End telemetry tracking for successful completion
+        self._mark_end()
         self._set_state(TransitionState.FINISHED)
         self._emit_progress(1.0)
         self.finished.emit()
