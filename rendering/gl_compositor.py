@@ -12,7 +12,7 @@ compositor over time.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Callable
 import time
 import math
@@ -173,6 +173,11 @@ class _GLPipelineState:
     # Textures for the current pair of images being blended/transitioned.
     old_tex_id: int = 0
     new_tex_id: int = 0
+    # Small per-pixmap texture cache keyed by QPixmap.cacheKey() so
+    # shader-backed transitions can reuse GPU textures across frames and
+    # transitions instead of re-uploading from CPU memory each time.
+    texture_cache: dict[int, int] = field(default_factory=dict)
+    texture_lru: list[int] = field(default_factory=list)
 
     # Cached uniform locations for the basic card-flip program.
     u_angle_loc: int = -1
@@ -2914,6 +2919,21 @@ class GLCompositorWidget(QOpenGLWidget):
         try:
             self._release_transition_textures()
 
+            # Delete any cached textures and clear the cache.
+            try:
+                cache = getattr(self._gl_pipeline, "texture_cache", None)
+                if cache:
+                    ids = [int(t) for t in cache.values() if t]
+                    if ids:
+                        arr = (ctypes.c_uint * len(ids))(*ids)
+                        gl.glDeleteTextures(len(ids), arr)
+                    cache.clear()
+                lru = getattr(self._gl_pipeline, "texture_lru", None)
+                if isinstance(lru, list):
+                    lru.clear()
+            except Exception:
+                logger.debug("[GL COMPOSITOR] Failed to delete cached textures", exc_info=True)
+
             try:
                 if self._gl_pipeline.basic_program:
                     gl.glDeleteProgram(int(self._gl_pipeline.basic_program))
@@ -3772,6 +3792,67 @@ void main() {
         # used even if it is still compiled in the pipeline.
         return False
 
+    def warm_shader_textures(self, old_pixmap: Optional[QPixmap], new_pixmap: Optional[QPixmap]) -> None:
+        """Best-effort prewarm of shader textures for a pixmap pair.
+
+        This initialises the GLSL pipeline on first use (if not already
+        done), then uploads/caches textures for the provided old/new pixmaps
+        so shader-backed transitions can reuse them without paying the full
+        upload cost on their first frame. Failures are logged at DEBUG and do
+        not affect the caller.
+        """
+
+        if gl is None or self._gl_disabled_for_session:
+            return
+        if old_pixmap is None and (new_pixmap is None or new_pixmap.isNull()):
+            return
+
+        # Ensure pipeline exists before touching GL resources.
+        if self._gl_pipeline is None:
+            try:
+                self.makeCurrent()
+            except Exception:
+                return
+            try:
+                try:
+                    self._gl_pipeline = _GLPipelineState()
+                    self._use_shaders = False
+                    self._gl_disabled_for_session = False
+                    self._init_gl_pipeline()
+                except Exception:
+                    logger.debug("[GL COMPOSITOR] warm_shader_textures failed to init pipeline", exc_info=True)
+                    return
+            finally:
+                try:
+                    self.doneCurrent()
+                except Exception:
+                    pass
+
+        if self._gl_pipeline is None or not self._gl_pipeline.initialized:
+            return
+
+        try:
+            self.makeCurrent()
+        except Exception:
+            return
+
+        try:
+            try:
+                if old_pixmap is not None and not old_pixmap.isNull():
+                    self._get_or_create_texture_for_pixmap(old_pixmap)
+            except Exception:
+                logger.debug("[GL COMPOSITOR] warm_shader_textures failed for old pixmap", exc_info=True)
+            try:
+                if new_pixmap is not None and not new_pixmap.isNull():
+                    self._get_or_create_texture_for_pixmap(new_pixmap)
+            except Exception:
+                logger.debug("[GL COMPOSITOR] warm_shader_textures failed for new pixmap", exc_info=True)
+        finally:
+            try:
+                self.doneCurrent()
+            except Exception:
+                pass
+
     def _upload_texture_from_pixmap(self, pixmap: QPixmap) -> int:
         """Upload a QPixmap as a GL texture and return its id.
 
@@ -3835,15 +3916,72 @@ void main() {
 
         return tex_id
 
-    def _release_transition_textures(self) -> None:
-        if gl is None or self._gl_pipeline is None:
-            return
-        for tex_id in (self._gl_pipeline.old_tex_id, self._gl_pipeline.new_tex_id):
+    def _get_or_create_texture_for_pixmap(self, pixmap: QPixmap) -> int:
+        """Return a cached texture id for *pixmap*, uploading if needed.
+
+        Textures are cached per ``QPixmap.cacheKey()`` in the pipeline state so
+        shader-backed transitions can reuse GPU textures across frames and
+        transitions instead of re-uploading from CPU memory each time. A small
+        LRU is used to bound VRAM usage.
+        """
+
+        if gl is None or self._gl_pipeline is None or pixmap is None or pixmap.isNull():
+            return 0
+
+        key = 0
+        try:
+            if hasattr(pixmap, "cacheKey"):
+                key = int(pixmap.cacheKey())
+        except Exception:
+            key = 0
+
+        cache = self._gl_pipeline.texture_cache
+        lru = self._gl_pipeline.texture_lru
+
+        if key > 0:
+            tex_id = cache.get(key, 0)
             if tex_id:
+                # Refresh LRU position.
                 try:
-                    gl.glDeleteTextures(int(tex_id))
+                    if key in lru:
+                        lru.remove(key)
+                    lru.append(key)
                 except Exception:
-                    logger.debug("[GL SHADER] Failed to delete texture %s", tex_id, exc_info=True)
+                    pass
+                return int(tex_id)
+
+        tex_id = self._upload_texture_from_pixmap(pixmap)
+        if not tex_id:
+            return 0
+
+        if key > 0:
+            cache[key] = tex_id
+            try:
+                lru.append(key)
+                max_cached = 12
+                while len(lru) > max_cached:
+                    evict_key = lru.pop(0)
+                    if evict_key == key:
+                        continue
+                    old_tex = cache.pop(evict_key, 0)
+                    if old_tex:
+                        try:
+                            gl.glDeleteTextures(int(old_tex))
+                        except Exception:
+                            logger.debug(
+                                "[GL SHADER] Failed to delete cached texture %s", old_tex, exc_info=True
+                            )
+            except Exception:
+                pass
+
+        return tex_id
+
+    def _release_transition_textures(self) -> None:
+        if self._gl_pipeline is None:
+            return
+        # Only drop references to the current pair; cached textures remain
+        # alive so subsequent transitions can reuse them. Cache lifetime is
+        # bounded and cleaned up in _cleanup_gl_pipeline().
         self._gl_pipeline.old_tex_id = 0
         self._gl_pipeline.new_tex_id = 0
 
@@ -3856,8 +3994,8 @@ void main() {
         self._release_transition_textures()
 
         try:
-            self._gl_pipeline.old_tex_id = self._upload_texture_from_pixmap(old_pixmap)
-            self._gl_pipeline.new_tex_id = self._upload_texture_from_pixmap(new_pixmap)
+            self._gl_pipeline.old_tex_id = self._get_or_create_texture_for_pixmap(old_pixmap)
+            self._gl_pipeline.new_tex_id = self._get_or_create_texture_for_pixmap(new_pixmap)
         except Exception:
             logger.debug("[GL SHADER] Failed to upload transition textures", exc_info=True)
             self._release_transition_textures()

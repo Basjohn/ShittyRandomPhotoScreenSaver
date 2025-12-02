@@ -97,6 +97,15 @@ class GLCompositorRainDropsTransition(BaseTransition):
                 "[GL COMPOSITOR] Failed to configure compositor geometry/visibility (rain drops)",
                 exc_info=True,
             )
+        # Prewarm shader textures for this pixmap pair so the first
+        # Raindrops frame does not pay the full texture upload cost.
+        try:
+            warm = getattr(comp, "warm_shader_textures", None)
+            if callable(warm):
+                warm(old_pixmap, new_pixmap)
+        except Exception:
+            logger.debug("[GL COMPOSITOR] Failed to warm raindrops textures", exc_info=True)
+
         # Drive via shared AnimationManager. Try the shader-based raindrops
         # path first; if it is unavailable or fails to start, fall back to the
         # existing diffuse-region implementation.

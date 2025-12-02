@@ -93,6 +93,15 @@ class GLCompositorBlockSpinTransition(BaseTransition):
                 exc_info=True,
             )
 
+        # Prewarm shader textures for this pixmap pair so the first
+        # BlockSpin frame does not pay the full texture upload cost.
+        try:
+            warm = getattr(comp, "warm_shader_textures", None)
+            if callable(warm):
+                warm(old_pixmap, new_pixmap)
+        except Exception:
+            logger.debug("[GL COMPOSITOR] Failed to warm block spins textures", exc_info=True)
+
         # Drive via shared AnimationManager.
         easing_curve = self._resolve_easing()
         am = self._get_animation_manager(widget)

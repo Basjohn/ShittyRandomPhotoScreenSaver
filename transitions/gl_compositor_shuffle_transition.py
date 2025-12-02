@@ -125,6 +125,15 @@ class GLCompositorShuffleTransition(BaseTransition):
         cols = max(1, (width + bs - 1) // bs)
         rows = max(1, (height + bs - 1) // bs)
 
+        # Prewarm shader textures for this pixmap pair so the first Shuffle
+        # frame does not pay the full texture upload cost.
+        try:
+            warm = getattr(comp, "warm_shader_textures", None)
+            if callable(warm):
+                warm(old_pixmap, new_pixmap)
+        except Exception:
+            logger.debug("[GL COMPOSITOR] Failed to warm shuffle textures", exc_info=True)
+
         def _on_finished() -> None:
             self._on_anim_complete()
 
