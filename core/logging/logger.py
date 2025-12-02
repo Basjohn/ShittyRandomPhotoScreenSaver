@@ -247,6 +247,21 @@ class SuppressingStreamHandler(logging.StreamHandler):
             super().close()
 
 
+class PerfLogFilter(logging.Filter):
+    """Filter that accepts only PERF metric records.
+
+    Records are matched purely on the presence of "[PERF]" in the formatted
+    message so existing call sites do not need to change.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        try:
+            msg = record.getMessage()
+        except Exception:
+            msg = str(record.msg)
+        return "[PERF]" in msg
+
+
 def get_log_dir() -> Path:
     """Return the directory used for log files.
 
@@ -321,10 +336,11 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     
-    # File handler with rotation (1MB max, keep 5 backups)
+    # File handler with rotation (larger cap to reduce truncation during
+    # extended debug/perf sessions while still keeping log size bounded).
     file_handler = RotatingFileHandler(
         log_file,
-        maxBytes=1 * 1024 * 1024,
+        maxBytes=5 * 1024 * 1024,
         backupCount=5,
         encoding='utf-8'
     )
@@ -353,6 +369,21 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
     
     if debug_enabled:
         root_logger.addHandler(console_handler)
+
+    # Dedicated PERF metrics log capturing any record whose message contains
+    # the "[PERF]" tag. This keeps performance summaries readable even when
+    # the main log is busy with other diagnostics.
+    perf_log_file = log_dir / "screensaver_perf.log"
+    perf_handler = RotatingFileHandler(
+        perf_log_file,
+        maxBytes=5 * 1024 * 1024,
+        backupCount=5,
+        encoding='utf-8',
+    )
+    perf_handler.setFormatter(formatter)
+    perf_handler.setLevel(logging.INFO)
+    perf_handler.addFilter(PerfLogFilter())
+    root_logger.addHandler(perf_handler)
 
     # Tame particularly noisy third-party libraries so their DEBUG-level
     # chatter (HTTP connection pools, asyncio internals, etc.) only shows

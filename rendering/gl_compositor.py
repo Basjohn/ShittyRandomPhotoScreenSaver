@@ -1904,8 +1904,8 @@ class GLCompositorWidget(QOpenGLWidget):
         """Completion handler for shader-driven raindrops transitions."""
 
         try:
-            # Emit a concise profiling summary for the Ripple/Raindrops shader
-            # path so future fidelity-oriented tuning has FPS telemetry without
+            # Emit a concise profiling summary for the Ripple shader path so
+            # future fidelity-oriented tuning has FPS telemetry without
             # altering the effect itself.
             if is_perf_metrics_enabled():
                 try:
@@ -1929,7 +1929,7 @@ class GLCompositorWidget(QOpenGLWidget):
                                 else 0.0
                             )
                             logger.info(
-                                "[PERF] [GL COMPOSITOR] Raindrops metrics: duration=%.1fms, frames=%d, "
+                                "[PERF] [GL COMPOSITOR] Ripple metrics: duration=%.1fms, frames=%d, "
                                 "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, size=%dx%d",
                                 duration_ms,
                                 self._raindrops_profile_frame_count,
@@ -1940,7 +1940,7 @@ class GLCompositorWidget(QOpenGLWidget):
                                 self.height(),
                             )
                 except Exception as e:
-                    logger.debug("[GL COMPOSITOR] Raindrops metrics logging failed: %s", e, exc_info=True)
+                    logger.debug("[GL COMPOSITOR] Ripple metrics logging failed: %s", e, exc_info=True)
 
             # Reset profiling state.
             self._raindrops_profile_start_ts = None
@@ -1965,11 +1965,7 @@ class GLCompositorWidget(QOpenGLWidget):
             try:
                 self.update()
             except Exception as e:
-                logger.debug(
-                    "[GL COMPOSITOR] Raindrops complete update failed (likely after deletion): %s",
-                    e,
-                    exc_info=True,
-                )
+                logger.debug("[GL COMPOSITOR] Ripple complete update failed (likely after deletion): %s", e, exc_info=True)
 
             if on_finished:
                 try:
@@ -1977,7 +1973,7 @@ class GLCompositorWidget(QOpenGLWidget):
                 except Exception:
                     logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
         except Exception as e:
-            logger.debug("[GL COMPOSITOR] Raindrops complete handler failed: %s", e, exc_info=True)
+            logger.debug("[GL COMPOSITOR] Ripple complete handler failed: %s", e, exc_info=True)
 
     def _on_shuffle_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
         """Completion handler for shader-driven Shuffle transitions."""
@@ -3931,6 +3927,14 @@ void main() {
             dpr = 1.0
         w = max(1, int(round(self.width() * dpr)))
         h = max(1, int(round(self.height() * dpr)))
+        # Guard against off-by-one rounding between Qt's reported size and
+        # the underlying framebuffer by slightly over-covering vertically.
+        # This prevents a 1px retained strip from the previous frame at the
+        # top edge on certain DPI/size combinations.
+        try:
+            h = max(1, h + 1)
+        except Exception:
+            h = max(1, h)
         return w, h
 
     def _paint_blockspin_shader(self, target: QRect) -> None:
@@ -4289,6 +4293,118 @@ void main() {
                 dt_max_ms = self._wipe_profile_max_dt * 1000.0 if self._wipe_profile_max_dt > 0.0 else 0.0
                 line2 = f"{fps:.1f} fps  dt_min={dt_min_ms:.1f}ms  dt_max={dt_max_ms:.1f}ms"
 
+        if (
+            active_label is None
+            and self._blockspin is not None
+            and self._blockspin_profile_start_ts is not None
+            and self._blockspin_profile_last_ts is not None
+            and self._blockspin_profile_frame_count > 0
+        ):
+            elapsed = self._blockspin_profile_last_ts - self._blockspin_profile_start_ts
+            if elapsed > 0.0:
+                fps = self._blockspin_profile_frame_count / elapsed
+                active_label = "BlockSpin"
+                line1 = f"{active_label} t={self._blockspin.progress:.2f}"
+                dt_min_ms = self._blockspin_profile_min_dt * 1000.0 if self._blockspin_profile_min_dt > 0.0 else 0.0
+                dt_max_ms = self._blockspin_profile_max_dt * 1000.0 if self._blockspin_profile_max_dt > 0.0 else 0.0
+                line2 = f"{fps:.1f} fps  dt_min={dt_min_ms:.1f}ms  dt_max={dt_max_ms:.1f}ms"
+
+        if (
+            active_label is None
+            and self._warp is not None
+            and self._warp_profile_start_ts is not None
+            and self._warp_profile_last_ts is not None
+            and self._warp_profile_frame_count > 0
+        ):
+            elapsed = self._warp_profile_last_ts - self._warp_profile_start_ts
+            if elapsed > 0.0:
+                fps = self._warp_profile_frame_count / elapsed
+                active_label = "Warp"
+                line1 = f"{active_label} t={self._warp.progress:.2f}"
+                dt_min_ms = self._warp_profile_min_dt * 1000.0 if self._warp_profile_min_dt > 0.0 else 0.0
+                dt_max_ms = self._warp_profile_max_dt * 1000.0 if self._warp_profile_max_dt > 0.0 else 0.0
+                line2 = f"{fps:.1f} fps  dt_min={dt_min_ms:.1f}ms  dt_max={dt_max_ms:.1f}ms"
+
+        if (
+            active_label is None
+            and self._raindrops is not None
+            and self._raindrops_profile_start_ts is not None
+            and self._raindrops_profile_last_ts is not None
+            and self._raindrops_profile_frame_count > 0
+        ):
+            elapsed = self._raindrops_profile_last_ts - self._raindrops_profile_start_ts
+            if elapsed > 0.0:
+                fps = self._raindrops_profile_frame_count / elapsed
+                active_label = "Ripple"
+                line1 = f"{active_label} t={self._raindrops.progress:.2f}"
+                dt_min_ms = self._raindrops_profile_min_dt * 1000.0 if self._raindrops_profile_min_dt > 0.0 else 0.0
+                dt_max_ms = self._raindrops_profile_max_dt * 1000.0 if self._raindrops_profile_max_dt > 0.0 else 0.0
+                line2 = f"{fps:.1f} fps  dt_min={dt_min_ms:.1f}ms  dt_max={dt_max_ms:.1f}ms"
+
+        if (
+            active_label is None
+            and self._shuffle is not None
+            and self._shuffle_profile_start_ts is not None
+            and self._shuffle_profile_last_ts is not None
+            and self._shuffle_profile_frame_count > 0
+        ):
+            elapsed = self._shuffle_profile_last_ts - self._shuffle_profile_start_ts
+            if elapsed > 0.0:
+                fps = self._shuffle_profile_frame_count / elapsed
+                active_label = "Shuffle"
+                line1 = f"{active_label} t={self._shuffle.progress:.2f}"
+                dt_min_ms = self._shuffle_profile_min_dt * 1000.0 if self._shuffle_profile_min_dt > 0.0 else 0.0
+                dt_max_ms = self._shuffle_profile_max_dt * 1000.0 if self._shuffle_profile_max_dt > 0.0 else 0.0
+                line2 = f"{fps:.1f} fps  dt_min={dt_min_ms:.1f}ms  dt_max={dt_max_ms:.1f}ms"
+
+        if (
+            active_label is None
+            and self._diffuse is not None
+            and self._diffuse_profile_start_ts is not None
+            and self._diffuse_profile_last_ts is not None
+            and self._diffuse_profile_frame_count > 0
+        ):
+            elapsed = self._diffuse_profile_last_ts - self._diffuse_profile_start_ts
+            if elapsed > 0.0:
+                fps = self._diffuse_profile_frame_count / elapsed
+                active_label = "Diffuse"
+                line1 = f"{active_label} t={self._diffuse.progress:.2f}"
+                dt_min_ms = self._diffuse_profile_min_dt * 1000.0 if self._diffuse_profile_min_dt > 0.0 else 0.0
+                dt_max_ms = self._diffuse_profile_max_dt * 1000.0 if self._diffuse_profile_max_dt > 0.0 else 0.0
+                line2 = f"{fps:.1f} fps  dt_min={dt_min_ms:.1f}ms  dt_max={dt_max_ms:.1f}ms"
+
+        if (
+            active_label is None
+            and self._blinds is not None
+            and self._blinds_profile_start_ts is not None
+            and self._blinds_profile_last_ts is not None
+            and self._blinds_profile_frame_count > 0
+        ):
+            elapsed = self._blinds_profile_last_ts - self._blinds_profile_start_ts
+            if elapsed > 0.0:
+                fps = self._blinds_profile_frame_count / elapsed
+                active_label = "Blinds"
+                line1 = f"{active_label} t={self._blinds.progress:.2f}"
+                dt_min_ms = self._blinds_profile_min_dt * 1000.0 if self._blinds_profile_min_dt > 0.0 else 0.0
+                dt_max_ms = self._blinds_profile_max_dt * 1000.0 if self._blinds_profile_max_dt > 0.0 else 0.0
+                line2 = f"{fps:.1f} fps  dt_min={dt_min_ms:.1f}ms  dt_max={dt_max_ms:.1f}ms"
+
+        if (
+            active_label is None
+            and self._peel is not None
+            and self._peel_profile_start_ts is not None
+            and self._peel_profile_last_ts is not None
+            and self._peel_profile_frame_count > 0
+        ):
+            elapsed = self._peel_profile_last_ts - self._peel_profile_start_ts
+            if elapsed > 0.0:
+                fps = self._peel_profile_frame_count / elapsed
+                active_label = "Peel"
+                line1 = f"{active_label} t={self._peel.progress:.2f}"
+                dt_min_ms = self._peel_profile_min_dt * 1000.0 if self._peel_profile_min_dt > 0.0 else 0.0
+                dt_max_ms = self._peel_profile_max_dt * 1000.0 if self._peel_profile_max_dt > 0.0 else 0.0
+                line2 = f"{fps:.1f} fps  dt_min={dt_min_ms:.1f}ms  dt_max={dt_max_ms:.1f}ms"
+
         if not active_label:
             return
 
@@ -4316,6 +4432,15 @@ void main() {
         finally:
             painter.restore()
 
+    def _paint_debug_overlay_gl(self) -> None:
+        if not is_perf_metrics_enabled():
+            return
+        painter = QPainter(self)
+        try:
+            self._paint_debug_overlay(painter)
+        finally:
+            painter.end()
+
     def paintGL(self) -> None:  # type: ignore[override]
         target = self.rect()
 
@@ -4325,6 +4450,8 @@ void main() {
             try:
                 if self._prepare_blockspin_textures():
                     self._paint_blockspin_shader(target)
+                    if is_perf_metrics_enabled():
+                        self._paint_debug_overlay_gl()
                     return
             except Exception:
                 logger.debug(
@@ -4342,6 +4469,8 @@ void main() {
         if self._raindrops is not None and self._can_use_raindrops_shader():
             try:
                 self._paint_raindrops_shader(target)
+                if is_perf_metrics_enabled():
+                    self._paint_debug_overlay_gl()
                 return
             except Exception:
                 logger.debug(
@@ -4362,6 +4491,8 @@ void main() {
         if self._shuffle is not None and self._can_use_shuffle_shader():
             try:
                 self._paint_shuffle_shader(target)
+                if is_perf_metrics_enabled():
+                    self._paint_debug_overlay_gl()
                 return
             except Exception:
                 logger.debug(
@@ -4382,6 +4513,8 @@ void main() {
         if self._shooting_stars is not None and self._can_use_claws_shader():
             try:
                 self._paint_claws_shader(target)
+                if is_perf_metrics_enabled():
+                    self._paint_debug_overlay_gl()
                 return
             except Exception:
                 logger.debug(
@@ -4398,6 +4531,8 @@ void main() {
         if self._warp is not None and self._can_use_warp_shader():
             try:
                 self._paint_warp_shader(target)
+                if is_perf_metrics_enabled():
+                    self._paint_debug_overlay_gl()
                 return
             except Exception:
                 logger.debug(
@@ -4645,6 +4780,7 @@ void main() {
                     painter.setOpacity(1.0)
                     painter.drawPixmap(target, st.new_pixmap)
                     painter.restore()
+                self._paint_debug_overlay(painter)
                 return
 
             # If a wipe is active, draw old fully and new clipped to the wipe region.

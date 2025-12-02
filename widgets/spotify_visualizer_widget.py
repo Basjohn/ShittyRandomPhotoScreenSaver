@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import List, Optional
 import platform
 import time
+import math
 
 from PySide6.QtCore import QObject, QRect, Qt
 from PySide6.QtGui import QColor, QPainter, QPaintEvent
@@ -694,13 +695,10 @@ class SpotifyVisualizerAudioWorker(QObject):
                 except Exception:
                     pass
 
-            if n > 8:
-                try:
-                    cutoff = max(1, int(n * 0.1))
-                    weights = np.linspace(0.3, 1.0, cutoff, dtype="float32")
-                    mag[:cutoff] *= weights
-                except Exception:
-                    pass
+            # Older versions applied an extra emphasis to the lowest ~10%% of
+            # FFT bins here. With the current band weighting this leads to an
+            # overly left-leaning visual, so we rely on the later spatial
+            # weighting instead.
         except Exception:
             return [0.0] * bands
 
@@ -743,22 +741,40 @@ class SpotifyVisualizerAudioWorker(QObject):
                 positions = np.linspace(-1.0, 1.0, bands, dtype="float32")
                 band_idx_f = np.arange(bands, dtype="float32")
                 t = band_idx_f / max(1.0, float(bands - 1))
+
+                # Keep a visual "hill" in the centre, but shift it slightly
+                # to the right and narrow it so fewer bars sit at the same
+                # height. This preserves the appealing centre focus while
+                # avoiding a flat plateau and helping right-hand bands.
                 tilt = 0.45 + 0.6 * t
-                sigma = 0.75
-                center_profile = np.exp(-0.5 * (positions / sigma) ** 2).astype("float32")
+                sigma = 0.60
+                center_shift = 0.18
+                center_profile = np.exp(-0.5 * ((positions - center_shift) / sigma) ** 2).astype(
+                    "float32"
+                )
                 peak_profile = float(center_profile.max()) if center_profile.size else 0.0
                 if peak_profile > 1e-6:
                     center_profile = center_profile / peak_profile
-                center_weight = 0.55
+
+                center_weight = 0.40
                 base_weights = (1.0 - center_weight) + center_weight * center_profile
-                bias_strength = 0.35
+
+                # Slightly stronger right bias so the main energy cluster is
+                # at least one bar further right on average, without making
+                # highs dominate.
+                bias_strength = 0.75
                 right_bias = 1.0 + bias_strength * positions
                 right_bias = np.clip(
                     right_bias,
                     1.0 - bias_strength,
                     1.0 + bias_strength,
                 )
-                total_weights = base_weights * tilt * right_bias
+
+                # Gently attenuate the lowest bands so they do not visually
+                # swamp the spectrum even on bass-heavy tracks, without
+                # flattening the overall curve.
+                bass_atten = 1.0 - 0.16 * (1.0 - t) * (1.0 - t)
+                total_weights = base_weights * tilt * right_bias * bass_atten
                 self._weight_bands = bands
                 self._weight_factors = total_weights.astype("float32", copy=False)
             weights = self._weight_factors
@@ -807,6 +823,19 @@ class SpotifyVisualizerAudioWorker(QObject):
                 return None
             if size > 2048:
                 mono = mono[-2048:]
+            # Treat very low overall amplitude as silence and return zeros so
+            # we don't amplify numerical noise into full-height bars when
+            # audio stops.
+            try:
+                peak_raw = float(np_mod.max(np_mod.abs(mono))) if getattr(mono, "size", 0) else 0.0
+            except Exception:
+                peak_raw = 0.0
+            if peak_raw < 1e-3:
+                target = int(self._bar_count)
+                if target <= 0:
+                    return None
+                return [0.0] * target
+
             fft = np_mod.abs(np_mod.fft.rfft(mono))
             bars = self._fft_to_bars(fft)
             if not isinstance(bars, list):
@@ -826,6 +855,144 @@ class SpotifyVisualizerAudioWorker(QObject):
             return None
 
 
+class _SpotifyBeatEngine(QObject):
+    def __init__(self, bar_count: int) -> None:
+        super().__init__()
+        self._bar_count = max(1, int(bar_count))
+        self._audio_buffer: TripleBuffer[_AudioFrame] = TripleBuffer()
+        self._audio_worker = SpotifyVisualizerAudioWorker(self._bar_count, self._audio_buffer, parent=self)
+        self._bars_result_buffer: TripleBuffer[List[float]] = TripleBuffer()
+        self._compute_task_active: bool = False
+        self._thread_manager: Optional[ThreadManager] = None
+        self._ref_count: int = 0
+        self._latest_bars: Optional[List[float]] = None
+        self._last_audio_ts: float = 0.0
+
+    def set_thread_manager(self, thread_manager: Optional[ThreadManager]) -> None:
+        self._thread_manager = thread_manager
+
+    def acquire(self) -> None:
+        self._ref_count += 1
+
+    def release(self) -> None:
+        if self._ref_count > 0:
+            self._ref_count -= 1
+        if self._ref_count == 0:
+            self._stop_worker()
+
+    def ensure_started(self) -> None:
+        try:
+            if not self._audio_worker.is_running():
+                self._audio_worker.start()
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to start audio worker in shared engine", exc_info=True)
+
+    def _stop_worker(self) -> None:
+        try:
+            self._audio_worker.stop()
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to stop audio worker in shared engine", exc_info=True)
+
+    def _schedule_compute_bars_task(self, samples: object) -> None:
+        tm = self._thread_manager
+        if tm is None:
+            return
+
+        self._compute_task_active = True
+
+        def _job(local_samples=samples):
+            return self._audio_worker.compute_bars_from_samples(local_samples)
+
+        def _on_result(result) -> None:
+            try:
+                self._compute_task_active = False
+                success = getattr(result, "success", True)
+                bars = getattr(result, "result", None)
+                if not success:
+                    return
+                if isinstance(bars, list):
+                    self._bars_result_buffer.publish(bars)
+                    self._latest_bars = bars
+                    try:
+                        self._last_audio_ts = time.time()
+                    except Exception:
+                        pass
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] compute task callback failed", exc_info=True)
+
+        try:
+            tm.submit_compute_task(_job, callback=_on_result)
+        except Exception:
+            self._compute_task_active = False
+
+    def tick(self) -> Optional[List[float]]:
+        tm = self._thread_manager
+
+        now_ts = time.time()
+        frame = self._audio_buffer.consume_latest()
+        if frame is not None:
+            samples = getattr(frame, "samples", None)
+            if samples is not None:
+                try:
+                    self._last_audio_ts = now_ts
+                except Exception:
+                    pass
+                if tm is not None:
+                    if not self._compute_task_active:
+                        self._schedule_compute_bars_task(samples)
+                else:
+                    bars_inline = self._audio_worker.compute_bars_from_samples(samples)
+                    if isinstance(bars_inline, list):
+                        try:
+                            self._bars_result_buffer.publish(bars_inline)
+                        except Exception:
+                            pass
+                        self._latest_bars = bars_inline
+
+        # If we have not seen any audio for a short window, treat this as
+        # silence and force the shared bars to zero so all widgets decay
+        # together instead of holding stale peaks.
+        try:
+            last_ts = float(self._last_audio_ts)
+        except Exception:
+            last_ts = 0.0
+        if last_ts > 0.0:
+            try:
+                silence_timeout = 0.4
+                if (now_ts - last_ts) >= silence_timeout:
+                    if isinstance(self._latest_bars, list) and self._bar_count > 0:
+                        if any(b > 0.0 for b in self._latest_bars):
+                            self._latest_bars = [0.0] * self._bar_count
+            except Exception:
+                pass
+
+        return self._latest_bars
+
+
+_global_beat_engine: Optional[_SpotifyBeatEngine] = None
+
+
+def get_shared_spotify_beat_engine(bar_count: int) -> _SpotifyBeatEngine:
+    global _global_beat_engine
+    if _global_beat_engine is None:
+        _global_beat_engine = _SpotifyBeatEngine(bar_count)
+    else:
+        try:
+            existing = int(getattr(_global_beat_engine, "_bar_count", bar_count))
+        except Exception:
+            existing = bar_count
+        if existing != int(bar_count):
+            try:
+                logger.debug(
+                    "[SPOTIFY_VIS] Shared beat engine already initialised with bar_count=%s (requested=%s)",
+                    existing,
+                    bar_count,
+                )
+            except Exception:
+                pass
+    return _global_beat_engine
+
+
 class SpotifyVisualizerWidget(QWidget):
     """Thin bar visualizer card paired with the Spotify media widget.
 
@@ -841,12 +1008,18 @@ class SpotifyVisualizerWidget(QWidget):
         self._bar_count = max(1, int(bar_count))
         self._display_bars: List[float] = [0.0] * self._bar_count
         self._target_bars: List[float] = [0.0] * self._bar_count
+        self._per_bar_energy: List[float] = [0.0] * self._bar_count
+        # Base smoothing time constant in seconds; actual per-tick blend
+        # factor is derived from this and the real dt between ticks so that
+        # behaviour stays consistent even if tick rate changes.
         self._smoothing: float = 0.25
 
         self._thread_manager: Optional[ThreadManager] = None
         self._bars_timer = None
         self._shadow_config = None
         self._show_background: bool = True
+        self._animation_manager = None
+        self._anim_listener_id: Optional[int] = None
 
         # Card style (mirrors Spotify/Media widget)
         self._bg_color = QColor(16, 16, 16, 255)
@@ -857,23 +1030,37 @@ class SpotifyVisualizerWidget(QWidget):
         # Bar styling
         self._bar_fill_color = QColor(200, 200, 200, 230)
         self._bar_border_color = QColor(255, 255, 255, 255)
-        self._bar_segments: int = 13
+        self._bar_segments: int = 14
 
         # Behavioural gating
         self._spotify_playing: bool = False
         self._anchor_media: Optional[QWidget] = None
         self._has_seen_media: bool = False
 
-        # Lock-free bar frame buffer shared with audio worker
-        self._bars_buffer: TripleBuffer[_AudioFrame] = TripleBuffer()
-        self._audio_worker = SpotifyVisualizerAudioWorker(self._bar_count, self._bars_buffer, parent=self)
-
-        # Background FFT/band-mapping pipeline (compute thread). The audio
-        # worker publishes raw mono samples into _bars_buffer; a compute
-        # task turns those into bar magnitudes and publishes them here so
-        # the UI tick only performs lightweight smoothing and painting.
-        self._bars_result_buffer: TripleBuffer[List[float]] = TripleBuffer()
-        self._compute_task_active: bool = False
+        # Shared beat engine (single audio worker per process). We keep
+        # aliases for _audio_worker/_bars_buffer/_bars_result_buffer so
+        # existing tests and diagnostics continue to function, but all
+        # heavy work is centralised in the engine.
+        self._engine: Optional[_SpotifyBeatEngine] = get_shared_spotify_beat_engine(self._bar_count)
+        try:
+            engine = self._engine
+            if engine is not None:
+                # Canonical bar_count is driven by the shared engine.
+                try:
+                    engine_bar_count = int(getattr(engine, "_bar_count", self._bar_count))
+                except Exception:
+                    engine_bar_count = self._bar_count
+                if engine_bar_count > 0 and engine_bar_count != self._bar_count:
+                    self._bar_count = engine_bar_count
+                    self._display_bars = [0.0] * self._bar_count
+                    self._target_bars = [0.0] * self._bar_count
+                    self._per_bar_energy = [0.0] * self._bar_count
+                # Test/diagnostic aliases – these reference shared state.
+                self._bars_buffer = engine._audio_buffer  # type: ignore[attr-defined]
+                self._audio_worker = engine._audio_worker  # type: ignore[attr-defined]
+                self._bars_result_buffer = engine._bars_result_buffer  # type: ignore[attr-defined]
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to attach shared beat engine", exc_info=True)
 
         self._enabled: bool = False
         self._paint_debug_logged: bool = False
@@ -910,6 +1097,11 @@ class SpotifyVisualizerWidget(QWidget):
         self._geom_bar_width: int = 0
         self._geom_seg_height: int = 0
 
+        self._last_update_ts: float = 0.0
+        self._last_smooth_ts: float = 0.0
+        self._base_max_fps: float = 25.0
+        self._transition_max_fps: float = 15.0
+
         self._setup_ui()
 
     # ------------------------------------------------------------------
@@ -918,6 +1110,48 @@ class SpotifyVisualizerWidget(QWidget):
 
     def set_thread_manager(self, thread_manager: ThreadManager) -> None:
         self._thread_manager = thread_manager
+        try:
+            engine = get_shared_spotify_beat_engine(self._bar_count)
+            self._engine = engine
+            engine.set_thread_manager(thread_manager)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to propagate ThreadManager to shared beat engine", exc_info=True)
+
+    def attach_to_animation_manager(self, animation_manager) -> None:
+        # Detach from any previous manager first to avoid stacking listeners.
+        if self._animation_manager is not None and self._anim_listener_id is not None:
+            try:
+                if hasattr(self._animation_manager, "remove_tick_listener"):
+                    self._animation_manager.remove_tick_listener(self._anim_listener_id)
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to remove previous AnimationManager listener", exc_info=True)
+
+        self._animation_manager = animation_manager
+        self._anim_listener_id = None
+
+        try:
+            def _tick_listener(dt: float) -> None:
+                try:
+                    if getattr(self, "_enabled", False):
+                        self._on_tick()
+                except Exception:
+                    logger.debug("[SPOTIFY_VIS] AnimationManager-driven tick failed", exc_info=True)
+
+            listener_id = animation_manager.add_tick_listener(_tick_listener)
+            self._anim_listener_id = listener_id
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to attach to AnimationManager", exc_info=True)
+
+    def detach_from_animation_manager(self) -> None:
+        am = self._animation_manager
+        listener_id = self._anim_listener_id
+        if am is not None and listener_id is not None and hasattr(am, "remove_tick_listener"):
+            try:
+                am.remove_tick_listener(listener_id)
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to detach from AnimationManager", exc_info=True)
+        self._animation_manager = None
+        self._anim_listener_id = None
 
     def set_shadow_config(self, config) -> None:
         self._shadow_config = config
@@ -1027,16 +1261,26 @@ class SpotifyVisualizerWidget(QWidget):
         except Exception:
             pass
 
-        # Start audio capture first so the buffer can begin filling.
+        # Start audio capture via the shared beat engine so the buffer can
+        # begin filling. Each widget acquires a reference so the engine can
+        # stop cleanly once the last visualiser stops.
         try:
-            if not self._audio_worker.is_running():
-                self._audio_worker.start()
+            engine = get_shared_spotify_beat_engine(self._bar_count)
+            self._engine = engine
+            if self._thread_manager is not None:
+                engine.set_thread_manager(self._thread_manager)
+            engine.acquire()
+            engine.ensure_started()
         except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to start audio worker", exc_info=True)
+            logger.debug("[SPOTIFY_VIS] Failed to start shared beat engine", exc_info=True)
 
-        # Schedule a recurring UI tick via ThreadManager; this avoids
-        # creating ad-hoc QTimers and keeps timing under central control.
-        if self._thread_manager is not None and self._bars_timer is None:
+        # Schedule a recurring UI tick via ThreadManager; AnimationManager
+        # tick listeners (when attached) act as a secondary timing source
+        # but do not replace this fallback.
+        if (
+            self._thread_manager is not None
+            and self._bars_timer is None
+        ):
             try:
                 self._bars_timer = self._thread_manager.schedule_recurring(40, self._on_tick)
             except Exception:
@@ -1048,9 +1292,19 @@ class SpotifyVisualizerWidget(QWidget):
         self._enabled = False
 
         try:
-            self._audio_worker.stop()
+            engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
         except Exception:
-            pass
+            engine = None
+        if engine is not None:
+            try:
+                engine.release()
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to release shared beat engine", exc_info=True)
+
+        try:
+            self.detach_from_animation_manager()
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to detach from AnimationManager on stop", exc_info=True)
 
         try:
             if self._bars_timer is not None:
@@ -1204,123 +1458,156 @@ class SpotifyVisualizerWidget(QWidget):
         if not self._enabled:
             return
 
+        now_ts = time.time()
+
         if is_perf_metrics_enabled():
             try:
-                now = time.time()
                 if self._perf_tick_start_ts is None:
-                    self._perf_tick_start_ts = now
+                    self._perf_tick_start_ts = now_ts
                 if self._perf_tick_last_ts is not None:
-                    dt = now - self._perf_tick_last_ts
+                    dt = now_ts - self._perf_tick_last_ts
                     if dt > 0.0:
                         if self._perf_tick_min_dt == 0.0 or dt < self._perf_tick_min_dt:
                             self._perf_tick_min_dt = dt
                         if dt > self._perf_tick_max_dt:
                             self._perf_tick_max_dt = dt
-                self._perf_tick_last_ts = now
+                self._perf_tick_last_ts = now_ts
                 self._perf_tick_frame_count += 1
 
                 # Periodically emit a PERF snapshot while running so that
                 # logs capture the visualiser's effective tick/paint rate
                 # even if the widget is never explicitly stopped.
-                if self._perf_last_log_ts is None or (now - self._perf_last_log_ts) >= 5.0:
+                if self._perf_last_log_ts is None or (now_ts - self._perf_last_log_ts) >= 5.0:
                     self._log_perf_snapshot(reset=False)
-                    self._perf_last_log_ts = now
+                    self._perf_last_log_ts = now_ts
             except Exception:
                 logger.debug("[SPOTIFY_VIS] Tick PERF accounting failed", exc_info=True)
 
-        tm = self._thread_manager
-
         with profile("SPOTIFY_VIS_TICK", threshold_ms=5.0, log_level="DEBUG"):
-            # 1) Consume latest raw audio frame and either schedule a
-            #    compute task (normal path) or compute inline (fallback
-            #    when no ThreadManager is available, e.g. in tests).
-            frame = self._bars_buffer.consume_latest()
-            if frame is not None:
-                samples = getattr(frame, "samples", None)
-                if samples is not None:
-                    if tm is not None:
-                        if not getattr(self, "_compute_task_active", False):
-                            self._schedule_compute_bars_task(samples)
-                    else:
-                        bars = self._audio_worker.compute_bars_from_samples(samples)
-                        if isinstance(bars, list):
-                            self._target_bars = bars
-                            if is_verbose_logging():
-                                try:
-                                    logger.debug(
-                                        "[SPOTIFY_VIS] _on_tick: received frame (min=%.4f, max=%.4f)",
-                                        min(self._target_bars) if self._target_bars else 0.0,
-                                        max(self._target_bars) if self._target_bars else 0.0,
-                                    )
-                                except Exception:
-                                    pass
+            bars = None
+            try:
+                engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
+                self._engine = engine
+                if engine is not None:
+                    bars = engine.tick()
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Shared beat engine tick failed", exc_info=True)
+                bars = None
 
-            # 2) When running with a ThreadManager, prefer bars produced
-            #    by the compute task so the UI tick remains lightweight.
-            if tm is not None:
+            if isinstance(bars, list):
+                # Use the spectral shape produced by _fft_to_bars and the
+                # static weighting directly, only clamping into [0, 1]. This
+                # avoids over-flattening from aggressive per-bar
+                # normalisation while still allowing the smoothing logic
+                # below to control rise/decay.
                 try:
-                    bars_from_compute = self._bars_result_buffer.consume_latest()
+                    count = self._bar_count
+                    if count <= 0:
+                        self._target_bars = []
+                    else:
+                        clamped: List[float] = []  # type: ignore[valid-type]
+                        for i in range(count):
+                            try:
+                                v = float(bars[i])
+                            except Exception:
+                                v = 0.0
+                            if v < 0.0:
+                                v = 0.0
+                            if v > 1.0:
+                                v = 1.0
+                            clamped.append(v)
+                        self._target_bars = clamped
                 except Exception:
-                    bars_from_compute = None
-                if isinstance(bars_from_compute, list):
-                    self._target_bars = bars_from_compute
+                    try:
+                        self._target_bars = [
+                            0.0 if v is None else max(0.0, min(1.0, float(v))) for v in (bars or [])
+                        ]
+                    except Exception:
+                        self._target_bars = [0.0] * self._bar_count
 
-            # 3) Spotify state gating – drive bars towards idle when not
-            #    playing regardless of upstream audio activity.
+                if is_verbose_logging():
+                    try:
+                        logger.debug(
+                            "[SPOTIFY_VIS] _on_tick: received bars (min=%.4f, max=%.4f)",
+                            min(self._target_bars) if self._target_bars else 0.0,
+                            max(self._target_bars) if self._target_bars else 0.0,
+                        )
+                    except Exception:
+                        pass
+
             if not self._spotify_playing:
                 self._target_bars = [0.0] * self._bar_count
 
-            # 4) Smooth display bars towards the current target and
-            #    request a repaint when anything changed.
             changed = False
-            s = self._smoothing
+
+            # Convert the fixed smoothing constant into a time-based blend
+            # factor so behaviour remains consistent across different tick
+            # rates (ThreadManager vs AnimationManager-driven). We use the
+            # per-tick delta since the last smoothing step rather than time
+            # since the last repaint so smoothing is independent of paint
+            # throttling.
+            dt_smooth = 0.0
+            try:
+                last_smooth = self._last_smooth_ts
+                if last_smooth > 0.0:
+                    dt_smooth = max(0.0, now_ts - last_smooth)
+            except Exception:
+                dt_smooth = 0.0
+            try:
+                self._last_smooth_ts = now_ts
+            except Exception:
+                pass
+            base_tau = max(0.05, float(self._smoothing))
+            if dt_smooth <= 0.0:
+                alpha_rise = 0.0
+                alpha_decay = 0.0
+            else:
+                try:
+                    # Make rises and falls more responsive while keeping
+                    # decay slightly slower so a visible trace remains.
+                    tau_rise = base_tau * 0.5
+                    tau_decay = base_tau * 1.2
+                    alpha_rise = 1.0 - math.exp(-dt_smooth / tau_rise)
+                    alpha_decay = 1.0 - math.exp(-dt_smooth / tau_decay)
+                except Exception:
+                    linear = min(1.0, dt_smooth / base_tau)
+                    alpha_rise = linear
+                    alpha_decay = linear
+            alpha_rise = max(0.0, min(1.0, alpha_rise))
+            alpha_decay = max(0.0, min(1.0, alpha_decay))
             for i in range(self._bar_count):
                 cur = self._display_bars[i]
-                tgt = self._target_bars[i]
-                nxt = cur + (tgt - cur) * s
+                try:
+                    tgt = self._target_bars[i]
+                except Exception:
+                    tgt = 0.0
+                alpha = alpha_rise if tgt >= cur else alpha_decay
+                nxt = cur + (tgt - cur) * alpha
                 if abs(nxt - cur) > 1e-3:
                     changed = True
                 self._display_bars[i] = nxt
 
             if changed:
-                self.update()
+                max_fps = self._base_max_fps
+                try:
+                    parent = self.parent()
+                    if parent is not None and hasattr(parent, "has_running_transition"):
+                        if bool(parent.has_running_transition()):
+                            max_fps = self._transition_max_fps
+                except Exception:
+                    pass
 
-    def _schedule_compute_bars_task(self, samples: object) -> None:
-        """Offload FFT/band-mapping work to the compute thread pool.
+                min_dt = 0.0
+                try:
+                    if max_fps > 0.0:
+                        min_dt = 1.0 / max_fps
+                except Exception:
+                    min_dt = 0.0
 
-        A single outstanding compute task is allowed at a time; new audio
-        frames will be picked up on the next tick once the current job
-        completes, keeping CPU usage bounded while still following the
-        latest audio.
-        """
-
-        tm = self._thread_manager
-        if tm is None:
-            return
-
-        self._compute_task_active = True
-
-        def _job(local_samples=samples):
-            return self._audio_worker.compute_bars_from_samples(local_samples)
-
-        def _on_result(result) -> None:
-            try:
-                self._compute_task_active = False
-                success = getattr(result, "success", True)
-                bars = getattr(result, "result", None)
-                if not success:
-                    return
-                if isinstance(bars, list):
-                    self._bars_result_buffer.publish(bars)
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] compute task callback failed", exc_info=True)
-
-        try:
-            tm.submit_compute_task(_job, callback=_on_result)
-        except Exception:
-            # If scheduling fails, clear the flag so we can try again
-            # on a future tick without permanently stalling the worker.
-            self._compute_task_active = False
+                last = self._last_update_ts
+                if last <= 0.0 or (now_ts - last) >= min_dt:
+                    self._last_update_ts = now_ts
+                    self.update()
 
     def paintEvent(self, event: QPaintEvent) -> None:  # type: ignore[override]
         super().paintEvent(event)

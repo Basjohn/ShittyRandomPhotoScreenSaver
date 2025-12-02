@@ -280,7 +280,7 @@ GL Path: The only supported GL route uses a single `GLCompositorWidget` per disp
         'mode': 'fill',                    # 'fill' | 'fit' | 'shrink'
         'hw_accel': True,                  # bool - GL compositor / hardware backend enabled when True
         'refresh_sync': True,              # bool - enable vsync / refresh sync
-        'prefer_triple_buffer': True,      # bool - prefer triple-buffered swap when available
+        'prefer_triple_buffer': True,      # legacy hint; compositor always requests a double-buffered surface and leaves any true triple buffering to the driver
         'gl_depth_bits': 24,               # int - depth buffer bits for GL context
         'gl_stencil_bits': 8,              # int - stencil buffer bits for GL context
         'render_backend_mode': 'opengl',   # 'opengl' | 'software' (fallback)

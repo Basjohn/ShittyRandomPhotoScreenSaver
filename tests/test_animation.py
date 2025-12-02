@@ -3,8 +3,8 @@ import time
 import pytest
 from PySide6.QtWidgets import QWidget, QGraphicsOpacityEffect
 from core.animation import (
-    AnimationManager, EasingCurve, AnimationState,
-    PropertyAnimationConfig, CustomAnimationConfig
+    AnimationManager, EasingCurve,
+    PropertyAnimationConfig,
 )
 
 
@@ -230,9 +230,7 @@ def test_animation_with_delay(animation_manager, qt_app):
     def update_callback(progress):
         progress_values.append(progress)
     
-    start_time = time.time()
-    
-    anim_id = animation_manager.animate_custom(
+    animation_manager.animate_custom(
         duration=0.1,
         update_callback=update_callback,
         on_start=on_start,
@@ -334,8 +332,9 @@ def test_animation_manager_auto_stop(animation_manager, test_widget):
         easing=EasingCurve.LINEAR
     )
     
-    # Timer should be running
+    # Timer should be running and the animation marked as running
     assert animation_manager._timer.isActive()
+    assert animation_manager.is_running(anim_id)
     
     # Wait for completion with event processing
     for _ in range(20):
@@ -344,3 +343,21 @@ def test_animation_manager_auto_stop(animation_manager, test_widget):
     
     # Should eventually stop
     assert animation_manager.get_active_count() == 0
+
+
+def test_animation_manager_emits_perf_metrics(qt_app, caplog):
+    from core.animation.animator import AnimationManager
+
+    am = AnimationManager(fps=60)
+
+    am._profile_start_ts = 0.0  # type: ignore[attr-defined]
+    am._profile_last_ts = 1.0  # type: ignore[attr-defined]
+    am._profile_frame_count = 60  # type: ignore[attr-defined]
+    am._profile_min_dt = 1.0 / 120.0  # type: ignore[attr-defined]
+    am._profile_max_dt = 1.0 / 20.0  # type: ignore[attr-defined]
+
+    with caplog.at_level("INFO"):
+        am._log_profile_summary()  # type: ignore[attr-defined]
+
+    messages = [r.message for r in caplog.records]
+    assert any("[PERF] [ANIM] AnimationManager metrics" in m for m in messages)

@@ -308,6 +308,11 @@ class BaseTransition(QObject, metaclass=QABCMeta):
                     am.set_target_fps(int(target_fps))
             except Exception:
                 pass
+        try:
+            if hasattr(widget, "_on_animation_manager_ready"):
+                widget._on_animation_manager_ready(am)
+        except Exception:
+            pass
         return am
 
     def _get_thread_manager(self, widget: QWidget):

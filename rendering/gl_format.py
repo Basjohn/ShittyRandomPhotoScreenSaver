@@ -2,7 +2,10 @@
 Utilities for constructing QSurfaceFormat instances that respect user settings.
 
 Centralizes GL surface configuration so we consistently honour refresh sync
-(vsync) and triple-buffer preferences across the application.
+(vsync) while preferring a simple double-buffered swap behaviour. Any
+"prefer triple buffer" setting is now treated as a legacy hint and does not
+change the requested swap behaviour; modern drivers control true triple
+buffering at their own layer.
 """
 from __future__ import annotations
 
@@ -157,8 +160,10 @@ def build_surface_format(
 
     fmt = QSurfaceFormat()
 
-    use_triple = prefs.prefer_triple_buffer and prefs.refresh_sync
-    requested_swap = QSurfaceFormat.SwapBehavior.TripleBuffer if use_triple else QSurfaceFormat.SwapBehavior.DoubleBuffer
+    # Always request a double-buffered surface; modern drivers manage any
+    # true triple buffering themselves and explicit TripleBuffer requests
+    # tend to be brittle across stacks.
+    requested_swap = QSurfaceFormat.SwapBehavior.DoubleBuffer
     try:
         fmt.setSwapBehavior(requested_swap)
     except Exception as e:

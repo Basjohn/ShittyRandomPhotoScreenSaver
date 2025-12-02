@@ -1374,6 +1374,28 @@ class DisplayWidget(QWidget):
         logger.debug("[WARMUP] Skipping legacy GL overlay warm-up (compositor-only pipeline)")
         return
 
+    def _on_animation_manager_ready(self, animation_manager) -> None:
+        """Hook called by BaseTransition when an AnimationManager is available.
+
+        Allows overlays such as the Spotify Beat Visualizer to subscribe to
+        the same high-frequency tick that drives transitions so they do not
+        pause or desync during animations.
+        """
+
+        try:
+            vis = getattr(self, "spotify_visualizer_widget", None)
+        except Exception:
+            vis = None
+
+        if vis is None:
+            return
+
+        try:
+            if hasattr(vis, "attach_to_animation_manager"):
+                vis.attach_to_animation_manager(animation_manager)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to attach visualizer to AnimationManager", exc_info=True)
+
     def _ensure_overlay_stack(self, stage: str = "runtime") -> None:
         """Refresh overlay geometry and schedule raises to maintain Z-order."""
 

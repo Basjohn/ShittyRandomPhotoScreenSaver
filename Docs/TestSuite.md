@@ -443,7 +443,7 @@ pytest -v tests/test_module.py --tb=short
 pytest -v tests/ --tb=short
 
 # If terminal output is unreliable:
-pytest -v tests/ --tb=short > test_output.log 2>&1
+pytest -v tests/ --tb=short -s > test_output.log 2>&1
 Get-Content test_output.log -Tail 50
 ```
 
@@ -709,16 +709,19 @@ pytest tests/ --tb=short || exit 1
 
 ### 24. `tests/test_spotify_visualizer_widget.py` – Spotify Beat Visualiser
 
-**Module Purpose**: Guard the architecture and basic performance characteristics of the Spotify Beat Visualiser after the GL compositor move and beat-pipeline refactor.
+**Module Purpose**: Guard the architecture and basic performance characteristics of the Spotify Beat Visualiser after the GL compositor move and beat‑pipeline refactor, including the shared beat engine and adaptive FPS limiting.
 
-**Test Count**: 2 tests  
+**Test Count**: 5 tests  
 **Status**: ✅ All passing
 
 **Critical Tests:**
-- `test_spotify_visualizer_tick_uses_compute_bars` – Confirms `SpotifyVisualizerWidget._on_tick` consumes `_AudioFrame` objects from the shared `TripleBuffer` and delegates bar computation to `SpotifyVisualizerAudioWorker.compute_bars_from_samples`, enforcing that FFT/band mapping lives in the measured UI tick path rather than the high-frequency audio callback.
-- `test_spotify_visualizer_compute_bars_reasonable_runtime` – Coarse runtime regression guard for `compute_bars_from_samples`: repeatedly computes bars for random audio samples and asserts the batch finishes within a generous time bound, catching accidental GIL-heavy work migrating into per-sample Python loops.
+- `test_spotify_visualizer_tick_uses_compute_bars` – Confirms `SpotifyVisualizerWidget._on_tick` consumes `_AudioFrame` objects from the shared `TripleBuffer` and delegates bar computation to `SpotifyVisualizerAudioWorker.compute_bars_from_samples`, enforcing that FFT/band mapping lives in the measured UI tick path rather than the high‑frequency audio callback (or its shared compute equivalent).
+- `test_spotify_visualizer_compute_bars_reasonable_runtime` – Coarse runtime regression guard for `compute_bars_from_samples`: repeatedly computes bars for random audio samples and asserts the batch finishes within a generous time bound, catching accidental GIL‑heavy work migrating into per‑sample Python loops.
+- `test_spotify_visualizer_widgets_share_audio_engine` – Verifies that multiple `SpotifyVisualizerWidget` instances share a single underlying `SpotifyVisualizerAudioWorker` and `TripleBuffer`, ensuring there is only one audio capture/FFT pipeline per process.
+- `test_spotify_visualizer_tick_respects_fps_cap` – Verifies that the visualiser’s tick path honours the configured FPS cap and does not repaint more often than allowed when called rapidly, so the widget cannot flood the UI event loop during transitions.
+- `test_spotify_visualizer_emits_perf_metrics` – Asserts that the visualiser emits `[PERF] [SPOTIFY_VIS] Tick metrics` via `_log_perf_snapshot` when PERF metrics are enabled, so its effective FPS and dt jitter are always recorded alongside `[PERF] [ANIM]` and `[PERF] [GL COMPOSITOR]` in the dedicated PERF log.
 
-**Purpose**: Provide a focused regression harness for the Spotify beat pipeline so future refactors cannot silently reintroduce the “Spotify playing → transitions collapse to ~20 FPS” choke.
+**Purpose**: Provide a focused regression harness for the Spotify beat pipeline (including the shared beat engine and adaptive FPS cap) so future refactors cannot silently reintroduce the "Spotify playing → transitions collapse to ~20–40 FPS" choke.
 
 ---
 
@@ -745,10 +748,10 @@ pytest tests/ --tb=short || exit 1
 **Status**: ✅ All passing
 
 **Critical Tests:**
-- `test_console_handler_replaces_unencodable_characters_narrow_encodings` – Simulates cp1252/latin-1 console streams and asserts that `SuppressingStreamHandler` degrades arrows/emoji into replacement characters instead of raising when the console cannot represent them.
+- `test_console_handler_replaces_unencodable_characters_narrow_encodings` – Simulates cp1252/latin-1 console streams and asserts that `SuppressingStreamHandler` degrades arrows/emoji into replacement characters instead of raising when the console encoding cannot represent them.
 - `test_console_handler_preserves_unicode_on_utf8_console` – Asserts that UTF-8 console streams still display the full Unicode message with no replacement, keeping debug readability high on modern terminals.
 
-**Purpose**: Provide a regression harness for the console encoding roadmap item so future logging changes cannot reintroduce cp1252 `UnicodeEncodeError` issues during interactive debug sessions.
+**Purpose**: Provide a regression harness for the console encoding roadmap item so future logging changes cannot reintroduce cp1252 `UnicodeEncodeError` issues during interactive debug sessions. Combined with the dedicated rotating `screensaver_perf.log` (which captures all `[PERF]` lines via a PERF-only filter), this keeps both console and file-based diagnostics robust while making performance metrics easy to inspect across rotated logs.
 
 ---
 

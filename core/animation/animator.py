@@ -268,6 +268,8 @@ class AnimationManager(QObject):
         self._animation_groups: Dict[str, AnimationGroupConfig] = {}
         self._last_update_time: Optional[float] = None
 
+        self._tick_listeners: Dict[int, Callable[[float], None]] = {}
+
         # Lightweight profiling state for `[PERF] [ANIM]` metrics. These are
         # reset each time the manager's timer starts and logged once when it
         # stops so callers can correlate effective FPS and dt jitter with
@@ -361,6 +363,14 @@ class AnimationManager(QObject):
                 pass
         
         logger.info("AnimationManager cleanup complete")
+
+    def add_tick_listener(self, callback: Callable[[float], None]) -> int:
+        listener_id = id(callback)
+        self._tick_listeners[listener_id] = callback
+        return listener_id
+
+    def remove_tick_listener(self, callback_id: int) -> None:
+        self._tick_listeners.pop(callback_id, None)
     
     def animate_property(self, target: Any, property_name: str, start_value: Any, 
                         end_value: Any, duration: float, 
@@ -571,6 +581,13 @@ class AnimationManager(QObject):
         # Update all animations
         for anim_id, animator in list(self._animations.items()):
             animator.update(delta_time)
+
+        if self._tick_listeners:
+            for cb in list(self._tick_listeners.values()):
+                try:
+                    cb(delta_time)
+                except Exception as e:
+                    logger.debug("[ANIM] Tick listener failed: %s", e, exc_info=True)
 
     def _log_profile_summary(self) -> None:
         """Emit a concise `[PERF] [ANIM]` summary for the last active run."""
