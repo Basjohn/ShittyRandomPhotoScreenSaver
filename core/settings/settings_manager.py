@@ -161,7 +161,8 @@ class SettingsManager(QObject):
                     '3D Block Spins': True,
                     'Rain Drops': True,
                     'Warp Dissolve': True,
-                    'Shuffle': True,
+                    # Shuffle has been retired for v1.2 and is no longer
+                    # part of the active random/switch pool.
                     'Blinds': True,
                 },
             },

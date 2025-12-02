@@ -46,7 +46,6 @@ from transitions.gl_compositor_peel_transition import GLCompositorPeelTransition
 from transitions.gl_compositor_blockspin_transition import GLCompositorBlockSpinTransition
 from transitions.gl_compositor_raindrops_transition import GLCompositorRainDropsTransition
 from transitions.gl_compositor_warp_transition import GLCompositorWarpTransition
-from transitions.gl_compositor_shuffle_transition import GLCompositorShuffleTransition
 from widgets.clock_widget import ClockWidget, TimeFormat, ClockPosition
 from widgets.weather_widget import WeatherWidget, WeatherPosition
 from widgets.media_widget import MediaWidget, MediaPosition
@@ -1822,36 +1821,14 @@ class DisplayWidget(QWidget):
                 return transition
 
             if transition_type == 'Shuffle':
-                # Shuffle is implemented as a compositor-driven variant of a
-                # block-based diffuse mask. Square blocks of the new image
-                # slide in from a random edge with a soft stacking effect.
-                # It is GL-only and falls back to a simple crossfade when GPU
-                # acceleration or the compositor is unavailable.
+                # Shuffle has been retired for v1.2. Any legacy configurations
+                # that still reference this label are mapped to a simple
+                # Crossfade so settings remain valid without exposing Shuffle
+                # in the active transition set.
 
-                diffuse_settings = transitions_settings.get('diffuse', {}) if isinstance(transitions_settings.get('diffuse', {}), dict) else {}
-                block_size_raw = diffuse_settings.get('block_size', 50)
-                try:
-                    block_size = int(block_size_raw)
-                except Exception:
-                    block_size = 50
-
-                direction_str = 'Random'
-
-                if hw_accel:
-                    try:
-                        self._ensure_gl_compositor()
-                    except Exception:
-                        logger.debug("[GL COMPOSITOR] Failed to ensure compositor during shuffle selection", exc_info=True)
-                    use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
-                    if use_compositor:
-                        transition = GLCompositorShuffleTransition(duration_ms, block_size, direction_str, easing_str)
-                    else:
-                        transition = CrossfadeTransition(duration_ms, easing_str)
-                else:
-                    transition = CrossfadeTransition(duration_ms, easing_str)
-
+                transition = CrossfadeTransition(duration_ms, easing_str)
                 transition.set_resource_manager(self._resource_manager)
-                label = 'Shuffle' if hw_accel else 'Crossfade'
+                label = 'Crossfade'
                 self._log_transition_selection(requested_type, label, random_mode, random_choice_value)
                 return transition
 

@@ -92,7 +92,9 @@ class ScreensaverEngine(QObject):
         self._loading_lock = threading.Lock()  # FIX: Protect loading flag from race conditions
         # Canonical list of transition types used for C-key cycling. Legacy
         # "Claw Marks" entries have been fully removed from the engine and are
-        # mapped to "Crossfade" at selection time for back-compat only.
+        # mapped to "Crossfade" at selection time for back-compat only. The
+        # Shuffle transition has been retired for v1.2 and no longer appears in
+        # the active rotation.
         self._transition_types: List[str] = [
             "Crossfade",
             "Slide",
@@ -103,7 +105,6 @@ class ScreensaverEngine(QObject):
             "3D Block Spins",
             "Ripple",  # formerly "Rain Drops"
             "Warp Dissolve",
-            "Shuffle",
             "Blinds",
         ]
         self._current_transition_index: int = 0  # Will sync with settings in initialize()
@@ -1297,9 +1298,9 @@ class ScreensaverEngine(QObject):
             # restrict to those enabled in the per-transition pool map.
             base_types = ["Crossfade", "Slide", "Wipe", "Diffuse", "Block Puzzle Flip"]
             # Treat legacy 'Rain Drops' entries as equivalent to 'Ripple' when
-            # evaluating GL-only pools. "Claw Marks" has been removed from the
-            # runtime and is no longer part of the random pool.
-            gl_only_types = ["Blinds", "Peel", "3D Block Spins", "Ripple", "Rain Drops", "Warp Dissolve", "Shuffle"]
+            # evaluating GL-only pools. "Claw Marks" and "Shuffle" have been
+            # removed from the runtime and are no longer part of the random pool.
+            gl_only_types = ["Blinds", "Peel", "3D Block Spins", "Ripple", "Rain Drops", "Warp Dissolve"]
 
             try:
                 raw_hw = self.settings_manager.get('display.hw_accel', False)
@@ -1332,8 +1333,12 @@ class ScreensaverEngine(QObject):
                 # Fallback: always ensure at least Crossfade is available so
                 # misconfigured pool settings cannot break rotation entirely.
                 available = ["Crossfade"]
-            # Avoid immediate repeats of transition type
+            # Avoid immediate repeats of transition type. Legacy "Shuffle"
+            # selections are treated as "Crossfade" so the engine no longer
+            # reintroduces Shuffle into the pool.
             last_type = self.settings_manager.get('transitions.last_random_choice', None)
+            if last_type == "Shuffle":
+                last_type = "Crossfade"
             candidates = [t for t in available if t != last_type] if last_type in available else available
             if not candidates:
                 candidates = available

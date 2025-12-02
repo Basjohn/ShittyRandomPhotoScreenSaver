@@ -127,7 +127,9 @@ class SpotifyVisualizerAudioWorker(QObject):
                             samplerate = 48000
 
                         if channels > 0 and samplerate > 0:
-                            chunk_size = 1024
+                            # Prefer smaller audio blocks for lower latency where
+                            # supported, with a slightly larger fallback size if
+                            # the host API rejects 512-sample buffers.
 
                             def _pa_callback(in_data, frame_count, time_info, status_flags):
                                 try:
@@ -171,28 +173,53 @@ class SpotifyVisualizerAudioWorker(QObject):
 
                             stream = None
                             try:
-                                stream = pa.open(
-                                    format=pyaudio.paInt16,
-                                    channels=channels,
-                                    rate=samplerate,
-                                    frames_per_buffer=chunk_size,
-                                    input=True,
-                                    input_device_index=default_speakers["index"],
-                                    stream_callback=_pa_callback,
-                                )
-                                stream.start_stream()
-                                self._pa = pa
-                                self._stream = stream
-                                self._running = True
-                                logger.info(
-                                    "[SPOTIFY_VIS] Audio worker started via PyAudioWPatch (device=%s, name=%r, channels=%s, sr=%s, block=%s)",
-                                    default_speakers.get("index"),
-                                    default_speakers.get("name"),
-                                    channels,
-                                    samplerate,
-                                    chunk_size,
-                                )
-                                return
+                                # Try lower-latency 512-sample blocks first,
+                                # then fall back to 1024-sample blocks if the
+                                # host rejects the smaller size.
+                                for chunk_size in (512, 1024):
+                                    try:
+                                        stream = pa.open(
+                                            format=pyaudio.paInt16,
+                                            channels=channels,
+                                            rate=samplerate,
+                                            frames_per_buffer=chunk_size,
+                                            input=True,
+                                            input_device_index=default_speakers["index"],
+                                            stream_callback=_pa_callback,
+                                        )
+                                        stream.start_stream()
+                                        self._pa = pa
+                                        self._stream = stream
+                                        self._running = True
+                                        logger.info(
+                                            "[SPOTIFY_VIS] Audio worker started via PyAudioWPatch (device=%s, name=%r, channels=%s, sr=%s, block=%s)",
+                                            default_speakers.get("index"),
+                                            default_speakers.get("name"),
+                                            channels,
+                                            samplerate,
+                                            chunk_size,
+                                        )
+                                        return
+                                    except Exception:
+                                        # Clean up this attempt and try the
+                                        # next block size.
+                                        try:
+                                            if stream is not None:
+                                                try:
+                                                    stream.stop_stream()
+                                                except Exception:
+                                                    pass
+                                                try:
+                                                    stream.close()
+                                                except Exception:
+                                                    pass
+                                        except Exception:
+                                            pass
+                                        stream = None
+                                # If we reach here, both block sizes failed;
+                                # raise to trigger the outer teardown and
+                                # sounddevice fallback.
+                                raise
                             except Exception:
                                 if is_verbose_logging():
                                     logger.error(
@@ -293,7 +320,10 @@ class SpotifyVisualizerAudioWorker(QObject):
                         channels = 2
 
                     if channels > 0:
-                        blocksize = 1024
+                        # Prefer smaller blocks for lower latency on WASAPI
+                        # loopback; sounddevice falls back internally when
+                        # needed.
+                        blocksize = 512
 
                         def _loopback_callback(indata, frames, time_info, status):  # type: ignore[override]
                             # This runs on the audio thread. Keep work minimal
@@ -1011,8 +1041,10 @@ class SpotifyVisualizerWidget(QWidget):
         self._per_bar_energy: List[float] = [0.0] * self._bar_count
         # Base smoothing time constant in seconds; actual per-tick blend
         # factor is derived from this and the real dt between ticks so that
-        # behaviour stays consistent even if tick rate changes.
-        self._smoothing: float = 0.25
+        # behaviour stays consistent even if tick rate changes. Slightly
+        # reduced from earlier values to make bar attacks feel less "late"
+        # without removing the pleasant decay tail.
+        self._smoothing: float = 0.18
 
         self._thread_manager: Optional[ThreadManager] = None
         self._bars_timer = None
@@ -1079,6 +1111,14 @@ class SpotifyVisualizerWidget(QWidget):
         self._perf_paint_min_dt: float = 0.0
         self._perf_paint_max_dt: float = 0.0
 
+        # Lightweight view of capture→bars latency derived from the shared
+        # beat engine's last-audio timestamp. Logged alongside Tick/Paint
+        # metrics but kept in a separate line so existing schemas remain
+        # stable for tools.
+        self._perf_audio_lag_last_ms: float = 0.0
+        self._perf_audio_lag_min_ms: float = 0.0
+        self._perf_audio_lag_max_ms: float = 0.0
+
         # Last time we emitted a PERF snapshot while running. This allows us
         # to log Spotify visualiser activity periodically even if the widget
         # is never explicitly stopped/cleaned up (for example, if the
@@ -1099,8 +1139,12 @@ class SpotifyVisualizerWidget(QWidget):
 
         self._last_update_ts: float = 0.0
         self._last_smooth_ts: float = 0.0
-        self._base_max_fps: float = 25.0
-        self._transition_max_fps: float = 15.0
+        # Base paint FPS caps for the visualiser; slightly higher than
+        # before now that compositor/GL transitions are cheaper, while
+        # still low enough that the visualiser cannot dominate the UI
+        # event loop.
+        self._base_max_fps: float = 30.0
+        self._transition_max_fps: float = 18.0
 
         self._setup_ui()
 
@@ -1282,7 +1326,10 @@ class SpotifyVisualizerWidget(QWidget):
             and self._bars_timer is None
         ):
             try:
-                self._bars_timer = self._thread_manager.schedule_recurring(40, self._on_tick)
+                # Slightly tighter tick cadence (~30ms) so bar updates track
+                # audio more closely while remaining below typical slideshow
+                # framerates.
+                self._bars_timer = self._thread_manager.schedule_recurring(30, self._on_tick)
             except Exception:
                 self._bars_timer = None
 
@@ -1490,6 +1537,25 @@ class SpotifyVisualizerWidget(QWidget):
                 self._engine = engine
                 if engine is not None:
                     bars = engine.tick()
+                    # Track capture→bars latency so PERF logs can report how
+                    # far behind the latest audio frame the visualiser is.
+                    try:
+                        last_audio_ts = float(getattr(engine, "_last_audio_ts", 0.0))
+                    except Exception:
+                        last_audio_ts = 0.0
+                    if last_audio_ts > 0.0:
+                        try:
+                            lag_ms = max(0.0, (now_ts - last_audio_ts) * 1000.0)
+                        except Exception:
+                            lag_ms = 0.0
+                        try:
+                            self._perf_audio_lag_last_ms = lag_ms
+                            if self._perf_audio_lag_min_ms == 0.0 or lag_ms < self._perf_audio_lag_min_ms:
+                                self._perf_audio_lag_min_ms = lag_ms
+                            if lag_ms > self._perf_audio_lag_max_ms:
+                                self._perf_audio_lag_max_ms = lag_ms
+                        except Exception:
+                            pass
             except Exception:
                 logger.debug("[SPOTIFY_VIS] Shared beat engine tick failed", exc_info=True)
                 bars = None
@@ -1563,10 +1629,11 @@ class SpotifyVisualizerWidget(QWidget):
                 alpha_decay = 0.0
             else:
                 try:
-                    # Make rises and falls more responsive while keeping
-                    # decay slightly slower so a visible trace remains.
-                    tau_rise = base_tau * 0.5
-                    tau_decay = base_tau * 1.2
+                    # Make rises more responsive (shorter attack) while
+                    # keeping decay only slightly slower so a visible trace
+                    # remains without smearing the beat.
+                    tau_rise = base_tau * 0.35
+                    tau_decay = base_tau * 1.0
                     alpha_rise = 1.0 - math.exp(-dt_smooth / tau_rise)
                     alpha_decay = 1.0 - math.exp(-dt_smooth / tau_decay)
                 except Exception:
@@ -1787,6 +1854,18 @@ class SpotifyVisualizerWidget(QWidget):
                         max_dt_ms_p,
                         self._bar_count,
                     )
+            # Emit a separate AudioLag metrics line so tools that parse
+            # Tick/Paint summaries remain compatible.
+            try:
+                if self._perf_audio_lag_last_ms > 0.0:
+                    logger.info(
+                        "[PERF] [SPOTIFY_VIS] AudioLag metrics: last=%.2fms, min=%.2fms, max=%.2fms",
+                        self._perf_audio_lag_last_ms,
+                        self._perf_audio_lag_min_ms,
+                        self._perf_audio_lag_max_ms,
+                    )
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] AudioLag PERF metrics logging failed", exc_info=True)
         except Exception:
             logger.debug("[SPOTIFY_VIS] PERF metrics logging failed", exc_info=True)
         finally:
@@ -1801,4 +1880,7 @@ class SpotifyVisualizerWidget(QWidget):
                 self._perf_paint_frame_count = 0
                 self._perf_paint_min_dt = 0.0
                 self._perf_paint_max_dt = 0.0
+                self._perf_audio_lag_last_ms = 0.0
+                self._perf_audio_lag_min_ms = 0.0
+                self._perf_audio_lag_max_ms = 0.0
 
