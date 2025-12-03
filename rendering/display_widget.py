@@ -52,6 +52,7 @@ from widgets.weather_widget import WeatherWidget, WeatherPosition
 from widgets.media_widget import MediaWidget, MediaPosition
 from widgets.reddit_widget import RedditWidget, RedditPosition
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
+from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
 from widgets.shadow_utils import apply_widget_shadow
 from core.logging.logger import get_logger, is_verbose_logging
 from core.logging.overlay_telemetry import record_overlay_ready
@@ -160,6 +161,7 @@ class DisplayWidget(QWidget):
         self.weather_widget: Optional[WeatherWidget] = None
         self.media_widget: Optional[MediaWidget] = None
         self.spotify_visualizer_widget: Optional[SpotifyVisualizerWidget] = None
+        self._spotify_bars_overlay: Optional[SpotifyBarsGLOverlay] = None
         self.reddit_widget: Optional[RedditWidget] = None
         self._current_transition: Optional[BaseTransition] = None
         self._current_transition_overlay_key: Optional[str] = None
@@ -2657,6 +2659,77 @@ class DisplayWidget(QWidget):
             vis.raise_()
         except Exception:
             pass
+
+    def push_spotify_visualizer_frame(
+        self,
+        *,
+        bars,
+        bar_count,
+        segments,
+        fill_color,
+        border_color,
+        fade,
+        playing,
+    ):
+        vis = getattr(self, "spotify_visualizer_widget", None)
+        if vis is None:
+            return False
+
+        try:
+            if not vis.isVisible():
+                return False
+        except Exception:
+            return False
+
+        try:
+            geom = vis.geometry()
+        except Exception:
+            return False
+
+        if geom.width() <= 0 or geom.height() <= 0:
+            return False
+
+        # Lazily create a small GL overlay dedicated to Spotify bars. This
+        # sits above the card widget in Z-order while the card itself remains
+        # a normal QWidget with ShadowFadeProfile-driven opacity.
+        overlay = getattr(self, "_spotify_bars_overlay", None)
+        if overlay is None or not isinstance(overlay, SpotifyBarsGLOverlay):
+            try:
+                overlay = SpotifyBarsGLOverlay(self)
+                overlay.setObjectName("spotify_bars_gl_overlay")
+                self._spotify_bars_overlay = overlay
+                if self._resource_manager is not None:
+                    try:
+                        self._resource_manager.register_qt(
+                            overlay,
+                            description="Spotify bars GL overlay",
+                        )
+                    except Exception:
+                        logger.debug("[SPOTIFY_VIS] Failed to register SpotifyBarsGLOverlay", exc_info=True)
+            except Exception:
+                self._spotify_bars_overlay = None
+                return False
+
+        if overlay is None:
+            return False
+
+        try:
+            overlay.set_state(
+                geom,
+                bars,
+                bar_count,
+                segments,
+                fill_color,
+                border_color,
+                fade,
+                playing,
+                visible=True,
+            )
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to push frame to SpotifyBarsGLOverlay", exc_info=True)
+            return False
+
+        return True
 
     def resizeEvent(self, event: QResizeEvent) -> None:  # type: ignore[override]
         super().resizeEvent(event)

@@ -1146,6 +1146,11 @@ class SpotifyVisualizerWidget(QWidget):
         self._base_max_fps: float = 30.0
         self._transition_max_fps: float = 18.0
 
+        # When GPU overlay rendering is available, we disable the
+        # widget's own bar drawing and instead push frames up to the
+        # DisplayWidget, which owns a small QOpenGLWidget overlay.
+        self._cpu_bars_enabled: bool = True
+
         self._setup_ui()
 
     # ------------------------------------------------------------------
@@ -1435,6 +1440,45 @@ class SpotifyVisualizerWidget(QWidget):
                         exc_info=True,
                     )
 
+    def _get_gpu_fade_factor(self, now_ts: float) -> float:
+        """Return fade factor for GPU bars based on ShadowFadeProfile.
+
+        We prefer the shared ShadowFadeProfile progress when available so that
+        the GL overlay tracks the exact same curve. When no progress is
+        present we fall back to 1.0 while the widget is visible.
+        """
+
+        try:
+            prog = getattr(self, "_shadowfade_progress", None)
+        except Exception:
+            prog = None
+
+        if isinstance(prog, (float, int)):
+            p = float(prog)
+            if p <= 0.0:
+                return 0.0
+            if p >= 1.0:
+                return 1.0
+
+            # Clamp first, then apply a small delay so bars fade in slightly
+            # after the card/shadow begin fading. This keeps practical sync
+            # with ShadowFadeProfile while avoiding bars appearing "ready"
+            # before the rest of the widget.
+            p = max(0.0, min(1.0, p))
+            delay = 0.15
+            if p <= delay:
+                return 0.0
+            t = (p - delay) / (1.0 - delay)
+            # Gentle ease-in so the bar opacity builds up smoothly.
+            t = t * t
+            return max(0.0, min(1.0, t))
+
+        # Fallback: treat widget visibility as a coarse fade proxy.
+        try:
+            return 1.0 if self.isVisible() else 0.0
+        except Exception:
+            return 1.0
+
     def _rebuild_geometry_cache(self, rect: QRect) -> None:
         """Recompute cached bar/segment layout for the current geometry."""
 
@@ -1466,7 +1510,9 @@ class SpotifyVisualizerWidget(QWidget):
         gap = 2
         total_gap = gap * (count - 1) if count > 1 else 0
         bar_width = max(1, int((inner.width() - total_gap) / max(1, count)))
-        x0 = inner.left()
+        # Small horizontal offset so the bar field aligns visually with the
+        # card frame and matches the GL overlay geometry.
+        x0 = inner.left() + 5
         bar_x = [x0 + i * (bar_width + gap) for i in range(count)]
 
         seg_gap = 1
@@ -1615,7 +1661,7 @@ class SpotifyVisualizerWidget(QWidget):
             dt_smooth = 0.0
             try:
                 last_smooth = self._last_smooth_ts
-                if last_smooth > 0.0:
+                if last_smooth >= 0.0:
                     dt_smooth = max(0.0, now_ts - last_smooth)
             except Exception:
                 dt_smooth = 0.0
@@ -1674,7 +1720,47 @@ class SpotifyVisualizerWidget(QWidget):
                 last = self._last_update_ts
                 if last <= 0.0 or (now_ts - last) >= min_dt:
                     self._last_update_ts = now_ts
-                    self.update()
+
+                    used_gpu = False
+                    parent = self.parent()
+                    # When DisplayWidget exposes a GPU overlay path, prefer
+                    # that and disable CPU bar drawing once it succeeds.
+                    if parent is not None and hasattr(parent, "push_spotify_visualizer_frame"):
+                        try:
+                            fade = self._get_gpu_fade_factor(now_ts)
+                        except Exception:
+                            fade = 1.0
+                        try:
+                            used_gpu = bool(parent.push_spotify_visualizer_frame(
+                                bars=list(self._display_bars),
+                                bar_count=self._bar_count,
+                                segments=getattr(self, "_bar_segments", 16),
+                                fill_color=self._bar_fill_color,
+                                border_color=self._bar_border_color,
+                                fade=fade,
+                                playing=self._spotify_playing,
+                            ))
+                        except Exception:
+                            used_gpu = False
+
+                    if used_gpu:
+                        try:
+                            self._cpu_bars_enabled = False
+                        except Exception:
+                            pass
+                        # Card/background/shadow still repaint via stylesheet
+                        # and ShadowFadeProfile; we do not need to redraw bars
+                        # when GPU overlay is active.
+                        try:
+                            self.update()
+                        except Exception:
+                            pass
+                    else:
+                        # Fallback: keep original QWidget-based bar drawing.
+                        try:
+                            self.update()
+                        except Exception:
+                            pass
 
     def paintEvent(self, event: QPaintEvent) -> None:  # type: ignore[override]
         super().paintEvent(event)
@@ -1713,6 +1799,14 @@ class SpotifyVisualizerWidget(QWidget):
             except Exception:
                 pass
         if rect.width() <= 0 or rect.height() <= 0:
+            painter.end()
+            return
+
+        # When GPU overlay rendering is active for this widget instance, the
+        # card/fade/shadow are still drawn via stylesheets and
+        # ShadowFadeProfile, but the bar geometry itself is rendered by the
+        # GL overlay. In that mode we skip the CPU bar drawing entirely.
+        if not getattr(self, "_cpu_bars_enabled", True):
             painter.end()
             return
 

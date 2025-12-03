@@ -350,7 +350,18 @@ class ShadowFadeProfile:
 
             def _on_value_changed(value: float) -> None:
                 try:
-                    effect.setOpacity(float(value))
+                    f = float(value)
+                except Exception:
+                    f = 0.0
+                try:
+                    effect.setOpacity(f)
+                except Exception:
+                    pass
+                # Expose the instantaneous fade progress on the widget so
+                # GPU clients (e.g. GL compositor overlays) can track the
+                # same curve without duplicating easing logic.
+                try:
+                    setattr(widget, "_shadowfade_progress", f)
                 except Exception:
                     pass
 
@@ -369,6 +380,13 @@ class ShadowFadeProfile:
 
                 try:
                     setattr(widget, "_shadowfade_effect", None)
+                except Exception:
+                    pass
+
+                # Ensure final progress is pinned at 1.0 for clients that
+                # read the attribute after the fade completes.
+                try:
+                    setattr(widget, "_shadowfade_progress", 1.0)
                 except Exception:
                     pass
 

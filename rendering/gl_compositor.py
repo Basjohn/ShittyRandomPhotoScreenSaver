@@ -451,6 +451,18 @@ class GLCompositorWidget(QOpenGLWidget):
         # widget itself.
         self._resource_manager: Optional[ResourceManager] = None
 
+        # Smoothed Spotify visualiser state pushed from DisplayWidget. When
+        # present, bars are rendered as a thin overlay above the current
+        # image/transition but below the PERF HUD.
+        self._spotify_vis_enabled: bool = False
+        self._spotify_vis_rect: Optional[QRect] = None
+        self._spotify_vis_bars = None
+        self._spotify_vis_bar_count: int = 0
+        self._spotify_vis_segments: int = 0
+        self._spotify_vis_fill_color: Optional[QColor] = None
+        self._spotify_vis_border_color: Optional[QColor] = None
+        self._spotify_vis_fade: float = 0.0
+
     # ------------------------------------------------------------------
     # Public API used by DisplayWidget / transitions
     # ------------------------------------------------------------------
@@ -461,6 +473,86 @@ class GLCompositorWidget(QOpenGLWidget):
         # If no crossfade is active, repaint immediately.
         if self._crossfade is None:
             self.update()
+
+    def set_spotify_visualizer_state(
+        self,
+        rect: QRect,
+        bars,
+        bar_count: int,
+        segments: int,
+        fill_color: QColor,
+        border_color: QColor,
+        fade: float,
+        playing: bool,
+        visible: bool,
+    ) -> None:
+        """Update Spotify bar overlay state pushed from DisplayWidget.
+
+        When ``visible`` is False or the geometry is invalid, the overlay is
+        disabled. Otherwise the smoothed bar values are clamped into [0, 1]
+        and cached so they can be drawn after the base image/transition but
+        before the PERF HUD.
+        """
+
+        if not visible:
+            self._spotify_vis_enabled = False
+            return
+
+        try:
+            count = int(bar_count)
+        except Exception:
+            count = 0
+        try:
+            segs = int(segments)
+        except Exception:
+            segs = 0
+
+        if count <= 0 or segs <= 0:
+            self._spotify_vis_enabled = False
+            return
+
+        try:
+            bars_seq = list(bars)
+        except Exception:
+            self._spotify_vis_enabled = False
+            return
+
+        if not bars_seq:
+            self._spotify_vis_enabled = False
+            return
+
+        if len(bars_seq) > count:
+            bars_seq = bars_seq[:count]
+        elif len(bars_seq) < count:
+            bars_seq = bars_seq + [0.0] * (count - len(bars_seq))
+
+        clamped = []
+        for v in bars_seq:
+            try:
+                f = float(v)
+            except Exception:
+                f = 0.0
+            if f < 0.0:
+                f = 0.0
+            if f > 1.0:
+                f = 1.0
+            clamped.append(f)
+
+        if not clamped:
+            self._spotify_vis_enabled = False
+            return
+
+        self._spotify_vis_enabled = True
+        self._spotify_vis_rect = QRect(rect)
+        self._spotify_vis_bars = clamped
+        self._spotify_vis_bar_count = len(clamped)
+        self._spotify_vis_segments = max(1, segs)
+        self._spotify_vis_fill_color = QColor(fill_color)
+        self._spotify_vis_border_color = QColor(border_color)
+        try:
+            self._spotify_vis_fade = max(0.0, min(1.0, float(fade)))
+        except Exception:
+            self._spotify_vis_fade = 1.0
 
     def start_crossfade(
         self,
@@ -5414,21 +5506,132 @@ void main() {
         finally:
             painter.restore()
 
+    def _paint_spotify_visualizer(self, painter: QPainter) -> None:
+        if not self._spotify_vis_enabled:
+            return
+
+        rect = self._spotify_vis_rect
+        bars = self._spotify_vis_bars
+        if rect is None or bars is None:
+            return
+
+        try:
+            fade = float(self._spotify_vis_fade)
+        except Exception:
+            fade = 0.0
+        if fade <= 0.0:
+            return
+
+        count = self._spotify_vis_bar_count
+        segments = self._spotify_vis_segments
+        if count <= 0 or segments <= 0:
+            return
+
+        if rect.width() <= 0 or rect.height() <= 0:
+            return
+
+        margin_x = 8
+        margin_y = 6
+        inner = rect.adjusted(margin_x, margin_y, -margin_x, -margin_y)
+        if inner.width() <= 0 or inner.height() <= 0:
+            return
+
+        gap = 2
+        total_gap = gap * (count - 1) if count > 1 else 0
+        bar_width = int((inner.width() - total_gap) / max(1, count))
+        if bar_width <= 0:
+            return
+        # Match the QWidget visualiser: slight rightward offset so bars
+        # visually line up with the card frame.
+        x0 = inner.left() + 3
+        bar_x = [x0 + i * (bar_width + gap) for i in range(count)]
+
+        seg_gap = 1
+        total_seg_gap = seg_gap * max(0, segments - 1)
+        seg_height = int((inner.height() - total_seg_gap) / max(1, segments))
+        if seg_height <= 0:
+            return
+        base_bottom = inner.bottom()
+        seg_y = [base_bottom - s * (seg_height + seg_gap) - seg_height + 1 for s in range(segments)]
+
+        fill = QColor(self._spotify_vis_fill_color or QColor(200, 200, 200, 230))
+        border = QColor(self._spotify_vis_border_color or QColor(255, 255, 255, 255))
+
+        # Apply the fade factor by scaling alpha on both fill and border so
+        # the bar field ramps with the widget card.
+        try:
+            fade_clamped = max(0.0, min(1.0, fade))
+            fill.setAlpha(int(fill.alpha() * fade_clamped))
+            border.setAlpha(int(border.alpha() * fade_clamped))
+        except Exception:
+            pass
+
+        painter.save()
+        try:
+            painter.setBrush(fill)
+            painter.setPen(border)
+
+            max_segments = min(segments, len(seg_y))
+            draw_count = min(count, len(bar_x), len(bars))
+
+            for i in range(draw_count):
+                x = bar_x[i]
+                try:
+                    value = float(bars[i])
+                except Exception:
+                    value = 0.0
+                if value <= 0.0:
+                    continue
+                if value > 1.0:
+                    value = 1.0
+                active = int(round(value * segments))
+                if active <= 0:
+                    continue
+                if active > max_segments:
+                    active = max_segments
+                for s in range(active):
+                    y = seg_y[s]
+                    bar_rect = QRect(x, y, bar_width, seg_height)
+                    painter.drawRect(bar_rect)
+        finally:
+            painter.restore()
+
+    def _render_debug_overlay_image(self) -> Optional[QImage]:
+        """Render the PERF HUD into a small offscreen image.
+
+        This keeps glyph rasterisation fully in QPainter's software path so
+        the final card can be composited on top of the GL surface without
+        relying on GL text rendering state.
+        """
+
+        if not is_perf_metrics_enabled():
+            return None
+        size = self.size()
+        if size.width() <= 0 or size.height() <= 0:
+            return None
+
+        image = QImage(size.width(), size.height(), QImage.Format.Format_ARGB32_Premultiplied)
+        image.fill(Qt.GlobalColor.transparent)
+
+        painter = QPainter(image)
+        try:
+            self._paint_debug_overlay(painter)
+        finally:
+            painter.end()
+
+        return image
+
     def _paint_debug_overlay_gl(self) -> None:
         if not is_perf_metrics_enabled():
             return
+
+        image = self._render_debug_overlay_image()
+        if image is None:
+            return
+
         painter = QPainter(self)
         try:
-            # Let Qt handle the correct device transform (including HiDPI)
-            # and simply enable text antialiasing so the HUD remains
-            # crisp. We avoid overriding the world/view transform here to
-            # prevent glyph distortion on some drivers.
-            try:
-                painter.setRenderHint(QPainter.TextAntialiasing, True)
-            except Exception:
-                pass
-
-            self._paint_debug_overlay(painter)
+            painter.drawImage(0, 0, image)
         finally:
             painter.end()
 
@@ -5441,6 +5644,7 @@ void main() {
             try:
                 if self._prepare_blockspin_textures():
                     self._paint_blockspin_shader(target)
+                    self._paint_spotify_visualizer_gl()
                     if is_perf_metrics_enabled():
                         self._paint_debug_overlay_gl()
                     return
@@ -5460,6 +5664,7 @@ void main() {
         if self._raindrops is not None and self._can_use_raindrops_shader():
             try:
                 self._paint_raindrops_shader(target)
+                self._paint_spotify_visualizer_gl()
                 if is_perf_metrics_enabled():
                     self._paint_debug_overlay_gl()
                 return
@@ -5482,6 +5687,7 @@ void main() {
         if self._shuffle is not None and self._can_use_shuffle_shader():
             try:
                 self._paint_shuffle_shader(target)
+                self._paint_spotify_visualizer_gl()
                 if is_perf_metrics_enabled():
                     self._paint_debug_overlay_gl()
                 return
@@ -5504,6 +5710,7 @@ void main() {
         if self._shooting_stars is not None and self._can_use_claws_shader():
             try:
                 self._paint_claws_shader(target)
+                self._paint_spotify_visualizer_gl()
                 if is_perf_metrics_enabled():
                     self._paint_debug_overlay_gl()
                 return
@@ -5522,6 +5729,7 @@ void main() {
         if self._warp is not None and self._can_use_warp_shader():
             try:
                 self._paint_warp_shader(target)
+                self._paint_spotify_visualizer_gl()
                 if is_perf_metrics_enabled():
                     self._paint_debug_overlay_gl()
                 return
@@ -5544,6 +5752,7 @@ void main() {
         if self._diffuse is not None and self._can_use_diffuse_shader():
             try:
                 self._paint_diffuse_shader(target)
+                self._paint_spotify_visualizer_gl()
                 if is_perf_metrics_enabled():
                     self._paint_debug_overlay_gl()
                 return
@@ -5562,6 +5771,7 @@ void main() {
         if self._crossfade is not None and self._can_use_crossfade_shader():
             try:
                 self._paint_crossfade_shader(target)
+                self._paint_spotify_visualizer_gl()
                 if is_perf_metrics_enabled():
                     self._paint_debug_overlay_gl()
                 return
@@ -5580,6 +5790,7 @@ void main() {
         if self._slide is not None and self._can_use_slide_shader():
             try:
                 self._paint_slide_shader(target)
+                self._paint_spotify_visualizer_gl()
                 if is_perf_metrics_enabled():
                     self._paint_debug_overlay_gl()
                 return
@@ -5598,6 +5809,7 @@ void main() {
         if self._wipe is not None and self._can_use_wipe_shader():
             try:
                 self._paint_wipe_shader(target)
+                self._paint_spotify_visualizer_gl()
                 if is_perf_metrics_enabled():
                     self._paint_debug_overlay_gl()
                 return
@@ -5767,6 +5979,7 @@ void main() {
                     painter.restore()
 
                     y += band_height
+                self._paint_spotify_visualizer(painter)
                 self._paint_debug_overlay(painter)
                 return
 
@@ -5785,11 +5998,13 @@ void main() {
                 if t <= 0.0:
                     painter.setOpacity(1.0)
                     painter.drawPixmap(target, st.old_pixmap)
+                    self._paint_spotify_visualizer(painter)
                     self._paint_debug_overlay(painter)
                     return
                 if t >= 1.0:
                     painter.setOpacity(1.0)
                     painter.drawPixmap(target, st.new_pixmap)
+                    self._paint_spotify_visualizer(painter)
                     self._paint_debug_overlay(painter)
                     return
 
@@ -5797,6 +6012,7 @@ void main() {
                 painter.drawPixmap(target, st.old_pixmap)
                 painter.setOpacity(t)
                 painter.drawPixmap(target, st.new_pixmap)
+                self._paint_spotify_visualizer(painter)
                 return
 
             # If a block flip is active, draw old fully and new clipped to the
@@ -5815,6 +6031,7 @@ void main() {
                     painter.setOpacity(1.0)
                     painter.drawPixmap(target, st.new_pixmap)
                     painter.restore()
+                self._paint_spotify_visualizer(painter)
                 self._paint_debug_overlay(painter)
                 return
 
@@ -5871,6 +6088,7 @@ void main() {
                         painter.setOpacity(1.0)
                         painter.drawPixmap(target, st.new_pixmap)
                         painter.restore()
+                self._paint_spotify_visualizer(painter)
                 self._paint_debug_overlay(painter)
                 return
 
@@ -5898,6 +6116,7 @@ void main() {
                     painter.setOpacity(1.0)
                     new_rect = QRect(new_pos.x(), new_pos.y(), w, h)
                     painter.drawPixmap(new_rect, st.new_pixmap)
+                self._paint_spotify_visualizer(painter)
                 self._paint_debug_overlay(painter)
                 return
 
@@ -5910,6 +6129,7 @@ void main() {
                 if cf.new_pixmap and not cf.new_pixmap.isNull():
                     painter.setOpacity(cf.progress)
                     painter.drawPixmap(target, cf.new_pixmap)
+                self._paint_spotify_visualizer(painter)
                 self._paint_debug_overlay(painter)
                 return
 
@@ -5921,6 +6141,16 @@ void main() {
                 # As a last resort, fill black.
                 painter.fillRect(target, Qt.GlobalColor.black)
 
+            self._paint_spotify_visualizer(painter)
             self._paint_debug_overlay(painter)
+        finally:
+            painter.end()
+
+    def _paint_spotify_visualizer_gl(self) -> None:
+        if not self._spotify_vis_enabled:
+            return
+        painter = QPainter(self)
+        try:
+            self._paint_spotify_visualizer(painter)
         finally:
             painter.end()
