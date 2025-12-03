@@ -1149,8 +1149,9 @@ class SpotifyVisualizerWidget(QWidget):
         # before now that compositor/GL transitions are cheaper, while
         # still low enough that the visualiser cannot dominate the UI
         # event loop.
-        self._base_max_fps: float = 30.0
-        self._transition_max_fps: float = 18.0
+        self._base_max_fps: float = 90.0
+        self._transition_max_fps: float = 60.0
+        self._last_gpu_fade_sent: float = -1.0
 
         # When GPU overlay rendering is available, we disable the
         # widget's own bar drawing and instead push frames up to the
@@ -1780,6 +1781,7 @@ class SpotifyVisualizerWidget(QWidget):
                     self._last_update_ts = now_ts
 
                     used_gpu = False
+                    need_card_update = False
                     parent = self.parent()
                     # When DisplayWidget exposes a GPU overlay path, prefer
                     # that and disable CPU bar drawing once it succeeds.
@@ -1788,6 +1790,19 @@ class SpotifyVisualizerWidget(QWidget):
                             fade = self._get_gpu_fade_factor(now_ts)
                         except Exception:
                             fade = 1.0
+                        try:
+                            prev_fade = getattr(self, "_last_gpu_fade_sent", -1.0)
+                        except Exception:
+                            prev_fade = -1.0
+                        try:
+                            self._last_gpu_fade_sent = float(fade)
+                        except Exception:
+                            pass
+                        try:
+                            if prev_fade < 0.0 or abs(fade - prev_fade) >= 0.01:
+                                need_card_update = True
+                        except Exception:
+                            need_card_update = True
                         try:
                             used_gpu = bool(parent.push_spotify_visualizer_frame(
                                 bars=list(self._display_bars),
@@ -1809,10 +1824,11 @@ class SpotifyVisualizerWidget(QWidget):
                         # Card/background/shadow still repaint via stylesheet
                         # and ShadowFadeProfile; we do not need to redraw bars
                         # when GPU overlay is active.
-                        try:
-                            self.update()
-                        except Exception:
-                            pass
+                        if need_card_update:
+                            try:
+                                self.update()
+                            except Exception:
+                                pass
                     else:
                         # Fallback: when there is no DisplayWidget/GPU bridge
                         # (for example in tests or standalone widget usage),

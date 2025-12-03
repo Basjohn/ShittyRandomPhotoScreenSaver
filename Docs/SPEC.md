@@ -472,6 +472,26 @@ GL Path: The only supported GL route uses a single `GLCompositorWidget` per disp
 }
 ```
 
+### Spotify Beat Visualizer implementation notes
+
+The Spotify visualiser consists of three cooperating pieces:
+
+- A process-wide :class:`_SpotifyBeatEngine` that captures loopback audio, mixes to mono, and performs FFT + bar mapping off the UI thread using the `ThreadManager` COMPUTE pool and a lock-free `TripleBuffer` for handoff.
+- :mod:`widgets/spotify_visualizer_widget.py`, a QWidget that owns the Spotify-style card, fade and drop shadow (`ShadowFadeProfile`), and smoothing of per-bar magnitudes. The widget pushes the current bar array and fade factor into a GPU overlay (when available) or falls back to its original QPainter-based bar drawing when running in Software renderer mode or when GL is unavailable.
+- :mod:`widgets/spotify_bars_gl_overlay.py`, a small `QOpenGLWidget` overlay owned by :class:`DisplayWidget` that renders the bar field via a GLSL/VAO pipeline. The overlay:
+  - Uses a single fullscreen quad VAO/VBO and a fragment shader with `u_bars[64]` as the magnitude array.
+  - Is sized to exactly cover the visualiser card rect and clears to transparent each frame so old bar segments do not leave ghosting artefacts.
+  - Computes geometry in **logical** widget pixels but samples from `gl_FragCoord` and a `u_dpr` (device pixel ratio) uniform so that bar and segment layout is stable across HiDPI setups.
+  - Mirrors the QWidget geometry: fixed margins, 2px horizontal gaps between bars, 1px vertical gaps between segments, and a thin 1px border around each segment using `bar_fill_color` / `bar_border_color`.
+
+For debugging geometry and HiDPI issues there is an environment-controlled constant-bar mode:
+
+- ``SRPSS_SPOTIFY_VIS_DEBUG_CONST``
+  - When set to a float in ``(0, 1]``, :class:`SpotifyVisualizerWidget` bypasses its normal smoothing and forces every bar to the same value each tick. This is intended for diagnosing GPU geometry and compositing artefacts (e.g. fixed distortion bands) independently of audio data.
+  - The value is still clamped into ``[0, 1]`` and is never persisted to settings; it is a developer-only tool.
+
+The GPU overlay path is the **primary** renderer whenever the OpenGL backend is active. The software (QWidget) bar renderer is only used as an explicit fallback, controlled via ``widgets.spotify_visualizer.software_visualizer_enabled`` and backend mode resolution in :mod:`rendering/backends`.
+
 ---
 
 ## Implementation Policies & Conventions
