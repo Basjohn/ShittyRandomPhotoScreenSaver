@@ -1,0 +1,44 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+cachedir: .pytest_cache
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+configfile: pytest.ini
+plugins: qt-4.5.0
+collecting ... collected 26 items
+
+tests/test_transitions.py::test_transition_state_enum PASSED             [  3%]
+tests/test_transitions.py::test_crossfade_creation PASSED                [  7%]
+tests/test_transitions.py::test_crossfade_duration PASSED                [ 11%]
+tests/test_transitions.py::test_crossfade_start_with_no_old_image PASSED [ 15%]
+tests/test_transitions.py::test_crossfade_start_with_images PASSED       [ 19%]
+tests/test_transitions.py::test_crossfade_signals PASSED                 [ 23%]
+tests/test_transitions.py::test_crossfade_progress_range PASSED          [ 26%]
+tests/test_transitions.py::test_crossfade_stop PASSED                    [ 30%]
+tests/test_transitions.py::test_crossfade_cleanup PASSED                 [ 34%]
+tests/test_transitions.py::test_crossfade_invalid_pixmap PASSED          [ 38%]
+tests/test_transitions.py::test_crossfade_already_running PASSED         [ 42%]
+tests/test_transitions.py::test_crossfade_easing_curves PASSED           [ 46%]
+tests/test_transitions.py::test_crossfade_set_easing PASSED              [ 50%]
+tests/test_transitions.py::test_crossfade_repr PASSED                    [ 53%]
+tests/test_transitions.py::test_crossfade_state_transitions PASSED       [ 57%]
+tests/test_transitions.py::test_crossfade_multiple_transitions PASSED    [ 61%]
+tests/test_transition_integration.py::TestTransitionIntegration::test_crossfade_transition_runs PASSED [ 65%]
+tests/test_transition_integration.py::TestTransitionIntegration::test_slide_transition_runs PASSED [ 69%]
+tests/test_transition_integration.py::TestTransitionIntegration::test_diffuse_transition_runs PASSED [ 73%]
+tests/test_transition_integration.py::TestTransitionIntegration::test_block_puzzle_flip_transition_runs PASSED [ 76%]
+tests/test_transition_integration.py::TestTransitionIntegration::test_wipe_transition_runs PASSED [ 80%]
+tests/test_transition_integration.py::TestTransitionIntegration::test_transition_cleanup_on_stop PASSED [ 84%]
+tests/test_transition_integration.py::TestTransitionIntegration::test_transition_settings_respected PASSED [ 88%]
+tests/test_transition_integration.py::TestTransitionIntegration::test_transition_fallback_on_error PASSED [ 92%]
+tests/test_transition_integration.py::TestTransitionIntegration::test_random_slide_direction PASSED [ 96%]
+tests/test_gl_prewarm.py::test_gl_prewarm_overlays_ready PASSED          [100%]QSettings: Failed to delete key "Software\Test\ScreensaverTest" (Illegal operation attempted on a registry key that has been marked for deletion.)
+QSettings: Failed to delete key "Software\Test\ScreensaverTest" (Illegal operation attempted on a registry key that has been marked for deletion.)
+QSettings: Failed to delete key "Software\Test\ScreensaverTest" (Illegal operation attempted on a registry key that has been marked for deletion.)
+QSettings: Failed to delete key "Software\Test\ScreensaverTest" (Illegal operation attempted on a registry key that has been marked for deletion.)
+QSettings: Failed to delete key "Software\Test\ScreensaverTest" (Illegal operation attempted on a registry key that has been marked for deletion.)
+QSettings: Failed to delete key "Software\Test\ScreensaverTest" (Illegal operation attempted on a registry key that has been marked for deletion.)
+
+
+============================= 26 passed in 14.55s =============================
+QSettings: Failed to delete key "Software\Test\ScreensaverTest" (Illegal operation attempted on a registry key that has been marked for deletion.)

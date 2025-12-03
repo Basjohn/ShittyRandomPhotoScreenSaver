@@ -247,7 +247,10 @@ class TransitionsTab(QWidget):
         shape_row = QHBoxLayout()
         shape_row.addWidget(QLabel("Shape:"))
         self.diffuse_shape_combo = QComboBox()
-        self.diffuse_shape_combo.addItems(["Rectangle", "Circle", "Diamond", "Plus", "Triangle"])
+        # GLSL-backed Diffuse currently supports only Rectangle and Membrane
+        # (shaped variants like Circle/Diamond/Plus were removed due to
+        # timing/visual issues). Keep the UI in sync with the active paths.
+        self.diffuse_shape_combo.addItems(["Rectangle", "Membrane"])
         self.diffuse_shape_combo.currentTextChanged.connect(self._save_settings)
         shape_row.addWidget(self.diffuse_shape_combo)
         shape_row.addStretch()

@@ -10,8 +10,8 @@ from __future__ import annotations
 import random
 from typing import Optional, List
 
-from PySide6.QtCore import QRect, QRectF, QPoint
-from PySide6.QtGui import QPixmap, QRegion, QPainterPath, QPolygon
+from PySide6.QtCore import QRect
+from PySide6.QtGui import QPixmap, QRegion
 from PySide6.QtWidgets import QWidget
 
 from core.logging.logger import get_logger
@@ -49,8 +49,12 @@ class GLCompositorDiffuseTransition(BaseTransition):
     ) -> None:
         super().__init__(duration_ms)
         self._block_size = max(1, int(block_size))
-        valid_shapes = ["Rectangle", "Circle", "Diamond", "Plus", "Triangle"]
-        self._shape = shape if shape in valid_shapes else "Rectangle"
+        # GLSL-backed diffuse only supports Rectangle and Membrane. Clamp any
+        # legacy/unknown shapes to Rectangle so CPU and GLSL paths stay
+        # aligned.
+        if shape not in ("Rectangle", "Membrane"):
+            shape = "Rectangle"
+        self._shape = shape
         self._easing_str = easing
         self._widget: Optional[QWidget] = None
         self._compositor: Optional[GLCompositorWidget] = None
@@ -59,6 +63,8 @@ class GLCompositorDiffuseTransition(BaseTransition):
         self._region: QRegion = QRegion()
         self._revealed_count: int = 0
         self._total_cells: int = 0
+        self._grid_cols: int = 0
+        self._grid_rows: int = 0
 
     # ------------------------------------------------------------------
     # BaseTransition API
@@ -106,6 +112,16 @@ class GLCompositorDiffuseTransition(BaseTransition):
                 exc_info=True,
             )
 
+        # Prewarm shader textures for this pixmap pair so any GLSL-backed
+        # diffuse path does not pay the full texture upload cost on its first
+        # frame. Failures are logged and do not affect the fallback paths.
+        try:
+            warm = getattr(comp, "warm_shader_textures", None)
+            if callable(warm):
+                warm(old_pixmap, new_pixmap)
+        except Exception:
+            logger.debug("[GL COMPOSITOR] Failed to warm diffuse textures", exc_info=True)
+
         # Build cell grid matching the widget geometry.
         width = widget.width()
         height = widget.height()
@@ -122,6 +138,15 @@ class GLCompositorDiffuseTransition(BaseTransition):
         def _on_finished() -> None:
             self._on_anim_complete()
 
+        # Provide grid hints for all diffuse shapes so the compositor can opt
+        # into the GLSL diffuse path when available. The region-based
+        # implementation remains the authoritative fallback when shaders are
+        # disabled or unavailable.
+        grid_cols: Optional[int]
+        grid_rows: Optional[int]
+        grid_cols = self._grid_cols or 0
+        grid_rows = self._grid_rows or 0
+
         self._animation_id = comp.start_diffuse(
             old_pixmap,
             new_pixmap,
@@ -130,6 +155,9 @@ class GLCompositorDiffuseTransition(BaseTransition):
             animation_manager=am,
             update_callback=_update,
             on_finished=_on_finished,
+            grid_cols=grid_cols,
+            grid_rows=grid_rows,
+            shape=self._shape,
         )
 
         self._set_state(TransitionState.RUNNING)
@@ -209,6 +237,8 @@ class GLCompositorDiffuseTransition(BaseTransition):
         self._region = QRegion()
         self._revealed_count = 0
         self._total_cells = len(self._cells)
+        self._grid_cols = cols
+        self._grid_rows = rows
 
     def _on_anim_update(self, progress: float, total: int) -> None:
         if self._state != TransitionState.RUNNING or self._compositor is None:
@@ -223,36 +253,9 @@ class GLCompositorDiffuseTransition(BaseTransition):
                 any_new = True
                 self._revealed_count += 1
                 r = cell.rect
-                if self._shape == "Circle":
-                    path = QPainterPath()
-                    path.addEllipse(QRectF(r))
-                    self._region = self._region.united(QRegion(path.toFillPolygon().toPolygon()))
-                elif self._shape == "Triangle":
-                    top = QPoint(r.x() + r.width() // 2, r.y())
-                    bottom_left = QPoint(r.x(), r.y() + r.height())
-                    bottom_right = QPoint(r.x() + r.width(), r.y() + r.height())
-                    self._region = self._region.united(QRegion(QPolygon([top, bottom_left, bottom_right])))
-                elif self._shape == "Diamond":
-                    cx = r.x() + r.width() // 2
-                    cy = r.y() + r.height() // 2
-                    top = QPoint(cx, r.y())
-                    right = QPoint(r.x() + r.width(), cy)
-                    bottom = QPoint(cx, r.y() + r.height())
-                    left = QPoint(r.x(), cy)
-                    self._region = self._region.united(QRegion(QPolygon([top, right, bottom, left])))
-                elif self._shape == "Plus":
-                    size_w = max(1, r.width())
-                    size_h = max(1, r.height())
-                    thickness_w = max(1, size_w // 3)
-                    thickness_h = max(1, size_h // 3)
-                    cx = r.x() + size_w // 2
-                    cy = r.y() + size_h // 2
-                    v_rect = QRect(cx - thickness_w // 2, r.y(), thickness_w, size_h)
-                    h_rect = QRect(r.x(), cy - thickness_h // 2, size_w, thickness_h)
-                    self._region = self._region.united(QRegion(v_rect))
-                    self._region = self._region.united(QRegion(h_rect))
-                else:
-                    self._region = self._region.united(QRegion(r))
+                # Region-based path is now purely rectangular; Membrane is
+                # implemented only in the GLSL shader.
+                self._region = self._region.united(QRegion(r))
 
         if any_new:
             try:

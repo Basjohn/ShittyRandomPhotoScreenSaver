@@ -69,7 +69,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - transitions/wipe_transition.py, transitions/gl_wipe_transition.py, transitions/gl_compositor_wipe_transition.py
   - Slide/Wipe directions stored independently in settings; Slide is cardinals only, Wipe includes diagonals
 - transitions/diffuse_transition.py, transitions/gl_diffuse_transition.py, transitions/gl_compositor_diffuse_transition.py
-  - Diffuse shapes: Rectangle, Circle, Diamond, Plus, Triangle; block size clamped (min 4px) and shared between CPU/GL; compositor-backed diffuse and Shuffle reuse the same block-size.
+  - Diffuse shapes: Rectangle, Membrane. Block size is clamped (min 4px) and shared between CPU and GL paths; the CPU fallback uses a simple block-based dissolve, while the Membrane shape is implemented only in the GLSL compositor path. Shuffle historically reused the same block-size but is now retired.
 - transitions/block_puzzle_flip_transition.py, transitions/gl_block_puzzle_flip_transition.py, transitions/gl_compositor_blockflip_transition.py
 - transitions/gl_blinds.py, transitions/gl_compositor_blinds_transition.py
   - GL-only Blinds transition using either a legacy overlay or the compositor; participates in GL prewarm and requires hardware acceleration.

@@ -247,6 +247,23 @@ class SuppressingStreamHandler(logging.StreamHandler):
             super().close()
 
 
+class NonPerfFilter(logging.Filter):
+    """Filter that drops PERF-tagged records from the main log file.
+
+    Detailed performance telemetry is already written to a dedicated
+    ``screensaver_perf.log`` via PerfLogFilter, so the primary
+    ``screensaver.log`` can omit those high-volume lines to keep logs
+    smaller and more focused while preserving all metrics.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        try:
+            msg = record.getMessage()
+        except Exception:
+            msg = str(record.msg)
+        return "[PERF]" not in msg
+
+
 class PerfLogFilter(logging.Filter):
     """Filter that accepts only PERF metric records.
 
@@ -336,8 +353,8 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     
-    # File handler with rotation (larger cap to reduce truncation during
-    # extended debug/perf sessions while still keeping log size bounded).
+    # File handler with rotation (cap keeps individual log files bounded
+    # while a separate PERF log captures detailed metrics).
     file_handler = RotatingFileHandler(
         log_file,
         maxBytes=5 * 1024 * 1024,
@@ -346,6 +363,10 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
     )
     file_handler.setFormatter(formatter)
     file_handler.setLevel(level)
+    # PERF-tagged records are redirected to the dedicated PERF log, so we
+    # drop them from the main screensaver.log to reduce noise and keep
+    # per-run logs smaller and easier to inspect.
+    file_handler.addFilter(NonPerfFilter())
     
     console_handler = SuppressingStreamHandler(sys.stdout)
     if debug_enabled and sys.stdout.isatty():

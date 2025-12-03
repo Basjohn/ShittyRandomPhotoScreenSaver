@@ -1,0 +1,272 @@
+173 INFO: PyInstaller: 6.15.0, contrib hooks: 2025.8
+173 INFO: Python: 3.11.9
+191 INFO: Platform: Windows-10-10.0.26100-SP0
+191 INFO: Python environment: C:\Python311
+191 INFO: wrote F:\Programming\Apps\ShittyRandomPhotoScreenSaver\SRPSS MC.spec
+193 INFO: Removing temporary files and cleaning cache in C:\Users\Basjohn\AppData\Local\pyinstaller
+216 WARNING: Failed to collect submodules for 'PySide6.scripts.deploy_lib' because importing 'PySide6.scripts.deploy_lib' raised: ModuleNotFoundError: No module named 'project_lib'
+2542 INFO: Module search paths (PYTHONPATH):
+['C:\\Python311\\Scripts\\pyinstaller.exe',
+ 'C:\\Python311\\python311.zip',
+ 'C:\\Python311\\DLLs',
+ 'C:\\Python311\\Lib',
+ 'C:\\Python311',
+ 'C:\\Python311\\Lib\\site-packages',
+ 'C:\\Python311\\Lib\\site-packages\\win32',
+ 'C:\\Python311\\Lib\\site-packages\\win32\\lib',
+ 'C:\\Python311\\Lib\\site-packages\\Pythonwin',
+ 'F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver']
+pygame 2.6.1 (SDL 2.28.4, Python 3.11.9)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+2943 INFO: Appending 'binaries' from .spec
+2966 INFO: Appending 'datas' from .spec
+3209 INFO: checking Analysis
+3209 INFO: Building Analysis because Analysis-00.toc is non existent
+3209 INFO: Running Analysis Analysis-00.toc
+3209 INFO: Target bytecode optimization level: 0
+3209 INFO: Initializing module dependency graph...
+3210 INFO: Initializing module graph hook caches...
+3222 INFO: Analyzing modules for base_library.zip ...
+4217 INFO: Processing standard module hook 'hook-heapq.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+4269 INFO: Processing standard module hook 'hook-encodings.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+5338 INFO: Processing standard module hook 'hook-pickle.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+6300 INFO: Caching module dependency graph...
+6325 INFO: Looking for Python shared library...
+6330 INFO: Using Python shared library: C:\Python311\python311.dll
+6330 INFO: Analyzing F:\Programming\Apps\ShittyRandomPhotoScreenSaver\main_mc.py
+6342 INFO: Processing standard module hook 'hook-PySide6.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+6473 INFO: Processing standard module hook 'hook-shiboken6.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+6563 INFO: Processing standard module hook 'hook-PySide6.QtNetwork.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+7206 INFO: Processing standard module hook 'hook-PySide6.QtCore.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+7792 INFO: Processing standard module hook 'hook-PySide6.QtWidgets.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+8388 INFO: Processing standard module hook 'hook-PySide6.QtGui.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+9020 INFO: Processing standard module hook 'hook-platform.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+9124 INFO: Processing standard module hook 'hook-PIL.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+9184 INFO: Processing standard module hook 'hook-PIL.Image.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+9556 INFO: Processing standard module hook 'hook-numpy.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+9874 INFO: Processing standard module hook 'hook-sysconfig.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+10521 INFO: Processing standard module hook 'hook-difflib.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+10683 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+10733 INFO: Processing standard module hook 'hook-xml.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+10869 INFO: Processing standard module hook 'hook-_ctypes.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+11377 INFO: Processing standard module hook 'hook-psutil.py' from 'C:\\Python311\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+11741 INFO: Processing pre-safe-import-module hook 'hook-typing_extensions.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+11741 INFO: SetuptoolsInfo: initializing cached setuptools info...
+12549 INFO: Processing standard module hook 'hook-charset_normalizer.py' from 'C:\\Python311\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+12844 INFO: Processing standard module hook 'hook-xml.etree.cElementTree.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+12981 INFO: Processing standard module hook 'hook-PIL.ImageFilter.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+13164 INFO: Processing standard module hook 'hook-PySide6.QtOpenGLWidgets.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+13458 INFO: Processing standard module hook 'hook-pytz.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+13680 INFO: Processing standard module hook 'hook-urllib3.py' from 'C:\\Python311\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+14160 INFO: Processing standard module hook 'hook-certifi.py' from 'C:\\Python311\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+14453 INFO: Processing standard module hook 'hook-sounddevice.py' from 'C:\\Python311\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+14861 INFO: Analyzing hidden import 'PySide6.Qt3DAnimation'
+14879 INFO: Processing standard module hook 'hook-PySide6.Qt3DAnimation.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+15017 INFO: Processing standard module hook 'hook-PySide6.Qt3DCore.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+15242 INFO: Processing standard module hook 'hook-PySide6.Qt3DRender.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+16696 INFO: Processing standard module hook 'hook-PySide6.QtOpenGL.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+16876 INFO: Analyzing hidden import 'PySide6.Qt3DExtras'
+16919 INFO: Processing standard module hook 'hook-PySide6.Qt3DExtras.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+17046 INFO: Analyzing hidden import 'PySide6.Qt3DInput'
+17059 INFO: Processing standard module hook 'hook-PySide6.Qt3DInput.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+17180 INFO: Analyzing hidden import 'PySide6.Qt3DLogic'
+17181 INFO: Processing standard module hook 'hook-PySide6.Qt3DLogic.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+17298 INFO: Analyzing hidden import 'PySide6.QtAsyncio'
+17319 INFO: Analyzing hidden import 'PySide6.QtAxContainer'
+17325 INFO: Processing standard module hook 'hook-PySide6.QtAxContainer.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+17445 INFO: Analyzing hidden import 'PySide6.QtBluetooth'
+17486 INFO: Processing standard module hook 'hook-PySide6.QtBluetooth.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+17600 INFO: Analyzing hidden import 'PySide6.QtCharts'
+17666 INFO: Processing standard module hook 'hook-PySide6.QtCharts.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+17799 INFO: Analyzing hidden import 'PySide6.QtConcurrent'
+17802 INFO: Processing standard module hook 'hook-PySide6.QtConcurrent.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+17915 INFO: Analyzing hidden import 'PySide6.QtDBus'
+17937 INFO: Processing standard module hook 'hook-PySide6.QtDBus.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+18061 INFO: Analyzing hidden import 'PySide6.QtDataVisualization'
+18122 INFO: Processing standard module hook 'hook-PySide6.QtDataVisualization.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+18247 INFO: Analyzing hidden import 'PySide6.QtDesigner'
+18286 INFO: Processing standard module hook 'hook-PySide6.QtDesigner.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+18456 INFO: Analyzing hidden import 'PySide6.QtExampleIcons'
+18457 INFO: Analyzing hidden import 'PySide6.QtGraphs'
+18545 INFO: Processing standard module hook 'hook-PySide6.QtGraphs.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+18704 INFO: Processing standard module hook 'hook-PySide6.QtQml.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+19715 INFO: Analyzing hidden import 'PySide6.QtGraphsWidgets'
+19726 INFO: Processing standard module hook 'hook-PySide6.QtGraphsWidgets.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+19909 INFO: Processing standard module hook 'hook-PySide6.QtQuick.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+20049 INFO: Processing standard module hook 'hook-PySide6.QtQuickWidgets.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+20167 INFO: Analyzing hidden import 'PySide6.QtHelp'
+20176 INFO: Processing standard module hook 'hook-PySide6.QtHelp.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+20298 INFO: Analyzing hidden import 'PySide6.QtHttpServer'
+20305 INFO: Processing standard module hook 'hook-PySide6.QtHttpServer.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+20423 INFO: Analyzing hidden import 'PySide6.QtLocation'
+20457 INFO: Processing standard module hook 'hook-PySide6.QtLocation.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+20620 INFO: Processing standard module hook 'hook-PySide6.QtPositioning.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+20763 INFO: Analyzing hidden import 'PySide6.QtMultimedia'
+20828 INFO: Processing standard module hook 'hook-PySide6.QtMultimedia.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+21000 INFO: Analyzing hidden import 'PySide6.QtMultimediaWidgets'
+21002 INFO: Processing standard module hook 'hook-PySide6.QtMultimediaWidgets.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+21122 INFO: Analyzing hidden import 'PySide6.QtNetworkAuth'
+21138 INFO: Processing standard module hook 'hook-PySide6.QtNetworkAuth.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+21257 INFO: Analyzing hidden import 'PySide6.QtNfc'
+21269 INFO: Processing standard module hook 'hook-PySide6.QtNfc.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+21392 INFO: Analyzing hidden import 'PySide6.QtPdf'
+21401 INFO: Processing standard module hook 'hook-PySide6.QtPdf.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+21531 INFO: Analyzing hidden import 'PySide6.QtPdfWidgets'
+21534 INFO: Processing standard module hook 'hook-PySide6.QtPdfWidgets.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+21655 INFO: Analyzing hidden import 'PySide6.QtPrintSupport'
+21667 INFO: Processing standard module hook 'hook-PySide6.QtPrintSupport.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+21788 INFO: Analyzing hidden import 'PySide6.QtQuick3D'
+21797 INFO: Processing standard module hook 'hook-PySide6.QtQuick3D.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+21922 INFO: Analyzing hidden import 'PySide6.QtQuickControls2'
+21924 INFO: Processing standard module hook 'hook-PySide6.QtQuickControls2.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+22051 INFO: Analyzing hidden import 'PySide6.QtQuickTest'
+22052 INFO: Analyzing hidden import 'PySide6.QtRemoteObjects'
+22064 INFO: Processing standard module hook 'hook-PySide6.QtRemoteObjects.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+22186 INFO: Analyzing hidden import 'PySide6.QtScxml'
+22196 INFO: Processing standard module hook 'hook-PySide6.QtScxml.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+22322 INFO: Analyzing hidden import 'PySide6.QtSensors'
+22341 INFO: Processing standard module hook 'hook-PySide6.QtSensors.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+22473 INFO: Analyzing hidden import 'PySide6.QtSerialBus'
+22495 INFO: Processing standard module hook 'hook-PySide6.QtSerialBus.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+22664 INFO: Analyzing hidden import 'PySide6.QtSerialPort'
+22669 INFO: Processing standard module hook 'hook-PySide6.QtSerialPort.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+22788 INFO: Analyzing hidden import 'PySide6.QtSpatialAudio'
+22795 INFO: Processing standard module hook 'hook-PySide6.QtSpatialAudio.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+22919 INFO: Analyzing hidden import 'PySide6.QtSql'
+22943 INFO: Processing standard module hook 'hook-PySide6.QtSql.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+23100 INFO: Analyzing hidden import 'PySide6.QtStateMachine'
+23110 INFO: Processing standard module hook 'hook-PySide6.QtStateMachine.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+23227 INFO: Analyzing hidden import 'PySide6.QtSvg'
+23232 INFO: Processing standard module hook 'hook-PySide6.QtSvg.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+23352 INFO: Analyzing hidden import 'PySide6.QtSvgWidgets'
+23355 INFO: Processing standard module hook 'hook-PySide6.QtSvgWidgets.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+23476 INFO: Analyzing hidden import 'PySide6.QtTest'
+23487 INFO: Processing standard module hook 'hook-PySide6.QtTest.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+23611 INFO: Analyzing hidden import 'PySide6.QtTextToSpeech'
+23617 INFO: Processing standard module hook 'hook-PySide6.QtTextToSpeech.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+23754 INFO: Analyzing hidden import 'PySide6.QtUiTools'
+23755 INFO: Processing standard module hook 'hook-PySide6.QtUiTools.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+23873 INFO: Analyzing hidden import 'PySide6.QtWebChannel'
+23875 INFO: Processing standard module hook 'hook-PySide6.QtWebChannel.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+23994 INFO: Analyzing hidden import 'PySide6.QtWebEngineCore'
+24035 INFO: Processing standard module hook 'hook-PySide6.QtWebEngineCore.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+24236 INFO: Analyzing hidden import 'PySide6.QtWebEngineQuick'
+24241 INFO: Processing standard module hook 'hook-PySide6.QtWebEngineQuick.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+24363 INFO: Analyzing hidden import 'PySide6.QtWebEngineWidgets'
+24382 INFO: Processing standard module hook 'hook-PySide6.QtWebEngineWidgets.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+24502 INFO: Analyzing hidden import 'PySide6.QtWebSockets'
+24509 INFO: Processing standard module hook 'hook-PySide6.QtWebSockets.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+24629 INFO: Analyzing hidden import 'PySide6.QtWebView'
+24630 INFO: Analyzing hidden import 'PySide6.QtXml'
+24643 INFO: Processing standard module hook 'hook-PySide6.QtXml.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+24762 INFO: Analyzing hidden import 'PySide6._config'
+24762 INFO: Analyzing hidden import 'PySide6._git_pyside_version'
+24763 INFO: Analyzing hidden import 'PySide6.scripts'
+24763 INFO: Analyzing hidden import 'PySide6.scripts.deploy'
+24767 INFO: Analyzing hidden import 'PySide6.scripts.metaobjectdump'
+24777 INFO: Analyzing hidden import 'PySide6.scripts.project'
+24786 INFO: Analyzing hidden import 'PySide6.scripts.project_lib'
+24828 INFO: Analyzing hidden import 'PySide6.scripts.pyside_tool'
+24833 INFO: Analyzing hidden import 'PySide6.scripts.qml'
+24837 INFO: Analyzing hidden import 'PySide6.scripts.qtpy2cpp'
+24840 INFO: Analyzing hidden import 'PySide6.support'
+24841 INFO: Analyzing hidden import 'PySide6.support.deprecated'
+24841 INFO: Analyzing hidden import 'PySide6.support.generate_pyi'
+24844 INFO: Analyzing hidden import 'PIL.AvifImagePlugin'
+24850 INFO: Analyzing hidden import 'PIL.BdfFontFile'
+24856 INFO: Analyzing hidden import 'PIL.BlpImagePlugin'
+24868 INFO: Analyzing hidden import 'PIL.BufrStubImagePlugin'
+24869 INFO: Analyzing hidden import 'PIL.ContainerIO'
+24872 INFO: Analyzing hidden import 'PIL.CurImagePlugin'
+24874 INFO: Analyzing hidden import 'PIL.DcxImagePlugin'
+24880 INFO: Analyzing hidden import 'PIL.DdsImagePlugin'
+24890 INFO: Analyzing hidden import 'PIL.EpsImagePlugin'
+24899 INFO: Analyzing hidden import 'PIL.FitsImagePlugin'
+24902 INFO: Analyzing hidden import 'PIL.FliImagePlugin'
+24907 INFO: Analyzing hidden import 'PIL.FpxImagePlugin'
+24912 INFO: Analyzing hidden import 'PIL.FtexImagePlugin'
+24914 INFO: Analyzing hidden import 'PIL.GbrImagePlugin'
+24917 INFO: Analyzing hidden import 'PIL.GdImageFile'
+24920 INFO: Analyzing hidden import 'PIL.GribStubImagePlugin'
+24922 INFO: Analyzing hidden import 'PIL.Hdf5StubImagePlugin'
+24924 INFO: Analyzing hidden import 'PIL.IcnsImagePlugin'
+24948 INFO: Analyzing hidden import 'PIL.IcoImagePlugin'
+24955 INFO: Analyzing hidden import 'PIL.ImImagePlugin'
+24962 INFO: Analyzing hidden import 'PIL.ImageDraw'
+25020 INFO: Analyzing hidden import 'PIL.ImageEnhance'
+25028 INFO: Analyzing hidden import 'PIL.ImageGrab'
+25033 INFO: Analyzing hidden import 'PIL.ImageMorph'
+25039 INFO: Analyzing hidden import 'PIL.ImageTk'
+25044 INFO: Analyzing hidden import 'PIL.ImageTransform'
+25045 INFO: Analyzing hidden import 'PIL.ImtImagePlugin'
+25047 INFO: Analyzing hidden import 'PIL.IptcImagePlugin'
+25052 INFO: Analyzing hidden import 'PIL.McIdasImagePlugin'
+25055 INFO: Analyzing hidden import 'PIL.MicImagePlugin'
+25057 INFO: Analyzing hidden import 'PIL.MpegImagePlugin'
+25059 INFO: Analyzing hidden import 'PIL.MspImagePlugin'
+25063 INFO: Analyzing hidden import 'PIL.PSDraw'
+25065 INFO: Analyzing hidden import 'PIL.PalmImagePlugin'
+25072 INFO: Analyzing hidden import 'PIL.PcdImagePlugin'
+25074 INFO: Analyzing hidden import 'PIL.PcfFontFile'
+25080 INFO: Analyzing hidden import 'PIL.PdfImagePlugin'
+25112 INFO: Analyzing hidden import 'PIL.PixarImagePlugin'
+25113 INFO: Analyzing hidden import 'PIL.PsdImagePlugin'
+25119 INFO: Analyzing hidden import 'PIL.QoiImagePlugin'
+25125 INFO: Analyzing hidden import 'PIL.SgiImagePlugin'
+25130 INFO: Analyzing hidden import 'PIL.SpiderImagePlugin'
+25136 INFO: Processing standard module hook 'hook-PIL.SpiderImagePlugin.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+25136 INFO: Analyzing hidden import 'PIL.SunImagePlugin'
+25139 INFO: Analyzing hidden import 'PIL.TarIO'
+25141 INFO: Analyzing hidden import 'PIL.TgaImagePlugin'
+25145 INFO: Analyzing hidden import 'PIL.WalImageFile'
+25147 INFO: Analyzing hidden import 'PIL.WebPImagePlugin'
+25154 INFO: Analyzing hidden import 'PIL.WmfImagePlugin'
+25158 INFO: Analyzing hidden import 'PIL.XVThumbImagePlugin'
+25160 INFO: Analyzing hidden import 'PIL.XbmImagePlugin'
+25162 INFO: Analyzing hidden import 'PIL.XpmImagePlugin'
+25165 INFO: Analyzing hidden import 'PIL.__main__'
+25166 INFO: Analyzing hidden import 'PIL._tkinter_finder'
+25167 INFO: Analyzing hidden import 'PIL.report'
+25167 INFO: Analyzing hidden import 'certifi.__main__'
+25168 INFO: Processing module hooks (post-graph stage)...
+25225 INFO: Performing binary vs. data reclassification (4195 entries)
+25907 INFO: Looking for ctypes DLLs
+25967 INFO: Analyzing run-time hooks ...
+25969 INFO: Including run-time hook 'pyi_rth_inspect.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+25972 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+25972 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+25975 INFO: Including run-time hook 'pyi_rth_pyside6.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+25976 INFO: Processing pre-find-module-path hook 'hook-_pyi_rth_utils.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks\\pre_find_module_path'
+25977 INFO: Processing standard module hook 'hook-_pyi_rth_utils.py' from 'C:\\Python311\\Lib\\site-packages\\PyInstaller\\hooks'
+26065 INFO: Creating base_library.zip...
+26122 INFO: Looking for dynamic libraries
+26683 INFO: Extra DLL search directories (AddDllDirectory): ['C:\\Python311\\Lib\\site-packages\\shiboken6', 'C:\\Python311\\Lib\\site-packages\\numpy.libs']
+26683 INFO: Extra DLL search directories (PATH): ['C:\\Python311\\Lib\\site-packages\\PySide6']
+31372 WARNING: Library not found: could not resolve 'fbclient.dll', dependency of 'C:\\Python311\\Lib\\site-packages\\PySide6\\plugins\\sqldrivers\\qsqlibase.dll'.
+31372 WARNING: Library not found: could not resolve 'MIMAPI64.dll', dependency of 'C:\\Python311\\Lib\\site-packages\\PySide6\\plugins\\sqldrivers\\qsqlmimer.dll'.
+31372 WARNING: Library not found: could not resolve 'OCI.dll', dependency of 'C:\\Python311\\Lib\\site-packages\\PySide6\\plugins\\sqldrivers\\qsqloci.dll'.
+31373 WARNING: Library not found: could not resolve 'LIBPQ.dll', dependency of 'C:\\Python311\\Lib\\site-packages\\PySide6\\plugins\\sqldrivers\\qsqlpsql.dll'.
+31374 WARNING: Library not found: could not resolve 'Qt63DQuickLogic.dll', dependency of 'C:\\Python311\\Lib\\site-packages\\PySide6\\qml\\Qt3D\\Logic\\3dquicklogicplugin.dll'.
+31374 WARNING: Library not found: could not resolve 'Qt63DQuickScene3D.dll', dependency of 'C:\\Python311\\Lib\\site-packages\\PySide6\\qml\\QtQuick\\Scene3D\\qtquickscene3dplugin.dll'.
+31627 INFO: Warnings written to F:\Programming\Apps\ShittyRandomPhotoScreenSaver\build_mc\SRPSS MC\warn-SRPSS MC.txt
+31708 INFO: Graph cross-reference written to F:\Programming\Apps\ShittyRandomPhotoScreenSaver\build_mc\SRPSS MC\xref-SRPSS MC.html
+31856 INFO: checking PYZ
+31856 INFO: Building PYZ because PYZ-00.toc is non existent
+31856 INFO: Building PYZ (ZlibArchive) F:\Programming\Apps\ShittyRandomPhotoScreenSaver\build_mc\SRPSS MC\PYZ-00.pyz
+32737 INFO: Building PYZ (ZlibArchive) F:\Programming\Apps\ShittyRandomPhotoScreenSaver\build_mc\SRPSS MC\PYZ-00.pyz completed successfully.
+32802 INFO: checking PKG
+32802 INFO: Building PKG because PKG-00.toc is non existent
+32802 INFO: Building PKG (CArchive) SRPSS MC.pkg
+79938 INFO: Building PKG (CArchive) SRPSS MC.pkg completed successfully.
+80001 INFO: Bootloader C:\Python311\Lib\site-packages\PyInstaller\bootloader\Windows-64bit-intel\runw.exe
+80001 INFO: checking EXE
+80001 INFO: Building EXE because EXE-00.toc is non existent
+80001 INFO: Building EXE from EXE-00.toc
+80001 INFO: Copying bootloader EXE to F:\Programming\Apps\ShittyRandomPhotoScreenSaver\release\SRPSS MC.exe
+80006 INFO: Copying icon to EXE
+80009 INFO: Copying 0 resources to EXE
+80010 INFO: Embedding manifest in EXE
+80012 INFO: Appending PKG archive to EXE
+80138 INFO: Fixing EXE headers
+81750 INFO: Building EXE from EXE-00.toc completed successfully.
+81809 INFO: Build complete! The results are available in: F:\Programming\Apps\ShittyRandomPhotoScreenSaver\release

@@ -30,11 +30,10 @@ from rendering.gl_compositor import GLCompositorWidget
 from transitions.base_transition import BaseTransition
 from transitions import (
     CrossfadeTransition,
-    DiffuseTransition,
-    SlideDirection,
     SlideTransition,
-    WipeDirection,
+    SlideDirection,
     WipeTransition,
+    WipeDirection,
     BlockPuzzleFlipTransition,
 )
 from transitions.gl_compositor_crossfade_transition import GLCompositorCrossfadeTransition
@@ -46,6 +45,8 @@ from transitions.gl_compositor_peel_transition import GLCompositorPeelTransition
 from transitions.gl_compositor_blockspin_transition import GLCompositorBlockSpinTransition
 from transitions.gl_compositor_raindrops_transition import GLCompositorRainDropsTransition
 from transitions.gl_compositor_warp_transition import GLCompositorWarpTransition
+from transitions.gl_compositor_diffuse_transition import GLCompositorDiffuseTransition
+from transitions.diffuse_transition import DiffuseTransition
 from widgets.clock_widget import ClockWidget, TimeFormat, ClockPosition
 from widgets.weather_widget import WeatherWidget, WeatherPosition
 from widgets.media_widget import MediaWidget, MediaPosition
@@ -1865,7 +1866,18 @@ class DisplayWidget(QWidget):
                     block_size = 50
                 shape = diffuse_settings.get('shape', 'Rectangle') or 'Rectangle'
 
-                transition = DiffuseTransition(duration_ms, block_size, shape)
+                if hw_accel:
+                    try:
+                        self._ensure_gl_compositor()
+                    except Exception:
+                        logger.debug("[GL COMPOSITOR] Failed to ensure compositor during diffuse selection", exc_info=True)
+                    use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
+                    if use_compositor:
+                        transition = GLCompositorDiffuseTransition(duration_ms, block_size, shape, easing_str)
+                    else:
+                        transition = DiffuseTransition(duration_ms, block_size, shape)
+                else:
+                    transition = DiffuseTransition(duration_ms, block_size, shape)
 
                 transition.set_resource_manager(self._resource_manager)
                 self._log_transition_selection(requested_type, 'Diffuse', random_mode, random_choice_value)
@@ -2215,6 +2227,16 @@ class DisplayWidget(QWidget):
                     comp.set_base_pixmap(self.current_pixmap)
                     comp.show()
                     comp.raise_()
+                    # Prewarm shader textures for the upcoming transition so
+                    # GLSL paths (Slide, Wipe, Diffuse, etc.) do not pay the
+                    # full texture upload cost on their first animated frame.
+                    try:
+                        comp.warm_shader_textures(previous_pixmap_ref, new_pixmap)
+                    except Exception:
+                        logger.debug(
+                            "[GL COMPOSITOR] warm_shader_textures failed during pre-warm",
+                            exc_info=True,
+                        )
                     for attr_name in ("clock_widget", "clock2_widget", "clock3_widget"):
                         clock = getattr(self, attr_name, None)
                         if clock is not None:

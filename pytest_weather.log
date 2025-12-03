@@ -1,0 +1,95 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+cachedir: .pytest_cache
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+plugins: qt-4.5.0
+collecting ... collected 21 items
+
+tests/test_weather_widget.py::test_weather_position_enum PASSED          [  4%]
+tests/test_weather_widget.py::test_weather_creation PASSED               [  9%]
+tests/test_weather_widget.py::test_weather_no_api_key PASSED             [ 14%]
+tests/test_weather_widget.py::test_weather_stop PASSED                   [ 19%]
+tests/test_weather_widget.py::test_weather_signals PASSED                [ 23%]
+tests/test_weather_widget.py::test_weather_display_update FAILED         [ 28%]
+tests/test_weather_widget.py::test_weather_cache PASSED                  [ 33%]
+tests/test_weather_widget.py::test_weather_all_positions FAILED          [ 38%]
+tests/test_weather_widget.py::test_weather_set_position FAILED           [ 42%]
+tests/test_weather_widget.py::test_weather_set_api_key PASSED            [ 47%]
+tests/test_weather_widget.py::test_weather_set_location PASSED           [ 52%]
+tests/test_weather_widget.py::test_weather_set_font_size PASSED          [ 57%]
+tests/test_weather_widget.py::test_weather_set_text_color PASSED         [ 61%]
+tests/test_weather_widget.py::test_weather_cleanup PASSED                [ 66%]
+tests/test_weather_widget.py::test_weather_error_handling PASSED         [ 71%]
+tests/test_weather_widget.py::test_weather_error_with_cache PASSED       [ 76%]
+tests/test_weather_widget.py::test_weather_fetcher_creation PASSED       [ 80%]
+tests/test_weather_widget.py::test_weather_fetcher_success FAILED        [ 85%]
+tests/test_weather_widget.py::test_weather_fetcher_error FAILED          [ 90%]
+tests/test_weather_widget.py::test_weather_display_no_data PASSED        [ 95%]
+tests/test_weather_widget.py::test_weather_concurrent_start_prevention PASSED [100%]
+
+================================== FAILURES ===================================
+_________________________ test_weather_display_update _________________________
+tests\test_weather_widget.py:113: in test_weather_display_update
+    assert "20░C" in text or "21░C" in text  # Rounded
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: assert ('20░C' in 'London\n0░C - Unknown' or '21░C' in 'London\n0░C - Unknown')
+_________________________ test_weather_all_positions __________________________
+tests\test_weather_widget.py:142: in test_weather_all_positions
+    weather = WeatherWidget(
+E   TypeError: WeatherWidget.__init__() got an unexpected keyword argument 'api_key'
+__________________________ test_weather_set_position __________________________
+tests\test_weather_widget.py:153: in test_weather_set_position
+    weather = WeatherWidget(
+E   TypeError: WeatherWidget.__init__() got an unexpected keyword argument 'api_key'
+________________________ test_weather_fetcher_success _________________________
+C:\Python311\Lib\site-packages\pytestqt\plugin.py:187: in pytest_runtest_call
+    result = yield
+             ^^^^^
+C:\Python311\Lib\unittest\mock.py:1375: in patched
+    with self.decoration_helper(patched,
+C:\Python311\Lib\contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+C:\Python311\Lib\unittest\mock.py:1357: in decoration_helper
+    arg = exit_stack.enter_context(patching)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Python311\Lib\contextlib.py:517: in enter_context
+    result = _enter(cm)
+             ^^^^^^^^^^
+C:\Python311\Lib\unittest\mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+C:\Python311\Lib\pkgutil.py:715: in resolve_name
+    result = getattr(result, p)
+             ^^^^^^^^^^^^^^^^^^
+E   AttributeError: module 'widgets.weather_widget' has no attribute 'requests'
+_________________________ test_weather_fetcher_error __________________________
+C:\Python311\Lib\site-packages\pytestqt\plugin.py:187: in pytest_runtest_call
+    result = yield
+             ^^^^^
+C:\Python311\Lib\unittest\mock.py:1375: in patched
+    with self.decoration_helper(patched,
+C:\Python311\Lib\contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+C:\Python311\Lib\unittest\mock.py:1357: in decoration_helper
+    arg = exit_stack.enter_context(patching)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Python311\Lib\contextlib.py:517: in enter_context
+    result = _enter(cm)
+             ^^^^^^^^^^
+C:\Python311\Lib\unittest\mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+C:\Python311\Lib\pkgutil.py:715: in resolve_name
+    result = getattr(result, p)
+             ^^^^^^^^^^^^^^^^^^
+E   AttributeError: module 'widgets.weather_widget' has no attribute 'requests'
+=========================== short test summary info ===========================
+FAILED tests/test_weather_widget.py::test_weather_display_update - AssertionE...
+FAILED tests/test_weather_widget.py::test_weather_all_positions - TypeError: ...
+FAILED tests/test_weather_widget.py::test_weather_set_position - TypeError: W...
+FAILED tests/test_weather_widget.py::test_weather_fetcher_success - Attribute...
+FAILED tests/test_weather_widget.py::test_weather_fetcher_error - AttributeEr...
+======================== 5 failed, 16 passed in 0.51s =========================

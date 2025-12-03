@@ -1,0 +1,44 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+cachedir: .pytest_cache
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+plugins: qt-4.5.0
+collecting ... collected 5 items
+
+tests/test_gl_prewarm.py::TestGLPrewarm::test_prewarm_method_exists PASSED [ 20%]
+tests/test_gl_prewarm.py::TestGLPrewarm::test_prewarm_creates_overlays PASSED [ 40%]
+tests/test_gl_prewarm.py::TestGLPrewarm::test_prewarm_does_not_hang PASSED [ 60%]
+tests/test_gl_prewarm.py::TestGLPrewarm::test_prewarm_overlays_are_hidden PASSED [ 80%]
+tests/test_gl_prewarm.py::TestGLPrewarm::test_prewarm_with_hw_accel_disabled FAILED [100%]
+
+================================== FAILURES ===================================
+______________ TestGLPrewarm.test_prewarm_with_hw_accel_disabled ______________
+tests\test_gl_prewarm.py:158: in test_prewarm_with_hw_accel_disabled
+    assert not hasattr(widget, '_srpss_gl_xfade_overlay')
+E   AssertionError: assert not True
+E    +  where True = hasattr(<rendering.display_widget.DisplayWidget(0x1fda0694470) at 0x000001FDA196B000>, '_srpss_gl_xfade_overlay')
+------------------------------ Captured log call ------------------------------
+WARNING  rendering.display_widget:display_widget.py:429 [PREWARM] Crossfade timeout after 100ms, continuing anyway
+WARNING  rendering.display_widget:display_widget.py:436 [PREWARM] Crossfade NOT ready after timeout
+WARNING  rendering.display_widget:display_widget.py:429 [PREWARM] Slide timeout after 100ms, continuing anyway
+WARNING  rendering.display_widget:display_widget.py:436 [PREWARM] Slide NOT ready after timeout
+WARNING  rendering.display_widget:display_widget.py:429 [PREWARM] Wipe timeout after 100ms, continuing anyway
+WARNING  rendering.display_widget:display_widget.py:436 [PREWARM] Wipe NOT ready after timeout
+WARNING  rendering.display_widget:display_widget.py:429 [PREWARM] Diffuse timeout after 100ms, continuing anyway
+WARNING  rendering.display_widget:display_widget.py:436 [PREWARM] Diffuse NOT ready after timeout
+WARNING  rendering.display_widget:display_widget.py:429 [PREWARM] Block timeout after 100ms, continuing anyway
+WARNING  rendering.display_widget:display_widget.py:436 [PREWARM] Block NOT ready after timeout
+WARNING  rendering.display_widget:display_widget.py:429 [PREWARM] PaintBlob timeout after 100ms, continuing anyway
+WARNING  rendering.display_widget:display_widget.py:436 [PREWARM] PaintBlob NOT ready after timeout
+WARNING  rendering.display_widget:display_widget.py:429 [PREWARM] RainDrops timeout after 100ms, continuing anyway
+WARNING  rendering.display_widget:display_widget.py:436 [PREWARM] RainDrops NOT ready after timeout
+WARNING  rendering.display_widget:display_widget.py:429 [PREWARM] Swirl timeout after 100ms, continuing anyway
+WARNING  rendering.display_widget:display_widget.py:436 [PREWARM] Swirl NOT ready after timeout
+WARNING  rendering.display_widget:display_widget.py:429 [PREWARM] Ripple timeout after 100ms, continuing anyway
+WARNING  rendering.display_widget:display_widget.py:436 [PREWARM] Ripple NOT ready after timeout
+WARNING  rendering.display_widget:display_widget.py:429 [PREWARM] ZoomBlur timeout after 100ms, continuing anyway
+WARNING  rendering.display_widget:display_widget.py:436 [PREWARM] ZoomBlur NOT ready after timeout
+=========================== short test summary info ===========================
+FAILED tests/test_gl_prewarm.py::TestGLPrewarm::test_prewarm_with_hw_accel_disabled
+========================= 1 failed, 4 passed in 4.43s =========================

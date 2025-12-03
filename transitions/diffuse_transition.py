@@ -5,9 +5,9 @@ Reveals new image by randomly fading in blocks over time.
 """
 import random
 from typing import Optional, List
-from PySide6.QtCore import QPointF, QRectF, Qt
+from PySide6.QtCore import Qt
 from core.animation.types import EasingCurve
-from PySide6.QtGui import QPixmap, QPainter, QColor, QPolygonF
+from PySide6.QtGui import QPixmap, QPainter, QColor
 from PySide6.QtWidgets import QWidget, QLabel
 
 from transitions.base_transition import BaseTransition, TransitionState
@@ -29,16 +29,15 @@ class DiffuseTransition(BaseTransition):
     def __init__(self, duration_ms: int = 2000, block_size: int = 8, shape: str = 'Rectangle'):
         """
         Initialize diffuse transition.
-        
+
         Args:
             duration_ms: Total duration in milliseconds
             block_size: Size of each block in pixels
-            shape: Shape type ('Rectangle', 'Circle', 'Triangle')
+            shape: Shape type ('Rectangle', 'Membrane')
         """
         super().__init__(duration_ms)
         
         self._block_size = block_size
-        self._shape = shape
         self._widget: Optional[QWidget] = None
         self._old_label: Optional[QLabel] = None
         self._new_label: Optional[QLabel] = None
@@ -54,6 +53,11 @@ class DiffuseTransition(BaseTransition):
         self._pixel_grid: List[tuple] = []  # (x, y, revealed)
         self._reveal_rate = 0.0  # Pixels to reveal per frame
         
+        # Clamp initial shape to the supported set so legacy settings do not
+        # request shapes that are no longer available.
+        if shape not in ("Rectangle", "Membrane"):
+            shape = "Rectangle"
+        self._shape = shape
         logger.debug(f"DiffuseTransition created (duration={duration_ms}ms, block_size={block_size}, shape={shape})")
     
     def start(self, old_pixmap: Optional[QPixmap], new_pixmap: QPixmap,
@@ -93,10 +97,6 @@ class DiffuseTransition(BaseTransition):
             # Begin telemetry tracking for animated diffuse
             self._mark_start()
 
-            # DEBUG: Verify pixmaps have valid content
-            logger.debug(f"[DIFFUSE] OLD PIXMAP: {old_pixmap.width()}x{old_pixmap.height()}, isNull={old_pixmap.isNull()}, depth={old_pixmap.depth()}")
-            logger.debug(f"[DIFFUSE] NEW PIXMAP: {new_pixmap.width()}x{new_pixmap.height()}, isNull={new_pixmap.isNull()}, depth={new_pixmap.depth()}")
-            
             # Get widget dimensions
             width = widget.width()
             height = widget.height()
@@ -132,14 +132,6 @@ class DiffuseTransition(BaseTransition):
                     self._resource_manager.register_qt(self._new_label, description="DiffuseTransition new label")
                 except Exception:
                     pass
-            
-            # DEBUG: Verify labels were created correctly
-            logger.debug(f"[DIFFUSE] OLD LABEL: geometry={self._old_label.geometry()}, visible={self._old_label.isVisible()}, hasPixmap={self._old_label.pixmap() is not None}")
-            logger.debug(f"[DIFFUSE] NEW LABEL: geometry={self._new_label.geometry()}, visible={self._new_label.isVisible()}, hasPixmap={self._new_label.pixmap() is not None}")
-            if self._old_label.pixmap():
-                logger.debug(f"[DIFFUSE] OLD LABEL pixmap size: {self._old_label.pixmap().size()}")
-            if self._new_label.pixmap():
-                logger.debug(f"[DIFFUSE] NEW LABEL pixmap size: {self._new_label.pixmap().size()}")
             
             # Create pixel grid for granular diffusion
             self._pixel_grid = self._create_pixel_grid(width, height)
@@ -306,28 +298,19 @@ class DiffuseTransition(BaseTransition):
         
         painter = QPainter(current)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
+
         # Set up for transparent filled shapes
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
-        
+
         # Reveal pixels (punch holes)
         revealed = 0
         while revealed < count and self._pixel_grid:
             x, y = self._pixel_grid.pop(0)
 
-            # Draw transparent shape based on selected type
-            if self._shape == 'Circle':
-                self._draw_circle_hole(painter, x, y)
-            elif self._shape == 'Triangle':
-                self._draw_triangle_hole(painter, x, y)
-            elif self._shape == 'Diamond':
-                self._draw_diamond_hole(painter, x, y)
-            elif self._shape == 'Plus':
-                self._draw_plus_hole(painter, x, y)
-            else:  # Rectangle (default)
-                # fillRect works with CompositionMode_Clear to create transparency
-                painter.fillRect(x, y, self._block_size, self._block_size, QColor(0, 0, 0, 0))
-            
+            # Draw transparent rectangular hole; CPU fallback uses a simple
+            # block dissolve while shaped variants live in the GLSL path.
+            painter.fillRect(x, y, self._block_size, self._block_size, QColor(0, 0, 0, 0))
+
             revealed += 1
         
         painter.end()
@@ -335,10 +318,6 @@ class DiffuseTransition(BaseTransition):
         # Update old label
         try:
             self._old_label.setPixmap(current)
-            # Verify the pixmap was set
-            if revealed > 0 and revealed % 50 == 0:  # Log every 50 blocks
-                updated_pixmap = self._old_label.pixmap()
-                logger.debug(f"[DIFFUSE] Updated old label, blocks revealed: {revealed}, pixmap size: {updated_pixmap.size() if updated_pixmap else 'None'}")
         except RuntimeError:
             logger.warning("[DIFFUSE] RuntimeError updating old label pixmap")
             pass
@@ -350,8 +329,8 @@ class DiffuseTransition(BaseTransition):
         
         logger.debug("Diffuse animation finished")
         
-        # Stop timer
-        if self._timer:
+        # Stop timer if present (older implementations used a QTimer here)
+        if getattr(self, "_timer", None):
             try:
                 self._timer.stop()
             except RuntimeError:
@@ -388,71 +367,7 @@ class DiffuseTransition(BaseTransition):
         self._emit_progress(1.0)
         self.finished.emit()
         logger.debug("Image shown immediately")
-    
-    def _draw_circle_hole(self, painter: QPainter, x: int, y: int) -> None:
-        """
-        Draw a circular transparent hole (FILLED, not outline).
-        
-        Args:
-            painter: QPainter instance
-            x: X coordinate
-            y: Y coordinate
-        """
-        # Create filled circle using QRectF for proper ellipse
-        rect = QRectF(x, y, self._block_size, self._block_size)
-        painter.drawEllipse(rect)
-    
-    def _draw_triangle_hole(self, painter: QPainter, x: int, y: int) -> None:
-        """
-        Draw a triangular transparent hole (FILLED, not outline).
-        
-        Args:
-            painter: QPainter instance
-            x: X coordinate
-            y: Y coordinate
-        """
-        # Create triangle with top vertex centered, bottom vertices at corners
-        top = QPointF(x + self._block_size / 2, y)
-        bottom_left = QPointF(x, y + self._block_size)
-        bottom_right = QPointF(x + self._block_size, y + self._block_size)
-        
-        # drawPolygon with CompositionMode_Clear should create transparent fill
-        triangle = QPolygonF([top, bottom_left, bottom_right])
-        painter.drawPolygon(triangle)
-    
-    def _draw_diamond_hole(self, painter: QPainter, x: int, y: int) -> None:
-        """Draw a diamond (rhombus) transparent hole centered in the block."""
-        cx = x + self._block_size / 2.0
-        cy = y + self._block_size / 2.0
-        half = self._block_size / 2.0
 
-        top = QPointF(cx, cy - half)
-        right = QPointF(cx + half, cy)
-        bottom = QPointF(cx, cy + half)
-        left = QPointF(cx - half, cy)
-
-        diamond = QPolygonF([top, right, bottom, left])
-        painter.drawPolygon(diamond)
-
-    def _draw_plus_hole(self, painter: QPainter, x: int, y: int) -> None:
-        """Draw a plus (+) shaped transparent hole using two rectangles."""
-        size = float(self._block_size)
-        if size <= 0:
-            return
-        thickness = max(1.0, size / 3.0)
-        cx = x + size / 2.0
-        cy = y + size / 2.0
-
-        # Vertical bar
-        vx = cx - thickness / 2.0
-        vy = y
-        painter.fillRect(int(vx), int(vy), int(thickness), int(size), QColor(0, 0, 0, 0))
-
-        # Horizontal bar
-        hx = x
-        hy = cy - thickness / 2.0
-        painter.fillRect(int(hx), int(hy), int(size), int(thickness), QColor(0, 0, 0, 0))
-    
     def set_block_size(self, size: int) -> None:
         """
         Set block size for diffuse effect.
@@ -470,14 +385,14 @@ class DiffuseTransition(BaseTransition):
     def set_shape(self, shape: str) -> None:
         """
         Set shape type for diffuse effect.
-        
+
         Args:
-            shape: Shape type ('Rectangle', 'Circle', 'Diamond', 'Plus', 'Triangle')
+            shape: Shape type ('Rectangle', 'Membrane')
         """
-        valid_shapes = ['Rectangle', 'Circle', 'Diamond', 'Plus', 'Triangle']
+        valid_shapes = ["Rectangle", "Membrane"]
         if shape not in valid_shapes:
             logger.warning(f"[FALLBACK] Invalid shape {shape}, using Rectangle")
-            shape = 'Rectangle'
+            shape = "Rectangle"
 
         self._shape = shape
         logger.debug(f"Diffuse shape set to {shape}")
