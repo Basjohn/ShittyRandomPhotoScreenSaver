@@ -1307,6 +1307,27 @@ class DisplayWidget(QWidget):
                     except Exception:
                         pass
 
+                    # Software visualiser toggle: allow explicit user control
+                    # plus automatic enablement when the renderer backend is
+                    # set to Software. This keeps the GPU overlay as the
+                    # primary path in OpenGL mode while still providing a
+                    # software-only visualiser when no GL is available.
+                    try:
+                        allow_software = bool(spotify_vis_settings.get('software_visualizer_enabled', False))
+                        backend_mode_raw = None
+                        if self.settings_manager is not None:
+                            try:
+                                backend_mode_raw = self.settings_manager.get('display.render_backend_mode', 'opengl')
+                            except Exception:
+                                backend_mode_raw = 'opengl'
+                        backend_mode = str(backend_mode_raw or 'opengl').lower().strip()
+                        if backend_mode == 'software':
+                            allow_software = True
+                        if hasattr(vis, 'set_software_visualizer_enabled'):
+                            vis.set_software_visualizer_enabled(allow_software)
+                    except Exception:
+                        logger.debug('[SPOTIFY_VIS] Failed to configure software visualiser flag', exc_info=True)
+
                     # Per-bar colours from spotify_visualizer settings
                     from PySide6.QtGui import QColor as _QColor
                     try:

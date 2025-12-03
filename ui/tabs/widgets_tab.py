@@ -751,6 +751,16 @@ class WidgetsTab(QWidget):
         self.spotify_vis_enabled.stateChanged.connect(self._save_settings)
         spotify_vis_layout.addWidget(self.spotify_vis_enabled)
 
+        # Optional software visualiser fallback. When enabled, the legacy
+        # QWidget-based bar renderer is allowed to draw when OpenGL is
+        # unavailable or when the renderer backend is set to Software.
+        self.spotify_vis_software_enabled = QCheckBox("Enable software visualizer in Software renderer mode")
+        self.spotify_vis_software_enabled.setToolTip(
+            "When checked, the software (CPU) Spotify visualizer can render bars when the renderer backend is set to 'Software' or when OpenGL is unavailable."
+        )
+        self.spotify_vis_software_enabled.stateChanged.connect(self._save_settings)
+        spotify_vis_layout.addWidget(self.spotify_vis_software_enabled)
+
         spotify_vis_bar_row = QHBoxLayout()
         spotify_vis_bar_row.addWidget(QLabel("Bar Count:"))
         self.spotify_vis_bar_count = QSpinBox()
@@ -1396,6 +1406,9 @@ class WidgetsTab(QWidget):
             bar_count = int(spotify_vis_config.get('bar_count', 32))
             self.spotify_vis_bar_count.setValue(bar_count)
 
+            software_enabled = bool(spotify_vis_config.get('software_visualizer_enabled', False))
+            self.spotify_vis_software_enabled.setChecked(software_enabled)
+
             fill_color_data = spotify_vis_config.get('bar_fill_color', [0, 255, 128, 230])
             try:
                 self._spotify_vis_fill_color = QColor(*fill_color_data)
@@ -1697,6 +1710,7 @@ class WidgetsTab(QWidget):
         spotify_vis_config = {
             'enabled': self.spotify_vis_enabled.isChecked(),
             'bar_count': self.spotify_vis_bar_count.value(),
+            'software_visualizer_enabled': self.spotify_vis_software_enabled.isChecked(),
             'bar_fill_color': [
                 self._spotify_vis_fill_color.red(),
                 self._spotify_vis_fill_color.green(),

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import List, Sequence
 
+import numpy as np
 from PySide6.QtCore import Qt, QRect
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
@@ -48,6 +49,23 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._border_color: QColor = QColor(255, 255, 255, 255)
         self._fade: float = 0.0
         self._playing: bool = False
+
+        # Minimal GL state for a fullscreen quad shader. If initialisation
+        # fails at any point we fall back to the legacy QPainter-on-GL path.
+        self._gl_program = None
+        self._gl_vao = None
+        self._gl_vbo = None
+        self._u_resolution = None
+        self._u_bar_count = None
+        self._u_segments = None
+        self._u_bars = None
+        self._u_fill_color = None
+        self._u_border_color = None
+        self._u_fade = None
+        self._u_playing = None
+        self._gl_disabled: bool = False
+        self._debug_bars_logged: bool = False
+        self._debug_paint_logged: bool = False
 
     # ------------------------------------------------------------------
     # Public API
@@ -170,6 +188,18 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
     # QOpenGLWidget hooks
     # ------------------------------------------------------------------
 
+    def initializeGL(self) -> None:  # type: ignore[override]
+        """Create the small shader pipeline used for bar rendering.
+
+        Any failure here is treated as non-fatal – the widget will fall back
+        to the QPainter implementation in paintGL.
+        """
+
+        try:
+            self._init_gl_pipeline()
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to initialise GL pipeline for SpotifyBarsGLOverlay", exc_info=True)
+
     def paintGL(self) -> None:  # type: ignore[override]
         if not self._enabled:
             return
@@ -194,6 +224,414 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         except Exception:
             pass
 
+        # Prefer the shader path when available; fall back to QPainter when
+        # the GL program or buffers are not ready or fail at runtime.
+        used_shader = self._render_with_shader(rect, fade)
+        if not used_shader:
+            self._render_with_qpainter(rect, fade)
+
+        if not getattr(self, "_debug_paint_logged", False):
+            try:
+                logger.debug(
+                    "[SPOTIFY_VIS] paintGL path: %s",
+                    "shader" if used_shader else "qpainter",
+                )
+            except Exception:
+                pass
+            try:
+                self._debug_paint_logged = True
+            except Exception:
+                pass
+
+    # ------------------------------------------------------------------
+    # Internal rendering helpers
+    # ------------------------------------------------------------------
+
+    def _init_gl_pipeline(self) -> None:
+        if self._gl_disabled or self._gl_program is not None:
+            return
+
+        from OpenGL import GL as _gl  # local alias to avoid surprises during import
+
+        vs_source = """#version 330 core
+layout(location = 0) in vec2 a_pos;
+out vec2 v_uv;
+void main() {
+    v_uv = a_pos * 0.5 + 0.5;
+    gl_Position = vec4(a_pos, 0.0, 1.0);
+}
+"""
+
+        fs_source = """#version 330 core
+in vec2 v_uv;
+out vec4 fragColor;
+
+uniform vec2 u_resolution;   // logical size in QWidget coordinates
+uniform float u_dpr;         // device pixel ratio of the backing FBO
+uniform int u_bar_count;
+uniform int u_segments;
+uniform float u_bars[64];
+uniform vec4 u_fill_color;
+uniform vec4 u_border_color;
+uniform float u_fade;
+uniform int u_playing;
+
+void main() {
+    if (u_fade <= 0.0 || u_bar_count <= 0 || u_segments <= 0) {
+        discard;
+    }
+
+    float width = u_resolution.x;
+    float height = u_resolution.y;
+    if (width <= 0.0 || height <= 0.0) {
+        discard;
+    }
+
+    // Derive logical fragment coordinates from the physical framebuffer
+    // position. QOpenGLWidget renders into a device-pixel-scaled FBO, so we
+    // map gl_FragCoord (physical) back into QWidget logical space using the
+    // current device pixel ratio.
+    float dpr = (u_dpr <= 0.0) ? 1.0 : u_dpr;
+    float fb_height = height * dpr;
+    vec2 fragCoord = vec2(gl_FragCoord.x / dpr, (fb_height - gl_FragCoord.y) / dpr);
+
+    float margin_x = 8.0;
+    float margin_y = 6.0;
+    float gap = 2.0;
+    float seg_gap = 1.0;
+
+    // Match QWidget geometry: inner rect is rect.adjusted(margin_x, margin_y,
+    // -margin_x, -margin_y). For a logical rect starting at (0, 0) this
+    // gives width = W - 2*margin_x and height = H - 2*margin_y.
+    float inner_left = margin_x;
+    float inner_top = margin_y;
+    float inner_width = width - margin_x * 2.0;
+    float inner_height = height - margin_y * 2.0;
+    float inner_right = inner_left + inner_width;
+    float inner_bottom = inner_top + inner_height;
+
+    if (inner_width <= 0.0 || inner_height <= 0.0) {
+        discard;
+    }
+
+    // Discard anything outside the bar field vertically so we don't fill
+    // the entire card when active_segments is high.
+    if (fragCoord.y < inner_top || fragCoord.y > inner_bottom) {
+        discard;
+    }
+
+    float bars_left = inner_left + 5.0;
+    float total_gap = gap * float(u_bar_count - 1);
+    float bar_width = (inner_width - total_gap) / float(u_bar_count);
+    bar_width = floor(bar_width);
+    if (bar_width < 1.0) {
+        discard;
+    }
+
+    float x_rel = fragCoord.x - bars_left;
+    if (x_rel < 0.0) {
+        discard;
+    }
+    float span = float(u_bar_count) * bar_width + total_gap;
+    if (x_rel >= span) {
+        discard;
+    }
+
+    float step_x = bar_width + gap;
+    int bar_index = int(floor(x_rel / step_x));
+    if (bar_index < 0 || bar_index >= u_bar_count) {
+        discard;
+    }
+
+    // Local X coordinate within the bar; discard the explicit gap region.
+    // Use a half-open range [0, bar_width) so that we never classify the
+    // gap pixel as part of the bar due to floating-point rounding.
+    float bar_local_x = x_rel - float(bar_index) * step_x;
+    if (bar_local_x < 0.0 || bar_local_x >= bar_width) {
+        discard;
+    }
+
+    float value = u_bars[bar_index];
+    if (value <= 0.0) {
+        discard;
+    }
+    if (value > 1.0) {
+        value = 1.0;
+    }
+
+    float total_seg_gap = seg_gap * float(u_segments - 1);
+    float seg_height = (inner_height - total_seg_gap) / float(u_segments);
+    seg_height = floor(seg_height);
+    if (seg_height < 1.0) {
+        discard;
+    }
+
+    float base_bottom = inner_bottom;
+    float step_y = seg_height + seg_gap;
+    float y_rel = base_bottom - fragCoord.y;
+    if (y_rel < 0.0) {
+        discard;
+    }
+
+    int seg_index = int(floor(y_rel / step_y));
+    if (seg_index < 0) {
+        discard;
+    }
+
+    // Local Y coordinate within the segment; discard the vertical gap
+    // region using a half-open range [0, seg_height).
+    float seg_local_y = y_rel - float(seg_index) * step_y;
+    if (seg_local_y < 0.0 || seg_local_y >= seg_height) {
+        discard;
+    }
+
+    float boosted = value * 1.2;
+    if (boosted > 1.0) {
+        boosted = 1.0;
+    }
+    int active_segments = int(round(boosted * float(u_segments)));
+    if (active_segments <= 0) {
+        if (u_playing != 0 && value > 0.0) {
+            active_segments = 1;
+        }
+    }
+    if (active_segments <= 0 || seg_index >= active_segments) {
+        discard;
+    }
+
+    // Draw a bar segment using the configured fill/border colours. Visual
+    // segmentation between blocks/segments is still provided by the explicit
+    // horizontal/vertical gaps; border detection operates in integer-like
+    // local coordinates to remain stable across resolutions/DPI.
+
+    float bw_px = floor(bar_width);
+    float sh_px = floor(seg_height);
+    float bx = floor(bar_local_x);
+    float by = floor(seg_local_y);
+
+    bool on_border = false;
+    if (bw_px <= 2.0 || sh_px <= 2.0) {
+        on_border = true;
+    } else {
+        if (bx <= 0.0 || bx >= bw_px - 1.0 || by <= 0.0 || by >= sh_px - 1.0) {
+            on_border = true;
+        }
+    }
+
+    vec4 fill = u_fill_color;
+    vec4 border = u_border_color;
+    fill.a *= u_fade;
+    border.a *= u_fade;
+    fragColor = on_border ? border : fill;
+}
+"""
+
+        prog = _gl.glCreateProgram()
+        vs = _gl.glCreateShader(_gl.GL_VERTEX_SHADER)
+        fs = _gl.glCreateShader(_gl.GL_FRAGMENT_SHADER)
+
+        _gl.glShaderSource(vs, vs_source)
+        _gl.glCompileShader(vs)
+        status = _gl.glGetShaderiv(vs, _gl.GL_COMPILE_STATUS)
+        if not status:
+            raise RuntimeError("SpotifyBarsGLOverlay vertex shader compile failed")
+
+        _gl.glShaderSource(fs, fs_source)
+        _gl.glCompileShader(fs)
+        status = _gl.glGetShaderiv(fs, _gl.GL_COMPILE_STATUS)
+        if not status:
+            raise RuntimeError("SpotifyBarsGLOverlay fragment shader compile failed")
+
+        _gl.glAttachShader(prog, vs)
+        _gl.glAttachShader(prog, fs)
+        _gl.glLinkProgram(prog)
+        link_ok = _gl.glGetProgramiv(prog, _gl.GL_LINK_STATUS)
+        if not link_ok:
+            raise RuntimeError("SpotifyBarsGLOverlay program link failed")
+
+        _gl.glDeleteShader(vs)
+        _gl.glDeleteShader(fs)
+
+        vao = _gl.glGenVertexArrays(1)
+        vbo = _gl.glGenBuffers(1)
+
+        _gl.glBindVertexArray(vao)
+        _gl.glBindBuffer(_gl.GL_ARRAY_BUFFER, vbo)
+        vertices = np.array(
+            [
+                -1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                -1.0,
+                1.0,
+                1.0,
+                1.0,
+            ],
+            dtype="float32",
+        )
+        _gl.glBufferData(
+            _gl.GL_ARRAY_BUFFER,
+            int(vertices.nbytes),
+            vertices,
+            _gl.GL_STATIC_DRAW,
+        )
+        _gl.glEnableVertexAttribArray(0)
+        _gl.glVertexAttribPointer(0, 2, _gl.GL_FLOAT, False, 0, None)
+        _gl.glBindVertexArray(0)
+
+        self._gl_program = prog
+        self._gl_vao = vao
+        self._gl_vbo = vbo
+        self._u_resolution = _gl.glGetUniformLocation(prog, "u_resolution")
+        self._u_bar_count = _gl.glGetUniformLocation(prog, "u_bar_count")
+        self._u_segments = _gl.glGetUniformLocation(prog, "u_segments")
+        self._u_bars = _gl.glGetUniformLocation(prog, "u_bars")
+        self._u_fill_color = _gl.glGetUniformLocation(prog, "u_fill_color")
+        self._u_border_color = _gl.glGetUniformLocation(prog, "u_border_color")
+        self._u_fade = _gl.glGetUniformLocation(prog, "u_fade")
+        self._u_playing = _gl.glGetUniformLocation(prog, "u_playing")
+        self._u_dpr = _gl.glGetUniformLocation(prog, "u_dpr")
+
+    def _render_with_shader(self, rect: QRect, fade: float) -> bool:
+        if self._gl_disabled:
+            return False
+
+        try:
+            if self._gl_program is None or self._gl_vao is None:
+                self._init_gl_pipeline()
+        except Exception:
+            self._gl_disabled = True
+            logger.debug("[SPOTIFY_VIS] GL pipeline unavailable, falling back to QPainter", exc_info=True)
+            return False
+
+        if self._gl_program is None or self._gl_vao is None:
+            return False
+
+        try:
+            count = int(self._bar_count)
+            segments = int(self._segments)
+        except Exception:
+            return False
+        if count <= 0 or segments <= 0:
+            return False
+
+        width = rect.width()
+        height = rect.height()
+        if width <= 0 or height <= 0:
+            return False
+
+        try:
+            from OpenGL import GL as _gl
+
+            _gl.glUseProgram(self._gl_program)
+            _gl.glBindVertexArray(self._gl_vao)
+
+            if self._u_resolution is not None:
+                _gl.glUniform2f(self._u_resolution, float(width), float(height))
+            if self._u_bar_count is not None:
+                _gl.glUniform1i(self._u_bar_count, min(count, 64))
+            if self._u_segments is not None:
+                _gl.glUniform1i(self._u_segments, segments)
+
+            if getattr(self, "_u_dpr", None) is not None:
+                try:
+                    # Prefer the window's devicePixelRatio when available; fall
+                    # back to the widget's own logical DPR. Clamp to a sane
+                    # range so that bad values do not explode geometry.
+                    dpr = 1.0
+                    try:
+                        win = self.windowHandle()  # type: ignore[attr-defined]
+                    except Exception:
+                        win = None
+                    if win is not None:
+                        try:
+                            dpr = float(win.devicePixelRatio())
+                        except Exception:
+                            dpr = 1.0
+                    else:
+                        try:
+                            dpr = float(self.devicePixelRatioF())
+                        except Exception:
+                            dpr = 1.0
+                    if dpr <= 0.0:
+                        dpr = 1.0
+                    if dpr > 4.0:
+                        dpr = 4.0
+                    _gl.glUniform1f(self._u_dpr, dpr)
+                except Exception:
+                    _gl.glUniform1f(self._u_dpr, 1.0)
+
+            bars = list(self._bars)
+            if not bars:
+                _gl.glBindVertexArray(0)
+                return False
+            if len(bars) < 64:
+                bars = bars + [0.0] * (64 - len(bars))
+            else:
+                bars = bars[:64]
+
+            if not getattr(self, "_debug_bars_logged", False):
+                try:
+                    if count > 0:
+                        sample = bars[:count]
+                        mn = min(sample)
+                        mx = max(sample)
+                    else:
+                        mn = 0.0
+                        mx = 0.0
+                    logger.debug(
+                        "[SPOTIFY_VIS] Shader bars snapshot: count=%d, min=%.4f, max=%.4f",
+                        count,
+                        mn,
+                        mx,
+                    )
+                except Exception:
+                    pass
+                try:
+                    self._debug_bars_logged = True
+                except Exception:
+                    pass
+
+            if self._u_bars is not None:
+                buf = np.asarray(bars, dtype="float32")
+                _gl.glUniform1fv(self._u_bars, 64, buf)
+
+            fill = QColor(self._fill_color)
+            if self._u_fill_color is not None:
+                _gl.glUniform4f(
+                    self._u_fill_color,
+                    float(fill.redF()),
+                    float(fill.greenF()),
+                    float(fill.blueF()),
+                    float(fill.alphaF()),
+                )
+
+            border = QColor(self._border_color)
+            if self._u_border_color is not None:
+                _gl.glUniform4f(
+                    self._u_border_color,
+                    float(border.redF()),
+                    float(border.greenF()),
+                    float(border.blueF()),
+                    float(border.alphaF()),
+                )
+            if self._u_fade is not None:
+                _gl.glUniform1f(self._u_fade, float(max(0.0, min(1.0, fade))))
+
+            if self._u_playing is not None:
+                _gl.glUniform1i(self._u_playing, 1 if self._playing else 0)
+
+            _gl.glDrawArrays(_gl.GL_TRIANGLE_STRIP, 0, 4)
+            _gl.glBindVertexArray(0)
+            _gl.glUseProgram(0)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Shader-based bar rendering failed", exc_info=True)
+            return False
+
+        return True
+
+    def _render_with_qpainter(self, rect: QRect, fade: float) -> None:
         count = self._bar_count
         segments = self._segments
         if count <= 0 or segments <= 0:
@@ -211,8 +649,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if bar_width <= 0:
             return
 
-        # Match the QWidget visualiser: small rightward offset so bars visually
-        # line up with the card frame.
         x0 = inner.left() + 5
         bar_x = [x0 + i * (bar_width + gap) for i in range(count)]
 

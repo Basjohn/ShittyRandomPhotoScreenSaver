@@ -442,6 +442,23 @@ GL Path: The only supported GL route uses a single `GLCompositorWidget` per disp
             'rounded_artwork_border': True,
             'show_header_frame': True,
         },
+        'spotify_visualizer': {
+            # Spotify Beat Visualizer – a thin bar visualiser paired with the
+            # Spotify media widget. Uses a shared beat engine and a GPU bar
+            # overlay by default, with an optional software (CPU) path for
+            # software renderer mode.
+            'enabled': True,
+            'monitor': 'ALL',              # visualiser mirrors media widget monitor selection
+            'bar_count': 16,               # number of vertical bars
+            'bar_fill_color': [24, 24, 24, 255],
+            'bar_border_color': [255, 255, 255, 255],
+            'bar_border_opacity': 1.0,
+            # When True, the legacy QWidget-based software visualiser is
+            # allowed to draw bars when the renderer backend is 'software' or
+            # when OpenGL is unavailable. In OpenGL mode the GPU overlay
+            # remains the primary path even when this is True.
+            'software_visualizer_enabled': False,
+        },
         # Global widget drop-shadow defaults shared by all overlay widgets.
         'shadows': {
             'enabled': True,

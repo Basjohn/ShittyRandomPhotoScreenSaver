@@ -294,12 +294,13 @@ class SettingsManager(QObject):
                     # Bar border colour (RGBA) and independent opacity scaler.
                     'bar_border_color': [255, 255, 255, 255],
                     'bar_border_opacity': 1.0,
+                    # When True, the legacy QWidget-based software visualiser is
+                    # allowed to render bars when OpenGL is unavailable or when
+                    # the renderer backend is explicitly set to 'software'. This
+                    # is disabled by default so the GPU overlay remains the
+                    # primary path in OpenGL mode.
+                    'software_visualizer_enabled': False,
                 },
-                # Reddit widget defaults – enabled by default so users see a
-                # small feed out of the box. The card appears in the
-                # bottom-right corner with a
-                # dark background and full-opacity border, using the "all"
-                # subreddit and a compact font size.
                 'reddit': {
                     'enabled': True,
                     # Default to primary display only so the widget does not
@@ -491,24 +492,7 @@ class SettingsManager(QObject):
                 'bar_fill_color': [24, 24, 24, 255],
                 'bar_border_color': [255, 255, 255, 255],
                 'bar_border_opacity': 1.0,
-            },
-            'reddit': {
-                'enabled': True,
-                'monitor': 1,
-                'position': 'Bottom Right',
-                'subreddit': 'all',
-                'font_family': 'Segoe UI',
-                'font_size': 14,
-                'margin': 20,
-                'color': [255, 255, 255, 230],
-                'show_background': True,
-                'bg_opacity': 1.0,
-                'bg_color': [35, 35, 35, 255],
-                'border_color': [255, 255, 255, 255],
-                'border_opacity': 1.0,
-                'show_separators': True,
-                'limit': 10,
-                'exit_on_click': True,
+                'software_visualizer_enabled': False,
             },
             'shadows': {
                 'enabled': True,

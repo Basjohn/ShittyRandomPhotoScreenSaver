@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import List, Optional
+import os
 import platform
 import time
 import math
@@ -18,6 +19,11 @@ from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
 from utils.profiler import profile
 
 logger = get_logger(__name__)
+
+try:
+    _DEBUG_CONST_BARS = float(os.environ.get("SRPSS_SPOTIFY_VIS_DEBUG_CONST", "0.0"))
+except Exception:
+    _DEBUG_CONST_BARS = 0.0
 
 
 @dataclass
@@ -1150,6 +1156,11 @@ class SpotifyVisualizerWidget(QWidget):
         # widget's own bar drawing and instead push frames up to the
         # DisplayWidget, which owns a small QOpenGLWidget overlay.
         self._cpu_bars_enabled: bool = True
+        # User-configurable switch controlling whether the legacy software
+        # visualiser is allowed to draw bars when GPU rendering is
+        # unavailable or disabled. Defaults to False so the GPU overlay
+        # remains the primary path in OpenGL mode.
+        self._software_visualizer_enabled: bool = False
 
         self._setup_ui()
 
@@ -1166,6 +1177,21 @@ class SpotifyVisualizerWidget(QWidget):
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to propagate ThreadManager to shared beat engine", exc_info=True)
 
+    def set_software_visualizer_enabled(self, enabled: bool) -> None:
+        """Enable or disable the QWidget-based software visualiser path.
+
+        When ``enabled`` is True, the widget is allowed to render bars via
+        its own ``paintEvent`` when GPU rendering is unavailable (for
+        example in software renderer mode). When False, the widget only
+        exposes smoothed bar data to the GPU overlay and does not draw
+        bars itself unless explicitly re-enabled.
+        """
+
+        try:
+            self._software_visualizer_enabled = bool(enabled)
+        except Exception:
+            self._software_visualizer_enabled = bool(enabled)
+
     def attach_to_animation_manager(self, animation_manager) -> None:
         # Detach from any previous manager first to avoid stacking listeners.
         if self._animation_manager is not None and self._anim_listener_id is not None:
@@ -1181,8 +1207,16 @@ class SpotifyVisualizerWidget(QWidget):
         try:
             def _tick_listener(dt: float) -> None:
                 try:
-                    if getattr(self, "_enabled", False):
-                        self._on_tick()
+                    # When a ThreadManager-driven timer is active, it is the
+                    # authoritative tick source for the visualiser. In that
+                    # case the AnimationManager should not also call
+                    # `_on_tick`, otherwise the widget may be driven at a
+                    # much higher effective rate than intended.
+                    if not getattr(self, "_enabled", False):
+                        return
+                    if getattr(self, "_bars_timer", None) is not None:
+                        return
+                    self._on_tick()
                 except Exception:
                     logger.debug("[SPOTIFY_VIS] AnimationManager-driven tick failed", exc_info=True)
 
@@ -1637,6 +1671,16 @@ class SpotifyVisualizerWidget(QWidget):
                     except Exception:
                         self._target_bars = [0.0] * self._bar_count
 
+                # Optional debug path: when SRPSS_SPOTIFY_VIS_DEBUG_CONST is
+                # set to a value in (0, 1], override all target bars with a
+                # constant so GPU geometry artefacts can be isolated from
+                # audio data.
+                if _DEBUG_CONST_BARS > 0.0:
+                    const_val = _DEBUG_CONST_BARS
+                    if const_val > 1.0:
+                        const_val = 1.0
+                    self._target_bars = [const_val] * self._bar_count
+
                 if is_verbose_logging():
                     try:
                         logger.debug(
@@ -1650,55 +1694,69 @@ class SpotifyVisualizerWidget(QWidget):
             if not self._spotify_playing:
                 self._target_bars = [0.0] * self._bar_count
 
-            changed = False
-
-            # Convert the fixed smoothing constant into a time-based blend
-            # factor so behaviour remains consistent across different tick
-            # rates (ThreadManager vs AnimationManager-driven). We use the
-            # per-tick delta since the last smoothing step rather than time
-            # since the last repaint so smoothing is independent of paint
-            # throttling.
-            dt_smooth = 0.0
-            try:
-                last_smooth = self._last_smooth_ts
-                if last_smooth >= 0.0:
-                    dt_smooth = max(0.0, now_ts - last_smooth)
-            except Exception:
-                dt_smooth = 0.0
-            try:
-                self._last_smooth_ts = now_ts
-            except Exception:
-                pass
-            base_tau = max(0.05, float(self._smoothing))
-            if dt_smooth <= 0.0:
-                alpha_rise = 0.0
-                alpha_decay = 0.0
+            # When debug constant-bar mode is enabled, bypass the smoothing
+            # path entirely so that any visible artefacts are guaranteed to
+            # come from geometry/compositing rather than timing or per-bar
+            # state. This is controlled via the SRPSS_SPOTIFY_VIS_DEBUG_CONST
+            # environment variable.
+            if _DEBUG_CONST_BARS > 0.0:
+                const_val = _DEBUG_CONST_BARS
+                if const_val > 1.0:
+                    const_val = 1.0
+                if const_val < 0.0:
+                    const_val = 0.0
+                self._display_bars = [const_val] * self._bar_count
+                changed = True
             else:
+                changed = False
+
+                # Convert the fixed smoothing constant into a time-based
+                # blend factor so behaviour remains consistent across
+                # different tick rates (ThreadManager vs
+                # AnimationManager-driven). We use the per-tick delta since
+                # the last smoothing step rather than time since the last
+                # repaint so smoothing is independent of paint throttling.
+                dt_smooth = 0.0
                 try:
-                    # Make rises more responsive (shorter attack) while
-                    # keeping decay only slightly slower so a visible trace
-                    # remains without smearing the beat.
-                    tau_rise = base_tau * 0.35
-                    tau_decay = base_tau * 1.0
-                    alpha_rise = 1.0 - math.exp(-dt_smooth / tau_rise)
-                    alpha_decay = 1.0 - math.exp(-dt_smooth / tau_decay)
+                    last_smooth = self._last_smooth_ts
+                    if last_smooth >= 0.0:
+                        dt_smooth = max(0.0, now_ts - last_smooth)
                 except Exception:
-                    linear = min(1.0, dt_smooth / base_tau)
-                    alpha_rise = linear
-                    alpha_decay = linear
-            alpha_rise = max(0.0, min(1.0, alpha_rise))
-            alpha_decay = max(0.0, min(1.0, alpha_decay))
-            for i in range(self._bar_count):
-                cur = self._display_bars[i]
+                    dt_smooth = 0.0
                 try:
-                    tgt = self._target_bars[i]
+                    self._last_smooth_ts = now_ts
                 except Exception:
-                    tgt = 0.0
-                alpha = alpha_rise if tgt >= cur else alpha_decay
-                nxt = cur + (tgt - cur) * alpha
-                if abs(nxt - cur) > 1e-3:
-                    changed = True
-                self._display_bars[i] = nxt
+                    pass
+                base_tau = max(0.05, float(self._smoothing))
+                if dt_smooth <= 0.0:
+                    alpha_rise = 0.0
+                    alpha_decay = 0.0
+                else:
+                    try:
+                        # Make rises more responsive (shorter attack) while
+                        # keeping decay only slightly slower so a visible
+                        # trace remains without smearing the beat.
+                        tau_rise = base_tau * 0.35
+                        tau_decay = base_tau * 1.0
+                        alpha_rise = 1.0 - math.exp(-dt_smooth / tau_rise)
+                        alpha_decay = 1.0 - math.exp(-dt_smooth / tau_decay)
+                    except Exception:
+                        linear = min(1.0, dt_smooth / base_tau)
+                        alpha_rise = linear
+                        alpha_decay = linear
+                alpha_rise = max(0.0, min(1.0, alpha_rise))
+                alpha_decay = max(0.0, min(1.0, alpha_decay))
+                for i in range(self._bar_count):
+                    cur = self._display_bars[i]
+                    try:
+                        tgt = self._target_bars[i]
+                    except Exception:
+                        tgt = 0.0
+                    alpha = alpha_rise if tgt >= cur else alpha_decay
+                    nxt = cur + (tgt - cur) * alpha
+                    if abs(nxt - cur) > 1e-3:
+                        changed = True
+                    self._display_bars[i] = nxt
 
             if changed:
                 max_fps = self._base_max_fps
@@ -1756,11 +1814,21 @@ class SpotifyVisualizerWidget(QWidget):
                         except Exception:
                             pass
                     else:
-                        # Fallback: keep original QWidget-based bar drawing.
-                        try:
-                            self.update()
-                        except Exception:
-                            pass
+                        # Fallback: when there is no DisplayWidget/GPU bridge
+                        # (for example in tests or standalone widget usage),
+                        # always allow the QWidget-based bar renderer so
+                        # behaviour matches the historical implementation.
+                        parent = self.parent()
+                        has_gpu_parent = parent is not None and hasattr(parent, "push_spotify_visualizer_frame")
+                        if not has_gpu_parent or getattr(self, "_software_visualizer_enabled", False):
+                            try:
+                                self._cpu_bars_enabled = True
+                            except Exception:
+                                pass
+                            try:
+                                self.update()
+                            except Exception:
+                                pass
 
     def paintEvent(self, event: QPaintEvent) -> None:  # type: ignore[override]
         super().paintEvent(event)
@@ -1878,7 +1946,10 @@ class SpotifyVisualizerWidget(QWidget):
                 value = max(0.0, min(1.0, self._display_bars[i]))
                 if value <= 0.0:
                     continue
-                active = int(round(value * segments))
+                boosted = value * 1.2
+                if boosted > 1.0:
+                    boosted = 1.0
+                active = int(round(boosted * segments))
                 if active <= 0:
                     if self._spotify_playing and value > 0.0:
                         active = 1
