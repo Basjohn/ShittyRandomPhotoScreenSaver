@@ -14,8 +14,10 @@ from __future__ import annotations
 
 from typing import Optional
 
+import weakref
+
 from PySide6.QtCore import Qt, QTimer, QPoint, QRect
-from PySide6.QtGui import QColor, QPainter, QPaintEvent
+from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import QWidget
 
 from core.logging.logger import get_logger, is_verbose_logging
@@ -36,6 +38,9 @@ class SpotifyVolumeWidget(QWidget):
     interaction mode is active.
     """
 
+    _instances = weakref.WeakSet()
+    _broadcasting: bool = False
+
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
 
@@ -49,6 +54,11 @@ class SpotifyVolumeWidget(QWidget):
         self._pending_volume: Optional[float] = None
         self._flush_timer: Optional[QTimer] = None
         self._has_faded_in: bool = False
+
+        try:
+            SpotifyVolumeWidget._instances.add(self)
+        except Exception:
+            pass
 
         # Geometry constants (logical pixels)
         self._track_margin: int = 6
@@ -89,11 +99,11 @@ class SpotifyVolumeWidget(QWidget):
         self._track_border_color = QColor(track_border)
         self._fill_color = QColor(fill)
 
-        # Enforce 100% opacity for the border and ~70% opacity for the fill,
-        # regardless of the incoming colours.
+        # Enforce 100% opacity for the border and a slightly translucent
+        # (~55%) fill, regardless of the incoming colours.
         try:
             self._track_border_color.setAlpha(255)
-            fill_alpha = int(0.7 * 255)
+            fill_alpha = int(0.55 * 255)
             self._fill_color.setAlpha(fill_alpha)
         except Exception:
             pass
@@ -222,7 +232,7 @@ class SpotifyVolumeWidget(QWidget):
         # decrease it.
         direction = 1 if delta_y > 0 else -1
         new_level = self._volume + (step * direction)
-        self._apply_volume(new_level)
+        self._apply_volume_and_broadcast(new_level)
         self._schedule_set_volume(new_level)
         return True
 
@@ -254,7 +264,12 @@ class SpotifyVolumeWidget(QWidget):
         radius = float(track_half)
 
         # Track background and border
-        painter.setPen(self._track_border_color)
+        pen = QPen(self._track_border_color)
+        try:
+            pen.setWidthF(1.5)
+        except Exception:
+            pen.setWidth(2)
+        painter.setPen(pen)
         painter.setBrush(self._track_bg_color)
         painter.drawRoundedRect(track_rect, radius, radius)
 
@@ -303,6 +318,39 @@ class SpotifyVolumeWidget(QWidget):
         except Exception:
             pass
 
+    def _apply_volume_and_broadcast(self, level: float) -> None:
+        """Apply a new volume locally and mirror it to sibling sliders.
+
+        The originating widget is responsible for scheduling the Core Audio
+        write; peers only update their visuals to stay in sync.
+        """
+
+        self._apply_volume(level)
+
+        cls = self.__class__
+        try:
+            broadcasting = getattr(cls, "_broadcasting", False)
+        except Exception:
+            broadcasting = False
+        if broadcasting:
+            return
+
+        try:
+            cls._broadcasting = True
+            try:
+                instances = list(getattr(cls, "_instances", []))
+            except Exception:
+                instances = []
+            for other in instances:
+                if other is self:
+                    continue
+                try:
+                    other._apply_volume(level)
+                except Exception:
+                    continue
+        finally:
+            cls._broadcasting = False
+
     def _set_volume_from_pos(self, local_pos: QPoint) -> None:
         rect = self.rect().adjusted(
             self._track_margin,
@@ -318,7 +366,7 @@ class SpotifyVolumeWidget(QWidget):
         ratio = 0.0
         if rect.height() > 0:
             ratio = float(rect.bottom() - y) / float(rect.height())
-        self._apply_volume(ratio)
+        self._apply_volume_and_broadcast(ratio)
         self._schedule_set_volume(ratio)
 
     def _schedule_set_volume(self, level: float) -> None:

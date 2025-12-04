@@ -447,6 +447,21 @@ trail:
   - `ghost_decay`: decay rate for the peak envelope; larger values shorten the
     visible trail while smaller values stretch it out.
 
+- **Fade waves & playback gating**  
+  The visualiser card participates in the **primary** overlay fade wave via
+  `DisplayWidget.request_overlay_fade_sync("spotify_visualizer", ...)` and the
+  shared `ShadowFadeProfile`, so its card background/border and drop shadow
+  arrive in lockstep with the media/weather/Reddit cards. The GPU bar overlay
+  and Spotify-only volume slider form a **secondary** wave: both consume a GPU
+  fade factor derived from the card’s fade progress (same duration/easing, but
+  with a delayed cubic ramp) so they fade in more slowly after the card is
+  present, avoiding pops and stray green dots. Playback gating comes from
+  `MediaWidget.media_updated` (payload `state` → normalized
+  `MediaPlaybackState`); when state is `PLAYING` the beat engine drives full bar
+  motion, and when state is `PAUSED`/`STOPPED` target magnitudes decay back to
+  zero so only the shader’s 1-segment idle floor remains visible as a flat
+  single-row baseline when Spotify is open but not actively playing.
+
 - **UI wiring and defaults**  
   The Widgets tab exposes a dedicated Spotify visualiser group:
   - A checkbox to enable/disable the visualiser and a **FORCE Software

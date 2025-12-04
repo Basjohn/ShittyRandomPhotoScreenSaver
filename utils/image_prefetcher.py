@@ -11,7 +11,7 @@ from typing import List, Optional, Set
 import threading
 from PySide6.QtGui import QImage
 
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_verbose_logging
 from core.threading.manager import ThreadManager, TaskPriority, ThreadPoolType
 from utils.image_cache import ImageCache
 
@@ -77,7 +77,8 @@ class ImagePrefetcher:
                 if img is not None:
                     try:
                         self._cache.put(path, img)
-                        logger.debug(f"Prefetched and cached: {path}")
+                        if is_verbose_logging():
+                            logger.debug(f"Prefetched and cached: {path}")
                     except Exception:
                         pass
             finally:

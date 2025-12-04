@@ -295,7 +295,13 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._playing = bool(playing)
 
         try:
-            self.setGeometry(rect)
+            cur_geom = None
+            try:
+                cur_geom = self.geometry()
+            except Exception:
+                cur_geom = None
+            if cur_geom is None or cur_geom != rect:
+                self.setGeometry(rect)
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to set overlay geometry", exc_info=True)
 

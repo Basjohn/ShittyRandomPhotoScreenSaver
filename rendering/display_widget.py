@@ -548,7 +548,21 @@ class DisplayWidget(QWidget):
                 pass
             self._overlay_fade_timeout = None
 
+        # Secondary fade starters for Spotify widgets (volume slider and
+        # visualiser card). These are kicked off shortly after the primary
+        # overlay fades begin so they never block the main group but still
+        # feel temporally connected.
+        self._spotify_secondary_fade_starters = []
+
         widgets_map = widgets if isinstance(widgets, dict) else {}
+
+        # Spotify visualizer configuration is used later when wiring the
+        # widget. When enabled for this display, the visualiser card
+        # participates in the primary overlay fade under the
+        # "spotify_visualizer" overlay name so its card/shadow enter with
+        # the main group.
+        spotify_vis_settings = widgets_map.get('spotify_visualizer', {}) if isinstance(widgets_map, dict) else {}
+        spotify_vis_enabled = SettingsManager.to_bool(spotify_vis_settings.get('enabled', False), False)
 
         weather_settings = widgets_map.get('weather', {}) if isinstance(widgets_map, dict) else {}
         weather_enabled = SettingsManager.to_bool(weather_settings.get('enabled', False), False)
@@ -595,9 +609,6 @@ class DisplayWidget(QWidget):
                 media_monitor_sel,
             )
 
-        spotify_vis_settings = widgets_map.get('spotify_visualizer', {}) if isinstance(widgets_map, dict) else {}
-        spotify_vis_enabled = SettingsManager.to_bool(spotify_vis_settings.get('enabled', False), False)
-
         self._overlay_fade_expected = set()
         if weather_enabled and weather_show_on_this:
             self._overlay_fade_expected.add("weather")
@@ -605,7 +616,10 @@ class DisplayWidget(QWidget):
             self._overlay_fade_expected.add("reddit")
         if media_enabled and media_show_on_this:
             self._overlay_fade_expected.add("media")
-        if media_enabled and media_show_on_this and spotify_vis_enabled:
+        # Spotify visualiser card is anchored to the media widget; only
+        # participate in the primary fade when both the media widget and
+        # Spotify visualiser are enabled on this display.
+        if spotify_vis_enabled and media_enabled and media_show_on_this:
             self._overlay_fade_expected.add("spotify_visualizer")
 
         position_map = {
@@ -1302,26 +1316,42 @@ class DisplayWidget(QWidget):
                         pass
 
                     # Inherit media card background and border colours for the
-                    # track, while using a dedicated (default white) fill
-                    # colour for the volume bar itself.
+                    # track, while using a dedicated (configurable) fill colour
+                    # for the volume bar itself.
                     try:
                         from PySide6.QtGui import QColor as _QColor
 
-                        fill_color = _QColor(255, 255, 255, 230)
+                        fill_color_data = media_settings.get('spotify_volume_fill_color', [255, 255, 255, 230])
+                        try:
+                            fr, fg, fb = (
+                                fill_color_data[0],
+                                fill_color_data[1],
+                                fill_color_data[2],
+                            )
+                            fa = fill_color_data[3] if len(fill_color_data) > 3 else 230
+                            fill_color = _QColor(fr, fg, fb, fa)
+                        except Exception:
+                            fill_color = _QColor(255, 255, 255, 230)
+
                         if hasattr(vol, "set_colors"):
                             vol.set_colors(track_bg=bg_qcolor, track_border=border_qcolor, fill=fill_color)
                     except Exception:
                         pass
 
                     try:
-                        vol.start()
-                    except Exception:
-                        logger.debug("[SPOTIFY_VOL] Failed to start volume widget", exc_info=True)
-
-                    try:
                         self._position_spotify_volume()
                     except Exception:
                         pass
+                    # Defer startup to the Spotify secondary fade coordinator
+                    # so the slider never appears before the main overlay
+                    # group but still fades in smoothly as a second wave.
+                    try:
+                        if hasattr(self, "register_spotify_secondary_fade"):
+                            self.register_spotify_secondary_fade(vol.start)
+                        else:
+                            vol.start()
+                    except Exception:
+                        logger.debug("[SPOTIFY_VOL] Failed to register/start volume widget", exc_info=True)
                 except Exception:
                     logger.debug("[SPOTIFY_VOL] Failed to create/configure Spotify volume widget", exc_info=True)
 
@@ -2317,10 +2347,11 @@ class DisplayWidget(QWidget):
                 pass
             self._seed_pixmap = self.current_pixmap
             self._last_pixmap_seed_ts = time.monotonic()
-            logger.debug(
-                "[DIAG] Seed pixmap set (phase=pre-transition, pixmap=%s)",
-                _describe_pixmap(self.current_pixmap),
-            )
+            if is_verbose_logging():
+                logger.debug(
+                    "[DIAG] Seed pixmap set (phase=pre-transition, pixmap=%s)",
+                    _describe_pixmap(self.current_pixmap),
+                )
             if self._updates_blocked_until_seed:
                 try:
                     self.setUpdatesEnabled(True)
@@ -2551,10 +2582,11 @@ class DisplayWidget(QWidget):
                 pass
         self._seed_pixmap = self.current_pixmap
         self._last_pixmap_seed_ts = time.monotonic()
-        logger.debug(
-            "[DIAG] Seed pixmap set (phase=post-transition, pixmap=%s)",
-            _describe_pixmap(self.current_pixmap),
-        )
+        if is_verbose_logging():
+            logger.debug(
+                "[DIAG] Seed pixmap set (phase=post-transition, pixmap=%s)",
+                _describe_pixmap(self.current_pixmap),
+            )
         if self._updates_blocked_until_seed:
             try:
                 self.setUpdatesEnabled(True)
@@ -3515,11 +3547,102 @@ class DisplayWidget(QWidget):
         )
         self._overlay_fade_pending = {}
 
-        for starter in starters:
+        # To reduce visible pops on startup when the event loop is still busy
+        # with GL/image initialisation, introduce a short warm-up delay for
+        # coordinated fades. The force path keeps immediate behaviour so a
+        # misbehaving overlay cannot block fades indefinitely.
+        warmup_delay_ms = 0 if force else 250
+
+        if warmup_delay_ms <= 0:
+            for starter in starters:
+                try:
+                    starter()
+                except Exception:
+                    pass
+            # When the primary fades fire immediately (force path or no
+            # warm-up), still give Spotify widgets a brief second-wave delay
+            # so they do not appear before the main group.
             try:
-                starter()
+                self._run_spotify_secondary_fades(base_delay_ms=150)
             except Exception:
                 pass
+            return
+
+        for starter in starters:
+            try:
+                QTimer.singleShot(warmup_delay_ms, starter)
+            except Exception:
+                try:
+                    starter()
+                except Exception:
+                    pass
+
+        # Schedule Spotify secondary fades to start a little after the
+        # coordinated primary warm-up, so the volume slider and visualiser
+        # card feel attached to the wave without blocking it.
+        try:
+            self._run_spotify_secondary_fades(base_delay_ms=warmup_delay_ms + 150)
+        except Exception:
+            pass
+
+    def _run_spotify_secondary_fades(self, *, base_delay_ms: int) -> None:
+        """Start any queued Spotify second-wave fade callbacks."""
+
+        starters = getattr(self, "_spotify_secondary_fade_starters", None)
+        if not starters:
+            return
+        try:
+            queued = list(starters)
+        except Exception:
+            queued = []
+        self._spotify_secondary_fade_starters = []
+
+        delay_ms = max(0, int(base_delay_ms))
+        for starter in queued:
+            try:
+                if delay_ms <= 0:
+                    starter()
+                else:
+                    QTimer.singleShot(delay_ms, starter)
+            except Exception:
+                try:
+                    starter()
+                except Exception:
+                    pass
+
+    def register_spotify_secondary_fade(self, starter: Callable[[], None]) -> None:
+        """Register a Spotify second-wave fade to run after primary overlays.
+
+        When there is no primary overlay coordination active, or when the
+        primary group has already started, the starter is run with a small
+        delay so it still feels like a secondary pass without popping in
+        ahead of other widgets.
+        """
+
+        try:
+            expected = self._overlay_fade_expected
+        except Exception:
+            expected = set()
+
+        starters = getattr(self, "_spotify_secondary_fade_starters", None)
+        if not isinstance(starters, list):
+            starters = []
+            self._spotify_secondary_fade_starters = starters
+
+        # If no primary overlays are coordinated for this display, or the
+        # primary wave has already started, run this as a tiny second wave
+        # instead of waiting for a coordinator that will never fire.
+        if not expected or getattr(self, "_overlay_fade_started", False):
+            try:
+                QTimer.singleShot(150, starter)
+            except Exception:
+                try:
+                    starter()
+                except Exception:
+                    pass
+            return
+
+        starters.append(starter)
 
     def get_overlay_stage_counts(self) -> dict[str, int]:
         """Return snapshot of overlay readiness counts (for diagnostics/tests)."""
@@ -4202,11 +4325,20 @@ class DisplayWidget(QWidget):
         super().mouseReleaseEvent(event)
 
     def wheelEvent(self, event: QWheelEvent) -> None:
-        """Route wheel scrolling to Spotify volume widget in interaction mode."""
+        """Route wheel scrolling to Spotify volume widget in interaction mode.
+
+        When hard-exit / Ctrl mode is active, scrolling over any Spotify-related
+        widget (media card, visualiser, or the volume slider itself) adjusts the
+        shared Spotify volume level. Outside these regions the wheel event is
+        ignored for volume but still prevented from exiting the saver.
+        """
 
         ctrl_mode_active = self._ctrl_held or DisplayWidget._global_ctrl_held
         if self._is_hard_exit_enabled() or ctrl_mode_active:
             vw = getattr(self, "spotify_volume_widget", None)
+            mw = getattr(self, "media_widget", None)
+            sv = getattr(self, "spotify_visualizer_widget", None)
+
             if vw is not None and vw.isVisible():
                 try:
                     from PySide6.QtCore import QPoint as _QPoint
@@ -4214,20 +4346,48 @@ class DisplayWidget(QWidget):
                     _QPoint = None  # type: ignore[assignment]
 
                 try:
+                    pos = event.position()
+                    pt = pos.toPoint()
+
+                    geom_vol = vw.geometry()
+                    over_volume = geom_vol.contains(pt)
+
+                    over_media = False
+                    if mw is not None and mw.isVisible():
+                        try:
+                            over_media = mw.geometry().contains(pt)
+                        except Exception:
+                            over_media = False
+
+                    over_vis = False
+                    if sv is not None and sv.isVisible():
+                        try:
+                            over_vis = sv.geometry().contains(pt)
+                        except Exception:
+                            over_vis = False
+
+                    local_pos = None
                     if _QPoint is not None:
-                        geom = vw.geometry()
-                        pos = event.position()
-                        local_pos = _QPoint(int(pos.x()) - geom.x(), int(pos.y()) - geom.y())
+                        if over_volume:
+                            local_pos = _QPoint(int(pos.x()) - geom_vol.x(), int(pos.y()) - geom_vol.y())
+                        elif over_media or over_vis:
+                            # Map wheel to the volume slider's centre X while
+                            # preserving the pointer's vertical position.
+                            center_x = vw.rect().center().x()
+                            local_pos = _QPoint(center_x, int(pos.y()) - geom_vol.y())
                     else:
-                        local_pos = event.position().toPoint()
-                    delta_y = int(event.angleDelta().y())
-                    if vw.handle_wheel(local_pos, delta_y):
-                        event.accept()
-                        return
+                        if over_volume or over_media or over_vis:
+                            local_pos = event.position().toPoint()
+
+                    if local_pos is not None:
+                        delta_y = int(event.angleDelta().y())
+                        if vw.handle_wheel(local_pos, delta_y):
+                            event.accept()
+                            return
                 except Exception:
                     logger.debug("[SPOTIFY_VOL] wheel routing failed", exc_info=True)
 
-            # Even when not over the volume widget, wheel in interaction mode
+            # Even when not over the Spotify widgets, wheel in interaction mode
             # should never exit the saver.
             event.accept()
             return

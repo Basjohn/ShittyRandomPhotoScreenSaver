@@ -8,7 +8,7 @@ from collections import OrderedDict
 import threading
 from typing import Optional, Union
 from PySide6.QtGui import QPixmap, QImage
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_verbose_logging
 
 logger = get_logger(__name__)
 
@@ -64,11 +64,13 @@ class ImageCache:
                 # Move to end (most recently used)
                 self._cache.move_to_end(key)
                 self._hit_count += 1
-                logger.debug(f"Cache hit: {key}")
+                if is_verbose_logging():
+                    logger.debug(f"Cache hit: {key}")
                 return self._cache[key]
             
             self._miss_count += 1
-            logger.debug(f"Cache miss: {key}")
+            if is_verbose_logging():
+                logger.debug(f"Cache miss: {key}")
             return None
     
     def put(self, key: str, image: Union[QImage, QPixmap]) -> None:
@@ -95,8 +97,11 @@ class ImageCache:
             while self._should_evict_locked():
                 self._evict_oldest_locked()
             
-            logger.debug(f"Cached: {key} (size={len(self._cache)}/{self.max_items}, "
-                        f"memory={self._current_memory / (1024*1024):.1f}MB)")
+            if is_verbose_logging():
+                logger.debug(
+                    f"Cached: {key} (size={len(self._cache)}/{self.max_items}, "
+                    f"memory={self._current_memory / (1024*1024):.1f}MB)"
+                )
     
     def contains(self, key: str) -> bool:
         """
@@ -125,7 +130,8 @@ class ImageCache:
             if key in self._cache:
                 pixmap = self._cache.pop(key)
                 self._current_memory -= self._estimate_size(pixmap)
-                logger.debug(f"Removed from cache: {key}")
+                if is_verbose_logging():
+                    logger.debug(f"Removed from cache: {key}")
                 return True
             return False
     
@@ -190,7 +196,8 @@ class ImageCache:
         key, img = self._cache.popitem(last=False)
         self._current_memory -= self._estimate_size(img)
         self._evict_count += 1
-        logger.debug(f"Evicted from cache: {key}")
+        if is_verbose_logging():
+            logger.debug(f"Evicted from cache: {key}")
     
     def _estimate_size(self, image: Union[QImage, QPixmap]) -> int:
         """

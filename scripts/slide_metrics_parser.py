@@ -34,8 +34,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--log",
         type=Path,
-        default=Path("logs") / "screensaver.log",
-        help="Path to the log file to analyze (default: logs/screensaver.log)",
+        default=Path("logs") / "screensaver_perf.log",
+        help="Path to the PERF log file to analyze (default: logs/screensaver_perf.log)",
     )
     return parser
 

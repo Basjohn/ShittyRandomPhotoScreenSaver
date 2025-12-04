@@ -3,7 +3,7 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import urljoin
 
-INDEX_URL = "https://basmilius.github.io/weather-icons/index-line.html"
+INDEX_URL = "https://basmilius.github.io/weather-icons/index-fill.html"
 
 
 def fetch_html(url: str) -> str:

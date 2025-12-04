@@ -2007,3 +2007,9 @@
 2025-12-04 15:10:02,925 - pytest_runner - INFO - pytest finished with exit code 0
 2025-12-04 15:14:26,960 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_image_processor.py', 'tests/test_lanczos_scaling.py', 'tests/test_threading.py', '-vv']
 2025-12-04 15:14:28,631 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-04 16:23:15,322 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', '-vv']
+2025-12-04 16:23:17,442 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-04 16:26:59,771 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py::test_spotify_visualizer_tick_respects_fps_cap', '-vv']
+2025-12-04 16:27:00,781 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-04 17:02:11,396 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', '-vv']
+2025-12-04 17:02:12,286 - pytest_runner - INFO - pytest finished with exit code 0

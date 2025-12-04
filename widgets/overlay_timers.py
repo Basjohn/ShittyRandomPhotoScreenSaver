@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Optional
 
-from PySide6.QtCore import QTimer, QObject
+from PySide6.QtCore import QTimer, QObject, QMetaObject, Qt, QThread
 
 from core.logging.logger import get_logger
 
@@ -40,7 +40,18 @@ class OverlayTimerHandle:
         if timer is None:
             return
         try:
-            timer.stop()
+            # Ensure the stop call is executed on the timer's owning thread to
+            # avoid Qt warnings like "Timers cannot be stopped from another
+            # thread". When already on the owning thread we stop immediately;
+            # otherwise we queue the call to that thread.
+            if QThread.currentThread() is timer.thread():
+                timer.stop()
+            else:
+                QMetaObject.invokeMethod(
+                    timer,
+                    "stop",
+                    Qt.ConnectionType.QueuedConnection,
+                )
         except Exception:
             logger.debug("[OVERLAY_TIMER] Failed to stop timer", exc_info=True)
         self._timer = None

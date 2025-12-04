@@ -1146,7 +1146,11 @@ class SpotifyVisualizerWidget(QWidget):
         self._geom_bar_width: int = 0
         self._geom_seg_height: int = 0
 
-        self._last_update_ts: float = 0.0
+        # Last time a visual update (GPU frame push or QWidget repaint)
+        # was issued. Initialised to a negative sentinel so the first
+        # tick always triggers an update and subsequent ticks are
+        # throttled purely by the configured FPS caps.
+        self._last_update_ts: float = -1.0
         self._last_smooth_ts: float = 0.0
         self._has_pushed_first_frame: bool = False
         # Base paint FPS caps for the visualiser; slightly higher than
@@ -1154,7 +1158,7 @@ class SpotifyVisualizerWidget(QWidget):
         # still low enough that the visualiser cannot dominate the UI
         # event loop.
         self._base_max_fps: float = 90.0
-        self._transition_max_fps: float = 90.0
+        self._transition_max_fps: float = 60.0
         self._last_gpu_fade_sent: float = -1.0
 
         # When GPU overlay rendering is available, we disable the
@@ -1339,19 +1343,9 @@ class SpotifyVisualizerWidget(QWidget):
 
         first_media = not self._has_seen_media
         if first_media:
+            # Track that we have seen at least one Spotify media state update
+            # so later calls can focus purely on bar gating.
             self._has_seen_media = True
-            parent = self.parent()
-
-            def _starter() -> None:
-                self._start_widget_fade_in(1500)
-
-            if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
-                try:
-                    parent.request_overlay_fade_sync("spotify_visualizer", _starter)
-                except Exception:
-                    _starter()
-            else:
-                _starter()
 
         if is_verbose_logging():
             try:
@@ -1408,6 +1402,28 @@ class SpotifyVisualizerWidget(QWidget):
                 self._bars_timer = self._thread_manager.schedule_recurring(16, self._on_tick)
             except Exception:
                 self._bars_timer = None
+
+        # Coordinate the visualiser card fade-in with the primary overlay
+        # group so it joins the main wave on this display regardless of
+        # current Spotify playback state.
+        parent = self.parent()
+
+        def _starter() -> None:
+            try:
+                self._start_widget_fade_in(1500)
+            except Exception:
+                try:
+                    self.show()
+                except Exception:
+                    pass
+
+        if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
+            try:
+                parent.request_overlay_fade_sync("spotify_visualizer", _starter)
+            except Exception:
+                _starter()
+        else:
+            _starter()
 
     def stop(self) -> None:
         if not self._enabled:
@@ -1531,24 +1547,24 @@ class SpotifyVisualizerWidget(QWidget):
             if p >= 1.0:
                 return 1.0
 
-            # Clamp first, then apply a small delay so bars fade in slightly
+            # Clamp first, then apply a stronger delay so bars fade in well
             # after the card/shadow begin fading. This keeps practical sync
-            # with ShadowFadeProfile while avoiding bars appearing "ready"
-            # before the rest of the widget.
+            # with ShadowFadeProfile while ensuring the bars clearly read as a
+            # second wave rather than appearing fully formed too early.
             p = max(0.0, min(1.0, p))
-            delay = 0.15
+            delay = 0.65
             if p <= delay:
                 return 0.0
             t = (p - delay) / (1.0 - delay)
-            # Gentle ease-in so the bar opacity builds up smoothly.
-            t = t * t
+            # Slower cubic ease-in so the bar opacity builds gradually and
+            # avoids a sudden pop once the delay has elapsed.
+            t = t * t * t
             return max(0.0, min(1.0, t))
 
-        # Fallback: treat widget visibility as a coarse fade proxy.
-        try:
-            return 1.0 if self.isVisible() else 0.0
-        except Exception:
-            return 1.0
+        # Fallback: when ShadowFadeProfile progress is unavailable, keep the
+        # bars fully hidden so they never jump to full opacity ahead of the
+        # card/shadow fade.
+        return 0.0
 
     def _rebuild_geometry_cache(self, rect: QRect) -> None:
         """Recompute cached bar/segment layout for the current geometry."""
@@ -1745,25 +1761,26 @@ class SpotifyVisualizerWidget(QWidget):
                 self._display_bars = [const_val] * self._bar_count
                 changed = True
             else:
+                # Time-based smoothing from _target_bars -> _display_bars.
+                # We derive per-tick blend factors from a base time constant
+                # so behaviour stays stable across different tick rates.
                 changed = False
 
-                # Convert the fixed smoothing constant into a time-based
-                # blend factor so behaviour remains consistent across
-                # different tick rates (ThreadManager vs
-                # AnimationManager-driven). We use the per-tick delta since
-                # the last smoothing step rather than time since the last
-                # repaint so smoothing is independent of paint throttling.
                 dt_smooth = 0.0
                 try:
                     last_smooth = self._last_smooth_ts
-                    if last_smooth >= 0.0:
-                        dt_smooth = max(0.0, now_ts - last_smooth)
                 except Exception:
-                    dt_smooth = 0.0
+                    last_smooth = -1.0
+                if last_smooth >= 0.0:
+                    try:
+                        dt_smooth = max(0.0, now_ts - last_smooth)
+                    except Exception:
+                        dt_smooth = 0.0
                 try:
                     self._last_smooth_ts = now_ts
                 except Exception:
                     pass
+
                 base_tau = max(0.05, float(self._smoothing))
                 if dt_smooth <= 0.0:
                     alpha_rise = 0.0
@@ -1783,6 +1800,7 @@ class SpotifyVisualizerWidget(QWidget):
                         alpha_decay = linear
                 alpha_rise = max(0.0, min(1.0, alpha_rise))
                 alpha_decay = max(0.0, min(1.0, alpha_decay))
+
                 for i in range(self._bar_count):
                     cur = self._display_bars[i]
                     try:
@@ -1799,13 +1817,11 @@ class SpotifyVisualizerWidget(QWidget):
                         changed = True
                     self._display_bars[i] = nxt
 
-            # Always push at least one frame so the visualiser baseline is
-            # visible as soon as the widget fades in, even before audio
-            # arrives.
-            if not getattr(self, "_has_pushed_first_frame", False):
-                changed = True
+                # Always push at least one frame so the visualiser baseline is
+                # visible as soon as the widget fades in, even before audio
+                # arrives.
+                first_frame = not getattr(self, "_has_pushed_first_frame", False)
 
-            if changed:
                 max_fps = self._base_max_fps
                 try:
                     parent = self.parent()
@@ -1823,12 +1839,14 @@ class SpotifyVisualizerWidget(QWidget):
                     min_dt = 0.0
 
                 last = self._last_update_ts
-                if last <= 0.0 or (now_ts - last) >= min_dt:
+                if last < 0.0 or (now_ts - last) >= min_dt:
                     self._last_update_ts = now_ts
 
                     used_gpu = False
                     need_card_update = False
+                    fade_changed = False
                     parent = self.parent()
+                    fade = 1.0
                     # When DisplayWidget exposes a GPU overlay path, prefer
                     # that and disable CPU bar drawing once it succeeds.
                     if parent is not None and hasattr(parent, "push_spotify_visualizer_frame"):
@@ -1846,24 +1864,29 @@ class SpotifyVisualizerWidget(QWidget):
                             pass
                         try:
                             if prev_fade < 0.0 or abs(fade - prev_fade) >= 0.01:
+                                fade_changed = True
                                 need_card_update = True
                         except Exception:
+                            fade_changed = True
                             need_card_update = True
-                        try:
-                            used_gpu = bool(parent.push_spotify_visualizer_frame(
-                                bars=list(self._display_bars),
-                                bar_count=self._bar_count,
-                                segments=getattr(self, "_bar_segments", 16),
-                                fill_color=self._bar_fill_color,
-                                border_color=self._bar_border_color,
-                                fade=fade,
-                                playing=self._spotify_playing,
-                                ghosting_enabled=getattr(self, "_ghosting_enabled", True),
-                                ghost_alpha=getattr(self, "_ghost_alpha", 0.4),
-                                ghost_decay=getattr(self, "_ghost_decay_rate", 0.4),
-                            ))
-                        except Exception:
-                            used_gpu = False
+
+                        should_push = changed or fade_changed or first_frame
+                        if should_push:
+                            try:
+                                used_gpu = bool(parent.push_spotify_visualizer_frame(
+                                    bars=list(self._display_bars),
+                                    bar_count=self._bar_count,
+                                    segments=getattr(self, "_bar_segments", 16),
+                                    fill_color=self._bar_fill_color,
+                                    border_color=self._bar_border_color,
+                                    fade=fade,
+                                    playing=self._spotify_playing,
+                                    ghosting_enabled=getattr(self, "_ghosting_enabled", True),
+                                    ghost_alpha=getattr(self, "_ghost_alpha", 0.4),
+                                    ghost_decay=getattr(self, "_ghost_decay_rate", 0.4),
+                                ))
+                            except Exception:
+                                used_gpu = False
 
                     if used_gpu:
                         try:
@@ -1876,7 +1899,9 @@ class SpotifyVisualizerWidget(QWidget):
                             pass
                         # Card/background/shadow still repaint via stylesheet
                         # and ShadowFadeProfile; we do not need to redraw bars
-                        # when GPU overlay is active.
+                        # when GPU overlay is active. Only request a QWidget
+                        # repaint when the fade factor changes enough to be
+                        # visually meaningful.
                         if need_card_update:
                             try:
                                 self.update()

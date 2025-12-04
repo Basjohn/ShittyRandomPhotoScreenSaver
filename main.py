@@ -436,6 +436,27 @@ def main():
     logger.info("=" * 60)
     logger.info(f"ShittyRandomPhotoScreenSaver Exiting (code={exit_code})")
     logger.info("=" * 60)
+
+    # When PERF metrics are enabled for this run, automatically invoke the
+    # PERF helper to summarise recent Spotify visualiser and Slide metrics
+    # from the dedicated screensaver_perf.log. This is a best-effort helper
+    # and failures are logged at DEBUG only so normal runs are unaffected.
+    try:
+        perf_flag = os.getenv("SRPSS_PERF_METRICS", "").strip().lower()
+        if perf_flag in ("1", "true", "on", "yes"):
+            try:
+                from scripts import spotify_vis_metrics_parser as _sv  # type: ignore[import]
+                _sv.main()
+            except Exception:
+                logger.debug(
+                    "[PERF] spotify_vis_metrics_parser auto-run failed",
+                    exc_info=True,
+                )
+    except Exception:
+        logger.debug(
+            "[PERF] spotify_vis_metrics_parser auto-run guard failed",
+            exc_info=True,
+        )
     
     return exit_code
 

@@ -706,6 +706,14 @@ class WidgetsTab(QWidget):
         media_border_opacity_row.addWidget(self.media_border_opacity_label)
         media_layout.addLayout(media_border_opacity_row)
 
+        media_volume_fill_row = QHBoxLayout()
+        media_volume_fill_row.addWidget(QLabel("Volume Fill Color:"))
+        self.media_volume_fill_color_btn = QPushButton("Choose Color...")
+        self.media_volume_fill_color_btn.clicked.connect(self._choose_media_volume_fill_color)
+        media_volume_fill_row.addWidget(self.media_volume_fill_color_btn)
+        media_volume_fill_row.addStretch()
+        media_layout.addLayout(media_volume_fill_row)
+
         # Artwork size
         media_artwork_row = QHBoxLayout()
         media_artwork_row.addWidget(QLabel("Artwork Size:"))
@@ -1463,6 +1471,12 @@ class WidgetsTab(QWidget):
             self.media_border_opacity.setValue(media_border_opacity_pct)
             self.media_border_opacity_label.setText(f"{media_border_opacity_pct}%")
 
+            volume_fill_data = media_config.get('spotify_volume_fill_color', [255, 255, 255, 230])
+            try:
+                self._media_volume_fill_color = QColor(*volume_fill_data)
+            except Exception:
+                self._media_volume_fill_color = QColor(255, 255, 255, 230)
+
             m_monitor_sel = media_config.get('monitor', 'ALL')
             m_mon_text = str(m_monitor_sel) if isinstance(m_monitor_sel, (int, str)) else 'ALL'
             midx = self.media_monitor_combo.findText(m_mon_text)
@@ -1679,6 +1693,18 @@ class WidgetsTab(QWidget):
             self._media_border_color = color
             self._save_settings()
 
+    def _choose_media_volume_fill_color(self) -> None:
+        """Choose Spotify volume slider fill color."""
+
+        color = QColorDialog.getColor(
+            getattr(self, "_media_volume_fill_color", self._media_color),
+            self,
+            "Choose Spotify Volume Fill Color",
+        )
+        if color.isValid():
+            self._media_volume_fill_color = color
+            self._save_settings()
+
     def _choose_spotify_vis_fill_color(self) -> None:
         """Choose Spotify Beat Visualizer bar fill color."""
 
@@ -1798,6 +1824,12 @@ class WidgetsTab(QWidget):
             'border_color': [self._media_border_color.red(), self._media_border_color.green(),
                              self._media_border_color.blue(), self._media_border_color.alpha()],
             'border_opacity': self.media_border_opacity.value() / 100.0,
+            'spotify_volume_fill_color': [
+                self._media_volume_fill_color.red(),
+                self._media_volume_fill_color.green(),
+                self._media_volume_fill_color.blue(),
+                self._media_volume_fill_color.alpha(),
+            ],
             'artwork_size': self.media_artwork_size.value(),
             'rounded_artwork_border': self.media_rounded_artwork.isChecked(),
             'show_header_frame': self.media_show_header_frame.isChecked(),

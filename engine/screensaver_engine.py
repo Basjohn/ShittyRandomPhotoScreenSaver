@@ -21,7 +21,7 @@ from core.events import EventSystem, EventType
 from core.resources import ResourceManager
 from core.threading import ThreadManager
 from core.settings import SettingsManager
-from core.logging.logger import get_logger, is_perf_metrics_enabled
+from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.animation import AnimationManager
 
 from engine.display_manager import DisplayManager
@@ -675,7 +675,7 @@ class ScreensaverEngine(QObject):
                 except Exception:
                     continue
             self._prefetcher.prefetch_paths(paths)
-            if paths:
+            if paths and is_verbose_logging():
                 logger.debug(f"Prefetch scheduled for {len(paths)} upcoming images")
                 # Avoid heavy UI-side conversions while transitions are active.
                 skip_heavy_ui_work = False
