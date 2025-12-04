@@ -12,7 +12,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - core/events/event_system.py
   - EventSystem pub/sub (thread-safe)
 - core/settings/settings_manager.py
-  - SettingsManager (get/set, dot-notation)
+  - SettingsManager (get/set, dot-notation, section helpers, JSON SST snapshot import/export)
   - Maps application name "Screensaver" to "Screensaver_MC" when running under the MC executable (e.g. `SRPSS MC`, `SRPSS_MC`, `main_mc.py`) so QSettings are isolated between the normal screensaver and MC profiles.
 - core/animation/animator.py
   - AnimationManager and easing types
@@ -100,9 +100,9 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - widgets/media_widget.py
   - Spotify/media overlay widget driven by `core/media/media_controller.py`; per-monitor selection via `widgets.media`, corner positioning, background frame, and monochrome transport controls (Prev/Play/Pause/Next) over track metadata. Artwork uses a square frame for album covers and adapts to non-square thumbnails (e.g. Spotify video stills) by widening/tallening the card frame while still using a cover-style crop (no letterboxing/pillarboxing) so video-shaped assets respect their aspect ratio without changing existing album-art styling.
 - widgets/spotify_visualizer_widget.py
-  - Spotify Beat Visualizer widget and background audio worker. Captures loopback audio via a shared `_SpotifyBeatEngine` (single process-wide engine), publishes raw mono frames into a lock-free `TripleBuffer`, performs FFT/band mapping, applies per-bar smoothing, and exposes bar magnitudes + fade state to the GPU overlay. The QWidget still owns the Spotify-style card, fade, and drop shadow; bar drawing is normally performed by a dedicated `SpotifyBarsGLOverlay` QOpenGLWidget overlay created and managed by `DisplayWidget`, with a software (CPU) fallback path controlled by `widgets.spotify_visualizer.software_visualizer_enabled` when the renderer backend is set to Software. Emits `[PERF] [SPOTIFY_VIS]` Tick/Paint metrics alongside `[PERF] [ANIM]` and `[PERF] [GL COMPOSITOR]` for perf analysis.
+  - Spotify Beat Visualizer widget and background audio worker. Captures loopback audio via a shared `_SpotifyBeatEngine` (single process-wide engine), publishes raw mono frames into a lock-free `TripleBuffer`, performs FFT/band mapping, applies per-bar smoothing, and exposes bar magnitudes + fade state to the GPU bar overlay. The QWidget still owns the Spotify-style card, fade, and drop shadow; bar drawing is normally performed by a dedicated `SpotifyBarsGLOverlay` QOpenGLWidget overlay created and managed by `DisplayWidget`, with a software (CPU) fallback path controlled by `widgets.spotify_visualizer.software_visualizer_enabled` when the renderer backend is set to Software. The visualiser guarantees a 1-segment idle floor even when playback is paused or starting, and maintains a configurable ghosting trail (border-colour segments above the current bar height) with per-segment alpha falloff so older trail segments fade faster. Emits `[PERF] [SPOTIFY_VIS]` Tick/Paint metrics alongside `[PERF] [ANIM]` and `[PERF] [GL COMPOSITOR]` for perf analysis.
 - widgets/spotify_bars_gl_overlay.py
-  - GLSL/VAO Spotify bars overlay with DPI-aware geometry.
+  - GLSL/VAO Spotify bars overlay with DPI-aware geometry, per-bar peak envelope and 1-segment floor, rendering the main bar stack plus a configurable ghost trail driven by a decaying peak value. Uses the bar border colour for ghost segments with a vertical alpha falloff, and respects `ghosting_enabled`, `ghost_alpha`, and `ghost_decay` from `widgets.spotify_visualizer.*` settings.
  - widgets/reddit_widget.py
    - Reddit overlay widget showing top posts from a configured subreddit with 4- and 10-item layouts, per-monitor selection via `widgets.reddit`, shared overlay fade-in coordination, and click-through to the system browser.
  - widgets/overlay_timers.py

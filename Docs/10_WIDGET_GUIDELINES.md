@@ -413,3 +413,52 @@ By following this scaffold and the Spotify‑derived details above, future
 widgets should drop cleanly into the existing architecture, look consistent,
 behave correctly under GL/software backends, and avoid the persistence and
 alignment issues already solved for the Spotify widget.
+
+---
+
+## 9. Spotify Beat Visualizer specifics (GPU bar overlay & ghosting)
+
+The Spotify Beat Visualizer follows the same card/overlay patterns as the
+media widget but adds a dedicated GPU bar overlay and a configurable ghosting
+trail:
+
+- **Split responsibilities**  
+  The QWidget (`SpotifyVisualizerWidget`) owns the Spotify-style card, fade,
+  drop shadow and bar smoothing. A dedicated `SpotifyBarsGLOverlay`
+  `QOpenGLWidget` child of `DisplayWidget` renders the actual bar field on the
+  GPU when the OpenGL backend is active, with a QWidget/QPainter bar path used
+  only as a fallback when `software_visualizer_enabled` is true or GL is
+  unavailable.
+
+- **1-segment idle floor**  
+  The GPU overlay maintains a per-bar peak envelope with a guaranteed
+  1-segment floor so the visualiser never collapses to a blank card. Even when
+  playback is paused or starting, the bars show at least a single illuminated
+  segment per column, matching the intended "always-alive" visual language.
+
+- **Ghosting trail behaviour**  
+  Above each live bar, the overlay can draw a short ghost trail using the bar
+  border colour. This trail is driven by the decaying peak envelope (not by
+  residual FBO contents) and fades out with a **vertical alpha falloff** so
+  segments closest to the live bar are brightest and the highest segments fade
+  fastest. Ghosting is controlled by `widgets.spotify_visualizer.*` settings:
+  - `ghosting_enabled`: global on/off for the trail.
+  - `ghost_alpha`: overall opacity multiplier for ghost segments (0.0–1.0).
+  - `ghost_decay`: decay rate for the peak envelope; larger values shorten the
+    visible trail while smaller values stretch it out.
+
+- **UI wiring and defaults**  
+  The Widgets tab exposes a dedicated Spotify visualiser group:
+  - A checkbox to enable/disable the visualiser and a **FORCE Software
+    Visualizer** checkbox on the same row for the QWidget-only path.
+  - A checkbox to enable/disable ghosting.
+  - A **Ghost Opacity** slider mapped to `ghost_alpha` (0–100%).
+  - A **Ghost Decay Speed** slider mapped to `ghost_decay` (~0.10x–1.00x).
+  Defaults are defined centrally in `SettingsManager._set_defaults()` and
+  mirrored in `Docs/SPEC.md`; UI code must treat those as the single source of
+  truth.
+
+These behaviours are canonical for any future beat-style visualisers: keep the
+card/overlay split, guarantee a minimal idle floor, and route any ghosting or
+trailing effects through explicit, documented settings rather than implicit
+framebuffer residue.

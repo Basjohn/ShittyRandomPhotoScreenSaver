@@ -6,6 +6,8 @@ Uses QSettings for persistent storage. Simplified from SPQDocker reusable module
 from typing import Any, Callable, Dict, List, Mapping
 import threading
 import sys
+import json
+from pathlib import Path
 from PySide6.QtCore import QSettings, QObject, Signal
 from core.logging.logger import get_logger, is_verbose_logging
 
@@ -48,6 +50,8 @@ class SettingsManager(QObject):
             pass
 
         self._settings = QSettings(organization, app_name)
+        self._organization = organization
+        self._application = app_name
         self._lock = threading.RLock()
         self._change_handlers: Dict[str, List[Callable]] = {}
 
@@ -557,7 +561,65 @@ class SettingsManager(QObject):
         """Convenience wrapper around get() that normalizes to bool."""
         raw = self.get(key, default)
         return self.to_bool(raw, default)
-    
+
+    def get_application_name(self) -> str:
+        """Return the QSettings application name for this manager."""
+        try:
+            return getattr(self, "_application", self._settings.applicationName())
+        except Exception:
+            return "Screensaver"
+
+    def get_organization_name(self) -> str:
+        """Return the QSettings organization name for this manager."""
+        try:
+            return getattr(self, "_organization", self._settings.organizationName())
+        except Exception:
+            return "ShittyRandomPhotoScreenSaver"
+
+    def _coerce_import_value(self, key: str, value: Any) -> Any:
+        """Best-effort type coercion for SST imports.
+
+        This is intentionally conservative and only normalises a small set of
+        critical bool/int keys. All other values are passed through as-is.
+        """
+
+        dotted = str(key) if key is not None else ""
+        bool_keys = {
+            "display.hw_accel",
+            "display.refresh_sync",
+            "display.sharpen_downscale",
+            "display.pan_and_scan",
+            "display.pan_auto_speed",
+            "display.same_image_all_monitors",
+            "sources.rss_save_to_disk",
+            "input.hard_exit",
+            "queue.shuffle",
+        }
+        int_keys = {
+            "timing.interval",
+            "sources.rss_background_cap",
+            "sources.rss_refresh_minutes",
+            "sources.rss_stale_minutes",
+            "cache.prefetch_ahead",
+            "cache.max_items",
+            "cache.max_memory_mb",
+            "cache.max_concurrent",
+        }
+
+        try:
+            if dotted in bool_keys:
+                return self.to_bool(value, default=False)
+            if dotted in int_keys:
+                if isinstance(value, bool):
+                    # bool is a subclass of int; preserve intent.
+                    return int(value)
+                return int(value)
+        except Exception:
+            logger.debug("Failed to coerce SST value for %s=%r", dotted, value, exc_info=True)
+            return value
+
+        return value
+
     def set(self, key: str, value: Any) -> None:
         """
         Set a setting value.
@@ -648,3 +710,355 @@ class SettingsManager(QObject):
         with self._lock:
             self._settings.clear()
         logger.warning("All settings cleared")
+
+    # ------------------------------------------------------------------
+    # QoL helpers for structured access and SST-style snapshots
+    # ------------------------------------------------------------------
+
+    def get_section(self, section: str, default: Any = None) -> Any:
+        """Return a whole section value (e.g. 'widgets', 'transitions').
+
+        For mapping-backed sections, this normalises the result to a plain
+        dict so callers can work with standard container types.
+        """
+
+        with self._lock:
+            value = self._settings.value(section, default)
+
+        if isinstance(value, Mapping):
+            return dict(value)
+        return value
+
+    def set_section(self, section: str, value: Mapping[str, Any]) -> None:
+        """Set a whole section value in one shot.
+
+        This is primarily intended for mapping-backed sections like
+        'widgets' and 'transitions' and keeps change notifications and
+        logging behaviour consistent with set().
+        """
+
+        mapping = dict(value) if isinstance(value, Mapping) else value
+        with self._lock:
+            old_value = self._settings.value(section)
+            self._settings.setValue(section, mapping)
+
+        self.settings_changed.emit(section, mapping)
+        if is_verbose_logging():
+            logger.debug("Section changed: %s: %r -> %r", section, old_value, mapping)
+        else:
+            logger.debug("Section changed: %s", section)
+
+    def get_widgets_map(self) -> Dict[str, Any]:
+        """Return the full widgets map as a plain dict.
+
+        Callers should prefer this over reading the raw 'widgets' key so
+        any future migration or normalisation can be centralised here.
+        """
+
+        value = self.get_section('widgets', {})
+        return dict(value) if isinstance(value, Mapping) else {}
+
+    def set_widgets_map(self, widgets: Mapping[str, Any]) -> None:
+        """Replace the widgets map with the given mapping.
+
+        This is a thin wrapper around set_section('widgets', ...) to keep
+        callers from hard-coding the 'widgets' key.
+        """
+
+        self.set_section('widgets', widgets)
+
+    def export_to_sst(self, path: str) -> bool:
+        """Export a human-readable SST snapshot of all settings to *path*.
+
+        The snapshot is a JSON document with a simple nested structure that
+        mirrors the canonical settings schema documented in Docs/SPEC.md.
+        QSettings remains the runtime store; this is purely a convenience
+        layer for humans (and tests) to inspect or move configurations
+        between machines.
+        """
+
+        try:
+            with self._lock:
+                keys = list(self._settings.allKeys())
+                snapshot: Dict[str, Any] = {}
+
+                for key in keys:
+                    value = self._settings.value(key)
+
+                    # Widgets and transitions are already stored as nested
+                    # mappings; keep them as top-level sections in the
+                    # snapshot so they are easy to diff and re-import.
+                    if key == 'widgets':
+                        if isinstance(value, Mapping):
+                            snapshot['widgets'] = dict(value)
+                        else:
+                            snapshot['widgets'] = value
+                        continue
+                    if key == 'transitions':
+                        if isinstance(value, Mapping):
+                            snapshot['transitions'] = dict(value)
+                        else:
+                            snapshot['transitions'] = value
+                        continue
+
+                    # Dotted keys (e.g. 'display.mode', 'input.hard_exit')
+                    # become nested sections in the SST snapshot.
+                    if '.' in key:
+                        section, subkey = key.split('.', 1)
+                        container = snapshot.get(section)
+                        if not isinstance(container, dict):
+                            container = {}
+                            snapshot[section] = container
+                        container[subkey] = value
+                    else:
+                        # Rare top-level scalars (if any) are kept as-is.
+                        snapshot[key] = value
+
+            app_name = None
+            try:
+                app_name = getattr(self, "_application", None) or self._settings.applicationName()
+            except Exception:
+                app_name = "Screensaver"
+
+            payload: Dict[str, Any] = {
+                'settings_version': 1,
+                'application': app_name,
+                'snapshot': snapshot,
+            }
+
+            target = Path(path)
+            target.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding='utf-8')
+            logger.info("Exported settings snapshot to %s", target)
+            return True
+        except Exception:
+            logger.exception("Failed to export settings snapshot to %s", path)
+            return False
+
+    def import_from_sst(self, path: str, merge: bool = True) -> bool:
+        """Import settings from an SST snapshot at *path*.
+
+        When *merge* is True (default), existing sections are overlaid with
+        values from the snapshot instead of clearing the store first. This
+        keeps the operation safer in the presence of new keys introduced
+        after the snapshot was created.
+        """
+
+        try:
+            raw = Path(path).read_text(encoding='utf-8')
+            loaded = json.loads(raw)
+        except Exception:
+            logger.exception("Failed to read settings snapshot from %s", path)
+            return False
+
+        sst_version: Any = None
+        sst_application: Any = None
+        if isinstance(loaded, Mapping):
+            sst_version = loaded.get('settings_version')
+            sst_application = loaded.get('application')
+
+        current_version = 1
+        if isinstance(sst_version, int):
+            if sst_version > current_version:
+                logger.warning(
+                    "Importing settings snapshot from newer settings_version=%s (current=%s)",
+                    sst_version,
+                    current_version,
+                )
+            elif sst_version < current_version:
+                logger.info(
+                    "Importing settings snapshot from older settings_version=%s (current=%s)",
+                    sst_version,
+                    current_version,
+                )
+
+        if isinstance(sst_application, str):
+            try:
+                current_app = self.get_application_name()
+            except Exception:
+                current_app = None
+            if current_app and sst_application != current_app:
+                logger.info(
+                    "Importing settings snapshot for application '%s' into '%s'",
+                    sst_application,
+                    current_app,
+                )
+
+        root: Any
+        if isinstance(loaded, Mapping) and 'snapshot' in loaded:
+            root = loaded.get('snapshot', {})
+        else:
+            root = loaded
+
+        if not isinstance(root, Mapping):
+            logger.warning("Settings snapshot root is not a mapping: %r", type(root))
+            return False
+
+        try:
+            with self._lock:
+                for section_key, section_value in root.items():
+                    # Widgets: treat as a single mapping-backed section.
+                    if section_key == 'widgets':
+                        widgets_map: Any = section_value
+                        if not isinstance(widgets_map, Mapping):
+                            continue
+                        widgets_dict: Dict[str, Any] = dict(widgets_map)
+
+                        if merge:
+                            existing = self._settings.value('widgets', {})
+                            if isinstance(existing, Mapping):
+                                merged_widgets = dict(existing)
+                                for name, cfg in widgets_dict.items():
+                                    merged_widgets[name] = cfg
+                                widgets_dict = merged_widgets
+
+                        self._settings.setValue('widgets', widgets_dict)
+                        continue
+
+                    # Transitions: similar treatment to widgets.
+                    if section_key == 'transitions':
+                        transitions_map: Any = section_value
+                        if not isinstance(transitions_map, Mapping):
+                            continue
+                        transitions_dict: Dict[str, Any] = dict(transitions_map)
+
+                        if merge:
+                            existing_t = self._settings.value('transitions', {})
+                            if isinstance(existing_t, Mapping):
+                                merged_t = dict(existing_t)
+                                merged_t.update(transitions_dict)
+                                transitions_dict = merged_t
+
+                        self._settings.setValue('transitions', transitions_dict)
+                        continue
+
+                    # Known mapping-backed sections must be dict-like.
+                    if section_key in {'display', 'timing', 'input', 'sources', 'cache'} and not isinstance(section_value, Mapping):
+                        logger.warning(
+                            "Skipping SST section '%s': expected mapping, got %s",
+                            section_key,
+                            type(section_value).__name__,
+                        )
+                        continue
+
+                    # Generic nested sections (display, timing, input, cache, etc.).
+                    if isinstance(section_value, Mapping):
+                        flat: Mapping[str, Any] = section_value
+                        for subkey, subval in flat.items():
+                            dotted = f"{section_key}.{subkey}"
+                            coerced = self._coerce_import_value(dotted, subval)
+                            self._settings.setValue(dotted, coerced)
+                    else:
+                        # Top-level scalar from SST – write back directly.
+                        coerced = self._coerce_import_value(section_key, section_value)
+                        self._settings.setValue(section_key, coerced)
+
+                self._settings.sync()
+
+            # Wildcard signal so listeners that care about global changes can
+            # refresh their view.
+            self.settings_changed.emit('*', None)
+            logger.info("Imported settings snapshot from %s", path)
+            return True
+        except Exception:
+            logger.exception("Failed to apply settings snapshot from %s", path)
+            return False
+
+    def preview_import_from_sst(self, path: str, merge: bool = True) -> Dict[str, Any]:
+        """Preview the effect of importing an SST snapshot without mutating settings.
+
+        Returns a mapping of setting keys to ``(old_value, new_value)`` tuples for
+        every key that would change if :meth:`import_from_sst` were invoked with
+        the same arguments.
+        """
+
+        try:
+            raw = Path(path).read_text(encoding='utf-8')
+            loaded = json.loads(raw)
+        except Exception:
+            logger.exception("Failed to read settings snapshot for preview from %s", path)
+            return {}
+
+        root: Any
+        if isinstance(loaded, Mapping) and 'snapshot' in loaded:
+            root = loaded.get('snapshot', {})
+        else:
+            root = loaded
+
+        if not isinstance(root, Mapping):
+            logger.warning("Settings snapshot root is not a mapping for preview: %r", type(root))
+            return {}
+
+        diffs: Dict[str, Any] = {}
+
+        try:
+            with self._lock:
+                for section_key, section_value in root.items():
+                    if section_key == 'widgets':
+                        widgets_map: Any = section_value
+                        if not isinstance(widgets_map, Mapping):
+                            continue
+                        new_widgets: Dict[str, Any] = dict(widgets_map)
+
+                        existing = self._settings.value('widgets', {})
+                        if isinstance(existing, Mapping):
+                            old_widgets = dict(existing)
+                        else:
+                            old_widgets = {}
+
+                        if merge and isinstance(existing, Mapping):
+                            merged_widgets = dict(existing)
+                            for name, cfg in new_widgets.items():
+                                merged_widgets[name] = cfg
+                            new_widgets = merged_widgets
+
+                        if old_widgets != new_widgets:
+                            diffs['widgets'] = (old_widgets, new_widgets)
+                        continue
+
+                    if section_key == 'transitions':
+                        transitions_map: Any = section_value
+                        if not isinstance(transitions_map, Mapping):
+                            continue
+                        new_transitions: Dict[str, Any] = dict(transitions_map)
+
+                        existing_t = self._settings.value('transitions', {})
+                        if isinstance(existing_t, Mapping):
+                            old_transitions = dict(existing_t)
+                        else:
+                            old_transitions = {}
+
+                        if merge and isinstance(existing_t, Mapping):
+                            merged_t = dict(existing_t)
+                            merged_t.update(new_transitions)
+                            new_transitions = merged_t
+
+                        if old_transitions != new_transitions:
+                            diffs['transitions'] = (old_transitions, new_transitions)
+                        continue
+
+                    if section_key in {'display', 'timing', 'input', 'sources', 'cache'} and not isinstance(section_value, Mapping):
+                        logger.warning(
+                            "Skipping SST section '%s' in preview: expected mapping, got %s",
+                            section_key,
+                            type(section_value).__name__,
+                        )
+                        continue
+
+                    if isinstance(section_value, Mapping):
+                        flat: Mapping[str, Any] = section_value
+                        for subkey, subval in flat.items():
+                            dotted = f"{section_key}.{subkey}"
+                            new_val = self._coerce_import_value(dotted, subval)
+                            old_val = self._settings.value(dotted)
+                            if old_val != new_val:
+                                diffs[dotted] = (old_val, new_val)
+                    else:
+                        new_val = self._coerce_import_value(section_key, section_value)
+                        old_val = self._settings.value(section_key)
+                        if old_val != new_val:
+                            diffs[section_key] = (old_val, new_val)
+
+            return diffs
+        except Exception:
+            logger.exception("Failed to compute settings snapshot preview from %s", path)
+            return {}

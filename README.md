@@ -29,7 +29,7 @@ Shitty Showcase where I cut off the Spotify controls in recording.
   - **Clock widgets** (up to three): 12h/24h, multiple time zones, analogue or digital
   - **Weather widget** using Open‑Meteo (no API key) with location autodetect on first run
   - **Media widget** (Spotify now‑playing) with optional controls and artwork
-  - **Spotify beat visualizer** paired with the media widget
+  - **Spotify beat visualizer** paired with the media widget – thin GPU bar overlay with a 1‑bar idle floor and a configurable ghosting trail (opacity + decay), with an automatic software fallback on non‑GL stacks
   - **Reddit widget** showing top posts from a configured subreddit
   Widget requests are welcome, the engine is robust enough to handle all sorts of your weird kinky shit.
 
@@ -40,7 +40,7 @@ Shitty Showcase where I cut off the Spotify controls in recording.
     - **Display** – mode, interval, sharpen, pan & scan, monitor selection
     - **Transitions** – transition type, duration, directions, per‑type tuning
     - **Widgets** – clock(s), weather, media, Spotify visualizer, Reddit (You'll need to configure these to your liking! Geolocation is kinda shit.)
-    - **About** – version, credits and emergency defaults button
+    - **About** – version, credits, SST-based settings Import/Export (human‑readable JSON snapshot per profile) and emergency defaults button
     
 - **Hard‑exit mode & interaction gating**
   - Optional "hard‑exit" mode: mouse movement/clicks no longer exit; only keyboard exits

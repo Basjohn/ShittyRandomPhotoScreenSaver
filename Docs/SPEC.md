@@ -1,14 +1,14 @@
 # ShittyRandomPhotoScreenSaver - Technical Specification
 
 **Version**: 1.0  
-**Last Updated**: Nov 24, 2025 15:30 - Canonical settings + GL compositor path + default intervals  
+**Last Updated**: Dec 4, 2025 02:10 - Canonical settings + GL compositor path + Spotify Beat Visualizer GPU overlay ghosting defaults  
 **Status**: Architecture solid; GL compositor route and settings schema stabilised; GL transition visuals (Diffuse/Wipe/BlockPuzzle) still pending final tuning
 
 ---
 
 ## Project Summary
 
-A modern, feature-rich Windows screensaver built with PySide6 that displays photos from local folders or RSS feeds with advanced transitions, multi-monitor support, and overlay widgets (clock, weather, and a Spotify media widget).
+A modern, feature-rich Windows screensaver built with PySide6 that displays photos from local folders or RSS feeds with advanced transitions, multi-monitor support, and overlay widgets (clock, weather, a Spotify media widget, and a Spotify beat visualizer).
 
 ---
 
@@ -453,6 +453,12 @@ GL Path: The only supported GL route uses a single `GLCompositorWidget` per disp
             'bar_fill_color': [24, 24, 24, 255],
             'bar_border_color': [255, 255, 255, 255],
             'bar_border_opacity': 1.0,
+            # Ghosting configuration: trailing border-colour segments above the
+            # current bar height, driven by a per-bar peak envelope and
+            # rendered by the GPU overlay.
+            'ghosting_enabled': True,
+            'ghost_alpha': 0.4,
+            'ghost_decay': 0.4,
             # When True, the legacy QWidget-based software visualiser is
             # allowed to draw bars when the renderer backend is 'software' or
             # when OpenGL is unavailable. In OpenGL mode the GPU overlay
@@ -478,9 +484,11 @@ The Spotify visualiser consists of three cooperating pieces:
 
 - A process-wide :class:`_SpotifyBeatEngine` that captures loopback audio, mixes to mono, and performs FFT + bar mapping off the UI thread using the `ThreadManager` COMPUTE pool and a lock-free `TripleBuffer` for handoff.
 - :mod:`widgets/spotify_visualizer_widget.py`, a QWidget that owns the Spotify-style card, fade and drop shadow (`ShadowFadeProfile`), and smoothing of per-bar magnitudes. The widget pushes the current bar array and fade factor into a GPU overlay (when available) or falls back to its original QPainter-based bar drawing when running in Software renderer mode or when GL is unavailable.
-- :mod:`widgets/spotify_bars_gl_overlay.py`, a small `QOpenGLWidget` overlay owned by :class:`DisplayWidget` that renders the bar field via a GLSL/VAO pipeline. The overlay:
+- :mod:`widgets/spotify_bars_gl_overlay.py`, a small `QOpenGLWidget` overlay owned by :class:`DisplayWidget` that renders the bar field via a GLSL/VAO pipeline and a per-bar peak envelope used for ghosting. The overlay:
   - Uses a single fullscreen quad VAO/VBO and a fragment shader with `u_bars[64]` as the magnitude array.
-  - Is sized to exactly cover the visualiser card rect and clears to transparent each frame so old bar segments do not leave ghosting artefacts.
+  - Is sized to exactly cover the visualiser card rect and clears to transparent each frame; the ghost trail is driven purely from the peak data, not from residual FBO contents.
+  - Maintains per-bar peak values that decay more slowly than the live bar magnitudes, guaranteeing at least one active segment per bar (a 1-segment idle floor) and driving a configurable border-colour ghost trail above the current bar height.
+  - Applies a vertical alpha falloff to ghost segments based on their distance above the live bar so older trail segments fade out faster while newer segments remain brighter.
   - Computes geometry in **logical** widget pixels but samples from `gl_FragCoord` and a `u_dpr` (device pixel ratio) uniform so that bar and segment layout is stable across HiDPI setups.
   - Mirrors the QWidget geometry: fixed margins, 2px horizontal gaps between bars, 1px vertical gaps between segments, and a thin 1px border around each segment using `bar_fill_color` / `bar_border_color`.
 
@@ -509,6 +517,11 @@ These policies are **normative**: new code, tests, and docs must follow them unl
   - Boolean-like values must be normalised via `SettingsManager.to_bool` / `get_bool` or an equivalent central helper.
 - **Defaults come from SettingsManager**
   - All defaults are defined in `SettingsManager._set_defaults()` and mirrored in this spec. UI tabs and runtime components must not hardcode conflicting default values.
+  - New settings (including widget configuration keys) must be added to `_set_defaults()` and, where applicable, to `_ensure_widgets_defaults()` for back‑compat with existing profiles.
+- **SST snapshots and About-tab Import/Export**
+  - QSettings remains the single runtime store for configuration; SST files are *snapshots* of the current profile (`Screensaver` vs `Screensaver_MC`) and are not read at startup.
+  - The About tab exposes **Export Settings…** and **Import Settings…** buttons backed by `SettingsManager.export_to_sst()` / `import_from_sst()`. These read/write a human‑readable JSON document containing `settings_version`, `application`, and a nested `snapshot` map that mirrors the canonical schema above.
+  - Import is merge‑by‑default: existing keys are preserved when the snapshot omits them, and overlapping keys are overwritten from the snapshot. A full restore path is therefore: **Reset To Defaults** → **Import Settings…** with the desired SST file.
 
 ### 2. Rendering, GL Path & Flicker Policy
 

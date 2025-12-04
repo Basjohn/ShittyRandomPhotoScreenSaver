@@ -1977,3 +1977,5 @@
 2025-11-24 15:43:57,067 - pytest_runner - INFO - pytest finished with exit code 1
 2025-11-24 15:46:00,300 - pytest_runner - INFO - pytest.py starting with args: ['-vv', '--maxfail=5', 'tests/test_transitions.py', 'tests/test_transition_integration.py', 'tests/test_gl_prewarm.py']
 2025-11-24 15:46:21,151 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-04 04:23:06,046 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_settings.py', 'tests/test_settings_dialog.py', '-q']
+2025-12-04 04:23:11,352 - pytest_runner - INFO - pytest finished with exit code 0

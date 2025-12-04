@@ -14,7 +14,7 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QWidget, QPushButton,
     QLabel, QStackedWidget, QGraphicsDropShadowEffect, QSizeGrip,
-    QMessageBox, QSizePolicy,
+    QMessageBox, QSizePolicy, QFileDialog,
 )
 from PySide6.QtCore import Qt, QPoint, Signal, QUrl, QTimer
 from PySide6.QtGui import QFont, QColor, QPixmap, QDesktopServices, QPainter, QPen, QGuiApplication
@@ -884,7 +884,7 @@ class SettingsDialog(QDialog):
         layout.addWidget(content_card)
         layout.addStretch()
 
-        # Reset to Defaults button (bottom-left, small and unobtrusive)
+        # Reset / Import / Export buttons (bottom row, small and unobtrusive)
         button_row = QHBoxLayout()
         self.reset_defaults_btn = QPushButton("Reset To Defaults")
         self.reset_defaults_btn.setObjectName("resetDefaultsButton")
@@ -892,7 +892,24 @@ class SettingsDialog(QDialog):
         self.reset_defaults_btn.setStyleSheet("font-size: 11px; padding: 4px 10px;")
         self.reset_defaults_btn.clicked.connect(self._on_reset_to_defaults_clicked)
         button_row.addWidget(self.reset_defaults_btn)
+
         button_row.addStretch()
+
+        # Import/Export settings snapshots using the SettingsManager SST
+        # helpers. These operate on the current QSettings profile only and
+        # are intended as human-friendly backups/restores rather than a
+        # replacement for QSettings itself.
+        self.import_settings_btn = QPushButton("Import Settings…")
+        self.import_settings_btn.setFixedHeight(24)
+        self.import_settings_btn.setStyleSheet("font-size: 11px; padding: 4px 10px;")
+        self.import_settings_btn.clicked.connect(self._on_import_settings_clicked)
+        button_row.addWidget(self.import_settings_btn)
+
+        self.export_settings_btn = QPushButton("Export Settings…")
+        self.export_settings_btn.setFixedHeight(24)
+        self.export_settings_btn.setStyleSheet("font-size: 11px; padding: 4px 10px;")
+        self.export_settings_btn.clicked.connect(self._on_export_settings_clicked)
+        button_row.addWidget(self.export_settings_btn)
         layout.addLayout(button_row)
 
         self.reset_notice_label = QLabel("Settings reverted to defaults!")
@@ -1109,6 +1126,129 @@ class SettingsDialog(QDialog):
                 self,
                 "Error",
                 "Failed to reset settings to defaults. See log for details.",
+            )
+    
+    def _on_export_settings_clicked(self) -> None:
+        """Export the current settings profile to an SST snapshot file."""
+
+        try:
+            # Prefer the user's Documents folder as a sensible default
+            # location for human-edited snapshots; fall back to CWD.
+            try:
+                base_dir = Path.home() / "Documents"
+            except Exception:
+                base_dir = Path.cwd()
+
+            if not base_dir.exists():
+                base_dir = Path.cwd()
+
+            profile = "Screensaver"
+            try:
+                if hasattr(self._settings, "get_application_name"):
+                    profile = self._settings.get_application_name()
+            except Exception:
+                profile = "Screensaver"
+            safe_profile = str(profile).replace(" ", "_") if profile is not None else "Screensaver"
+            default_path = str(base_dir / f"SRPSS_Settings_{safe_profile}.sst")
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Export Settings Snapshot",
+                default_path,
+                "Settings Snapshot (*.sst *.json);;All Files (*)",
+            )
+
+            if not file_path:
+                return
+
+            ok = False
+            try:
+                ok = bool(self._settings.export_to_sst(file_path))
+            except Exception:
+                logger.exception("Export to SST failed")
+                ok = False
+
+            if not ok:
+                QMessageBox.warning(
+                    self,
+                    "Export Failed",
+                    "Failed to export settings snapshot. See log for details.",
+                )
+            else:
+                QMessageBox.information(
+                    self,
+                    "Export Complete",
+                    "Settings snapshot exported successfully.",
+                )
+        except Exception as exc:
+            logger.exception("Unexpected error during settings export: %s", exc)
+            QMessageBox.warning(
+                self,
+                "Export Failed",
+                "Failed to export settings snapshot. See log for details.",
+            )
+
+    def _on_import_settings_clicked(self) -> None:
+        """Import settings from an SST snapshot and refresh all tabs."""
+
+        try:
+            try:
+                base_dir = Path.home() / "Documents"
+            except Exception:
+                base_dir = Path.cwd()
+
+            if not base_dir.exists():
+                base_dir = Path.cwd()
+
+            file_path, _ = QFileDialog.getOpenFileName(
+                self,
+                "Import Settings Snapshot",
+                str(base_dir),
+                "Settings Snapshot (*.sst *.json);;All Files (*)",
+            )
+
+            if not file_path:
+                return
+
+            ok = False
+            try:
+                ok = bool(self._settings.import_from_sst(file_path, merge=True))
+            except Exception:
+                logger.exception("Import from SST failed")
+                ok = False
+
+            if not ok:
+                QMessageBox.warning(
+                    self,
+                    "Import Failed",
+                    "Failed to import settings snapshot. See log for details.",
+                )
+                return
+
+            # Reload all tabs so the UI reflects the imported configuration
+            # immediately.
+            try:
+                if hasattr(self, "sources_tab"):
+                    self.sources_tab._load_settings()  # type: ignore[attr-defined]
+                if hasattr(self, "display_tab"):
+                    self.display_tab._load_settings()  # type: ignore[attr-defined]
+                if hasattr(self, "transitions_tab"):
+                    self.transitions_tab._load_settings()  # type: ignore[attr-defined]
+                if hasattr(self, "widgets_tab"):
+                    self.widgets_tab._load_settings()  # type: ignore[attr-defined]
+            except Exception:
+                logger.debug("Failed to reload settings tabs after SST import", exc_info=True)
+
+            QMessageBox.information(
+                self,
+                "Import Complete",
+                "Settings snapshot imported successfully.",
+            )
+        except Exception as exc:
+            logger.exception("Unexpected error during settings import: %s", exc)
+            QMessageBox.warning(
+                self,
+                "Import Failed",
+                "Failed to import settings snapshot. See log for details.",
             )
     
     def _toggle_maximize(self) -> None:

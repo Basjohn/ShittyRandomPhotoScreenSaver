@@ -1,4 +1,5 @@
 """Tests for SettingsManager."""
+import json
 from core.settings import SettingsManager
 
 
@@ -113,4 +114,99 @@ def test_get_all_keys(qt_app):
     assert len(keys) > 0
     assert "sources.mode" in keys
     
+    manager.clear()
+
+
+def test_sst_round_trip_defaults(qt_app, tmp_path):
+    """Exporting and re-importing defaults should restore canonical values."""
+    manager = SettingsManager(organization="Test", application="ScreensaverTest")
+
+    # Start from a clean canonical state and export it.
+    manager.reset_to_defaults()
+    snapshot_path = tmp_path / "settings_defaults.sst"
+    assert manager.export_to_sst(str(snapshot_path))
+    assert snapshot_path.exists()
+
+    # Mutate some values away from defaults.
+    manager.set("sources.mode", "rss")
+    manager.set("display.hw_accel", False)
+
+    widgets = manager.get("widgets", {})
+    assert isinstance(widgets, dict)
+    spotify_cfg = dict(widgets.get("spotify_visualizer", {}))
+    assert spotify_cfg  # should exist in defaults
+    spotify_cfg["ghost_alpha"] = 0.1
+    widgets["spotify_visualizer"] = spotify_cfg
+    manager.set("widgets", widgets)
+
+    assert manager.get("sources.mode") == "rss"
+    assert manager.get_bool("display.hw_accel") is False
+    widgets_mut = manager.get("widgets", {})
+    assert widgets_mut["spotify_visualizer"]["ghost_alpha"] == 0.1
+
+    # Import the exported snapshot and verify defaults are restored.
+    assert manager.import_from_sst(str(snapshot_path), merge=True)
+
+    assert manager.get("sources.mode") == "folders"
+    assert manager.get_bool("display.hw_accel") is True
+    widgets_after = manager.get("widgets", {})
+    assert isinstance(widgets_after, dict)
+    assert widgets_after["spotify_visualizer"]["ghost_alpha"] == 0.4
+
+    manager.clear()
+
+
+def test_sst_merge_and_type_coercion_and_preview(qt_app, tmp_path):
+    """SST import should merge sections, coerce basic types, and be previewable."""
+
+    manager = SettingsManager(organization="Test", application="ScreensaverTest")
+    manager.reset_to_defaults()
+
+    # Add an extra widget entry that should survive a merge-based import.
+    widgets = manager.get("widgets", {})
+    assert isinstance(widgets, dict)
+    widgets["custom_widget"] = {"enabled": True, "monitor": 1}
+    manager.set("widgets", widgets)
+
+    # Export current state to SST.
+    snapshot_path = tmp_path / "settings_merge.sst"
+    assert manager.export_to_sst(str(snapshot_path))
+    data = json.loads(snapshot_path.read_text(encoding="utf-8"))
+
+    # Simulate an older snapshot that:
+    # - Does not know about custom_widget
+    # - Stores some values as strings to exercise type coercion.
+    snapshot = data.get("snapshot", {})
+    widgets_snap = snapshot.get("widgets", {})
+    if "custom_widget" in widgets_snap:
+        del widgets_snap["custom_widget"]
+
+    display_section = snapshot.setdefault("display", {})
+    display_section["hw_accel"] = "false"
+    timing_section = snapshot.setdefault("timing", {})
+    timing_section["interval"] = "99"
+
+    data["snapshot"] = snapshot
+    modified_path = tmp_path / "settings_merge_modified.sst"
+    modified_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    # Preview the import and ensure we see type-changing keys.
+    diffs = manager.preview_import_from_sst(str(modified_path), merge=True)
+    assert "display.hw_accel" in diffs
+    assert "timing.interval" in diffs
+
+    # Apply the import.
+    assert manager.import_from_sst(str(modified_path), merge=True)
+
+    # custom_widget must still be present because merge=True preserves
+    # entries that are not present in the snapshot.
+    merged_widgets = manager.get("widgets", {})
+    assert "custom_widget" in merged_widgets
+
+    # Coercion: bool and int come back with correct types/values.
+    assert manager.get_bool("display.hw_accel") is False
+    interval_val = manager.get("timing.interval")
+    assert isinstance(interval_val, int)
+    assert interval_val == 99
+
     manager.clear()
