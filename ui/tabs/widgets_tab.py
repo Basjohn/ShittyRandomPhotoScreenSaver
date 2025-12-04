@@ -744,22 +744,26 @@ class WidgetsTab(QWidget):
         spotify_vis_group = QGroupBox("Spotify Beat Visualizer")
         spotify_vis_layout = QVBoxLayout(spotify_vis_group)
 
+        # Enable/disable row with FORCE Software Visualizer on the same line.
+        spotify_vis_enable_row = QHBoxLayout()
         self.spotify_vis_enabled = QCheckBox("Enable Spotify Beat Visualizer")
         self.spotify_vis_enabled.setToolTip(
             "Shows a thin bar visualizer tied to Spotify playback, positioned just above the Spotify widget."
         )
         self.spotify_vis_enabled.stateChanged.connect(self._save_settings)
-        spotify_vis_layout.addWidget(self.spotify_vis_enabled)
+        spotify_vis_enable_row.addWidget(self.spotify_vis_enabled)
 
         # Optional software visualiser fallback. When enabled, the legacy
         # QWidget-based bar renderer is allowed to draw when OpenGL is
         # unavailable or when the renderer backend is set to Software.
-        self.spotify_vis_software_enabled = QCheckBox("Enable software visualizer in Software renderer mode")
+        self.spotify_vis_software_enabled = QCheckBox("FORCE Software Visualizer")
         self.spotify_vis_software_enabled.setToolTip(
-            "When checked, the software (CPU) Spotify visualizer can render bars when the renderer backend is set to 'Software' or when OpenGL is unavailable."
+            "Force the legacy CPU bar visualizer even when the renderer backend is set to Software or when OpenGL is unavailable."
         )
         self.spotify_vis_software_enabled.stateChanged.connect(self._save_settings)
-        spotify_vis_layout.addWidget(self.spotify_vis_software_enabled)
+        spotify_vis_enable_row.addStretch()
+        spotify_vis_enable_row.addWidget(self.spotify_vis_software_enabled)
+        spotify_vis_layout.addLayout(spotify_vis_enable_row)
 
         spotify_vis_bar_row = QHBoxLayout()
         spotify_vis_bar_row.addWidget(QLabel("Bar Count:"))
@@ -805,6 +809,52 @@ class WidgetsTab(QWidget):
         )
         spotify_vis_border_opacity_row.addWidget(self.spotify_vis_border_opacity_label)
         spotify_vis_layout.addLayout(spotify_vis_border_opacity_row)
+
+        # Ghosting controls: global enable, opacity and decay speed.
+        spotify_vis_ghost_enable_row = QHBoxLayout()
+        self.spotify_vis_ghost_enabled = QCheckBox("Enable Ghosting")
+        self.spotify_vis_ghost_enabled.setChecked(True)
+        self.spotify_vis_ghost_enabled.setToolTip(
+            "When enabled, the visualizer draws trailing ghost bars above the current height."
+        )
+        self.spotify_vis_ghost_enabled.stateChanged.connect(self._save_settings)
+        spotify_vis_ghost_enable_row.addWidget(self.spotify_vis_ghost_enabled)
+        spotify_vis_ghost_enable_row.addStretch()
+        spotify_vis_layout.addLayout(spotify_vis_ghost_enable_row)
+
+        spotify_vis_ghost_opacity_row = QHBoxLayout()
+        spotify_vis_ghost_opacity_row.addWidget(QLabel("Ghost Opacity:"))
+        self.spotify_vis_ghost_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.spotify_vis_ghost_opacity.setMinimum(0)
+        self.spotify_vis_ghost_opacity.setMaximum(100)
+        self.spotify_vis_ghost_opacity.setValue(40)
+        self.spotify_vis_ghost_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.spotify_vis_ghost_opacity.setTickInterval(5)
+        self.spotify_vis_ghost_opacity.valueChanged.connect(self._save_settings)
+        spotify_vis_ghost_opacity_row.addWidget(self.spotify_vis_ghost_opacity)
+        self.spotify_vis_ghost_opacity_label = QLabel("40%")
+        self.spotify_vis_ghost_opacity.valueChanged.connect(
+            lambda v: self.spotify_vis_ghost_opacity_label.setText(f"{v}%")
+        )
+        spotify_vis_ghost_opacity_row.addWidget(self.spotify_vis_ghost_opacity_label)
+        spotify_vis_layout.addLayout(spotify_vis_ghost_opacity_row)
+
+        spotify_vis_ghost_decay_row = QHBoxLayout()
+        spotify_vis_ghost_decay_row.addWidget(QLabel("Ghost Decay Speed:"))
+        self.spotify_vis_ghost_decay = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.spotify_vis_ghost_decay.setMinimum(10)   # 0.10x
+        self.spotify_vis_ghost_decay.setMaximum(100)  # 1.00x
+        self.spotify_vis_ghost_decay.setValue(40)     # 0.40x default
+        self.spotify_vis_ghost_decay.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.spotify_vis_ghost_decay.setTickInterval(5)
+        self.spotify_vis_ghost_decay.valueChanged.connect(self._save_settings)
+        spotify_vis_ghost_decay_row.addWidget(self.spotify_vis_ghost_decay)
+        self.spotify_vis_ghost_decay_label = QLabel("0.40x")
+        self.spotify_vis_ghost_decay.valueChanged.connect(
+            lambda v: self.spotify_vis_ghost_decay_label.setText(f"{v / 100.0:.2f}x")
+        )
+        spotify_vis_ghost_decay_row.addWidget(self.spotify_vis_ghost_decay_label)
+        spotify_vis_layout.addLayout(spotify_vis_ghost_decay_row)
 
         self._media_container = QWidget()
         media_container_layout = QVBoxLayout(self._media_container)
@@ -1147,6 +1197,9 @@ class WidgetsTab(QWidget):
                 getattr(self, 'spotify_vis_enabled', None),
                 getattr(self, 'spotify_vis_bar_count', None),
                 getattr(self, 'spotify_vis_border_opacity', None),
+                getattr(self, 'spotify_vis_ghost_enabled', None),
+                getattr(self, 'spotify_vis_ghost_opacity', None),
+                getattr(self, 'spotify_vis_ghost_decay', None),
                 getattr(self, 'reddit_enabled', None),
                 getattr(self, 'reddit_subreddit', None),
                 getattr(self, 'reddit_items', None),
@@ -1424,6 +1477,36 @@ class WidgetsTab(QWidget):
             border_opacity_pct = int(spotify_vis_config.get('bar_border_opacity', 0.85) * 100)
             self.spotify_vis_border_opacity.setValue(border_opacity_pct)
             self.spotify_vis_border_opacity_label.setText(f"{border_opacity_pct}%")
+
+            # Ghosting settings
+            ghost_enabled_raw = spotify_vis_config.get('ghosting_enabled', True)
+            ghost_enabled = SettingsManager.to_bool(ghost_enabled_raw, True)
+            self.spotify_vis_ghost_enabled.setChecked(ghost_enabled)
+
+            ghost_alpha_val = spotify_vis_config.get('ghost_alpha', 0.4)
+            try:
+                ghost_alpha_pct = int(float(ghost_alpha_val) * 100)
+            except Exception:
+                ghost_alpha_pct = 40
+            if ghost_alpha_pct < 0:
+                ghost_alpha_pct = 0
+            if ghost_alpha_pct > 100:
+                ghost_alpha_pct = 100
+            self.spotify_vis_ghost_opacity.setValue(ghost_alpha_pct)
+            self.spotify_vis_ghost_opacity_label.setText(f"{ghost_alpha_pct}%")
+
+            ghost_decay_val = spotify_vis_config.get('ghost_decay', 0.4)
+            try:
+                ghost_decay_f = float(ghost_decay_val)
+            except Exception:
+                ghost_decay_f = 0.4
+            ghost_decay_slider = int(ghost_decay_f * 100.0)
+            if ghost_decay_slider < 10:
+                ghost_decay_slider = 10
+            if ghost_decay_slider > 100:
+                ghost_decay_slider = 100
+            self.spotify_vis_ghost_decay.setValue(ghost_decay_slider)
+            self.spotify_vis_ghost_decay_label.setText(f"{ghost_decay_slider / 100.0:.2f}x")
 
             # Load reddit settings. If the reddit section is missing or empty
             # (older configs), fall back to the canonical defaults from
@@ -1724,6 +1807,9 @@ class WidgetsTab(QWidget):
                 self._spotify_vis_border_color.alpha(),
             ],
             'bar_border_opacity': self.spotify_vis_border_opacity.value() / 100.0,
+            'ghosting_enabled': self.spotify_vis_ghost_enabled.isChecked(),
+            'ghost_alpha': self.spotify_vis_ghost_opacity.value() / 100.0,
+            'ghost_decay': max(0.1, self.spotify_vis_ghost_decay.value() / 100.0),
         }
 
         reddit_limit_text = self.reddit_items.currentText().strip()

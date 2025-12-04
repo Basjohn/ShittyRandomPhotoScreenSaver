@@ -294,6 +294,11 @@ class SettingsManager(QObject):
                     # Bar border colour (RGBA) and independent opacity scaler.
                     'bar_border_color': [255, 255, 255, 255],
                     'bar_border_opacity': 1.0,
+                    # Ghosting configuration: trailing bar effect above the
+                    # current height, rendered by the GPU overlay.
+                    'ghosting_enabled': True,
+                    'ghost_alpha': 0.4,
+                    'ghost_decay': 0.4,
                     # When True, the legacy QWidget-based software visualiser is
                     # allowed to render bars when OpenGL is unavailable or when
                     # the renderer backend is explicitly set to 'software'. This
@@ -492,6 +497,9 @@ class SettingsManager(QObject):
                 'bar_fill_color': [24, 24, 24, 255],
                 'bar_border_color': [255, 255, 255, 255],
                 'bar_border_opacity': 1.0,
+                'ghosting_enabled': True,
+                'ghost_alpha': 0.4,
+                'ghost_decay': 0.4,
                 'software_visualizer_enabled': False,
             },
             'shadows': {

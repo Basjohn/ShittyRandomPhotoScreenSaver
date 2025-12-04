@@ -1361,6 +1361,36 @@ class DisplayWidget(QWidget):
                     except Exception:
                         pass
 
+                    # Ghosting configuration: enabled flag, ghost opacity and
+                    # decay speed for the GPU overlay. Defaults are driven by
+                    # SettingsManager but can be overridden per-user from the
+                    # Widgets tab.
+                    try:
+                        ghost_enabled_raw = spotify_vis_settings.get('ghosting_enabled', True)
+                        ghost_enabled = SettingsManager.to_bool(ghost_enabled_raw, True)
+                    except Exception:
+                        ghost_enabled = True
+
+                    try:
+                        ghost_alpha_val = spotify_vis_settings.get('ghost_alpha', 0.4)
+                        ghost_alpha = float(ghost_alpha_val)
+                    except Exception:
+                        ghost_alpha = 0.4
+
+                    try:
+                        ghost_decay_val = spotify_vis_settings.get('ghost_decay', 0.4)
+                        ghost_decay = float(ghost_decay_val)
+                    except Exception:
+                        ghost_decay = 0.4
+
+                    ghost_decay = max(0.0, ghost_decay)
+
+                    try:
+                        if hasattr(vis, 'set_ghost_config'):
+                            vis.set_ghost_config(ghost_enabled, ghost_alpha, ghost_decay)
+                    except Exception:
+                        logger.debug('[SPOTIFY_VIS] Failed to configure ghosting settings on visualiser', exc_info=True)
+
                     # Global widget drop shadow
                     try:
                         vis.set_shadow_config(shadows_config)
@@ -2691,6 +2721,9 @@ class DisplayWidget(QWidget):
         border_color,
         fade,
         playing,
+        ghosting_enabled=True,
+        ghost_alpha=0.4,
+        ghost_decay=-1.0,
     ):
         vis = getattr(self, "spotify_visualizer_widget", None)
         if vis is None:
@@ -2745,6 +2778,9 @@ class DisplayWidget(QWidget):
                 fade,
                 playing,
                 visible=True,
+                ghosting_enabled=ghosting_enabled,
+                ghost_alpha=ghost_alpha,
+                ghost_decay=ghost_decay,
             )
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to push frame to SpotifyBarsGLOverlay", exc_info=True)

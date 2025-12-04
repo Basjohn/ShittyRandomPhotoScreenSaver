@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import List, Sequence
 
 import numpy as np
+import time
 from PySide6.QtCore import Qt, QRect
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
@@ -50,6 +51,22 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._fade: float = 0.0
         self._playing: bool = False
 
+        # Ghosting configuration – whether trailing segments are drawn and
+        # how strong they appear relative to the main bar border colour. The
+        # decay rate is controlled separately via _peak_decay_per_sec.
+        self._ghosting_enabled: bool = True
+        self._ghost_alpha: float = 0.4
+
+        # Per-bar peak values used to draw trailing "ghost" segments above
+        # the current bar height. Peaks are updated whenever new bar data
+        # arrives and decay over time.
+        self._peaks: List[float] = []
+        self._last_peak_ts: float = 0.0
+        # Decay rate for the peak envelope; kept low enough that the
+        # peak/value gap – and thus the ghost trail – remains visible for
+        # roughly a second after a strong drop.
+        self._peak_decay_per_sec: float = 0.4
+
         # Minimal GL state for a fullscreen quad shader. If initialisation
         # fails at any point we fall back to the legacy QPainter-on-GL path.
         self._gl_program = None
@@ -59,10 +76,12 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._u_bar_count = None
         self._u_segments = None
         self._u_bars = None
+        self._u_peaks = None
         self._u_fill_color = None
         self._u_border_color = None
         self._u_fade = None
         self._u_playing = None
+        self._u_ghost_alpha = None
         self._gl_disabled: bool = False
         self._debug_bars_logged: bool = False
         self._debug_paint_logged: bool = False
@@ -82,6 +101,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         fade: float,
         playing: bool,
         visible: bool,
+        ghosting_enabled: bool = True,
+        ghost_alpha: float = 0.4,
+        ghost_decay: float = -1.0,
     ) -> None:
         """Update overlay bar state and geometry.
 
@@ -97,6 +119,32 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             except Exception:
                 pass
             return
+
+        # Apply ghost configuration up-front so it is visible to both the
+        # peak-envelope update and the shader path. When ghosting is
+        # disabled, we keep bar rendering active but collapse ghost alpha to
+        # zero so only the solid bars remain.
+        try:
+            self._ghosting_enabled = bool(ghosting_enabled)
+        except Exception:
+            self._ghosting_enabled = True
+
+        try:
+            ga = float(ghost_alpha)
+        except Exception:
+            ga = 0.4
+        if ga < 0.0:
+            ga = 0.0
+        if ga > 1.0:
+            ga = 1.0
+        self._ghost_alpha = ga
+
+        try:
+            gd = float(ghost_decay)
+        except Exception:
+            gd = -1.0
+        if gd >= 0.0:
+            self._peak_decay_per_sec = max(0.0, gd)
 
         try:
             count = int(bar_count)
@@ -157,6 +205,82 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             except Exception:
                 pass
             return
+
+        # Update per-bar peak state using the latest clamped values.
+        try:
+            now_ts = time.monotonic()
+        except Exception:
+            now_ts = 0.0
+        dt = 0.0
+        try:
+            last_ts = self._last_peak_ts
+        except Exception:
+            last_ts = 0.0
+        if last_ts > 0.0 and now_ts > last_ts:
+            dt = now_ts - last_ts
+        try:
+            self._last_peak_ts = now_ts
+        except Exception:
+            pass
+
+        try:
+            peaks = list(self._peaks)
+        except Exception:
+            peaks = []
+
+        if not peaks or len(peaks) != len(clamped):
+            peaks = list(clamped)
+
+        decay_rate = self._peak_decay_per_sec
+        if decay_rate < 0.0:
+            decay_rate = 0.0
+
+        if dt > 0.0 and decay_rate > 0.0:
+            decay = decay_rate * dt
+            max_len = len(clamped)
+            if len(peaks) < max_len:
+                peaks.extend([0.0] * (max_len - len(peaks)))
+            for i in range(max_len):
+                v = clamped[i]
+                p = peaks[i]
+                if v > p:
+                    # New higher bar value becomes the next peak.
+                    p = v
+                else:
+                    # Let the peak decay more slowly than the bar value so it
+                    # stays above for a while and forms a visible trail, but
+                    # bias the decay rate by the current peak/value gap so the
+                    # highest (oldest) ghost segments shrink a little faster
+                    # than the newer ones regardless of the global decay
+                    # setting.
+                    delta = p - v
+                    if delta <= 0.0:
+                        p = v
+                    else:
+                        # Scale the decay by a mild factor in [0.75, 1.5]
+                        # based on how tall the trail currently is. Long
+                        # trails (large delta) lose height a bit faster so
+                        # their topmost segments disappear sooner, while small
+                        # residual peaks decay more gently.
+                        try:
+                            gap_factor = 0.75 + min(1.0, float(delta)) * 0.75
+                        except Exception:
+                            gap_factor = 1.0
+                        p = max(v, p - decay * gap_factor)
+                if p < 0.0:
+                    p = 0.0
+                if p > 1.0:
+                    p = 1.0
+                peaks[i] = p
+        else:
+            for i, v in enumerate(clamped):
+                if i < len(peaks):
+                    if v > peaks[i]:
+                        peaks[i] = v
+                else:
+                    peaks.append(v)
+
+        self._peaks = peaks
 
         self._enabled = True
         self._bars = clamped
@@ -271,10 +395,12 @@ uniform float u_dpr;         // device pixel ratio of the backing FBO
 uniform int u_bar_count;
 uniform int u_segments;
 uniform float u_bars[64];
+uniform float u_peaks[64];
 uniform vec4 u_fill_color;
 uniform vec4 u_border_color;
 uniform float u_fade;
 uniform int u_playing;
+uniform float u_ghost_alpha;
 
 void main() {
     if (u_fade <= 0.0 || u_bar_count <= 0 || u_segments <= 0) {
@@ -352,11 +478,19 @@ void main() {
     }
 
     float value = u_bars[bar_index];
-    if (value <= 0.0) {
-        discard;
+    if (value < 0.0) {
+        value = 0.0;
     }
     if (value > 1.0) {
         value = 1.0;
+    }
+
+    float peak = u_peaks[bar_index];
+    if (peak < 0.0) {
+        peak = 0.0;
+    }
+    if (peak > 1.0) {
+        peak = 1.0;
     }
 
     float total_seg_gap = seg_gap * float(u_segments - 1);
@@ -391,11 +525,45 @@ void main() {
     }
     int active_segments = int(round(boosted * float(u_segments)));
     if (active_segments <= 0) {
-        if (u_playing != 0 && value > 0.0) {
-            active_segments = 1;
+        // Always keep at least one active segment so the visualiser has
+        // a visible baseline even when audio energy is near zero or the
+        // player is paused.
+        active_segments = 1;
+    }
+
+    // Determine whether this fragment belongs to the main bar body
+    // or to a trailing ghost segment derived from the decaying peak.
+    int peak_segments = active_segments;
+    bool is_ghost_frag = false;
+    if (peak > value) {
+        float delta = peak - value;
+        if (delta < 0.0) {
+            delta = 0.0;
+        }
+
+        // Map the peak/value difference into extra segments above the
+        // current active height. Even a modest drop produces at least one
+        // ghost segment when there is vertical room.
+        float boosted_delta = delta * 1.2;
+        if (boosted_delta > 1.0) {
+            boosted_delta = 1.0;
+        }
+        int extra_segments = int(ceil(boosted_delta * float(u_segments)));
+        if (extra_segments <= 0 && delta > 0.01 && active_segments < u_segments) {
+            extra_segments = 1;
+        }
+
+        peak_segments = active_segments + extra_segments;
+        if (peak_segments > u_segments) {
+            peak_segments = u_segments;
+        }
+        if (peak_segments > active_segments && seg_index >= active_segments && seg_index < peak_segments) {
+            is_ghost_frag = true;
         }
     }
-    if (active_segments <= 0 || seg_index >= active_segments) {
+
+    bool is_bar_frag = (active_segments > 0) && (seg_index < active_segments);
+    if (!is_bar_frag && !is_ghost_frag) {
         discard;
     }
 
@@ -410,11 +578,13 @@ void main() {
     float by = floor(seg_local_y);
 
     bool on_border = false;
-    if (bw_px <= 2.0 || sh_px <= 2.0) {
-        on_border = true;
-    } else {
-        if (bx <= 0.0 || bx >= bw_px - 1.0 || by <= 0.0 || by >= sh_px - 1.0) {
+    if (is_bar_frag) {
+        if (bw_px <= 2.0 || sh_px <= 2.0) {
             on_border = true;
+        } else {
+            if (bx <= 0.0 || bx >= bw_px - 1.0 || by <= 0.0 || by >= sh_px - 1.0) {
+                on_border = true;
+            }
         }
     }
 
@@ -422,7 +592,41 @@ void main() {
     vec4 border = u_border_color;
     fill.a *= u_fade;
     border.a *= u_fade;
-    fragColor = on_border ? border : fill;
+
+    if (is_ghost_frag) {
+        // Ghost bars use the bright border colour with an additional alpha
+        // falloff along the trail so newer ghost segments just above the
+        // live bar remain stronger while the oldest/highest segments fade
+        // out more quickly.
+        float ghost_alpha = clamp(u_ghost_alpha, 0.0, 1.0);
+        if (ghost_alpha <= 0.0) {
+            discard;
+        }
+
+        // Normalise the distance of this ghost segment above the active bar
+        // into [0, 1], where 0.0 sits directly above the bar and 1.0 is the
+        // top-most ghost segment.
+        float ghost_factor = 1.0;
+        if (peak_segments > active_segments) {
+            float ghost_idx = float(seg_index - active_segments);
+            float ghost_len = float(max(1, peak_segments - active_segments));
+            float t = 0.0;
+            if (ghost_len > 1.0) {
+                t = clamp(ghost_idx / (ghost_len - 1.0), 0.0, 1.0);
+            }
+            // Fade from full strength near the bar to a softer outline at
+            // the very top of the trail.
+            float start = 1.0;
+            float end = 0.25;
+            ghost_factor = mix(start, end, t);
+        }
+
+        vec4 ghost = border;
+        ghost.a *= ghost_alpha * ghost_factor;
+        fragColor = ghost;
+    } else {
+        fragColor = on_border ? border : fill;
+    }
 }
 """
 
@@ -487,10 +691,12 @@ void main() {
         self._u_bar_count = _gl.glGetUniformLocation(prog, "u_bar_count")
         self._u_segments = _gl.glGetUniformLocation(prog, "u_segments")
         self._u_bars = _gl.glGetUniformLocation(prog, "u_bars")
+        self._u_peaks = _gl.glGetUniformLocation(prog, "u_peaks")
         self._u_fill_color = _gl.glGetUniformLocation(prog, "u_fill_color")
         self._u_border_color = _gl.glGetUniformLocation(prog, "u_border_color")
         self._u_fade = _gl.glGetUniformLocation(prog, "u_fade")
         self._u_playing = _gl.glGetUniformLocation(prog, "u_playing")
+        self._u_ghost_alpha = _gl.glGetUniformLocation(prog, "u_ghost_alpha")
         self._u_dpr = _gl.glGetUniformLocation(prog, "u_dpr")
 
     def _render_with_shader(self, rect: QRect, fade: float) -> bool:
@@ -597,6 +803,18 @@ void main() {
                 buf = np.asarray(bars, dtype="float32")
                 _gl.glUniform1fv(self._u_bars, 64, buf)
 
+            peaks = list(self._peaks)
+            if len(peaks) < len(bars):
+                peaks = peaks + [0.0] * (len(bars) - len(peaks))
+            if len(peaks) < 64:
+                peaks = peaks + [0.0] * (64 - len(peaks))
+            else:
+                peaks = peaks[:64]
+
+            if self._u_peaks is not None:
+                buf_peaks = np.asarray(peaks, dtype="float32")
+                _gl.glUniform1fv(self._u_peaks, 64, buf_peaks)
+
             fill = QColor(self._fill_color)
             if self._u_fill_color is not None:
                 _gl.glUniform4f(
@@ -621,6 +839,17 @@ void main() {
 
             if self._u_playing is not None:
                 _gl.glUniform1i(self._u_playing, 1 if self._playing else 0)
+
+            if self._u_ghost_alpha is not None:
+                try:
+                    ga = float(self._ghost_alpha if self._ghosting_enabled else 0.0)
+                except Exception:
+                    ga = 0.0
+                if ga < 0.0:
+                    ga = 0.0
+                if ga > 1.0:
+                    ga = 1.0
+                _gl.glUniform1f(self._u_ghost_alpha, ga)
 
             _gl.glDrawArrays(_gl.GL_TRIANGLE_STRIP, 0, 4)
             _gl.glBindVertexArray(0)

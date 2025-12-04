@@ -1068,7 +1068,10 @@ class SpotifyVisualizerWidget(QWidget):
         # Bar styling
         self._bar_fill_color = QColor(200, 200, 200, 230)
         self._bar_border_color = QColor(255, 255, 255, 255)
-        self._bar_segments: int = 14
+        self._bar_segments: int = 16
+        self._ghosting_enabled: bool = True
+        self._ghost_alpha: float = 0.4
+        self._ghost_decay_rate: float = 0.4
 
         # Behavioural gating
         self._spotify_playing: bool = False
@@ -1145,12 +1148,13 @@ class SpotifyVisualizerWidget(QWidget):
 
         self._last_update_ts: float = 0.0
         self._last_smooth_ts: float = 0.0
+        self._has_pushed_first_frame: bool = False
         # Base paint FPS caps for the visualiser; slightly higher than
         # before now that compositor/GL transitions are cheaper, while
         # still low enough that the visualiser cannot dominate the UI
         # event loop.
         self._base_max_fps: float = 90.0
-        self._transition_max_fps: float = 60.0
+        self._transition_max_fps: float = 90.0
         self._last_gpu_fade_sent: float = -1.0
 
         # When GPU overlay rendering is available, we disable the
@@ -1282,6 +1286,39 @@ class SpotifyVisualizerWidget(QWidget):
         self._bar_border_color = QColor(border_color)
         self.update()
 
+    def set_ghost_config(self, enabled: bool, alpha: float, decay: float) -> None:
+        """Configure ghost trailing behaviour for the GPU bar overlay.
+
+        ``enabled`` toggles whether ghost bars are drawn at all. ``alpha``
+        controls their base opacity relative to the main bar border colour,
+        and ``decay`` feeds into the overlay's peak-envelope decay so that
+        higher values shorten the trail while lower values keep it visible
+        for longer.
+        """
+
+        try:
+            self._ghosting_enabled = bool(enabled)
+        except Exception:
+            self._ghosting_enabled = True
+
+        try:
+            ga = float(alpha)
+        except Exception:
+            ga = 0.4
+        if ga < 0.0:
+            ga = 0.0
+        if ga > 1.0:
+            ga = 1.0
+        self._ghost_alpha = ga
+
+        try:
+            gd = float(decay)
+        except Exception:
+            gd = 0.4
+        if gd < 0.0:
+            gd = 0.0
+        self._ghost_decay_rate = gd
+
     def set_anchor_media_widget(self, widget: QWidget) -> None:
         self._anchor_media = widget
 
@@ -1329,7 +1366,6 @@ class SpotifyVisualizerWidget(QWidget):
         if not self._spotify_playing:
             # Drive target bars to zero; smoothing path will fade them out.
             self._target_bars = [0.0] * self._bar_count
-            self._display_bars = [0.0] * self._bar_count
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -1366,10 +1402,10 @@ class SpotifyVisualizerWidget(QWidget):
             and self._bars_timer is None
         ):
             try:
-                # Slightly tighter tick cadence (~30ms) so bar updates track
-                # audio more closely while remaining below typical slideshow
-                # framerates.
-                self._bars_timer = self._thread_manager.schedule_recurring(30, self._on_tick)
+                # Tighter tick cadence (~16ms) so bar updates can track audio
+                # more closely and approach high-refresh display rates while
+                # still remaining well below the GL compositor's peak FPS.
+                self._bars_timer = self._thread_manager.schedule_recurring(16, self._on_tick)
             except Exception:
                 self._bars_timer = None
 
@@ -1735,10 +1771,10 @@ class SpotifyVisualizerWidget(QWidget):
                 else:
                     try:
                         # Make rises more responsive (shorter attack) while
-                        # keeping decay only slightly slower so a visible
-                        # trace remains without smearing the beat.
+                        # giving decay a much longer tail so motion leaves
+                        # a clearly visible trace at higher tick rates.
                         tau_rise = base_tau * 0.35
-                        tau_decay = base_tau * 1.0
+                        tau_decay = base_tau * 3.0
                         alpha_rise = 1.0 - math.exp(-dt_smooth / tau_rise)
                         alpha_decay = 1.0 - math.exp(-dt_smooth / tau_decay)
                     except Exception:
@@ -1755,9 +1791,19 @@ class SpotifyVisualizerWidget(QWidget):
                         tgt = 0.0
                     alpha = alpha_rise if tgt >= cur else alpha_decay
                     nxt = cur + (tgt - cur) * alpha
+                    # Snap extremely small residuals to zero so ghost
+                    # envelopes can fully collapse back to the 1-bar floor.
+                    if abs(nxt) < 1e-3:
+                        nxt = 0.0
                     if abs(nxt - cur) > 1e-3:
                         changed = True
                     self._display_bars[i] = nxt
+
+            # Always push at least one frame so the visualiser baseline is
+            # visible as soon as the widget fades in, even before audio
+            # arrives.
+            if not getattr(self, "_has_pushed_first_frame", False):
+                changed = True
 
             if changed:
                 max_fps = self._base_max_fps
@@ -1812,11 +1858,18 @@ class SpotifyVisualizerWidget(QWidget):
                                 border_color=self._bar_border_color,
                                 fade=fade,
                                 playing=self._spotify_playing,
+                                ghosting_enabled=getattr(self, "_ghosting_enabled", True),
+                                ghost_alpha=getattr(self, "_ghost_alpha", 0.4),
+                                ghost_decay=getattr(self, "_ghost_decay_rate", 0.4),
                             ))
                         except Exception:
                             used_gpu = False
 
                     if used_gpu:
+                        try:
+                            self._has_pushed_first_frame = True
+                        except Exception:
+                            pass
                         try:
                             self._cpu_bars_enabled = False
                         except Exception:
@@ -1843,6 +1896,10 @@ class SpotifyVisualizerWidget(QWidget):
                                 pass
                             try:
                                 self.update()
+                                try:
+                                    self._has_pushed_first_frame = True
+                                except Exception:
+                                    pass
                             except Exception:
                                 pass
 
