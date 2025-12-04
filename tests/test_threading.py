@@ -3,6 +3,8 @@ Tests for ThreadManager.
 """
 import pytest
 import time
+import threading
+from PySide6.QtCore import QThread
 from core.threading.manager import ThreadManager, ThreadPoolType, TaskResult
 
 
@@ -59,7 +61,7 @@ def test_submit_compute_task(qt_app):
     def callback(result: TaskResult):
         result_value.append(result)
     
-    task_id = manager.submit_task(
+    manager.submit_task(
         ThreadPoolType.COMPUTE,
         compute_task,
         5, 3,
@@ -104,3 +106,59 @@ def test_thread_manager_shutdown(qt_app):
     # Should not be able to submit after shutdown
     with pytest.raises(RuntimeError):
         manager.submit_task(ThreadPoolType.IO, lambda: None)
+
+
+def test_run_on_ui_thread_from_ui_thread(qt_app):
+    """run_on_ui_thread executes immediately when already on the UI thread.
+
+    This is important for callers that may be on the UI thread already (e.g.
+    DisplayWidget callbacks) and rely on synchronous behaviour.
+    """
+
+    called = []
+    thread_ids = []
+
+    def _fn():
+        called.append(True)
+        thread_ids.append(QThread.currentThread())
+
+    # In tests with qt_app, we are already running on the main Qt thread.
+    ThreadManager.run_on_ui_thread(_fn)
+
+    assert called == [True]
+    assert thread_ids[0] is qt_app.thread()
+
+
+def test_run_on_ui_thread_from_worker_thread(qt_app):
+    """run_on_ui_thread dispatches work back onto the UI thread from workers.
+
+    Future async ImageProcessor paths and other background tasks depend on this
+    to safely update Qt objects from ThreadManager IO/COMPUTE pools.
+    """
+
+    called = []
+    thread_ids = []
+
+    def _fn():
+        called.append(True)
+        thread_ids.append(QThread.currentThread())
+
+    def _worker():
+        # Simulate a background thread (could be IO/COMPUTE pool) calling into
+        # the UI dispatch helper.
+        ThreadManager.run_on_ui_thread(_fn)
+
+    t = threading.Thread(target=_worker)
+    t.start()
+
+    # Pump the Qt event loop until the callback runs or we timeout.
+    deadline = time.time() + 2.0
+    while not called and time.time() < deadline:
+        qt_app.processEvents()
+        time.sleep(0.01)
+
+    t.join(timeout=1.0)
+
+    assert called == [True]
+    # The callback must have executed on the main Qt thread, not the worker.
+    assert thread_ids[0] is qt_app.thread()

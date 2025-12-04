@@ -21,7 +21,7 @@ from PySide6.QtWidgets import QWidget
 from core.logging.logger import get_logger, is_verbose_logging
 from core.media.spotify_volume import SpotifyVolumeController
 from core.threading.manager import ThreadManager
-from widgets.shadow_utils import apply_widget_shadow
+from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
 
 logger = get_logger(__name__)
 
@@ -48,6 +48,7 @@ class SpotifyVolumeWidget(QWidget):
         self._dragging: bool = False
         self._pending_volume: Optional[float] = None
         self._flush_timer: Optional[QTimer] = None
+        self._has_faded_in: bool = False
 
         # Geometry constants (logical pixels)
         self._track_margin: int = 6
@@ -87,6 +88,15 @@ class SpotifyVolumeWidget(QWidget):
         self._track_bg_color = QColor(track_bg)
         self._track_border_color = QColor(track_border)
         self._fill_color = QColor(fill)
+
+        # Enforce 100% opacity for the border and ~70% opacity for the fill,
+        # regardless of the incoming colours.
+        try:
+            self._track_border_color.setAlpha(255)
+            fill_alpha = int(0.7 * 255)
+            self._fill_color.setAlpha(fill_alpha)
+        except Exception:
+            pass
         try:
             self.update()
         except Exception:
@@ -113,13 +123,17 @@ class SpotifyVolumeWidget(QWidget):
             return
         self._enabled = True
 
+        try:
+            self.hide()
+        except Exception:
+            pass
+
         if not self._controller.is_available():
             if is_verbose_logging():
                 logger.info("[SPOTIFY_VOL] Controller unavailable; widget will remain hidden")
             return
 
         self._ensure_flush_timer()
-        self.show()
 
         if self._thread_manager is None:
             try:
@@ -128,6 +142,7 @@ class SpotifyVolumeWidget(QWidget):
                 current = None
             if isinstance(current, float):
                 self._apply_volume(current)
+            self._start_widget_fade_in(1500)
             return
 
         def _do_read() -> Optional[float]:
@@ -150,6 +165,9 @@ class SpotifyVolumeWidget(QWidget):
             self._thread_manager.submit_io_task(_do_read, callback=_on_result)
         except Exception:
             logger.debug("[SPOTIFY_VOL] Failed to schedule initial volume read", exc_info=True)
+        # Start fade-in once the initial read has been scheduled; the callback
+        # will update the visual level as soon as it completes.
+        self._start_widget_fade_in(1500)
 
     def stop(self) -> None:
         if not self._enabled:
@@ -200,7 +218,9 @@ class SpotifyVolumeWidget(QWidget):
             return False
 
         step = 0.05
-        direction = -1 if delta_y > 0 else 1
+        # Scroll up (delta_y > 0) should increase volume; scroll down should
+        # decrease it.
+        direction = 1 if delta_y > 0 else -1
         new_level = self._volume + (step * direction)
         self._apply_volume(new_level)
         self._schedule_set_volume(new_level)
@@ -333,3 +353,50 @@ class SpotifyVolumeWidget(QWidget):
             self._thread_manager.submit_io_task(_do_set, clamped)
         except Exception:
             logger.debug("[SPOTIFY_VOL] Failed to submit set_volume task", exc_info=True)
+
+    def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:
+        """Fade the widget in using the shared ShadowFadeProfile.
+
+        This mirrors the behaviour of other overlay widgets (media, weather,
+        clocks, Reddit, Spotify visualiser) so the volume slider participates in
+        the same two-stage card/shadow fade.
+        """
+
+        if self._has_faded_in and duration_ms <= 0:
+            try:
+                self.show()
+            except Exception:
+                pass
+            return
+
+        if duration_ms <= 0:
+            try:
+                self.show()
+            except Exception:
+                pass
+            if self._shadow_config is not None:
+                try:
+                    apply_widget_shadow(self, self._shadow_config, has_background_frame=False)
+                except Exception:
+                    logger.debug("[SPOTIFY_VOL] Failed to attach shadow in no-fade path", exc_info=True)
+            self._has_faded_in = True
+            return
+
+        try:
+            ShadowFadeProfile.start_fade_in(
+                self,
+                self._shadow_config,
+                has_background_frame=False,
+            )
+            self._has_faded_in = True
+        except Exception:
+            logger.debug("[SPOTIFY_VOL] _start_widget_fade_in fallback path triggered", exc_info=True)
+            try:
+                self.show()
+            except Exception:
+                pass
+            if self._shadow_config is not None:
+                try:
+                    apply_widget_shadow(self, self._shadow_config, has_background_frame=False)
+                except Exception:
+                    logger.debug("[SPOTIFY_VOL] Failed to apply widget shadow in fallback path", exc_info=True)

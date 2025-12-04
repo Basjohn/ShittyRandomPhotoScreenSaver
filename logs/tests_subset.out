@@ -1,0 +1,55 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+cachedir: .pytest_cache
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+configfile: pytest.ini
+plugins: qt-4.5.0
+collecting ... collected 44 items
+
+tests/test_image_processor.py::test_fill_mode_wider_image PASSED         [  2%]
+tests/test_image_processor.py::test_fill_mode_taller_image PASSED        [  4%]
+tests/test_image_processor.py::test_fill_mode_small_image PASSED         [  6%]
+tests/test_image_processor.py::test_fit_mode_landscape PASSED            [  9%]
+tests/test_image_processor.py::test_fit_mode_portrait PASSED             [ 11%]
+tests/test_image_processor.py::test_shrink_mode_large_image PASSED       [ 13%]
+tests/test_image_processor.py::test_shrink_mode_small_image PASSED       [ 15%]
+tests/test_image_processor.py::test_null_image_fallback PASSED           [ 18%]
+tests/test_image_processor.py::test_square_image_fill PASSED             [ 20%]
+tests/test_image_processor.py::test_aspect_ratio_preservation_fit PASSED [ 22%]
+tests/test_image_processor.py::test_calculate_scale_factors_fill PASSED  [ 25%]
+tests/test_image_processor.py::test_calculate_scale_factors_fit PASSED   [ 27%]
+tests/test_image_processor.py::test_calculate_scale_factors_shrink_no_scaling PASSED [ 29%]
+tests/test_image_processor.py::test_calculate_scale_factors_shrink_with_scaling PASSED [ 31%]
+tests/test_image_processor.py::test_get_crop_rect PASSED                 [ 34%]
+tests/test_image_processor.py::test_display_mode_from_string PASSED      [ 36%]
+tests/test_image_processor.py::test_display_mode_from_string_invalid PASSED [ 38%]
+tests/test_image_processor.py::test_display_mode_str PASSED              [ 40%]
+tests/test_image_processor.py::test_qimage_sync_matches_pixmap[fill] PASSED [ 43%]
+tests/test_image_processor.py::test_qimage_sync_matches_pixmap[fit] PASSED [ 45%]
+tests/test_image_processor.py::test_qimage_sync_matches_pixmap[shrink] PASSED [ 47%]
+tests/test_image_processor.py::test_qimage_async_matches_sync[fill] PASSED [ 50%]
+tests/test_image_processor.py::test_qimage_async_matches_sync[fit] PASSED [ 52%]
+tests/test_image_processor.py::test_qimage_async_matches_sync[shrink] PASSED [ 54%]
+tests/test_lanczos_scaling.py::TestLanczosScaling::test_lanczos_downscaling PASSED [ 56%]
+tests/test_lanczos_scaling.py::TestLanczosScaling::test_bug10_no_image_tripling PASSED [ 59%]
+tests/test_lanczos_scaling.py::TestLanczosScaling::test_lanczos_with_alpha_channel PASSED [ 61%]
+tests/test_lanczos_scaling.py::TestLanczosScaling::test_lanczos_with_sharpening PASSED [ 63%]
+tests/test_lanczos_scaling.py::TestLanczosScaling::test_fallback_when_lanczos_disabled PASSED [ 65%]
+tests/test_lanczos_scaling.py::TestLanczosScaling::test_fallback_when_pil_unavailable SKIPPED [ 68%]
+tests/test_lanczos_scaling.py::TestLanczosScaling::test_lanczos_fill_mode PASSED [ 70%]
+tests/test_lanczos_scaling.py::TestLanczosScaling::test_lanczos_fit_mode PASSED [ 72%]
+tests/test_lanczos_scaling.py::TestLanczosScaling::test_lanczos_shrink_mode_downscale PASSED [ 75%]
+tests/test_lanczos_scaling.py::TestLanczosScaling::test_lanczos_shrink_mode_no_upscale PASSED [ 77%]
+tests/test_lanczos_scaling.py::TestLanczosScaling::test_lanczos_aspect_ratio_preserved PASSED [ 79%]
+tests/test_lanczos_scaling.py::TestLanczosScaling::test_null_image_handling PASSED [ 81%]
+tests/test_lanczos_scaling.py::TestLanczosScaling::test_aggressive_downscale PASSED [ 84%]
+tests/test_threading.py::test_thread_manager_initialization PASSED       [ 86%]
+tests/test_threading.py::test_submit_io_task PASSED                      [ 88%]
+tests/test_threading.py::test_submit_compute_task PASSED                 [ 90%]
+tests/test_threading.py::test_get_pool_stats PASSED                      [ 93%]
+tests/test_threading.py::test_thread_manager_shutdown PASSED             [ 95%]
+tests/test_threading.py::test_run_on_ui_thread_from_ui_thread PASSED     [ 97%]
+tests/test_threading.py::test_run_on_ui_thread_from_worker_thread PASSED [100%]
+
+======================== 43 passed, 1 skipped in 1.50s ========================

@@ -49,6 +49,24 @@ A modern, feature-rich Windows screensaver built with PySide6 that displays phot
 
 GL Path: The only supported GL route uses a single `GLCompositorWidget` per display (Route 3) that executes Crossfade/Slide/Wipe/Diffuse/BlockFlip/Blinds via a compositor API. Legacy per-transition GL overlays (QOpenGLWidget + QPainter) are quarantined for reference/tests only and are not used by the current engine. Overlays/compositor expose readiness flags (e.g. `is_ready_for_display()`) to gate base paints before they present.
 
+##### 3.1.1 Transition implementation matrix (v1.2)
+
+The table below summarises, for each transition, whether there is a CPU implementation, a compositor/QPainter path on `GLCompositorWidget`, and a dedicated GLSL shader path. Shader-backed transitions always retain CPU/compositor fallbacks.
+
+| Transition         | CPU fallback | Compositor (QPainter) | GLSL shader path            | Notes |
+|--------------------|-------------|------------------------|-----------------------------|-------|
+| Crossfade          | Yes         | Yes                    | Yes (fullscreen quad)       | Port complete; correctness validated; remaining work is perf tuning only. |
+| Slide              | Yes         | Yes                    | Yes (fullscreen quad)       | Port complete; per-transition perf tuning (dt_max spikes on some sizes) remains open. |
+| Wipe               | Yes         | Yes                    | Yes (mask shader)           | GLSL Wipe path implemented and correctness-validated; perf/QA tasks still tracked in the roadmap. |
+| Diffuse            | Yes         | Yes                    | Yes (Rectangle/Membrane)    | GLSL Diffuse implemented for Rectangle/Membrane; CPU Diffuse is the authoritative fallback. |
+| Block Puzzle Flip  | Yes         | Yes                    | **Planned**                 | Currently compositor-only; GLSL port scheduled as future work (Group A) rather than v1.2 baseline. |
+| Blinds             | No CPU-only | Yes (`GLBlindsTransition`) | **Planned**             | GL-only compositor effect; GLSL port planned alongside Block Puzzle Flip / Peel. |
+| Peel               | No CPU-only | Yes (`GLCompositorPeelTransition`) | **Planned**      | Strip-based compositor transition; GLSL variant pending. |
+| 3D Block Spins     | N/A         | Yes                    | Yes (card-flip shader)      | Implemented via shared card-flip shader in the compositor pipeline. |
+| Ripple / Rain Drops| Yes         | Yes (fallback path)    | Yes (ripple shader)         | Primary path is GLSL; roadmap tracks remaining dt_max smoothing on 4K / multi-monitor setups. |
+| Warp Dissolve      | Yes         | Yes (fallback path)    | Yes (vortex shader)         | Shader path tuned; CPU/compositor fallbacks retained. |
+| Shuffle            | Yes         | Retired                | Retired                     | Legacy GLSL Shuffle and its compositor wiring are removed from random/switch pools for v1.2. |
+
 #### 4. Multi-Monitor Support
 - **FR-4.1**: Detect all connected monitors
 - **FR-4.2**: Same image mode - synchronized display across all monitors

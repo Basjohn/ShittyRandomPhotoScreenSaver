@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt, QSize, QRect
 from PySide6.QtGui import QPixmap, QPainter, QImage
 from rendering.display_modes import DisplayMode
 from core.logging.logger import get_logger
+from rendering.image_processor_async import AsyncImageProcessor
 
 logger = get_logger(__name__)
 
@@ -31,32 +32,26 @@ class ImageProcessor:
                      mode: DisplayMode = DisplayMode.FILL,
                      use_lanczos: bool = False,
                      sharpen: bool = False) -> QPixmap:
+        """Process image for display.
+
+        This is now a thin wrapper around the QImage-first implementation in
+        ``AsyncImageProcessor`` so the crop/scale logic is shared between
+        sync/async paths. All heavy work happens on ``QImage``; this wrapper
+        simply converts to/from ``QPixmap`` for existing callers.
         """
-        Process image for display.
-        
-        Args:
-            image: Source image (QPixmap)
-            screen_size: Target screen size
-            mode: Display mode (FILL, FIT, or SHRINK)
-            use_lanczos: Use PIL Lanczos resampling for better quality (default: False)
-            sharpen: Apply sharpening filter after downscaling (default: False)
-        
-        Returns:
-            Processed QPixmap ready for display
-        """
+
         if image.isNull():
-            logger.warning("[FALLBACK] Image is null, returning empty pixmap")
-            return QPixmap(screen_size)
-        
-        if mode == DisplayMode.FILL:
-            return ImageProcessor._process_fill(image, screen_size, use_lanczos, sharpen)
-        elif mode == DisplayMode.FIT:
-            return ImageProcessor._process_fit(image, screen_size, use_lanczos, sharpen)
-        elif mode == DisplayMode.SHRINK:
-            return ImageProcessor._process_shrink(image, screen_size, use_lanczos, sharpen)
-        else:
-            logger.error(f"Unknown display mode: {mode}, defaulting to FILL")
-            return ImageProcessor._process_fill(image, screen_size, use_lanczos, sharpen)
+            logger.warning("[FALLBACK] Image is null, delegating to QImage path")
+
+        qimage = image.toImage()
+        processed_qimage = AsyncImageProcessor.process_qimage(
+            qimage,
+            screen_size,
+            mode,
+            use_lanczos,
+            sharpen,
+        )
+        return QPixmap.fromImage(processed_qimage)
     
     @staticmethod
     def _scale_pixmap(pixmap: QPixmap, width: int, height: int, use_lanczos: bool = False, sharpen: bool = False) -> QPixmap:

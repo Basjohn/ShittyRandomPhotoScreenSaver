@@ -1,13 +1,14 @@
 """Tests for image processor."""
 import pytest
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QPixmap, QImage, QPainter
+from PySide6.QtGui import QPixmap, QImage
 from rendering.image_processor import ImageProcessor
 from rendering.display_modes import DisplayMode
+from rendering.image_processor_async import AsyncImageProcessor
 
 
 @pytest.fixture
-def create_test_image():
+def create_test_image(qt_app):
     """Factory for creating test images of various sizes."""
     def _create(width: int, height: int, color=Qt.GlobalColor.red) -> QPixmap:
         """Create a solid color test image."""
@@ -251,3 +252,75 @@ def test_display_mode_str():
     assert str(DisplayMode.FILL) == 'fill'
     assert str(DisplayMode.FIT) == 'fit'
     assert str(DisplayMode.SHRINK) == 'shrink'
+
+
+@pytest.mark.parametrize("mode", [DisplayMode.FILL, DisplayMode.FIT, DisplayMode.SHRINK])
+def test_qimage_sync_matches_pixmap(create_test_image, mode):
+    pixmap = create_test_image(1600, 900)
+    qimage = pixmap.toImage()
+    screen_size = QSize(1920, 1080)
+
+    pix_result = ImageProcessor.process_image(pixmap, screen_size, mode)
+    qi_result = AsyncImageProcessor.process_qimage(qimage, screen_size, mode)
+
+    assert qi_result.width() == pix_result.width()
+    assert qi_result.height() == pix_result.height()
+    assert _to_argb32_bytes(qi_result) == _to_argb32_bytes(pix_result)
+
+
+@pytest.mark.parametrize("mode", [DisplayMode.FILL, DisplayMode.FIT, DisplayMode.SHRINK])
+def test_qimage_async_matches_sync(create_test_image, thread_manager, mode):
+    """Async QImage path should match the sync QImage helper pixel-for-pixel.
+
+    We use a callback + polling rather than get_task_result so the test does
+    not depend on ThreadManager's internal _active_tasks bookkeeping.
+    """
+
+    from core.threading.manager import TaskResult  # local import for tests
+    import time
+
+    pixmap = create_test_image(1600, 900)
+    qimage = pixmap.toImage()
+    screen_size = QSize(1920, 1080)
+
+    sync_img = AsyncImageProcessor.process_qimage(qimage, screen_size, mode)
+
+    results: list[TaskResult] = []
+
+    def _on_done(res: TaskResult) -> None:
+        results.append(res)
+
+    AsyncImageProcessor.process_qimage_async(
+        thread_manager,
+        qimage,
+        screen_size,
+        mode,
+        callback=_on_done,
+    )
+
+    deadline = time.time() + 2.0
+    while not results and time.time() < deadline:
+        time.sleep(0.01)
+
+    assert results, "Async QImage task did not complete in time"
+    task_result = results[0]
+    assert task_result.success
+    async_img = task_result.result
+    assert isinstance(async_img, QImage)
+
+    assert async_img.width() == sync_img.width()
+    assert async_img.height() == sync_img.height()
+    assert _to_argb32_bytes(async_img) == _to_argb32_bytes(sync_img)
+
+
+def _to_argb32_bytes(value) -> bytes:
+    if isinstance(value, QPixmap):
+        image = value.toImage()
+    else:
+        image = QImage(value)
+    image = image.convertToFormat(QImage.Format.Format_ARGB32)
+    ptr = image.constBits()
+    if hasattr(ptr, "setsize"):
+        ptr.setsize(image.sizeInBytes())
+        return bytes(ptr)
+    return ptr.tobytes()

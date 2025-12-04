@@ -1984,3 +1984,26 @@
 2025-12-04 04:58:02,098 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_pan_scan_integration.py', '-q']
 2025-12-04 04:58:03,318 - pytest_runner - INFO - pytest finished with exit code 0
 2025-12-04 05:00:39,557 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_settings.py', 'tests/test_settings_dialog.py', 'tests/test_widgets_media_integration.py', 'tests/test_media_widget.py', '-q']
+2025-12-04 13:40:12,376 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_threading.py', '-vv']
+2025-12-04 13:40:13,253 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-04 14:07:42,954 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_image_processor.py', 'tests/test_lanczos_scaling.py', 'tests/test_threading.py', '-vv']
+2025-12-04 14:12:59,223 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_image_processor.py', 'tests/test_lanczos_scaling.py', 'tests/test_threading.py', '-vv']
+2025-12-04 14:15:30,170 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_image_processor.py', '-vv']
+2025-12-04 14:16:29,614 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_image_processor.py::test_fill_mode_wider_image', '-vv']
+2025-12-04 14:23:30,549 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_image_processor.py', '-vv']
+2025-12-04 14:24:02,840 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_image_processor.py', '-vv']
+2025-12-04 14:24:03,374 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-04 14:24:38,171 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_image_processor.py', 'tests/test_lanczos_scaling.py', 'tests/test_threading.py', '-vv']
+2025-12-04 14:24:39,754 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-04 14:41:30,627 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_image_processor.py', 'tests/test_lanczos_scaling.py', 'tests/test_threading.py', '-vv']
+2025-12-04 14:41:32,593 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-04 14:44:04,104 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_image_processor.py', 'tests/test_lanczos_scaling.py', 'tests/test_threading.py', '-vv']
+2025-12-04 14:44:06,255 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-04 14:53:38,458 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_image_processor.py', 'tests/test_lanczos_scaling.py', 'tests/test_threading.py', '-vv']
+2025-12-04 14:53:40,144 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-04 14:58:38,094 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_image_processor.py', 'tests/test_lanczos_scaling.py', 'tests/test_threading.py', '-vv']
+2025-12-04 14:58:40,490 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-04 15:10:01,125 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_image_processor.py', 'tests/test_lanczos_scaling.py', 'tests/test_threading.py', '-vv']
+2025-12-04 15:10:02,925 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-04 15:14:26,960 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_image_processor.py', 'tests/test_lanczos_scaling.py', 'tests/test_threading.py', '-vv']
+2025-12-04 15:14:28,631 - pytest_runner - INFO - pytest finished with exit code 0

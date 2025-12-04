@@ -71,12 +71,31 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
 - GL overlays remain persistent and pre-warmed via `overlay_manager.prepare_gl_overlay` / `DisplayWidget._prewarm_gl_contexts` to avoid first-use flicker on legacy GL paths; compositor-backed transitions reuse the same per-display compositor widget and never create additional GL surfaces.
 - Diffuse shapes: `Rectangle`, `Membrane`. Block size is clamped (min 4px) and shared between CPU and GL paths and enforced by the Transitions tab UI. The CPU fallback always performs a block-based dissolve; the Membrane shape is implemented only in the GLSL compositor path.
 - Durations: a global `transitions.duration_ms` provides the baseline duration for all transition types, while `transitions.durations["<Type>"]` (e.g. `"Slide"`, `"Wipe"`, `"Diffuse"`, `"Block Puzzle Flip"`, `"Blinds"`, `"Peel"`, `"3D Block Spins"`, `"Rain Drops"`, `"Warp Dissolve"`) stores optional per-type overrides. The Transitions tab slider is bound to the active type and persists its value into `durations` while keeping `duration_ms` up to date for legacy consumers. Legacy settings for "Shuffle" are mapped to Crossfade for back-compat.
+
+### Transition implementation matrix (v1.2 status)
+
+The table below clarifies which transitions currently have CPU, compositor (QPainter/geometry on the GLCompositor) and GLSL shader implementations. All shader-backed paths retain CPU/compositor fallbacks.
+
+| Transition         | CPU fallback | Compositor (QPainter) | GLSL shader path            | Notes |
+|--------------------|-------------|------------------------|-----------------------------|-------|
+| Crossfade          | Yes         | Yes                    | Yes (fullscreen quad)       | Port complete; perf tuning tracked via `[PERF] [GL COMPOSITOR] Crossfade` metrics. |
+| Slide              | Yes         | Yes                    | Yes (fullscreen quad)       | Port complete; per-transition perf tuning (dt_max spikes on some sizes) still open. |
+| Wipe               | Yes         | Yes                    | Yes (mask shader)           | GLSL Wipe path implemented; remaining work is primarily perf/QA and parity checks. |
+| Diffuse            | Yes         | Yes                    | Yes (Rectangle/Membrane)    | GLSL Diffuse implemented for Rectangle/Membrane; CPU Diffuse remains the authoritative fallback. |
+| Block Puzzle Flip  | Yes         | Yes                    | **Planned** (no GLSL yet)   | Still compositor-based; GLSL port is a future v1.2+ task. |
+| Blinds             | No CPU-only | Yes (`GLBlindsTransition`) | **Planned** (no GLSL yet) | GL-only compositor path; shader-backed variant still to be introduced. |
+| Peel               | No CPU-only | Yes (`GLCompositorPeelTransition`) | **Planned** (no GLSL yet) | Strip-based compositor effect; GLSL variant still pending. |
+| 3D Block Spins     | N/A         | Yes                    | Yes (card-flip shader)      | Implemented via shared card-flip shader; legacy grid Block Puzzle settings removed. |
+| Ripple / Rain Drops| Yes         | Yes (fallback path)    | Yes (ripple shader)         | Primary path is GLSL ripple; remaining work focuses on dt_max smoothing on 4K/multi-monitor. |
+| Warp Dissolve      | Yes         | Yes (fallback path)    | Yes (vortex shader)         | Shader path tuned; further adjustments are perf/visual polish only. |
+| Shuffle            | Yes         | Retired                | Retired                     | Legacy Shuffle is fully removed from random/switch pools; any future Shuffle would be a new GLSL design. |
+
 - Per-transition pool membership:
   - `transitions.pool` is a map of transition type name → bool controlling whether a type participates in engine random rotation and C-key cycling (explicit selection is always allowed regardless of this flag).
 - GL-only gating:
   - GL-only types (Blinds, Peel, 3D Block Spins, Ripple, Warp Dissolve) are only instantiated on the compositor/GL paths when `display.hw_accel=True` and the compositor is available.
   - When hardware acceleration is disabled, the Transitions tab disables these types and the engine maps any request for them to a safe CPU fallback (currently Crossfade).
-  - Shader-backed variants (Group A, e.g. GLSL Block Spins and future Rain Drops / Warp ports) run on top of the compositor. On any shader initialisation or runtime failure, the engine disables shader usage for the remainder of the session and demotes all subsequent shader-backed requests to the existing QPainter compositor transitions (Group B). Only when the compositor or GL backend is unavailable for the session does the engine fall back to pure software transitions (Group C). Per-transition "try GLSL and silently fall back" paths are avoided; group demotion is explicit and session-scoped.
+  - Shader-backed variants (Group A) run on top of the compositor. On any shader initialisation or runtime failure, the engine disables shader usage for the remainder of the session and demotes all subsequent shader-backed requests to the existing QPainter compositor transitions (Group B). Only when the compositor or GL backend is unavailable for the session does the engine fall back to pure software transitions (Group C). Per-transition "try GLSL and silently fall back" paths are avoided; group demotion is explicit and session-scoped.
 - Non-repeating random selection:
   - Engine sets `transitions.random_choice` per rotation, filtered through `transitions.pool` and GL-only gating.
   - Slide: cardinal-only directions; stored as `transitions.slide.direction` and last as `transitions.slide.last_direction` (legacy fallback maintained).
@@ -92,12 +111,27 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
   - `ImagePrefetcher` decodes upcoming images into `QImage` on IO threads and stores them in `ImageCache`.
   - A COMPUTE-pool prescale step uses `ThreadManager.submit_compute_task` to scale the first upcoming image to distinct display sizes and caches them under `"path|scaled:WxH"` keys as `QImage`.
   - When displaying, `ScreensaverEngine._load_image_task` prefers these prescaled entries and promotes them to `QPixmap` on the UI thread, writing the pixmaps back into `ImageCache` so subsequent loads avoid repeated conversions.
+- Image processing pipeline (v1.2 and beyond):  
+  - Fully wire prefetch + prescale so large 4K–8K images are decoded on IO threads and pre-scaled for distinct display sizes using COMPUTE threads, caching under "path|scaled:WxH" keys in `ImageCache` while keeping QPixmap creation on the UI thread.  
+  - Design an optional further-async `ImageProcessor` path that can move safe crop/composite steps to COMPUTE threads while preserving current quality and semantics.  
+    - Operate on `QImage` frames sourced from `ImageCache` (including prescaled `"path|scaled:WxH"` entries) on the COMPUTE pool; avoid `QPixmap` work off the GUI thread.
+    - Promote the final cropped/composited `QImage` to `QPixmap` (or GL textures) **once per image per display** on the UI thread only, then reuse that pixmap/texture across transitions.
+    - Add tests that compare this async QImage-based crop/composite output against `ImageProcessor.process_image(...)` pixel-for-pixel for representative modes (FILL/FIT/SHRINK) and resolutions (1080p/4K) to lock in visual equivalence.
+  - Keep DPR-aware sizing and pixmap seeding in [DisplayWidget](cci:2://file:///f:/Programming/Apps/ShittyRandomPhotoScreenSaver/rendering/display_widget.py:100:0-4382:16) so base frames are always ready before transitions start.
 -- Profiling keys:
   - `GL_SLIDE_PREPAINT`
   - `GL_WIPE_PREPAINT`
   - `GL_WIPE_REPAINT_FRAME`
   - `[PERF] [GL COMPOSITOR] <Name> metrics` summary lines for **all** compositor-driven transitions (Slide, Wipe, Block Puzzle Flip, Ripple/Raindrops, Warp Dissolve, Block Spins, legacy GLSL Claws when enabled). Each line reports `duration`, `frames`, `avg_fps`, `dt_min`, `dt_max`, and compositor `size` and is emitted once per transition completion by `GLCompositorWidget` when PERF metrics are enabled.
-  - A central `PERF_METRICS_ENABLED` flag, exposed via `core.logging.logger.is_perf_metrics_enabled()`, gates all high-volume PERF math and logging so production/retail GUI builds can disable telemetry cost entirely while preserving behaviour when enabled.
+ - Telemetry counters record transition type requested vs. instantiated, cache hits/misses, and transition skips while in progress.
+ - Animation timing for **all** transitions (CPU and GL/compositor) is centralised through per-display `AnimationManager` instances driven by a `PreciseTimer`-backed loop; transitions use `[PERF] [ANIM]` metrics (duration, frames, avg_fps, dt_min/max, fps_target) as the canonical timing signal rather than ad-hoc timers.
+ - Background work (IO/COMPUTE) is routed through the central `ThreadManager` pools wherever possible; any remaining direct `QThread`/`QTimer` usages outside `core.threading.manager` are explicitly logged fallbacks (e.g. widget-level weather fetch when ThreadManager is unavailable) rather than parallel primary paths.
+ - Console debug output uses a suppressing stream handler that groups consecutive INFO/DEBUG lines from the same logger into `[N Suppressed: CHECK LOG...]` summaries while leaving file logs untouched. The high-visibility `Initializing Screensaver Engine 🚦🚦🚦🚦🚦` banner is exempt from grouping so it always appears once per run, and when multiple `[PERF]` lines with `avg_fps=...` are collapsed, the summary includes the trailing `avg_fps` token to keep grouped telemetry readable in the console.
+ - A central PERF switch is configured in `core.logging.logger`: `PERF_METRICS_ENABLED` defaults to true for development, can be overridden by the `SRPSS_PERF_METRICS` environment variable (`0/false/off/no` vs `1/true/on/yes`), and, in frozen builds, is finalised at startup by a small `<exe-stem>.perf.cfg` file written next to the executable by the build scripts (`scripts/build_nuitka*.ps1`). GUI/retail builds typically write `0` to disable PERF metrics, while console/debug builds write `1` to keep full telemetry enabled.
+ - Optional CPU profiling for both RUN and CONFIG modes is gated by the `SRPSS_PROFILE_CPU` environment variable. When enabled, `main.py` wraps the selected entrypoint (`run_screensaver` or `run_config`) in a `cProfile.Profile` run and writes `.pstats` snapshots into the active log directory returned by `core.logging.logger.get_log_dir()`, so developers can inspect hotspots and feed them back into the roadmap.
+ - When PERF metrics are enabled, `GLCompositorWidget` can optionally draw a small on-screen FPS/debug overlay on top of compositor frames (e.g. Slide/Wipe) to visualise real frame pacing during development. This overlay is disabled implicitly when PERF metrics are turned off so retail builds incur no additional HUD cost.
+ - On `initializeGL`, `GLCompositorWidget` logs the OpenGL adapter vendor/renderer/version and disables the shader pipeline for the session when a clearly software GL implementation is detected (for example, GDI Generic, Microsoft Basic Render Driver, llvmpipe). In this case, compositor QPainter-based transitions and CPU fallbacks remain active, but shader-backed paths are not used on that stack.
+ - If spikes persist, further expand compute-pool pre-scale-to-screen (including DPR-specific variants) as a future enhancement.
 - When PERF metrics are enabled, `GLCompositorWidget` can optionally draw a small on-screen FPS/debug overlay on top of whichever compositor-driven transition is active (Slide, Wipe, Blinds, Peel, BlockFlip, Diffuse, Block Spins, Ripple/Raindrops, Warp Dissolve) to visualise real frame pacing during development. This overlay is disabled implicitly when PERF metrics are turned off so retail builds incur no additional HUD cost.
 - On `initializeGL`, `GLCompositorWidget` logs the OpenGL adapter vendor/renderer/version and disables the shader pipeline for the session when a clearly software GL implementation is detected (for example, GDI Generic, Microsoft Basic Render Driver, llvmpipe). In this case, compositor QPainter-based transitions and CPU fallbacks remain active, but shader-backed paths are not used on that stack.
 - If spikes persist, further expand compute-pool pre-scale-to-screen (including DPR-specific variants) as a future enhancement.
@@ -155,9 +189,9 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
 - Import is merge‑by‑default: values from the snapshot overwrite the current profile where they overlap, but keys that do not exist in the snapshot are preserved. A full restore is therefore "Reset To Defaults" followed by "Import Settings…".
 
 ## Thread Safety & Centralization
-- All business logic threading via `ThreadManager`.
-- UI updates only on main thread (`run_on_ui_thread`).
-- Simple locks (Lock/RLock) guard mutable state; no raw QThread.
+- All business logic threading goes via `ThreadManager` where available.
+- UI updates only on the main thread (`run_on_ui_thread`).
+- Simple locks (Lock/RLock) guard mutable state; no raw QThread in the engine. The only remaining QThread usage is WeatherWidget's fetcher fallback when no `ThreadManager` has been injected into the widget tree.
 - Qt objects registered with `ResourceManager` where appropriate.
 
 ## OpenGL Overlay Lifecycle

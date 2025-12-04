@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Tuple
 from PySide6.QtCore import QObject, Signal, QTimer
 from PySide6.QtWidgets import QApplication
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QPixmap, QImage
 
 from core.events import EventSystem, EventType
 from core.resources import ResourceManager
@@ -30,6 +30,7 @@ from sources.folder_source import FolderSource
 from sources.rss_source import RSSSource
 from sources.base_provider import ImageMetadata, ImageSourceType
 from rendering.display_modes import DisplayMode
+from rendering.image_processor_async import AsyncImageProcessor
 from ui.settings_dialog import SettingsDialog
 from utils.image_cache import ImageCache
 from utils.image_prefetcher import ImagePrefetcher
@@ -721,10 +722,17 @@ class ScreensaverEngine(QObject):
                                 """
                                 try:
                                     from PySide6.QtGui import QImage
-                                    from PySide6.QtCore import Qt
                                     base = self._image_cache.get(src_path)
                                     if isinstance(base, QImage) and not base.isNull():
-                                        scaled = base.scaled(width, height, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                                        # Use the shared QImage-based scaler so behaviour matches
+                                        # the AsyncImageProcessor helper (Lanczos disabled here).
+                                        scaled = AsyncImageProcessor._scale_image(
+                                            base,
+                                            width,
+                                            height,
+                                            use_lanczos=False,
+                                            sharpen=False,
+                                        )
                                         if not scaled.isNull():
                                             self._image_cache.put(cache_key, scaled)
                                 except Exception as e:
@@ -1145,9 +1153,9 @@ class ScreensaverEngine(QObject):
                 return None
             
             # Use cache if available (QImage decoded on IO thread)
+            pixmap: Optional[QPixmap] = None
             if self._prefetcher and self._image_cache:
                 # Prefer a pre-scaled variant for this display if present
-                scaled_pm: Optional[QPixmap] = None
                 try:
                     size = preferred_size or self._get_primary_display_size()
                     if size:
@@ -1155,34 +1163,30 @@ class ScreensaverEngine(QObject):
                         scaled_key = f"{image_path}|scaled:{w}x{h}"
                         scaled_cached = self._image_cache.get(scaled_key)
                         if isinstance(scaled_cached, QPixmap):
-                            scaled_pm = scaled_cached
-                        elif scaled_cached is not None:
-                            try:
-                                scaled_pm = QPixmap.fromImage(scaled_cached)
-                                if scaled_pm is not None and not scaled_pm.isNull():
-                                    # Promote the cached entry to QPixmap so future
-                                    # loads do not need to repeat the conversion.
-                                    self._image_cache.put(scaled_key, scaled_pm)
-                            except Exception:
-                                scaled_pm = None
+                            pixmap = scaled_cached
+                        elif isinstance(scaled_cached, QImage) and not scaled_cached.isNull() and self.thread_manager:
+                            # Heavy crop/scale already done as QImage; promote once per image.
+                            pm = QPixmap.fromImage(scaled_cached)
+                            if not pm.isNull():
+                                self._image_cache.put(scaled_key, pm)
+                                pixmap = pm
                 except Exception:
-                    pass
-                if scaled_pm is not None and not scaled_pm.isNull():
-                    pixmap = scaled_pm
-                else:
+                    pixmap = None
+
+                if pixmap is None or pixmap.isNull():
                     cached = self._image_cache.get(image_path)
                     if isinstance(cached, QPixmap):
                         pixmap = cached
-                    elif cached is not None:
+                    elif isinstance(cached, QImage) and not cached.isNull():
                         try:
-                            pixmap = QPixmap.fromImage(cached)  # must be on UI thread
-                            if pixmap is not None and not pixmap.isNull():
-                                # Promote base image cache entry to QPixmap for
-                                # future reuse at this size.
-                                self._image_cache.put(image_path, pixmap)
+                            # Convert base QImage to QPixmap once and cache it.
+                            pm = QPixmap.fromImage(cached)
+                            if not pm.isNull():
+                                self._image_cache.put(image_path, pm)
+                                pixmap = pm
                         except Exception:
-                            pixmap = QPixmap()
-                    else:
+                            pixmap = None
+                    if pixmap is None:
                         pixmap = QPixmap(image_path)
             else:
                 pixmap = QPixmap(image_path)
