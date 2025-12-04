@@ -281,11 +281,20 @@ class MediaWidget(QLabel):
         # card whenever we recompute our own position. We duck-type the
         # parent so MediaWidget remains reusable outside DisplayWidget.
         parent = self.parent()
-        if parent is not None and hasattr(parent, "_position_spotify_visualizer"):
-            try:
-                parent._position_spotify_visualizer()
-            except Exception:
-                pass
+        if parent is not None:
+            # Keep Spotify-related overlays anchored to the card whenever we
+            # recompute our own position. We duck-type the parent so
+            # MediaWidget remains reusable outside DisplayWidget.
+            if hasattr(parent, "_position_spotify_visualizer"):
+                try:
+                    parent._position_spotify_visualizer()
+                except Exception:
+                    pass
+            if hasattr(parent, "_position_spotify_volume"):
+                try:
+                    parent._position_spotify_volume()
+                except Exception:
+                    pass
 
     # ------------------------------------------------------------------
     # Styling

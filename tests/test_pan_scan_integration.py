@@ -12,7 +12,15 @@ from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtCore import Qt
 
 from rendering.display_widget import DisplayWidget
-from rendering.pan_and_scan import PanAndScan
+try:
+    # Pan & Scan has been fully removed from the runtime path in v1.2, but
+    # these tests are retained as historical documentation of the bugs they
+    # once caught. Import errors would break collection, so we soft-import the
+    # old module and skip its dependent tests via per-test markers below.
+    from rendering.pan_and_scan import PanAndScan  # type: ignore[import]
+except Exception:  # pragma: no cover - module no longer present in normal runs
+    PanAndScan = None  # type: ignore[assignment]
+
 from core.settings.settings_manager import SettingsManager
 from rendering.display_modes import DisplayMode
 

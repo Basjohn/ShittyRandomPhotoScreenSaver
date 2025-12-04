@@ -739,6 +739,16 @@ class WidgetsTab(QWidget):
         self.media_show_controls.stateChanged.connect(self._save_settings)
         media_layout.addWidget(self.media_show_controls)
 
+        # Spotify-only vertical volume slider (paired with the Spotify card).
+        self.media_spotify_volume_enabled = QCheckBox("Enable Spotify Volume Slider")
+        self.media_spotify_volume_enabled.setToolTip(
+            "Show a slim vertical volume slider next to the Spotify card when Core Audio/pycaw is available. "
+            "The slider only affects the Spotify session volume and is gated by hard-exit / Ctrl interaction modes."
+        )
+        self.media_spotify_volume_enabled.setChecked(True)
+        self.media_spotify_volume_enabled.stateChanged.connect(self._save_settings)
+        media_layout.addWidget(self.media_spotify_volume_enabled)
+
         # Spotify Beat Visualizer group (Spotify-only beat bars tied to
         # the Spotify/Media widget).
         spotify_vis_group = QGroupBox("Spotify Beat Visualizer")
@@ -1194,6 +1204,7 @@ class WidgetsTab(QWidget):
                 getattr(self, 'media_rounded_artwork', None),
                 getattr(self, 'media_show_header_frame', None),
                 getattr(self, 'media_show_controls', None),
+                getattr(self, 'media_spotify_volume_enabled', None),
                 getattr(self, 'spotify_vis_enabled', None),
                 getattr(self, 'spotify_vis_bar_count', None),
                 getattr(self, 'spotify_vis_border_opacity', None),
@@ -1429,6 +1440,11 @@ class WidgetsTab(QWidget):
 
             show_controls = SettingsManager.to_bool(media_config.get('show_controls', True), True)
             self.media_show_controls.setChecked(show_controls)
+
+            spotify_volume_enabled = SettingsManager.to_bool(
+                media_config.get('spotify_volume_enabled', True), True
+            )
+            self.media_spotify_volume_enabled.setChecked(spotify_volume_enabled)
 
             # Load media colors
             media_color_data = media_config.get('color', [255, 255, 255, 230])
@@ -1786,6 +1802,7 @@ class WidgetsTab(QWidget):
             'rounded_artwork_border': self.media_rounded_artwork.isChecked(),
             'show_header_frame': self.media_show_header_frame.isChecked(),
             'show_controls': self.media_show_controls.isChecked(),
+            'spotify_volume_enabled': self.media_spotify_volume_enabled.isChecked(),
         }
         mmon_text = self.media_monitor_combo.currentText()
         media_config['monitor'] = mmon_text if mmon_text == 'ALL' else int(mmon_text)

@@ -22,6 +22,7 @@ from PySide6.QtGui import (
     QCursor,
     QFocusEvent,
     QGuiApplication,
+    QWheelEvent,
 )
 from shiboken6 import Shiboken
 from rendering.display_modes import DisplayMode
@@ -53,6 +54,7 @@ from widgets.media_widget import MediaWidget, MediaPosition
 from widgets.reddit_widget import RedditWidget, RedditPosition
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+from widgets.spotify_volume_widget import SpotifyVolumeWidget
 from widgets.shadow_utils import apply_widget_shadow
 from core.logging.logger import get_logger, is_verbose_logging
 from core.logging.overlay_telemetry import record_overlay_ready
@@ -161,6 +163,7 @@ class DisplayWidget(QWidget):
         self.weather_widget: Optional[WeatherWidget] = None
         self.media_widget: Optional[MediaWidget] = None
         self.spotify_visualizer_widget: Optional[SpotifyVisualizerWidget] = None
+        self.spotify_volume_widget: Optional[SpotifyVolumeWidget] = None
         self._spotify_bars_overlay: Optional[SpotifyBarsGLOverlay] = None
         self.reddit_widget: Optional[RedditWidget] = None
         self._current_transition: Optional[BaseTransition] = None
@@ -1132,6 +1135,9 @@ class DisplayWidget(QWidget):
         show_header_frame = SettingsManager.to_bool(
             media_settings.get('show_header_frame', True), True
         )
+        spotify_volume_enabled = SettingsManager.to_bool(
+            media_settings.get('spotify_volume_enabled', True), True
+        )
 
         try:
             self.media_widget = MediaWidget(self, position=mpos)
@@ -1262,6 +1268,62 @@ class DisplayWidget(QWidget):
             logger.info(
                 "✅ Media widget started: %s, font=%spx, margin=%s", position_str, font_size, margin_val
             )
+
+            # Optional Spotify vertical volume widget, paired with the media
+            # card. This is Spotify-only and uses Core Audio/pycaw when
+            # available; when unavailable the widget remains hidden.
+            existing_vol = getattr(self, "spotify_volume_widget", None)
+            media_active_on_this = media_enabled and media_show_on_this
+            if not (spotify_volume_enabled and media_active_on_this):
+                if existing_vol is not None:
+                    try:
+                        existing_vol.stop()
+                        existing_vol.hide()
+                    except Exception:
+                        pass
+                self.spotify_volume_widget = None
+            else:
+                try:
+                    if existing_vol is None:
+                        vol = SpotifyVolumeWidget(self)
+                        self.spotify_volume_widget = vol
+                    else:
+                        vol = existing_vol
+
+                    if self._thread_manager is not None and hasattr(vol, "set_thread_manager"):
+                        try:
+                            vol.set_thread_manager(self._thread_manager)
+                        except Exception:
+                            pass
+
+                    try:
+                        vol.set_shadow_config(shadows_config)
+                    except Exception:
+                        pass
+
+                    # Inherit media card background and border colours for the
+                    # track, while using a dedicated (default white) fill
+                    # colour for the volume bar itself.
+                    try:
+                        from PySide6.QtGui import QColor as _QColor
+
+                        fill_color = _QColor(255, 255, 255, 230)
+                        if hasattr(vol, "set_colors"):
+                            vol.set_colors(track_bg=bg_qcolor, track_border=border_qcolor, fill=fill_color)
+                    except Exception:
+                        pass
+
+                    try:
+                        vol.start()
+                    except Exception:
+                        logger.debug("[SPOTIFY_VOL] Failed to start volume widget", exc_info=True)
+
+                    try:
+                        self._position_spotify_volume()
+                    except Exception:
+                        pass
+                except Exception:
+                    logger.debug("[SPOTIFY_VOL] Failed to create/configure Spotify volume widget", exc_info=True)
 
             # Spotify Beat Visualizer (paired with media widget).
             existing_vis = getattr(self, 'spotify_visualizer_widget', None)
@@ -1480,6 +1542,7 @@ class DisplayWidget(QWidget):
             overlays_to_raise = [
                 "media_widget",
                 "spotify_visualizer_widget",
+                "spotify_volume_widget",
                 "weather_widget",
                 "reddit_widget",
             ]
@@ -2711,6 +2774,62 @@ class DisplayWidget(QWidget):
         except Exception:
             pass
 
+    def _position_spotify_volume(self) -> None:
+        """Position Spotify volume slider beside the media widget.
+
+        The slider is placed on the side of the media card that has more
+        horizontal space available (left vs right).
+        """
+
+        vol = getattr(self, "spotify_volume_widget", None)
+        media = getattr(self, "media_widget", None)
+        if vol is None or media is None:
+            return
+        try:
+            media_geom = media.geometry()
+        except Exception:
+            return
+        if media_geom.width() <= 0 or media_geom.height() <= 0:
+            return
+
+        parent_width = max(1, self.width())
+        space_left = max(0, media_geom.left())
+        space_right = max(0, parent_width - media_geom.right())
+        gap = 16
+
+        width = max(vol.minimumWidth(), 32)
+
+        # Make the slider roughly match the media card height but with a small
+        # inset so the rounded ends are visible and do not collide with the
+        # card frame.
+        card_height = media_geom.height()
+        height = max(vol.minimumHeight(), card_height - 8)
+        height = min(height, card_height)
+
+        if space_right >= space_left:
+            x = media_geom.right() + gap
+            if x + width > parent_width:
+                x = max(0, parent_width - width)
+        else:
+            x = media_geom.left() - gap - width
+            if x < 0:
+                x = 0
+
+        # Vertically centre the slider relative to the media card.
+        y = media_geom.top() + max(0, (card_height - height) // 2)
+        max_y = max(0, self.height() - height)
+        if y > max_y:
+            y = max_y
+        if y < 0:
+            y = 0
+
+        try:
+            vol.setGeometry(x, y, width, height)
+            if vol.isVisible():
+                vol.raise_()
+        except Exception:
+            pass
+
     def push_spotify_visualizer_frame(
         self,
         *,
@@ -2815,6 +2934,10 @@ class DisplayWidget(QWidget):
             pass
         try:
             self._position_spotify_visualizer()
+        except Exception:
+            pass
+        try:
+            self._position_spotify_volume()
         except Exception:
             pass
 
@@ -3818,12 +3941,35 @@ class DisplayWidget(QWidget):
         ctrl_mode_active = self._ctrl_held or DisplayWidget._global_ctrl_held
         if self._is_hard_exit_enabled() or ctrl_mode_active:
             # In hard-exit or Ctrl-held interaction mode, route clicks over
-            # interactive widgets (e.g. media / reddit widget). Media
+            # interactive widgets (e.g. media / Spotify volume / reddit widget). Media
             # controls keep the screensaver active; Reddit links open the
             # browser and may optionally request a clean exit depending on
             # settings and hard-exit mode.
             handled = False
             reddit_handled = False
+
+            # Spotify volume widget (vertical slider beside media card)
+            vw = getattr(self, "spotify_volume_widget", None)
+            try:
+                if vw is not None and vw.isVisible() and vw.geometry().contains(event.pos()):
+                    try:
+                        from PySide6.QtCore import QPoint as _QPoint
+                    except Exception:  # pragma: no cover - import guard
+                        _QPoint = None  # type: ignore[assignment]
+
+                    if _QPoint is not None:
+                        geom = vw.geometry()
+                        local_pos = _QPoint(event.pos().x() - geom.x(), event.pos().y() - geom.y())
+                    else:
+                        local_pos = event.pos()
+
+                    try:
+                        if vw.handle_press(local_pos, event.button()):
+                            handled = True
+                    except Exception:
+                        logger.debug("[SPOTIFY_VOL] click routing failed", exc_info=True)
+            except Exception:
+                logger.debug("[SPOTIFY_VOL] Error while routing click to volume widget", exc_info=True)
 
             # Media widget (Spotify-style transport controls)
             mw = getattr(self, "media_widget", None)
@@ -3999,6 +4145,24 @@ class DisplayWidget(QWidget):
         if self._is_hard_exit_enabled() or ctrl_mode_active:
             # Hard exit or Ctrl-held mode disables mouse-move exit entirely.
             # Halo movement is handled centrally via the global event filter.
+            # While in this mode we also allow dragging over the Spotify
+            # volume widget so users can scrub volume without exiting.
+            vw = getattr(self, "spotify_volume_widget", None)
+            if vw is not None and vw.isVisible():
+                try:
+                    from PySide6.QtCore import QPoint as _QPoint
+                except Exception:  # pragma: no cover - import guard
+                    _QPoint = None  # type: ignore[assignment]
+
+                try:
+                    if _QPoint is not None:
+                        geom = vw.geometry()
+                        local_pos = _QPoint(event.pos().x() - geom.x(), event.pos().y() - geom.y())
+                    else:
+                        local_pos = event.pos()
+                    vw.handle_drag(local_pos)
+                except Exception:
+                    logger.debug("[SPOTIFY_VOL] drag routing failed", exc_info=True)
             event.accept()
             return
 
@@ -4020,6 +4184,55 @@ class DisplayWidget(QWidget):
             self.exit_requested.emit()
         
         event.accept()
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        """Handle mouse release; end Spotify volume drags in interaction mode."""
+
+        ctrl_mode_active = self._ctrl_held or DisplayWidget._global_ctrl_held
+        if self._is_hard_exit_enabled() or ctrl_mode_active:
+            vw = getattr(self, "spotify_volume_widget", None)
+            if vw is not None:
+                try:
+                    vw.handle_release()
+                except Exception:
+                    logger.debug("[SPOTIFY_VOL] release routing failed", exc_info=True)
+            event.accept()
+            return
+
+        super().mouseReleaseEvent(event)
+
+    def wheelEvent(self, event: QWheelEvent) -> None:
+        """Route wheel scrolling to Spotify volume widget in interaction mode."""
+
+        ctrl_mode_active = self._ctrl_held or DisplayWidget._global_ctrl_held
+        if self._is_hard_exit_enabled() or ctrl_mode_active:
+            vw = getattr(self, "spotify_volume_widget", None)
+            if vw is not None and vw.isVisible():
+                try:
+                    from PySide6.QtCore import QPoint as _QPoint
+                except Exception:  # pragma: no cover - import guard
+                    _QPoint = None  # type: ignore[assignment]
+
+                try:
+                    if _QPoint is not None:
+                        geom = vw.geometry()
+                        pos = event.position()
+                        local_pos = _QPoint(int(pos.x()) - geom.x(), int(pos.y()) - geom.y())
+                    else:
+                        local_pos = event.position().toPoint()
+                    delta_y = int(event.angleDelta().y())
+                    if vw.handle_wheel(local_pos, delta_y):
+                        event.accept()
+                        return
+                except Exception:
+                    logger.debug("[SPOTIFY_VOL] wheel routing failed", exc_info=True)
+
+            # Even when not over the volume widget, wheel in interaction mode
+            # should never exit the saver.
+            event.accept()
+            return
+
+        super().wheelEvent(event)
 
     def focusOutEvent(self, event: QFocusEvent) -> None:  # type: ignore[override]
         """Diagnostic: log once if we lose focus while still visible.

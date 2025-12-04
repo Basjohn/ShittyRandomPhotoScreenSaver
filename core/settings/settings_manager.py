@@ -283,6 +283,12 @@ class SettingsManager(QObject):
                     # Optional header subcontainer frame around the logo +
                     # title row to mirror the Reddit widget styling.
                     'show_header_frame': True,
+                    # Optional Spotify-only vertical volume slider rendered
+                    # alongside the media card. When enabled and Core Audio
+                    # (pycaw) is available, a slim overlay widget appears to
+                    # the side of the Spotify card and controls the Spotify
+                    # session volume only.
+                    'spotify_volume_enabled': True,
                 },
                 # Spotify Beat Visualizer – thin bar visualizer paired with
                 # the Spotify media widget. This is Spotify-only by design and
@@ -493,6 +499,7 @@ class SettingsManager(QObject):
                 'rounded_artwork_border': True,
                 'show_controls': True,
                 'show_header_frame': True,
+                'spotify_volume_enabled': True,
             },
             'spotify_visualizer': {
                 'enabled': True,
