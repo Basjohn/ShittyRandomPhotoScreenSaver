@@ -10,12 +10,17 @@ import logging
 import os
 import time
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
 # Environment variable to enable PERF metrics logging
 PERF_METRICS_ENABLED = os.environ.get("SRPSS_PERF_METRICS", "0") == "1"
+
+
+def is_perf_metrics_enabled() -> bool:
+    """Check if PERF metrics are enabled via environment variable."""
+    return PERF_METRICS_ENABLED
 
 
 @dataclass
@@ -42,7 +47,10 @@ class TransitionProfiler:
         profiler.tick("peel")
         
         # On transition complete:
-        profiler.complete("peel")
+        profiler.complete("peel", viewport_size=(1920, 1080))
+        
+        # For debug overlay:
+        metrics = profiler.get_metrics("peel")
     """
     
     def __init__(self) -> None:
@@ -76,8 +84,36 @@ class TransitionProfiler:
         
         profile.last_ts = now
     
-    def complete(self, name: str) -> None:
-        """Complete profiling and emit PERF log."""
+    def get_metrics(self, name: str) -> Optional[Tuple[float, float, float, float]]:
+        """Get current metrics for debug overlay.
+        
+        Returns:
+            Tuple of (avg_fps, min_dt_ms, max_dt_ms, elapsed_ms) or None if not active.
+        """
+        profile = self._profiles.get(name)
+        if profile is None or profile.start_ts is None or profile.last_ts is None:
+            return None
+        if profile.frame_count <= 0:
+            return None
+        
+        elapsed = profile.last_ts - profile.start_ts
+        if elapsed <= 0:
+            return None
+        
+        avg_fps = profile.frame_count / elapsed
+        min_dt_ms = profile.min_dt * 1000.0 if profile.min_dt > 0 else 0.0
+        max_dt_ms = profile.max_dt * 1000.0 if profile.max_dt > 0 else 0.0
+        elapsed_ms = elapsed * 1000.0
+        
+        return (avg_fps, min_dt_ms, max_dt_ms, elapsed_ms)
+    
+    def complete(self, name: str, viewport_size: Optional[Tuple[int, int]] = None) -> None:
+        """Complete profiling and emit PERF log.
+        
+        Args:
+            name: Transition name
+            viewport_size: Optional (width, height) for log output
+        """
         profile = self._profiles.pop(name, None)
         if profile is None:
             return
@@ -91,29 +127,39 @@ class TransitionProfiler:
         total_time = time.time() - profile.start_ts
         frame_count = profile.frame_count
         
-        if frame_count > 0:
-            avg_dt = total_time / frame_count
-            avg_fps = 1.0 / avg_dt if avg_dt > 0 else 0.0
+        if frame_count > 0 and total_time > 0:
+            avg_fps = frame_count / total_time
         else:
-            avg_dt = 0.0
             avg_fps = 0.0
         
-        min_fps = 1.0 / profile.max_dt if profile.max_dt > 0 else 0.0
-        max_fps = 1.0 / profile.min_dt if profile.min_dt > 0 else 0.0
+        duration_ms = total_time * 1000.0
+        min_dt_ms = profile.min_dt * 1000.0 if profile.min_dt > 0 else 0.0
+        max_dt_ms = profile.max_dt * 1000.0 if profile.max_dt > 0 else 0.0
         
-        logger.info(
-            "[PERF] [GL COMPOSITOR] %s metrics: frames=%d, total=%.3fs, "
-            "avg_dt=%.4fs (%.1f fps), min_dt=%.4fs (%.1f fps), max_dt=%.4fs (%.1f fps)",
-            name.capitalize(),
-            frame_count,
-            total_time,
-            avg_dt,
-            avg_fps,
-            profile.min_dt,
-            max_fps,
-            profile.max_dt,
-            min_fps,
-        )
+        if viewport_size:
+            logger.info(
+                "[PERF] [GL COMPOSITOR] %s metrics: duration=%.1fms, frames=%d, "
+                "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, size=%dx%d",
+                name.capitalize(),
+                duration_ms,
+                frame_count,
+                avg_fps,
+                min_dt_ms,
+                max_dt_ms,
+                viewport_size[0],
+                viewport_size[1],
+            )
+        else:
+            logger.info(
+                "[PERF] [GL COMPOSITOR] %s metrics: duration=%.1fms, frames=%d, "
+                "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms",
+                name.capitalize(),
+                duration_ms,
+                frame_count,
+                avg_fps,
+                min_dt_ms,
+                max_dt_ms,
+            )
     
     def reset(self, name: str) -> None:
         """Reset profiling state for a transition without logging."""
@@ -122,3 +168,9 @@ class TransitionProfiler:
     def is_active(self, name: str) -> bool:
         """Check if a transition is currently being profiled."""
         return name in self._profiles
+    
+    def get_active_transition(self) -> Optional[str]:
+        """Get the name of the currently active transition, if any."""
+        for name in self._profiles:
+            return name
+        return None

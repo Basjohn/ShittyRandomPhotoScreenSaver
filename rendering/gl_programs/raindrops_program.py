@@ -21,7 +21,7 @@ except ImportError:
 
 
 class RaindropsProgram(BaseGLProgram):
-    """Shader program for the Raindrops transition effect."""
+    """Shader program for the Raindrops/Ripple transition effect."""
 
     @property
     def name(self) -> str:

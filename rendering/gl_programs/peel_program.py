@@ -128,7 +128,7 @@ void main() {
 
     // Local coordinate within this logical strip in [0,1).
     float segPos = fract(axisCoord * strips);
-    float baseWidth = 0.45;
+    float baseWidth = 0.30;  // 30% thinner strips
     float width = mix(1.0, baseWidth, local);
     float halfBand = 0.5 * width;
     float bandMin = 0.5 - halfBand;

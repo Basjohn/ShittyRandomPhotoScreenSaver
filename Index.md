@@ -71,7 +71,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - `warp_program.py`: `WarpProgram` for the Warp Dissolve transition GLSL.
   - `raindrops_program.py`: `RaindropsProgram` for the Raindrops/Ripple transition GLSL.
 - rendering/gl_profiler.py
-  - `TransitionProfiler`: centralized profiling helper for GL compositor transitions, replacing per-transition profiling fields.
+  - `TransitionProfiler`: centralized profiling helper for GL compositor transitions. Tracks frame timing, min/max frame durations, and emits PERF logs. All compositor transitions (Slide, Wipe, Peel, BlockSpin, Warp, Raindrops, BlockFlip, Diffuse, Blinds) now use this single profiler instance instead of per-transition profiling fields.
 
 ## Transitions
 - transitions/base_transition.py
