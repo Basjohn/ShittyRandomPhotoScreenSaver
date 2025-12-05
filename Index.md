@@ -53,11 +53,25 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - Maintains lightweight per-transition state dataclasses (CrossfadeState, SlideState, WipeState, BlockFlipState, BlockSpinState, BlindsState, DiffuseState, PeelState, WarpState) and exposes `start_*` helpers driven by the shared AnimationManager.
   - Legacy per-transition GL overlays remain supported but new GL-only transitions route through this compositor instead of creating additional `QOpenGLWidget` instances.
   - On `initializeGL`, logs the OpenGL adapter vendor/renderer/version and disables the shader pipeline for obvious software GL implementations (for example, GDI Generic, Microsoft Basic Render Driver, llvmpipe), keeping compositor QPainter transitions and CPU fallbacks as the safe paths on those stacks.
-  - When PERF metrics are enabled (`core.logging.logger.is_perf_metrics_enabled()` / `PERF_METRICS_ENABLED`), emits `[PERF] [GL COMPOSITOR] <Name> metrics` summary lines for compositor-driven transitions and can optionally draw a small FPS/debug overlay based on the active transition's profiling state (Slide, Wipe, BlockSpin, Ripple, Warp Dissolve, Shuffle, Diffuse, Blinds, Peel); both metrics and HUD are disabled entirely when PERF metrics are turned off in retail builds.
+  - When PERF metrics are enabled (`core.logging.logger.is_perf_metrics_enabled()` / `PERF_METRICS_ENABLED`), emits `[PERF] [GL COMPOSITOR] <Name> metrics` summary lines for compositor-driven transitions and can optionally draw a small FPS/debug overlay based on the active transition's profiling state (Slide, Wipe, BlockSpin, Ripple, Warp Dissolve, Diffuse, Blinds, Peel); both metrics and HUD are disabled entirely when PERF metrics are turned off in retail builds. NOTE: Shuffle and Shooting Stars (Claws) transitions have been fully retired and removed.
 - rendering/image_processor.py
   - Scaling/cropping for FILL/FIT/SHRINK, optional Lanczos via PIL
 - rendering/display_modes.py
   - DisplayMode enum and helpers
+- rendering/gl_programs/
+  - Per-transition shader program helpers that encapsulate GLSL source, compilation, uniform caching, and draw logic.
+  - `base_program.py`: `BaseGLProgram` ABC with shared vertex shader and compilation helpers.
+  - `peel_program.py`: `PeelProgram` for the Peel transition GLSL.
+  - `blockflip_program.py`: `BlockFlipProgram` for the BlockFlip transition GLSL.
+  - `crossfade_program.py`: `CrossfadeProgram` for the Crossfade transition GLSL.
+  - `blinds_program.py`: `BlindsProgram` for the Blinds transition GLSL.
+  - `diffuse_program.py`: `DiffuseProgram` for the Diffuse transition GLSL.
+  - `slide_program.py`: `SlideProgram` for the Slide transition GLSL.
+  - `wipe_program.py`: `WipeProgram` for the Wipe transition GLSL.
+  - `warp_program.py`: `WarpProgram` for the Warp Dissolve transition GLSL.
+  - `raindrops_program.py`: `RaindropsProgram` for the Raindrops/Ripple transition GLSL.
+- rendering/gl_profiler.py
+  - `TransitionProfiler`: centralized profiling helper for GL compositor transitions, replacing per-transition profiling fields.
 
 ## Transitions
 - transitions/base_transition.py
@@ -69,7 +83,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - transitions/wipe_transition.py, transitions/gl_wipe_transition.py, transitions/gl_compositor_wipe_transition.py
   - Slide/Wipe directions stored independently in settings; Slide is cardinals only, Wipe includes diagonals
 - transitions/diffuse_transition.py, transitions/gl_diffuse_transition.py, transitions/gl_compositor_diffuse_transition.py
-  - Diffuse shapes: Rectangle, Membrane. Block size is clamped (min 4px) and shared between CPU and GL paths; the CPU fallback uses a simple block-based dissolve, while the Membrane shape is implemented only in the GLSL compositor path. Shuffle historically reused the same block-size but is now retired.
+  - Diffuse shapes: Rectangle, Membrane. Block size is clamped (min 4px) and shared between CPU and GL paths; the CPU fallback uses a simple block-based dissolve, while the Membrane shape is implemented only in the GLSL compositor path.
 - transitions/block_puzzle_flip_transition.py, transitions/gl_block_puzzle_flip_transition.py, transitions/gl_compositor_blockflip_transition.py
 - transitions/gl_blinds.py, transitions/gl_compositor_blinds_transition.py
   - GL-only Blinds transition using either a legacy overlay or the compositor; participates in GL prewarm and requires hardware acceleration.

@@ -35,6 +35,91 @@ try:  # Optional dependency; shaders are disabled if unavailable.
 except Exception:  # pragma: no cover - PyOpenGL not required for CPU paths
     gl = None
 
+# Import shader program helpers (lazy to avoid circular imports at module level)
+_peel_program_instance = None
+_blockflip_program_instance = None
+_crossfade_program_instance = None
+_blinds_program_instance = None
+_diffuse_program_instance = None
+
+def _get_peel_program():
+    """Lazy-load the PeelProgram singleton."""
+    global _peel_program_instance
+    if _peel_program_instance is None:
+        from rendering.gl_programs.peel_program import peel_program
+        _peel_program_instance = peel_program
+    return _peel_program_instance
+
+def _get_blockflip_program():
+    """Lazy-load the BlockFlipProgram singleton."""
+    global _blockflip_program_instance
+    if _blockflip_program_instance is None:
+        from rendering.gl_programs.blockflip_program import blockflip_program
+        _blockflip_program_instance = blockflip_program
+    return _blockflip_program_instance
+
+def _get_crossfade_program():
+    """Lazy-load the CrossfadeProgram singleton."""
+    global _crossfade_program_instance
+    if _crossfade_program_instance is None:
+        from rendering.gl_programs.crossfade_program import crossfade_program
+        _crossfade_program_instance = crossfade_program
+    return _crossfade_program_instance
+
+def _get_blinds_program():
+    """Lazy-load the BlindsProgram singleton."""
+    global _blinds_program_instance
+    if _blinds_program_instance is None:
+        from rendering.gl_programs.blinds_program import blinds_program
+        _blinds_program_instance = blinds_program
+    return _blinds_program_instance
+
+def _get_diffuse_program():
+    """Lazy-load the DiffuseProgram singleton."""
+    global _diffuse_program_instance
+    if _diffuse_program_instance is None:
+        from rendering.gl_programs.diffuse_program import diffuse_program
+        _diffuse_program_instance = diffuse_program
+    return _diffuse_program_instance
+
+_slide_program_instance = None
+_wipe_program_instance = None
+
+def _get_slide_program():
+    """Lazy-load the SlideProgram singleton."""
+    global _slide_program_instance
+    if _slide_program_instance is None:
+        from rendering.gl_programs.slide_program import slide_program
+        _slide_program_instance = slide_program
+    return _slide_program_instance
+
+def _get_wipe_program():
+    """Lazy-load the WipeProgram singleton."""
+    global _wipe_program_instance
+    if _wipe_program_instance is None:
+        from rendering.gl_programs.wipe_program import wipe_program
+        _wipe_program_instance = wipe_program
+    return _wipe_program_instance
+
+_warp_program_instance = None
+_raindrops_program_instance = None
+
+def _get_warp_program():
+    """Lazy-load the WarpProgram singleton."""
+    global _warp_program_instance
+    if _warp_program_instance is None:
+        from rendering.gl_programs.warp_program import warp_program
+        _warp_program_instance = warp_program
+    return _warp_program_instance
+
+def _get_raindrops_program():
+    """Lazy-load the RaindropsProgram singleton."""
+    global _raindrops_program_instance
+    if _raindrops_program_instance is None:
+        from rendering.gl_programs.raindrops_program import raindrops_program
+        _raindrops_program_instance = raindrops_program
+    return _raindrops_program_instance
+
 
 logger = get_logger(__name__)
 
@@ -48,22 +133,7 @@ class CrossfadeState:
     progress: float = 0.0  # 0..1
 
 
-@dataclass
-class ShuffleShaderState:
-    """State for a shader-driven Shuffle transition.
-
-    This models a fullscreen Shuffle mask rendered in GLSL. The compositor
-    drives the effect on a single quad using a logical block grid and a
-    per-block jitter field; controllers provide the old/new pixmaps,
-    grid dimensions and edge direction.
-    """
-
-    old_pixmap: Optional[QPixmap]
-    new_pixmap: Optional[QPixmap]
-    cols: int
-    rows: int
-    edge: str
-    progress: float = 0.0  # 0..1
+# NOTE: ShuffleShaderState removed - Shuffle transition is retired.
 
 
 @dataclass
@@ -135,18 +205,7 @@ class RaindropsState:
     progress: float = 0.0  # 0..1
 
 
-@dataclass
-class ShootingStarsState:
-    """State for a shader-driven Shooting Stars (claws) transition.
-
-    This models a field of streak-like "shooting stars" rendered entirely in
-    GLSL. The compositor draws the effect using a fullscreen quad shader;
-    controllers only provide the old/new pixmaps and timeline progress.
-    """
-
-    old_pixmap: Optional[QPixmap]
-    new_pixmap: Optional[QPixmap]
-    progress: float = 0.0  # 0..1
+# NOTE: ShootingStarsState removed - Claws/Shooting Stars transition is retired.
 
 
 @dataclass
@@ -203,47 +262,65 @@ class _GLPipelineState:
     u_block_uv_rect_loc: int = -1
 
     # Cached uniform locations for the Ripple (raindrops) shader program.
+    # Legacy fields kept for compatibility; new code uses raindrops_uniforms dict.
     raindrops_u_progress: int = -1
     raindrops_u_resolution: int = -1
     raindrops_u_old_tex: int = -1
     raindrops_u_new_tex: int = -1
+    # New: dict of uniform locations from RaindropsProgram.cache_uniforms()
+    raindrops_uniforms: dict = field(default_factory=dict)
 
     # Cached uniform locations for the Warp Dissolve shader program.
+    # Legacy fields kept for compatibility; new code uses warp_uniforms dict.
     warp_u_progress: int = -1
     warp_u_resolution: int = -1
     warp_u_old_tex: int = -1
     warp_u_new_tex: int = -1
+    # New: dict of uniform locations from WarpProgram.cache_uniforms()
+    warp_uniforms: dict = field(default_factory=dict)
 
     # Cached uniform locations for the Diffuse shader program.
+    # Legacy fields kept for compatibility; new code uses diffuse_uniforms dict.
     diffuse_u_progress: int = -1
     diffuse_u_resolution: int = -1
     diffuse_u_old_tex: int = -1
     diffuse_u_new_tex: int = -1
     diffuse_u_grid: int = -1
     diffuse_u_shape_mode: int = -1
+    # New: dict of uniform locations from DiffuseProgram.cache_uniforms()
+    diffuse_uniforms: dict = field(default_factory=dict)
 
     # Cached uniform locations for the BlockFlip shader program.
+    # Legacy fields kept for compatibility; new code uses blockflip_uniforms dict.
     blockflip_u_progress: int = -1
     blockflip_u_resolution: int = -1
     blockflip_u_old_tex: int = -1
     blockflip_u_new_tex: int = -1
     blockflip_u_grid: int = -1
     blockflip_u_direction: int = -1
+    # New: dict of uniform locations from BlockFlipProgram.cache_uniforms()
+    blockflip_uniforms: dict = field(default_factory=dict)
 
     # Cached uniform locations for the Peel shader program.
+    # Legacy fields kept for compatibility; new code uses peel_uniforms dict.
     peel_u_progress: int = -1
     peel_u_resolution: int = -1
     peel_u_old_tex: int = -1
     peel_u_new_tex: int = -1
     peel_u_direction: int = -1
     peel_u_strips: int = -1
+    # New: dict of uniform locations from PeelProgram.cache_uniforms()
+    peel_uniforms: dict = field(default_factory=dict)
 
     # Cached uniform locations for the Blinds shader program.
+    # Legacy fields kept for compatibility; new code uses blinds_uniforms dict.
     blinds_u_progress: int = -1
     blinds_u_resolution: int = -1
     blinds_u_old_tex: int = -1
     blinds_u_new_tex: int = -1
     blinds_u_grid: int = -1
+    # New: dict of uniform locations from BlindsProgram.cache_uniforms()
+    blinds_uniforms: dict = field(default_factory=dict)
 
     # Cached uniform locations for the Shuffle shader program.
     shuffle_u_progress: int = -1
@@ -252,21 +329,30 @@ class _GLPipelineState:
     shuffle_u_new_tex: int = -1
     shuffle_u_grid: int = -1
     shuffle_u_direction: int = -1
+    # Legacy fields kept for compatibility; new code uses crossfade_uniforms dict.
     crossfade_u_progress: int = -1
     crossfade_u_resolution: int = -1
     crossfade_u_old_tex: int = -1
     crossfade_u_new_tex: int = -1
+    # New: dict of uniform locations from CrossfadeProgram.cache_uniforms()
+    crossfade_uniforms: dict = field(default_factory=dict)
+    # Legacy fields kept for compatibility; new code uses slide_uniforms dict.
     slide_u_progress: int = -1
     slide_u_resolution: int = -1
     slide_u_old_tex: int = -1
     slide_u_new_tex: int = -1
     slide_u_old_rect: int = -1
     slide_u_new_rect: int = -1
+    # New: dict of uniform locations from SlideProgram.cache_uniforms()
+    slide_uniforms: dict = field(default_factory=dict)
+    # Legacy fields kept for compatibility; new code uses wipe_uniforms dict.
     wipe_u_progress: int = -1
     wipe_u_resolution: int = -1
     wipe_u_old_tex: int = -1
     wipe_u_new_tex: int = -1
     wipe_u_mode: int = -1
+    # New: dict of uniform locations from WipeProgram.cache_uniforms()
+    wipe_uniforms: dict = field(default_factory=dict)
 
     # Cached uniform locations for the Shooting Stars (claws) shader program.
     claws_u_progress: int = -1
@@ -390,10 +476,9 @@ class GLCompositorWidget(QOpenGLWidget):
         self._blockspin: Optional[BlockSpinState] = None
         self._blinds: Optional[BlindsState] = None
         self._diffuse: Optional[DiffuseState] = None
-        self._shuffle: Optional[ShuffleShaderState] = None
         self._raindrops: Optional[RaindropsState] = None
         self._peel: Optional[PeelState] = None
-        self._shooting_stars: Optional[ShootingStarsState] = None
+        # NOTE: _shuffle and _shooting_stars removed - these transitions are retired.
 
         # Profiling for compositor-driven slide transitions.
         # Metrics are logged with the "[PERF] [GL COMPOSITOR]" tag so
@@ -422,21 +507,12 @@ class GLCompositorWidget(QOpenGLWidget):
         self._raindrops_profile_frame_count: int = 0
         self._raindrops_profile_min_dt: float = 0.0
         self._raindrops_profile_max_dt: float = 0.0
-        self._shuffle_profile_start_ts: Optional[float] = None
-        self._shuffle_profile_last_ts: Optional[float] = None
-        self._shuffle_profile_frame_count: int = 0
-        self._shuffle_profile_min_dt: float = 0.0
-        self._shuffle_profile_max_dt: float = 0.0
         self._blockspin_profile_start_ts: Optional[float] = None
         self._blockspin_profile_last_ts: Optional[float] = None
         self._blockspin_profile_frame_count: int = 0
         self._blockspin_profile_min_dt: float = 0.0
         self._blockspin_profile_max_dt: float = 0.0
-        self._shooting_profile_start_ts: Optional[float] = None
-        self._shooting_profile_last_ts: Optional[float] = None
-        self._shooting_profile_frame_count: int = 0
-        self._shooting_profile_min_dt: float = 0.0
-        self._shooting_profile_max_dt: float = 0.0
+        # NOTE: _shuffle_profile_* and _shooting_profile_* removed - these transitions are retired.
         # Lightweight profiling for additional compositor-driven transitions
         # (Peel, BlockFlip, Diffuse, Blinds) so their GPU cost can be
         # compared against the core Slide/Wipe/Warp metrics.
@@ -810,207 +886,7 @@ class GLCompositorWidget(QOpenGLWidget):
         self._current_anim_id = anim_id
         return anim_id
 
-    def start_shuffle_shader(
-        self,
-        old_pixmap: Optional[QPixmap],
-        new_pixmap: QPixmap,
-        *,
-        cols: int,
-        rows: int,
-        edge: str,
-        duration_ms: int,
-        easing: EasingCurve,
-        animation_manager: AnimationManager,
-        on_finished: Optional[Callable[[], None]] = None,
-    ) -> Optional[str]:
-        """Begin a shader-driven Shuffle transition between two pixmaps.
-
-        This path is only used when the GLSL pipeline and Shuffle shader are
-        available; callers are expected to fall back to the existing
-        compositor-based Shuffle (diffuse/QRegion) implementation or further
-        down to Group C CPU transitions when this method returns ``None``.
-        """
-
-        if not new_pixmap or new_pixmap.isNull():
-            logger.error("[GL COMPOSITOR] Invalid new pixmap for shuffle")
-            return None
-
-        logger.debug("[GL SHADER] Shuffle shader path disabled; using diffuse/QRegion fallback")
-        return None
-
-        # If there is no old image, simply set the base pixmap and repaint.
-        if old_pixmap is None or old_pixmap.isNull():
-            logger.debug("[GL COMPOSITOR] No old image; showing new image immediately (shuffle shader)")
-            self._crossfade = None
-            self._slide = None
-            self._wipe = None
-            self._warp = None
-            self._blockflip = None
-            self._blockspin = None
-            self._blinds = None
-            self._diffuse = None
-            self._raindrops = None
-            self._peel = None
-            self._shuffle = None
-            self._shooting_stars = None
-            self._base_pixmap = new_pixmap
-            self.update()
-            if on_finished:
-                try:
-                    on_finished()
-                except Exception:
-                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
-            return None
-
-        # Shuffle shader is mutually exclusive with other transitions.
-        self._crossfade = None
-        self._slide = None
-        self._wipe = None
-        self._warp = None
-        self._blockflip = None
-        self._blockspin = None
-        self._blinds = None
-        self._diffuse = None
-        self._raindrops = None
-        self._peel = None
-        self._shuffle = None
-        self._shooting_stars = None
-        self._shuffle = ShuffleShaderState(
-            old_pixmap=old_pixmap,
-            new_pixmap=new_pixmap,
-            cols=max(1, int(cols)),
-            rows=max(1, int(rows)),
-            edge=edge or "L2R",
-            progress=0.0,
-        )
-        self._animation_manager = animation_manager
-        self._current_easing = easing
-
-        # Reset per-transition profiling state.
-        self._shuffle_profile_start_ts = None
-        self._shuffle_profile_last_ts = None
-        self._shuffle_profile_frame_count = 0
-        self._shuffle_profile_min_dt = 0.0
-        self._shuffle_profile_max_dt = 0.0
-
-        # Cancel any previous animation on this compositor.
-        if self._current_anim_id and self._animation_manager:
-            try:
-                self._animation_manager.cancel_animation(self._current_anim_id)
-            except Exception:
-                pass
-            self._current_anim_id = None
-
-        duration_sec = max(0.001, duration_ms / 1000.0)
-        anim_id = animation_manager.animate_custom(
-            duration=duration_sec,
-            easing=easing,
-            update_callback=self._on_shuffle_update,
-            on_complete=lambda: self._on_shuffle_complete(on_finished),
-        )
-        self._current_anim_id = anim_id
-        return anim_id
-
-    def start_shooting_stars(
-        self,
-        old_pixmap: Optional[QPixmap],
-        new_pixmap: QPixmap,
-        *,
-        duration_ms: int,
-        easing: EasingCurve,
-        animation_manager: AnimationManager,
-        on_finished: Optional[Callable[[], None]] = None,
-    ) -> Optional[str]:
-        """Begin a shader-driven Shooting Stars (claws) transition.
-
-        This path is only used when the GLSL pipeline and claws shader are
-        available; callers are expected to fall back to the existing
-        compositor-based Claw Marks implementation when this returns ``None``.
-        """
-
-        if not new_pixmap or new_pixmap.isNull():
-            logger.error("[GL COMPOSITOR] Invalid new pixmap for shooting stars")
-            return None
-
-        # The user has elected to fully retire the Shooting Stars / Claw Marks
-        # effect. The GLSL claws path is therefore hard-disabled and callers
-        # are expected to fall back to a compositor/crossfade implementation
-        # when this method returns ``None``.
-        logger.debug("[GL SHADER] Shooting Stars shader path disabled; using safe fallback")
-        return None
-
-        # Only use this path when the GLSL pipeline and claws shader are
-        # actually available. Callers are expected to fall back to the
-        # compositor's diffuse implementation when this returns ``None``.
-        if (
-            self._gl_disabled_for_session
-            or gl is None
-            or self._gl_pipeline is None
-            or not self._gl_pipeline.initialized
-            or not getattr(self._gl_pipeline, "claws_program", 0)
-        ):
-            return None
-
-        # If there is no old image, simply set the base pixmap and repaint.
-        if old_pixmap is None or old_pixmap.isNull():
-            logger.debug("[GL COMPOSITOR] No old image; showing new image immediately (shooting stars)")
-            self._crossfade = None
-            self._slide = None
-            self._wipe = None
-            self._warp = None
-            self._blockflip = None
-            self._blockspin = None
-            self._blinds = None
-            self._diffuse = None
-            self._raindrops = None
-            self._peel = None
-            self._shooting_stars = None
-            self._base_pixmap = new_pixmap
-            self.update()
-            if on_finished:
-                try:
-                    on_finished()
-                except Exception:
-                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
-            return None
-
-        # Shooting Stars is mutually exclusive with other transitions.
-        self._crossfade = None
-        self._slide = None
-        self._wipe = None
-        self._warp = None
-        self._blockflip = None
-        self._blockspin = None
-        self._blinds = None
-        self._diffuse = None
-        self._raindrops = None
-        self._peel = None
-        self._shooting_stars = None
-        self._shooting_stars = ShootingStarsState(
-            old_pixmap=old_pixmap,
-            new_pixmap=new_pixmap,
-            progress=0.0,
-        )
-        self._animation_manager = animation_manager
-        self._current_easing = easing
-
-        # Cancel any previous animation on this compositor.
-        if self._current_anim_id and self._animation_manager:
-            try:
-                self._animation_manager.cancel_animation(self._current_anim_id)
-            except Exception:
-                pass
-            self._current_anim_id = None
-
-        duration_sec = max(0.001, duration_ms / 1000.0)
-        anim_id = animation_manager.animate_custom(
-            duration=duration_sec,
-            easing=easing,
-            update_callback=self._on_shooting_stars_update,
-            on_complete=lambda: self._on_shooting_stars_complete(on_finished),
-        )
-        self._current_anim_id = anim_id
-        return anim_id
+    # NOTE: start_shuffle_shader() and start_shooting_stars() removed - these transitions are retired.
 
     def start_wipe(
         self,
@@ -1944,50 +1820,7 @@ class GLCompositorWidget(QOpenGLWidget):
             self._raindrops_profile_frame_count += 1
         self.update()
 
-    def _on_shooting_stars_update(self, progress: float) -> None:
-        """Update handler for shader-driven Shooting Stars transitions."""
-
-        if self._shooting_stars is None:
-            return
-        p = max(0.0, min(1.0, float(progress)))
-        self._shooting_stars.progress = p
-        if is_perf_metrics_enabled():
-            now = time.time()
-            if self._shooting_profile_start_ts is None:
-                self._shooting_profile_start_ts = now
-            if self._shooting_profile_last_ts is not None:
-                dt = now - self._shooting_profile_last_ts
-                if dt > 0.0:
-                    if self._shooting_profile_min_dt == 0.0 or dt < self._shooting_profile_min_dt:
-                        self._shooting_profile_min_dt = dt
-                    if dt > self._shooting_profile_max_dt:
-                        self._shooting_profile_max_dt = dt
-            self._shooting_profile_last_ts = now
-            self._shooting_profile_frame_count += 1
-        self.update()
-
-    def _on_shuffle_update(self, progress: float) -> None:
-        """Update handler for shader-driven Shuffle transitions."""
-
-        if self._shuffle is None:
-            return
-        p = max(0.0, min(1.0, float(progress)))
-        self._shuffle.progress = p
-        # Profiling: track frame timing for the Shuffle shader path.
-        if is_perf_metrics_enabled():
-            now = time.time()
-            if self._shuffle_profile_start_ts is None:
-                self._shuffle_profile_start_ts = now
-            if self._shuffle_profile_last_ts is not None:
-                dt = now - self._shuffle_profile_last_ts
-                if dt > 0.0:
-                    if self._shuffle_profile_min_dt == 0.0 or dt < self._shuffle_profile_min_dt:
-                        self._shuffle_profile_min_dt = dt
-                    if dt > self._shuffle_profile_max_dt:
-                        self._shuffle_profile_max_dt = dt
-            self._shuffle_profile_last_ts = now
-            self._shuffle_profile_frame_count += 1
-        self.update()
+    # NOTE: _on_shooting_stars_update() and _on_shuffle_update() removed - these transitions are retired.
 
     def _on_blockspin_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
         """Completion handler for compositor-driven block spin transitions."""
@@ -2204,153 +2037,7 @@ class GLCompositorWidget(QOpenGLWidget):
         except Exception as e:
             logger.debug("[GL COMPOSITOR] Ripple complete handler failed: %s", e, exc_info=True)
 
-    def _on_shuffle_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
-        """Completion handler for shader-driven Shuffle transitions."""
-
-        try:
-            # Emit a concise profiling summary for the Shuffle shader so future
-            # tuning has telemetry without altering visuals.
-            if is_perf_metrics_enabled():
-                try:
-                    if (
-                        self._shuffle_profile_start_ts is not None
-                        and self._shuffle_profile_last_ts is not None
-                        and self._shuffle_profile_frame_count > 0
-                    ):
-                        elapsed = max(0.0, self._shuffle_profile_last_ts - self._shuffle_profile_start_ts)
-                        if elapsed > 0.0:
-                            duration_ms = elapsed * 1000.0
-                            avg_fps = self._shuffle_profile_frame_count / elapsed
-                            min_dt_ms = (
-                                self._shuffle_profile_min_dt * 1000.0
-                                if self._shuffle_profile_min_dt > 0.0
-                                else 0.0
-                            )
-                            max_dt_ms = (
-                                self._shuffle_profile_max_dt * 1000.0
-                                if self._shuffle_profile_max_dt > 0.0
-                                else 0.0
-                            )
-                            logger.info(
-                                "[PERF] [GL COMPOSITOR] Shuffle metrics: duration=%.1fms, frames=%d, "
-                                "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, size=%dx%d",
-                                duration_ms,
-                                self._shuffle_profile_frame_count,
-                                avg_fps,
-                                min_dt_ms,
-                                max_dt_ms,
-                                self.width(),
-                                self.height(),
-                            )
-                except Exception as e:
-                    logger.debug("[GL COMPOSITOR] Shuffle metrics logging failed: %s", e, exc_info=True)
-
-            # Reset profiling state.
-            self._shuffle_profile_start_ts = None
-            self._shuffle_profile_last_ts = None
-            self._shuffle_profile_frame_count = 0
-            self._shuffle_profile_min_dt = 0.0
-            self._shuffle_profile_max_dt = 0.0
-
-            try:
-                self._release_transition_textures()
-            except Exception as e:
-                logger.debug("[GL COMPOSITOR] Failed to release transition textures on shuffle complete: %s", e, exc_info=True)
-
-            if self._shuffle is not None:
-                try:
-                    self._base_pixmap = self._shuffle.new_pixmap
-                except Exception:
-                    pass
-            self._shuffle = None
-            self._current_anim_id = None
-
-            try:
-                self.update()
-            except Exception as e:
-                logger.debug(
-                    "[GL COMPOSITOR] Shuffle complete update failed (likely after deletion): %s",
-                    e,
-                    exc_info=True,
-                )
-
-            if on_finished:
-                try:
-                    on_finished()
-                except Exception:
-                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Shuffle complete handler failed: %s", e, exc_info=True)
-
-    def _on_shooting_stars_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
-        """Completion handler for shader-driven Shooting Stars transitions."""
-
-        try:
-            if is_perf_metrics_enabled():
-                try:
-                    if (
-                        self._shooting_profile_start_ts is not None
-                        and self._shooting_profile_last_ts is not None
-                        and self._shooting_profile_frame_count > 0
-                    ):
-                        elapsed = max(0.0, self._shooting_profile_last_ts - self._shooting_profile_start_ts)
-                        if elapsed > 0.0:
-                            duration_ms = elapsed * 1000.0
-                            avg_fps = self._shooting_profile_frame_count / elapsed
-                            min_dt_ms = (
-                                self._shooting_profile_min_dt * 1000.0
-                                if self._shooting_profile_min_dt > 0.0
-                                else 0.0
-                            )
-                            max_dt_ms = (
-                                self._shooting_profile_max_dt * 1000.0
-                                if self._shooting_profile_max_dt > 0.0
-                                else 0.0
-                            )
-                            logger.info(
-                                "[PERF] [GL COMPOSITOR] ShootingStars metrics: duration=%.1fms, frames=%d, "
-                                "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, size=%dx%d",
-                                duration_ms,
-                                self._shooting_profile_frame_count,
-                                avg_fps,
-                                min_dt_ms,
-                                max_dt_ms,
-                                self.width(),
-                                self.height(),
-                            )
-                except Exception as e:
-                    logger.debug("[GL COMPOSITOR] ShootingStars metrics logging failed: %s", e, exc_info=True)
-
-            self._shooting_profile_start_ts = None
-            self._shooting_profile_last_ts = None
-            self._shooting_profile_frame_count = 0
-            self._shooting_profile_min_dt = 0.0
-            self._shooting_profile_max_dt = 0.0
-
-            if self._shooting_stars is not None:
-                try:
-                    self._base_pixmap = self._shooting_stars.new_pixmap
-                except Exception:
-                    pass
-            self._shooting_stars = None
-            self._current_anim_id = None
-
-            try:
-                self.update()
-            except Exception as e:
-                logger.debug(
-                    "[GL COMPOSITOR] Shooting Stars complete update failed (likely after deletion): %s",
-                    e,
-                    exc_info=True,
-                )
-
-            if on_finished:
-                try:
-                    on_finished()
-                except Exception:
-                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Shooting Stars complete handler failed: %s", e, exc_info=True)
+    # NOTE: _on_shuffle_complete() and _on_shooting_stars_complete() removed - these transitions are retired.
 
     def _on_peel_update(self, progress: float) -> None:
         """Update handler for compositor-driven peel transitions."""
@@ -2744,17 +2431,7 @@ class GLCompositorWidget(QOpenGLWidget):
             except Exception:
                 new_pm = None
 
-        if new_pm is None and self._shooting_stars is not None:
-            try:
-                new_pm = self._shooting_stars.new_pixmap
-            except Exception:
-                new_pm = None
-
-        if new_pm is None and self._shuffle is not None:
-            try:
-                new_pm = self._shuffle.new_pixmap
-            except Exception:
-                new_pm = None
+        # NOTE: _shooting_stars and _shuffle snap-to-new removed - these transitions are retired.
 
         if snap_to_new and new_pm is not None:
             self._base_pixmap = new_pm
@@ -2886,17 +2563,19 @@ class GLCompositorWidget(QOpenGLWidget):
             self._gl_pipeline.u_spec_dir_loc = gl.glGetUniformLocation(program, "u_specDir")
             self._gl_pipeline.u_axis_mode_loc = gl.glGetUniformLocation(program, "u_axisMode")
 
-            # Compile the Ripple (raindrops) shader program when GL is
-            # available. On failure we disable shader usage for this session so
-            # that all shader-backed transitions fall back to the compositor's
-            # QPainter-based paths (Group A → Group B).
+            # Compile the Ripple (raindrops) shader program using the helper module.
+            # On failure we disable shader usage for this session so that all
+            # shader-backed transitions fall back to QPainter-based paths.
             try:
-                rp = self._create_raindrops_program()
+                raindrops_helper = _get_raindrops_program()
+                rp = raindrops_helper.create_program()
                 self._gl_pipeline.raindrops_program = rp
-                self._gl_pipeline.raindrops_u_progress = gl.glGetUniformLocation(rp, "u_progress")
-                self._gl_pipeline.raindrops_u_resolution = gl.glGetUniformLocation(rp, "u_resolution")
-                self._gl_pipeline.raindrops_u_old_tex = gl.glGetUniformLocation(rp, "uOldTex")
-                self._gl_pipeline.raindrops_u_new_tex = gl.glGetUniformLocation(rp, "uNewTex")
+                self._gl_pipeline.raindrops_uniforms = raindrops_helper.cache_uniforms(rp)
+                # Also populate legacy fields for any code still using them
+                self._gl_pipeline.raindrops_u_progress = self._gl_pipeline.raindrops_uniforms.get("u_progress", -1)
+                self._gl_pipeline.raindrops_u_resolution = self._gl_pipeline.raindrops_uniforms.get("u_resolution", -1)
+                self._gl_pipeline.raindrops_u_old_tex = self._gl_pipeline.raindrops_uniforms.get("uOldTex", -1)
+                self._gl_pipeline.raindrops_u_new_tex = self._gl_pipeline.raindrops_uniforms.get("uNewTex", -1)
             except Exception:
                 logger.debug("[GL SHADER] Failed to initialize raindrops shader program", exc_info=True)
                 self._gl_pipeline.raindrops_program = 0
@@ -2904,13 +2583,17 @@ class GLCompositorWidget(QOpenGLWidget):
                 self._use_shaders = False
                 return
 
+            # Compile the Warp shader program using the helper module.
             try:
-                wp = self._create_warp_program()
+                warp_helper = _get_warp_program()
+                wp = warp_helper.create_program()
                 self._gl_pipeline.warp_program = wp
-                self._gl_pipeline.warp_u_progress = gl.glGetUniformLocation(wp, "u_progress")
-                self._gl_pipeline.warp_u_resolution = gl.glGetUniformLocation(wp, "u_resolution")
-                self._gl_pipeline.warp_u_old_tex = gl.glGetUniformLocation(wp, "uOldTex")
-                self._gl_pipeline.warp_u_new_tex = gl.glGetUniformLocation(wp, "uNewTex")
+                self._gl_pipeline.warp_uniforms = warp_helper.cache_uniforms(wp)
+                # Also populate legacy fields for any code still using them
+                self._gl_pipeline.warp_u_progress = self._gl_pipeline.warp_uniforms.get("u_progress", -1)
+                self._gl_pipeline.warp_u_resolution = self._gl_pipeline.warp_uniforms.get("u_resolution", -1)
+                self._gl_pipeline.warp_u_old_tex = self._gl_pipeline.warp_uniforms.get("uOldTex", -1)
+                self._gl_pipeline.warp_u_new_tex = self._gl_pipeline.warp_uniforms.get("uNewTex", -1)
             except Exception:
                 logger.debug("[GL SHADER] Failed to initialize warp shader program", exc_info=True)
                 self._gl_pipeline.warp_program = 0
@@ -2918,18 +2601,21 @@ class GLCompositorWidget(QOpenGLWidget):
                 self._use_shaders = False
                 return
 
-            # Compile the Diffuse shader program. On failure we disable shader
-            # usage for this session so that all shader-backed transitions fall
-            # back to the compositor's QPainter-based paths.
+            # Compile the Diffuse shader program using the helper module.
+            # On failure we disable shader usage for this session so that all
+            # shader-backed transitions fall back to QPainter-based paths.
             try:
-                dp = self._create_diffuse_program()
+                diffuse_helper = _get_diffuse_program()
+                dp = diffuse_helper.create_program()
                 self._gl_pipeline.diffuse_program = dp
-                self._gl_pipeline.diffuse_u_progress = gl.glGetUniformLocation(dp, "u_progress")
-                self._gl_pipeline.diffuse_u_resolution = gl.glGetUniformLocation(dp, "u_resolution")
-                self._gl_pipeline.diffuse_u_old_tex = gl.glGetUniformLocation(dp, "uOldTex")
-                self._gl_pipeline.diffuse_u_new_tex = gl.glGetUniformLocation(dp, "uNewTex")
-                self._gl_pipeline.diffuse_u_grid = gl.glGetUniformLocation(dp, "u_grid")
-                self._gl_pipeline.diffuse_u_shape_mode = gl.glGetUniformLocation(dp, "u_shapeMode")
+                self._gl_pipeline.diffuse_uniforms = diffuse_helper.cache_uniforms(dp)
+                # Also populate legacy fields for any code still using them
+                self._gl_pipeline.diffuse_u_progress = self._gl_pipeline.diffuse_uniforms.get("u_progress", -1)
+                self._gl_pipeline.diffuse_u_resolution = self._gl_pipeline.diffuse_uniforms.get("u_resolution", -1)
+                self._gl_pipeline.diffuse_u_old_tex = self._gl_pipeline.diffuse_uniforms.get("uOldTex", -1)
+                self._gl_pipeline.diffuse_u_new_tex = self._gl_pipeline.diffuse_uniforms.get("uNewTex", -1)
+                self._gl_pipeline.diffuse_u_grid = self._gl_pipeline.diffuse_uniforms.get("u_grid", -1)
+                self._gl_pipeline.diffuse_u_shape_mode = self._gl_pipeline.diffuse_uniforms.get("u_shapeMode", -1)
             except Exception:
                 logger.debug("[GL SHADER] Failed to initialize diffuse shader program", exc_info=True)
                 self._gl_pipeline.diffuse_program = 0
@@ -2937,18 +2623,21 @@ class GLCompositorWidget(QOpenGLWidget):
                 self._use_shaders = False
                 return
 
-            # Compile the BlockFlip shader program. On failure we disable
-            # shader usage for this session so that all shader-backed
-            # transitions fall back to the compositor's QPainter-based paths.
+            # Compile the BlockFlip shader program using the helper module.
+            # On failure we disable shader usage for this session so that all
+            # shader-backed transitions fall back to QPainter-based paths.
             try:
-                bfp = self._create_blockflip_program()
+                blockflip_helper = _get_blockflip_program()
+                bfp = blockflip_helper.create_program()
                 self._gl_pipeline.blockflip_program = bfp
-                self._gl_pipeline.blockflip_u_progress = gl.glGetUniformLocation(bfp, "u_progress")
-                self._gl_pipeline.blockflip_u_resolution = gl.glGetUniformLocation(bfp, "u_resolution")
-                self._gl_pipeline.blockflip_u_old_tex = gl.glGetUniformLocation(bfp, "uOldTex")
-                self._gl_pipeline.blockflip_u_new_tex = gl.glGetUniformLocation(bfp, "uNewTex")
-                self._gl_pipeline.blockflip_u_grid = gl.glGetUniformLocation(bfp, "u_grid")
-                self._gl_pipeline.blockflip_u_direction = gl.glGetUniformLocation(bfp, "u_direction")
+                self._gl_pipeline.blockflip_uniforms = blockflip_helper.cache_uniforms(bfp)
+                # Also populate legacy fields for any code still using them
+                self._gl_pipeline.blockflip_u_progress = self._gl_pipeline.blockflip_uniforms.get("u_progress", -1)
+                self._gl_pipeline.blockflip_u_resolution = self._gl_pipeline.blockflip_uniforms.get("u_resolution", -1)
+                self._gl_pipeline.blockflip_u_old_tex = self._gl_pipeline.blockflip_uniforms.get("uOldTex", -1)
+                self._gl_pipeline.blockflip_u_new_tex = self._gl_pipeline.blockflip_uniforms.get("uNewTex", -1)
+                self._gl_pipeline.blockflip_u_grid = self._gl_pipeline.blockflip_uniforms.get("u_grid", -1)
+                self._gl_pipeline.blockflip_u_direction = self._gl_pipeline.blockflip_uniforms.get("u_direction", -1)
             except Exception:
                 logger.debug("[GL SHADER] Failed to initialize blockflip shader program", exc_info=True)
                 self._gl_pipeline.blockflip_program = 0
@@ -2956,18 +2645,21 @@ class GLCompositorWidget(QOpenGLWidget):
                 self._use_shaders = False
                 return
 
-            # Compile the Peel shader program. On failure we disable shader
-            # usage for this session so that all shader-backed transitions
-            # fall back to the compositor's QPainter-based paths.
+            # Compile the Peel shader program using the helper module.
+            # On failure we disable shader usage for this session so that all
+            # shader-backed transitions fall back to QPainter-based paths.
             try:
-                pp = self._create_peel_program()
+                peel_helper = _get_peel_program()
+                pp = peel_helper.create_program()
                 self._gl_pipeline.peel_program = pp
-                self._gl_pipeline.peel_u_progress = gl.glGetUniformLocation(pp, "u_progress")
-                self._gl_pipeline.peel_u_resolution = gl.glGetUniformLocation(pp, "u_resolution")
-                self._gl_pipeline.peel_u_old_tex = gl.glGetUniformLocation(pp, "uOldTex")
-                self._gl_pipeline.peel_u_new_tex = gl.glGetUniformLocation(pp, "uNewTex")
-                self._gl_pipeline.peel_u_direction = gl.glGetUniformLocation(pp, "u_direction")
-                self._gl_pipeline.peel_u_strips = gl.glGetUniformLocation(pp, "u_strips")
+                self._gl_pipeline.peel_uniforms = peel_helper.cache_uniforms(pp)
+                # Also populate legacy fields for any code still using them
+                self._gl_pipeline.peel_u_progress = self._gl_pipeline.peel_uniforms.get("u_progress", -1)
+                self._gl_pipeline.peel_u_resolution = self._gl_pipeline.peel_uniforms.get("u_resolution", -1)
+                self._gl_pipeline.peel_u_old_tex = self._gl_pipeline.peel_uniforms.get("uOldTex", -1)
+                self._gl_pipeline.peel_u_new_tex = self._gl_pipeline.peel_uniforms.get("uNewTex", -1)
+                self._gl_pipeline.peel_u_direction = self._gl_pipeline.peel_uniforms.get("u_direction", -1)
+                self._gl_pipeline.peel_u_strips = self._gl_pipeline.peel_uniforms.get("u_strips", -1)
             except Exception:
                 logger.debug("[GL SHADER] Failed to initialize peel shader program", exc_info=True)
                 self._gl_pipeline.peel_program = 0
@@ -2975,13 +2667,17 @@ class GLCompositorWidget(QOpenGLWidget):
                 self._use_shaders = False
                 return
 
+            # Compile the Crossfade shader program using the helper module.
             try:
-                xp = self._create_crossfade_program()
+                crossfade_helper = _get_crossfade_program()
+                xp = crossfade_helper.create_program()
                 self._gl_pipeline.crossfade_program = xp
-                self._gl_pipeline.crossfade_u_progress = gl.glGetUniformLocation(xp, "u_progress")
-                self._gl_pipeline.crossfade_u_resolution = gl.glGetUniformLocation(xp, "u_resolution")
-                self._gl_pipeline.crossfade_u_old_tex = gl.glGetUniformLocation(xp, "uOldTex")
-                self._gl_pipeline.crossfade_u_new_tex = gl.glGetUniformLocation(xp, "uNewTex")
+                self._gl_pipeline.crossfade_uniforms = crossfade_helper.cache_uniforms(xp)
+                # Also populate legacy fields for any code still using them
+                self._gl_pipeline.crossfade_u_progress = self._gl_pipeline.crossfade_uniforms.get("u_progress", -1)
+                self._gl_pipeline.crossfade_u_resolution = self._gl_pipeline.crossfade_uniforms.get("u_resolution", -1)
+                self._gl_pipeline.crossfade_u_old_tex = self._gl_pipeline.crossfade_uniforms.get("uOldTex", -1)
+                self._gl_pipeline.crossfade_u_new_tex = self._gl_pipeline.crossfade_uniforms.get("uNewTex", -1)
             except Exception:
                 logger.debug("[GL SHADER] Failed to initialize crossfade shader program", exc_info=True)
                 self._gl_pipeline.crossfade_program = 0
@@ -2989,15 +2685,19 @@ class GLCompositorWidget(QOpenGLWidget):
                 self._use_shaders = False
                 return
 
+            # Compile the Slide shader program using the helper module.
             try:
-                slp = self._create_slide_program()
+                slide_helper = _get_slide_program()
+                slp = slide_helper.create_program()
                 self._gl_pipeline.slide_program = slp
-                self._gl_pipeline.slide_u_progress = gl.glGetUniformLocation(slp, "u_progress")
-                self._gl_pipeline.slide_u_resolution = gl.glGetUniformLocation(slp, "u_resolution")
-                self._gl_pipeline.slide_u_old_tex = gl.glGetUniformLocation(slp, "uOldTex")
-                self._gl_pipeline.slide_u_new_tex = gl.glGetUniformLocation(slp, "uNewTex")
-                self._gl_pipeline.slide_u_old_rect = gl.glGetUniformLocation(slp, "u_oldRect")
-                self._gl_pipeline.slide_u_new_rect = gl.glGetUniformLocation(slp, "u_newRect")
+                self._gl_pipeline.slide_uniforms = slide_helper.cache_uniforms(slp)
+                # Also populate legacy fields for any code still using them
+                self._gl_pipeline.slide_u_progress = self._gl_pipeline.slide_uniforms.get("u_progress", -1)
+                self._gl_pipeline.slide_u_resolution = self._gl_pipeline.slide_uniforms.get("u_resolution", -1)
+                self._gl_pipeline.slide_u_old_tex = self._gl_pipeline.slide_uniforms.get("uOldTex", -1)
+                self._gl_pipeline.slide_u_new_tex = self._gl_pipeline.slide_uniforms.get("uNewTex", -1)
+                self._gl_pipeline.slide_u_old_rect = self._gl_pipeline.slide_uniforms.get("u_oldRect", -1)
+                self._gl_pipeline.slide_u_new_rect = self._gl_pipeline.slide_uniforms.get("u_newRect", -1)
             except Exception:
                 logger.debug("[GL SHADER] Failed to initialize slide shader program", exc_info=True)
                 self._gl_pipeline.slide_program = 0
@@ -3005,14 +2705,18 @@ class GLCompositorWidget(QOpenGLWidget):
                 self._use_shaders = False
                 return
 
+            # Compile the Wipe shader program using the helper module.
             try:
-                wp2 = self._create_wipe_program()
+                wipe_helper = _get_wipe_program()
+                wp2 = wipe_helper.create_program()
                 self._gl_pipeline.wipe_program = wp2
-                self._gl_pipeline.wipe_u_progress = gl.glGetUniformLocation(wp2, "u_progress")
-                self._gl_pipeline.wipe_u_resolution = gl.glGetUniformLocation(wp2, "u_resolution")
-                self._gl_pipeline.wipe_u_old_tex = gl.glGetUniformLocation(wp2, "uOldTex")
-                self._gl_pipeline.wipe_u_new_tex = gl.glGetUniformLocation(wp2, "uNewTex")
-                self._gl_pipeline.wipe_u_mode = gl.glGetUniformLocation(wp2, "u_mode")
+                self._gl_pipeline.wipe_uniforms = wipe_helper.cache_uniforms(wp2)
+                # Also populate legacy fields for any code still using them
+                self._gl_pipeline.wipe_u_progress = self._gl_pipeline.wipe_uniforms.get("u_progress", -1)
+                self._gl_pipeline.wipe_u_resolution = self._gl_pipeline.wipe_uniforms.get("u_resolution", -1)
+                self._gl_pipeline.wipe_u_old_tex = self._gl_pipeline.wipe_uniforms.get("uOldTex", -1)
+                self._gl_pipeline.wipe_u_new_tex = self._gl_pipeline.wipe_uniforms.get("uNewTex", -1)
+                self._gl_pipeline.wipe_u_mode = self._gl_pipeline.wipe_uniforms.get("u_mode", -1)
             except Exception:
                 logger.debug("[GL SHADER] Failed to initialize wipe shader program", exc_info=True)
                 self._gl_pipeline.wipe_program = 0
@@ -3020,17 +2724,20 @@ class GLCompositorWidget(QOpenGLWidget):
                 self._use_shaders = False
                 return
 
-            # Compile the Blinds shader program. On failure we disable shader
-            # usage for this session so that all shader-backed transitions fall
-            # back to the compositor's QPainter-based paths.
+            # Compile the Blinds shader program using the helper module.
+            # On failure we disable shader usage for this session so that all
+            # shader-backed transitions fall back to QPainter-based paths.
             try:
-                bp = self._create_blinds_program()
+                blinds_helper = _get_blinds_program()
+                bp = blinds_helper.create_program()
                 self._gl_pipeline.blinds_program = bp
-                self._gl_pipeline.blinds_u_progress = gl.glGetUniformLocation(bp, "u_progress")
-                self._gl_pipeline.blinds_u_resolution = gl.glGetUniformLocation(bp, "u_resolution")
-                self._gl_pipeline.blinds_u_old_tex = gl.glGetUniformLocation(bp, "uOldTex")
-                self._gl_pipeline.blinds_u_new_tex = gl.glGetUniformLocation(bp, "uNewTex")
-                self._gl_pipeline.blinds_u_grid = gl.glGetUniformLocation(bp, "u_grid")
+                self._gl_pipeline.blinds_uniforms = blinds_helper.cache_uniforms(bp)
+                # Also populate legacy fields for any code still using them
+                self._gl_pipeline.blinds_u_progress = self._gl_pipeline.blinds_uniforms.get("u_progress", -1)
+                self._gl_pipeline.blinds_u_resolution = self._gl_pipeline.blinds_uniforms.get("u_resolution", -1)
+                self._gl_pipeline.blinds_u_old_tex = self._gl_pipeline.blinds_uniforms.get("uOldTex", -1)
+                self._gl_pipeline.blinds_u_new_tex = self._gl_pipeline.blinds_uniforms.get("uNewTex", -1)
+                self._gl_pipeline.blinds_u_grid = self._gl_pipeline.blinds_uniforms.get("u_grid", -1)
             except Exception:
                 logger.debug("[GL SHADER] Failed to initialize blinds shader program", exc_info=True)
                 self._gl_pipeline.blinds_program = 0
@@ -3038,48 +2745,7 @@ class GLCompositorWidget(QOpenGLWidget):
                 self._use_shaders = False
                 return
 
-            # Compile the Shuffle shader program. On failure we disable shader
-            # usage for this session so that all shader-backed transitions fall
-            # back to the compositor's QPainter-based paths (Group A ￾ Group C
-            # downgrade via existing CPU transitions rather than a CPU Shuffle
-            # variant).
-            try:
-                sp = self._create_shuffle_program()
-                self._gl_pipeline.shuffle_program = sp
-                self._gl_pipeline.shuffle_u_progress = gl.glGetUniformLocation(sp, "u_progress")
-                self._gl_pipeline.shuffle_u_resolution = gl.glGetUniformLocation(sp, "u_resolution")
-                self._gl_pipeline.shuffle_u_old_tex = gl.glGetUniformLocation(sp, "uOldTex")
-                self._gl_pipeline.shuffle_u_new_tex = gl.glGetUniformLocation(sp, "uNewTex")
-                self._gl_pipeline.shuffle_u_grid = gl.glGetUniformLocation(sp, "u_grid")
-                self._gl_pipeline.shuffle_u_direction = gl.glGetUniformLocation(sp, "u_direction")
-            except Exception:
-                logger.debug("[GL SHADER] Failed to initialize shuffle shader program", exc_info=True)
-                self._gl_pipeline.shuffle_program = 0
-                self._gl_disabled_for_session = True
-                self._use_shaders = False
-                return
-
-            # Compile the Shooting Stars (claws) shader program. On failure we
-            # disable shader usage for this session so that all shader-backed
-            # transitions fall back to the compositor's QPainter-based paths
-            # (Group A → Group B).
-            try:
-                cp = self._create_claws_program()
-                self._gl_pipeline.claws_program = cp
-                self._gl_pipeline.claws_u_progress = gl.glGetUniformLocation(cp, "u_progress")
-                self._gl_pipeline.claws_u_resolution = gl.glGetUniformLocation(cp, "u_resolution")
-                self._gl_pipeline.claws_u_old_tex = gl.glGetUniformLocation(cp, "uOldTex")
-                self._gl_pipeline.claws_u_new_tex = gl.glGetUniformLocation(cp, "uNewTex")
-                self._gl_pipeline.claws_u_density = gl.glGetUniformLocation(cp, "u_density")
-                self._gl_pipeline.claws_u_direction = gl.glGetUniformLocation(cp, "u_direction")
-                self._gl_pipeline.claws_u_length = gl.glGetUniformLocation(cp, "u_length")
-                self._gl_pipeline.claws_u_width = gl.glGetUniformLocation(cp, "u_width")
-            except Exception:
-                logger.debug("[GL SHADER] Failed to initialize claws/shooting-stars shader program", exc_info=True)
-                self._gl_pipeline.claws_program = 0
-                self._gl_disabled_for_session = True
-                self._use_shaders = False
-                return
+            # NOTE: Shuffle and Claws shader initialization removed - these transitions are retired.
 
             # Fullscreen quad with interleaved position (x, y) and UV (u, v).
             vertices = [
@@ -3618,1360 +3284,36 @@ void main() {
 
         return int(program)
 
-    def _create_peel_program(self) -> int:
-        """Compile and link the shader program used for Peel.
+    # NOTE: _create_peel_program() has been moved to rendering/gl_programs/peel_program.py
+    # The PeelProgram helper is now responsible for shader compilation and rendering.
 
-        Peel is implemented as a fullscreen-quad shader that always draws the
-        new image as the stable base frame while strips of the old image slide
-        and fade away along a configured direction. Each logical strip has a
-        small per-strip timing offset so the wave feels organic rather than
-        perfectly synchronous.
-        """
+    # NOTE: _create_wipe_program() has been moved to rendering/gl_programs/wipe_program.py
+    # The WipeProgram helper is now responsible for shader compilation and rendering.
 
-        if gl is None:
-            raise RuntimeError("OpenGL context not available for shader program")
+    # NOTE: _create_diffuse_program() has been moved to rendering/gl_programs/diffuse_program.py
+    # The DiffuseProgram helper is now responsible for shader compilation and rendering.
 
-        vs_source = """#version 410 core
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aUv;
+    # NOTE: _create_blockflip_program() has been moved to rendering/gl_programs/blockflip_program.py
+    # The BlockFlipProgram helper is now responsible for shader compilation and rendering.
 
-out vec2 vUv;
+    # NOTE: _create_blinds_program() has been moved to rendering/gl_programs/blinds_program.py
+    # The BlindsProgram helper is now responsible for shader compilation and rendering.
 
-void main() {
-    vUv = aUv;
-    gl_Position = vec4(aPos, 0.0, 1.0);
-}
-"""
+    # NOTE: _create_crossfade_program() has been moved to rendering/gl_programs/crossfade_program.py
+    # The CrossfadeProgram helper is now responsible for shader compilation and rendering.
 
-        fs_source = """#version 410 core
-in vec2 vUv;
-out vec4 FragColor;
+    # NOTE: _create_slide_program() has been moved to rendering/gl_programs/slide_program.py
+    # The SlideProgram helper is now responsible for shader compilation and rendering.
 
-uniform sampler2D uOldTex;
-uniform sampler2D uNewTex;
-uniform float u_progress;
-uniform vec2 u_resolution;
-uniform vec2 u_direction;  // peel travel direction
-uniform float u_strips;    // logical strip count
+    # NOTE: _create_shuffle_program() REMOVED - Shuffle transition was retired (dead code)
 
-float hash1(float n) {
-    return fract(sin(n) * 43758.5453123);
-}
+    # NOTE: _create_warp_program() has been moved to rendering/gl_programs/warp_program.py
+    # The WarpProgram helper is now responsible for shader compilation and rendering.
 
-void main() {
-    // Flip V to match Qt's top-left image origin.
-    vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
+    # NOTE: _create_raindrops_program() has been moved to rendering/gl_programs/raindrops_program.py
+    # The RaindropsProgram helper is now responsible for shader compilation and rendering.
 
-    vec4 oldColor = texture(uOldTex, uv);
-    vec4 newColor = texture(uNewTex, uv);
-
-    float t = clamp(u_progress, 0.0, 1.0);
-
-    if (t <= 0.0) {
-        FragColor = oldColor;
-        return;
-    }
-    if (t >= 1.0) {
-        FragColor = newColor;
-        return;
-    }
-
-    // Normalised peel direction.
-    vec2 dir = u_direction;
-    if (length(dir) < 1e-3) {
-        dir = vec2(1.0, 0.0);
-    } else {
-        dir = normalize(dir);
-    }
-
-    float strips = max(u_strips, 1.0);
-
-    // Choose a 1D coordinate along the strip index. To mirror the CPU
-    // compositor we always order strips from left→right (horizontal) or
-    // top→bottom (vertical), independent of peel direction.
-    bool horizontal = abs(dir.x) >= abs(dir.y);
-    float axisCoord = horizontal ? uv.x : uv.y;
-
-    axisCoord = clamp(axisCoord, 0.0, 1.0);
-    float stripIndex = floor(axisCoord * strips + 1e-4);
-
-    // Sequential per-strip timing similar to the CPU compositor path: early
-    // strips start earlier, later strips start later but all complete by
-    // t = 1.0.
-    float start = 0.0;
-    if (strips > 1.0) {
-        float delay_per_strip = 0.7 / (strips - 1.0);
-        start = delay_per_strip * stripIndex;
-    }
-
-    float local;
-    if (t <= start) {
-        local = 0.0;
-    } else {
-        float span = max(1.0 - start, 1e-4);
-        local = clamp((t - start) / span, 0.0, 1.0);
-    }
-
-    // Local coordinate within this logical strip in [0,1). At the start of
-    // the animation each strip occupies its full segment width so the old
-    // image completely covers the new image. As the strip peels away, its
-    // visible band narrows toward the centre so the effect feels like thin
-    // sheets being pulled off.
-    float segPos = fract(axisCoord * strips);
-    float baseWidth = 0.45;                     // final fraction of segment used
-    float width = mix(1.0, baseWidth, local);   // 1.0 → baseWidth over lifetime
-    float halfBand = 0.5 * width;
-    float bandMin = 0.5 - halfBand;
-    float bandMax = 0.5 + halfBand;
-    float inBand = step(bandMin, segPos) * step(segPos, bandMax);
-
-    // If this strip has completely peeled away, only the new image remains.
-    if (local >= 1.0) {
-        FragColor = newColor;
-        return;
-    }
-
-    // Slide the strip off-screen along the peel direction. We work in the
-    // shifted UV space so both the visible band and the sampled old image
-    // move together across the screen, mirroring the CPU painter which
-    // translates and clips whole rectangles.
-    float travel = 1.2;  // slightly slower peel while still clearing the frame
-    vec2 shifted = uv - dir * local * travel;
-
-    // Recompute the band mask in shifted space so the geometry of the strip
-    // itself travels across the frame.
-    float maskCoord = horizontal ? shifted.x : shifted.y;
-    float maskCoordClamped = clamp(maskCoord, 0.0, 1.0);
-    float segPosShifted = fract(maskCoordClamped * strips);
-    float inBandShifted = step(bandMin, segPosShifted) * step(segPosShifted, bandMax);
-
-    // Only sample old image where the shifted strip still overlaps it.
-    float inside = 0.0;
-    if (shifted.x >= 0.0 && shifted.x <= 1.0 && shifted.y >= 0.0 && shifted.y <= 1.0) {
-        inside = 1.0;
-    }
-
-    vec4 peeledOld = texture(uOldTex, shifted);
-
-    // Piece-wise opacity: start fading as soon as this strip begins to
-    // peel, so each band thins out over its entire lifetime rather than
-    // staying fully opaque until late in the animation.
-    float fade = 1.0 - local;
-    // Quadratic falloff so strips start fading as soon as they move and
-    // disappear sooner in their lifetime.
-    float alpha = inside * inBandShifted * fade * fade;
-
-    // Short global tail so, regardless of local timing, we always land on a
-    // pure new image by the end of the transition.
-    float tail = smoothstep(0.90, 1.0, t);
-    alpha *= (1.0 - tail);
-
-    vec4 color = mix(newColor, peeledOld, clamp(alpha, 0.0, 1.0));
-    FragColor = color;
-}
-"""
-
-        vert = self._compile_shader(vs_source, gl.GL_VERTEX_SHADER)
-        try:
-            frag = self._compile_shader(fs_source, gl.GL_FRAGMENT_SHADER)
-        except Exception:
-            gl.glDeleteShader(vert)
-            raise
-
-        try:
-            program = gl.glCreateProgram()
-            gl.glAttachShader(program, vert)
-            gl.glAttachShader(program, frag)
-            gl.glLinkProgram(program)
-            status = gl.glGetProgramiv(program, gl.GL_LINK_STATUS)
-            if status != gl.GL_TRUE:
-                log = gl.glGetProgramInfoLog(program)
-                logger.debug("[GL SHADER] Failed to link peel program: %r", log)
-                gl.glDeleteProgram(program)
-                raise RuntimeError(f"Failed to link peel program: {log!r}")
-        finally:
-            gl.glDeleteShader(vert)
-            gl.glDeleteShader(frag)
-
-        return int(program)
-
-    def _create_wipe_program(self) -> int:
-        if gl is None:
-            raise RuntimeError("OpenGL context not available for shader program")
-
-        vs_source = """#version 410 core
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aUv;
-
-out vec2 vUv;
-
-void main() {
-    vUv = aUv;
-    gl_Position = vec4(aPos, 0.0, 1.0);
-}
-"""
-
-        fs_source = """#version 410 core
-in vec2 vUv;
-out vec4 FragColor;
-
-uniform sampler2D uOldTex;
-uniform sampler2D uNewTex;
-uniform float u_progress;
-uniform vec2 u_resolution;
-uniform int u_mode;   // 0=L2R,1=R2L,2=T2B,3=B2T,4=Diag TL-BR,5=Diag TR-BL
-
-void main() {
-    vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
-
-    vec4 oldColor = texture(uOldTex, uv);
-    vec4 newColor = texture(uNewTex, uv);
-
-    float t = clamp(u_progress, 0.0, 1.0);
-
-    if (t <= 0.0) {
-        FragColor = oldColor;
-        return;
-    }
-    if (t >= 1.0) {
-        FragColor = newColor;
-        return;
-    }
-
-    // Compute a scalar axis in [0,1] that the wipe front travels along.
-    float axis = 0.0;
-
-    if (u_mode == 0) {
-        // Left-to-right
-        axis = uv.x;
-    } else if (u_mode == 1) {
-        // Right-to-left
-        axis = 1.0 - uv.x;
-    } else if (u_mode == 2) {
-        // Top-to-bottom
-        axis = uv.y;
-    } else if (u_mode == 3) {
-        // Bottom-to-top
-        axis = 1.0 - uv.y;
-    } else if (u_mode == 4) {
-        // Diagonal TL-BR: project onto (1,1) and normalise back to 0..1.
-        float proj = (uv.x + uv.y) * 0.5;
-        axis = clamp(proj, 0.0, 1.0);
-    } else if (u_mode == 5) {
-        // Diagonal TR-BL: project onto (-1,1).
-        float proj = ((1.0 - uv.x) + uv.y) * 0.5;
-        axis = clamp(proj, 0.0, 1.0);
-    }
-
-    float m = step(axis, t);
-
-    vec4 color = mix(oldColor, newColor, m);
-    FragColor = color;
-}
-"""
-
-        vert = self._compile_shader(vs_source, gl.GL_VERTEX_SHADER)
-        try:
-            frag = self._compile_shader(fs_source, gl.GL_FRAGMENT_SHADER)
-        except Exception:
-            gl.glDeleteShader(vert)
-            raise
-
-        try:
-            program = gl.glCreateProgram()
-            gl.glAttachShader(program, vert)
-            gl.glAttachShader(program, frag)
-            gl.glLinkProgram(program)
-            status = gl.glGetProgramiv(program, gl.GL_LINK_STATUS)
-            if status != gl.GL_TRUE:
-                log = gl.glGetProgramInfoLog(program)
-                logger.debug("[GL SHADER] Failed to link wipe program: %r", log)
-                gl.glDeleteProgram(program)
-                raise RuntimeError(f"Failed to link wipe program: {log!r}")
-        finally:
-            gl.glDeleteShader(vert)
-            gl.glDeleteShader(frag)
-
-        return int(program)
-
-    def _create_diffuse_program(self) -> int:
-        """Compile and link the shader program used for Diffuse.
-
-        This is a fullscreen-quad shader that reveals the new image in a
-        block-based pattern. Each logical block in a grid receives a hashed
-        random threshold so blocks fade in over time rather than switching all
-        at once. The controller/config passes the grid via ``u_grid``.
-        """
-
-        if gl is None:
-            raise RuntimeError("OpenGL context not available for shader program")
-
-        vs_source = """#version 410 core
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aUv;
-
-out vec2 vUv;
-
-void main() {
-    vUv = aUv;
-    gl_Position = vec4(aPos, 0.0, 1.0);
-}
-"""
-
-        fs_source = """#version 410 core
-in vec2 vUv;
-out vec4 FragColor;
-
-uniform sampler2D uOldTex;
-uniform sampler2D uNewTex;
-uniform float u_progress;
-uniform vec2 u_resolution;
-uniform vec2 u_grid;        // (cols, rows)
-uniform int u_shapeMode;    // 0=Rectangle, 1=Membrane
-
-float hash1(float n) {
-    return fract(sin(n) * 43758.5453123);
-}
-
-void main() {
-    // Flip V to match Qt's top-left image origin.
-    vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
-
-    vec4 oldColor = texture(uOldTex, uv);
-    vec4 newColor = texture(uNewTex, uv);
-
-    float t = clamp(u_progress, 0.0, 1.0);
-
-    // Logical block grid in UV space; fall back to a single block when the
-    // grid is not configured.
-    vec2 grid = max(u_grid, vec2(1.0));
-    vec2 cell = clamp(floor(uv * grid), vec2(0.0), grid - vec2(1.0));
-    float cols = grid.x;
-    float rows = grid.y;
-    float cellIndex = cell.y * cols + cell.x;
-
-    // Per-block randomised reveal threshold in [0, 1]. As t increases from
-    // 0→1, more blocks cross their threshold and become visible, giving a
-    // long-lived mottled phase instead of a late, compressed switch. Clamp
-    // the effective threshold so every block has enough time to fully
-    // transition before t=1, and slightly bias thresholds towards earlier
-    // times so coverage ramps up more smoothly.
-    float rnd = hash1(cellIndex * 37.0 + 13.0);
-    float width = 0.18;
-    float shaped = pow(rnd, 1.35);
-    float threshold = min(shaped, 1.0 - width);
-
-    // Small local smoothing window so blocks do not pop on in a single
-    // frame. Width controls how quickly each block fades from old→new once
-    // its threshold is reached.
-    float local = smoothstep(threshold, threshold + width, t);
-
-    // Local UV inside the current block for shape masks.
-    vec2 cellOrigin = cell / grid;
-    vec2 cellSize = vec2(1.0) / grid;
-    vec2 uvLocal = (uv - cellOrigin) / cellSize; // 0..1 inside block
-
-    // Rectangle (0): whole-block transition using the local timing only.
-    float rectMix = local;
-
-    // Per-block shape progress: remains 0 until this block's threshold is
-    // reached, then ramps from 0→1 over the remaining global timeline. This
-    // keeps the membrane evolving inside each cell instead of synchronising
-    // purely to the global time.
-    float shapeProgress = 0.0;
-    if (t > threshold) {
-        float span = max(1e-4, 1.0 - threshold);
-        shapeProgress = clamp((t - threshold) / span, 0.0, 1.0);
-    }
-
-    vec2 centred = uvLocal - vec2(0.5);
-    float baseR = length(centred);
-
-    // Subtle per-cell wobble so membranes read as organic/webbed rather than
-    // perfect circles, without introducing harsh noise. The wobble only
-    // grows as the shapeProgress advances.
-    float wobble = (hash1(cellIndex * 91.0 + 7.0) - 0.5) * 0.20;
-    float r = baseR * (1.0 + wobble * shapeProgress);
-
-    // Membrane (1): soft radial membrane that grows over time inside each
-    // block. The centre reveals first and expands outward, but the maximum
-    // radius stays well below the block corners so a feathered web remains
-    // visible until the final global tail.
-    float memMinR = 0.10;
-    float memMaxR = 0.55;
-    float memR = mix(memMinR, memMaxR, shapeProgress);
-    float memEdge = 0.60;
-    float memInner = max(0.0, memR - memEdge * 0.6);
-    float memOuter = memR + memEdge * 0.4;
-    float membraneMask = 1.0 - smoothstep(memInner, memOuter, r);
-    float membraneMix = local * membraneMask;
-
-    float blockMix = rectMix;
-    if (u_shapeMode == 1) {
-        blockMix = membraneMix;
-    }
-
-    // Short global tail so that, regardless of local jitter, we always land
-    // on a pure new image by the end of the transition. For Membrane we
-    // also fade out and then fully clamp the block-based contribution in
-    // the last few percent so no grid structure survives into the final
-    // landing frames.
-    float tail;
-    if (u_shapeMode == 1) {
-        float blockFade = 1.0 - smoothstep(0.84, 0.94, t);
-        blockMix *= blockFade;
-        tail = smoothstep(0.84, 1.0, t);
-        if (t > 0.94) {
-            // Once the global tail is dominant, cap any remaining block
-            // modulation so the final frames are driven purely by the tail
-            // and no per-cell pattern is visible.
-            blockMix = min(blockMix, tail);
-        }
-    } else {
-        tail = smoothstep(0.96, 1.0, t);
-    }
-
-    float mixFactor = clamp(max(blockMix, tail), 0.0, 1.0);
-
-    vec4 color = mix(oldColor, newColor, mixFactor);
-    FragColor = color;
-}
-"""
-
-        vert = self._compile_shader(vs_source, gl.GL_VERTEX_SHADER)
-        try:
-            frag = self._compile_shader(fs_source, gl.GL_FRAGMENT_SHADER)
-        except Exception:
-            gl.glDeleteShader(vert)
-            raise
-
-        try:
-            program = gl.glCreateProgram()
-            gl.glAttachShader(program, vert)
-            gl.glAttachShader(program, frag)
-            gl.glLinkProgram(program)
-            status = gl.glGetProgramiv(program, gl.GL_LINK_STATUS)
-            if status != gl.GL_TRUE:
-                log = gl.glGetProgramInfoLog(program)
-                logger.debug("[GL SHADER] Failed to link diffuse program: %r", log)
-                gl.glDeleteProgram(program)
-                raise RuntimeError(f"Failed to link diffuse program: {log!r}")
-        finally:
-            gl.glDeleteShader(vert)
-            gl.glDeleteShader(frag)
-
-        return int(program)
-
-    def _create_blockflip_program(self) -> int:
-        if gl is None:
-            raise RuntimeError("OpenGL context not available for shader program")
-
-        vs_source = """#version 410 core
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aUv;
-
-out vec2 vUv;
-
-void main() {
-    vUv = aUv;
-    gl_Position = vec4(aPos, 0.0, 1.0);
-}
-"""
-
-        fs_source = """#version 410 core
-in vec2 vUv;
-out vec4 FragColor;
-
-uniform sampler2D uOldTex;
-uniform sampler2D uNewTex;
-uniform float u_progress;
-uniform vec2 u_resolution;
-uniform vec2 u_grid;        // (cols, rows)
-uniform vec2 u_direction;   // slide direction, cardinal
-
-float hash1(float n) {
-    return fract(sin(n) * 43758.5453123);
-}
-
-void main() {
-    // Flip V to match Qt's top-left image origin.
-    vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
-
-    vec4 oldColor = texture(uOldTex, uv);
-    vec4 newColor = texture(uNewTex, uv);
-
-    float t = clamp(u_progress, 0.0, 1.0);
-
-    if (t <= 0.0) {
-        FragColor = oldColor;
-        return;
-    }
-    if (t >= 1.0) {
-        FragColor = newColor;
-        return;
-    }
-
-    // Logical block grid in UV space.
-    vec2 grid = max(u_grid, vec2(1.0));
-    vec2 cell = clamp(floor(uv * grid), vec2(0.0), grid - vec2(1.0));
-    float cols = grid.x;
-    float rows = grid.y;
-    float cellIndex = cell.y * cols + cell.x;
-
-    vec2 cellOrigin = cell / grid;
-    vec2 cellSize = vec2(1.0) / grid;
-    vec2 uvLocal = (uv - cellOrigin) / cellSize; // 0..1 inside block
-
-    // Direction-aware wave based on the *block* row/column, mirroring the
-    // legacy BlockPuzzleFlip controller. This determines when each block
-    // begins its flip relative to the chosen edge.
-    vec2 dir = u_direction;
-    if (length(dir) < 1e-3) {
-        dir = vec2(1.0, 0.0);
-    } else {
-        dir = normalize(dir);
-    }
-
-    float colIndex = cell.x;
-    float rowIndex = cell.y;
-    bool horizontal = abs(dir.x) >= abs(dir.y);
-
-    // Base start timing from the leading edge, matching the CPU
-    // BlockPuzzleFlip controller.
-    float base = 0.0;
-    if (horizontal) {
-        // LEFT/RIGHT: wave travels across columns.
-        if (dir.x > 0.0) {
-            // SlideDirection.LEFT semantics: left→right.
-            if (cols > 1.0) {
-                base = colIndex / (cols - 1.0);
-            }
-        } else {
-            // SlideDirection.RIGHT semantics: right→left.
-            if (cols > 1.0) {
-                base = (cols - 1.0 - colIndex) / (cols - 1.0);
-            }
-        }
-    } else {
-        // UP/DOWN: wave travels across rows.
-        if (dir.y > 0.0) {
-            // SlideDirection.DOWN: top→bottom.
-            if (rows > 1.0) {
-                base = rowIndex / (rows - 1.0);
-            }
-        } else {
-            // SlideDirection.UP: bottom→top.
-            if (rows > 1.0) {
-                base = (rows - 1.0 - rowIndex) / (rows - 1.0);
-            }
-        }
-    }
-
-    // Center bias: blocks nearer the center of the orthogonal axis begin
-    // slightly earlier so the wavefront forms a shallow arrow/curve shape
-    // rather than a perfectly straight slit.
-    float colNorm = (cols > 1.0) ? colIndex / (cols - 1.0) : 0.5;
-    float rowNorm = (rows > 1.0) ? rowIndex / (rows - 1.0) : 0.5;
-    float ortho = horizontal ? abs(rowNorm - 0.5) : abs(colNorm - 0.5);
-    float centerFactor = (0.5 - ortho) * 2.0; // 1 at center, 0 at edges.
-    // Use a slightly stronger bias for vertical waves (fewer rows) so the
-    // centre band feels more pronounced, while keeping horizontal behaviour
-    // close to the original Block Puzzle Flip look.
-    float centerBiasStrength = horizontal ? 0.25 : 0.32;
-    base -= centerFactor * centerBiasStrength;
-    base = clamp(base, 0.0, 1.0);
-
-    // Small jitter so neighbouring blocks do not all start at exactly the
-    // same moment; scaled by grid density so the wavefront remains coherent.
-    float span = max(cols, rows);
-    float jitterBase = horizontal ? 0.18 : 0.10;
-    float jitterSpan = span > 0.0 ? jitterBase / span : 0.0;
-    if (jitterSpan > 0.0) {
-        base += (hash1(cellIndex * 91.0 + 7.0) - 0.5) * jitterSpan;
-    }
-    base = clamp(base, 0.0, 1.0);
-
-    float start = clamp(base * 0.9, 0.0, 1.0 - 0.25);
-    float end = start + 0.25;
-
-    float local = 0.0;
-    if (t >= start) {
-        float span = max(end - start, 1e-4);
-        local = clamp((t - start) / span, 0.0, 1.0);
-    }
-
-    // Cosine-based easing for the apparent flip, mirroring the legacy
-    // BlockPuzzleFlip controller: eased in [0, 1] drives the width of a
-    // hard-edged central band within each block.
-    float eased = 0.5 - 0.5 * cos(local * 3.14159265);
-
-    // Width of the revealed band within this block.
-    float w = clamp(eased, 0.0, 1.0);
-    float half = 0.5 * w;
-    float left = 0.5 - half;
-    float right = 0.5 + half;
-
-    // Choose local axis according to the flip direction. For horizontal
-    // flips use X inside the block; for vertical flips use Y.
-    float coord = horizontal ? uvLocal.x : uvLocal.y;
-
-    // Hard-edged band: pixels inside the band are fully new image, outside
-    // are fully old image. No spatial feathering.
-    float inBand = step(left, coord) * step(coord, right);
-
-    // Late global tail so any remaining stragglers land cleanly on new even
-    // if numerical jitter leaves tiny gaps.
-    float tail = smoothstep(0.92, 1.0, t);
-    float useNew = clamp(max(inBand, tail), 0.0, 1.0);
-    float useOld = 1.0 - useNew;
-
-    vec4 color = oldColor * useOld + newColor * useNew;
-    FragColor = color;
-}
-"""
-
-        vert = self._compile_shader(vs_source, gl.GL_VERTEX_SHADER)
-        try:
-            frag = self._compile_shader(fs_source, gl.GL_FRAGMENT_SHADER)
-        except Exception:
-            gl.glDeleteShader(vert)
-            raise
-
-        try:
-            program = gl.glCreateProgram()
-            gl.glAttachShader(program, vert)
-            gl.glAttachShader(program, frag)
-            gl.glLinkProgram(program)
-            status = gl.glGetProgramiv(program, gl.GL_LINK_STATUS)
-            if status != gl.GL_TRUE:
-                log = gl.glGetProgramInfoLog(program)
-                logger.debug("[GL SHADER] Failed to link blockflip program: %r", log)
-                gl.glDeleteProgram(program)
-                raise RuntimeError(f"Failed to link blockflip program: {log!r}")
-        finally:
-            gl.glDeleteShader(vert)
-            gl.glDeleteShader(frag)
-
-        return int(program)
-
-    def _create_blinds_program(self) -> int:
-        if gl is None:
-            raise RuntimeError("OpenGL context not available for shader program")
-
-        vs_source = """#version 410 core
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aUv;
-
-out vec2 vUv;
-
-void main() {
-    vUv = aUv;
-    gl_Position = vec4(aPos, 0.0, 1.0);
-}
-"""
-
-        fs_source = """#version 410 core
-in vec2 vUv;
-out vec4 FragColor;
-
-uniform sampler2D uOldTex;
-uniform sampler2D uNewTex;
-uniform float u_progress;
-uniform vec2 u_resolution;
-uniform vec2 u_grid;        // (cols, rows)
-
-void main() {
-    // Flip V to match Qt's top-left image origin.
-    vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
-
-    vec4 oldColor = texture(uOldTex, uv);
-    vec4 newColor = texture(uNewTex, uv);
-
-    float t = clamp(u_progress, 0.0, 1.0);
-
-    // Logical grid in UV space; when u_grid is unset we fall back to a
-    // single full-frame cell so the effect still works.
-    vec2 grid = max(u_grid, vec2(1.0));
-    vec2 cell = clamp(floor(uv * grid), vec2(0.0), grid - vec2(1.0));
-
-    vec2 cellOrigin = cell / grid;
-    vec2 cellSize = vec2(1.0) / grid;
-    vec2 uvLocal = (uv - cellOrigin) / cellSize; // 0..1 inside cell
-
-    // Blinds are modelled as a horizontal band within each cell that grows
-    // symmetrically from the centre outwards. At t=0 the band is collapsed
-    // to a thin line; by t=1 it covers the full cell width.
-    float w = clamp(t, 0.0, 1.0);
-    float half = 0.5 * w;
-    float left = 0.5 - half;
-    float right = 0.5 + half;
-
-    // Soft edges so the band does not appear as a harsh 1px stripe.
-    float feather = 0.08;
-    float edgeL = smoothstep(left - feather, left, uvLocal.x);
-    float edgeR = 1.0 - smoothstep(right, right + feather, uvLocal.x);
-    float bandMask = clamp(edgeL * edgeR, 0.0, 1.0);
-
-    // Late global tail to guarantee we land on a fully revealed frame even
-    // if numerical jitter leaves small gaps in the band coverage.
-    float tail = smoothstep(0.96, 1.0, t);
-    float mixFactor = clamp(max(bandMask, tail), 0.0, 1.0);
-
-    FragColor = mix(oldColor, newColor, mixFactor);
-}
-"""
-
-        vert = self._compile_shader(vs_source, gl.GL_VERTEX_SHADER)
-        try:
-            frag = self._compile_shader(fs_source, gl.GL_FRAGMENT_SHADER)
-        except Exception:
-            gl.glDeleteShader(vert)
-            raise
-
-        try:
-            program = gl.glCreateProgram()
-            gl.glAttachShader(program, vert)
-            gl.glAttachShader(program, frag)
-            gl.glLinkProgram(program)
-            status = gl.glGetProgramiv(program, gl.GL_LINK_STATUS)
-            if status != gl.GL_TRUE:
-                log = gl.glGetProgramInfoLog(program)
-                logger.debug("[GL SHADER] Failed to link blinds program: %r", log)
-                gl.glDeleteProgram(program)
-                raise RuntimeError(f"Failed to link blinds program: {log!r}")
-        finally:
-            gl.glDeleteShader(vert)
-            gl.glDeleteShader(frag)
-
-        return int(program)
-
-    def _create_crossfade_program(self) -> int:
-        if gl is None:
-            raise RuntimeError("OpenGL context not available for shader program")
-
-        vs_source = """#version 410 core
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aUv;
-
-out vec2 vUv;
-
-void main() {
-    vUv = aUv;
-    gl_Position = vec4(aPos, 0.0, 1.0);
-}
-"""
-
-        fs_source = """#version 410 core
-in vec2 vUv;
-out vec4 FragColor;
-
-uniform sampler2D uOldTex;
-uniform sampler2D uNewTex;
-uniform float u_progress;
-uniform vec2 u_resolution;
-
-void main() {
-    vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
-
-    vec4 oldColor = texture(uOldTex, uv);
-    vec4 newColor = texture(uNewTex, uv);
-
-    float t = clamp(u_progress, 0.0, 1.0);
-
-    FragColor = mix(oldColor, newColor, t);
-}
-"""
-
-        vert = self._compile_shader(vs_source, gl.GL_VERTEX_SHADER)
-        try:
-            frag = self._compile_shader(fs_source, gl.GL_FRAGMENT_SHADER)
-        except Exception:
-            gl.glDeleteShader(vert)
-            raise
-
-        try:
-            program = gl.glCreateProgram()
-            gl.glAttachShader(program, vert)
-            gl.glAttachShader(program, frag)
-            gl.glLinkProgram(program)
-            status = gl.glGetProgramiv(program, gl.GL_LINK_STATUS)
-            if status != gl.GL_TRUE:
-                log = gl.glGetProgramInfoLog(program)
-                logger.debug("[GL SHADER] Failed to link crossfade program: %r", log)
-                gl.glDeleteProgram(program)
-                raise RuntimeError(f"Failed to link crossfade program: {log!r}")
-        finally:
-            gl.glDeleteShader(vert)
-            gl.glDeleteShader(frag)
-
-        return int(program)
-
-    def _create_slide_program(self) -> int:
-        if gl is None:
-            raise RuntimeError("OpenGL context not available for shader program")
-
-        vs_source = """#version 410 core
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aUv;
-
-out vec2 vUv;
-
-void main() {
-    vUv = aUv;
-    gl_Position = vec4(aPos, 0.0, 1.0);
-}
-"""
-
-        fs_source = """#version 410 core
-in vec2 vUv;
-out vec4 FragColor;
-
-uniform sampler2D uOldTex;
-uniform sampler2D uNewTex;
-uniform float u_progress;
-uniform vec2 u_resolution;
-uniform vec4 u_oldRect; // xy = pos, zw = size, in normalised viewport coords
-uniform vec4 u_newRect; // xy = pos, zw = size, in normalised viewport coords
-
-void main() {
-    vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
-
-    // Start from a black background; old and new images layer on top.
-    vec4 color = vec4(0.0, 0.0, 0.0, 1.0);
-
-    // OLD image contribution.
-    vec2 oldMin = u_oldRect.xy;
-    vec2 oldMax = u_oldRect.xy + u_oldRect.zw;
-    if (uv.x >= oldMin.x && uv.x <= oldMax.x && uv.y >= oldMin.y && uv.y <= oldMax.y) {
-        vec2 span = max(u_oldRect.zw, vec2(1e-5));
-        vec2 local = (uv - oldMin) / span;
-        color = texture(uOldTex, local);
-    }
-
-    // NEW image overlays OLD where they overlap, mirroring the QPainter
-    // behaviour where the new pixmap is drawn last.
-    vec2 newMin = u_newRect.xy;
-    vec2 newMax = u_newRect.xy + u_newRect.zw;
-    if (uv.x >= newMin.x && uv.x <= newMax.x && uv.y >= newMin.y && uv.y <= newMax.y) {
-        vec2 span = max(u_newRect.zw, vec2(1e-5));
-        vec2 local = (uv - newMin) / span;
-        vec4 newColor = texture(uNewTex, local);
-        color = newColor;
-    }
-
-    FragColor = color;
-}
-"""
-
-        vert = self._compile_shader(vs_source, gl.GL_VERTEX_SHADER)
-        try:
-            frag = self._compile_shader(fs_source, gl.GL_FRAGMENT_SHADER)
-        except Exception:
-            gl.glDeleteShader(vert)
-            raise
-
-        try:
-            program = gl.glCreateProgram()
-            gl.glAttachShader(program, vert)
-            gl.glAttachShader(program, frag)
-            gl.glLinkProgram(program)
-            status = gl.glGetProgramiv(program, gl.GL_LINK_STATUS)
-            if status != gl.GL_TRUE:
-                log = gl.glGetProgramInfoLog(program)
-                logger.debug("[GL SHADER] Failed to link slide program: %r", log)
-                gl.glDeleteProgram(program)
-                raise RuntimeError(f"Failed to link slide program: {log!r}")
-        finally:
-            gl.glDeleteShader(vert)
-            gl.glDeleteShader(frag)
-
-        return int(program)
-
-    def _create_shuffle_program(self) -> int:
-        """Compile and link the shader program used for Shuffle mask."""
-
-        if gl is None:
-            raise RuntimeError("OpenGL context not available for shader program")
-
-        vs_source = """#version 410 core
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aUv;
-
-out vec2 vUv;
-
-void main() {
-    vUv = aUv;
-    gl_Position = vec4(aPos, 0.0, 1.0);
-}
-"""
-
-        fs_source = """#version 410 core
-in vec2 vUv;
-out vec4 FragColor;
-
-uniform sampler2D uOldTex;
-uniform sampler2D uNewTex;
-uniform float u_progress;
-uniform vec2 u_resolution;
-uniform vec2 u_grid;        // (cols, rows)
-uniform vec2 u_direction;   // slide direction, cardinal (e.g. (1,0), (-1,0), (0,1), (0,-1))
-
-float hash1(float n) {
-    return fract(sin(n) * 43758.5453123);
-}
-
-void main() {
-    // Flip V to match Qt's top-left image origin.
-    vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
-
-    vec4 oldColor = texture(uOldTex, uv);
-    vec4 newColor = texture(uNewTex, uv);
-
-    float t = clamp(u_progress, 0.0, 1.0);
-
-    // Logical block grid in UV space.
-    vec2 grid = max(u_grid, vec2(1.0));
-    vec2 cell = clamp(floor(uv * grid), vec2(0.0), grid - vec2(1.0));
-    float cols = grid.x;
-    float rows = grid.y;
-    float cellIndex = cell.y * cols + cell.x;
-
-    // Per-block jitter: staggered start so blocks do not all move in
-    // perfect lock-step. We mirror the diffuse-based Shuffle semantics by
-    // varying only the start time per block and letting the wavefront run
-    // across the screen, rather than also randomising the span.
-    float rnd = hash1(cellIndex * 37.0 + 13.0);
-    float start = rnd * 0.7;
-    float local = (t - start) / max(1.0 - start, 1e-3);
-    local = clamp(local, 0.0, 1.0);
-
-    // Local UV within the block.
-    vec2 cellOrigin = cell / grid;
-    vec2 cellSize = vec2(1.0) / grid;
-    vec2 uvLocal = (uv - cellOrigin) / cellSize; // 0..1 inside block
-
-    // Direction-aware axis so that the reveal always starts at axis = 0
-    // regardless of the global direction.
-    vec2 dir = u_direction;
-    if (length(dir) < 1e-3) {
-        dir = vec2(1.0, 0.0);
-    } else {
-        dir = normalize(dir);
-    }
-
-    float axis;
-    if (abs(dir.x) > abs(dir.y)) {
-        // Horizontal motion
-        axis = uvLocal.x;
-        if (dir.x < 0.0) {
-            axis = 1.0 - axis;
-        }
-    } else {
-        // Vertical motion
-        axis = uvLocal.y;
-        if (dir.y < 0.0) {
-            axis = 1.0 - axis;
-        }
-    }
-
-    // Soft front so the edge of each block reads as a moving band rather than
-    // a hard 1px line.
-    float front = local;
-    float feather = 0.18;
-    float blockMask = smoothstep(front - feather, front, axis);
-
-    // Late global tail: only in the final few percent do we force any
-    // remaining straggler blocks fully onto the new image, avoiding an
-    // early, harsh swap while still guaranteeing a clean landing.
-    float globalTail = smoothstep(0.96, 1.0, t);
-    float mixFactor = clamp(max(blockMask, globalTail), 0.0, 1.0);
-
-    vec4 color = mix(oldColor, newColor, mixFactor);
-    FragColor = color;
-}
-"""
-
-        vert = self._compile_shader(vs_source, gl.GL_VERTEX_SHADER)
-        try:
-            frag = self._compile_shader(fs_source, gl.GL_FRAGMENT_SHADER)
-        except Exception:
-            gl.glDeleteShader(vert)
-            raise
-
-        try:
-            program = gl.glCreateProgram()
-            gl.glAttachShader(program, vert)
-            gl.glAttachShader(program, frag)
-            gl.glLinkProgram(program)
-            status = gl.glGetProgramiv(program, gl.GL_LINK_STATUS)
-            if status != gl.GL_TRUE:
-                log = gl.glGetProgramInfoLog(program)
-                logger.debug("[GL SHADER] Failed to link shuffle program: %r", log)
-                gl.glDeleteProgram(program)
-                raise RuntimeError(f"Failed to link shuffle program: {log!r}")
-        finally:
-            gl.glDeleteShader(vert)
-            gl.glDeleteShader(frag)
-
-        return int(program)
-
-    def _create_warp_program(self) -> int:
-        """Compile and link the shader program used for Warp Dissolve."""
-
-        if gl is None:
-            raise RuntimeError("OpenGL context not available for shader program")
-
-        vs_source = """#version 410 core
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aUv;
-
-out vec2 vUv;
-
-void main() {
-    vUv = aUv;
-    gl_Position = vec4(aPos, 0.0, 1.0);
-}
-"""
-
-        fs_source = """#version 410 core
-in vec2 vUv;
-out vec4 FragColor;
-
-uniform sampler2D uOldTex;
-uniform sampler2D uNewTex;
-uniform float u_progress;
-uniform vec2 u_resolution;
-
-void main() {
-    // Flip V to match Qt's top-left image origin.
-    vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
-
-    vec4 newColor = texture(uNewTex, uv);
-    vec4 oldColor = texture(uOldTex, uv);
-
-    float t = clamp(u_progress, 0.0, 1.0);
-
-    // Normalised, aspect-corrected coordinates around the image centre.
-    float aspect = u_resolution.x / max(u_resolution.y, 1.0);
-    vec2 centered = uv - vec2(0.5, 0.5);
-    centered.x *= aspect;
-
-    float r = length(centered);
-    float maxR = length(vec2(0.5 * aspect, 0.5));
-    float rNorm = clamp(r / maxR, 0.0, 1.0);
-
-    // Angle in polar space.
-    float theta = atan(centered.y, centered.x);
-
-    // Strong vortex: peak twist at t=0.5 and near the centre. Allow up to
-    // ~1.65 turns at the core so the motion clearly reads as a whirlpool.
-    float swirlPhase = sin(t * 3.14159265);          // 0 at 0/1, 1 at 0.5
-    float swirlStrength = 3.3 * 3.14159265;          // ~10% stronger than 1.5
-    float radialFalloff = (1.0 - rNorm);
-    radialFalloff *= radialFalloff;                  // bias towards centre
-    // Suppress twist in a thin border near the outer edge to avoid visible
-    // bending of the very top/left edges on wide aspect ratios.
-    float edgeMask = 1.0 - smoothstep(0.94, 1.0, rNorm);
-    radialFalloff *= edgeMask;
-    float swirl = swirlPhase * swirlStrength * radialFalloff;
-
-    // Shared swirl field that gradually unwinds as we approach the end of the
-    // transition so the new image relaxes back to its original orientation.
-    float unwhirl = smoothstep(0.6, 1.0, t);
-    float sharedSwirl = swirl * (1.0 - 0.75 * unwhirl);
-
-    // OLD image - fully participates in the vortex.
-    float thetaOld = theta + sharedSwirl;
-    float rOld = r * (1.0 - 0.45 * t * (1.0 - rNorm));
-    vec2 dirOld = vec2(cos(thetaOld), sin(thetaOld));
-    dirOld.x /= aspect;
-    vec2 uvOld = vec2(0.5, 0.5) + dirOld * rOld;
-    uvOld = clamp(uvOld, vec2(0.0), vec2(1.0));
-    vec4 warpedOld = texture(uOldTex, uvOld);
-
-    // NEW image - equally twisted into the same vortex, then gently unwound as
-    // we approach t=1 so the final frame is stable. Retain a mild zoom-in
-    // early on but guarantee that we land exactly on the original framing
-    // once the unwhirl phase has completed.
-    float thetaNew = theta + sharedSwirl;
-    float zoomPhase = 0.85 + 0.25 * t;
-    float zoom = mix(zoomPhase, 1.0, unwhirl);
-    float rNew = r * zoom;
-    vec2 dirNew = vec2(cos(thetaNew), sin(thetaNew));
-    dirNew.x /= aspect;
-    vec2 uvNew = vec2(0.5, 0.5) + dirNew * rNew;
-    uvNew = clamp(uvNew, vec2(0.0), vec2(1.0));
-    vec4 warpedNew = texture(uNewTex, uvNew);
-
-    // Mixing: fade into a shared vortex, then unwhirl to the final frame.
-    //  - Centre reveals first once the vortex has formed
-    //  - Outer ring follows a bit later
-    //  - Global tail guarantees a clean landing on the new image
-    // Slightly earlier phases (~10%) so the dissolve feels a bit snappier.
-    float centrePhase = smoothstep(0.16, 0.41, t) * (1.0 - rNorm);
-    float ringPhase = smoothstep(0.27, 0.63, t) * smoothstep(0.15, 1.0, rNorm);
-    float tailPhase = smoothstep(0.72, 0.94, t);
-    float mixFactor = clamp(max(max(centrePhase, ringPhase), tailPhase), 0.0, 1.0);
-
-    vec4 color = mix(warpedOld, warpedNew, mixFactor);
-
-    FragColor = color;
-}
-"""
-
-        vert = self._compile_shader(vs_source, gl.GL_VERTEX_SHADER)
-        try:
-            frag = self._compile_shader(fs_source, gl.GL_FRAGMENT_SHADER)
-        except Exception:
-            gl.glDeleteShader(vert)
-            raise
-
-        try:
-            program = gl.glCreateProgram()
-            gl.glAttachShader(program, vert)
-            gl.glAttachShader(program, frag)
-            gl.glLinkProgram(program)
-            status = gl.glGetProgramiv(program, gl.GL_LINK_STATUS)
-            if status != gl.GL_TRUE:
-                log = gl.glGetProgramInfoLog(program)
-                logger.debug("[GL SHADER] Failed to link warp program: %r", log)
-                gl.glDeleteProgram(program)
-                raise RuntimeError(f"Failed to link warp program: {log!r}")
-        finally:
-            gl.glDeleteShader(vert)
-            gl.glDeleteShader(frag)
-
-        return int(program)
-
-    def _create_raindrops_program(self) -> int:
-        """Compile and link the shader program used for Raindrops."""
-
-        if gl is None:
-            raise RuntimeError("OpenGL context not available for shader program")
-
-        vs_source = """#version 410 core
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aUv;
-
-out vec2 vUv;
-
-void main() {
-    vUv = aUv;
-    gl_Position = vec4(aPos, 0.0, 1.0);
-}
-"""
-
-        fs_source = """#version 410 core
-in vec2 vUv;
-out vec4 FragColor;
-
-uniform sampler2D uOldTex;
-uniform sampler2D uNewTex;
-uniform float u_progress;
-uniform vec2 u_resolution;
-
-void main() {
-    // Flip V to match Qt's top-left image origin.
-    vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
-
-    vec4 oldColor = texture(uOldTex, uv);
-    vec4 newColor = texture(uNewTex, uv);
-
-    float t = clamp(u_progress, 0.0, 1.0);
-
-    // Normalised coordinates with aspect compensation so the ripple is
-    // circular even on non-square render targets.
-    float aspect = u_resolution.x / max(u_resolution.y, 1.0);
-    vec2 centered = uv - vec2(0.5, 0.5);
-    centered.x *= aspect;
-    float r = length(centered);
-
-    // Use the true maximum radius from the centre to the furthest corner so
-    // the ripple cleanly reaches the image corners without leaving a thin
-    // untransitioned band.
-    float maxR = length(vec2(0.5 * aspect, 0.5));
-    float rNorm = clamp(r / maxR, 0.0, 1.0);
-    float front = t;
-
-    // Radial wave travelling outwards from the centre. Lower spatial and
-    // temporal frequency to avoid judder.
-    float wave = 0.0;
-    if (rNorm < front + 0.25) {
-        float spatialFreq = 18.0;
-        float temporalFreq = 4.0;
-        float phase = spatialFreq * (rNorm - front) - temporalFreq * t;
-        float attenuation = exp(-6.0 * abs(rNorm - front));
-        wave = 0.012 * sin(phase) * attenuation;
-    }
-
-    vec2 dir = (r > 1e-5) ? (centered / r) : vec2(0.0, 0.0);
-
-    // Displace the sampling position along the radial direction to create
-    // a water-like refraction of the old image.
-    vec2 rippleUv = uv + dir * wave;
-    rippleUv = clamp(rippleUv, vec2(0.0), vec2(1.0));
-    vec4 rippleOld = texture(uOldTex, rippleUv);
-
-    vec4 base = mix(oldColor, rippleOld, 0.7);
-
-    // Reveal the NEW image from the centre outward. Points that the wave
-    // front has already passed transition to the new image, and a gentle
-    // global fade near the end guarantees we finish fully on the new frame.
-    float localMix = smoothstep(-0.04, 0.18, front - rNorm);
-    float globalMix = smoothstep(0.78, 0.95, t);
-    float newMix = clamp(max(localMix, globalMix), 0.0, 1.0);
-
-    vec4 mixed = mix(base, newColor, newMix);
-
-    // Subtle highlight on the main ring to read as a bright water crest.
-    float ringMask = smoothstep(front - 0.03, front, rNorm) *
-                     (1.0 - smoothstep(front, front + 0.03, rNorm));
-    mixed.rgb += vec3(0.08) * ringMask;
-
-    FragColor = mixed;
-}
-"""
-
-        vert = self._compile_shader(vs_source, gl.GL_VERTEX_SHADER)
-        try:
-            frag = self._compile_shader(fs_source, gl.GL_FRAGMENT_SHADER)
-        except Exception:
-            gl.glDeleteShader(vert)
-            raise
-
-        try:
-            program = gl.glCreateProgram()
-            gl.glAttachShader(program, vert)
-            gl.glAttachShader(program, frag)
-            gl.glLinkProgram(program)
-            status = gl.glGetProgramiv(program, gl.GL_LINK_STATUS)
-            if status != gl.GL_TRUE:
-                log = gl.glGetProgramInfoLog(program)
-                logger.debug("[GL SHADER] Failed to link raindrops program: %r", log)
-                gl.glDeleteProgram(program)
-                raise RuntimeError(f"Failed to link raindrops program: {log!r}")
-        finally:
-            gl.glDeleteShader(vert)
-            gl.glDeleteShader(frag)
-
-        return int(program)
-
-    def _create_claws_program(self) -> int:
-        """Compile and link the shader program used for Shooting Stars (claws)."""
-
-        if gl is None:
-            raise RuntimeError("OpenGL context not available for shader program")
-
-        vs_source = """#version 410 core
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aUv;
-
-out vec2 vUv;
-
-void main() {
-    vUv = aUv;
-    gl_Position = vec4(aPos, 0.0, 1.0);
-}
-"""
-
-        fs_source = """#version 410 core
-in vec2 vUv;
-out vec4 FragColor;
-
-uniform sampler2D uOldTex;
-uniform sampler2D uNewTex;
-uniform float u_progress;
-uniform vec2 u_resolution;
-uniform float u_density;
-uniform vec2 u_direction;
-uniform float u_length;
-uniform float u_width;
-
-float hash1(float n) {
-    return fract(sin(n) * 43758.5453123);
-}
-
-void main() {
-    vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
-
-    vec4 oldColor = texture(uOldTex, uv);
-    vec4 newColor = texture(uNewTex, uv);
-
-    float t = clamp(u_progress, 0.0, 1.0);
-
-    vec2 dir = u_direction;
-    if (length(dir) < 1e-3) {
-        dir = normalize(vec2(0.8, -1.0));
-    } else {
-        dir = normalize(dir);
-    }
-    vec2 perpDir = vec2(-dir.y, dir.x);
-
-    vec2 p = uv - vec2(0.5, 0.5);
-    float along = dot(p, dir) + 0.5;
-    float across = dot(p, perpDir) + 0.5;
-
-    float density = max(u_density, 1.0);
-    float stripeIndex = floor(across * density);
-    float stripeLocal = fract(across * density) - 0.5;
-
-    float rnd = hash1(stripeIndex * 37.0 + 13.0);
-    float start = rnd * 0.7;
-    float span = 0.25 + rnd * 0.25;
-    float localT = (t - start) / max(span, 1e-3);
-
-    float streakMask = 0.0;
-    if (localT > 0.0 && localT < 1.0) {
-        float head = localT * (1.1 + rnd * 0.3);
-        float halfLen = u_length;
-        float distAlong = along - head;
-        float core = 1.0 - smoothstep(halfLen, halfLen * 1.6, abs(distAlong));
-
-        float halfWidth = u_width;
-        float distAcross = stripeLocal;
-        float widthMask = 1.0 - smoothstep(halfWidth, halfWidth * 1.6, abs(distAcross));
-
-        streakMask = clamp(core * widthMask, 0.0, 1.0);
-    }
-
-    float globalMix = smoothstep(0.75, 1.0, t);
-    float baseMix = max(globalMix, t);
-    vec4 base = mix(oldColor, newColor, baseMix);
-
-    if (streakMask > 0.0) {
-        float starMix = clamp(0.6 + 0.4 * t, 0.0, 1.0);
-        vec4 streakCol = mix(base, newColor, starMix);
-        streakCol.rgb += vec3(0.35) * streakMask;
-        base = mix(base, streakCol, streakMask);
-    }
-
-    FragColor = base;
-}
-"""
-
-        vert = self._compile_shader(vs_source, gl.GL_VERTEX_SHADER)
-        try:
-            frag = self._compile_shader(fs_source, gl.GL_FRAGMENT_SHADER)
-        except Exception:
-            gl.glDeleteShader(vert)
-            raise
-
-        try:
-            program = gl.glCreateProgram()
-            gl.glAttachShader(program, vert)
-            gl.glAttachShader(program, frag)
-            gl.glLinkProgram(program)
-            status = gl.glGetProgramiv(program, gl.GL_LINK_STATUS)
-            if status != gl.GL_TRUE:
-                log = gl.glGetProgramInfoLog(program)
-                logger.debug("[GL SHADER] Failed to link claws program: %r", log)
-                gl.glDeleteProgram(program)
-                raise RuntimeError(f"Failed to link claws program: {log!r}")
-        finally:
-            gl.glDeleteShader(vert)
-            gl.glDeleteShader(frag)
-
-        return int(program)
+    # NOTE: _create_claws_program() REMOVED - Claws/Shooting Stars transition was retired (dead code)
 
     def _compile_shader(self, source: str, shader_type: int) -> int:
         """Compile a single GLSL shader and return its id."""
@@ -5073,16 +3415,7 @@ void main() {
     def _can_use_wipe_shader(self) -> bool:
         return self._can_use_simple_shader(self._wipe, getattr(self._gl_pipeline, "wipe_program", 0))
 
-    def _can_use_shuffle_shader(self) -> bool:
-        return self._can_use_simple_shader(self._shuffle, getattr(self._gl_pipeline, "shuffle_program", 0))
-
-    def _can_use_claws_shader(self) -> bool:
-        # Shooting Stars / Claw Marks shader path is hard-disabled. The user
-        # has elected to remove this effect, and any remaining "Claw Marks"
-        # requests are routed through a CPU crossfade instead. Keeping this
-        # function returning False ensures the GLSL claws program is never
-        # used even if it is still compiled in the pipeline.
-        return False
+    # NOTE: _can_use_shuffle_shader() and _can_use_claws_shader() removed - these transitions are retired.
 
     def warm_shader_textures(self, old_pixmap: Optional[QPixmap], new_pixmap: Optional[QPixmap]) -> None:
         """Best-effort prewarm of shader textures for a pixmap pair.
@@ -5415,17 +3748,7 @@ void main() {
         st = self._wipe
         return self._prepare_pair_textures(st.old_pixmap, st.new_pixmap)
 
-    def _prepare_shuffle_textures(self) -> bool:
-        if not self._can_use_shuffle_shader():
-            return False
-        if self._gl_pipeline is None:
-            return False
-        if self._gl_pipeline.old_tex_id and self._gl_pipeline.new_tex_id:
-            return True
-        if self._shuffle is None:
-            return False
-        st = self._shuffle
-        return self._prepare_pair_textures(st.old_pixmap, st.new_pixmap)
+    # NOTE: _prepare_shuffle_textures() removed - Shuffle transition is retired.
 
     def _get_viewport_size(self) -> tuple[int, int]:
         """Return the framebuffer viewport size in physical pixels."""
@@ -5558,6 +3881,7 @@ void main() {
             gl.glUseProgram(0)
 
     def _paint_peel_shader(self, target: QRect) -> None:
+        """Render Peel transition using the PeelProgram helper."""
         if not self._can_use_peel_shader() or self._gl_pipeline is None or self._peel is None:
             return
         st = self._peel
@@ -5567,119 +3891,23 @@ void main() {
             return
 
         vp_w, vp_h = self._get_viewport_size()
-        p = max(0.0, min(1.0, float(st.progress)))
 
-        gl.glViewport(0, 0, vp_w, vp_h)
-        gl.glDisable(gl.GL_DEPTH_TEST)
+        # Delegate rendering to the PeelProgram helper
+        peel_helper = _get_peel_program()
+        peel_helper.render(
+            program=self._gl_pipeline.peel_program,
+            uniforms=self._gl_pipeline.peel_uniforms,
+            viewport=(vp_w, vp_h),
+            old_tex=self._gl_pipeline.old_tex_id,
+            new_tex=self._gl_pipeline.new_tex_id,
+            state=st,
+            quad_vao=self._gl_pipeline.quad_vao,
+        )
 
-        gl.glUseProgram(self._gl_pipeline.peel_program)
-        try:
-            if self._gl_pipeline.peel_u_progress != -1:
-                gl.glUniform1f(self._gl_pipeline.peel_u_progress, float(p))
-
-            if self._gl_pipeline.peel_u_resolution != -1:
-                gl.glUniform2f(self._gl_pipeline.peel_u_resolution, float(vp_w), float(vp_h))
-
-            # Map SlideDirection to a cardinal travel vector that matches the
-            # CPU compositor semantics: LEFT moves strips left, RIGHT moves
-            # them right, DOWN moves them down, UP moves them up.
-            dx = 0.0
-            dy = 0.0
-            try:
-                direction = getattr(st, "direction", None)
-                if direction == SlideDirection.LEFT:
-                    dx, dy = -1.0, 0.0
-                elif direction == SlideDirection.RIGHT:
-                    dx, dy = 1.0, 0.0
-                elif direction == SlideDirection.DOWN:
-                    dx, dy = 0.0, 1.0
-                elif direction == SlideDirection.UP:
-                    dx, dy = 0.0, -1.0
-            except Exception:
-                dx, dy = -1.0, 0.0
-
-            if self._gl_pipeline.peel_u_direction != -1:
-                gl.glUniform2f(self._gl_pipeline.peel_u_direction, float(dx), float(dy))
-
-            if self._gl_pipeline.peel_u_strips != -1:
-                try:
-                    strips = max(1, int(getattr(st, "strips", 1)))
-                except Exception:
-                    strips = 1
-                gl.glUniform1f(self._gl_pipeline.peel_u_strips, float(strips))
-
-            if self._gl_pipeline.peel_u_old_tex != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE0)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.old_tex_id)
-                gl.glUniform1i(self._gl_pipeline.peel_u_old_tex, 0)
-            if self._gl_pipeline.peel_u_new_tex != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE1)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.new_tex_id)
-                gl.glUniform1i(self._gl_pipeline.peel_u_new_tex, 1)
-
-            gl.glBindVertexArray(self._gl_pipeline.quad_vao)
-            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-            gl.glBindVertexArray(0)
-        finally:
-            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
-            gl.glActiveTexture(gl.GL_TEXTURE0)
-            gl.glUseProgram(0)
-
-    def _paint_claws_shader(self, target: QRect) -> None:
-        if not self._can_use_claws_shader() or self._gl_pipeline is None or self._shooting_stars is None:
-            return
-        st = self._shooting_stars
-        if not st.old_pixmap or st.old_pixmap.isNull() or not st.new_pixmap or st.new_pixmap.isNull():
-            return
-        if not self._prepare_pair_textures(st.old_pixmap, st.new_pixmap):
-            return
-
-        vp_w, vp_h = self._get_viewport_size()
-        p = max(0.0, min(1.0, float(st.progress)))
-
-        gl.glViewport(0, 0, vp_w, vp_h)
-        gl.glDisable(gl.GL_DEPTH_TEST)
-
-        gl.glUseProgram(self._gl_pipeline.claws_program)
-        try:
-            if self._gl_pipeline.claws_u_progress != -1:
-                gl.glUniform1f(self._gl_pipeline.claws_u_progress, float(p))
-
-            if self._gl_pipeline.claws_u_resolution != -1:
-                gl.glUniform2f(self._gl_pipeline.claws_u_resolution, float(vp_w), float(vp_h))
-
-            stripe_count = float(max(10.0, min(32.0, vp_w / 96.0)))
-            if self._gl_pipeline.claws_u_density != -1:
-                gl.glUniform1f(self._gl_pipeline.claws_u_density, stripe_count)
-
-            if self._gl_pipeline.claws_u_direction != -1:
-                gl.glUniform2f(self._gl_pipeline.claws_u_direction, 0.9, -0.45)
-
-            if self._gl_pipeline.claws_u_length != -1:
-                gl.glUniform1f(self._gl_pipeline.claws_u_length, 0.35)
-
-            if self._gl_pipeline.claws_u_width != -1:
-                width = 0.18 / max(stripe_count, 1.0)
-                gl.glUniform1f(self._gl_pipeline.claws_u_width, float(width))
-
-            if self._gl_pipeline.claws_u_old_tex != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE0)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.old_tex_id)
-                gl.glUniform1i(self._gl_pipeline.claws_u_old_tex, 0)
-            if self._gl_pipeline.claws_u_new_tex != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE1)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.new_tex_id)
-                gl.glUniform1i(self._gl_pipeline.claws_u_new_tex, 1)
-
-            gl.glBindVertexArray(self._gl_pipeline.quad_vao)
-            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-            gl.glBindVertexArray(0)
-        finally:
-            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
-            gl.glActiveTexture(gl.GL_TEXTURE0)
-            gl.glUseProgram(0)
+    # NOTE: _paint_claws_shader() REMOVED - Claws/Shooting Stars transition was retired (dead code)
 
     def _paint_blinds_shader(self, target: QRect) -> None:
+        """Render Blinds transition using the BlindsProgram helper."""
         if not self._can_use_blinds_shader() or self._gl_pipeline is None or self._blinds is None:
             return
         st = self._blinds
@@ -5689,43 +3917,19 @@ void main() {
             return
 
         vp_w, vp_h = self._get_viewport_size()
-
-        float_cols = float(max(1, int(getattr(st, "cols", 0))))
-        float_rows = float(max(1, int(getattr(st, "rows", 0))))
-        p = max(0.0, min(1.0, float(st.progress)))
-
-        gl.glViewport(0, 0, vp_w, vp_h)
-        gl.glDisable(gl.GL_DEPTH_TEST)
-
-        gl.glUseProgram(self._gl_pipeline.blinds_program)
-        try:
-            if self._gl_pipeline.blinds_u_progress != -1:
-                gl.glUniform1f(self._gl_pipeline.blinds_u_progress, float(p))
-
-            if self._gl_pipeline.blinds_u_resolution != -1:
-                gl.glUniform2f(self._gl_pipeline.blinds_u_resolution, float(vp_w), float(vp_h))
-
-            if self._gl_pipeline.blinds_u_grid != -1:
-                gl.glUniform2f(self._gl_pipeline.blinds_u_grid, float_cols, float_rows)
-
-            if self._gl_pipeline.blinds_u_old_tex != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE0)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.old_tex_id)
-                gl.glUniform1i(self._gl_pipeline.blinds_u_old_tex, 0)
-            if self._gl_pipeline.blinds_u_new_tex != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE1)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.new_tex_id)
-                gl.glUniform1i(self._gl_pipeline.blinds_u_new_tex, 1)
-
-            gl.glBindVertexArray(self._gl_pipeline.quad_vao)
-            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-            gl.glBindVertexArray(0)
-        finally:
-            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
-            gl.glActiveTexture(gl.GL_TEXTURE0)
-            gl.glUseProgram(0)
+        blinds_helper = _get_blinds_program()
+        blinds_helper.render(
+            program=self._gl_pipeline.blinds_program,
+            uniforms=self._gl_pipeline.blinds_uniforms,
+            viewport=(vp_w, vp_h),
+            old_tex=self._gl_pipeline.old_tex_id,
+            new_tex=self._gl_pipeline.new_tex_id,
+            state=st,
+            quad_vao=self._gl_pipeline.quad_vao,
+        )
 
     def _paint_wipe_shader(self, target: QRect) -> None:
+        """Render Wipe transition using the WipeProgram helper."""
         if not self._can_use_wipe_shader() or self._gl_pipeline is None or self._wipe is None:
             return
         st = self._wipe
@@ -5735,58 +3939,19 @@ void main() {
             return
 
         vp_w, vp_h = self._get_viewport_size()
-
-        float_t = max(0.0, min(1.0, float(st.progress)))
-
-        gl.glViewport(0, 0, vp_w, vp_h)
-        gl.glDisable(gl.GL_DEPTH_TEST)
-
-        gl.glUseProgram(self._gl_pipeline.wipe_program)
-        try:
-            if self._gl_pipeline.wipe_u_progress != -1:
-                gl.glUniform1f(self._gl_pipeline.wipe_u_progress, float_t)
-
-            if self._gl_pipeline.wipe_u_resolution != -1:
-                gl.glUniform2f(self._gl_pipeline.wipe_u_resolution, float(vp_w), float(vp_h))
-
-            # Map WipeDirection to a compact integer mode used by the shader.
-            mode = 0
-            try:
-                direction = st.direction
-                if direction == WipeDirection.RIGHT_TO_LEFT:
-                    mode = 1
-                elif direction == WipeDirection.TOP_TO_BOTTOM:
-                    mode = 2
-                elif direction == WipeDirection.BOTTOM_TO_TOP:
-                    mode = 3
-                elif direction == WipeDirection.DIAG_TL_BR:
-                    mode = 4
-                elif direction == WipeDirection.DIAG_TR_BL:
-                    mode = 5
-            except Exception:
-                mode = 0
-
-            if self._gl_pipeline.wipe_u_mode != -1:
-                gl.glUniform1i(self._gl_pipeline.wipe_u_mode, int(mode))
-
-            if self._gl_pipeline.wipe_u_old_tex != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE0)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.old_tex_id)
-                gl.glUniform1i(self._gl_pipeline.wipe_u_old_tex, 0)
-            if self._gl_pipeline.wipe_u_new_tex != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE1)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.new_tex_id)
-                gl.glUniform1i(self._gl_pipeline.wipe_u_new_tex, 1)
-
-            gl.glBindVertexArray(self._gl_pipeline.quad_vao)
-            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-            gl.glBindVertexArray(0)
-        finally:
-            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
-            gl.glActiveTexture(gl.GL_TEXTURE0)
-            gl.glUseProgram(0)
+        wipe_helper = _get_wipe_program()
+        wipe_helper.render(
+            program=self._gl_pipeline.wipe_program,
+            uniforms=self._gl_pipeline.wipe_uniforms,
+            viewport=(vp_w, vp_h),
+            old_tex=self._gl_pipeline.old_tex_id,
+            new_tex=self._gl_pipeline.new_tex_id,
+            state=st,
+            quad_vao=self._gl_pipeline.quad_vao,
+        )
 
     def _paint_slide_shader(self, target: QRect) -> None:
+        """Render Slide transition using the SlideProgram helper."""
         if not self._can_use_slide_shader() or self._gl_pipeline is None or self._slide is None:
             return
         st = self._slide
@@ -5795,6 +3960,7 @@ void main() {
         if not self._prepare_slide_textures():
             return
 
+        # Compute rect positions based on progress (this logic stays in compositor)
         target_rect = target
         w = max(1, target_rect.width())
         h = max(1, target_rect.height())
@@ -5818,41 +3984,21 @@ void main() {
         new_y = float(new_pos.y()) * inv_h
 
         vp_w, vp_h = self._get_viewport_size()
-
-        gl.glViewport(0, 0, vp_w, vp_h)
-        gl.glDisable(gl.GL_DEPTH_TEST)
-
-        gl.glUseProgram(self._gl_pipeline.slide_program)
-        try:
-            if self._gl_pipeline.slide_u_progress != -1:
-                gl.glUniform1f(self._gl_pipeline.slide_u_progress, float(t))
-
-            if self._gl_pipeline.slide_u_resolution != -1:
-                gl.glUniform2f(self._gl_pipeline.slide_u_resolution, float(vp_w), float(vp_h))
-
-            if self._gl_pipeline.slide_u_old_rect != -1:
-                gl.glUniform4f(self._gl_pipeline.slide_u_old_rect, float(old_x), float(old_y), 1.0, 1.0)
-            if self._gl_pipeline.slide_u_new_rect != -1:
-                gl.glUniform4f(self._gl_pipeline.slide_u_new_rect, float(new_x), float(new_y), 1.0, 1.0)
-
-            if self._gl_pipeline.slide_u_old_tex != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE0)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.old_tex_id)
-                gl.glUniform1i(self._gl_pipeline.slide_u_old_tex, 0)
-            if self._gl_pipeline.slide_u_new_tex != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE1)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.new_tex_id)
-                gl.glUniform1i(self._gl_pipeline.slide_u_new_tex, 1)
-
-            gl.glBindVertexArray(self._gl_pipeline.quad_vao)
-            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-            gl.glBindVertexArray(0)
-        finally:
-            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
-            gl.glActiveTexture(gl.GL_TEXTURE0)
-            gl.glUseProgram(0)
+        slide_helper = _get_slide_program()
+        slide_helper.render(
+            program=self._gl_pipeline.slide_program,
+            uniforms=self._gl_pipeline.slide_uniforms,
+            viewport=(vp_w, vp_h),
+            old_tex=self._gl_pipeline.old_tex_id,
+            new_tex=self._gl_pipeline.new_tex_id,
+            state=st,
+            quad_vao=self._gl_pipeline.quad_vao,
+            old_rect=(old_x, old_y, 1.0, 1.0),
+            new_rect=(new_x, new_y, 1.0, 1.0),
+        )
 
     def _paint_crossfade_shader(self, target: QRect) -> None:
+        """Render Crossfade transition using the CrossfadeProgram helper."""
         if not self._can_use_crossfade_shader() or self._gl_pipeline is None or self._crossfade is None:
             return
         st = self._crossfade
@@ -5862,38 +4008,19 @@ void main() {
             return
 
         vp_w, vp_h = self._get_viewport_size()
-
-        p = max(0.0, min(1.0, float(st.progress)))
-
-        gl.glViewport(0, 0, vp_w, vp_h)
-        gl.glDisable(gl.GL_DEPTH_TEST)
-
-        gl.glUseProgram(self._gl_pipeline.crossfade_program)
-        try:
-            if self._gl_pipeline.crossfade_u_progress != -1:
-                gl.glUniform1f(self._gl_pipeline.crossfade_u_progress, float(p))
-
-            if self._gl_pipeline.crossfade_u_resolution != -1:
-                gl.glUniform2f(self._gl_pipeline.crossfade_u_resolution, float(vp_w), float(vp_h))
-
-            if self._gl_pipeline.crossfade_u_old_tex != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE0)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.old_tex_id)
-                gl.glUniform1i(self._gl_pipeline.crossfade_u_old_tex, 0)
-            if self._gl_pipeline.crossfade_u_new_tex != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE1)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.new_tex_id)
-                gl.glUniform1i(self._gl_pipeline.crossfade_u_new_tex, 1)
-
-            gl.glBindVertexArray(self._gl_pipeline.quad_vao)
-            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-            gl.glBindVertexArray(0)
-        finally:
-            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
-            gl.glActiveTexture(gl.GL_TEXTURE0)
-            gl.glUseProgram(0)
+        crossfade_helper = _get_crossfade_program()
+        crossfade_helper.render(
+            program=self._gl_pipeline.crossfade_program,
+            uniforms=self._gl_pipeline.crossfade_uniforms,
+            viewport=(vp_w, vp_h),
+            old_tex=self._gl_pipeline.old_tex_id,
+            new_tex=self._gl_pipeline.new_tex_id,
+            state=st,
+            quad_vao=self._gl_pipeline.quad_vao,
+        )
 
     def _paint_diffuse_shader(self, target: QRect) -> None:
+        """Render Diffuse transition using the DiffuseProgram helper."""
         if not self._can_use_diffuse_shader() or self._gl_pipeline is None or self._diffuse is None:
             return
         st = self._diffuse
@@ -5903,46 +4030,19 @@ void main() {
             return
 
         vp_w, vp_h = self._get_viewport_size()
-
-        p = max(0.0, min(1.0, float(st.progress)))
-
-        gl.glViewport(0, 0, vp_w, vp_h)
-        gl.glDisable(gl.GL_DEPTH_TEST)
-
-        gl.glUseProgram(self._gl_pipeline.diffuse_program)
-        try:
-            if self._gl_pipeline.diffuse_u_progress != -1:
-                gl.glUniform1f(self._gl_pipeline.diffuse_u_progress, float(p))
-
-            if self._gl_pipeline.diffuse_u_resolution != -1:
-                gl.glUniform2f(self._gl_pipeline.diffuse_u_resolution, float(vp_w), float(vp_h))
-
-            if self._gl_pipeline.diffuse_u_old_tex != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE0)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.old_tex_id)
-                gl.glUniform1i(self._gl_pipeline.diffuse_u_old_tex, 0)
-            if self._gl_pipeline.diffuse_u_new_tex != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE1)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.new_tex_id)
-                gl.glUniform1i(self._gl_pipeline.diffuse_u_new_tex, 1)
-
-            if self._gl_pipeline.diffuse_u_grid != -1:
-                float_cols = float(max(1, int(st.cols)))
-                float_rows = float(max(1, int(st.rows)))
-                gl.glUniform2f(self._gl_pipeline.diffuse_u_grid, float_cols, float_rows)
-
-            if self._gl_pipeline.diffuse_u_shape_mode != -1:
-                gl.glUniform1i(self._gl_pipeline.diffuse_u_shape_mode, int(getattr(st, "shape_mode", 0)))
-
-            gl.glBindVertexArray(self._gl_pipeline.quad_vao)
-            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-            gl.glBindVertexArray(0)
-        finally:
-            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
-            gl.glActiveTexture(gl.GL_TEXTURE0)
-            gl.glUseProgram(0)
+        diffuse_helper = _get_diffuse_program()
+        diffuse_helper.render(
+            program=self._gl_pipeline.diffuse_program,
+            uniforms=self._gl_pipeline.diffuse_uniforms,
+            viewport=(vp_w, vp_h),
+            old_tex=self._gl_pipeline.old_tex_id,
+            new_tex=self._gl_pipeline.new_tex_id,
+            state=st,
+            quad_vao=self._gl_pipeline.quad_vao,
+        )
 
     def _paint_blockflip_shader(self, target: QRect) -> None:
+        """Render BlockFlip transition using the BlockFlipProgram helper."""
         if not self._can_use_blockflip_shader() or self._gl_pipeline is None or self._blockflip is None:
             return
         st = self._blockflip
@@ -5952,128 +4052,23 @@ void main() {
             return
 
         vp_w, vp_h = self._get_viewport_size()
-        p = max(0.0, min(1.0, float(st.progress)))
 
-        gl.glViewport(0, 0, vp_w, vp_h)
-        gl.glDisable(gl.GL_DEPTH_TEST)
+        # Delegate rendering to the BlockFlipProgram helper
+        blockflip_helper = _get_blockflip_program()
+        blockflip_helper.render(
+            program=self._gl_pipeline.blockflip_program,
+            uniforms=self._gl_pipeline.blockflip_uniforms,
+            viewport=(vp_w, vp_h),
+            old_tex=self._gl_pipeline.old_tex_id,
+            new_tex=self._gl_pipeline.new_tex_id,
+            state=st,
+            quad_vao=self._gl_pipeline.quad_vao,
+        )
 
-        gl.glUseProgram(self._gl_pipeline.blockflip_program)
-        try:
-            if self._gl_pipeline.blockflip_u_progress != -1:
-                gl.glUniform1f(self._gl_pipeline.blockflip_u_progress, float(p))
-
-            if self._gl_pipeline.blockflip_u_resolution != -1:
-                gl.glUniform2f(self._gl_pipeline.blockflip_u_resolution, float(vp_w), float(vp_h))
-
-            if self._gl_pipeline.blockflip_u_grid != -1:
-                float_cols = float(max(1, int(getattr(st, "cols", 0))))
-                float_rows = float(max(1, int(getattr(st, "rows", 0))))
-                gl.glUniform2f(self._gl_pipeline.blockflip_u_grid, float_cols, float_rows)
-
-            # Map SlideDirection to a simple cardinal direction vector.
-            dx = 1.0
-            dy = 0.0
-            try:
-                direction = getattr(st, "direction", None)
-                if direction == SlideDirection.LEFT:
-                    dx, dy = 1.0, 0.0
-                elif direction == SlideDirection.RIGHT:
-                    dx, dy = -1.0, 0.0
-                elif direction == SlideDirection.DOWN:
-                    dx, dy = 0.0, 1.0
-                elif direction == SlideDirection.UP:
-                    dx, dy = 0.0, -1.0
-            except Exception:
-                dx, dy = 1.0, 0.0
-
-            if self._gl_pipeline.blockflip_u_direction != -1:
-                gl.glUniform2f(self._gl_pipeline.blockflip_u_direction, float(dx), float(dy))
-
-            if self._gl_pipeline.blockflip_u_old_tex != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE0)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.old_tex_id)
-                gl.glUniform1i(self._gl_pipeline.blockflip_u_old_tex, 0)
-            if self._gl_pipeline.blockflip_u_new_tex != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE1)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.new_tex_id)
-                gl.glUniform1i(self._gl_pipeline.blockflip_u_new_tex, 1)
-
-            gl.glBindVertexArray(self._gl_pipeline.quad_vao)
-            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-            gl.glBindVertexArray(0)
-        finally:
-            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
-            gl.glActiveTexture(gl.GL_TEXTURE0)
-            gl.glUseProgram(0)
-
-    def _paint_shuffle_shader(self, target: QRect) -> None:
-        if not self._can_use_shuffle_shader() or self._gl_pipeline is None or self._shuffle is None:
-            return
-        st = self._shuffle
-        if not st.old_pixmap or st.old_pixmap.isNull() or not st.new_pixmap or st.new_pixmap.isNull():
-            return
-        if not self._prepare_shuffle_textures():
-            return
-
-        vp_w, vp_h = self._get_viewport_size()
-
-        float_cols = float(max(1, int(st.cols)))
-        float_rows = float(max(1, int(st.rows)))
-        p = max(0.0, min(1.0, float(st.progress)))
-
-        gl.glViewport(0, 0, vp_w, vp_h)
-        gl.glDisable(gl.GL_DEPTH_TEST)
-
-        gl.glUseProgram(self._gl_pipeline.shuffle_program)
-        try:
-            if self._gl_pipeline.shuffle_u_progress != -1:
-                gl.glUniform1f(self._gl_pipeline.shuffle_u_progress, float(p))
-
-            if self._gl_pipeline.shuffle_u_resolution != -1:
-                gl.glUniform2f(self._gl_pipeline.shuffle_u_resolution, float(vp_w), float(vp_h))
-
-            if self._gl_pipeline.shuffle_u_grid != -1:
-                gl.glUniform2f(self._gl_pipeline.shuffle_u_grid, float_cols, float_rows)
-
-            # Map encoded edge string to a simple cardinal direction vector.
-            dx = 1.0
-            dy = 0.0
-            edge = st.edge or "L2R"
-            if edge == "L2R":
-                dx = 1.0
-                dy = 0.0
-            elif edge == "R2L":
-                dx = -1.0
-                dy = 0.0
-            elif edge == "T2B":
-                dx = 0.0
-                dy = 1.0
-            elif edge == "B2T":
-                dx = 0.0
-                dy = -1.0
-            if self._gl_pipeline.shuffle_u_direction != -1:
-                gl.glUniform2f(self._gl_pipeline.shuffle_u_direction, float(dx), float(dy))
-
-            if self._gl_pipeline.shuffle_u_old_tex != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE0)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.old_tex_id)
-                gl.glUniform1i(self._gl_pipeline.shuffle_u_old_tex, 0)
-            if self._gl_pipeline.shuffle_u_new_tex != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE1)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.new_tex_id)
-                gl.glUniform1i(self._gl_pipeline.shuffle_u_new_tex, 1)
-
-            gl.glBindVertexArray(self._gl_pipeline.quad_vao)
-            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-            gl.glBindVertexArray(0)
-        finally:
-            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
-            gl.glActiveTexture(gl.GL_TEXTURE0)
-            gl.glUseProgram(0)
-            gl.glDisable(gl.GL_DEPTH_TEST)
-            gl.glDisable(gl.GL_DEPTH_TEST)
+    # NOTE: _paint_shuffle_shader() removed - Shuffle transition is retired.
 
     def _paint_warp_shader(self, target: QRect) -> None:
+        """Render Warp Dissolve transition using the WarpProgram helper."""
         if not self._can_use_warp_shader() or self._gl_pipeline is None or self._warp is None:
             return
         st = self._warp
@@ -6083,80 +4078,38 @@ void main() {
             return
 
         vp_w, vp_h = self._get_viewport_size()
-
-        p = max(0.0, min(1.0, float(st.progress)))
-
-        gl.glViewport(0, 0, vp_w, vp_h)
-        gl.glDisable(gl.GL_DEPTH_TEST)
-
-        gl.glUseProgram(self._gl_pipeline.warp_program)
-        try:
-            if self._gl_pipeline.warp_u_progress != -1:
-                gl.glUniform1f(self._gl_pipeline.warp_u_progress, float(p))
-
-            if self._gl_pipeline.warp_u_resolution != -1:
-                gl.glUniform2f(self._gl_pipeline.warp_u_resolution, float(vp_w), float(vp_h))
-
-            if self._gl_pipeline.warp_u_old_tex != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE0)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.old_tex_id)
-                gl.glUniform1i(self._gl_pipeline.warp_u_old_tex, 0)
-            if self._gl_pipeline.warp_u_new_tex != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE1)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.new_tex_id)
-                gl.glUniform1i(self._gl_pipeline.warp_u_new_tex, 1)
-
-            gl.glBindVertexArray(self._gl_pipeline.quad_vao)
-            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-            gl.glBindVertexArray(0)
-        finally:
-            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
-            gl.glActiveTexture(gl.GL_TEXTURE0)
-            gl.glUseProgram(0)
+        warp_helper = _get_warp_program()
+        warp_helper.render(
+            program=self._gl_pipeline.warp_program,
+            uniforms=self._gl_pipeline.warp_uniforms,
+            viewport=(vp_w, vp_h),
+            old_tex=self._gl_pipeline.old_tex_id,
+            new_tex=self._gl_pipeline.new_tex_id,
+            state=st,
+            quad_vao=self._gl_pipeline.quad_vao,
+        )
 
     def _paint_raindrops_shader(self, target: QRect) -> None:
+        """Render Raindrops transition using the RaindropsProgram helper."""
         if not self._can_use_raindrops_shader() or self._gl_pipeline is None or self._raindrops is None:
             return
         st = self._raindrops
         if not st.old_pixmap or st.old_pixmap.isNull() or not st.new_pixmap or st.new_pixmap.isNull():
             return
         if not self._prepare_raindrops_textures():
-            # Texture upload helper currently uses the shared old/new texture
-            # slots; on failure we simply skip the shader path.
             return
 
         vp_w, vp_h = self._get_viewport_size()
-
-        p = max(0.0, min(1.0, float(st.progress)))
-
-        gl.glViewport(0, 0, vp_w, vp_h)
-        gl.glDisable(gl.GL_DEPTH_TEST)
-
-        gl.glUseProgram(self._gl_pipeline.raindrops_program)
-        try:
-            # Per-frame uniforms now use cached locations from _GLPipelineState.
-            if self._gl_pipeline.raindrops_u_progress != -1:
-                gl.glUniform1f(self._gl_pipeline.raindrops_u_progress, float(p))
-
-            if self._gl_pipeline.raindrops_u_resolution != -1:
-                gl.glUniform2f(self._gl_pipeline.raindrops_u_resolution, float(vp_w), float(vp_h))
-
-            if self._gl_pipeline.raindrops_u_old_tex != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE0)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.old_tex_id)
-                gl.glUniform1i(self._gl_pipeline.raindrops_u_old_tex, 0)
-            if self._gl_pipeline.raindrops_u_new_tex != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE1)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.new_tex_id)
-                gl.glUniform1i(self._gl_pipeline.raindrops_u_new_tex, 1)
-
-            gl.glBindVertexArray(self._gl_pipeline.quad_vao)
-            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-            gl.glBindVertexArray(0)
-        finally:
-            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
-            gl.glActiveTexture(gl.GL_TEXTURE0)
-            gl.glUseProgram(0)
+        raindrops_helper = _get_raindrops_program()
+        raindrops_helper.render(
+            program=self._gl_pipeline.raindrops_program,
+            uniforms=self._gl_pipeline.raindrops_uniforms,
+            viewport=(vp_w, vp_h),
+            old_tex=self._gl_pipeline.old_tex_id,
+            new_tex=self._gl_pipeline.new_tex_id,
+            state=st,
+            quad_vao=self._gl_pipeline.quad_vao,
+        )
 
     def _paint_debug_overlay(self, painter: QPainter) -> None:
         if not is_perf_metrics_enabled():
@@ -6245,21 +4198,7 @@ void main() {
                 dt_max_ms = self._raindrops_profile_max_dt * 1000.0 if self._raindrops_profile_max_dt > 0.0 else 0.0
                 line2 = f"{fps:.1f} fps  dt_min={dt_min_ms:.1f}ms  dt_max={dt_max_ms:.1f}ms"
 
-        if (
-            active_label is None
-            and self._shuffle is not None
-            and self._shuffle_profile_start_ts is not None
-            and self._shuffle_profile_last_ts is not None
-            and self._shuffle_profile_frame_count > 0
-        ):
-            elapsed = self._shuffle_profile_last_ts - self._shuffle_profile_start_ts
-            if elapsed > 0.0:
-                fps = self._shuffle_profile_frame_count / elapsed
-                active_label = "Shuffle"
-                line1 = f"{active_label} t={self._shuffle.progress:.2f}"
-                dt_min_ms = self._shuffle_profile_min_dt * 1000.0 if self._shuffle_profile_min_dt > 0.0 else 0.0
-                dt_max_ms = self._shuffle_profile_max_dt * 1000.0 if self._shuffle_profile_max_dt > 0.0 else 0.0
-                line2 = f"{fps:.1f} fps  dt_min={dt_min_ms:.1f}ms  dt_max={dt_max_ms:.1f}ms"
+        # NOTE: Shuffle debug overlay removed - Shuffle transition is retired.
 
         if (
             active_label is None
@@ -6533,51 +4472,7 @@ void main() {
                 self._gl_disabled_for_session = True
                 self._use_shaders = False
 
-        # Shuffle shader path: when enabled and the GLSL pipeline is
-        # available, draw the Shuffle mask entirely in GLSL. On failure we
-        # disable shader usage for the session and fall back to the
-        # compositor's existing QPainter-based transitions for this run.
-        if self._shuffle is not None and self._can_use_shuffle_shader():
-            try:
-                self._paint_shuffle_shader(target)
-                self._paint_spotify_visualizer_gl()
-                if is_perf_metrics_enabled():
-                    self._paint_debug_overlay_gl()
-                return
-            except Exception:
-                logger.debug(
-                    "[GL SHADER] Shader shuffle path failed; disabling shader pipeline",
-                    exc_info=True,
-                )
-                logger.debug(
-                    "[GL COMPOSITOR] Shader shuffle path failed; disabling shader pipeline",
-                    exc_info=True,
-                )
-                self._gl_disabled_for_session = True
-                self._use_shaders = False
-
-        # Shooting Stars (claws) shader path: when enabled and the GLSL
-        # pipeline is available, draw the streak field entirely in GLSL. On
-        # failure we disable shader usage for the session and fall back to the
-        # compositor's existing QPainter-based transitions.
-        if self._shooting_stars is not None and self._can_use_claws_shader():
-            try:
-                self._paint_claws_shader(target)
-                self._paint_spotify_visualizer_gl()
-                if is_perf_metrics_enabled():
-                    self._paint_debug_overlay_gl()
-                return
-            except Exception:
-                logger.debug(
-                    "[GL SHADER] Shader shooting-stars path failed; disabling shader pipeline",
-                    exc_info=True,
-                )
-                logger.debug(
-                    "[GL COMPOSITOR] Shader shooting-stars path failed; disabling shader pipeline",
-                    exc_info=True,
-                )
-                self._gl_disabled_for_session = True
-                self._use_shaders = False
+        # NOTE: Shuffle and Shooting Stars shader paths removed - these transitions are retired.
 
         if self._warp is not None and self._can_use_warp_shader():
             try:
