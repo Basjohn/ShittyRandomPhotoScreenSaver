@@ -114,31 +114,13 @@ class Animation(QObject):
             # Delay complete, continue to animation
             delta_time = self.delay_elapsed - self.delay
         
-        # Update elapsed time
-        if delta_time > 0.0:
-            try:
-                if self.duration > 0.0:
-                    max_dt = min(self.duration * 0.25, 0.25)
-                else:
-                    max_dt = 0.25
-                if delta_time > max_dt:
-                    delta_time = max_dt
-            except Exception:
-                pass
+        # Update elapsed time with minimal clamping.
+        # Only clamp extreme outliers (>500ms) to prevent teleporting on major
+        # stalls, but otherwise let the animation progress naturally. The old
+        # aggressive clamping (25% of duration) caused visible stuttering.
+        if delta_time > 0.5:
+            delta_time = 0.5
         self.elapsed += delta_time
-
-        # Ensure elapsed time does not lag far behind real wall-clock time so
-        # animations still honour their configured duration even when the event
-        # loop stalls for a while. This keeps transitions from stretching well
-        # beyond their nominal length while preserving the per-frame clamping
-        # that prevents huge visual jumps.
-        if self.duration > 0.0 and self.start_time is not None:
-            try:
-                real_elapsed = max(0.0, time.time() - self.start_time)
-                if real_elapsed >= self.duration and self.elapsed < self.duration:
-                    self.elapsed = self.duration
-            except Exception:
-                pass
 
         # Calculate progress (0.0 to 1.0)
         if self.duration <= 0:

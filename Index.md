@@ -164,6 +164,11 @@ A living map of modules, purposes, and key classes. Keep this up to date.
  - widgets.reddit.monitor: 'ALL'|1|2|3
  - widgets.shadows.*: global widget shadow configuration shared by all overlay widgets
 
+## Audits
+- audits/v1_2 ROADMAP.md: Living roadmap for v1.2 features and performance goals
+- audits/GLSL_Performance_Optimizations.md: GLSL shader optimization analysis and implementation notes
+- audits/Performance_Audit_2025-12-05.md: Comprehensive performance audit identifying frame timing issues
+
 ## Notes
 - DPR-aware scaling in DisplayWidget → ImageProcessor to reduce GL upload cost
 - GL overlays are persistent and initialized lazily on first use via `prepare_gl_overlay`; NoPartialUpdate enabled

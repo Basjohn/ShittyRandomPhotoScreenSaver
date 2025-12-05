@@ -6,6 +6,7 @@ Windows screensaver application that displays photos with transitions.
 import sys
 import os
 import shutil
+import ctypes
 from pathlib import Path
 from enum import Enum
 from PySide6.QtWidgets import QApplication, QMessageBox
@@ -22,6 +23,47 @@ from versioning import APP_VERSION, APP_EXE_NAME
 
 logger = get_logger(__name__)
 
+# Windows timer resolution management for smoother animations.
+# Default Windows timer resolution is ~15.6ms which causes timer coalescing
+# and frame timing jitter. We request 1ms resolution for the duration of
+# the screensaver to ensure smooth 60fps+ animations.
+_winmm = None
+_timer_resolution_set = False
+
+def _set_windows_timer_resolution(resolution_ms: int = 1) -> bool:
+    """Request higher timer resolution on Windows for smoother animations.
+    
+    Args:
+        resolution_ms: Desired timer resolution in milliseconds (1-15)
+    
+    Returns:
+        True if resolution was set successfully
+    """
+    global _winmm, _timer_resolution_set
+    if sys.platform != 'win32':
+        return False
+    if _timer_resolution_set:
+        return True
+    try:
+        _winmm = ctypes.windll.winmm
+        result = _winmm.timeBeginPeriod(resolution_ms)
+        if result == 0:  # TIMERR_NOERROR
+            _timer_resolution_set = True
+            return True
+    except Exception:
+        pass
+    return False
+
+def _restore_windows_timer_resolution(resolution_ms: int = 1) -> None:
+    """Restore default Windows timer resolution."""
+    global _winmm, _timer_resolution_set
+    if not _timer_resolution_set or _winmm is None:
+        return
+    try:
+        _winmm.timeEndPeriod(resolution_ms)
+        _timer_resolution_set = False
+    except Exception:
+        pass
 
 class ScreensaverMode(Enum):
     """Screensaver execution modes based on Windows arguments."""
@@ -375,9 +417,18 @@ def main():
     # Route to appropriate mode
     exit_code = 0
     
+    # Set Windows timer resolution for smoother animations (RUN mode only)
+    timer_res_set = False
+    
     try:
         if mode == ScreensaverMode.RUN:
             logger.info("Starting screensaver in RUN mode")
+            # Request 1ms timer resolution for smooth 60fps+ animations
+            timer_res_set = _set_windows_timer_resolution(1)
+            if timer_res_set:
+                logger.info("Windows timer resolution set to 1ms for smooth animations")
+            else:
+                logger.debug("Could not set Windows timer resolution (non-Windows or failed)")
             profile_flag = os.getenv("SRPSS_PROFILE_CPU", "").strip().lower()
             if profile_flag in ("1", "true", "on", "yes"):
                 import cProfile
@@ -424,6 +475,11 @@ def main():
     except Exception as e:
         logger.exception(f"Fatal error in main: {e}")
         exit_code = 1
+    finally:
+        # Restore Windows timer resolution if we changed it
+        if timer_res_set:
+            _restore_windows_timer_resolution(1)
+            logger.debug("Windows timer resolution restored to default")
     
     # Cleanup pycache on exit (script mode only)
     if is_script_mode():

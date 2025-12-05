@@ -1213,21 +1213,16 @@ class SpotifyVisualizerWidget(QWidget):
         self._animation_manager = animation_manager
         self._anim_listener_id = None
 
+        # NOTE: We keep the dedicated _bars_timer running even when attached to
+        # AnimationManager. The AnimationManager only ticks during active transitions,
+        # so the dedicated timer ensures continuous visualizer updates between transitions.
+        # The _on_tick method handles deduplication via _last_update_ts.
+
         try:
             def _tick_listener(dt: float) -> None:
-                try:
-                    # When a ThreadManager-driven timer is active, it is the
-                    # authoritative tick source for the visualiser. In that
-                    # case the AnimationManager should not also call
-                    # `_on_tick`, otherwise the widget may be driven at a
-                    # much higher effective rate than intended.
-                    if not getattr(self, "_enabled", False):
-                        return
-                    if getattr(self, "_bars_timer", None) is not None:
-                        return
-                    self._on_tick()
-                except Exception:
-                    logger.debug("[SPOTIFY_VIS] AnimationManager-driven tick failed", exc_info=True)
+                if not self._enabled:
+                    return
+                self._on_tick()
 
             listener_id = animation_manager.add_tick_listener(_tick_listener)
             self._anim_listener_id = listener_id
@@ -1388,17 +1383,12 @@ class SpotifyVisualizerWidget(QWidget):
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to start shared beat engine", exc_info=True)
 
-        # Schedule a recurring UI tick via ThreadManager; AnimationManager
-        # tick listeners (when attached) act as a secondary timing source
-        # but do not replace this fallback.
-        if (
-            self._thread_manager is not None
-            and self._bars_timer is None
-        ):
+        # Always start the dedicated timer for continuous visualizer updates.
+        # AnimationManager only ticks during active transitions, so we need
+        # the dedicated timer to keep the visualizer running between transitions.
+        # The _on_tick method handles deduplication via _last_update_ts.
+        if self._thread_manager is not None and self._bars_timer is None:
             try:
-                # Tighter tick cadence (~16ms) so bar updates can track audio
-                # more closely and approach high-refresh display rates while
-                # still remaining well below the GL compositor's peak FPS.
                 self._bars_timer = self._thread_manager.schedule_recurring(16, self._on_tick)
             except Exception:
                 self._bars_timer = None
@@ -1617,22 +1607,17 @@ class SpotifyVisualizerWidget(QWidget):
         self._geom_seg_height = seg_height
 
     def _on_tick(self) -> None:
-        """Periodic UI tick scheduled via ThreadManager.
+        """Periodic UI tick - PERFORMANCE OPTIMIZED.
 
         Consumes the latest bar frame from the TripleBuffer and smoothly
         interpolates towards it for visual stability.
         """
-        try:
-            if not Shiboken.isValid(self):
-                try:
-                    if self._bars_timer is not None:
-                        self._bars_timer.stop()
-                except Exception:
-                    pass
+        # PERFORMANCE: Fast validity check without nested try/except
+        if not Shiboken.isValid(self):
+            if self._bars_timer is not None:
+                self._bars_timer.stop()
                 self._bars_timer = None
-                self._enabled = False
-                return
-        except Exception:
+            self._enabled = False
             return
 
         if not self._enabled:
@@ -1640,293 +1625,165 @@ class SpotifyVisualizerWidget(QWidget):
 
         now_ts = time.time()
 
+        # PERFORMANCE: Inline PERF metrics without nested try/except
         if is_perf_metrics_enabled():
-            try:
-                if self._perf_tick_start_ts is None:
-                    self._perf_tick_start_ts = now_ts
-                if self._perf_tick_last_ts is not None:
-                    dt = now_ts - self._perf_tick_last_ts
-                    if dt > 0.0:
-                        if self._perf_tick_min_dt == 0.0 or dt < self._perf_tick_min_dt:
-                            self._perf_tick_min_dt = dt
-                        if dt > self._perf_tick_max_dt:
-                            self._perf_tick_max_dt = dt
-                self._perf_tick_last_ts = now_ts
-                self._perf_tick_frame_count += 1
+            if self._perf_tick_start_ts is None:
+                self._perf_tick_start_ts = now_ts
+            if self._perf_tick_last_ts is not None:
+                dt = now_ts - self._perf_tick_last_ts
+                if dt > 0.0:
+                    if self._perf_tick_min_dt == 0.0 or dt < self._perf_tick_min_dt:
+                        self._perf_tick_min_dt = dt
+                    if dt > self._perf_tick_max_dt:
+                        self._perf_tick_max_dt = dt
+            self._perf_tick_last_ts = now_ts
+            self._perf_tick_frame_count += 1
 
-                # Periodically emit a PERF snapshot while running so that
-                # logs capture the visualiser's effective tick/paint rate
-                # even if the widget is never explicitly stopped.
-                if self._perf_last_log_ts is None or (now_ts - self._perf_last_log_ts) >= 5.0:
-                    self._log_perf_snapshot(reset=False)
-                    self._perf_last_log_ts = now_ts
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Tick PERF accounting failed", exc_info=True)
+            # Periodic PERF snapshot
+            if self._perf_last_log_ts is None or (now_ts - self._perf_last_log_ts) >= 5.0:
+                self._log_perf_snapshot(reset=False)
+                self._perf_last_log_ts = now_ts
 
-        with profile("SPOTIFY_VIS_TICK", threshold_ms=5.0, log_level="DEBUG"):
-            bars = None
-            try:
-                engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
-                self._engine = engine
-                if engine is not None:
-                    bars = engine.tick()
-                    # Track capture→bars latency so PERF logs can report how
-                    # far behind the latest audio frame the visualiser is.
-                    try:
-                        last_audio_ts = float(getattr(engine, "_last_audio_ts", 0.0))
-                    except Exception:
-                        last_audio_ts = 0.0
-                    if last_audio_ts > 0.0:
-                        try:
-                            lag_ms = max(0.0, (now_ts - last_audio_ts) * 1000.0)
-                        except Exception:
-                            lag_ms = 0.0
-                        try:
-                            self._perf_audio_lag_last_ms = lag_ms
-                            if self._perf_audio_lag_min_ms == 0.0 or lag_ms < self._perf_audio_lag_min_ms:
-                                self._perf_audio_lag_min_ms = lag_ms
-                            if lag_ms > self._perf_audio_lag_max_ms:
-                                self._perf_audio_lag_max_ms = lag_ms
-                        except Exception:
-                            pass
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Shared beat engine tick failed", exc_info=True)
-                bars = None
+        # PERFORMANCE: Get bars from engine without excessive try/except
+        bars = None
+        engine = self._engine
+        if engine is None:
+            engine = get_shared_spotify_beat_engine(self._bar_count)
+            self._engine = engine
+        if engine is not None:
+            bars = engine.tick()
+            # Track audio lag for PERF logs
+            if is_perf_metrics_enabled():
+                last_audio_ts = getattr(engine, "_last_audio_ts", 0.0)
+                if last_audio_ts > 0.0:
+                    lag_ms = (now_ts - last_audio_ts) * 1000.0
+                    self._perf_audio_lag_last_ms = lag_ms
+                    if self._perf_audio_lag_min_ms == 0.0 or lag_ms < self._perf_audio_lag_min_ms:
+                        self._perf_audio_lag_min_ms = lag_ms
+                    if lag_ms > self._perf_audio_lag_max_ms:
+                        self._perf_audio_lag_max_ms = lag_ms
 
-            if isinstance(bars, list):
-                # Use the spectral shape produced by _fft_to_bars and the
-                # static weighting directly, only clamping into [0, 1]. This
-                # avoids over-flattening from aggressive per-bar
-                # normalisation while still allowing the smoothing logic
-                # below to control rise/decay.
-                try:
-                    count = self._bar_count
-                    if count <= 0:
-                        self._target_bars = []
-                    else:
-                        clamped: List[float] = []  # type: ignore[valid-type]
-                        for i in range(count):
-                            try:
-                                v = float(bars[i])
-                            except Exception:
-                                v = 0.0
-                            if v < 0.0:
-                                v = 0.0
-                            if v > 1.0:
-                                v = 1.0
-                            clamped.append(v)
-                        self._target_bars = clamped
-                except Exception:
-                    try:
-                        self._target_bars = [
-                            0.0 if v is None else max(0.0, min(1.0, float(v))) for v in (bars or [])
-                        ]
-                    except Exception:
-                        self._target_bars = [0.0] * self._bar_count
-
-                # Optional debug path: when SRPSS_SPOTIFY_VIS_DEBUG_CONST is
-                # set to a value in (0, 1], override all target bars with a
-                # constant so GPU geometry artefacts can be isolated from
-                # audio data.
-                if _DEBUG_CONST_BARS > 0.0:
-                    const_val = _DEBUG_CONST_BARS
-                    if const_val > 1.0:
-                        const_val = 1.0
-                    self._target_bars = [const_val] * self._bar_count
-
-                if is_verbose_logging():
-                    try:
-                        logger.debug(
-                            "[SPOTIFY_VIS] _on_tick: received bars (min=%.4f, max=%.4f)",
-                            min(self._target_bars) if self._target_bars else 0.0,
-                            max(self._target_bars) if self._target_bars else 0.0,
-                        )
-                    except Exception:
-                        pass
-
-            if not self._spotify_playing:
-                self._target_bars = [0.0] * self._bar_count
-
-            # When debug constant-bar mode is enabled, bypass the smoothing
-            # path entirely so that any visible artefacts are guaranteed to
-            # come from geometry/compositing rather than timing or per-bar
-            # state. This is controlled via the SRPSS_SPOTIFY_VIS_DEBUG_CONST
-            # environment variable.
-            if _DEBUG_CONST_BARS > 0.0:
-                const_val = _DEBUG_CONST_BARS
-                if const_val > 1.0:
-                    const_val = 1.0
-                if const_val < 0.0:
-                    const_val = 0.0
-                self._display_bars = [const_val] * self._bar_count
-                changed = True
+        # PERFORMANCE: Optimized bar clamping without nested try/except
+        if isinstance(bars, list):
+            count = self._bar_count
+            if count > 0:
+                # Fast path: clamp bars to [0, 1] using min/max
+                clamped = [max(0.0, min(1.0, float(bars[i]) if i < len(bars) else 0.0)) for i in range(count)]
+                self._target_bars = clamped
             else:
-                # Time-based smoothing from _target_bars -> _display_bars.
-                # We derive per-tick blend factors from a base time constant
-                # so behaviour stays stable across different tick rates.
-                changed = False
+                self._target_bars = []
 
-                dt_smooth = 0.0
-                try:
-                    last_smooth = self._last_smooth_ts
-                except Exception:
-                    last_smooth = -1.0
-                if last_smooth >= 0.0:
-                    try:
-                        dt_smooth = max(0.0, now_ts - last_smooth)
-                    except Exception:
-                        dt_smooth = 0.0
-                try:
-                    self._last_smooth_ts = now_ts
-                except Exception:
-                    pass
+            # Debug constant-bar mode
+            if _DEBUG_CONST_BARS > 0.0:
+                const_val = min(1.0, _DEBUG_CONST_BARS)
+                self._target_bars = [const_val] * self._bar_count
 
-                base_tau = max(0.05, float(self._smoothing))
-                if dt_smooth <= 0.0:
-                    alpha_rise = 0.0
-                    alpha_decay = 0.0
+        if not self._spotify_playing:
+            self._target_bars = [0.0] * self._bar_count
+
+        # Debug constant-bar mode for display
+        if _DEBUG_CONST_BARS > 0.0:
+            const_val = max(0.0, min(1.0, _DEBUG_CONST_BARS))
+            self._display_bars = [const_val] * self._bar_count
+            changed = True
+        else:
+            # Time-based smoothing from _target_bars -> _display_bars.
+            # PERFORMANCE: Optimized smoothing with reduced try/except overhead
+            changed = False
+            last_smooth = self._last_smooth_ts
+            dt_smooth = max(0.0, now_ts - last_smooth) if last_smooth >= 0.0 else 0.0
+            self._last_smooth_ts = now_ts
+
+            base_tau = max(0.05, self._smoothing)
+            if dt_smooth <= 0.0:
+                alpha_rise = 0.0
+                alpha_decay = 0.0
+            else:
+                # Make rises more responsive (shorter attack) while
+                # giving decay a much longer tail so motion leaves
+                # a clearly visible trace at higher tick rates.
+                tau_rise = base_tau * 0.35
+                tau_decay = base_tau * 3.0
+                alpha_rise = 1.0 - math.exp(-dt_smooth / tau_rise)
+                alpha_decay = 1.0 - math.exp(-dt_smooth / tau_decay)
+            alpha_rise = max(0.0, min(1.0, alpha_rise))
+            alpha_decay = max(0.0, min(1.0, alpha_decay))
+
+            # PERFORMANCE: Optimized bar smoothing loop
+            bar_count = self._bar_count
+            display_bars = self._display_bars
+            target_bars = self._target_bars
+            for i in range(bar_count):
+                cur = display_bars[i]
+                tgt = target_bars[i] if i < len(target_bars) else 0.0
+                alpha = alpha_rise if tgt >= cur else alpha_decay
+                nxt = cur + (tgt - cur) * alpha
+                # Snap extremely small residuals to zero
+                if abs(nxt) < 1e-3:
+                    nxt = 0.0
+                if abs(nxt - cur) > 1e-3:
+                    changed = True
+                display_bars[i] = nxt
+
+        # Always push at least one frame so the visualiser baseline is
+        # visible as soon as the widget fades in, even before audio arrives.
+        first_frame = not self._has_pushed_first_frame
+
+        # PERFORMANCE: Simplified FPS cap check
+        max_fps = self._base_max_fps
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "has_running_transition"):
+            if parent.has_running_transition():
+                max_fps = self._transition_max_fps
+
+        min_dt = 1.0 / max_fps if max_fps > 0.0 else 0.0
+        last = self._last_update_ts
+        if last < 0.0 or (now_ts - last) >= min_dt:
+            self._last_update_ts = now_ts
+
+            used_gpu = False
+            need_card_update = False
+            fade_changed = False
+            fade = 1.0
+            # When DisplayWidget exposes a GPU overlay path, prefer
+            # that and disable CPU bar drawing once it succeeds.
+            if parent is not None and hasattr(parent, "push_spotify_visualizer_frame"):
+                fade = self._get_gpu_fade_factor(now_ts)
+                prev_fade = self._last_gpu_fade_sent
+                self._last_gpu_fade_sent = fade
+                if prev_fade < 0.0 or abs(fade - prev_fade) >= 0.01:
+                    fade_changed = True
+                    need_card_update = True
+
+                should_push = changed or fade_changed or first_frame
+                if should_push:
+                    used_gpu = parent.push_spotify_visualizer_frame(
+                        bars=list(self._display_bars),
+                        bar_count=self._bar_count,
+                        segments=self._bar_segments,
+                        fill_color=self._bar_fill_color,
+                        border_color=self._bar_border_color,
+                        fade=fade,
+                        playing=self._spotify_playing,
+                        ghosting_enabled=self._ghosting_enabled,
+                        ghost_alpha=self._ghost_alpha,
+                        ghost_decay=self._ghost_decay_rate,
+                    )
+
+                if used_gpu:
+                    self._has_pushed_first_frame = True
+                    self._cpu_bars_enabled = False
+                    # Card/background/shadow still repaint via stylesheet
+                    # Only request QWidget repaint when fade changes
+                    if need_card_update:
+                        self.update()
                 else:
-                    try:
-                        # Make rises more responsive (shorter attack) while
-                        # giving decay a much longer tail so motion leaves
-                        # a clearly visible trace at higher tick rates.
-                        tau_rise = base_tau * 0.35
-                        tau_decay = base_tau * 3.0
-                        alpha_rise = 1.0 - math.exp(-dt_smooth / tau_rise)
-                        alpha_decay = 1.0 - math.exp(-dt_smooth / tau_decay)
-                    except Exception:
-                        linear = min(1.0, dt_smooth / base_tau)
-                        alpha_rise = linear
-                        alpha_decay = linear
-                alpha_rise = max(0.0, min(1.0, alpha_rise))
-                alpha_decay = max(0.0, min(1.0, alpha_decay))
-
-                for i in range(self._bar_count):
-                    cur = self._display_bars[i]
-                    try:
-                        tgt = self._target_bars[i]
-                    except Exception:
-                        tgt = 0.0
-                    alpha = alpha_rise if tgt >= cur else alpha_decay
-                    nxt = cur + (tgt - cur) * alpha
-                    # Snap extremely small residuals to zero so ghost
-                    # envelopes can fully collapse back to the 1-bar floor.
-                    if abs(nxt) < 1e-3:
-                        nxt = 0.0
-                    if abs(nxt - cur) > 1e-3:
-                        changed = True
-                    self._display_bars[i] = nxt
-
-                # Always push at least one frame so the visualiser baseline is
-                # visible as soon as the widget fades in, even before audio
-                # arrives.
-                first_frame = not getattr(self, "_has_pushed_first_frame", False)
-
-                max_fps = self._base_max_fps
-                try:
-                    parent = self.parent()
-                    if parent is not None and hasattr(parent, "has_running_transition"):
-                        if bool(parent.has_running_transition()):
-                            max_fps = self._transition_max_fps
-                except Exception:
-                    pass
-
-                min_dt = 0.0
-                try:
-                    if max_fps > 0.0:
-                        min_dt = 1.0 / max_fps
-                except Exception:
-                    min_dt = 0.0
-
-                last = self._last_update_ts
-                if last < 0.0 or (now_ts - last) >= min_dt:
-                    self._last_update_ts = now_ts
-
-                    used_gpu = False
-                    need_card_update = False
-                    fade_changed = False
-                    parent = self.parent()
-                    fade = 1.0
-                    # When DisplayWidget exposes a GPU overlay path, prefer
-                    # that and disable CPU bar drawing once it succeeds.
-                    if parent is not None and hasattr(parent, "push_spotify_visualizer_frame"):
-                        try:
-                            fade = self._get_gpu_fade_factor(now_ts)
-                        except Exception:
-                            fade = 1.0
-                        try:
-                            prev_fade = getattr(self, "_last_gpu_fade_sent", -1.0)
-                        except Exception:
-                            prev_fade = -1.0
-                        try:
-                            self._last_gpu_fade_sent = float(fade)
-                        except Exception:
-                            pass
-                        try:
-                            if prev_fade < 0.0 or abs(fade - prev_fade) >= 0.01:
-                                fade_changed = True
-                                need_card_update = True
-                        except Exception:
-                            fade_changed = True
-                            need_card_update = True
-
-                        should_push = changed or fade_changed or first_frame
-                        if should_push:
-                            try:
-                                used_gpu = bool(parent.push_spotify_visualizer_frame(
-                                    bars=list(self._display_bars),
-                                    bar_count=self._bar_count,
-                                    segments=getattr(self, "_bar_segments", 16),
-                                    fill_color=self._bar_fill_color,
-                                    border_color=self._bar_border_color,
-                                    fade=fade,
-                                    playing=self._spotify_playing,
-                                    ghosting_enabled=getattr(self, "_ghosting_enabled", True),
-                                    ghost_alpha=getattr(self, "_ghost_alpha", 0.4),
-                                    ghost_decay=getattr(self, "_ghost_decay_rate", 0.4),
-                                ))
-                            except Exception:
-                                used_gpu = False
-
-                    if used_gpu:
-                        try:
-                            self._has_pushed_first_frame = True
-                        except Exception:
-                            pass
-                        try:
-                            self._cpu_bars_enabled = False
-                        except Exception:
-                            pass
-                        # Card/background/shadow still repaint via stylesheet
-                        # and ShadowFadeProfile; we do not need to redraw bars
-                        # when GPU overlay is active. Only request a QWidget
-                        # repaint when the fade factor changes enough to be
-                        # visually meaningful.
-                        if need_card_update:
-                            try:
-                                self.update()
-                            except Exception:
-                                pass
-                    else:
-                        # Fallback: when there is no DisplayWidget/GPU bridge
-                        # (for example in tests or standalone widget usage),
-                        # always allow the QWidget-based bar renderer so
-                        # behaviour matches the historical implementation.
-                        parent = self.parent()
-                        has_gpu_parent = parent is not None and hasattr(parent, "push_spotify_visualizer_frame")
-                        if not has_gpu_parent or getattr(self, "_software_visualizer_enabled", False):
-                            try:
-                                self._cpu_bars_enabled = True
-                            except Exception:
-                                pass
-                            try:
-                                self.update()
-                                try:
-                                    self._has_pushed_first_frame = True
-                                except Exception:
-                                    pass
-                            except Exception:
-                                pass
+                    # Fallback: when there is no DisplayWidget/GPU bridge
+                    has_gpu_parent = parent is not None and hasattr(parent, "push_spotify_visualizer_frame")
+                    if not has_gpu_parent or self._software_visualizer_enabled:
+                        self._cpu_bars_enabled = True
+                        self.update()
+                        self._has_pushed_first_frame = True
 
     def paintEvent(self, event: QPaintEvent) -> None:  # type: ignore[override]
         super().paintEvent(event)
