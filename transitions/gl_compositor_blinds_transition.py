@@ -48,6 +48,8 @@ class GLCompositorBlindsTransition(BaseTransition):
         self._compositor: Optional[GLCompositorWidget] = None
         self._slats: List[_CompositorBlindSlat] = []
         self._animation_id: Optional[str] = None
+        self._grid_rows: int = 0
+        self._grid_cols: int = 0
 
     # ------------------------------------------------------------------
     # BaseTransition API
@@ -92,6 +94,13 @@ class GLCompositorBlindsTransition(BaseTransition):
         except Exception:
             logger.debug("[GL COMPOSITOR] Failed to configure compositor geometry/visibility (blinds)", exc_info=True)
 
+        try:
+            warm = getattr(comp, "warm_shader_textures", None)
+            if callable(warm):
+                warm(old_pixmap, new_pixmap)
+        except Exception:
+            logger.debug("[GL COMPOSITOR] Failed to warm blinds textures", exc_info=True)
+
         # Build slat grid matching the widget geometry.
         width = widget.width()
         height = widget.height()
@@ -115,6 +124,8 @@ class GLCompositorBlindsTransition(BaseTransition):
             animation_manager=am,
             update_callback=_update,
             on_finished=_on_finished,
+            grid_cols=self._grid_cols or 0,
+            grid_rows=self._grid_rows or 0,
         )
 
         self._set_state(TransitionState.RUNNING)
@@ -179,6 +190,9 @@ class GLCompositorBlindsTransition(BaseTransition):
         cols = max(2, int(self._cols) * 2)
         aspect = height / max(1, width)
         rows = max(2, int(round(cols * aspect)))
+
+        self._grid_cols = cols
+        self._grid_rows = rows
 
         bw = max(1, width // cols)
         bh = max(1, height // rows)

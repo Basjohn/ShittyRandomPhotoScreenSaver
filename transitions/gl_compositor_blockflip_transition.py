@@ -65,6 +65,11 @@ class GLCompositorBlockFlipTransition(BaseTransition):
         # Optional direction bias so the compositor-backed Block Puzzle Flip
         # follows the same edge-originated wave model as the CPU variant.
         self._direction: Optional[SlideDirection] = direction
+        # Effective grid used by the GLSL BlockFlip shader; populated when the
+        # block grid is created so the compositor can mirror the controller
+        # layout.
+        self._shader_cols: int = 0
+        self._shader_rows: int = 0
 
     def get_expected_duration_ms(self) -> int:
         total = getattr(self, "_total_duration_ms", None)
@@ -107,6 +112,16 @@ class GLCompositorBlockFlipTransition(BaseTransition):
 
         self._compositor = comp
 
+        # Best-effort shader texture prewarm so the first GLSL frame does not
+        # pay the full upload cost. Failures are logged and ignored so the
+        # transition can still fall back safely.
+        try:
+            warm = getattr(comp, "warm_shader_textures", None)
+            if callable(warm):
+                warm(old_pixmap, new_pixmap)
+        except Exception:
+            logger.debug("[GL COMPOSITOR] Failed to warm blockflip textures", exc_info=True)
+
         # Ensure compositor matches widget geometry and is above the base.
         try:
             comp.setGeometry(0, 0, widget.width(), widget.height())
@@ -138,6 +153,9 @@ class GLCompositorBlockFlipTransition(BaseTransition):
             animation_manager=am,
             update_callback=_update,
             on_finished=_on_finished,
+            grid_cols=self._shader_cols or 0,
+            grid_rows=self._shader_rows or 0,
+            direction=self._direction,
         )
 
         self._set_state(TransitionState.RUNNING)
@@ -206,6 +224,11 @@ class GLCompositorBlockFlipTransition(BaseTransition):
 
         effective_rows = calculated_rows
         effective_cols = base_cols
+
+        # Expose the effective grid to the compositor/GLSL path so
+        # GLCompositorWidget can mirror this layout in its BlockFlip shader.
+        self._shader_cols = effective_cols
+        self._shader_rows = effective_rows
 
         logger.debug(
             "[GL COMPOSITOR BLOCK] Grid: %dx%d (aspect=%.2f, square blocks)",

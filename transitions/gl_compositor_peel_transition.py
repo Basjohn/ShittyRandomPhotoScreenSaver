@@ -81,6 +81,16 @@ class GLCompositorPeelTransition(BaseTransition):
 
         self._compositor = comp
 
+        # Best-effort shader texture prewarm so the first GLSL frame does not
+        # pay the full upload cost. Failures are logged and ignored so the
+        # transition can still fall back safely.
+        try:
+            warm = getattr(comp, "warm_shader_textures", None)
+            if callable(warm):
+                warm(old_pixmap, new_pixmap)
+        except Exception:
+            logger.debug("[GL COMPOSITOR] Failed to warm peel textures", exc_info=True)
+
         # Ensure compositor matches widget geometry and is above the base.
         try:
             comp.setGeometry(0, 0, widget.width(), widget.height())

@@ -1,0 +1,106 @@
+diff --git a/Docs/10_WIDGET_GUIDELINES.md b/Docs/10_WIDGET_GUIDELINES.md
+index 5d49c51..19ce852 100644
+--- a/Docs/10_WIDGET_GUIDELINES.md
++++ b/Docs/10_WIDGET_GUIDELINES.md
+@@ -456,18 +456,35 @@ trail:
+   fade factor derived from the card’s fade progress (same duration/easing, but
+   with a delayed cubic ramp) so they fade in more slowly after the card is
+   present, avoiding pops and stray green dots. Playback gating comes from
+-  `MediaWidget.media_updated` (payload `state` → normalized
++  - `MediaWidget.media_updated` (payload `state` → normalized
+   `MediaPlaybackState`); when state is `PLAYING` the beat engine drives full bar
+   motion, and when state is `PAUSED`/`STOPPED` target magnitudes decay back to
+   zero so only the shader’s 1-segment idle floor remains visible as a flat
+   single-row baseline when Spotify is open but not actively playing.
+ 
+-- **UI wiring and defaults**  
+-  The Widgets tab exposes a dedicated Spotify visualiser group:
+-  - A checkbox to enable/disable the visualiser and a **FORCE Software
+-    Visualizer** checkbox on the same row for the QWidget-only path.
+-  - A checkbox to enable/disable ghosting.
+-  - A **Ghost Opacity** slider mapped to `ghost_alpha` (0–100%).
++- **Lifecycle & debugging checklist**  
++  To debug fade or bar issues, follow this order:
++  - Confirm `DisplayWidget._setup_widgets()` creates `SpotifyVisualizerWidget`
++    when media + Spotify visualiser are enabled and that
++    `_overlay_fade_expected` includes `"spotify_visualizer"` on that display.
++  - Verify `SpotifyVisualizerWidget.start()` is called exactly once and that it
++    registers a `request_overlay_fade_sync("spotify_visualizer", starter)`
++    callback on the parent before any media updates arrive.
++  - Inspect `_shadowfade_progress` and `_get_gpu_fade_factor(...)` on the
++    widget: if progress never leaves 0.0 or fade never exceeds 0.0, the GPU
++    bars and Spotify volume widget will remain invisible even if the card is
++    drawn.
++  - Check `handle_media_update(payload)` receives `state="playing"` from
++    `MediaWidget.media_updated` when Spotify is active, and that
++    `_spotify_playing` is true while music is playing.
++  - Step through `_on_tick()`: confirm it reads non-zero bar magnitudes from
++    `_SpotifyBeatEngine`, updates `_display_bars` via the smoothing loop, and
++    calls `parent.push_spotify_visualizer_frame(...)` whenever bars or fade
++    change.
++  - Use `[PERF] [SPOTIFY_VIS] Tick/Paint metrics` plus
++    `[PERF] [GL COMPOSITOR]` logs to confirm that frames are being produced and
++    composited; a healthy Tick stream with flat Paint output usually indicates a
++    missing or obscured `SpotifyBarsGLOverlay` rather than a beat engine issue.
+   - A **Ghost Decay Speed** slider mapped to `ghost_decay` (~0.10x–1.00x).
+   Defaults are defined centrally in `SettingsManager._set_defaults()` and
+   mirrored in `Docs/SPEC.md`; UI code must treat those as the single source of
+diff --git a/Spec.md b/Spec.md
+index a2c5d6d..0d45d3e 100644
+--- a/Spec.md
++++ b/Spec.md
+@@ -220,6 +220,48 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
+ `Docs/10_WIDGET_GUIDELINES.md` is the **canonical source of truth** for overlay
+ widget behaviour; this Spec only summarises the high-level contract.
+ 
++### Spotify Visualizer lifecycle & debugging checklist
++
++When the Spotify Beat Visualizer misbehaves (no fade, flat bars, or popping),
++debug in this order:
++
++1. **Card creation & primary fade** – `DisplayWidget._setup_widgets` must:
++   - Create `SpotifyVisualizerWidget` when both media and Spotify visualiser
++     are enabled for the display.
++   - Register `"spotify_visualizer"` in `_overlay_fade_expected` so the card
++     participates in the primary overlay fade wave next to media/weather/Reddit.
++   - Call `SpotifyVisualizerWidget.start()` once, which in turn registers a
++     `request_overlay_fade_sync("spotify_visualizer", starter)` callback.
++2. **ShadowFadeProfile progress** – the widget stores fade progress from
++   `ShadowFadeProfile` (card + shadow) and exposes it to the GPU path via a
++   private `_shadowfade_progress` field. If this value never advances from 0→1,
++   the card will not fade and the GPU bars will remain fully gated.
++3. **GPU fade factor & secondary wave** – `_get_gpu_fade_factor(now_ts)` on the
++   widget derives a delayed cubic fade from `_shadowfade_progress`. Bars and the
++   Spotify volume widget should:
++   - Stay at 0.0 while the card fade is in its early stages.
++   - Ramp smoothly from 0.0→1.0 after the card crosses the configured delay.
++   If bars pop in instantly or never appear, inspect this helper first.
++4. **Media state & playback gating** – `MediaWidget.media_updated` emits a
++   payload with `state` mapped to `MediaPlaybackState` (`PLAYING`, `PAUSED`,
++   `STOPPED`). `SpotifyVisualizerWidget.handle_media_update(payload)` sets a
++   boolean `_spotify_playing` gate and clears `_target_bars` only when not
++   playing so the idle floor shows while preventing motion.
++5. **Beat engine & smoothing** – `_SpotifyBeatEngine` owns a single
++   `SpotifyVisualizerAudioWorker` and per-process triple buffers for bar
++   magnitudes. `SpotifyVisualizerWidget._on_tick()` pulls bars from the engine
++   when `_spotify_playing` is true, applies time-based per-bar smoothing and the
++   current GPU fade, then calls
++   `DisplayWidget.push_spotify_visualizer_frame(...)` when values or fade
++   change. Flat bars with a healthy fade usually point to either a muted/
++   stalled beat engine or smoothing never updating `_display_bars`.
++6. **GL overlay wiring** – `SpotifyBarsGLOverlay` must be created via
++   `overlay_manager.prepare_gl_overlay` and raised after transitions; if the
++   overlay is never visible, bars will not appear even with correct fade and
++   bar values. PERF logs (`[PERF] [SPOTIFY_VIS] Tick/Paint metrics`) and
++   `[PERF] [GL COMPOSITOR]` summaries are the canonical signals for confirming
++   that frames are being produced and composited.
++
+ ## Banding & Pixmap Seeding
+ - `DisplayWidget.show_on_screen` grabs a per-monitor wallpaper snapshot via `screen.grabWindow(0)` and seeds `current_pixmap`, `_seed_pixmap`, and `previous_pixmap` before GL prewarm runs. This prevents a wallpaper→black flash during startup even while overlays are initializing.
+ - `DisplayWidget` seeds `current_pixmap` again as soon as a real image loads, before transition warmup, to keep the base widget drawing a valid frame while overlays warm and transitions start.
+@@ -248,4 +290,4 @@ widget behaviour; this Spec only summarises the high-level contract.
+ - Optional Slide edge spark FX (GL/compositor-backed) where slide edges emit short-lived sparks with direction-aware angles and Auto/Blue/Orange colour modes; Auto samples a dominant edge colour and offsets it for visibility. This effect is strictly opt-in and must respect per-display clipping so it never bleeds across monitors.
+ 
+ **Version**: 1.2  
+-**Last Updated**: Dec 5, 2025 00:51 - Spotify Beat Visualizer primary/secondary fade waves, GPU fade gating, and idle baseline behaviour documented; settings schema and widget integration refreshed for the current v1.2 Spotify stack.
++**Last Updated**: Dec 5, 2025 00:59 - Spotify Beat Visualizer lifecycle/debugging checklist and primary/secondary fade waves documented; settings schema and widget integration refreshed for the current v1.2 Spotify stack.

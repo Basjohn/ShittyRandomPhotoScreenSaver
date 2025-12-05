@@ -59,9 +59,9 @@ The table below summarises, for each transition, whether there is a CPU implemen
 | Slide              | Yes         | Yes                    | Yes (fullscreen quad)       | Port complete; per-transition perf tuning (dt_max spikes on some sizes) remains open. |
 | Wipe               | Yes         | Yes                    | Yes (mask shader)           | GLSL Wipe path implemented and correctness-validated; perf/QA tasks still tracked in the roadmap. |
 | Diffuse            | Yes         | Yes                    | Yes (Rectangle/Membrane)    | GLSL Diffuse implemented for Rectangle/Membrane; CPU Diffuse is the authoritative fallback. |
-| Block Puzzle Flip  | Yes         | Yes                    | **Planned**                 | Currently compositor-only; GLSL port scheduled as future work (Group A) rather than v1.2 baseline. |
+| Block Puzzle Flip  | Yes         | Yes                    | Yes (blockflip shader)      | GLSL BlockFlip shader implemented on GLCompositorWidget with the existing QPainter/compositor path retained as the authoritative fallback and for non-GL sessions. |
 | Blinds             | No CPU-only | Yes (`GLBlindsTransition`) | **Planned**             | GL-only compositor effect; GLSL port planned alongside Block Puzzle Flip / Peel. |
-| Peel               | No CPU-only | Yes (`GLCompositorPeelTransition`) | **Planned**      | Strip-based compositor transition; GLSL variant pending. |
+| Peel               | No CPU-only | Yes (`GLCompositorPeelTransition`) | Yes (peel shader) | Strip-based compositor transition with a GLSL peel shader on GLCompositorWidget; the existing QPainter implementation remains the authoritative fallback when shaders are unavailable. |
 | 3D Block Spins     | N/A         | Yes                    | Yes (card-flip shader)      | Implemented via shared card-flip shader in the compositor pipeline. |
 | Ripple / Rain Drops| Yes         | Yes (fallback path)    | Yes (ripple shader)         | Primary path is GLSL; roadmap tracks remaining dt_max smoothing on 4K / multi-monitor setups. |
 | Warp Dissolve      | Yes         | Yes (fallback path)    | Yes (vortex shader)         | Shader path tuned; CPU/compositor fallbacks retained. |

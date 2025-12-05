@@ -116,6 +116,9 @@ class BlockFlipState:
     new_pixmap: Optional[QPixmap]
     region: Optional[QRegion] = None
     progress: float = 0.0  # 0..1
+    cols: int = 0
+    rows: int = 0
+    direction: Optional[SlideDirection] = None
 
 
 @dataclass
@@ -168,11 +171,14 @@ class _GLPipelineState:
     raindrops_program: int = 0
     warp_program: int = 0
     diffuse_program: int = 0
+    blockflip_program: int = 0
+    peel_program: int = 0
     claws_program: int = 0
     shuffle_program: int = 0
     crossfade_program: int = 0
     slide_program: int = 0
     wipe_program: int = 0
+    blinds_program: int = 0
 
     # Textures for the current pair of images being blended/transitioned.
     old_tex_id: int = 0
@@ -215,6 +221,29 @@ class _GLPipelineState:
     diffuse_u_new_tex: int = -1
     diffuse_u_grid: int = -1
     diffuse_u_shape_mode: int = -1
+
+    # Cached uniform locations for the BlockFlip shader program.
+    blockflip_u_progress: int = -1
+    blockflip_u_resolution: int = -1
+    blockflip_u_old_tex: int = -1
+    blockflip_u_new_tex: int = -1
+    blockflip_u_grid: int = -1
+    blockflip_u_direction: int = -1
+
+    # Cached uniform locations for the Peel shader program.
+    peel_u_progress: int = -1
+    peel_u_resolution: int = -1
+    peel_u_old_tex: int = -1
+    peel_u_new_tex: int = -1
+    peel_u_direction: int = -1
+    peel_u_strips: int = -1
+
+    # Cached uniform locations for the Blinds shader program.
+    blinds_u_progress: int = -1
+    blinds_u_resolution: int = -1
+    blinds_u_old_tex: int = -1
+    blinds_u_new_tex: int = -1
+    blinds_u_grid: int = -1
 
     # Cached uniform locations for the Shuffle shader program.
     shuffle_u_progress: int = -1
@@ -299,6 +328,8 @@ class BlindsState:
     new_pixmap: Optional[QPixmap]
     region: Optional[QRegion] = None
     progress: float = 0.0  # 0..1
+    cols: int = 0
+    rows: int = 0
 
 
 @dataclass
@@ -1228,6 +1259,9 @@ class GLCompositorWidget(QOpenGLWidget):
         animation_manager: AnimationManager,
         update_callback: Callable[[float], None],
         on_finished: Optional[Callable[[], None]] = None,
+        grid_cols: Optional[int] = None,
+        grid_rows: Optional[int] = None,
+        direction: Optional[SlideDirection] = None,
     ) -> Optional[str]:
         """Begin a block puzzle flip using the compositor.
 
@@ -1264,6 +1298,9 @@ class GLCompositorWidget(QOpenGLWidget):
             old_pixmap=old_pixmap,
             new_pixmap=new_pixmap,
             region=None,
+            cols=int(grid_cols) if grid_cols is not None and grid_cols > 0 else 0,
+            rows=int(grid_rows) if grid_rows is not None and grid_rows > 0 else 0,
+            direction=direction,
         )
         self._animation_manager = animation_manager
         self._current_easing = easing
@@ -1299,6 +1336,17 @@ class GLCompositorWidget(QOpenGLWidget):
                             self._blockflip_profile_max_dt = dt
                 self._blockflip_profile_last_ts = now
                 self._blockflip_profile_frame_count += 1
+
+            # Keep BlockFlipState.progress in sync with the animation
+            # timeline so both the QPainter and any future GLSL paths see a
+            # consistent value.
+            try:
+                if self._blockflip is not None:
+                    p = max(0.0, min(1.0, float(progress)))
+                    self._blockflip.progress = p
+            except Exception:
+                pass
+
             _inner(progress)
 
         duration_sec = max(0.001, duration_ms / 1000.0)
@@ -1528,6 +1576,8 @@ class GLCompositorWidget(QOpenGLWidget):
         animation_manager: AnimationManager,
         update_callback: Callable[[float], None],
         on_finished: Optional[Callable[[], None]] = None,
+        grid_cols: Optional[int] = None,
+        grid_rows: Optional[int] = None,
     ) -> Optional[str]:
         """Begin a blinds reveal using the compositor.
 
@@ -1566,6 +1616,8 @@ class GLCompositorWidget(QOpenGLWidget):
             old_pixmap=old_pixmap,
             new_pixmap=new_pixmap,
             region=None,
+            cols=int(grid_cols) if grid_cols is not None and grid_cols > 0 else 0,
+            rows=int(grid_rows) if grid_rows is not None and grid_rows > 0 else 0,
         )
         self._animation_manager = animation_manager
         self._current_easing = easing
@@ -1600,6 +1652,17 @@ class GLCompositorWidget(QOpenGLWidget):
                             self._blinds_profile_max_dt = dt
                 self._blinds_profile_last_ts = now
                 self._blinds_profile_frame_count += 1
+
+            # Keep BlindsState.progress in sync with the animation timeline so
+            # both the QPainter and any future GLSL paths see a consistent
+            # progress value.
+            try:
+                if self._blinds is not None:
+                    p = max(0.0, min(1.0, float(progress)))
+                    self._blinds.progress = p
+            except Exception:
+                pass
+
             _inner(progress)
 
         duration_sec = max(0.001, duration_ms / 1000.0)
@@ -2874,6 +2937,44 @@ class GLCompositorWidget(QOpenGLWidget):
                 self._use_shaders = False
                 return
 
+            # Compile the BlockFlip shader program. On failure we disable
+            # shader usage for this session so that all shader-backed
+            # transitions fall back to the compositor's QPainter-based paths.
+            try:
+                bfp = self._create_blockflip_program()
+                self._gl_pipeline.blockflip_program = bfp
+                self._gl_pipeline.blockflip_u_progress = gl.glGetUniformLocation(bfp, "u_progress")
+                self._gl_pipeline.blockflip_u_resolution = gl.glGetUniformLocation(bfp, "u_resolution")
+                self._gl_pipeline.blockflip_u_old_tex = gl.glGetUniformLocation(bfp, "uOldTex")
+                self._gl_pipeline.blockflip_u_new_tex = gl.glGetUniformLocation(bfp, "uNewTex")
+                self._gl_pipeline.blockflip_u_grid = gl.glGetUniformLocation(bfp, "u_grid")
+                self._gl_pipeline.blockflip_u_direction = gl.glGetUniformLocation(bfp, "u_direction")
+            except Exception:
+                logger.debug("[GL SHADER] Failed to initialize blockflip shader program", exc_info=True)
+                self._gl_pipeline.blockflip_program = 0
+                self._gl_disabled_for_session = True
+                self._use_shaders = False
+                return
+
+            # Compile the Peel shader program. On failure we disable shader
+            # usage for this session so that all shader-backed transitions
+            # fall back to the compositor's QPainter-based paths.
+            try:
+                pp = self._create_peel_program()
+                self._gl_pipeline.peel_program = pp
+                self._gl_pipeline.peel_u_progress = gl.glGetUniformLocation(pp, "u_progress")
+                self._gl_pipeline.peel_u_resolution = gl.glGetUniformLocation(pp, "u_resolution")
+                self._gl_pipeline.peel_u_old_tex = gl.glGetUniformLocation(pp, "uOldTex")
+                self._gl_pipeline.peel_u_new_tex = gl.glGetUniformLocation(pp, "uNewTex")
+                self._gl_pipeline.peel_u_direction = gl.glGetUniformLocation(pp, "u_direction")
+                self._gl_pipeline.peel_u_strips = gl.glGetUniformLocation(pp, "u_strips")
+            except Exception:
+                logger.debug("[GL SHADER] Failed to initialize peel shader program", exc_info=True)
+                self._gl_pipeline.peel_program = 0
+                self._gl_disabled_for_session = True
+                self._use_shaders = False
+                return
+
             try:
                 xp = self._create_crossfade_program()
                 self._gl_pipeline.crossfade_program = xp
@@ -2919,9 +3020,27 @@ class GLCompositorWidget(QOpenGLWidget):
                 self._use_shaders = False
                 return
 
+            # Compile the Blinds shader program. On failure we disable shader
+            # usage for this session so that all shader-backed transitions fall
+            # back to the compositor's QPainter-based paths.
+            try:
+                bp = self._create_blinds_program()
+                self._gl_pipeline.blinds_program = bp
+                self._gl_pipeline.blinds_u_progress = gl.glGetUniformLocation(bp, "u_progress")
+                self._gl_pipeline.blinds_u_resolution = gl.glGetUniformLocation(bp, "u_resolution")
+                self._gl_pipeline.blinds_u_old_tex = gl.glGetUniformLocation(bp, "uOldTex")
+                self._gl_pipeline.blinds_u_new_tex = gl.glGetUniformLocation(bp, "uNewTex")
+                self._gl_pipeline.blinds_u_grid = gl.glGetUniformLocation(bp, "u_grid")
+            except Exception:
+                logger.debug("[GL SHADER] Failed to initialize blinds shader program", exc_info=True)
+                self._gl_pipeline.blinds_program = 0
+                self._gl_disabled_for_session = True
+                self._use_shaders = False
+                return
+
             # Compile the Shuffle shader program. On failure we disable shader
             # usage for this session so that all shader-backed transitions fall
-            # back to the compositor's QPainter-based paths (Group A  Group C
+            # back to the compositor's QPainter-based paths (Group A ￾ Group C
             # downgrade via existing CPU transitions rather than a CPU Shuffle
             # variant).
             try:
@@ -3115,11 +3234,14 @@ class GLCompositorWidget(QOpenGLWidget):
                 self._gl_pipeline.raindrops_program = 0
                 self._gl_pipeline.warp_program = 0
                 self._gl_pipeline.diffuse_program = 0
+                self._gl_pipeline.blockflip_program = 0
+                self._gl_pipeline.peel_program = 0
                 self._gl_pipeline.shuffle_program = 0
                 self._gl_pipeline.claws_program = 0
                 self._gl_pipeline.crossfade_program = 0
                 self._gl_pipeline.slide_program = 0
                 self._gl_pipeline.wipe_program = 0
+                self._gl_pipeline.blinds_program = 0
                 self._gl_pipeline.quad_vao = 0
                 self._gl_pipeline.quad_vbo = 0
                 self._gl_pipeline.box_vao = 0
@@ -3138,11 +3260,14 @@ class GLCompositorWidget(QOpenGLWidget):
             self._gl_pipeline.raindrops_program = 0
             self._gl_pipeline.warp_program = 0
             self._gl_pipeline.diffuse_program = 0
+            self._gl_pipeline.blockflip_program = 0
+            self._gl_pipeline.peel_program = 0
             self._gl_pipeline.shuffle_program = 0
             self._gl_pipeline.claws_program = 0
             self._gl_pipeline.crossfade_program = 0
             self._gl_pipeline.slide_program = 0
             self._gl_pipeline.wipe_program = 0
+            self._gl_pipeline.blinds_program = 0
             self._gl_pipeline.quad_vao = 0
             self._gl_pipeline.quad_vbo = 0
             self._gl_pipeline.box_vao = 0
@@ -3178,6 +3303,8 @@ class GLCompositorWidget(QOpenGLWidget):
                     gl.glDeleteProgram(int(self._gl_pipeline.warp_program))
                 if getattr(self._gl_pipeline, "diffuse_program", 0):
                     gl.glDeleteProgram(int(self._gl_pipeline.diffuse_program))
+                if getattr(self._gl_pipeline, "blockflip_program", 0):
+                    gl.glDeleteProgram(int(self._gl_pipeline.blockflip_program))
                 if getattr(self._gl_pipeline, "shuffle_program", 0):
                     gl.glDeleteProgram(int(self._gl_pipeline.shuffle_program))
                 if getattr(self._gl_pipeline, "claws_program", 0):
@@ -3188,6 +3315,8 @@ class GLCompositorWidget(QOpenGLWidget):
                     gl.glDeleteProgram(int(self._gl_pipeline.slide_program))
                 if getattr(self._gl_pipeline, "wipe_program", 0):
                     gl.glDeleteProgram(int(self._gl_pipeline.wipe_program))
+                if getattr(self._gl_pipeline, "blinds_program", 0):
+                    gl.glDeleteProgram(int(self._gl_pipeline.blinds_program))
             except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to delete shader program", exc_info=True)
 
@@ -3489,6 +3618,180 @@ void main() {
 
         return int(program)
 
+    def _create_peel_program(self) -> int:
+        """Compile and link the shader program used for Peel.
+
+        Peel is implemented as a fullscreen-quad shader that always draws the
+        new image as the stable base frame while strips of the old image slide
+        and fade away along a configured direction. Each logical strip has a
+        small per-strip timing offset so the wave feels organic rather than
+        perfectly synchronous.
+        """
+
+        if gl is None:
+            raise RuntimeError("OpenGL context not available for shader program")
+
+        vs_source = """#version 410 core
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec2 aUv;
+
+out vec2 vUv;
+
+void main() {
+    vUv = aUv;
+    gl_Position = vec4(aPos, 0.0, 1.0);
+}
+"""
+
+        fs_source = """#version 410 core
+in vec2 vUv;
+out vec4 FragColor;
+
+uniform sampler2D uOldTex;
+uniform sampler2D uNewTex;
+uniform float u_progress;
+uniform vec2 u_resolution;
+uniform vec2 u_direction;  // peel travel direction
+uniform float u_strips;    // logical strip count
+
+float hash1(float n) {
+    return fract(sin(n) * 43758.5453123);
+}
+
+void main() {
+    // Flip V to match Qt's top-left image origin.
+    vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
+
+    vec4 oldColor = texture(uOldTex, uv);
+    vec4 newColor = texture(uNewTex, uv);
+
+    float t = clamp(u_progress, 0.0, 1.0);
+
+    if (t <= 0.0) {
+        FragColor = oldColor;
+        return;
+    }
+    if (t >= 1.0) {
+        FragColor = newColor;
+        return;
+    }
+
+    // Normalised peel direction.
+    vec2 dir = u_direction;
+    if (length(dir) < 1e-3) {
+        dir = vec2(1.0, 0.0);
+    } else {
+        dir = normalize(dir);
+    }
+
+    float strips = max(u_strips, 1.0);
+
+    // Choose a 1D coordinate along the strip index. To mirror the CPU
+    // compositor we always order strips from left→right (horizontal) or
+    // top→bottom (vertical), independent of peel direction.
+    bool horizontal = abs(dir.x) >= abs(dir.y);
+    float axisCoord = horizontal ? uv.x : uv.y;
+
+    axisCoord = clamp(axisCoord, 0.0, 1.0);
+    float stripIndex = floor(axisCoord * strips + 1e-4);
+
+    // Sequential per-strip timing similar to the CPU compositor path: early
+    // strips start earlier, later strips start later but all complete by
+    // t = 1.0.
+    float start = 0.0;
+    if (strips > 1.0) {
+        float delay_per_strip = 0.7 / (strips - 1.0);
+        start = delay_per_strip * stripIndex;
+    }
+
+    float local;
+    if (t <= start) {
+        local = 0.0;
+    } else {
+        float span = max(1.0 - start, 1e-4);
+        local = clamp((t - start) / span, 0.0, 1.0);
+    }
+
+    // Local coordinate within this logical strip in [0,1). At the start of
+    // the animation each strip occupies its full segment width so the old
+    // image completely covers the new image. As the strip peels away, its
+    // visible band narrows toward the centre so the effect feels like thin
+    // sheets being pulled off.
+    float segPos = fract(axisCoord * strips);
+    float baseWidth = 0.6;                      // final fraction of segment used
+    float width = mix(1.0, baseWidth, local);   // 1.0 → baseWidth over lifetime
+    float halfBand = 0.5 * width;
+    float bandMin = 0.5 - halfBand;
+    float bandMax = 0.5 + halfBand;
+    float inBand = step(bandMin, segPos) * step(segPos, bandMax);
+
+    // If this strip has completely peeled away, only the new image remains.
+    if (local >= 1.0) {
+        FragColor = newColor;
+        return;
+    }
+
+    // Slide the strip off-screen along the peel direction. We work in the
+    // shifted UV space so both the visible band and the sampled old image
+    // move together across the screen, mirroring the CPU painter which
+    // translates and clips whole rectangles.
+    float travel = 1.4;  // slightly more than the viewport diagonal in UV units
+    vec2 shifted = uv - dir * local * travel;
+
+    // Recompute the band mask in shifted space so the geometry of the strip
+    // itself travels across the frame.
+    float maskCoord = horizontal ? shifted.x : shifted.y;
+    float maskCoordClamped = clamp(maskCoord, 0.0, 1.0);
+    float segPosShifted = fract(maskCoordClamped * strips);
+    float inBandShifted = step(bandMin, segPosShifted) * step(segPosShifted, bandMax);
+
+    // Only sample old image where the shifted strip still overlaps it.
+    float inside = 0.0;
+    if (shifted.x >= 0.0 && shifted.x <= 1.0 && shifted.y >= 0.0 && shifted.y <= 1.0) {
+        inside = 1.0;
+    }
+
+    vec4 peeledOld = texture(uOldTex, shifted);
+
+    // Piece-wise opacity: start fading as soon as this strip begins to
+    // peel, so each band thins out over its entire lifetime rather than
+    // staying fully opaque until late in the animation.
+    float alpha = inside * inBandShifted * (1.0 - local);
+
+    // Short global tail so, regardless of local timing, we always land on a
+    // pure new image by the end of the transition.
+    float tail = smoothstep(0.90, 1.0, t);
+    alpha *= (1.0 - tail);
+
+    vec4 color = mix(newColor, peeledOld, clamp(alpha, 0.0, 1.0));
+    FragColor = color;
+}
+"""
+
+        vert = self._compile_shader(vs_source, gl.GL_VERTEX_SHADER)
+        try:
+            frag = self._compile_shader(fs_source, gl.GL_FRAGMENT_SHADER)
+        except Exception:
+            gl.glDeleteShader(vert)
+            raise
+
+        try:
+            program = gl.glCreateProgram()
+            gl.glAttachShader(program, vert)
+            gl.glAttachShader(program, frag)
+            gl.glLinkProgram(program)
+            status = gl.glGetProgramiv(program, gl.GL_LINK_STATUS)
+            if status != gl.GL_TRUE:
+                log = gl.glGetProgramInfoLog(program)
+                logger.debug("[GL SHADER] Failed to link peel program: %r", log)
+                gl.glDeleteProgram(program)
+                raise RuntimeError(f"Failed to link peel program: {log!r}")
+        finally:
+            gl.glDeleteShader(vert)
+            gl.glDeleteShader(frag)
+
+        return int(program)
+
     def _create_wipe_program(self) -> int:
         if gl is None:
             raise RuntimeError("OpenGL context not available for shader program")
@@ -3750,6 +4053,285 @@ void main() {
                 logger.debug("[GL SHADER] Failed to link diffuse program: %r", log)
                 gl.glDeleteProgram(program)
                 raise RuntimeError(f"Failed to link diffuse program: {log!r}")
+        finally:
+            gl.glDeleteShader(vert)
+            gl.glDeleteShader(frag)
+
+        return int(program)
+
+    def _create_blockflip_program(self) -> int:
+        if gl is None:
+            raise RuntimeError("OpenGL context not available for shader program")
+
+        vs_source = """#version 410 core
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec2 aUv;
+
+out vec2 vUv;
+
+void main() {
+    vUv = aUv;
+    gl_Position = vec4(aPos, 0.0, 1.0);
+}
+"""
+
+        fs_source = """#version 410 core
+in vec2 vUv;
+out vec4 FragColor;
+
+uniform sampler2D uOldTex;
+uniform sampler2D uNewTex;
+uniform float u_progress;
+uniform vec2 u_resolution;
+uniform vec2 u_grid;        // (cols, rows)
+uniform vec2 u_direction;   // slide direction, cardinal
+
+float hash1(float n) {
+    return fract(sin(n) * 43758.5453123);
+}
+
+void main() {
+    // Flip V to match Qt's top-left image origin.
+    vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
+
+    vec4 oldColor = texture(uOldTex, uv);
+    vec4 newColor = texture(uNewTex, uv);
+
+    float t = clamp(u_progress, 0.0, 1.0);
+
+    if (t <= 0.0) {
+        FragColor = oldColor;
+        return;
+    }
+    if (t >= 1.0) {
+        FragColor = newColor;
+        return;
+    }
+
+    // Logical block grid in UV space.
+    vec2 grid = max(u_grid, vec2(1.0));
+    vec2 cell = clamp(floor(uv * grid), vec2(0.0), grid - vec2(1.0));
+    float cols = grid.x;
+    float rows = grid.y;
+    float cellIndex = cell.y * cols + cell.x;
+
+    vec2 cellOrigin = cell / grid;
+    vec2 cellSize = vec2(1.0) / grid;
+    vec2 uvLocal = (uv - cellOrigin) / cellSize; // 0..1 inside block
+
+    // Direction-aware wave based on the *block* row/column, mirroring the
+    // legacy BlockPuzzleFlip controller. This determines when each block
+    // begins its flip relative to the chosen edge.
+    vec2 dir = u_direction;
+    if (length(dir) < 1e-3) {
+        dir = vec2(1.0, 0.0);
+    } else {
+        dir = normalize(dir);
+    }
+
+    float colIndex = cell.x;
+    float rowIndex = cell.y;
+    bool horizontal = abs(dir.x) >= abs(dir.y);
+
+    // Base start timing from the leading edge, matching the CPU
+    // BlockPuzzleFlip controller.
+    float base = 0.0;
+    if (horizontal) {
+        // LEFT/RIGHT: wave travels across columns.
+        if (dir.x > 0.0) {
+            // SlideDirection.LEFT semantics: left→right.
+            if (cols > 1.0) {
+                base = colIndex / (cols - 1.0);
+            }
+        } else {
+            // SlideDirection.RIGHT semantics: right→left.
+            if (cols > 1.0) {
+                base = (cols - 1.0 - colIndex) / (cols - 1.0);
+            }
+        }
+    } else {
+        // UP/DOWN: wave travels across rows.
+        if (dir.y > 0.0) {
+            // SlideDirection.DOWN: top→bottom.
+            if (rows > 1.0) {
+                base = rowIndex / (rows - 1.0);
+            }
+        } else {
+            // SlideDirection.UP: bottom→top.
+            if (rows > 1.0) {
+                base = (rows - 1.0 - rowIndex) / (rows - 1.0);
+            }
+        }
+    }
+
+    // Center bias: blocks nearer the center of the orthogonal axis begin
+    // slightly earlier so the wavefront forms a shallow arrow/curve shape
+    // rather than a perfectly straight slit.
+    float colNorm = (cols > 1.0) ? colIndex / (cols - 1.0) : 0.5;
+    float rowNorm = (rows > 1.0) ? rowIndex / (rows - 1.0) : 0.5;
+    float ortho = horizontal ? abs(rowNorm - 0.5) : abs(colNorm - 0.5);
+    float centerFactor = (0.5 - ortho) * 2.0; // 1 at center, 0 at edges.
+    float centerBiasStrength = 0.25;          // tune: fraction of timeline.
+    base -= centerFactor * centerBiasStrength;
+    base = clamp(base, 0.0, 1.0);
+
+    // Small jitter so neighbouring blocks do not all start at exactly the
+    // same moment; scaled by grid density so the wavefront remains coherent.
+    float span = max(cols, rows);
+    float jitterSpan = span > 0.0 ? 0.18 / span : 0.0;
+    if (jitterSpan > 0.0) {
+        base += (hash1(cellIndex * 91.0 + 7.0) - 0.5) * jitterSpan;
+    }
+    base = clamp(base, 0.0, 1.0);
+
+    float start = clamp(base * 0.9, 0.0, 1.0 - 0.25);
+    float end = start + 0.25;
+
+    float local = 0.0;
+    if (t >= start) {
+        float span = max(end - start, 1e-4);
+        local = clamp((t - start) / span, 0.0, 1.0);
+    }
+
+    // Cosine-based easing for the apparent flip, mirroring the legacy
+    // BlockPuzzleFlip controller: eased in [0, 1] drives the width of a
+    // hard-edged central band within each block.
+    float eased = 0.5 - 0.5 * cos(local * 3.14159265);
+
+    // Width of the revealed band within this block.
+    float w = clamp(eased, 0.0, 1.0);
+    float half = 0.5 * w;
+    float left = 0.5 - half;
+    float right = 0.5 + half;
+
+    // Choose local axis according to the flip direction. For horizontal
+    // flips use X inside the block; for vertical flips use Y.
+    float coord = horizontal ? uvLocal.x : uvLocal.y;
+
+    // Hard-edged band: pixels inside the band are fully new image, outside
+    // are fully old image. No spatial feathering.
+    float inBand = step(left, coord) * step(coord, right);
+
+    // Late global tail so any remaining stragglers land cleanly on new even
+    // if numerical jitter leaves tiny gaps.
+    float tail = smoothstep(0.92, 1.0, t);
+    float useNew = clamp(max(inBand, tail), 0.0, 1.0);
+    float useOld = 1.0 - useNew;
+
+    vec4 color = oldColor * useOld + newColor * useNew;
+    FragColor = color;
+}
+"""
+
+        vert = self._compile_shader(vs_source, gl.GL_VERTEX_SHADER)
+        try:
+            frag = self._compile_shader(fs_source, gl.GL_FRAGMENT_SHADER)
+        except Exception:
+            gl.glDeleteShader(vert)
+            raise
+
+        try:
+            program = gl.glCreateProgram()
+            gl.glAttachShader(program, vert)
+            gl.glAttachShader(program, frag)
+            gl.glLinkProgram(program)
+            status = gl.glGetProgramiv(program, gl.GL_LINK_STATUS)
+            if status != gl.GL_TRUE:
+                log = gl.glGetProgramInfoLog(program)
+                logger.debug("[GL SHADER] Failed to link blockflip program: %r", log)
+                gl.glDeleteProgram(program)
+                raise RuntimeError(f"Failed to link blockflip program: {log!r}")
+        finally:
+            gl.glDeleteShader(vert)
+            gl.glDeleteShader(frag)
+
+        return int(program)
+
+    def _create_blinds_program(self) -> int:
+        if gl is None:
+            raise RuntimeError("OpenGL context not available for shader program")
+
+        vs_source = """#version 410 core
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec2 aUv;
+
+out vec2 vUv;
+
+void main() {
+    vUv = aUv;
+    gl_Position = vec4(aPos, 0.0, 1.0);
+}
+"""
+
+        fs_source = """#version 410 core
+in vec2 vUv;
+out vec4 FragColor;
+
+uniform sampler2D uOldTex;
+uniform sampler2D uNewTex;
+uniform float u_progress;
+uniform vec2 u_resolution;
+uniform vec2 u_grid;        // (cols, rows)
+
+void main() {
+    // Flip V to match Qt's top-left image origin.
+    vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
+
+    vec4 oldColor = texture(uOldTex, uv);
+    vec4 newColor = texture(uNewTex, uv);
+
+    float t = clamp(u_progress, 0.0, 1.0);
+
+    // Logical grid in UV space; when u_grid is unset we fall back to a
+    // single full-frame cell so the effect still works.
+    vec2 grid = max(u_grid, vec2(1.0));
+    vec2 cell = clamp(floor(uv * grid), vec2(0.0), grid - vec2(1.0));
+
+    vec2 cellOrigin = cell / grid;
+    vec2 cellSize = vec2(1.0) / grid;
+    vec2 uvLocal = (uv - cellOrigin) / cellSize; // 0..1 inside cell
+
+    // Blinds are modelled as a horizontal band within each cell that grows
+    // symmetrically from the centre outwards. At t=0 the band is collapsed
+    // to a thin line; by t=1 it covers the full cell width.
+    float w = clamp(t, 0.0, 1.0);
+    float half = 0.5 * w;
+    float left = 0.5 - half;
+    float right = 0.5 + half;
+
+    // Soft edges so the band does not appear as a harsh 1px stripe.
+    float feather = 0.08;
+    float edgeL = smoothstep(left - feather, left, uvLocal.x);
+    float edgeR = 1.0 - smoothstep(right, right + feather, uvLocal.x);
+    float bandMask = clamp(edgeL * edgeR, 0.0, 1.0);
+
+    // Late global tail to guarantee we land on a fully revealed frame even
+    // if numerical jitter leaves small gaps in the band coverage.
+    float tail = smoothstep(0.96, 1.0, t);
+    float mixFactor = clamp(max(bandMask, tail), 0.0, 1.0);
+
+    FragColor = mix(oldColor, newColor, mixFactor);
+}
+"""
+
+        vert = self._compile_shader(vs_source, gl.GL_VERTEX_SHADER)
+        try:
+            frag = self._compile_shader(fs_source, gl.GL_FRAGMENT_SHADER)
+        except Exception:
+            gl.glDeleteShader(vert)
+            raise
+
+        try:
+            program = gl.glCreateProgram()
+            gl.glAttachShader(program, vert)
+            gl.glAttachShader(program, frag)
+            gl.glLinkProgram(program)
+            status = gl.glGetProgramiv(program, gl.GL_LINK_STATUS)
+            if status != gl.GL_TRUE:
+                log = gl.glGetProgramInfoLog(program)
+                logger.debug("[GL SHADER] Failed to link blinds program: %r", log)
+                gl.glDeleteProgram(program)
+                raise RuntimeError(f"Failed to link blinds program: {log!r}")
         finally:
             gl.glDeleteShader(vert)
             gl.glDeleteShader(frag)
@@ -4445,6 +5027,36 @@ void main() {
             return False
         return self._can_use_simple_shader(st, getattr(self._gl_pipeline, "diffuse_program", 0))
 
+    def _can_use_blockflip_shader(self) -> bool:
+        st = self._blockflip
+        if st is None:
+            return False
+        # BlockFlip GLSL path only activates when grid hints are available; when
+        # cols/rows are zero we stay on the QPainter compositor path.
+        if getattr(st, "cols", 0) <= 0 or getattr(st, "rows", 0) <= 0:
+            return False
+        return self._can_use_simple_shader(st, getattr(self._gl_pipeline, "blockflip_program", 0))
+
+    def _can_use_peel_shader(self) -> bool:
+        st = self._peel
+        if st is None:
+            return False
+        # Require at least one logical strip; start_peel already clamps this
+        # but we keep the guard for safety.
+        if getattr(st, "strips", 0) <= 0:
+            return False
+        return self._can_use_simple_shader(st, getattr(self._gl_pipeline, "peel_program", 0))
+
+    def _can_use_blinds_shader(self) -> bool:
+        st = self._blinds
+        if st is None:
+            return False
+        # Blinds GLSL path only activates when grid hints are available; when
+        # cols/rows are zero we stay on the QPainter compositor path.
+        if getattr(st, "cols", 0) <= 0 or getattr(st, "rows", 0) <= 0:
+            return False
+        return self._can_use_simple_shader(st, getattr(self._gl_pipeline, "blinds_program", 0))
+
     def _can_use_crossfade_shader(self) -> bool:
         return self._can_use_simple_shader(self._crossfade, getattr(self._gl_pipeline, "crossfade_program", 0))
 
@@ -4727,6 +5339,39 @@ void main() {
         st = self._diffuse
         return self._prepare_pair_textures(st.old_pixmap, st.new_pixmap)
 
+    def _prepare_blockflip_textures(self) -> bool:
+        if not self._can_use_blockflip_shader():
+            return False
+        if self._gl_pipeline is None:
+            return False
+        # Reuse any textures already prepared for this pixmap pair.
+        if self._gl_pipeline.old_tex_id and self._gl_pipeline.new_tex_id:
+            return True
+        if self._blockflip is None:
+            return False
+        st = self._blockflip
+        return self._prepare_pair_textures(st.old_pixmap, st.new_pixmap)
+
+    def _prepare_peel_textures(self) -> bool:
+        if not self._can_use_peel_shader():
+            return False
+        if self._gl_pipeline is None:
+            return False
+        if self._peel is None:
+            return False
+        st = self._peel
+        return self._prepare_pair_textures(st.old_pixmap, st.new_pixmap)
+
+    def _prepare_blinds_textures(self) -> bool:
+        if not self._can_use_blinds_shader():
+            return False
+        if self._gl_pipeline is None:
+            return False
+        if self._blinds is None:
+            return False
+        st = self._blinds
+        return self._prepare_pair_textures(st.old_pixmap, st.new_pixmap)
+
     def _prepare_crossfade_textures(self) -> bool:
         if not self._can_use_crossfade_shader():
             return False
@@ -4905,6 +5550,74 @@ void main() {
             gl.glActiveTexture(gl.GL_TEXTURE0)
             gl.glUseProgram(0)
 
+    def _paint_peel_shader(self, target: QRect) -> None:
+        if not self._can_use_peel_shader() or self._gl_pipeline is None or self._peel is None:
+            return
+        st = self._peel
+        if not st.old_pixmap or st.old_pixmap.isNull() or not st.new_pixmap or st.new_pixmap.isNull():
+            return
+        if not self._prepare_peel_textures():
+            return
+
+        vp_w, vp_h = self._get_viewport_size()
+        p = max(0.0, min(1.0, float(st.progress)))
+
+        gl.glViewport(0, 0, vp_w, vp_h)
+        gl.glDisable(gl.GL_DEPTH_TEST)
+
+        gl.glUseProgram(self._gl_pipeline.peel_program)
+        try:
+            if self._gl_pipeline.peel_u_progress != -1:
+                gl.glUniform1f(self._gl_pipeline.peel_u_progress, float(p))
+
+            if self._gl_pipeline.peel_u_resolution != -1:
+                gl.glUniform2f(self._gl_pipeline.peel_u_resolution, float(vp_w), float(vp_h))
+
+            # Map SlideDirection to a cardinal travel vector that matches the
+            # CPU compositor semantics: LEFT moves strips left, RIGHT moves
+            # them right, DOWN moves them down, UP moves them up.
+            dx = 0.0
+            dy = 0.0
+            try:
+                direction = getattr(st, "direction", None)
+                if direction == SlideDirection.LEFT:
+                    dx, dy = -1.0, 0.0
+                elif direction == SlideDirection.RIGHT:
+                    dx, dy = 1.0, 0.0
+                elif direction == SlideDirection.DOWN:
+                    dx, dy = 0.0, 1.0
+                elif direction == SlideDirection.UP:
+                    dx, dy = 0.0, -1.0
+            except Exception:
+                dx, dy = -1.0, 0.0
+
+            if self._gl_pipeline.peel_u_direction != -1:
+                gl.glUniform2f(self._gl_pipeline.peel_u_direction, float(dx), float(dy))
+
+            if self._gl_pipeline.peel_u_strips != -1:
+                try:
+                    strips = max(1, int(getattr(st, "strips", 1)))
+                except Exception:
+                    strips = 1
+                gl.glUniform1f(self._gl_pipeline.peel_u_strips, float(strips))
+
+            if self._gl_pipeline.peel_u_old_tex != -1:
+                gl.glActiveTexture(gl.GL_TEXTURE0)
+                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.old_tex_id)
+                gl.glUniform1i(self._gl_pipeline.peel_u_old_tex, 0)
+            if self._gl_pipeline.peel_u_new_tex != -1:
+                gl.glActiveTexture(gl.GL_TEXTURE1)
+                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.new_tex_id)
+                gl.glUniform1i(self._gl_pipeline.peel_u_new_tex, 1)
+
+            gl.glBindVertexArray(self._gl_pipeline.quad_vao)
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+            gl.glBindVertexArray(0)
+        finally:
+            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
+            gl.glActiveTexture(gl.GL_TEXTURE0)
+            gl.glUseProgram(0)
+
     def _paint_claws_shader(self, target: QRect) -> None:
         if not self._can_use_claws_shader() or self._gl_pipeline is None or self._shooting_stars is None:
             return
@@ -4950,6 +5663,52 @@ void main() {
                 gl.glActiveTexture(gl.GL_TEXTURE1)
                 gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.new_tex_id)
                 gl.glUniform1i(self._gl_pipeline.claws_u_new_tex, 1)
+
+            gl.glBindVertexArray(self._gl_pipeline.quad_vao)
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+            gl.glBindVertexArray(0)
+        finally:
+            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
+            gl.glActiveTexture(gl.GL_TEXTURE0)
+            gl.glUseProgram(0)
+
+    def _paint_blinds_shader(self, target: QRect) -> None:
+        if not self._can_use_blinds_shader() or self._gl_pipeline is None or self._blinds is None:
+            return
+        st = self._blinds
+        if not st.old_pixmap or st.old_pixmap.isNull() or not st.new_pixmap or st.new_pixmap.isNull():
+            return
+        if not self._prepare_blinds_textures():
+            return
+
+        vp_w, vp_h = self._get_viewport_size()
+
+        float_cols = float(max(1, int(getattr(st, "cols", 0))))
+        float_rows = float(max(1, int(getattr(st, "rows", 0))))
+        p = max(0.0, min(1.0, float(st.progress)))
+
+        gl.glViewport(0, 0, vp_w, vp_h)
+        gl.glDisable(gl.GL_DEPTH_TEST)
+
+        gl.glUseProgram(self._gl_pipeline.blinds_program)
+        try:
+            if self._gl_pipeline.blinds_u_progress != -1:
+                gl.glUniform1f(self._gl_pipeline.blinds_u_progress, float(p))
+
+            if self._gl_pipeline.blinds_u_resolution != -1:
+                gl.glUniform2f(self._gl_pipeline.blinds_u_resolution, float(vp_w), float(vp_h))
+
+            if self._gl_pipeline.blinds_u_grid != -1:
+                gl.glUniform2f(self._gl_pipeline.blinds_u_grid, float_cols, float_rows)
+
+            if self._gl_pipeline.blinds_u_old_tex != -1:
+                gl.glActiveTexture(gl.GL_TEXTURE0)
+                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.old_tex_id)
+                gl.glUniform1i(self._gl_pipeline.blinds_u_old_tex, 0)
+            if self._gl_pipeline.blinds_u_new_tex != -1:
+                gl.glActiveTexture(gl.GL_TEXTURE1)
+                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.new_tex_id)
+                gl.glUniform1i(self._gl_pipeline.blinds_u_new_tex, 1)
 
             gl.glBindVertexArray(self._gl_pipeline.quad_vao)
             gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
@@ -5167,6 +5926,70 @@ void main() {
 
             if self._gl_pipeline.diffuse_u_shape_mode != -1:
                 gl.glUniform1i(self._gl_pipeline.diffuse_u_shape_mode, int(getattr(st, "shape_mode", 0)))
+
+            gl.glBindVertexArray(self._gl_pipeline.quad_vao)
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+            gl.glBindVertexArray(0)
+        finally:
+            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
+            gl.glActiveTexture(gl.GL_TEXTURE0)
+            gl.glUseProgram(0)
+
+    def _paint_blockflip_shader(self, target: QRect) -> None:
+        if not self._can_use_blockflip_shader() or self._gl_pipeline is None or self._blockflip is None:
+            return
+        st = self._blockflip
+        if not st.old_pixmap or st.old_pixmap.isNull() or not st.new_pixmap or st.new_pixmap.isNull():
+            return
+        if not self._prepare_blockflip_textures():
+            return
+
+        vp_w, vp_h = self._get_viewport_size()
+        p = max(0.0, min(1.0, float(st.progress)))
+
+        gl.glViewport(0, 0, vp_w, vp_h)
+        gl.glDisable(gl.GL_DEPTH_TEST)
+
+        gl.glUseProgram(self._gl_pipeline.blockflip_program)
+        try:
+            if self._gl_pipeline.blockflip_u_progress != -1:
+                gl.glUniform1f(self._gl_pipeline.blockflip_u_progress, float(p))
+
+            if self._gl_pipeline.blockflip_u_resolution != -1:
+                gl.glUniform2f(self._gl_pipeline.blockflip_u_resolution, float(vp_w), float(vp_h))
+
+            if self._gl_pipeline.blockflip_u_grid != -1:
+                float_cols = float(max(1, int(getattr(st, "cols", 0))))
+                float_rows = float(max(1, int(getattr(st, "rows", 0))))
+                gl.glUniform2f(self._gl_pipeline.blockflip_u_grid, float_cols, float_rows)
+
+            # Map SlideDirection to a simple cardinal direction vector.
+            dx = 1.0
+            dy = 0.0
+            try:
+                direction = getattr(st, "direction", None)
+                if direction == SlideDirection.LEFT:
+                    dx, dy = 1.0, 0.0
+                elif direction == SlideDirection.RIGHT:
+                    dx, dy = -1.0, 0.0
+                elif direction == SlideDirection.DOWN:
+                    dx, dy = 0.0, 1.0
+                elif direction == SlideDirection.UP:
+                    dx, dy = 0.0, -1.0
+            except Exception:
+                dx, dy = 1.0, 0.0
+
+            if self._gl_pipeline.blockflip_u_direction != -1:
+                gl.glUniform2f(self._gl_pipeline.blockflip_u_direction, float(dx), float(dy))
+
+            if self._gl_pipeline.blockflip_u_old_tex != -1:
+                gl.glActiveTexture(gl.GL_TEXTURE0)
+                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.old_tex_id)
+                gl.glUniform1i(self._gl_pipeline.blockflip_u_old_tex, 0)
+            if self._gl_pipeline.blockflip_u_new_tex != -1:
+                gl.glActiveTexture(gl.GL_TEXTURE1)
+                gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.new_tex_id)
+                gl.glUniform1i(self._gl_pipeline.blockflip_u_new_tex, 1)
 
             gl.glBindVertexArray(self._gl_pipeline.quad_vao)
             gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
@@ -5657,6 +6480,29 @@ void main() {
                 self._gl_disabled_for_session = True
                 self._use_shaders = False
 
+        # BlockFlip shader path: when enabled and the GLSL pipeline is
+        # available, draw the flip field in GLSL using the grid and direction
+        # hints provided by the controller. On failure we disable shader usage
+        # for the session and fall back to the existing QPainter path.
+        if self._blockflip is not None and self._can_use_blockflip_shader():
+            try:
+                self._paint_blockflip_shader(target)
+                self._paint_spotify_visualizer_gl()
+                if is_perf_metrics_enabled():
+                    self._paint_debug_overlay_gl()
+                return
+            except Exception:
+                logger.debug(
+                    "[GL SHADER] Shader blockflip path failed; disabling shader pipeline",
+                    exc_info=True,
+                )
+                logger.debug(
+                    "[GL COMPOSITOR] Shader blockflip path failed; disabling shader pipeline",
+                    exc_info=True,
+                )
+                self._gl_disabled_for_session = True
+                self._use_shaders = False
+
         # Raindrops shader path: when enabled and the GLSL pipeline is
         # available, draw the droplet field entirely in GLSL. On failure we
         # disable shader usage for the session and fall back to the
@@ -5763,6 +6609,54 @@ void main() {
                 )
                 logger.debug(
                     "[GL COMPOSITOR] Shader diffuse path failed; disabling shader pipeline",
+                    exc_info=True,
+                )
+                self._gl_disabled_for_session = True
+                self._use_shaders = False
+
+        # Peel shader path: when enabled and the GLSL pipeline is available,
+        # draw the strip-based peel entirely in GLSL using the direction and
+        # strip count provided by the controller. On failure we disable shader
+        # usage for the session and fall back to the existing QPainter
+        # compositor implementation below.
+        if self._peel is not None and self._can_use_peel_shader():
+            try:
+                self._paint_peel_shader(target)
+                self._paint_spotify_visualizer_gl()
+                if is_perf_metrics_enabled():
+                    self._paint_debug_overlay_gl()
+                return
+            except Exception:
+                logger.debug(
+                    "[GL SHADER] Shader peel path failed; disabling shader pipeline",
+                    exc_info=True,
+                )
+                logger.debug(
+                    "[GL COMPOSITOR] Shader peel path failed; disabling shader pipeline",
+                    exc_info=True,
+                )
+                self._gl_disabled_for_session = True
+                self._use_shaders = False
+
+        # Blinds shader path: when enabled and the GLSL pipeline is
+        # available, draw the blinds reveal entirely in GLSL using the grid
+        # hints provided by the controller. On failure we disable shader
+        # usage for the session and fall back to the QPainter compositor
+        # implementation below.
+        if self._blinds is not None and self._can_use_blinds_shader():
+            try:
+                self._paint_blinds_shader(target)
+                self._paint_spotify_visualizer_gl()
+                if is_perf_metrics_enabled():
+                    self._paint_debug_overlay_gl()
+                return
+            except Exception:
+                logger.debug(
+                    "[GL SHADER] Shader blinds path failed; disabling shader pipeline",
+                    exc_info=True,
+                )
+                logger.debug(
+                    "[GL COMPOSITOR] Shader blinds path failed; disabling shader pipeline",
                     exc_info=True,
                 )
                 self._gl_disabled_for_session = True

@@ -456,18 +456,35 @@ trail:
   fade factor derived from the card’s fade progress (same duration/easing, but
   with a delayed cubic ramp) so they fade in more slowly after the card is
   present, avoiding pops and stray green dots. Playback gating comes from
-  `MediaWidget.media_updated` (payload `state` → normalized
+  - `MediaWidget.media_updated` (payload `state` → normalized
   `MediaPlaybackState`); when state is `PLAYING` the beat engine drives full bar
   motion, and when state is `PAUSED`/`STOPPED` target magnitudes decay back to
   zero so only the shader’s 1-segment idle floor remains visible as a flat
   single-row baseline when Spotify is open but not actively playing.
 
-- **UI wiring and defaults**  
-  The Widgets tab exposes a dedicated Spotify visualiser group:
-  - A checkbox to enable/disable the visualiser and a **FORCE Software
-    Visualizer** checkbox on the same row for the QWidget-only path.
-  - A checkbox to enable/disable ghosting.
-  - A **Ghost Opacity** slider mapped to `ghost_alpha` (0–100%).
+- **Lifecycle & debugging checklist**  
+  To debug fade or bar issues, follow this order:
+  - Confirm `DisplayWidget._setup_widgets()` creates `SpotifyVisualizerWidget`
+    when media + Spotify visualiser are enabled and that
+    `_overlay_fade_expected` includes `"spotify_visualizer"` on that display.
+  - Verify `SpotifyVisualizerWidget.start()` is called exactly once and that it
+    registers a `request_overlay_fade_sync("spotify_visualizer", starter)`
+    callback on the parent before any media updates arrive.
+  - Inspect `_shadowfade_progress` and `_get_gpu_fade_factor(...)` on the
+    widget: if progress never leaves 0.0 or fade never exceeds 0.0, the GPU
+    bars and Spotify volume widget will remain invisible even if the card is
+    drawn.
+  - Check `handle_media_update(payload)` receives `state="playing"` from
+    `MediaWidget.media_updated` when Spotify is active, and that
+    `_spotify_playing` is true while music is playing.
+  - Step through `_on_tick()`: confirm it reads non-zero bar magnitudes from
+    `_SpotifyBeatEngine`, updates `_display_bars` via the smoothing loop, and
+    calls `parent.push_spotify_visualizer_frame(...)` whenever bars or fade
+    change.
+  - Use `[PERF] [SPOTIFY_VIS] Tick/Paint metrics` plus
+    `[PERF] [GL COMPOSITOR]` logs to confirm that frames are being produced and
+    composited; a healthy Tick stream with flat Paint output usually indicates a
+    missing or obscured `SpotifyBarsGLOverlay` rather than a beat engine issue.
   - A **Ghost Decay Speed** slider mapped to `ghost_decay` (~0.10x–1.00x).
   Defaults are defined centrally in `SettingsManager._set_defaults()` and
   mirrored in `Docs/SPEC.md`; UI code must treat those as the single source of

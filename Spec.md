@@ -82,9 +82,9 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
 | Slide              | Yes         | Yes                    | Yes (fullscreen quad)       | Port complete; per-transition perf tuning (dt_max spikes on some sizes) still open. |
 | Wipe               | Yes         | Yes                    | Yes (mask shader)           | GLSL Wipe path implemented; remaining work is primarily perf/QA and parity checks. |
 | Diffuse            | Yes         | Yes                    | Yes (Rectangle/Membrane)    | GLSL Diffuse implemented for Rectangle/Membrane; CPU Diffuse remains the authoritative fallback. |
-| Block Puzzle Flip  | Yes         | Yes                    | **Planned** (no GLSL yet)   | Still compositor-based; GLSL port is a future v1.2+ task. |
+| Block Puzzle Flip  | Yes         | Yes                    | Yes (blockflip shader)      | GLSL BlockFlip shader implemented on GLCompositorWidget with the existing QPainter/compositor path retained as the authoritative fallback and for non-GL sessions. |
 | Blinds             | No CPU-only | Yes (`GLBlindsTransition`) | **Planned** (no GLSL yet) | GL-only compositor path; shader-backed variant still to be introduced. |
-| Peel               | No CPU-only | Yes (`GLCompositorPeelTransition`) | **Planned** (no GLSL yet) | Strip-based compositor effect; GLSL variant still pending. |
+| Peel               | No CPU-only | Yes (`GLCompositorPeelTransition`) | Yes (peel shader)         | Strip-based compositor effect with a GLSL peel shader on GLCompositorWidget; the existing QPainter implementation remains the authoritative fallback when shaders are unavailable. |
 | 3D Block Spins     | N/A         | Yes                    | Yes (card-flip shader)      | Implemented via shared card-flip shader; legacy grid Block Puzzle settings removed. |
 | Ripple / Rain Drops| Yes         | Yes (fallback path)    | Yes (ripple shader)         | Primary path is GLSL ripple; remaining work focuses on dt_max smoothing on 4K/multi-monitor. |
 | Warp Dissolve      | Yes         | Yes (fallback path)    | Yes (vortex shader)         | Shader path tuned; further adjustments are perf/visual polish only. |
@@ -220,6 +220,48 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
 `Docs/10_WIDGET_GUIDELINES.md` is the **canonical source of truth** for overlay
 widget behaviour; this Spec only summarises the high-level contract.
 
+### Spotify Visualizer lifecycle & debugging checklist
+
+When the Spotify Beat Visualizer misbehaves (no fade, flat bars, or popping),
+debug in this order:
+
+1. **Card creation & primary fade** – `DisplayWidget._setup_widgets` must:
+   - Create `SpotifyVisualizerWidget` when both media and Spotify visualiser
+     are enabled for the display.
+   - Register `"spotify_visualizer"` in `_overlay_fade_expected` so the card
+     participates in the primary overlay fade wave next to media/weather/Reddit.
+   - Call `SpotifyVisualizerWidget.start()` once, which in turn registers a
+     `request_overlay_fade_sync("spotify_visualizer", starter)` callback.
+2. **ShadowFadeProfile progress** – the widget stores fade progress from
+   `ShadowFadeProfile` (card + shadow) and exposes it to the GPU path via a
+   private `_shadowfade_progress` field. If this value never advances from 0→1,
+   the card will not fade and the GPU bars will remain fully gated.
+3. **GPU fade factor & secondary wave** – `_get_gpu_fade_factor(now_ts)` on the
+   widget derives a delayed cubic fade from `_shadowfade_progress`. Bars and the
+   Spotify volume widget should:
+   - Stay at 0.0 while the card fade is in its early stages.
+   - Ramp smoothly from 0.0→1.0 after the card crosses the configured delay.
+   If bars pop in instantly or never appear, inspect this helper first.
+4. **Media state & playback gating** – `MediaWidget.media_updated` emits a
+   payload with `state` mapped to `MediaPlaybackState` (`PLAYING`, `PAUSED`,
+   `STOPPED`). `SpotifyVisualizerWidget.handle_media_update(payload)` sets a
+   boolean `_spotify_playing` gate and clears `_target_bars` only when not
+   playing so the idle floor shows while preventing motion.
+5. **Beat engine & smoothing** – `_SpotifyBeatEngine` owns a single
+   `SpotifyVisualizerAudioWorker` and per-process triple buffers for bar
+   magnitudes. `SpotifyVisualizerWidget._on_tick()` pulls bars from the engine
+   when `_spotify_playing` is true, applies time-based per-bar smoothing and the
+   current GPU fade, then calls
+   `DisplayWidget.push_spotify_visualizer_frame(...)` when values or fade
+   change. Flat bars with a healthy fade usually point to either a muted/
+   stalled beat engine or smoothing never updating `_display_bars`.
+6. **GL overlay wiring** – `SpotifyBarsGLOverlay` must be created via
+   `overlay_manager.prepare_gl_overlay` and raised after transitions; if the
+   overlay is never visible, bars will not appear even with correct fade and
+   bar values. PERF logs (`[PERF] [SPOTIFY_VIS] Tick/Paint metrics`) and
+   `[PERF] [GL COMPOSITOR]` summaries are the canonical signals for confirming
+   that frames are being produced and composited.
+
 ## Banding & Pixmap Seeding
 - `DisplayWidget.show_on_screen` grabs a per-monitor wallpaper snapshot via `screen.grabWindow(0)` and seeds `current_pixmap`, `_seed_pixmap`, and `previous_pixmap` before GL prewarm runs. This prevents a wallpaper→black flash during startup even while overlays are initializing.
 - `DisplayWidget` seeds `current_pixmap` again as soon as a real image loads, before transition warmup, to keep the base widget drawing a valid frame while overlays warm and transitions start.
@@ -248,4 +290,4 @@ widget behaviour; this Spec only summarises the high-level contract.
 - Optional Slide edge spark FX (GL/compositor-backed) where slide edges emit short-lived sparks with direction-aware angles and Auto/Blue/Orange colour modes; Auto samples a dominant edge colour and offsets it for visibility. This effect is strictly opt-in and must respect per-display clipping so it never bleeds across monitors.
 
 **Version**: 1.2  
-**Last Updated**: Dec 5, 2025 00:51 - Spotify Beat Visualizer primary/secondary fade waves, GPU fade gating, and idle baseline behaviour documented; settings schema and widget integration refreshed for the current v1.2 Spotify stack.
+**Last Updated**: Dec 5, 2025 00:59 - Spotify Beat Visualizer lifecycle/debugging checklist and primary/secondary fade waves documented; settings schema and widget integration refreshed for the current v1.2 Spotify stack.
