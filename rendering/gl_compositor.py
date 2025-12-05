@@ -3718,7 +3718,7 @@ void main() {
     // visible band narrows toward the centre so the effect feels like thin
     // sheets being pulled off.
     float segPos = fract(axisCoord * strips);
-    float baseWidth = 0.6;                      // final fraction of segment used
+    float baseWidth = 0.45;                     // final fraction of segment used
     float width = mix(1.0, baseWidth, local);   // 1.0 → baseWidth over lifetime
     float halfBand = 0.5 * width;
     float bandMin = 0.5 - halfBand;
@@ -3735,7 +3735,7 @@ void main() {
     // shifted UV space so both the visible band and the sampled old image
     // move together across the screen, mirroring the CPU painter which
     // translates and clips whole rectangles.
-    float travel = 1.4;  // slightly more than the viewport diagonal in UV units
+    float travel = 1.2;  // slightly slower peel while still clearing the frame
     vec2 shifted = uv - dir * local * travel;
 
     // Recompute the band mask in shifted space so the geometry of the strip
@@ -3756,7 +3756,10 @@ void main() {
     // Piece-wise opacity: start fading as soon as this strip begins to
     // peel, so each band thins out over its entire lifetime rather than
     // staying fully opaque until late in the animation.
-    float alpha = inside * inBandShifted * (1.0 - local);
+    float fade = 1.0 - local;
+    // Quadratic falloff so strips start fading as soon as they move and
+    // disappear sooner in their lifetime.
+    float alpha = inside * inBandShifted * fade * fade;
 
     // Short global tail so, regardless of local timing, we always land on a
     // pure new image by the end of the transition.
@@ -4171,14 +4174,18 @@ void main() {
     float rowNorm = (rows > 1.0) ? rowIndex / (rows - 1.0) : 0.5;
     float ortho = horizontal ? abs(rowNorm - 0.5) : abs(colNorm - 0.5);
     float centerFactor = (0.5 - ortho) * 2.0; // 1 at center, 0 at edges.
-    float centerBiasStrength = 0.25;          // tune: fraction of timeline.
+    // Use a slightly stronger bias for vertical waves (fewer rows) so the
+    // centre band feels more pronounced, while keeping horizontal behaviour
+    // close to the original Block Puzzle Flip look.
+    float centerBiasStrength = horizontal ? 0.25 : 0.32;
     base -= centerFactor * centerBiasStrength;
     base = clamp(base, 0.0, 1.0);
 
     // Small jitter so neighbouring blocks do not all start at exactly the
     // same moment; scaled by grid density so the wavefront remains coherent.
     float span = max(cols, rows);
-    float jitterSpan = span > 0.0 ? 0.18 / span : 0.0;
+    float jitterBase = horizontal ? 0.18 : 0.10;
+    float jitterSpan = span > 0.0 ? jitterBase / span : 0.0;
     if (jitterSpan > 0.0) {
         base += (hash1(cellIndex * 91.0 + 7.0) - 0.5) * jitterSpan;
     }
