@@ -43,6 +43,8 @@ void main() {
 
     @property
     def fragment_source(self) -> str:
+        # Optimized: Uses branchless bounds checking with step() for better GPU performance.
+        # This eliminates thread divergence from if-statements.
         return """#version 410 core
 in vec2 vUv;
 out vec4 FragColor;
@@ -50,35 +52,45 @@ out vec4 FragColor;
 uniform sampler2D uOldTex;
 uniform sampler2D uNewTex;
 uniform float u_progress;
-uniform vec2 u_resolution;
 uniform vec4 u_oldRect; // xy = pos, zw = size, in normalised viewport coords
 uniform vec4 u_newRect; // xy = pos, zw = size, in normalised viewport coords
 
 void main() {
     vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
 
-    // Start from a black background; old and new images layer on top.
-    vec4 color = vec4(0.0, 0.0, 0.0, 1.0);
-
-    // OLD image contribution.
+    // Compute rect bounds
     vec2 oldMin = u_oldRect.xy;
     vec2 oldMax = u_oldRect.xy + u_oldRect.zw;
-    if (uv.x >= oldMin.x && uv.x <= oldMax.x && uv.y >= oldMin.y && uv.y <= oldMax.y) {
-        vec2 span = max(u_oldRect.zw, vec2(1e-5));
-        vec2 local = (uv - oldMin) / span;
-        color = texture(uOldTex, local);
-    }
-
-    // NEW image overlays OLD where they overlap, mirroring the QPainter
-    // behaviour where the new pixmap is drawn last.
     vec2 newMin = u_newRect.xy;
     vec2 newMax = u_newRect.xy + u_newRect.zw;
-    if (uv.x >= newMin.x && uv.x <= newMax.x && uv.y >= newMin.y && uv.y <= newMax.y) {
-        vec2 span = max(u_newRect.zw, vec2(1e-5));
-        vec2 local = (uv - newMin) / span;
-        vec4 newColor = texture(uNewTex, local);
-        color = newColor;
-    }
+
+    // Branchless bounds checking using step()
+    // inOld = 1.0 if uv is inside old rect, 0.0 otherwise
+    float inOld = step(oldMin.x, uv.x) * step(uv.x, oldMax.x) *
+                  step(oldMin.y, uv.y) * step(uv.y, oldMax.y);
+    
+    // inNew = 1.0 if uv is inside new rect, 0.0 otherwise
+    float inNew = step(newMin.x, uv.x) * step(uv.x, newMax.x) *
+                  step(newMin.y, uv.y) * step(uv.y, newMax.y);
+
+    // Compute texture coordinates (safe division)
+    vec2 oldSpan = max(u_oldRect.zw, vec2(1e-5));
+    vec2 newSpan = max(u_newRect.zw, vec2(1e-5));
+    vec2 oldLocal = (uv - oldMin) / oldSpan;
+    vec2 newLocal = (uv - newMin) / newSpan;
+
+    // Sample textures (GPU prefetch friendly - always sample both)
+    vec4 oldColor = texture(uOldTex, oldLocal);
+    vec4 newColor = texture(uNewTex, newLocal);
+
+    // Start with black background
+    vec4 color = vec4(0.0, 0.0, 0.0, 1.0);
+    
+    // Layer old image where visible
+    color = mix(color, oldColor, inOld);
+    
+    // Layer new image on top where visible (new always wins in overlap)
+    color = mix(color, newColor, inNew);
 
     FragColor = color;
 }
@@ -90,7 +102,6 @@ void main() {
             return {}
         return {
             "u_progress": gl.glGetUniformLocation(program, "u_progress"),
-            "u_resolution": gl.glGetUniformLocation(program, "u_resolution"),
             "uOldTex": gl.glGetUniformLocation(program, "uOldTex"),
             "uNewTex": gl.glGetUniformLocation(program, "uNewTex"),
             "u_oldRect": gl.glGetUniformLocation(program, "u_oldRect"),
@@ -128,9 +139,6 @@ void main() {
         try:
             if uniforms.get("u_progress", -1) != -1:
                 gl.glUniform1f(uniforms["u_progress"], float(progress))
-
-            if uniforms.get("u_resolution", -1) != -1:
-                gl.glUniform2f(uniforms["u_resolution"], float(vp_w), float(vp_h))
 
             if uniforms.get("u_oldRect", -1) != -1:
                 gl.glUniform4f(uniforms["u_oldRect"], *old_rect)

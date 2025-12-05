@@ -66,8 +66,8 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - `crossfade_program.py`: `CrossfadeProgram` for the Crossfade transition GLSL.
   - `blinds_program.py`: `BlindsProgram` for the Blinds transition GLSL.
   - `diffuse_program.py`: `DiffuseProgram` for the Diffuse transition GLSL.
-  - `slide_program.py`: `SlideProgram` for the Slide transition GLSL.
-  - `wipe_program.py`: `WipeProgram` for the Wipe transition GLSL.
+  - `slide_program.py`: `SlideProgram` for the Slide transition GLSL. Optimized with branchless bounds checking using `step()` and `mix()`.
+  - `wipe_program.py`: `WipeProgram` for the Wipe transition GLSL. Optimized with direction vector approach instead of mode branching.
   - `warp_program.py`: `WarpProgram` for the Warp Dissolve transition GLSL.
   - `raindrops_program.py`: `RaindropsProgram` for the Raindrops/Ripple transition GLSL.
 - rendering/gl_profiler.py

@@ -50,7 +50,6 @@ out vec4 FragColor;
 uniform sampler2D uOldTex;
 uniform sampler2D uNewTex;
 uniform float u_progress;
-uniform vec2 u_resolution;
 
 void main() {
     vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
@@ -70,7 +69,6 @@ void main() {
             return {}
         return {
             "u_progress": gl.glGetUniformLocation(program, "u_progress"),
-            "u_resolution": gl.glGetUniformLocation(program, "u_resolution"),
             "uOldTex": gl.glGetUniformLocation(program, "uOldTex"),
             "uNewTex": gl.glGetUniformLocation(program, "uNewTex"),
         }
@@ -99,9 +97,6 @@ void main() {
         try:
             if uniforms.get("u_progress", -1) != -1:
                 gl.glUniform1f(uniforms["u_progress"], float(progress))
-
-            if uniforms.get("u_resolution", -1) != -1:
-                gl.glUniform2f(uniforms["u_resolution"], float(vp_w), float(vp_h))
 
             if uniforms.get("uOldTex", -1) != -1:
                 gl.glActiveTexture(gl.GL_TEXTURE0)

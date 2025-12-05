@@ -3394,28 +3394,22 @@ void main() {
         if not self._prepare_slide_textures():
             return
 
-        # Compute rect positions based on progress (this logic stays in compositor)
+        # Compute rect positions based on progress using float interpolation
+        # (avoid int() quantization which causes stepping/chugging)
         target_rect = target
         w = max(1, target_rect.width())
         h = max(1, target_rect.height())
 
         t = max(0.0, min(1.0, float(st.progress)))
-        old_pos = QPoint(
-            int(st.old_start.x() + (st.old_end.x() - st.old_start.x()) * t),
-            int(st.old_start.y() + (st.old_end.y() - st.old_start.y()) * t),
-        )
-        new_pos = QPoint(
-            int(st.new_start.x() + (st.new_end.x() - st.new_start.x()) * t),
-            int(st.new_start.y() + (st.new_end.y() - st.new_start.y()) * t),
-        )
-
+        
+        # Use float interpolation directly to avoid quantization
         inv_w = 1.0 / float(max(1, w))
         inv_h = 1.0 / float(max(1, h))
 
-        old_x = float(old_pos.x()) * inv_w
-        old_y = float(old_pos.y()) * inv_h
-        new_x = float(new_pos.x()) * inv_w
-        new_y = float(new_pos.y()) * inv_h
+        old_x = (float(st.old_start.x()) + (float(st.old_end.x()) - float(st.old_start.x())) * t) * inv_w
+        old_y = (float(st.old_start.y()) + (float(st.old_end.y()) - float(st.old_start.y())) * t) * inv_h
+        new_x = (float(st.new_start.x()) + (float(st.new_end.x()) - float(st.new_start.x())) * t) * inv_w
+        new_y = (float(st.new_start.y()) + (float(st.new_end.y()) - float(st.new_start.y())) * t) * inv_h
 
         vp_w, vp_h = self._get_viewport_size()
         slide_helper = _get_slide_program()

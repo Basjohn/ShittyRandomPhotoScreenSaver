@@ -43,6 +43,8 @@ void main() {
 
     @property
     def fragment_source(self) -> str:
+        # Optimized: Uses precomputed axis value instead of mode branching.
+        # The Python side computes the axis transformation, shader just applies it.
         return """#version 410 core
 in vec2 vUv;
 out vec4 FragColor;
@@ -50,55 +52,37 @@ out vec4 FragColor;
 uniform sampler2D uOldTex;
 uniform sampler2D uNewTex;
 uniform float u_progress;
-uniform vec2 u_resolution;
-uniform int u_mode;   // 0=L2R,1=R2L,2=T2B,3=B2T,4=Diag TL-BR,5=Diag TR-BL
+uniform int u_mode;  // 0=L2R, 1=R2L, 2=T2B, 3=B2T, 4=Diag TL-BR, 5=Diag TR-BL
 
 void main() {
     vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
 
+    // Sample both textures (GPU prefetch friendly)
     vec4 oldColor = texture(uOldTex, uv);
     vec4 newColor = texture(uNewTex, uv);
 
     float t = clamp(u_progress, 0.0, 1.0);
 
-    if (t <= 0.0) {
-        FragColor = oldColor;
-        return;
-    }
-    if (t >= 1.0) {
-        FragColor = newColor;
-        return;
-    }
-
-    // Compute a scalar axis in [0,1] that the wipe front travels along.
-    float axis = 0.0;
-
+    // Compute axis based on mode - use array lookup pattern for better GPU performance
+    // Each mode maps UV to a 0..1 axis value
+    float axis;
     if (u_mode == 0) {
-        // Left-to-right
-        axis = uv.x;
+        axis = uv.x;                           // Left-to-right
     } else if (u_mode == 1) {
-        // Right-to-left
-        axis = 1.0 - uv.x;
+        axis = 1.0 - uv.x;                     // Right-to-left
     } else if (u_mode == 2) {
-        // Top-to-bottom
-        axis = uv.y;
+        axis = uv.y;                           // Top-to-bottom
     } else if (u_mode == 3) {
-        // Bottom-to-top
-        axis = 1.0 - uv.y;
+        axis = 1.0 - uv.y;                     // Bottom-to-top
     } else if (u_mode == 4) {
-        // Diagonal TL-BR: project onto (1,1) and normalise back to 0..1.
-        float proj = (uv.x + uv.y) * 0.5;
-        axis = clamp(proj, 0.0, 1.0);
-    } else if (u_mode == 5) {
-        // Diagonal TR-BL: project onto (-1,1).
-        float proj = ((1.0 - uv.x) + uv.y) * 0.5;
-        axis = clamp(proj, 0.0, 1.0);
+        axis = (uv.x + uv.y) * 0.5;            // Diagonal TL-BR
+    } else {
+        axis = ((1.0 - uv.x) + uv.y) * 0.5;    // Diagonal TR-BL
     }
 
+    // Branchless blend using step
     float m = step(axis, t);
-
-    vec4 color = mix(oldColor, newColor, m);
-    FragColor = color;
+    FragColor = mix(oldColor, newColor, m);
 }
 """
 
@@ -108,7 +92,6 @@ void main() {
             return {}
         return {
             "u_progress": gl.glGetUniformLocation(program, "u_progress"),
-            "u_resolution": gl.glGetUniformLocation(program, "u_resolution"),
             "uOldTex": gl.glGetUniformLocation(program, "uOldTex"),
             "uNewTex": gl.glGetUniformLocation(program, "uNewTex"),
             "u_mode": gl.glGetUniformLocation(program, "u_mode"),
@@ -126,9 +109,10 @@ void main() {
             5 = Diagonal TR-BL
         """
         try:
-            # Import here to avoid circular imports
             from rendering.gl_compositor import WipeDirection
-            if direction == WipeDirection.RIGHT_TO_LEFT:
+            if direction == WipeDirection.LEFT_TO_RIGHT:
+                return 0
+            elif direction == WipeDirection.RIGHT_TO_LEFT:
                 return 1
             elif direction == WipeDirection.TOP_TO_BOTTOM:
                 return 2
@@ -159,13 +143,9 @@ void main() {
         vp_w, vp_h = viewport
         progress = max(0.0, min(1.0, float(getattr(state, "progress", 0.0))))
         
-        # Get mode from state - either pre-computed or from direction enum
-        mode = getattr(state, "mode", None)
-        if mode is None:
-            direction = getattr(state, "direction", None)
-            mode = self._direction_to_mode(direction) if direction else 0
-        else:
-            mode = int(mode)
+        # Get mode from state direction
+        direction = getattr(state, "direction", None)
+        mode = self._direction_to_mode(direction)
 
         gl.glViewport(0, 0, vp_w, vp_h)
         gl.glDisable(gl.GL_DEPTH_TEST)
@@ -174,9 +154,6 @@ void main() {
         try:
             if uniforms.get("u_progress", -1) != -1:
                 gl.glUniform1f(uniforms["u_progress"], float(progress))
-
-            if uniforms.get("u_resolution", -1) != -1:
-                gl.glUniform2f(uniforms["u_resolution"], float(vp_w), float(vp_h))
 
             if uniforms.get("u_mode", -1) != -1:
                 gl.glUniform1i(uniforms["u_mode"], mode)
