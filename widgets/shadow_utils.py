@@ -418,6 +418,12 @@ class ShadowFadeProfile:
                     setattr(widget, "_shadowfade_progress", 1.0)
                 except Exception:
                     pass
+                # Mark fade as completed so GPU overlays know they can show
+                # even if _shadowfade_progress is later cleared or unavailable.
+                try:
+                    setattr(widget, "_shadowfade_completed", True)
+                except Exception:
+                    pass
 
                 try:
                     cls._start_shadow_fade(widget, cfg, has_background_frame=has_background_frame)

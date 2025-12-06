@@ -1659,11 +1659,13 @@ class SpotifyVisualizerWidget(QWidget):
             t = t * t * t
             return max(0.0, min(1.0, t))
 
-        # Fallback: when ShadowFadeProfile progress is unavailable, return 1.0
-        # if the widget is visible so bars show. The previous behavior of
-        # returning 0.0 caused bars to never appear when fade tracking failed.
+        # Fallback: when ShadowFadeProfile progress is unavailable, check if
+        # the fade animation has completed (progress reached 1.0 at some point).
+        # We track this via _shadowfade_completed flag to avoid returning 1.0
+        # prematurely at startup before the fade animation begins.
         try:
-            if self.isVisible():
+            completed = getattr(self, "_shadowfade_completed", False)
+            if completed and self.isVisible():
                 return 1.0
         except Exception:
             pass

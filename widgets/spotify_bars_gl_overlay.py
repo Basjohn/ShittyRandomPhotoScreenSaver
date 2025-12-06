@@ -30,6 +30,14 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
         apply_widget_surface_format(self, reason="spotify_bars_overlay")
 
+        # CRITICAL: Hide immediately at construction to prevent startup flash.
+        # The widget will be shown later when set_state() is called with fade > 0.
+        # This must happen BEFORE any other setup to avoid a visible frame.
+        try:
+            self.hide()
+        except Exception:
+            pass
+
         try:
             self.setAutoFillBackground(False)
             self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)

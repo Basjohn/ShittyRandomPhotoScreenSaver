@@ -2442,7 +2442,10 @@ class GLCompositorWidget(QOpenGLWidget):
             self._gl_pipeline = _GLPipelineState()
         if self._gl_pipeline.initialized:
             return
+        
+        _pipeline_start = time.time()
         try:
+            _shader_start = time.time()
             program = self._create_card_flip_program()
             self._gl_pipeline.basic_program = program
             # Cache uniform locations for the shared card-flip program.
@@ -2787,7 +2790,11 @@ class GLCompositorWidget(QOpenGLWidget):
             gl.glBindBuffer(gl.GL_ARRAY_BUFFER, 0)
 
             self._gl_pipeline.initialized = True
-            logger.info("[GL COMPOSITOR] Shader pipeline initialized (card flip)")
+            _pipeline_elapsed = (time.time() - _pipeline_start) * 1000.0
+            if _pipeline_elapsed > 50.0 and is_perf_metrics_enabled():
+                logger.warning("[PERF] [GL COMPOSITOR] Shader pipeline init took %.2fms", _pipeline_elapsed)
+            else:
+                logger.info("[GL COMPOSITOR] Shader pipeline initialized (%.1fms)", _pipeline_elapsed)
         except Exception:
             logger.debug("[GL SHADER] Failed to initialize shader pipeline", exc_info=True)
             self._gl_disabled_for_session = True
@@ -3408,6 +3415,21 @@ void main() {
         h = image.height()
         if w <= 0 or h <= 0:
             return 0
+
+        # PERFORMANCE: Scale down large textures to reduce upload time.
+        # 4K textures (3840x2160) take 34-47ms to upload even with PBOs.
+        # Scaling to max 2560px reduces upload time by ~60% while maintaining
+        # visual quality for transitions. The GPU will scale up during rendering.
+        max_texture_dim = 2560
+        if w > max_texture_dim or h > max_texture_dim:
+            scale_factor = min(max_texture_dim / w, max_texture_dim / h)
+            new_w = int(w * scale_factor)
+            new_h = int(h * scale_factor)
+            # Use SmoothTransformation for quality, FastTransformation for speed
+            image = image.scaled(new_w, new_h, Qt.AspectRatioMode.KeepAspectRatio, 
+                                Qt.TransformationMode.FastTransformation)
+            w = image.width()
+            h = image.height()
 
         try:
             ptr = image.constBits()

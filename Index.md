@@ -175,6 +175,9 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - audits/v1_2 ROADMAP.md: Living roadmap for v1.2 features and performance goals
 - audits/GLSL_Performance_Optimizations.md: GLSL shader optimization analysis and implementation notes
 - audits/Performance_Audit_2025-12-05.md: Comprehensive performance audit identifying frame timing issues
+- audits/FLICKER_INVESTIGATION.md: Widget and transition flicker root cause analysis and fixes
+- audits/UI_THREAD_AUDIT.md: UI thread blocking operations inventory and optimization plan
+- audits/ARCHITECTURE_AUDIT.md: Exhaustive architecture audit with prioritized action plan
 
 ## Notes
 - DPR-aware scaling in DisplayWidget → ImageProcessor to reduce GL upload cost
