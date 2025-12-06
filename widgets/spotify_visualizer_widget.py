@@ -698,6 +698,10 @@ class SpotifyVisualizerAudioWorker(QObject):
         return None
 
     def _fft_to_bars(self, fft) -> List[float]:
+        """Convert FFT magnitudes to visualizer bar heights.
+        
+        Restored from 1.196v with proven amplitude/beat logic.
+        """
         np = self._np
         if fft is None:
             return [0.0] * self._bar_count
@@ -733,14 +737,10 @@ class SpotifyVisualizerAudioWorker(QObject):
                     mag = np.convolve(mag, kernel, mode="same")
                 except Exception:
                     pass
-
-            # Older versions applied an extra emphasis to the lowest ~10%% of
-            # FFT bins here. With the current band weighting this leads to an
-            # overly left-leaning visual, so we rely on the later spatial
-            # weighting instead.
         except Exception:
             return [0.0] * bands
 
+        # Logarithmic binning for perceptual frequency distribution
         cache_key = (n, bands)
         try:
             if getattr(self, "_band_cache_key", None) != cache_key:
@@ -775,41 +775,37 @@ class SpotifyVisualizerAudioWorker(QObject):
             return [0.0] * bands
         arr = arr / peak
 
+        # Spatial weighting for center-focused visual
         try:
             if getattr(self, "_weight_bands", None) != bands:
+                positions = np.linspace(-1.0, 1.0, bands, dtype="float32")
                 band_idx_f = np.arange(bands, dtype="float32")
                 t = band_idx_f / max(1.0, float(bands - 1))
 
-                # High frequencies (right side) naturally have less energy.
-                # Apply exponential boost to compensate - stronger as we go right.
-                # This is the PRIMARY fix for right-side bars being too low.
-                freq_compensation = 1.0 + 2.5 * (t ** 1.5)
+                # Tilt to help right side
+                tilt = 0.45 + 0.6 * t
                 
-                # Gentle center hill for visual appeal (shifted slightly right)
-                positions = np.linspace(-1.0, 1.0, bands, dtype="float32")
-                sigma = 0.7
-                center_shift = 0.15
+                # Center hill shifted slightly right
+                sigma = 0.60
+                center_shift = 0.18
                 center_profile = np.exp(-0.5 * ((positions - center_shift) / sigma) ** 2).astype(
                     "float32"
                 )
                 peak_profile = float(center_profile.max()) if center_profile.size else 0.0
                 if peak_profile > 1e-6:
                     center_profile = center_profile / peak_profile
-                
-                # Blend: mostly frequency compensation, some center shaping
-                center_weight = 0.25
+
+                center_weight = 0.40
                 base_weights = (1.0 - center_weight) + center_weight * center_profile
 
-                # Attenuate bass slightly to prevent it from dominating
-                bass_atten = 0.7 + 0.3 * t
-                
-                total_weights = base_weights * freq_compensation * bass_atten
-                
-                # Normalize weights so average is ~1.0
-                avg_weight = float(total_weights.mean()) if total_weights.size else 1.0
-                if avg_weight > 1e-6:
-                    total_weights = total_weights / avg_weight
-                
+                # Right bias
+                bias_strength = 0.75
+                right_bias = 1.0 + bias_strength * positions
+                right_bias = np.clip(right_bias, 1.0 - bias_strength, 1.0 + bias_strength)
+
+                # Bass attenuation
+                bass_atten = 1.0 - 0.16 * (1.0 - t) * (1.0 - t)
+                total_weights = base_weights * tilt * right_bias * bass_atten
                 self._weight_bands = bands
                 self._weight_factors = total_weights.astype("float32", copy=False)
             weights = self._weight_factors
@@ -818,6 +814,7 @@ class SpotifyVisualizerAudioWorker(QObject):
         except Exception:
             pass
 
+        # Edge smoothing
         try:
             if bands >= 3:
                 left0 = float(arr[0])
@@ -832,13 +829,9 @@ class SpotifyVisualizerAudioWorker(QObject):
         except Exception:
             pass
 
-        # Normalize but add headroom so the top bar requires more energy
-        # to reach 1.0. This prevents bars from getting stuck at max.
         peak2 = float(arr.max()) if arr.size else 0.0
         if peak2 > 1e-6:
-            # Scale so typical peaks hit ~0.85, requiring louder audio for 1.0
-            headroom = 1.18
-            arr = arr / (peak2 * headroom)
+            arr = arr / peak2
         arr = np.clip(arr, 0.0, 1.0)
         return [float(x) for x in arr.tolist()]
 

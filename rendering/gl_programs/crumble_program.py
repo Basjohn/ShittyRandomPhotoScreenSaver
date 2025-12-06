@@ -2,7 +2,13 @@
 
 Crumble creates a rock-like crack pattern across the old image, then the pieces
 fall away with physics-based motion to reveal the new image underneath. The
-cracks form a Voronoi-like pattern with slightly randomized, organic edges.
+cracks form a Voronoi-like pattern with randomized, organic edges and optional
+grain texture during crack formation.
+
+Settings:
+- u_piece_count: Number of pieces (4-16, default 8)
+- u_crack_complexity: Crack detail level (0.5-2.0, default 1.0)
+- u_mosaic_mode: 0=normal crumble, 1=glass shatter with 3D depth
 """
 
 from __future__ import annotations
@@ -52,21 +58,40 @@ uniform sampler2D uOldTex;
 uniform sampler2D uNewTex;
 uniform float u_progress;
 uniform vec2 u_resolution;
-uniform float u_seed;       // Random seed for crack pattern variation
-uniform float u_piece_count; // Approximate number of pieces (grid density)
+uniform float u_seed;           // Random seed for crack pattern variation
+uniform float u_piece_count;    // Approximate number of pieces (grid density)
+uniform float u_crack_complexity; // Crack detail level (0.5-2.0)
+uniform float u_mosaic_mode;    // 0=crumble, 1=glass shatter
 
-// Hash functions for procedural randomness
+// Hash functions for procedural randomness with better distribution
 float hash1(vec2 p) {
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
 }
 
 vec2 hash2(vec2 p) {
-    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
-    return fract(sin(p) * 43758.5453);
+    vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.xx + p3.yz) * p3.zy);
 }
 
-// Voronoi distance for crack pattern
-vec3 voronoi(vec2 uv, float scale, float seed) {
+// Noise for grain effect
+float noise(vec2 p) {
+    vec2 ip = floor(p);
+    vec2 fp = fract(p);
+    fp = fp * fp * (3.0 - 2.0 * fp); // Smoothstep
+    
+    float a = hash1(ip);
+    float b = hash1(ip + vec2(1.0, 0.0));
+    float c = hash1(ip + vec2(0.0, 1.0));
+    float d = hash1(ip + vec2(1.0, 1.0));
+    
+    return mix(mix(a, b, fp.x), mix(c, d, fp.x), fp.y);
+}
+
+// Voronoi distance for crack pattern with randomized edges
+vec4 voronoi(vec2 uv, float scale, float seed, float complexity) {
     vec2 p = uv * scale;
     vec2 ip = floor(p);
     vec2 fp = fract(p);
@@ -74,6 +99,7 @@ vec3 voronoi(vec2 uv, float scale, float seed) {
     float minDist = 10.0;
     float secondDist = 10.0;
     vec2 closestCell = vec2(0.0);
+    vec2 closestPoint = vec2(0.0);
     
     // Check 3x3 neighborhood
     for (int y = -1; y <= 1; y++) {
@@ -81,9 +107,16 @@ vec3 voronoi(vec2 uv, float scale, float seed) {
             vec2 neighbor = vec2(float(x), float(y));
             vec2 cellId = ip + neighbor;
             
-            // Random point within cell, offset by seed
-            vec2 point = hash2(cellId + seed * 0.1) * 0.8 + 0.1;
+            // Random point within cell with seed-based variation
+            // Add complexity-based jitter for more organic shapes
+            vec2 jitter = hash2(cellId + seed * 0.1);
+            float jitterAmount = 0.6 + complexity * 0.2;
+            vec2 point = jitter * jitterAmount + (1.0 - jitterAmount) * 0.5;
             point += neighbor;
+            
+            // Add slight distortion based on position for non-uniform cells
+            float distort = hash1(cellId * 2.3 + seed) * 0.15 * complexity;
+            point += vec2(sin(cellId.y * 3.14), cos(cellId.x * 3.14)) * distort;
             
             float d = length(fp - point);
             
@@ -91,30 +124,65 @@ vec3 voronoi(vec2 uv, float scale, float seed) {
                 secondDist = minDist;
                 minDist = d;
                 closestCell = cellId;
+                closestPoint = point;
             } else if (d < secondDist) {
                 secondDist = d;
             }
         }
     }
     
-    // Edge distance (for cracks)
+    // Edge distance (for cracks) with slight noise for rough edges
     float edge = secondDist - minDist;
+    float edgeNoise = noise(uv * scale * 8.0 + seed) * 0.02 * complexity;
+    edge += edgeNoise;
     
-    return vec3(closestCell, edge);
+    return vec4(closestCell, edge, hash1(closestCell + seed));
+}
+
+// Sub-crack pattern within pieces (forms just before falling)
+float subCracks(vec2 uv, vec2 cellId, float seed, float intensity) {
+    // Create smaller cracks within each piece
+    vec2 localUv = fract(uv * 4.0 + cellId * 0.5);
+    float n1 = noise(localUv * 20.0 + seed * 10.0);
+    float n2 = noise(localUv * 35.0 + seed * 7.0);
+    
+    // Create crack-like lines from noise
+    float crack = abs(n1 - 0.5) * 2.0;
+    crack = 1.0 - step(0.15, crack);
+    crack *= abs(n2 - 0.5) > 0.3 ? 1.0 : 0.0;
+    
+    return crack * intensity;
+}
+
+// Helper to get piece transform for a given cell
+void getPieceTransform(vec2 cellId, float scale, float t, float seed,
+                       out float pieceFall, out float fallDist, out float driftX, out float rotAngle) {
+    float pieceRand = hash1(cellId + seed);
+    float pieceRand2 = hash1(cellId * 1.7 + seed + 100.0);
+    
+    float fallPhase = (t - 0.35) / 0.65;
+    fallPhase = clamp(fallPhase, 0.0, 1.0);
+    
+    float normalizedY = cellId.y / scale;
+    float fallDelay = pieceRand * 0.25 + normalizedY * 0.35;
+    
+    pieceFall = fallPhase > fallDelay ? (fallPhase - fallDelay) / (1.0 - fallDelay) : 0.0;
+    pieceFall = clamp(pieceFall, 0.0, 1.0);
+    
+    float accel = pieceFall * pieceFall;
+    fallDist = accel * 1.5;
+    driftX = pieceFall * (pieceRand - 0.5) * 0.2;
+    rotAngle = pieceFall * (pieceRand2 - 0.5) * 0.6;
 }
 
 void main() {
-    // Flip V to match Qt's top-left image origin
     vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
     
-    vec4 oldColor = texture(uOldTex, uv);
     vec4 newColor = texture(uNewTex, uv);
-    
     float t = clamp(u_progress, 0.0, 1.0);
     
-    // Early exit for start/end states
     if (t <= 0.0) {
-        FragColor = oldColor;
+        FragColor = texture(uOldTex, uv);
         return;
     }
     if (t >= 1.0) {
@@ -122,92 +190,89 @@ void main() {
         return;
     }
     
-    // Scale for Voronoi pattern (more pieces = higher scale)
     float scale = max(4.0, u_piece_count);
+    float complexity = clamp(u_crack_complexity, 0.5, 2.0);
     
-    // Get Voronoi cell info
-    vec3 vor = voronoi(uv, scale, u_seed);
-    vec2 cellId = vor.xy;
-    float edgeDist = vor.z;
+    // Crack width - thin lines
+    float crackWidth = 0.012 + complexity * 0.005;
     
-    // Per-piece random values based on cell ID
-    float pieceRand = hash1(cellId + u_seed);
-    float pieceRand2 = hash1(cellId * 1.7 + u_seed + 100.0);
+    // For this screen pixel, search for which Voronoi piece covers it.
+    // We check multiple candidate cells by searching around.
     
-    // === PHASE 1: Crack formation (t = 0.0 to 0.3) ===
-    float crackPhase = smoothstep(0.0, 0.3, t);
+    vec3 finalColor = newColor.rgb;
+    bool pixelCovered = false;
+    float bestFall = 1.0;
     
-    // Cracks appear progressively based on piece random value
-    // Pieces with lower random values crack first
-    float crackThreshold = pieceRand * 0.8;
-    float crackAppear = smoothstep(crackThreshold, crackThreshold + 0.15, crackPhase);
+    // Get the cell at current screen position as starting point
+    vec4 vorHere = voronoi(uv, scale, u_seed, complexity);
     
-    // Crack line width (thin dark lines between pieces)
-    float crackWidth = 0.08;
-    float crackLine = 1.0 - smoothstep(0.0, crackWidth, edgeDist);
-    crackLine *= crackAppear;
+    // Search nearby cells (the piece that covers this pixel might have come from elsewhere)
+    for (int dy = -2; dy <= 2; dy++) {
+        for (int dx = -2; dx <= 2; dx++) {
+            // Candidate cell
+            vec2 candidateCell = vorHere.xy + vec2(float(dx), float(dy));
+            
+            // Get this cell's transform
+            float pieceFall, fallDist, driftX, rotAngle;
+            getPieceTransform(candidateCell, scale, t, u_seed, pieceFall, fallDist, driftX, rotAngle);
+            
+            // Where is this cell's center now?
+            vec2 originalCenter = (candidateCell + 0.5) / scale;
+            vec2 movedCenter = originalCenter + vec2(driftX, fallDist);
+            
+            // Inverse transform: find what original point maps to current screen pos
+            vec2 fromMoved = uv - movedCenter;
+            float cosR = cos(-rotAngle);
+            float sinR = sin(-rotAngle);
+            vec2 unrotated = vec2(
+                fromMoved.x * cosR - fromMoved.y * sinR,
+                fromMoved.x * sinR + fromMoved.y * cosR
+            );
+            vec2 originalPos = originalCenter + unrotated;
+            
+            // Check if this original position belongs to this Voronoi cell
+            vec4 vorCheck = voronoi(originalPos, scale, u_seed, complexity);
+            
+            // If the original position is in THIS cell, then this cell's piece covers our pixel
+            // Don't cut off at pieceFall < 0.98 - let pieces fall off screen naturally
+            if (vorCheck.xy == candidateCell) {
+                // Check if ORIGINAL position is in bounds (piece came from valid texture area)
+                // But allow the CURRENT position to be anywhere (piece can fall off screen)
+                if (originalPos.x >= 0.0 && originalPos.x <= 1.0 && 
+                    originalPos.y >= 0.0 && originalPos.y <= 1.0) {
+                    
+                    // This piece covers the pixel - use it if it's the "frontmost"
+                    // (pieces that haven't fallen as far are in front)
+                    if (!pixelCovered || pieceFall < bestFall) {
+                        pixelCovered = true;
+                        bestFall = pieceFall;
+                        
+                        // Sample texture at original position
+                        vec4 oldColor = texture(uOldTex, originalPos);
+                        finalColor = oldColor.rgb;
+                        
+                        // Crack lines (at original position)
+                        float crackPhase = t / 0.4;
+                        crackPhase = clamp(crackPhase, 0.0, 1.0);
+                        float pieceRandCrack = hash1(candidateCell + u_seed);
+                        float crackAppear = crackPhase > pieceRandCrack * 0.4 ? 1.0 : 0.0;
+                        
+                        if (vorCheck.z < crackWidth && crackAppear > 0.5) {
+                            finalColor *= 0.25; // Dark crack line
+                        }
+                        
+                        // Shadow on falling pieces
+                        finalColor *= (1.0 - pieceFall * 0.2);
+                    }
+                }
+            }
+        }
+    }
     
-    // === PHASE 2: Pieces start falling (t = 0.25 to 1.0) ===
-    float fallPhase = smoothstep(0.25, 1.0, t);
-    
-    // Each piece has a different fall start time based on its position and randomness
-    // Pieces at the bottom fall first (like gravity pulling them down)
-    float yBias = 1.0 - (cellId.y / scale); // Bottom pieces have higher bias
-    float fallStart = pieceRand * 0.4 + yBias * 0.3;
-    float pieceFall = smoothstep(fallStart, fallStart + 0.3, fallPhase);
-    
-    // Fall physics: accelerating downward motion
-    float fallDistance = pieceFall * pieceFall * 2.0; // Quadratic for acceleration
-    
-    // Slight rotation during fall (pieces tumble)
-    float rotation = pieceFall * (pieceRand2 - 0.5) * 0.5;
-    
-    // Horizontal drift (pieces don't fall straight down)
-    float drift = pieceFall * (pieceRand - 0.5) * 0.3;
-    
-    // Calculate displaced UV for the falling piece
-    vec2 pieceCenter = (cellId + 0.5) / scale;
-    vec2 toCenter = uv - pieceCenter;
-    
-    // Apply rotation around piece center
-    float cosR = cos(rotation);
-    float sinR = sin(rotation);
-    vec2 rotated = vec2(
-        toCenter.x * cosR - toCenter.y * sinR,
-        toCenter.x * sinR + toCenter.y * cosR
-    );
-    
-    // Apply fall displacement
-    vec2 displaced = pieceCenter + rotated;
-    displaced.y += fallDistance;
-    displaced.x += drift;
-    
-    // Check if this pixel is still part of a visible piece
-    // Pieces that have fallen off screen are invisible
-    float visible = 1.0 - step(1.2, displaced.y); // Fade out when piece falls below screen
-    visible *= 1.0 - pieceFall * 0.3; // Gradual fade during fall
-    
-    // Sample old image at displaced position for falling pieces
-    vec4 fallingColor = texture(uOldTex, clamp(displaced, 0.0, 1.0));
-    
-    // === Combine phases ===
-    
-    // Darken cracks
-    vec3 crackedOld = oldColor.rgb * (1.0 - crackLine * 0.7);
-    
-    // Mix between cracked old image and falling pieces
-    float useFalling = pieceFall * visible;
-    vec3 pieceColor = mix(crackedOld, fallingColor.rgb, useFalling * 0.5);
-    
-    // Reveal new image where pieces have fallen away
-    float reveal = pieceFall * (1.0 - visible * 0.7);
-    
-    // Final blend
-    vec3 finalColor = mix(pieceColor, newColor.rgb, reveal);
-    
-    // Add subtle shadow under falling pieces
-    float shadow = pieceFall * visible * 0.2;
-    finalColor = mix(finalColor, vec3(0.0), shadow * (1.0 - edgeDist));
+    // If no piece covers this pixel, show new image (the "hole")
+    if (!pixelCovered) {
+        finalColor = newColor.rgb;
+    }
     
     FragColor = vec4(finalColor, 1.0);
 }
@@ -224,6 +289,8 @@ void main() {
             "uNewTex": gl.glGetUniformLocation(program, "uNewTex"),
             "u_seed": gl.glGetUniformLocation(program, "u_seed"),
             "u_piece_count": gl.glGetUniformLocation(program, "u_piece_count"),
+            "u_crack_complexity": gl.glGetUniformLocation(program, "u_crack_complexity"),
+            "u_mosaic_mode": gl.glGetUniformLocation(program, "u_mosaic_mode"),
         }
 
     def render(
@@ -244,7 +311,8 @@ void main() {
             viewport: (width, height) of the viewport
             old_tex: GL texture ID for old image
             new_tex: GL texture ID for new image
-            state: CrumbleState dataclass with progress, seed, piece_count
+            state: CrumbleState dataclass with progress, seed, piece_count,
+                   crack_complexity, mosaic_mode
             quad_vao: VAO for fullscreen quad
         """
         if gl is None:
@@ -254,6 +322,8 @@ void main() {
         progress = max(0.0, min(1.0, float(getattr(state, "progress", 0.0))))
         seed = float(getattr(state, "seed", 0.0))
         piece_count = float(getattr(state, "piece_count", 8.0))
+        crack_complexity = float(getattr(state, "crack_complexity", 1.0))
+        mosaic_mode = 1.0 if getattr(state, "mosaic_mode", False) else 0.0
 
         gl.glViewport(0, 0, vp_w, vp_h)
         gl.glDisable(gl.GL_DEPTH_TEST)
@@ -272,6 +342,12 @@ void main() {
 
             if uniforms.get("u_piece_count", -1) != -1:
                 gl.glUniform1f(uniforms["u_piece_count"], float(piece_count))
+
+            if uniforms.get("u_crack_complexity", -1) != -1:
+                gl.glUniform1f(uniforms["u_crack_complexity"], float(crack_complexity))
+
+            if uniforms.get("u_mosaic_mode", -1) != -1:
+                gl.glUniform1f(uniforms["u_mosaic_mode"], float(mosaic_mode))
 
             # Bind old texture to unit 0
             if uniforms.get("uOldTex", -1) != -1:

@@ -11,8 +11,11 @@ Single source of truth for architecture and key decisions.
 - Engine orchestrates sources → queue → display → transitions.
 - DisplayWidget is the fullscreen presenter; transitions are created per-settings.
 - ThreadManager provides IO and compute pools; all business threading goes through it.
-- ResourceManager tracks Qt objects for deterministic cleanup.
+- ResourceManager tracks Qt objects for deterministic cleanup; includes QPixmap/QImage pooling to reduce GC pressure.
 - SettingsManager provides dot-notation access, persisted across runs.
+- WidgetManager (extracted from DisplayWidget) handles overlay widget lifecycle, Z-order, and rate-limited raises.
+- TransitionStateManager (extracted from GLCompositor) manages per-transition state with change notifications.
+- BeatEngine (extracted from SpotifyVisualizerWidget) handles FFT processing and bar smoothing on COMPUTE pool.
 
 ## Runtime Variants
 - Normal screensaver build:

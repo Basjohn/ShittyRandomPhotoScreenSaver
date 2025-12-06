@@ -10,7 +10,7 @@ Allows users to configure transition settings:
 from typing import Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QSpinBox, QGroupBox, QScrollArea, QSlider, QCheckBox
+    QSpinBox, QDoubleSpinBox, QGroupBox, QScrollArea, QSlider, QCheckBox
 )
 from PySide6.QtCore import Signal, Qt
 
@@ -259,6 +259,42 @@ class TransitionsTab(QWidget):
         
         layout.addWidget(self.diffuse_group)
         
+        # Crumble specific settings
+        self.crumble_group = QGroupBox("Crumble Settings")
+        crumble_layout = QVBoxLayout(self.crumble_group)
+        
+        piece_count_row = QHBoxLayout()
+        piece_count_row.addWidget(QLabel("Piece Count:"))
+        self.crumble_piece_count_spin = QSpinBox()
+        self.crumble_piece_count_spin.setRange(4, 16)
+        self.crumble_piece_count_spin.setValue(8)
+        self.crumble_piece_count_spin.setAccelerated(True)
+        self.crumble_piece_count_spin.valueChanged.connect(self._save_settings)
+        piece_count_row.addWidget(self.crumble_piece_count_spin)
+        piece_count_row.addStretch()
+        crumble_layout.addLayout(piece_count_row)
+        
+        complexity_row = QHBoxLayout()
+        complexity_row.addWidget(QLabel("Crack Complexity:"))
+        self.crumble_complexity_spin = QDoubleSpinBox()
+        self.crumble_complexity_spin.setRange(0.5, 2.0)
+        self.crumble_complexity_spin.setSingleStep(0.1)
+        self.crumble_complexity_spin.setValue(1.0)
+        self.crumble_complexity_spin.valueChanged.connect(self._save_settings)
+        complexity_row.addWidget(self.crumble_complexity_spin)
+        complexity_row.addStretch()
+        crumble_layout.addLayout(complexity_row)
+        
+        mosaic_row = QHBoxLayout()
+        self.crumble_mosaic_check = QCheckBox("Glass Shatter Mode")
+        self.crumble_mosaic_check.setToolTip("Use glass shatter effect with 3D depth instead of rock crumble")
+        self.crumble_mosaic_check.stateChanged.connect(self._save_settings)
+        mosaic_row.addWidget(self.crumble_mosaic_check)
+        mosaic_row.addStretch()
+        crumble_layout.addLayout(mosaic_row)
+        
+        layout.addWidget(self.crumble_group)
+        
         layout.addStretch()
         
         # Set scroll area widget and add to main layout
@@ -490,6 +526,12 @@ class TransitionsTab(QWidget):
             if index >= 0:
                 self.diffuse_shape_combo.setCurrentIndex(index)
 
+            # Load crumble settings
+            crumble = transitions_config.get('crumble', {})
+            self.crumble_piece_count_spin.setValue(crumble.get('piece_count', 8))
+            self.crumble_complexity_spin.setValue(crumble.get('crack_complexity', 1.0))
+            self.crumble_mosaic_check.setChecked(crumble.get('mosaic_mode', False))
+
             # Now that in-memory per-type directions are loaded, update the direction combo
             self._update_specific_settings()
 
@@ -597,6 +639,9 @@ class TransitionsTab(QWidget):
 
         # Show/hide 3D Block Spins settings
         self.blockspin_group.setVisible(transition == "3D Block Spins")
+        
+        # Show/hide Crumble settings
+        self.crumble_group.setVisible(transition == "Crumble")
 
     def _refresh_hw_dependent_options(self) -> None:
         """Grey out GL-only transitions when HW acceleration is disabled."""
@@ -690,6 +735,11 @@ class TransitionsTab(QWidget):
             'diffuse': {
                 'block_size': self.block_size_spin.value(),
                 'shape': self.diffuse_shape_combo.currentText()
+            },
+            'crumble': {
+                'piece_count': self.crumble_piece_count_spin.value(),
+                'crack_complexity': self.crumble_complexity_spin.value(),
+                'mosaic_mode': self.crumble_mosaic_check.isChecked()
             },
             'durations': dict(self._duration_by_type),
             'pool': dict(self._pool_by_type),

@@ -2219,6 +2219,12 @@ class DisplayWidget(QWidget):
                     piece_count = int(piece_count_raw)
                 except Exception:
                     piece_count = 8
+                crack_complexity_raw = crumble_settings.get('crack_complexity', 1.0)
+                try:
+                    crack_complexity = float(crack_complexity_raw)
+                except Exception:
+                    crack_complexity = 1.0
+                mosaic_mode = bool(crumble_settings.get('mosaic_mode', False))
 
                 if hw_accel:
                     try:
@@ -2227,7 +2233,9 @@ class DisplayWidget(QWidget):
                         logger.debug("[GL COMPOSITOR] Failed to ensure compositor during crumble selection", exc_info=True)
                     use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
                     if use_compositor:
-                        transition = GLCompositorCrumbleTransition(duration_ms, piece_count)
+                        transition = GLCompositorCrumbleTransition(
+                            duration_ms, piece_count, crack_complexity, mosaic_mode
+                        )
                     else:
                         # When compositor cannot be used, prefer a CPU
                         # Crossfade fallback.

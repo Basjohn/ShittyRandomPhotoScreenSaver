@@ -33,9 +33,13 @@ class GLCompositorCrumbleTransition(BaseTransition):
         self,
         duration_ms: int = 3500,
         piece_count: int = 8,
+        crack_complexity: float = 1.0,
+        mosaic_mode: bool = False,
     ) -> None:
         super().__init__(duration_ms)
         self._piece_count = max(4, piece_count)
+        self._crack_complexity = max(0.5, min(2.0, crack_complexity))
+        self._mosaic_mode = mosaic_mode
         self._widget: Optional[QWidget] = None
         self._compositor: Optional[GLCompositorWidget] = None
         self._animation_id: Optional[str] = None
@@ -108,16 +112,21 @@ class GLCompositorCrumbleTransition(BaseTransition):
             animation_manager=am,
             on_finished=_on_finished,
             piece_count=self._piece_count,
+            crack_complexity=self._crack_complexity,
+            mosaic_mode=self._mosaic_mode,
         )
 
         self._set_state(TransitionState.RUNNING)
         self.started.emit()
         if is_perf_metrics_enabled():
             logger.info("[PERF] GLCompositorCrumbleTransition started")
+        mode_str = "glass" if self._mosaic_mode else "rock"
         logger.info(
-            "GLCompositorCrumbleTransition started (%dms, pieces=%d)",
+            "GLCompositorCrumbleTransition started (%dms, pieces=%d, complexity=%.1f, mode=%s)",
             self.duration_ms,
             self._piece_count,
+            self._crack_complexity,
+            mode_str,
         )
         return True
 

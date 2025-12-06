@@ -29,7 +29,13 @@ class ResourceManager:
     Tracks and manages all resources that require explicit cleanup.
     Uses weak references to allow garbage collection while tracking resources.
     Thread-safe operations with proper cleanup ordering.
+    
+    Includes object pooling for QPixmap/QImage to reduce GC pressure.
     """
+    
+    # Pool configuration
+    PIXMAP_POOL_MAX_SIZE = 8  # Max pooled pixmaps per size bucket
+    IMAGE_POOL_MAX_SIZE = 8   # Max pooled images per size bucket
     
     def __init__(self):
         """Initialize the ResourceManager."""
@@ -41,6 +47,14 @@ class ResourceManager:
         self._shutdown = False
         self._initialized = False
         self._lock = threading.RLock()
+        
+        # Object pools for reducing GC pressure
+        # Key: (width, height) tuple, Value: list of pooled objects
+        self._pixmap_pool: Dict[tuple, List[Any]] = {}
+        self._image_pool: Dict[tuple, List[Any]] = {}
+        self._pool_lock = threading.Lock()
+        self._pool_stats = {"pixmap_hits": 0, "pixmap_misses": 0, 
+                          "image_hits": 0, "image_misses": 0}
         
         # Register cleanup on interpreter shutdown
         if not getattr(sys, 'is_finalizing', False):
@@ -360,11 +374,149 @@ class ResourceManager:
                     except Exception as e:
                         self._logger.error(f"Error cleaning up {resource_id}: {e}")
         
+        # Clear object pools
+        try:
+            self.clear_pools()
+        except Exception as e:
+            self._logger.debug(f"Error clearing pools: {e}")
+        
         self._logger.info("Resource cleanup complete")
     
     def shutdown(self) -> None:
         """Shutdown the resource manager."""
         self.cleanup_all()
+    
+    # -------------------------------------------------------------------------
+    # Object Pooling for QPixmap/QImage
+    # -------------------------------------------------------------------------
+    
+    def acquire_pixmap(self, width: int, height: int) -> Optional[Any]:
+        """
+        Acquire a QPixmap from the pool or return None if none available.
+        
+        The caller should check if None is returned and create a new QPixmap.
+        Pooled pixmaps are cleared before being returned.
+        
+        Args:
+            width: Required width
+            height: Required height
+            
+        Returns:
+            QPixmap from pool or None
+        """
+        key = (width, height)
+        with self._pool_lock:
+            if key in self._pixmap_pool and self._pixmap_pool[key]:
+                pixmap = self._pixmap_pool[key].pop()
+                self._pool_stats["pixmap_hits"] += 1
+                # Clear the pixmap for reuse
+                try:
+                    pixmap.fill()  # Fill with transparent
+                except Exception:
+                    pass
+                return pixmap
+            self._pool_stats["pixmap_misses"] += 1
+            return None
+    
+    def release_pixmap(self, pixmap: Any) -> bool:
+        """
+        Return a QPixmap to the pool for reuse.
+        
+        Args:
+            pixmap: QPixmap to return to pool
+            
+        Returns:
+            True if pooled, False if pool is full or pixmap is invalid
+        """
+        if pixmap is None:
+            return False
+        try:
+            if pixmap.isNull():
+                return False
+            key = (pixmap.width(), pixmap.height())
+        except Exception:
+            return False
+        
+        with self._pool_lock:
+            if key not in self._pixmap_pool:
+                self._pixmap_pool[key] = []
+            if len(self._pixmap_pool[key]) < self.PIXMAP_POOL_MAX_SIZE:
+                self._pixmap_pool[key].append(pixmap)
+                return True
+            return False
+    
+    def acquire_image(self, width: int, height: int, format_hint: Any = None) -> Optional[Any]:
+        """
+        Acquire a QImage from the pool or return None if none available.
+        
+        Args:
+            width: Required width
+            height: Required height
+            format_hint: Optional QImage.Format to match
+            
+        Returns:
+            QImage from pool or None
+        """
+        key = (width, height)
+        with self._pool_lock:
+            if key in self._image_pool and self._image_pool[key]:
+                image = self._image_pool[key].pop()
+                self._pool_stats["image_hits"] += 1
+                # Fill with transparent
+                try:
+                    image.fill(0)
+                except Exception:
+                    pass
+                return image
+            self._pool_stats["image_misses"] += 1
+            return None
+    
+    def release_image(self, image: Any) -> bool:
+        """
+        Return a QImage to the pool for reuse.
+        
+        Args:
+            image: QImage to return to pool
+            
+        Returns:
+            True if pooled, False if pool is full or image is invalid
+        """
+        if image is None:
+            return False
+        try:
+            if image.isNull():
+                return False
+            key = (image.width(), image.height())
+        except Exception:
+            return False
+        
+        with self._pool_lock:
+            if key not in self._image_pool:
+                self._image_pool[key] = []
+            if len(self._image_pool[key]) < self.IMAGE_POOL_MAX_SIZE:
+                self._image_pool[key].append(image)
+                return True
+            return False
+    
+    def clear_pools(self) -> None:
+        """Clear all object pools."""
+        with self._pool_lock:
+            self._pixmap_pool.clear()
+            self._image_pool.clear()
+            self._logger.debug("Object pools cleared")
+    
+    def get_pool_stats(self) -> Dict[str, Any]:
+        """Get object pool statistics."""
+        with self._pool_lock:
+            total_pixmaps = sum(len(v) for v in self._pixmap_pool.values())
+            total_images = sum(len(v) for v in self._image_pool.values())
+            return {
+                "pixmap_pool_size": total_pixmaps,
+                "image_pool_size": total_images,
+                "pixmap_buckets": len(self._pixmap_pool),
+                "image_buckets": len(self._image_pool),
+                **self._pool_stats
+            }
     
     def get_stats(self) -> Dict[str, Any]:
         """Get resource manager statistics."""
@@ -372,7 +524,8 @@ class ResourceManager:
             stats = {
                 'total_resources': len(self._resources),
                 'by_type': {},
-                'by_group': {}
+                'by_group': {},
+                'pools': self.get_pool_stats()
             }
             
             for info in self._resources.values():

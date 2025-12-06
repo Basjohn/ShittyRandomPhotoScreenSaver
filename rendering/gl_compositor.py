@@ -302,6 +302,13 @@ class _GLPipelineState:
     texture_cache: dict[int, int] = field(default_factory=dict)
     texture_lru: list[int] = field(default_factory=list)
 
+    # Double-buffered PBO pool for async texture uploads.
+    # Each PBO pair allows one buffer to be filled while the other is used for upload.
+    # Format: list of (pbo_id, size, in_use) tuples
+    pbo_pool: list = field(default_factory=list)
+    # Pending uploads: list of (pbo_id, tex_id, width, height) waiting for next frame
+    pbo_pending_uploads: list = field(default_factory=list)
+
     # Cached uniform locations for the basic card-flip program.
     u_angle_loc: int = -1
     u_aspect_loc: int = -1
@@ -503,6 +510,11 @@ class CrumbleState:
 
     Crumble creates a rock-like crack pattern across the old image, then the
     pieces fall away with physics-based motion to reveal the new image.
+    
+    Settings:
+    - piece_count: Number of pieces (4-16, default 8)
+    - crack_complexity: Crack detail level (0.5-2.0, default 1.0)
+    - mosaic_mode: If True, uses glass shatter effect with 3D depth
     """
 
     old_pixmap: Optional[QPixmap]
@@ -510,6 +522,8 @@ class CrumbleState:
     progress: float = 0.0  # 0..1
     seed: float = 0.0  # Random seed for crack pattern variation
     piece_count: float = 8.0  # Approximate number of pieces (grid density)
+    crack_complexity: float = 1.0  # Crack detail level (0.5-2.0)
+    mosaic_mode: bool = False  # Glass shatter mode
 
 
 class GLCompositorWidget(QOpenGLWidget):
@@ -1748,12 +1762,19 @@ class GLCompositorWidget(QOpenGLWidget):
         animation_manager: AnimationManager,
         on_finished: Optional[Callable[[], None]] = None,
         piece_count: int = 8,
+        crack_complexity: float = 1.0,
+        mosaic_mode: bool = False,
         seed: Optional[float] = None,
     ) -> Optional[str]:
         """Begin a crumble transition using the compositor.
 
         The crumble effect creates a rock-like crack pattern across the old
         image, then the pieces fall away to reveal the new image.
+        
+        Args:
+            piece_count: Number of pieces (4-16)
+            crack_complexity: Crack detail level (0.5-2.0)
+            mosaic_mode: If True, uses glass shatter effect with 3D depth
         """
         import random as _random
 
@@ -1797,6 +1818,8 @@ class GLCompositorWidget(QOpenGLWidget):
             progress=0.0,
             seed=actual_seed,
             piece_count=float(max(4, piece_count)),
+            crack_complexity=max(0.5, min(2.0, crack_complexity)),
+            mosaic_mode=mosaic_mode,
         )
         self._animation_manager = animation_manager
         self._current_easing = easing
@@ -2872,6 +2895,12 @@ class GLCompositorWidget(QOpenGLWidget):
             except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to delete cached textures", exc_info=True)
 
+            # Clean up PBO pool
+            try:
+                self._cleanup_pbo_pool()
+            except Exception:
+                logger.debug("[GL COMPOSITOR] Failed to cleanup PBO pool", exc_info=True)
+
             try:
                 if self._gl_pipeline.basic_program:
                     gl.glDeleteProgram(int(self._gl_pipeline.basic_program))
@@ -3393,14 +3422,67 @@ void main() {
             except Exception:
                 pass
 
+    def _get_or_create_pbo(self, required_size: int) -> int:
+        """Get a PBO from the pool or create a new one.
+        
+        Returns PBO id or 0 on failure.
+        """
+        if gl is None or self._gl_pipeline is None:
+            return 0
+        
+        # Look for an available PBO of sufficient size
+        for i, (pbo_id, size, in_use) in enumerate(self._gl_pipeline.pbo_pool):
+            if not in_use and size >= required_size:
+                self._gl_pipeline.pbo_pool[i] = (pbo_id, size, True)
+                return pbo_id
+        
+        # Create a new PBO
+        try:
+            pbo = gl.glGenBuffers(1)
+            pbo_id = int(pbo)
+            if pbo_id > 0:
+                gl.glBindBuffer(gl.GL_PIXEL_UNPACK_BUFFER, pbo_id)
+                # Use GL_STREAM_DRAW for streaming uploads
+                gl.glBufferData(gl.GL_PIXEL_UNPACK_BUFFER, required_size, None, gl.GL_STREAM_DRAW)
+                gl.glBindBuffer(gl.GL_PIXEL_UNPACK_BUFFER, 0)
+                self._gl_pipeline.pbo_pool.append((pbo_id, required_size, True))
+                return pbo_id
+        except Exception:
+            pass
+        return 0
+
+    def _release_pbo(self, pbo_id: int) -> None:
+        """Mark a PBO as available in the pool."""
+        if self._gl_pipeline is None:
+            return
+        for i, (pid, size, in_use) in enumerate(self._gl_pipeline.pbo_pool):
+            if pid == pbo_id:
+                self._gl_pipeline.pbo_pool[i] = (pid, size, False)
+                return
+
+    def _cleanup_pbo_pool(self) -> None:
+        """Delete all PBOs in the pool."""
+        if gl is None or self._gl_pipeline is None:
+            return
+        for pbo_id, _, _ in self._gl_pipeline.pbo_pool:
+            try:
+                gl.glDeleteBuffers(1, [pbo_id])
+            except Exception:
+                pass
+        self._gl_pipeline.pbo_pool.clear()
+        self._gl_pipeline.pbo_pending_uploads.clear()
+
     def _upload_texture_from_pixmap(self, pixmap: QPixmap) -> int:
         """Upload a QPixmap as a GL texture and return its id.
 
         Returns 0 on failure. Caller is responsible for deleting the texture
         when no longer needed.
         
-        Uses PBO (Pixel Buffer Object) for async DMA transfer when available,
-        reducing UI thread blocking during texture uploads.
+        Uses double-buffered PBOs for async DMA transfer:
+        1. Map PBO to get CPU-accessible pointer
+        2. Copy image data to mapped buffer (fast memcpy)
+        3. Unmap PBO (triggers async DMA to GPU)
+        4. Upload from PBO to texture (GPU-side, non-blocking)
         """
         _upload_start = time.time()
 
@@ -3416,20 +3498,9 @@ void main() {
         if w <= 0 or h <= 0:
             return 0
 
-        # PERFORMANCE: Scale down large textures to reduce upload time.
-        # 4K textures (3840x2160) take 34-47ms to upload even with PBOs.
-        # Scaling to max 2560px reduces upload time by ~60% while maintaining
-        # visual quality for transitions. The GPU will scale up during rendering.
-        max_texture_dim = 2560
-        if w > max_texture_dim or h > max_texture_dim:
-            scale_factor = min(max_texture_dim / w, max_texture_dim / h)
-            new_w = int(w * scale_factor)
-            new_h = int(h * scale_factor)
-            # Use SmoothTransformation for quality, FastTransformation for speed
-            image = image.scaled(new_w, new_h, Qt.AspectRatioMode.KeepAspectRatio, 
-                                Qt.TransformationMode.FastTransformation)
-            w = image.width()
-            h = image.height()
+        # NOTE: No texture scaling - upload at native resolution.
+        # Modern GPUs (RTX 4090, etc.) handle 4K textures with PBOs efficiently.
+        # The PBO async DMA transfer below handles the upload without blocking.
 
         try:
             ptr = image.constBits()
@@ -3447,26 +3518,44 @@ void main() {
         tex = gl.glGenTextures(1)
         tex_id = int(tex)
         
-        # Try PBO-based async upload for better performance
+        # Try double-buffered PBO upload for better performance
         use_pbo = False
         pbo_id = 0
+        
         try:
-            # Check if PBO is available (OpenGL 2.1+)
-            if hasattr(gl, 'GL_PIXEL_UNPACK_BUFFER') and data_size > 0:
-                pbo = gl.glGenBuffers(1)
-                pbo_id = int(pbo)
+            if hasattr(gl, 'GL_PIXEL_UNPACK_BUFFER') and data_size > 0 and self._gl_pipeline is not None:
+                pbo_id = self._get_or_create_pbo(data_size)
                 if pbo_id > 0:
                     gl.glBindBuffer(gl.GL_PIXEL_UNPACK_BUFFER, pbo_id)
-                    # Allocate PBO with GL_STREAM_DRAW for one-time upload
-                    gl.glBufferData(gl.GL_PIXEL_UNPACK_BUFFER, data_size, data, gl.GL_STREAM_DRAW)
-                    use_pbo = True
+                    
+                    # Use glMapBuffer to get a CPU-accessible pointer
+                    # GL_WRITE_ONLY allows the driver to optimize for streaming
+                    try:
+                        # Orphan the buffer first to avoid sync stalls
+                        gl.glBufferData(gl.GL_PIXEL_UNPACK_BUFFER, data_size, None, gl.GL_STREAM_DRAW)
+                        
+                        # Map the buffer for writing
+                        mapped_ptr = gl.glMapBuffer(gl.GL_PIXEL_UNPACK_BUFFER, gl.GL_WRITE_ONLY)
+                        if mapped_ptr:
+                            # Copy data to mapped buffer using ctypes memmove
+                            ctypes.memmove(mapped_ptr, data, data_size)
+                            gl.glUnmapBuffer(gl.GL_PIXEL_UNPACK_BUFFER)
+                            use_pbo = True
+                        else:
+                            # Fallback: use glBufferSubData if mapping fails
+                            gl.glBufferSubData(gl.GL_PIXEL_UNPACK_BUFFER, 0, data_size, data)
+                            use_pbo = True
+                    except Exception:
+                        # glMapBuffer not available, use glBufferData
+                        gl.glBufferData(gl.GL_PIXEL_UNPACK_BUFFER, data_size, data, gl.GL_STREAM_DRAW)
+                        use_pbo = True
         except Exception:
             # PBO not available or failed - fall back to direct upload
             use_pbo = False
             if pbo_id > 0:
                 try:
                     gl.glBindBuffer(gl.GL_PIXEL_UNPACK_BUFFER, 0)
-                    gl.glDeleteBuffers(1, [pbo_id])
+                    self._release_pbo(pbo_id)
                 except Exception:
                     pass
                 pbo_id = 0
@@ -3481,6 +3570,7 @@ void main() {
             
             if use_pbo:
                 # Upload from PBO (async DMA transfer)
+                # The actual data transfer happens asynchronously on the GPU
                 gl.glTexImage2D(
                     gl.GL_TEXTURE_2D,
                     0,
@@ -3514,23 +3604,23 @@ void main() {
             if pbo_id > 0:
                 try:
                     gl.glBindBuffer(gl.GL_PIXEL_UNPACK_BUFFER, 0)
-                    gl.glDeleteBuffers(1, [pbo_id])
+                    self._release_pbo(pbo_id)
                 except Exception:
                     pass
             return 0
         finally:
             gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
-            # Clean up PBO
+            # Unbind and release PBO back to pool
             if pbo_id > 0:
                 try:
                     gl.glBindBuffer(gl.GL_PIXEL_UNPACK_BUFFER, 0)
-                    gl.glDeleteBuffers(1, [pbo_id])
+                    self._release_pbo(pbo_id)
                 except Exception:
                     pass
 
         # Log slow texture uploads
         _upload_elapsed = (time.time() - _upload_start) * 1000.0
-        if _upload_elapsed > 30.0 and is_perf_metrics_enabled():
+        if _upload_elapsed > 20.0 and is_perf_metrics_enabled():
             logger.warning("[PERF] [GL COMPOSITOR] Slow texture upload: %.2fms (%dx%d, pbo=%s)", _upload_elapsed, w, h, use_pbo)
 
         return tex_id

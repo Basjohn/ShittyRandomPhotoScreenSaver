@@ -1521,7 +1521,7 @@ class ScreensaverEngine(QObject):
             # Treat legacy 'Rain Drops' entries as equivalent to 'Ripple' when
             # evaluating GL-only pools. "Claw Marks" and "Shuffle" have been
             # removed from the runtime and are no longer part of the random pool.
-            gl_only_types = ["Blinds", "Peel", "3D Block Spins", "Ripple", "Rain Drops", "Warp Dissolve"]
+            gl_only_types = ["Blinds", "Peel", "3D Block Spins", "Ripple", "Rain Drops", "Warp Dissolve", "Crumble"]
 
             try:
                 raw_hw = self.settings_manager.get('display.hw_accel', False)
@@ -1664,7 +1664,7 @@ class ScreensaverEngine(QObject):
 
         raw_hw = self.settings_manager.get('display.hw_accel', False)
         hw = SettingsManager.to_bool(raw_hw, False)
-        gl_only = {"Blinds", "Peel", "3D Block Spins", "Ripple", "Rain Drops", "Warp Dissolve", "Shuffle"}
+        gl_only = {"Blinds", "Peel", "3D Block Spins", "Ripple", "Rain Drops", "Warp Dissolve", "Crumble"}
 
         transitions_config = self.settings_manager.get('transitions', {})
         if not isinstance(transitions_config, dict):

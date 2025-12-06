@@ -77,6 +77,11 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - `crumble_program.py`: `CrumbleProgram` for the Crumble transition GLSL (Voronoi crack pattern with falling pieces).
 - rendering/gl_profiler.py
   - `TransitionProfiler`: centralized profiling helper for GL compositor transitions. Tracks frame timing, min/max frame durations, and emits PERF logs. All compositor transitions (Slide, Wipe, Peel, BlockSpin, Warp, Raindrops, BlockFlip, Diffuse, Blinds) now use this single profiler instance instead of per-transition profiling fields.
+- rendering/widget_manager.py
+  - `WidgetManager`: Extracted from DisplayWidget. Manages overlay widget lifecycle, positioning, visibility, Z-order, and rate-limited raise operations.
+- rendering/transition_state.py
+  - Transition state dataclasses extracted from GLCompositor: `TransitionStateBase`, `CrossfadeState`, `SlideState`, `WipeState`, `BlockFlipState`, `BlockSpinState`, `BlindsState`, `DiffuseState`, `PeelState`, `WarpState`, `RaindropsState`, `CrumbleState`.
+  - `TransitionStateManager`: Clean interface for getting/setting transition state with change notifications.
 
 ## Transitions
 - transitions/base_transition.py
@@ -102,10 +107,6 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - Compositor-backed GL-only Warp Dissolve transition using a banded horizontal warp of the old image over a stable new image.
 - transitions/gl_compositor_crumble_transition.py
   - Compositor-backed GL-only Crumble transition creating a rock-like Voronoi crack pattern across the old image, then pieces fall away with physics-based motion (gravity, rotation, drift) to reveal the new image.
-- transitions/gl_compositor_clawmarks_transition.py
-  - Legacy compositor-backed GL-only Claw Marks / Shooting Stars transition. This effect has been removed from the active transition pool and its GLSL "claws" shader path is hard-disabled; the module is kept only as a reference and any legacy requests are mapped to a safe Crossfade-style fallback instead of a dedicated Claw transition.
-- transitions/gl_compositor_shuffle_transition.py
-  - Legacy compositor-backed GL-only Shuffle transition. This effect has been retired for v1.2 and is no longer part of the active transition set; any legacy references are mapped to a Crossfade fallback. The module is kept only as a reference and may be removed entirely in a future cleanup.
 
 ## Sources
 - sources/base_provider.py
@@ -130,6 +131,10 @@ A living map of modules, purposes, and key classes. Keep this up to date.
    - Reddit overlay widget showing top posts from a configured subreddit with 4- and 10-item layouts, per-monitor selection via `widgets.reddit`, shared overlay fade-in coordination, and click-through to the system browser.
  - widgets/overlay_timers.py
    - Centralised overlay timer helper providing `create_overlay_timer()` and `OverlayTimerHandle` for recurring UI-thread timers (clock/weather/media/Reddit). Prefers `ThreadManager.schedule_recurring` with ResourceManager tracking and falls back to a widget-local `QTimer` when no ThreadManager is available.
+ - widgets/beat_engine.py
+   - `BeatEngine`: Extracted from SpotifyVisualizerWidget. Handles FFT processing, beat detection, and bar smoothing on the COMPUTE pool. Thread-safe state access for UI thread consumption.
+   - `BeatEngineConfig`: Configuration dataclass for bar count, smoothing, decay, ghosting.
+   - `BeatEngineState`: Current state dataclass with bars, peaks, and playing status.
 
 ## Utilities
 - utils/image_cache.py
@@ -159,6 +164,9 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - transitions.slide.direction, transitions.slide.last_direction (legacy flat keys maintained for back-compat; nested `transitions['slide']['direction']` is the canonical form)
 - transitions.wipe.direction, transitions.wipe.last_direction (legacy flat keys maintained for back-compat; nested `transitions['wipe']['direction']` is the canonical form)
 - transitions.pool: map of transition type name → bool controlling whether a type participates in random rotation and C-key cycling (explicit selection remains allowed regardless of this flag; GL-only types still respect `display.hw_accel`).
+- transitions.crumble.piece_count: int (4-16, default 8) - number of pieces in crumble transition
+- transitions.crumble.crack_complexity: float (0.5-2.0, default 1.0) - crack detail level
+- transitions.crumble.mosaic_mode: bool (default false) - glass shatter mode with 3D depth effect
 - timing.interval: int seconds
 - display.same_image_all_monitors: bool
 - cache.prefetch_ahead: int (default 5)
