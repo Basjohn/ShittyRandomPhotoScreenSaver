@@ -56,7 +56,7 @@ from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
 from widgets.spotify_volume_widget import SpotifyVolumeWidget
 from widgets.shadow_utils import apply_widget_shadow
-from core.logging.logger import get_logger, is_verbose_logging
+from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.logging.overlay_telemetry import record_overlay_ready
 from core.resources.manager import ResourceManager
 from core.settings.settings_manager import SettingsManager
@@ -483,9 +483,19 @@ class DisplayWidget(QWidget):
             logger.info("Refresh rate sync disabled, using fixed 60 FPS")
         else:
             detected = int(round(self._detect_refresh_rate()))
-            target = max(10, min(240, detected))
+            # Apply adaptive rate selection to prevent judder on high-Hz displays:
+            # - 60Hz or below: full refresh rate
+            # - 61-120Hz: half refresh rate (e.g., 120Hz → 60Hz)
+            # - Above 120Hz: third refresh rate (e.g., 165Hz → 55Hz)
+            if detected <= 60:
+                target = detected
+            elif detected <= 120:
+                target = detected // 2
+            else:
+                target = detected // 3
+            target = max(30, min(240, target))  # Clamp to reasonable range
             self._target_fps = target
-            logger.info(f"Detected refresh rate: {detected} Hz, target animation FPS: {self._target_fps}")
+            logger.info(f"Detected refresh rate: {detected} Hz, adaptive target FPS: {self._target_fps}")
         
         try:
             am = getattr(self, "_animation_manager", None)
@@ -901,12 +911,6 @@ class DisplayWidget(QWidget):
                     self.weather_widget.set_background_border(2, border_qcolor)
                 except Exception:
                     pass
-                # Show/hide condition icons; default to OFF so the textual
-                # summary is the primary signal unless the user explicitly
-                # enables icons in the Widgets tab.
-                show_icons = SettingsManager.to_bool(weather_settings.get('show_icons', False), False)
-                if hasattr(self.weather_widget, 'set_show_icons'):
-                    self.weather_widget.set_show_icons(show_icons)
 
                 # Global widget drop shadow (shared config for all widgets).
                 #
@@ -1568,28 +1572,10 @@ class DisplayWidget(QWidget):
 
         # Ensure primary overlay widgets remain above any GL compositor or
         # legacy transition overlays for the duration of transitions.
-        try:
-            overlays_to_raise = [
-                "media_widget",
-                "spotify_visualizer_widget",
-                "spotify_volume_widget",
-                "weather_widget",
-                "reddit_widget",
-            ]
-            for attr_name in overlays_to_raise:
-                try:
-                    w = getattr(self, attr_name, None)
-                except Exception:
-                    w = None
-                if w is None:
-                    continue
-                try:
-                    if w.isVisible():
-                        w.raise_()
-                except Exception:
-                    continue
-        except Exception:
-            pass
+        # PERF: Skip if we've already raised overlays this frame (raise_overlay handles this)
+        # The raise_overlay function already handles all the necessary raises with
+        # frame-rate limiting, so we don't need to duplicate the work here.
+        pass
 
     def _prewarm_gl_contexts(self) -> None:
         """
@@ -2250,12 +2236,72 @@ class DisplayWidget(QWidget):
         except Exception:
             pass
     
-    def set_image(self, pixmap: QPixmap, image_path: str = "") -> None:
+    def get_target_size(self) -> QSize:
+        """Get the target physical size for image processing.
+        
+        Returns the physical pixel size (logical * DPR) that images should be
+        processed to for this display. Used by async image processing pipelines.
         """
-        Display a new image with transition.
+        logical_size = self.size()
+        return QSize(
+            int(logical_size.width() * self._device_pixel_ratio),
+            int(logical_size.height() * self._device_pixel_ratio)
+        )
+
+    def set_image(self, pixmap: QPixmap, image_path: str = "") -> None:
+        """Display a new image with transition (backward-compatible sync version).
+        
+        NOTE: This method processes the image synchronously on the UI thread.
+        For better performance, use set_processed_image() with pre-processed
+        pixmaps from a background thread.
         
         Args:
-            pixmap: Image to display
+            pixmap: Image to display (will be processed for screen fit)
+            image_path: Path to image (for logging/events)
+        """
+        if pixmap.isNull():
+            logger.warning("[FALLBACK] Received null pixmap in set_image")
+            self.error_message = "Failed to load image"
+            self.current_pixmap = None
+            self.update()
+            return
+
+        # Process image for display at physical resolution
+        screen_size = self.get_target_size()
+        logger.debug(f"[IMAGE QUALITY] Processing image for {screen_size.width()}x{screen_size.height()} (DPR={self._device_pixel_ratio})")
+        
+        # Get quality settings
+        use_lanczos = False
+        sharpen = False
+        if self.settings_manager:
+            sharpen = self.settings_manager.get('display.sharpen_downscale', False)
+            if isinstance(sharpen, str):
+                sharpen = sharpen.lower() == 'true'
+        
+        # Process image (this blocks the UI thread - use set_processed_image for async)
+        processed_pixmap = ImageProcessor.process_image(
+            pixmap,
+            screen_size,
+            self.display_mode,
+            use_lanczos,
+            sharpen
+        )
+        
+        # Delegate to the async-friendly method
+        self.set_processed_image(processed_pixmap, pixmap, image_path)
+
+    def set_processed_image(self, processed_pixmap: QPixmap, original_pixmap: QPixmap, 
+                           image_path: str = "") -> None:
+        """Display an already-processed image with transition.
+        
+        ARCHITECTURAL NOTE: This method accepts pre-processed pixmaps to avoid
+        blocking the UI thread with image scaling. The caller (typically the
+        engine) should process images on a background thread and call this
+        method on the UI thread with the results.
+        
+        Args:
+            processed_pixmap: Screen-fitted pixmap ready for display
+            original_pixmap: Original unprocessed pixmap (for reference)
             image_path: Path to image (for logging/events)
         """
         # If a transition is already running, skip this call (single-skip policy)
@@ -2267,49 +2313,14 @@ class DisplayWidget(QWidget):
             )
             return
 
-        if pixmap.isNull():
-            logger.warning("[FALLBACK] Received null pixmap")
+        if processed_pixmap.isNull():
+            logger.warning("[FALLBACK] Received null processed pixmap")
             self.error_message = "Failed to load image"
             self.current_pixmap = None
             self.update()
             return
-        
-        # Process image for display at physical resolution for quality
-        # Use physical pixels (logical size * DPI ratio) to avoid double-scaling quality loss
-        logical_size = self.size()
-        screen_size = QSize(
-            int(logical_size.width() * self._device_pixel_ratio),
-            int(logical_size.height() * self._device_pixel_ratio)
-        )
-        logger.debug(f"[IMAGE QUALITY] Logical: {logical_size.width()}x{logical_size.height()}, "
-                    f"Physical: {screen_size.width()}x{screen_size.height()} (DPR={self._device_pixel_ratio})")
-        
-        # Get quality settings (force-disable Lanczos; keep sharpen)
-        use_lanczos = False
-        sharpen = False
-        if self.settings_manager:
-            # Lanczos intentionally ignored due to distortion; keep False
-            sharpen = self.settings_manager.get('display.sharpen_downscale', False)
-            if isinstance(sharpen, str):
-                sharpen = sharpen.lower() == 'true'
-        
-        # CRITICAL FIX: Transitions ALWAYS use screen-fitted pixmaps
-        # Pan & scan scaling happens AFTER transition finishes
-        # This fixes block puzzle, wipe, and diffuse distortions
-        processed_pixmap = ImageProcessor.process_image(
-            pixmap,
-            screen_size,
-            self.display_mode,
-            use_lanczos,
-            sharpen
-        )
 
-        # Keep original pixmap for any future processing separate from the
-        # screen-fitted frame used for transitions.
-        original_pixmap = pixmap
-
-        # For both GL and software transitions we now always present the
-        # processed, screen-fitted pixmap.
+        # Use the pre-processed pixmap directly - no UI thread blocking
         new_pixmap = processed_pixmap
         
         self._animation_manager = None
@@ -2488,36 +2499,55 @@ class DisplayWidget(QWidget):
                     success = transition.start(self.previous_pixmap, new_pixmap, self)
                     if success:
                         self._start_transition_watchdog(overlay_key, transition)
-                        for attr_name in ("clock_widget", "clock2_widget", "clock3_widget"):
-                            clock = getattr(self, attr_name, None)
-                            if clock is not None:
-                                try:
-                                    clock.raise_()
-                                    if hasattr(clock, '_tz_label') and clock._tz_label:
-                                        clock._tz_label.raise_()
-                                except Exception:
-                                    pass
-                        if self.weather_widget:
+                        # PERF: Raise widgets ONCE at transition start, not every frame.
+                        # Use QTimer.singleShot to defer raises slightly so they don't
+                        # block the transition start. This keeps widgets visible without
+                        # blocking the UI thread synchronously.
+                        def _deferred_raise():
                             try:
-                                self.weather_widget.raise_()
+                                for attr_name in ("clock_widget", "clock2_widget", "clock3_widget"):
+                                    clock = getattr(self, attr_name, None)
+                                    if clock is not None:
+                                        try:
+                                            clock.raise_()
+                                            if hasattr(clock, '_tz_label') and clock._tz_label:
+                                                clock._tz_label.raise_()
+                                        except Exception:
+                                            pass
+                                if self.weather_widget:
+                                    try:
+                                        self.weather_widget.raise_()
+                                    except Exception:
+                                        pass
+                                mw = getattr(self, "media_widget", None)
+                                if mw is not None:
+                                    try:
+                                        mw.raise_()
+                                    except Exception:
+                                        pass
+                                rw = getattr(self, "reddit_widget", None)
+                                if rw is not None:
+                                    try:
+                                        rw.raise_()
+                                    except Exception:
+                                        pass
+                                sv = getattr(self, "spotify_visualizer_widget", None)
+                                if sv is not None:
+                                    try:
+                                        sv.raise_()
+                                    except Exception:
+                                        pass
+                                # Also raise the bars GL overlay
+                                bars_overlay = getattr(self, "_spotify_bars_overlay", None)
+                                if bars_overlay is not None:
+                                    try:
+                                        bars_overlay.raise_()
+                                    except Exception:
+                                        pass
                             except Exception:
                                 pass
-                        mw = getattr(self, "media_widget", None)
-                        if mw is not None:
-                            try:
-                                mw.raise_()
-                            except Exception:
-                                pass
-                        rw = getattr(self, "reddit_widget", None)
-                        if rw is not None:
-                            try:
-                                rw.raise_()
-                            except Exception:
-                                pass
-                        try:
-                            self._ensure_overlay_stack(stage="transition_start")
-                        except Exception:
-                            pass
+                        # Defer to next event loop iteration
+                        QTimer.singleShot(0, _deferred_raise)
                         logger.debug(f"Transition started: {transition.__class__.__name__}")
                         return
                     else:
@@ -2547,7 +2577,7 @@ class DisplayWidget(QWidget):
                 except Exception:
                     pass
 
-                logger.debug(f"Image displayed: {image_path} ({pixmap.width()}x{pixmap.height()})")
+                logger.debug(f"Image displayed: {image_path} ({processed_pixmap.width()}x{processed_pixmap.height()})")
                 self.image_displayed.emit(image_path)
                 self._has_rendered_first_frame = True
 
@@ -2560,6 +2590,7 @@ class DisplayWidget(QWidget):
         pan_preview: Optional[QPixmap] = None,
     ) -> None:
         """Handle transition completion."""
+        _finish_start = time.time()
 
         overlay_key = self._current_transition_overlay_key
         if overlay_key:
@@ -2599,13 +2630,14 @@ class DisplayWidget(QWidget):
         # the new image is displayed.
 
         # After the display reflects the new pixmap (and optional pan), clean up
-        # Ensure base repaint is flushed before we remove any overlay to avoid flicker
+        # PERF: Use update() instead of repaint() - repaint() is synchronous and blocks
+        # the UI thread for 50+ms. update() schedules an async repaint.
         try:
             self._ensure_overlay_stack(stage="transition_finish")
         except Exception:
             pass
         try:
-            self.repaint()
+            self.update()  # Async repaint - doesn't block
         except Exception:
             pass
         if transition_to_clean:
@@ -2617,6 +2649,11 @@ class DisplayWidget(QWidget):
         logger.debug("Transition completed, image displayed: %s", image_path)
         self.image_displayed.emit(image_path)
         self._pending_transition_finish_args = None
+        
+        # PERF: Log slow transition completions
+        _finish_elapsed = (time.time() - _finish_start) * 1000.0
+        if _finish_elapsed > 30.0 and is_perf_metrics_enabled():
+            logger.warning("[PERF] Slow _on_transition_finished: %.2fms", _finish_elapsed)
 
     def _start_transition_watchdog(self, overlay_key: Optional[str], transition: BaseTransition) -> None:
         """Start or restart the transition watchdog timer."""

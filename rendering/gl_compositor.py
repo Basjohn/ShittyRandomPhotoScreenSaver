@@ -16,14 +16,16 @@ from dataclasses import dataclass, field
 from typing import Optional, Callable
 import math
 import ctypes
+import time
 
-from PySide6.QtCore import Qt, QPoint, QRect
+from PySide6.QtCore import Qt, QPoint, QRect, QTimer
 from PySide6.QtGui import QPainter, QPixmap, QRegion, QImage, QColor
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.animation.types import EasingCurve
 from core.animation.animator import AnimationManager
+from core.animation.frame_interpolator import FrameState
 from rendering.gl_format import apply_widget_surface_format
 from rendering.gl_profiler import TransitionProfiler
 from transitions.wipe_transition import WipeDirection, _compute_wipe_region
@@ -124,6 +126,23 @@ def _get_raindrops_program():
 logger = get_logger(__name__)
 
 
+def _blockspin_spin_from_progress(p: float) -> float:
+    """Map 0..1 timeline to spin progress with eased endpoints.
+    
+    PERFORMANCE: Module-level function to avoid per-frame nested function creation.
+    The curve lingers slightly near 0/1 and crosses 0.5 more quickly
+    so slabs spend less time edge-on and more time close to face-on.
+    """
+    if p <= 0.03:
+        return 0.0
+    if p >= 0.97:
+        return 1.0
+    t = (p - 0.03) / 0.94
+    # Smoothstep-style easing: 0..1 -> 0..1 with low slope at the
+    # endpoints and higher slope around the midpoint.
+    return t * t * (3.0 - 2.0 * t)
+
+
 @dataclass
 class CrossfadeState:
     """State for a compositor-driven crossfade transition."""
@@ -138,7 +157,11 @@ class CrossfadeState:
 
 @dataclass
 class SlideState:
-    """State for a compositor-driven slide transition."""
+    """State for a compositor-driven slide transition.
+    
+    PERFORMANCE: Float coordinates are pre-computed at creation time to avoid
+    repeated QPoint.x()/y() calls and float() conversions in the hot render path.
+    """
 
     old_pixmap: Optional[QPixmap]
     new_pixmap: Optional[QPixmap]
@@ -147,6 +170,27 @@ class SlideState:
     new_start: QPoint
     new_end: QPoint
     progress: float = 0.0  # 0..1
+    
+    # Pre-computed float coordinates for hot path (set in __post_init__)
+    _old_start_x: float = 0.0
+    _old_start_y: float = 0.0
+    _old_delta_x: float = 0.0  # old_end.x - old_start.x
+    _old_delta_y: float = 0.0  # old_end.y - old_start.y
+    _new_start_x: float = 0.0
+    _new_start_y: float = 0.0
+    _new_delta_x: float = 0.0  # new_end.x - new_start.x
+    _new_delta_y: float = 0.0  # new_end.y - new_start.y
+    
+    def __post_init__(self) -> None:
+        """Pre-compute float coordinates to avoid per-frame conversions."""
+        self._old_start_x = float(self.old_start.x())
+        self._old_start_y = float(self.old_start.y())
+        self._old_delta_x = float(self.old_end.x()) - self._old_start_x
+        self._old_delta_y = float(self.old_end.y()) - self._old_start_y
+        self._new_start_x = float(self.new_start.x())
+        self._new_start_y = float(self.new_start.y())
+        self._new_delta_x = float(self.new_end.x()) - self._new_start_x
+        self._new_delta_y = float(self.new_end.y()) - self._new_start_y
 
 
 @dataclass
@@ -484,6 +528,18 @@ class GLCompositorWidget(QOpenGLWidget):
         # Replaces per-transition profiling fields with a single reusable instance.
         self._profiler = TransitionProfiler()
 
+        # FRAME PACING: Single FrameState for all transitions. Decouples animation
+        # updates from rendering - animation pushes timestamped samples, paintGL
+        # interpolates to actual render time for smooth motion.
+        self._frame_state: Optional[FrameState] = None
+        
+        # RENDER TIMER: Drives repaints at display refresh rate during transitions.
+        # This decouples rendering from animation timer jitter - the animation timer
+        # updates the FrameState, the render timer triggers repaints, and paintGL
+        # interpolates to the actual render time.
+        self._render_timer: Optional[QTimer] = None
+        self._render_timer_fps: int = 60  # Will be set from display refresh rate
+
         # Animation plumbing: compositor does not own AnimationManager, but we
         # keep the current animation id so the caller can cancel if needed.
         self._animation_manager: Optional[AnimationManager] = None
@@ -505,6 +561,11 @@ class GLCompositorWidget(QOpenGLWidget):
         # widget itself.
         self._resource_manager: Optional[ResourceManager] = None
 
+        # PERFORMANCE: Cached viewport size to avoid per-frame DPR calculations.
+        # Invalidated on resize events.
+        self._cached_viewport: Optional[tuple[int, int]] = None
+        self._cached_widget_size: Optional[tuple[int, int]] = None
+
         # Smoothed Spotify visualiser state pushed from DisplayWidget. When
         # present, bars are rendered as a thin overlay above the current
         # image/transition but below the PERF HUD.
@@ -520,6 +581,111 @@ class GLCompositorWidget(QOpenGLWidget):
     # ------------------------------------------------------------------
     # Public API used by DisplayWidget / transitions
     # ------------------------------------------------------------------
+
+    def _get_render_progress(self, fallback: float = 0.0) -> float:
+        """Get interpolated progress for rendering.
+        
+        Uses FrameState to interpolate to actual render time, masking timer jitter.
+        Falls back to the provided value if no frame state is active.
+        """
+        if self._frame_state is not None:
+            return self._frame_state.get_interpolated_progress()
+        return fallback
+
+    def _start_frame_pacing(self, duration_sec: float) -> FrameState:
+        """Create and return a new FrameState for a transition.
+        
+        Called at the start of any transition to enable decoupled rendering.
+        Also starts the render timer to drive repaints at display refresh rate.
+        """
+        self._frame_state = FrameState(duration=duration_sec)
+        self._start_render_timer()
+        return self._frame_state
+
+    def _stop_frame_pacing(self) -> None:
+        """Clear the frame state when a transition completes."""
+        self._stop_render_timer()
+        if self._frame_state is not None:
+            self._frame_state.mark_complete()
+        self._frame_state = None
+    
+    def _start_render_timer(self) -> None:
+        """Start the render timer to drive repaints during transitions.
+        
+        Uses adaptive rate selection based on display refresh rate:
+        - 60Hz or below: target full refresh rate
+        - 61-120Hz: target half refresh rate (e.g., 120Hz → 60Hz)
+        - Above 120Hz: target third refresh rate (e.g., 165Hz → 55Hz)
+        
+        This ensures we target achievable frame rates rather than impossible ones.
+        The interpolation system smooths the visual result regardless of actual FPS.
+        """
+        if self._render_timer is not None:
+            return  # Already running
+        
+        # Get refresh rate from parent DisplayWidget's stored screen reference
+        # (more reliable than self.screen() which may return wrong screen for child widgets)
+        display_hz = 60
+        try:
+            screen = None
+            parent = self.parent()
+            # First try parent's stored _screen reference (set by DisplayWidget.show_on_screen)
+            if parent is not None and hasattr(parent, "_screen"):
+                screen = parent._screen
+            # Fallback to parent.screen() if _screen not available
+            if screen is None and parent is not None:
+                screen = parent.screen()
+            # Fallback to self.screen()
+            if screen is None:
+                screen = self.screen()
+            # Final fallback to primary screen
+            if screen is None:
+                from PySide6.QtGui import QGuiApplication
+                screen = QGuiApplication.primaryScreen()
+            if screen is not None:
+                display_hz = int(screen.refreshRate())
+                if display_hz <= 0:
+                    display_hz = 60
+        except Exception:
+            pass
+        
+        # Adaptive rate selection - target achievable FPS
+        if display_hz <= 60:
+            target_fps = display_hz  # Full rate for 60Hz and below
+        elif display_hz <= 120:
+            target_fps = display_hz // 2  # Half rate for 61-120Hz (e.g., 120→60, 90→45)
+        else:
+            target_fps = display_hz // 3  # Third rate for >120Hz (e.g., 165→55, 144→48)
+        
+        # Ensure minimum of 30 FPS
+        target_fps = max(30, target_fps)
+        
+        self._render_timer_fps = target_fps
+        interval_ms = max(1, 1000 // target_fps)
+        
+        self._render_timer = QTimer(self)
+        self._render_timer.setTimerType(Qt.TimerType.PreciseTimer)
+        self._render_timer.timeout.connect(self._on_render_tick)
+        self._render_timer.start(interval_ms)
+        
+        logger.debug("[GL COMPOSITOR] Render timer started: display=%dHz, target=%dHz (interval=%dms)", 
+                    display_hz, target_fps, interval_ms)
+    
+    def _stop_render_timer(self) -> None:
+        """Stop the render timer."""
+        if self._render_timer is not None:
+            self._render_timer.stop()
+            self._render_timer.deleteLater()
+            self._render_timer = None
+            logger.debug("[GL COMPOSITOR] Render timer stopped")
+    
+    def _on_render_tick(self) -> None:
+        """Called by render timer to trigger a repaint.
+        
+        The actual progress interpolation happens in paintGL using the FrameState.
+        """
+        if self._frame_state is not None and self._frame_state.started and not self._frame_state.completed:
+            self.update()
 
     def set_base_pixmap(self, pixmap: Optional[QPixmap]) -> None:
         """Set the base image when no transition is active."""
@@ -647,6 +813,15 @@ class GLCompositorWidget(QOpenGLWidget):
         self._animation_manager = animation_manager
         self._current_easing = easing
 
+        # PERFORMANCE: Pre-upload textures BEFORE animation starts
+        if self._gl_pipeline is not None and self._use_shaders:
+            try:
+                self.makeCurrent()
+                self._prepare_crossfade_textures()
+                self.doneCurrent()
+            except Exception:
+                logger.debug("[GL COMPOSITOR] Pre-upload textures failed", exc_info=True)
+
         # Cancel any previous animation on this compositor.
         if self._current_anim_id and self._animation_manager:
             try:
@@ -656,11 +831,13 @@ class GLCompositorWidget(QOpenGLWidget):
             self._current_anim_id = None
 
         duration_sec = max(0.001, duration_ms / 1000.0)
+        frame_state = self._start_frame_pacing(duration_sec)
         anim_id = animation_manager.animate_custom(
             duration=duration_sec,
             easing=easing,
             update_callback=self._on_crossfade_update,
             on_complete=lambda: self._on_crossfade_complete(on_finished),
+            frame_state=frame_state,
         )
         self._current_anim_id = anim_id
         return anim_id
@@ -724,6 +901,15 @@ class GLCompositorWidget(QOpenGLWidget):
         self._animation_manager = animation_manager
         self._current_easing = easing
 
+        # PERFORMANCE: Pre-upload textures BEFORE animation starts
+        if self._gl_pipeline is not None and self._use_shaders:
+            try:
+                self.makeCurrent()
+                self._prepare_warp_textures()
+                self.doneCurrent()
+            except Exception:
+                logger.debug("[GL COMPOSITOR] Pre-upload textures failed", exc_info=True)
+
         self._profiler.start("warp")
 
         # Cancel any previous animation on this compositor.
@@ -735,11 +921,13 @@ class GLCompositorWidget(QOpenGLWidget):
             self._current_anim_id = None
 
         duration_sec = max(0.001, duration_ms / 1000.0)
+        frame_state = self._start_frame_pacing(duration_sec)
         anim_id = animation_manager.animate_custom(
             duration=duration_sec,
             easing=easing,
             update_callback=self._on_warp_update,
             on_complete=lambda: self._on_warp_complete(on_finished),
+            frame_state=frame_state,
         )
         self._current_anim_id = anim_id
         return anim_id
@@ -817,6 +1005,15 @@ class GLCompositorWidget(QOpenGLWidget):
         self._animation_manager = animation_manager
         self._current_easing = easing
 
+        # PERFORMANCE: Pre-upload textures BEFORE animation starts
+        if self._gl_pipeline is not None and self._use_shaders:
+            try:
+                self.makeCurrent()
+                self._prepare_raindrops_textures()
+                self.doneCurrent()
+            except Exception:
+                logger.debug("[GL COMPOSITOR] Pre-upload textures failed", exc_info=True)
+
         self._profiler.start("raindrops")
 
         # Cancel any previous animation on this compositor.
@@ -828,11 +1025,13 @@ class GLCompositorWidget(QOpenGLWidget):
             self._current_anim_id = None
 
         duration_sec = max(0.001, duration_ms / 1000.0)
+        frame_state = self._start_frame_pacing(duration_sec)
         anim_id = animation_manager.animate_custom(
             duration=duration_sec,
             easing=easing,
             update_callback=self._on_raindrops_update,
             on_complete=lambda: self._on_raindrops_complete(on_finished),
+            frame_state=frame_state,
         )
         self._current_anim_id = anim_id
         return anim_id
@@ -888,6 +1087,15 @@ class GLCompositorWidget(QOpenGLWidget):
         self._animation_manager = animation_manager
         self._current_easing = easing
 
+        # PERFORMANCE: Pre-upload textures BEFORE animation starts
+        if self._gl_pipeline is not None and self._use_shaders:
+            try:
+                self.makeCurrent()
+                self._prepare_wipe_textures()
+                self.doneCurrent()
+            except Exception:
+                logger.debug("[GL COMPOSITOR] Pre-upload textures failed", exc_info=True)
+
         self._profiler.start("wipe")
 
         # Cancel any previous animation on this compositor.
@@ -899,11 +1107,13 @@ class GLCompositorWidget(QOpenGLWidget):
             self._current_anim_id = None
 
         duration_sec = max(0.001, duration_ms / 1000.0)
+        frame_state = self._start_frame_pacing(duration_sec)
         anim_id = animation_manager.animate_custom(
             duration=duration_sec,
             easing=easing,
             update_callback=self._on_wipe_update,
             on_complete=lambda: self._on_wipe_complete(on_finished),
+            frame_state=frame_state,
         )
         self._current_anim_id = anim_id
         return anim_id
@@ -949,6 +1159,9 @@ class GLCompositorWidget(QOpenGLWidget):
         # Slide and crossfade/wipe are mutually exclusive; clear any active crossfade/wipe.
         self._crossfade = None
         self._wipe = None
+        
+        duration_sec = max(0.001, duration_ms / 1000.0)
+        
         self._slide = SlideState(
             old_pixmap=old_pixmap,
             new_pixmap=new_pixmap,
@@ -961,6 +1174,15 @@ class GLCompositorWidget(QOpenGLWidget):
         self._animation_manager = animation_manager
         self._current_easing = easing
 
+        # TRANSITION READINESS: Pre-upload textures BEFORE animation starts.
+        if self._gl_pipeline is not None and self._use_shaders:
+            try:
+                self.makeCurrent()
+                self._prepare_slide_textures()
+                self.doneCurrent()
+            except Exception:
+                logger.debug("[GL COMPOSITOR] Pre-upload textures failed", exc_info=True)
+
         # Start profiling for this transition.
         self._profiler.start("slide")
 
@@ -972,12 +1194,14 @@ class GLCompositorWidget(QOpenGLWidget):
                 pass
             self._current_anim_id = None
 
-        duration_sec = max(0.001, duration_ms / 1000.0)
+        # FRAME PACING: Create FrameState and pass to animation
+        frame_state = self._start_frame_pacing(duration_sec)
         anim_id = animation_manager.animate_custom(
             duration=duration_sec,
             easing=easing,
             update_callback=self._on_slide_update,
             on_complete=lambda: self._on_slide_complete(on_finished),
+            frame_state=frame_state,
         )
         self._current_anim_id = anim_id
         return anim_id
@@ -1043,6 +1267,15 @@ class GLCompositorWidget(QOpenGLWidget):
         self._animation_manager = animation_manager
         self._current_easing = easing
 
+        # PERFORMANCE: Pre-upload textures BEFORE animation starts
+        if self._gl_pipeline is not None and self._use_shaders:
+            try:
+                self.makeCurrent()
+                self._prepare_peel_textures()
+                self.doneCurrent()
+            except Exception:
+                logger.debug("[GL COMPOSITOR] Pre-upload textures failed", exc_info=True)
+
         self._profiler.start("peel")
 
         # Cancel any previous animation on this compositor.
@@ -1054,11 +1287,13 @@ class GLCompositorWidget(QOpenGLWidget):
             self._current_anim_id = None
 
         duration_sec = max(0.001, duration_ms / 1000.0)
+        frame_state = self._start_frame_pacing(duration_sec)
         anim_id = animation_manager.animate_custom(
             duration=duration_sec,
             easing=easing,
             update_callback=self._on_peel_update,
             on_complete=lambda: self._on_peel_complete(on_finished),
+            frame_state=frame_state,
         )
         self._current_anim_id = anim_id
         return anim_id
@@ -1119,6 +1354,15 @@ class GLCompositorWidget(QOpenGLWidget):
         self._animation_manager = animation_manager
         self._current_easing = easing
 
+        # PERFORMANCE: Pre-upload textures BEFORE animation starts
+        if self._gl_pipeline is not None and self._use_shaders:
+            try:
+                self.makeCurrent()
+                self._prepare_blockflip_textures()
+                self.doneCurrent()
+            except Exception:
+                logger.debug("[GL COMPOSITOR] Pre-upload textures failed", exc_info=True)
+
         # Cancel any previous animation on this compositor.
         if self._current_anim_id and self._animation_manager:
             try:
@@ -1143,11 +1387,13 @@ class GLCompositorWidget(QOpenGLWidget):
             _inner(progress)
 
         duration_sec = max(0.001, duration_ms / 1000.0)
+        frame_state = self._start_frame_pacing(duration_sec)
         anim_id = animation_manager.animate_custom(
             duration=duration_sec,
             easing=easing,
             update_callback=_blockflip_profiled_update,
             on_complete=lambda: self._on_blockflip_complete(on_finished),
+            frame_state=frame_state,
         )
         self._current_anim_id = anim_id
         return anim_id
@@ -1211,6 +1457,15 @@ class GLCompositorWidget(QOpenGLWidget):
         self._animation_manager = animation_manager
         self._current_easing = easing
 
+        # PERFORMANCE: Pre-upload textures BEFORE animation starts
+        if self._gl_pipeline is not None and self._use_shaders:
+            try:
+                self.makeCurrent()
+                self._prepare_blockspin_textures()
+                self.doneCurrent()
+            except Exception:
+                logger.debug("[GL COMPOSITOR] Pre-upload textures failed", exc_info=True)
+
         self._profiler.start("blockspin")
 
         # Cancel any previous animation on this compositor.
@@ -1222,11 +1477,13 @@ class GLCompositorWidget(QOpenGLWidget):
             self._current_anim_id = None
 
         duration_sec = max(0.001, duration_ms / 1000.0)
+        frame_state = self._start_frame_pacing(duration_sec)
         anim_id = animation_manager.animate_custom(
             duration=duration_sec,
             easing=easing,
             update_callback=self._on_blockspin_update,
             on_complete=lambda: self._on_blockspin_complete(on_finished),
+            frame_state=frame_state,
         )
         self._current_anim_id = anim_id
         return anim_id
@@ -1309,6 +1566,15 @@ class GLCompositorWidget(QOpenGLWidget):
         self._animation_manager = animation_manager
         self._current_easing = easing
 
+        # PERFORMANCE: Pre-upload textures BEFORE animation starts
+        if self._gl_pipeline is not None and self._use_shaders:
+            try:
+                self.makeCurrent()
+                self._prepare_diffuse_textures()
+                self.doneCurrent()
+            except Exception:
+                logger.debug("[GL COMPOSITOR] Pre-upload textures failed", exc_info=True)
+
         # Cancel any previous animation on this compositor.
         if self._current_anim_id and self._animation_manager:
             try:
@@ -1332,11 +1598,13 @@ class GLCompositorWidget(QOpenGLWidget):
             _inner(progress)
 
         duration_sec = max(0.001, duration_ms / 1000.0)
+        frame_state = self._start_frame_pacing(duration_sec)
         anim_id = animation_manager.animate_custom(
             duration=duration_sec,
             easing=easing,
             update_callback=_diffuse_profiled_update,
             on_complete=lambda: self._on_diffuse_complete(on_finished),
+            frame_state=frame_state,
         )
         self._current_anim_id = anim_id
         return anim_id
@@ -1397,6 +1665,15 @@ class GLCompositorWidget(QOpenGLWidget):
         self._animation_manager = animation_manager
         self._current_easing = easing
 
+        # PERFORMANCE: Pre-upload textures BEFORE animation starts
+        if self._gl_pipeline is not None and self._use_shaders:
+            try:
+                self.makeCurrent()
+                self._prepare_blinds_textures()
+                self.doneCurrent()
+            except Exception:
+                logger.debug("[GL COMPOSITOR] Pre-upload textures failed", exc_info=True)
+
         # Cancel any previous animation on this compositor.
         if self._current_anim_id and self._animation_manager:
             try:
@@ -1421,11 +1698,13 @@ class GLCompositorWidget(QOpenGLWidget):
             _inner(progress)
 
         duration_sec = max(0.001, duration_ms / 1000.0)
+        frame_state = self._start_frame_pacing(duration_sec)
         anim_id = animation_manager.animate_custom(
             duration=duration_sec,
             easing=easing,
             update_callback=_blinds_profiled_update,
             on_complete=lambda: self._on_blinds_complete(on_finished),
+            frame_state=frame_state,
         )
         self._current_anim_id = anim_id
         return anim_id
@@ -1440,9 +1719,12 @@ class GLCompositorWidget(QOpenGLWidget):
         # Clamp and store progress
         p = max(0.0, min(1.0, float(progress)))
         self._crossfade.progress = p
-        self.update()
+        # NOTE: Do NOT call self.update() here - the render timer drives repaints
+        # at the display refresh rate. Calling update() here would double the FPS.
 
     def _on_crossfade_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
+        # Stop frame pacing
+        self._stop_frame_pacing()
         # Snap to final state: base pixmap becomes the new image, transition ends.
         if self._crossfade is not None:
             try:
@@ -1464,13 +1746,17 @@ class GLCompositorWidget(QOpenGLWidget):
         p = max(0.0, min(1.0, float(progress)))
         self._slide.progress = p
         self._profiler.tick("slide")
-        self.update()
+        # NOTE: Do NOT call self.update() here - the render timer drives repaints
+        # at the display refresh rate. Calling update() here would double the FPS.
 
     def _on_slide_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
         """Handle completion of compositor-driven slide transitions."""
         try:
             # Complete profiling and emit metrics.
             self._profiler.complete("slide", viewport_size=(self.width(), self.height()))
+            
+            # Stop frame pacing
+            self._stop_frame_pacing()
 
             # Snap to final state: base pixmap becomes the new image, transition ends.
             if self._slide is not None:
@@ -1501,12 +1787,13 @@ class GLCompositorWidget(QOpenGLWidget):
         p = max(0.0, min(1.0, float(progress)))
         self._wipe.progress = p
         self._profiler.tick("wipe")
-        self.update()
+        # NOTE: Do NOT call self.update() here - the render timer drives repaints
 
     def _on_wipe_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
         """Handle completion of compositor-driven wipe transitions."""
         try:
             self._profiler.complete("wipe", viewport_size=(self.width(), self.height()))
+            self._stop_frame_pacing()
 
             if self._wipe is not None:
                 try:
@@ -1535,7 +1822,7 @@ class GLCompositorWidget(QOpenGLWidget):
         p = max(0.0, min(1.0, float(progress)))
         self._blockspin.progress = p
         self._profiler.tick("blockspin")
-        self.update()
+        # NOTE: Do NOT call self.update() here - the render timer drives repaints
 
     def _on_warp_update(self, progress: float) -> None:
         """Update handler for compositor-driven warp dissolve transitions."""
@@ -1544,7 +1831,7 @@ class GLCompositorWidget(QOpenGLWidget):
         p = max(0.0, min(1.0, float(progress)))
         self._warp.progress = p
         self._profiler.tick("warp")
-        self.update()
+        # NOTE: Do NOT call self.update() here - the render timer drives repaints
 
     def _on_raindrops_update(self, progress: float) -> None:
         """Update handler for shader-driven raindrops transitions."""
@@ -1553,7 +1840,7 @@ class GLCompositorWidget(QOpenGLWidget):
         p = max(0.0, min(1.0, float(progress)))
         self._raindrops.progress = p
         self._profiler.tick("raindrops")
-        self.update()
+        # NOTE: Do NOT call self.update() here - the render timer drives repaints
 
     # NOTE: _on_shooting_stars_update() and _on_shuffle_update() removed - these transitions are retired.
 
@@ -1561,6 +1848,7 @@ class GLCompositorWidget(QOpenGLWidget):
         """Completion handler for compositor-driven block spin transitions."""
         try:
             self._profiler.complete("blockspin", viewport_size=(self.width(), self.height()))
+            self._stop_frame_pacing()
 
             if self._blockspin is not None:
                 try:
@@ -1587,6 +1875,7 @@ class GLCompositorWidget(QOpenGLWidget):
         """Completion handler for compositor-driven warp dissolve transitions."""
         try:
             self._profiler.complete("warp", viewport_size=(self.width(), self.height()))
+            self._stop_frame_pacing()
 
             try:
                 self._release_transition_textures()
@@ -1618,6 +1907,7 @@ class GLCompositorWidget(QOpenGLWidget):
         """Completion handler for shader-driven raindrops transitions."""
         try:
             self._profiler.complete("raindrops", viewport_size=(self.width(), self.height()))
+            self._stop_frame_pacing()
 
             try:
                 self._release_transition_textures()
@@ -1654,12 +1944,13 @@ class GLCompositorWidget(QOpenGLWidget):
         p = max(0.0, min(1.0, float(progress)))
         self._peel.progress = p
         self._profiler.tick("peel")
-        self.update()
+        # NOTE: Do NOT call self.update() here - the render timer drives repaints
 
     def _on_peel_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
         """Completion handler for compositor-driven peel transitions."""
         try:
             self._profiler.complete("peel", viewport_size=(self.width(), self.height()))
+            self._stop_frame_pacing()
 
             if self._peel is not None:
                 try:
@@ -1687,12 +1978,14 @@ class GLCompositorWidget(QOpenGLWidget):
             return
         p = max(0.0, min(1.0, float(progress)))
         self._blockflip.progress = p
-        self.update()
+        self._profiler.tick("blockflip")
+        # NOTE: Do NOT call self.update() here - the render timer drives repaints
 
     def _on_blockflip_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
         """Completion handler for compositor-driven block flip transitions."""
         try:
             self._profiler.complete("blockflip", viewport_size=(self.width(), self.height()))
+            self._stop_frame_pacing()
 
             if self._blockflip is not None:
                 try:
@@ -1719,6 +2012,7 @@ class GLCompositorWidget(QOpenGLWidget):
         """Completion handler for compositor-driven diffuse transitions."""
         try:
             self._profiler.complete("diffuse", viewport_size=(self.width(), self.height()))
+            self._stop_frame_pacing()
 
             if self._diffuse is not None:
                 try:
@@ -1745,6 +2039,7 @@ class GLCompositorWidget(QOpenGLWidget):
         """Completion handler for compositor-driven blinds transitions."""
         try:
             self._profiler.complete("blinds", viewport_size=(self.width(), self.height()))
+            self._stop_frame_pacing()
 
             if self._blinds is not None:
                 try:
@@ -2918,6 +3213,7 @@ void main() {
         Returns 0 on failure. Caller is responsible for deleting the texture
         when no longer needed.
         """
+        _upload_start = time.time()
 
         if gl is None or pixmap is None or pixmap.isNull():
             return 0
@@ -2972,6 +3268,11 @@ void main() {
             return 0
         finally:
             gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
+
+        # Log slow texture uploads
+        _upload_elapsed = (time.time() - _upload_start) * 1000.0
+        if _upload_elapsed > 30.0 and is_perf_metrics_enabled():
+            logger.warning("[PERF] [GL COMPOSITOR] Slow texture upload: %.2fms (%dx%d)", _upload_elapsed, w, h)
 
         return tex_id
 
@@ -3108,6 +3409,9 @@ void main() {
             return False
         if self._gl_pipeline is None:
             return False
+        # PERFORMANCE: Early exit if textures already prepared (same pattern as slide/wipe)
+        if self._gl_pipeline.old_tex_id and self._gl_pipeline.new_tex_id:
+            return True
         if self._diffuse is None:
             return False
         st = self._diffuse
@@ -3131,6 +3435,9 @@ void main() {
             return False
         if self._gl_pipeline is None:
             return False
+        # PERFORMANCE: Early exit if textures already prepared
+        if self._gl_pipeline.old_tex_id and self._gl_pipeline.new_tex_id:
+            return True
         if self._peel is None:
             return False
         st = self._peel
@@ -3141,6 +3448,9 @@ void main() {
             return False
         if self._gl_pipeline is None:
             return False
+        # PERFORMANCE: Early exit if textures already prepared
+        if self._gl_pipeline.old_tex_id and self._gl_pipeline.new_tex_id:
+            return True
         if self._blinds is None:
             return False
         st = self._blinds
@@ -3185,25 +3495,42 @@ void main() {
     # NOTE: _prepare_shuffle_textures() removed - Shuffle transition is retired.
 
     def _get_viewport_size(self) -> tuple[int, int]:
-        """Return the framebuffer viewport size in physical pixels."""
-
+        """Return the framebuffer viewport size in physical pixels.
+        
+        PERFORMANCE OPTIMIZED: Caches the result and only recalculates when
+        widget size changes. This eliminates per-frame DPR lookups and float
+        conversions in the hot render path.
+        """
+        current_size = (self.width(), self.height())
+        
+        # Return cached value if widget size hasn't changed
+        if self._cached_viewport is not None and self._cached_widget_size == current_size:
+            return self._cached_viewport
+        
+        # Recalculate viewport size
         try:
             dpr = float(self.devicePixelRatioF())
         except Exception:
             dpr = 1.0
-        w = max(1, int(round(self.width() * dpr)))
-        h = max(1, int(round(self.height() * dpr)))
+        w = max(1, int(round(current_size[0] * dpr)))
+        h = max(1, int(round(current_size[1] * dpr)))
         # Guard against off-by-one rounding between Qt's reported size and
         # the underlying framebuffer by slightly over-covering vertically.
         # This prevents a 1px retained strip from the previous frame at the
         # top edge on certain DPI/size combinations.
-        try:
-            h = max(1, h + 1)
-        except Exception:
-            h = max(1, h)
-        return w, h
+        h = max(1, h + 1)
+        
+        # Cache the result
+        self._cached_viewport = (w, h)
+        self._cached_widget_size = current_size
+        return self._cached_viewport
 
     def _paint_blockspin_shader(self, target: QRect) -> None:
+        """Render 3D Block Spin transition.
+        
+        PERFORMANCE OPTIMIZED: Uses module-level easing function and avoids
+        per-frame list comprehensions.
+        """
         if not self._can_use_blockspin_shader() or self._gl_pipeline is None or self._blockspin is None:
             return
         if not self._prepare_blockspin_textures():
@@ -3214,26 +3541,9 @@ void main() {
         h = max(1, target.height())
 
         st = self._blockspin
-        base_p = max(0.0, min(1.0, float(st.progress)))
+        base_p = st.progress  # Already 0..1 float, no conversion needed
 
-        def _spin_from_progress(p: float) -> float:
-            """Map 0..1 timeline to spin progress with eased endpoints.
-
-            The curve lingers slightly near 0/1 and crosses 0.5 more quickly
-            so slabs spend less time edge-on and more time close to face-on.
-            """
-
-            if p <= 0.03:
-                return 0.0
-            if p >= 0.97:
-                return 1.0
-
-            t = (p - 0.03) / 0.94
-            # Smoothstep-style easing: 0..1 -> 0..1 with low slope at the
-            # endpoints and higher slope around the midpoint.
-            return t * t * (3.0 - 2.0 * t)
-
-        aspect = float(w) / float(h)
+        aspect = w / h  # Python 3 division is float by default
 
         gl.glViewport(0, 0, vp_w, vp_h)
         # Enable depth testing so the front face of the slab properly occludes
@@ -3278,37 +3588,33 @@ void main() {
                 gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_pipeline.new_tex_id)
                 gl.glUniform1i(self._gl_pipeline.u_new_tex_loc, 1)
 
-            # Prefer the dedicated box mesh for a true 3D slab; fall back to
-            # the fullscreen quad if the box geometry was not created.
-            use_box = getattr(self._gl_pipeline, "box_vao", 0) and getattr(self._gl_pipeline, "box_vertex_count", 0) > 0
-
-            # Configure a helper to issue a single slab draw with caller-supplied
-            # angle and placement.
-            def _draw_slab(angle_rad: float, block_rect: tuple[float, float, float, float], uv_rect: tuple[float, float, float, float]) -> None:
-                if self._gl_pipeline.u_angle_loc != -1:
-                    gl.glUniform1f(self._gl_pipeline.u_angle_loc, float(angle_rad))
-                if self._gl_pipeline.u_block_rect_loc != -1:
-                    gl.glUniform4f(self._gl_pipeline.u_block_rect_loc, *[float(v) for v in block_rect])
-                if self._gl_pipeline.u_block_uv_rect_loc != -1:
-                    gl.glUniform4f(self._gl_pipeline.u_block_uv_rect_loc, *[float(v) for v in uv_rect])
-
-                if use_box:
-                    gl.glBindVertexArray(self._gl_pipeline.box_vao)
-                    gl.glDrawArrays(gl.GL_TRIANGLES, 0, int(self._gl_pipeline.box_vertex_count))
-                    gl.glBindVertexArray(0)
-                else:
-                    gl.glBindVertexArray(self._gl_pipeline.quad_vao)
-                    gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-                    gl.glBindVertexArray(0)
-
             # Single full-frame slab. Direction is applied as a sign on the
             # spin so LEFT/RIGHT and UP/DOWN produce mirrored rotations while
             # still ending on the same final orientation.
-            spin = _spin_from_progress(base_p)
+            spin = _blockspin_spin_from_progress(base_p)
             angle = math.pi * spin * spin_dir
-            full_rect = (-1.0, -1.0, 1.0, 1.0)
-            full_uv = (0.0, 0.0, 1.0, 1.0)
-            _draw_slab(angle, full_rect, full_uv)
+            
+            # PERFORMANCE: Inlined _draw_slab to avoid per-frame nested function
+            # and list comprehensions. Values are already floats.
+            if self._gl_pipeline.u_angle_loc != -1:
+                gl.glUniform1f(self._gl_pipeline.u_angle_loc, angle)
+            if self._gl_pipeline.u_block_rect_loc != -1:
+                gl.glUniform4f(self._gl_pipeline.u_block_rect_loc, -1.0, -1.0, 1.0, 1.0)
+            if self._gl_pipeline.u_block_uv_rect_loc != -1:
+                gl.glUniform4f(self._gl_pipeline.u_block_uv_rect_loc, 0.0, 0.0, 1.0, 1.0)
+
+            # Prefer the dedicated box mesh for a true 3D slab; fall back to
+            # the fullscreen quad if the box geometry was not created.
+            box_vao = getattr(self._gl_pipeline, "box_vao", 0)
+            box_count = getattr(self._gl_pipeline, "box_vertex_count", 0)
+            if box_vao and box_count > 0:
+                gl.glBindVertexArray(box_vao)
+                gl.glDrawArrays(gl.GL_TRIANGLES, 0, box_count)
+                gl.glBindVertexArray(0)
+            else:
+                gl.glBindVertexArray(self._gl_pipeline.quad_vao)
+                gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+                gl.glBindVertexArray(0)
         finally:
             gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
             gl.glActiveTexture(gl.GL_TEXTURE0)
@@ -3385,7 +3691,11 @@ void main() {
         )
 
     def _paint_slide_shader(self, target: QRect) -> None:
-        """Render Slide transition using the SlideProgram helper."""
+        """Render Slide transition using the SlideProgram helper.
+        
+        PERFORMANCE OPTIMIZED: Uses pre-computed float coordinates from SlideState
+        to avoid per-frame QPoint.x()/y() calls and float() conversions.
+        """
         if not self._can_use_slide_shader() or self._gl_pipeline is None or self._slide is None:
             return
         st = self._slide
@@ -3393,23 +3703,25 @@ void main() {
             return
         if not self._prepare_slide_textures():
             return
+        # Track actual paint timing (after all early-exit checks)
+        self._profiler.tick_paint("slide")
 
-        # Compute rect positions based on progress using float interpolation
-        # (avoid int() quantization which causes stepping/chugging)
-        target_rect = target
-        w = max(1, target_rect.width())
-        h = max(1, target_rect.height())
+        # PERFORMANCE: Use pre-computed float coordinates from SlideState
+        # This eliminates 8x float() conversions and 8x QPoint method calls per frame
+        w = max(1, target.width())
+        h = max(1, target.height())
+        inv_w = 1.0 / w
+        inv_h = 1.0 / h
 
-        t = max(0.0, min(1.0, float(st.progress)))
+        # FRAME PACING: Use interpolated progress from compositor's FrameState
+        # Fall back to state progress if frame pacing not active
+        t = self._get_render_progress(fallback=st.progress)
         
-        # Use float interpolation directly to avoid quantization
-        inv_w = 1.0 / float(max(1, w))
-        inv_h = 1.0 / float(max(1, h))
-
-        old_x = (float(st.old_start.x()) + (float(st.old_end.x()) - float(st.old_start.x())) * t) * inv_w
-        old_y = (float(st.old_start.y()) + (float(st.old_end.y()) - float(st.old_start.y())) * t) * inv_h
-        new_x = (float(st.new_start.x()) + (float(st.new_end.x()) - float(st.new_start.x())) * t) * inv_w
-        new_y = (float(st.new_start.y()) + (float(st.new_end.y()) - float(st.new_start.y())) * t) * inv_h
+        # Use pre-computed deltas for interpolation
+        old_x = (st._old_start_x + st._old_delta_x * t) * inv_w
+        old_y = (st._old_start_y + st._old_delta_y * t) * inv_h
+        new_x = (st._new_start_x + st._new_delta_x * t) * inv_w
+        new_y = (st._new_start_y + st._new_delta_y * t) * inv_h
 
         vp_w, vp_h = self._get_viewport_size()
         slide_helper = _get_slide_program()
@@ -3727,6 +4039,17 @@ void main() {
             painter.end()
 
     def paintGL(self) -> None:  # type: ignore[override]
+        _paint_start = time.time()
+        try:
+            self._paintGL_impl()
+        finally:
+            # Log slow paintGL calls - this ALWAYS runs regardless of which path was taken
+            _paint_elapsed = (time.time() - _paint_start) * 1000.0
+            if _paint_elapsed > 50.0 and is_perf_metrics_enabled():
+                logger.warning("[PERF] [GL COMPOSITOR] Slow paintGL: %.2fms", _paint_elapsed)
+
+    def _paintGL_impl(self) -> None:
+        """Internal paintGL implementation."""
         target = self.rect()
 
         # Prefer the shader path for Block Spins when available. On any failure

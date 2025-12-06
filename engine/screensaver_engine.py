@@ -13,7 +13,7 @@ import random
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple
-from PySide6.QtCore import QObject, Signal, QTimer
+from PySide6.QtCore import QObject, Signal, QTimer, QSize
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QPixmap, QImage
 
@@ -1112,13 +1112,13 @@ class ScreensaverEngine(QObject):
             
             self._current_image = image_meta
             
-            # Submit to IO thread pool
-            # FIX: Use async properly or remove - keeping sync for now
+            # ARCHITECTURAL FIX: Use async image processing to avoid UI thread blocking
+            # This moves heavy image scaling/cropping to background threads
             if self.thread_manager:
-                # Future not used - load sync below
-                pass
+                self._load_and_display_image_async(image_meta)
+                return True  # Async - will complete later
             
-            # For basic version, load synchronously
+            # Fallback to sync path if no thread manager
             return self._load_and_display_image(image_meta)
         
         except Exception as e:
@@ -1201,10 +1201,227 @@ class ScreensaverEngine(QObject):
         except Exception as e:
             logger.exception(f"Image load task failed: {e}")
             return None
+
+    def _load_and_display_image_async(self, image_meta: ImageMetadata, retry_count: int = 0) -> None:
+        """
+        Load and display image asynchronously. Processes image on background thread.
+        
+        ARCHITECTURAL NOTE: This method moves heavy image processing off the UI thread
+        to eliminate frame timing spikes during image changes. The flow is:
+        1. Load QImage on IO thread (or from cache)
+        2. Process/scale QImage on COMPUTE thread
+        3. Convert to QPixmap and display on UI thread
+        
+        For "different images on each monitor" mode, this loads separate images for
+        each display from the queue.
+        
+        Args:
+            image_meta: Image metadata for first display
+            retry_count: Number of retries attempted (max 10)
+        """
+        if not self.thread_manager or not self.display_manager:
+            # Fall back to sync path if no thread manager
+            self._load_and_display_image(image_meta, retry_count)
+            return
+
+        # Check same_image setting to determine how many images to load
+        raw_same_image = self.settings_manager.get('display.same_image_all_monitors', True)
+        same_image = SettingsManager.to_bool(raw_same_image, True)
+        
+        # Build list of images to load - one per display if different images mode
+        displays = self.display_manager.displays if self.display_manager else []
+        image_metas = [image_meta]  # First display gets the provided image
+        
+        if not same_image and len(displays) > 1:
+            # Load different images for each additional display
+            for i in range(1, len(displays)):
+                next_meta = self.image_queue.next() if self.image_queue else None
+                if next_meta:
+                    image_metas.append(next_meta)
+                else:
+                    # Fallback: reuse first image if queue is empty
+                    image_metas.append(image_meta)
+            logger.debug(f"[ASYNC] Loading {len(image_metas)} different images for {len(displays)} displays")
+
+        def _do_load_and_process() -> Optional[Dict]:
+            """Background task: load and process images for all displays."""
+            from PySide6.QtGui import QPixmap
+            try:
+                processed_images = {}
+                display_list = self.display_manager.displays if self.display_manager else []
+                
+                # Get quality settings
+                sharpen = False
+                if self.settings_manager:
+                    sharpen = self.settings_manager.get('display.sharpen_downscale', False)
+                    if isinstance(sharpen, str):
+                        sharpen = sharpen.lower() == 'true'
+                
+                for i, display in enumerate(display_list):
+                    # Get the image metadata for this display
+                    meta = image_metas[i] if i < len(image_metas) else image_metas[0]
+                    img_path = str(meta.local_path) if meta.local_path else (meta.url or "")
+                    
+                    if not img_path:
+                        logger.warning(f"[ASYNC] No path for display {i}")
+                        continue
+                    
+                    # Load QImage (thread-safe)
+                    qimage: Optional[QImage] = None
+                    
+                    # Try cache first
+                    if self._image_cache:
+                        cached = self._image_cache.get(img_path)
+                        if isinstance(cached, QImage) and not cached.isNull():
+                            qimage = cached
+                        elif isinstance(cached, QPixmap) and not cached.isNull():
+                            qimage = cached.toImage()
+                    
+                    # Load from disk if not cached
+                    if qimage is None or qimage.isNull():
+                        qimage = QImage(img_path)
+                        if qimage.isNull():
+                            logger.warning(f"[ASYNC] Failed to load QImage: {img_path}")
+                            continue
+                        # Cache the loaded QImage
+                        if self._image_cache:
+                            self._image_cache.put(img_path, qimage)
+                    
+                    try:
+                        # Get target size from display
+                        if hasattr(display, 'get_target_size'):
+                            target_size = display.get_target_size()
+                        else:
+                            # Fallback: use display size * DPR
+                            dpr = getattr(display, '_device_pixel_ratio', 1.0)
+                            target_size = QSize(
+                                int(display.width() * dpr),
+                                int(display.height() * dpr)
+                            )
+                        
+                        # Get display mode
+                        display_mode = getattr(display, 'display_mode', DisplayMode.FILL)
+                        
+                        # Process image for this display (thread-safe QImage operation)
+                        processed_qimage = AsyncImageProcessor.process_qimage(
+                            qimage,
+                            target_size,
+                            display_mode,
+                            use_lanczos=False,
+                            sharpen=sharpen,
+                        )
+                        
+                        # Convert to QPixmap on worker thread (Qt 6 allows this)
+                        # This moves the expensive conversion off the UI thread
+                        processed_pixmap = QPixmap.fromImage(processed_qimage)
+                        original_pixmap = QPixmap.fromImage(qimage)
+                        
+                        processed_images[i] = {
+                            'pixmap': processed_pixmap,
+                            'original_pixmap': original_pixmap,
+                            'target_size': target_size,
+                            'path': img_path,
+                        }
+                    except Exception as e:
+                        logger.debug(f"[ASYNC] Failed to process for display {i}: {e}")
+                
+                if not processed_images:
+                    return None
+                    
+                return {
+                    'processed': processed_images,
+                    'same_image': same_image,
+                }
+            except Exception as e:
+                logger.exception(f"[ASYNC] Background image processing failed: {e}")
+                return None
+
+        def _on_process_complete(result) -> None:
+            """UI thread callback: convert to QPixmap and display."""
+            try:
+                data = result.result if result and result.success else None
+                if data is None:
+                    logger.warning(f"[ASYNC] Image processing failed, retrying (attempt {retry_count + 1}/10)")
+                    self._loading_in_progress = False
+                    if retry_count < 10 and self.image_queue:
+                        next_meta = self.image_queue.next()
+                        if next_meta:
+                            self._load_and_display_image_async(next_meta, retry_count + 1)
+                    return
+                
+                processed = data['processed']
+                is_same_image = data.get('same_image', True)
+                
+                displays = self.display_manager.displays if self.display_manager else []
+                displayed_paths = []
+                
+                # PERF: Stagger transition starts by 100ms per display to avoid
+                # simultaneous transition completions which cause 100+ms UI blocks.
+                stagger_ms = 100
+                
+                for i, display in enumerate(displays):
+                    if i not in processed:
+                        continue
+                    
+                    proc_data = processed[i]
+                    # Pixmaps already converted on worker thread
+                    processed_pixmap = proc_data['pixmap']
+                    original_pixmap = proc_data['original_pixmap']
+                    img_path = proc_data['path']
+                    
+                    if processed_pixmap.isNull():
+                        logger.warning(f"[ASYNC] QPixmap is null for display {i}")
+                        continue
+                    
+                    # Use set_processed_image to avoid re-processing
+                    # Stagger display updates to prevent simultaneous transition completions
+                    delay_ms = i * stagger_ms
+                    if delay_ms > 0:
+                        def _delayed_set(d=display, pp=processed_pixmap, op=original_pixmap, ip=img_path):
+                            if hasattr(d, 'set_processed_image'):
+                                d.set_processed_image(pp, op, ip)
+                            else:
+                                d.set_image(pp, ip)
+                        QTimer.singleShot(delay_ms, _delayed_set)
+                    else:
+                        if hasattr(display, 'set_processed_image'):
+                            display.set_processed_image(processed_pixmap, original_pixmap, img_path)
+                        else:
+                            display.set_image(processed_pixmap, img_path)
+                    
+                    displayed_paths.append(img_path)
+                
+                # Emit signal for first image
+                if displayed_paths:
+                    self.image_changed.emit(displayed_paths[0])
+                    if is_same_image:
+                        logger.info(f"[ASYNC] Same image displayed on all monitors: {displayed_paths[0]}")
+                    else:
+                        logger.info(f"[ASYNC] Different images displayed on {len(displayed_paths)} displays")
+                
+                self._schedule_prefetch()
+                self._loading_in_progress = False
+                
+            except Exception as e:
+                logger.exception(f"[ASYNC] UI callback failed: {e}")
+                self._loading_in_progress = False
+
+        # Submit to COMPUTE pool for processing
+        try:
+            self.thread_manager.submit_compute_task(
+                _do_load_and_process,
+                callback=lambda r: self.thread_manager.run_on_ui_thread(lambda: _on_process_complete(r))
+            )
+        except Exception as e:
+            logger.warning(f"[ASYNC] Failed to submit task, falling back to sync: {e}")
+            self._load_and_display_image(image_meta, retry_count)
     
     def _load_and_display_image(self, image_meta: ImageMetadata, retry_count: int = 0) -> bool:
         """
         Load and display image synchronously. Auto-retries with next image on failure.
+        
+        NOTE: This is the legacy sync path. For better performance, use
+        _load_and_display_image_async() which processes images off the UI thread.
         
         Args:
             image_meta: Image metadata

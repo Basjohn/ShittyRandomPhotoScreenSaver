@@ -2013,3 +2013,112 @@
 2025-12-04 16:27:00,781 - pytest_runner - INFO - pytest finished with exit code 0
 2025-12-04 17:02:11,396 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', '-vv']
 2025-12-04 17:02:12,286 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-05 22:25:34,966 - pytest_runner - INFO - pytest.py starting with args: ['--collect-only', '-q']
+2025-12-05 22:25:37,732 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-05 22:25:44,674 - pytest_runner - INFO - pytest.py starting with args: ['-x', '--tb=short']
+2025-12-05 22:25:52,299 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-05 22:26:52,157 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_block_puzzle_flip.py', '-v', '--tb=short']
+2025-12-05 22:26:54,406 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-05 22:27:01,011 - pytest_runner - INFO - pytest.py starting with args: ['-x', '--tb=line', '-q']
+2025-12-05 22:27:07,743 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-05 22:27:19,786 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_clock_widget.py::test_clock_signals', '-v', '--tb=short']
+2025-12-05 22:27:21,964 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-05 22:27:29,169 - pytest_runner - INFO - pytest.py starting with args: ['--ignore=tests/test_clock_widget.py', '-x', '--tb=line', '-q']
+2025-12-05 22:27:48,908 - pytest_runner - INFO - pytest.py starting with args: ['--ignore=tests/test_clock_widget.py', '-x', '--tb=line', '-q']
+2025-12-05 22:28:09,346 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_animation.py', 'tests/test_threading.py', 'tests/test_image_processor.py', 'tests/test_image_queue.py', '-v', '--tb=short']
+2025-12-05 22:28:12,978 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-05 22:29:06,275 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_gl_compositor_slide.py', 'tests/test_gl_compositor_crossfade.py', 'tests/test_transition_integration.py', '-v', '--tb=short']
+2025-12-05 22:29:29,166 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-05 22:29:37,186 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', 'tests/test_settings.py', 'tests/test_integration.py', '-v', '--tb=short']
+2025-12-05 22:30:12,771 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-05 22:32:17,336 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', '-v', '--tb=short']
+2025-12-05 22:32:17,963 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-05 22:32:25,202 - pytest_runner - INFO - pytest.py starting with args: ['--ignore=tests/test_clock_widget.py', '-q', '--tb=line']
+2025-12-05 22:32:38,477 - pytest_runner - INFO - pytest.py starting with args: ['--ignore=tests/test_clock_widget.py', '-x', '--tb=short']
+2025-12-05 22:32:51,367 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_animation.py', 'tests/test_threading.py', 'tests/test_image_processor.py', 'tests/test_image_queue.py', 'tests/test_integration.py', 'tests/test_settings.py', 'tests/test_transition_integration.py', '-q']
+2025-12-05 22:33:41,746 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-05 22:42:44,213 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_gl_compositor_slide.py', 'tests/test_gl_compositor_crossfade.py', 'tests/test_transition_integration.py', '-v', '--tb=short']
+2025-12-05 22:43:07,970 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-05 22:46:05,546 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_animation.py', 'tests/test_threading.py', 'tests/test_transition_integration.py', 'tests/test_spotify_visualizer_widget.py', '-q']
+2025-12-05 22:46:26,731 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-05 22:50:46,655 - pytest_runner - INFO - pytest.py starting with args: ['-q']
+2025-12-05 22:51:05,562 - pytest_runner - INFO - pytest.py starting with args: ['-v', '--tb=short']
+2025-12-05 22:51:22,507 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_clock_widget.py::test_clock_signals', '-v', '--tb=long']
+2025-12-05 22:51:24,746 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-05 22:51:34,857 - pytest_runner - INFO - pytest.py starting with args: ['-q']
+2025-12-05 22:51:52,240 - pytest_runner - INFO - pytest.py starting with args: ['--tb=short']
+2025-12-05 22:52:09,301 - pytest_runner - INFO - pytest.py starting with args: ['--tb=line']
+2025-12-05 22:52:26,217 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_clock_widget.py', '-v', '--tb=short']
+2025-12-05 22:52:31,086 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-05 22:52:39,154 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_gl_compositor_slide.py', 'tests/test_gl_compositor_crossfade.py', 'tests/test_transition_integration.py', 'tests/test_animation.py', 'tests/test_threading.py', 'tests/test_spotify_visualizer_widget.py', '-v', '--tb=short']
+2025-12-05 22:53:04,401 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-05 22:56:51,705 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_gl_compositor_slide.py', 'tests/test_gl_compositor_crossfade.py', 'tests/test_transition_integration.py', '-v', '--tb=short']
+2025-12-05 22:57:14,688 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-05 23:04:27,194 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', '-v', '--tb=short']
+2025-12-05 23:04:28,016 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-05 23:10:42,086 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_gl_compositor_slide.py', 'tests/test_gl_compositor_crossfade.py', 'tests/test_transition_integration.py', '-v', '--tb=short']
+2025-12-05 23:11:04,857 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-05 23:22:17,622 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_gl_compositor_slide.py', 'tests/test_gl_compositor_crossfade.py', 'tests/test_transition_integration.py', '-v', '--tb=short']
+2025-12-05 23:22:42,217 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-05 23:33:56,811 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_gl_compositor_slide.py', '-v', '--tb=short']
+2025-12-05 23:33:59,847 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-05 23:42:36,415 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_gl_compositor_slide.py', '-v', '--tb=short']
+2025-12-05 23:42:39,192 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-05 23:44:08,990 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_gl_compositor_slide.py', 'tests/test_transition_integration.py', '-v', '--tb=short']
+2025-12-05 23:44:30,115 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-05 23:57:01,332 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_gl_compositor_slide.py', 'tests/test_transition_integration.py', '-v', '--tb=short']
+2025-12-05 23:57:23,072 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-06 00:02:04,737 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_gl_compositor_slide.py', 'tests/test_transition_integration.py', '-v', '--tb=short']
+2025-12-06 00:02:26,614 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-06 00:15:32,673 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_gl_compositor_slide.py', 'tests/test_transition_integration.py', '-v', '--tb=short']
+2025-12-06 00:15:54,218 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-06 00:23:15,787 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_gl_compositor_slide.py', 'tests/test_transition_integration.py', '-v', '--tb=short']
+2025-12-06 00:23:37,623 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-06 00:37:23,411 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_gl_compositor_slide.py', 'tests/test_transition_integration.py', '-v', '--tb=short']
+2025-12-06 00:37:44,655 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-06 00:54:02,036 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_gl_compositor_slide.py', 'tests/test_transition_integration.py', '-v', '--tb=short']
+2025-12-06 00:54:23,748 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-06 01:01:43,202 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_transition_integration.py', '-v', '--tb=short']
+2025-12-06 01:02:02,402 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-06 01:05:18,927 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_slide_jitter.py', '-v', '-s']
+2025-12-06 01:05:19,647 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-06 01:05:48,079 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_slide_jitter.py', '-v', '-s']
+2025-12-06 01:05:49,447 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-06 01:06:49,810 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_slide_jitter.py', '-v', '-s']
+2025-12-06 01:06:53,077 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-06 01:21:50,564 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_transition_integration.py', 'tests/test_slide_jitter.py', '-v', '--tb=short']
+2025-12-06 01:22:12,413 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-06 01:37:52,708 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_transition_integration.py', 'tests/test_slide_jitter.py', '-v', '--tb=short']
+2025-12-06 01:38:14,749 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-06 01:42:45,259 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_frame_timing_workload.py', '-v', '--tb=short']
+2025-12-06 01:42:46,031 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-06 01:45:06,489 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_frame_timing_workload.py', '-v', '--tb=short']
+2025-12-06 01:45:06,796 - pytest_runner - INFO - pytest finished with exit code 5
+2025-12-06 01:45:17,767 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_frame_timing_workload.py', '-v', '--tb=short']
+2025-12-06 01:45:18,078 - pytest_runner - INFO - pytest finished with exit code 5
+2025-12-06 01:45:23,551 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_frame_timing_workload.py::TestFrameTimingWorkload', '-v', '--collect-only']
+2025-12-06 01:45:23,851 - pytest_runner - INFO - pytest finished with exit code 4
+2025-12-06 01:45:46,305 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_frame_timing_workload.py', '-v', '--collect-only', '--ignore-glob=**/temp/*']
+2025-12-06 01:45:46,610 - pytest_runner - INFO - pytest finished with exit code 5
+2025-12-06 01:46:36,965 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_frame_timing_workload.py', '-v', '--tb=short']
+2025-12-06 01:46:37,272 - pytest_runner - INFO - pytest finished with exit code 5
+2025-12-06 01:47:47,505 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_frame_timing_workload.py', '-v', '--tb=short']
+2025-12-06 01:48:01,419 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-06 01:51:11,864 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', '-v', '--tb=short']
+2025-12-06 01:51:12,667 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-06 02:09:30,921 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', '-v', '--tb=short']
+2025-12-06 02:09:31,751 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-06 02:09:38,284 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_frame_timing_workload.py', '-v', '--tb=short']
+2025-12-06 02:09:52,570 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-06 02:12:31,290 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_animation_manager.py', 'tests/test_spotify_visualizer_widget.py', '-v', '--tb=short']
+2025-12-06 02:12:31,650 - pytest_runner - INFO - pytest finished with exit code 4
+2025-12-06 02:12:41,873 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', 'tests/test_frame_timing_workload.py', '-v', '--tb=short']
+2025-12-06 02:12:56,291 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-06 02:21:02,268 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_frame_timing_workload.py', 'tests/test_transition_integration.py', '-v', '--tb=short']
+2025-12-06 02:21:34,621 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-06 02:24:48,069 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_perf_dt_max.py', '-v', '-s']
+2025-12-06 02:25:13,631 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-06 02:54:05,447 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_perf_dt_max.py', 'tests/test_transition_integration.py', '-v', '--tb=short']
+2025-12-06 02:54:50,019 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-06 02:55:24,423 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_perf_dt_max.py', '-v', '-s']
+2025-12-06 02:55:50,090 - pytest_runner - INFO - pytest finished with exit code 0

@@ -8,7 +8,7 @@ from PySide6.QtCore import Qt, QRect
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_perf_metrics_enabled
 from rendering.gl_format import apply_widget_surface_format
 from OpenGL import GL as gl
 
@@ -114,10 +114,11 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
         if not visible:
             self._enabled = False
-            try:
-                self.hide()
-            except Exception:
-                pass
+            # PERF: Don't call hide() - it's expensive (25ms+) and causes show() to be
+            # called again on next visible frame. Instead, paintGL checks _enabled flag
+            # and skips rendering when disabled. The overlay stays "visible" to Qt but
+            # renders nothing.
+            self.update()  # Trigger repaint to clear the bars
             return
 
         # Apply ghost configuration up-front so it is visible to both the
@@ -294,6 +295,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._fade = 1.0
         self._playing = bool(playing)
 
+        _geom_start = time.time()
         try:
             cur_geom = None
             try:
@@ -304,15 +306,30 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 self.setGeometry(rect)
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to set overlay geometry", exc_info=True)
+        _geom_elapsed = (time.time() - _geom_start) * 1000.0
 
+        _show_start = time.time()
         try:
             if self._enabled:
-                self.show()
-                self.raise_()
+                # PERF: show()/raise_() take 25ms+ each - avoid calling them
+                # Instead of hiding/showing, we control visibility via _enabled flag
+                # and let paintGL skip rendering when disabled
+                if not self.isVisible():
+                    # Only show once when first becoming visible
+                    self.show()
+                # Skip raise_() entirely - it's expensive and unnecessary
+                # The overlay is created on top and stays there
         except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to show/raise overlay", exc_info=True)
+            logger.debug("[SPOTIFY_VIS] Failed to show overlay", exc_info=True)
+        _show_elapsed = (time.time() - _show_start) * 1000.0
 
+        _update_start = time.time()
         self.update()
+        _update_elapsed = (time.time() - _update_start) * 1000.0
+        
+        if is_perf_metrics_enabled() and (_geom_elapsed > 5.0 or _show_elapsed > 5.0 or _update_elapsed > 5.0):
+            logger.warning("[PERF] [SPOTIFY_BARS_GL] set_state breakdown: geom=%.2fms, show=%.2fms, update=%.2fms",
+                          _geom_elapsed, _show_elapsed, _update_elapsed)
 
     # ------------------------------------------------------------------
     # QOpenGLWidget hooks

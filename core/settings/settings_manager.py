@@ -249,10 +249,6 @@ class SettingsManager(QObject):
                     'bg_color': [35, 35, 35, 255],
                     'border_color': [255, 255, 255, 255],
                     'border_opacity': 1.0,
-                    # Default to hiding condition icons; users can enable them
-                    # from the Widgets tab when they prefer a more graphical
-                    # presentation.
-                    'show_icons': False,
                 },
                 # Media widget defaults intentionally mirror other overlay
                 # widgets. It is disabled by default but configured with a
@@ -480,7 +476,6 @@ class SettingsManager(QObject):
                 'bg_color': [35, 35, 35, 255],
                 'border_color': [255, 255, 255, 255],
                 'border_opacity': 1.0,
-                'show_icons': False,
             },
             'media': {
                 'enabled': True,

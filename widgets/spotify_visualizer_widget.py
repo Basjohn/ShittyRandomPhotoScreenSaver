@@ -70,7 +70,10 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._np = np
 
         # 1) Try PyAudioWPatch WASAPI loopback on Windows.
-        if platform.system().lower().startswith("win"):
+        # PERF: Check if we should skip PyAudioWPatch (for debugging/testing)
+        force_sounddevice = os.environ.get("SRPSS_FORCE_SOUNDDEVICE", "").lower() in ("1", "true", "yes")
+        
+        if platform.system().lower().startswith("win") and not force_sounddevice:
             try:
                 import pyaudiowpatch as pyaudio  # type: ignore[import]
             except Exception as exc:  # pragma: no cover - optional dependency
@@ -892,6 +895,12 @@ class SpotifyVisualizerAudioWorker(QObject):
 
 
 class _SpotifyBeatEngine(QObject):
+    """Shared beat engine with integrated smoothing.
+    
+    Smoothing is performed here (on COMPUTE pool callback) rather than in the
+    widget's UI thread tick, reducing UI thread load significantly.
+    """
+    
     def __init__(self, bar_count: int) -> None:
         super().__init__()
         self._bar_count = max(1, int(bar_count))
@@ -903,9 +912,55 @@ class _SpotifyBeatEngine(QObject):
         self._ref_count: int = 0
         self._latest_bars: Optional[List[float]] = None
         self._last_audio_ts: float = 0.0
+        
+        # Smoothing state (moved from widget to reduce UI thread work)
+        self._smoothed_bars: List[float] = [0.0] * self._bar_count
+        self._last_smooth_ts: float = -1.0
+        self._smoothing_tau: float = 0.12  # Base smoothing time constant
 
     def set_thread_manager(self, thread_manager: Optional[ThreadManager]) -> None:
         self._thread_manager = thread_manager
+    
+    def set_smoothing(self, tau: float) -> None:
+        """Set the base smoothing time constant."""
+        self._smoothing_tau = max(0.05, float(tau))
+    
+    def _apply_smoothing(self, target_bars: List[float]) -> List[float]:
+        """Apply time-based exponential smoothing to bars.
+        
+        This is called from the COMPUTE pool callback, not the UI thread.
+        """
+        now_ts = time.time()
+        last_ts = self._last_smooth_ts
+        dt = max(0.0, now_ts - last_ts) if last_ts >= 0.0 else 0.0
+        self._last_smooth_ts = now_ts
+        
+        if dt <= 0.0:
+            # First frame or no time elapsed - just copy
+            self._smoothed_bars = list(target_bars)
+            return self._smoothed_bars
+        
+        base_tau = self._smoothing_tau
+        tau_rise = base_tau * 0.35  # Fast attack
+        tau_decay = base_tau * 3.0  # Slow decay
+        alpha_rise = 1.0 - math.exp(-dt / tau_rise)
+        alpha_decay = 1.0 - math.exp(-dt / tau_decay)
+        alpha_rise = max(0.0, min(1.0, alpha_rise))
+        alpha_decay = max(0.0, min(1.0, alpha_decay))
+        
+        bar_count = self._bar_count
+        smoothed = self._smoothed_bars
+        
+        for i in range(bar_count):
+            cur = smoothed[i] if i < len(smoothed) else 0.0
+            tgt = target_bars[i] if i < len(target_bars) else 0.0
+            alpha = alpha_rise if tgt >= cur else alpha_decay
+            nxt = cur + (tgt - cur) * alpha
+            if abs(nxt) < 1e-3:
+                nxt = 0.0
+            smoothed[i] = nxt
+        
+        return smoothed
 
     def acquire(self) -> None:
         self._ref_count += 1
@@ -935,24 +990,66 @@ class _SpotifyBeatEngine(QObject):
             return
 
         self._compute_task_active = True
+        
+        # Capture smoothing state for the job (thread-safe copy)
+        smoothed_copy = list(self._smoothed_bars)
+        last_smooth_ts = self._last_smooth_ts
+        smoothing_tau = self._smoothing_tau
+        bar_count = self._bar_count
 
         def _job(local_samples=samples):
-            return self._audio_worker.compute_bars_from_samples(local_samples)
+            """FFT + smoothing on COMPUTE pool - keeps UI thread free."""
+            raw_bars = self._audio_worker.compute_bars_from_samples(local_samples)
+            if not isinstance(raw_bars, list):
+                return None
+            
+            # Apply smoothing here on COMPUTE thread
+            now_ts = time.time()
+            dt = max(0.0, now_ts - last_smooth_ts) if last_smooth_ts >= 0.0 else 0.0
+            
+            if dt <= 0.0:
+                return {'raw': raw_bars, 'smoothed': list(raw_bars), 'ts': now_ts}
+            
+            base_tau = smoothing_tau
+            tau_rise = base_tau * 0.35
+            tau_decay = base_tau * 3.0
+            alpha_rise = 1.0 - math.exp(-dt / tau_rise)
+            alpha_decay = 1.0 - math.exp(-dt / tau_decay)
+            alpha_rise = max(0.0, min(1.0, alpha_rise))
+            alpha_decay = max(0.0, min(1.0, alpha_decay))
+            
+            smoothed = []
+            for i in range(bar_count):
+                cur = smoothed_copy[i] if i < len(smoothed_copy) else 0.0
+                tgt = raw_bars[i] if i < len(raw_bars) else 0.0
+                alpha = alpha_rise if tgt >= cur else alpha_decay
+                nxt = cur + (tgt - cur) * alpha
+                if abs(nxt) < 1e-3:
+                    nxt = 0.0
+                smoothed.append(nxt)
+            
+            return {'raw': raw_bars, 'smoothed': smoothed, 'ts': now_ts}
 
         def _on_result(result) -> None:
             try:
                 self._compute_task_active = False
                 success = getattr(result, "success", True)
-                bars = getattr(result, "result", None)
-                if not success:
+                data = getattr(result, "result", None)
+                if not success or data is None:
                     return
-                if isinstance(bars, list):
-                    self._bars_result_buffer.publish(bars)
-                    self._latest_bars = bars
-                    try:
-                        self._last_audio_ts = time.time()
-                    except Exception:
-                        pass
+                raw_bars = data.get('raw')
+                smoothed_bars = data.get('smoothed')
+                ts = data.get('ts', time.time())
+                if isinstance(raw_bars, list):
+                    self._bars_result_buffer.publish(raw_bars)
+                    self._latest_bars = raw_bars
+                if isinstance(smoothed_bars, list):
+                    self._smoothed_bars = smoothed_bars
+                    self._last_smooth_ts = ts
+                try:
+                    self._last_audio_ts = time.time()
+                except Exception:
+                    pass
             except Exception:
                 logger.debug("[SPOTIFY_VIS] compute task callback failed", exc_info=True)
 
@@ -1003,6 +1100,14 @@ class _SpotifyBeatEngine(QObject):
                 pass
 
         return self._latest_bars
+    
+    def get_smoothed_bars(self) -> List[float]:
+        """Get pre-smoothed bars for UI display.
+        
+        This returns bars that have already been smoothed on the COMPUTE pool,
+        so the UI thread doesn't need to do any smoothing calculations.
+        """
+        return list(self._smoothed_bars)
 
 
 _global_beat_engine: Optional[_SpotifyBeatEngine] = None
@@ -1216,7 +1321,8 @@ class SpotifyVisualizerWidget(QWidget):
         # NOTE: We keep the dedicated _bars_timer running even when attached to
         # AnimationManager. The AnimationManager only ticks during active transitions,
         # so the dedicated timer ensures continuous visualizer updates between transitions.
-        # The _on_tick method handles deduplication via _last_update_ts.
+        # The _on_tick method's FPS cap via _last_update_ts handles deduplication of
+        # the actual GPU push, so double-ticking is not a performance issue.
 
         try:
             def _tick_listener(dt: float) -> None:
@@ -1611,7 +1717,13 @@ class SpotifyVisualizerWidget(QWidget):
 
         Consumes the latest bar frame from the TripleBuffer and smoothly
         interpolates towards it for visual stability.
+        
+        FPS CAP: This method is called by both _bars_timer (60Hz) and
+        AnimationManager tick listener (60-165Hz). We apply the FPS cap
+        at the START to avoid doing any work when rate-limited.
         """
+        _tick_entry_ts = time.time()
+        
         # PERFORMANCE: Fast validity check without nested try/except
         if not Shiboken.isValid(self):
             if self._bars_timer is not None:
@@ -1625,33 +1737,66 @@ class SpotifyVisualizerWidget(QWidget):
 
         now_ts = time.time()
 
-        # PERFORMANCE: Inline PERF metrics without nested try/except
+        # PERFORMANCE: FPS cap at the START - skip all work if rate-limited
+        # This is critical because _on_tick is called by multiple sources
+        max_fps = self._base_max_fps
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "has_running_transition"):
+            if parent.has_running_transition():
+                max_fps = self._transition_max_fps
+
+        min_dt = 1.0 / max_fps if max_fps > 0.0 else 0.0
+        last = self._last_update_ts
+        if last >= 0.0 and (now_ts - last) < min_dt:
+            # Rate limited - skip this tick entirely
+            return
+        self._last_update_ts = now_ts
+
+        # PERFORMANCE: Inline PERF metrics with gap filtering
         if is_perf_metrics_enabled():
-            if self._perf_tick_start_ts is None:
-                self._perf_tick_start_ts = now_ts
             if self._perf_tick_last_ts is not None:
                 dt = now_ts - self._perf_tick_last_ts
-                if dt > 0.0:
+                # Skip metrics for gaps >100ms (startup, widget paused/hidden).
+                # Reset measurement window to avoid polluting duration/avg_fps
+                # with startup spikes that aren't representative of runtime perf.
+                if dt > 0.1:
+                    self._perf_tick_start_ts = now_ts
+                    self._perf_tick_min_dt = 0.0
+                    self._perf_tick_max_dt = 0.0
+                    self._perf_tick_frame_count = 0
+                elif dt > 0.0:
                     if self._perf_tick_min_dt == 0.0 or dt < self._perf_tick_min_dt:
                         self._perf_tick_min_dt = dt
                     if dt > self._perf_tick_max_dt:
                         self._perf_tick_max_dt = dt
+                    self._perf_tick_frame_count += 1
+            else:
+                self._perf_tick_start_ts = now_ts
             self._perf_tick_last_ts = now_ts
-            self._perf_tick_frame_count += 1
 
             # Periodic PERF snapshot
             if self._perf_last_log_ts is None or (now_ts - self._perf_last_log_ts) >= 5.0:
                 self._log_perf_snapshot(reset=False)
                 self._perf_last_log_ts = now_ts
 
-        # PERFORMANCE: Get bars from engine without excessive try/except
-        bars = None
+        # PERFORMANCE: Get pre-smoothed bars from engine
+        # Smoothing is now done on COMPUTE pool, not UI thread
         engine = self._engine
         if engine is None:
             engine = get_shared_spotify_beat_engine(self._bar_count)
             self._engine = engine
+            # Sync smoothing settings to engine
+            engine.set_smoothing(self._smoothing)
+        
+        changed = False
         if engine is not None:
-            bars = engine.tick()
+            # Trigger engine tick (schedules FFT + smoothing on COMPUTE pool)
+            _engine_tick_start = time.time()
+            engine.tick()
+            _engine_tick_elapsed = (time.time() - _engine_tick_start) * 1000.0
+            if _engine_tick_elapsed > 20.0 and is_perf_metrics_enabled():
+                logger.warning("[PERF] [SPOTIFY_VIS] Slow engine.tick(): %.2fms", _engine_tick_elapsed)
+            
             # Track audio lag for PERF logs
             if is_perf_metrics_enabled():
                 last_audio_ts = getattr(engine, "_last_audio_ts", 0.0)
@@ -1662,128 +1807,91 @@ class SpotifyVisualizerWidget(QWidget):
                         self._perf_audio_lag_min_ms = lag_ms
                     if lag_ms > self._perf_audio_lag_max_ms:
                         self._perf_audio_lag_max_ms = lag_ms
-
-        # PERFORMANCE: Optimized bar clamping without nested try/except
-        if isinstance(bars, list):
-            count = self._bar_count
-            if count > 0:
-                # Fast path: clamp bars to [0, 1] using min/max
-                clamped = [max(0.0, min(1.0, float(bars[i]) if i < len(bars) else 0.0)) for i in range(count)]
-                self._target_bars = clamped
-            else:
-                self._target_bars = []
-
+            
+            # Get pre-smoothed bars (no computation on UI thread!)
+            # The engine handles decay naturally via exponential smoothing -
+            # when audio stops, raw bars go to zero and smoothed bars decay.
+            # We do NOT force zeros here as that breaks the decay animation.
+            smoothed = engine.get_smoothed_bars()
+            
             # Debug constant-bar mode
             if _DEBUG_CONST_BARS > 0.0:
-                const_val = min(1.0, _DEBUG_CONST_BARS)
-                self._target_bars = [const_val] * self._bar_count
-
-        if not self._spotify_playing:
-            self._target_bars = [0.0] * self._bar_count
-
-        # Debug constant-bar mode for display
-        if _DEBUG_CONST_BARS > 0.0:
-            const_val = max(0.0, min(1.0, _DEBUG_CONST_BARS))
-            self._display_bars = [const_val] * self._bar_count
-            changed = True
-        else:
-            # Time-based smoothing from _target_bars -> _display_bars.
-            # PERFORMANCE: Optimized smoothing with reduced try/except overhead
-            changed = False
-            last_smooth = self._last_smooth_ts
-            dt_smooth = max(0.0, now_ts - last_smooth) if last_smooth >= 0.0 else 0.0
-            self._last_smooth_ts = now_ts
-
-            base_tau = max(0.05, self._smoothing)
-            if dt_smooth <= 0.0:
-                alpha_rise = 0.0
-                alpha_decay = 0.0
-            else:
-                # Make rises more responsive (shorter attack) while
-                # giving decay a much longer tail so motion leaves
-                # a clearly visible trace at higher tick rates.
-                tau_rise = base_tau * 0.35
-                tau_decay = base_tau * 3.0
-                alpha_rise = 1.0 - math.exp(-dt_smooth / tau_rise)
-                alpha_decay = 1.0 - math.exp(-dt_smooth / tau_decay)
-            alpha_rise = max(0.0, min(1.0, alpha_rise))
-            alpha_decay = max(0.0, min(1.0, alpha_decay))
-
-            # PERFORMANCE: Optimized bar smoothing loop
+                const_val = max(0.0, min(1.0, _DEBUG_CONST_BARS))
+                smoothed = [const_val] * self._bar_count
+            
+            # Check if bars changed
             bar_count = self._bar_count
             display_bars = self._display_bars
-            target_bars = self._target_bars
+            any_nonzero = False
             for i in range(bar_count):
-                cur = display_bars[i]
-                tgt = target_bars[i] if i < len(target_bars) else 0.0
-                alpha = alpha_rise if tgt >= cur else alpha_decay
-                nxt = cur + (tgt - cur) * alpha
-                # Snap extremely small residuals to zero
-                if abs(nxt) < 1e-3:
-                    nxt = 0.0
-                if abs(nxt - cur) > 1e-3:
+                new_val = smoothed[i] if i < len(smoothed) else 0.0
+                old_val = display_bars[i] if i < len(display_bars) else 0.0
+                if abs(new_val - old_val) > 1e-4:
                     changed = True
-                display_bars[i] = nxt
+                if new_val > 0.0:
+                    any_nonzero = True
+                display_bars[i] = new_val
+            
+            # Force update during decay
+            if any_nonzero and not self._spotify_playing:
+                changed = True
 
         # Always push at least one frame so the visualiser baseline is
         # visible as soon as the widget fades in, even before audio arrives.
         first_frame = not self._has_pushed_first_frame
 
-        # PERFORMANCE: Simplified FPS cap check
-        max_fps = self._base_max_fps
-        parent = self.parent()
-        if parent is not None and hasattr(parent, "has_running_transition"):
-            if parent.has_running_transition():
-                max_fps = self._transition_max_fps
+        used_gpu = False
+        need_card_update = False
+        fade_changed = False
+        fade = 1.0
+        # When DisplayWidget exposes a GPU overlay path, prefer
+        # that and disable CPU bar drawing once it succeeds.
+        if parent is not None and hasattr(parent, "push_spotify_visualizer_frame"):
+            fade = self._get_gpu_fade_factor(now_ts)
+            prev_fade = self._last_gpu_fade_sent
+            self._last_gpu_fade_sent = fade
+            if prev_fade < 0.0 or abs(fade - prev_fade) >= 0.01:
+                fade_changed = True
+                need_card_update = True
 
-        min_dt = 1.0 / max_fps if max_fps > 0.0 else 0.0
-        last = self._last_update_ts
-        if last < 0.0 or (now_ts - last) >= min_dt:
-            self._last_update_ts = now_ts
+            should_push = changed or fade_changed or first_frame
+            if should_push:
+                _gpu_push_start = time.time()
+                used_gpu = parent.push_spotify_visualizer_frame(
+                    bars=list(self._display_bars),
+                    bar_count=self._bar_count,
+                    segments=self._bar_segments,
+                    fill_color=self._bar_fill_color,
+                    border_color=self._bar_border_color,
+                    fade=fade,
+                    playing=self._spotify_playing,
+                    ghosting_enabled=self._ghosting_enabled,
+                    ghost_alpha=self._ghost_alpha,
+                    ghost_decay=self._ghost_decay_rate,
+                )
+                _gpu_push_elapsed = (time.time() - _gpu_push_start) * 1000.0
+                if _gpu_push_elapsed > 20.0 and is_perf_metrics_enabled():
+                    logger.warning("[PERF] [SPOTIFY_VIS] Slow GPU push: %.2fms", _gpu_push_elapsed)
 
-            used_gpu = False
-            need_card_update = False
-            fade_changed = False
-            fade = 1.0
-            # When DisplayWidget exposes a GPU overlay path, prefer
-            # that and disable CPU bar drawing once it succeeds.
-            if parent is not None and hasattr(parent, "push_spotify_visualizer_frame"):
-                fade = self._get_gpu_fade_factor(now_ts)
-                prev_fade = self._last_gpu_fade_sent
-                self._last_gpu_fade_sent = fade
-                if prev_fade < 0.0 or abs(fade - prev_fade) >= 0.01:
-                    fade_changed = True
-                    need_card_update = True
-
-                should_push = changed or fade_changed or first_frame
-                if should_push:
-                    used_gpu = parent.push_spotify_visualizer_frame(
-                        bars=list(self._display_bars),
-                        bar_count=self._bar_count,
-                        segments=self._bar_segments,
-                        fill_color=self._bar_fill_color,
-                        border_color=self._bar_border_color,
-                        fade=fade,
-                        playing=self._spotify_playing,
-                        ghosting_enabled=self._ghosting_enabled,
-                        ghost_alpha=self._ghost_alpha,
-                        ghost_decay=self._ghost_decay_rate,
-                    )
-
-                if used_gpu:
+            if used_gpu:
+                self._has_pushed_first_frame = True
+                self._cpu_bars_enabled = False
+                # Card/background/shadow still repaint via stylesheet
+                # Only request QWidget repaint when fade changes
+                if need_card_update:
+                    self.update()
+            else:
+                # Fallback: when there is no DisplayWidget/GPU bridge
+                has_gpu_parent = parent is not None and hasattr(parent, "push_spotify_visualizer_frame")
+                if not has_gpu_parent or self._software_visualizer_enabled:
+                    self._cpu_bars_enabled = True
+                    self.update()
                     self._has_pushed_first_frame = True
-                    self._cpu_bars_enabled = False
-                    # Card/background/shadow still repaint via stylesheet
-                    # Only request QWidget repaint when fade changes
-                    if need_card_update:
-                        self.update()
-                else:
-                    # Fallback: when there is no DisplayWidget/GPU bridge
-                    has_gpu_parent = parent is not None and hasattr(parent, "push_spotify_visualizer_frame")
-                    if not has_gpu_parent or self._software_visualizer_enabled:
-                        self._cpu_bars_enabled = True
-                        self.update()
-                        self._has_pushed_first_frame = True
+
+        # PERF: Log slow ticks to identify blocking operations
+        _tick_elapsed = (time.time() - _tick_entry_ts) * 1000.0
+        if _tick_elapsed > 50.0 and is_perf_metrics_enabled():
+            logger.warning("[PERF] [SPOTIFY_VIS] Slow _on_tick: %.2fms", _tick_elapsed)
 
     def paintEvent(self, event: QPaintEvent) -> None:  # type: ignore[override]
         super().paintEvent(event)
@@ -1836,17 +1944,27 @@ class SpotifyVisualizerWidget(QWidget):
         if is_perf_metrics_enabled():
             try:
                 now = time.time()
-                if self._perf_paint_start_ts is None:
-                    self._perf_paint_start_ts = now
                 if self._perf_paint_last_ts is not None:
                     dt = now - self._perf_paint_last_ts
-                    if dt > 0.0:
+                    # Skip metrics for gaps >1s (widget was likely occluded during GL transition).
+                    # Also reset the measurement window to avoid polluting duration/avg_fps.
+                    if dt > 1.0:
+                        # Large gap detected - reset measurement window
+                        self._perf_paint_start_ts = now
+                        self._perf_paint_min_dt = 0.0
+                        self._perf_paint_max_dt = 0.0
+                        self._perf_paint_frame_count = 0
+                    elif dt > 0.0:
+                        # Normal frame - record metrics
                         if self._perf_paint_min_dt == 0.0 or dt < self._perf_paint_min_dt:
                             self._perf_paint_min_dt = dt
                         if dt > self._perf_paint_max_dt:
                             self._perf_paint_max_dt = dt
+                        self._perf_paint_frame_count += 1
+                else:
+                    # First paint event
+                    self._perf_paint_start_ts = now
                 self._perf_paint_last_ts = now
-                self._perf_paint_frame_count += 1
             except Exception:
                 logger.debug("[SPOTIFY_VIS] Paint PERF accounting failed", exc_info=True)
 

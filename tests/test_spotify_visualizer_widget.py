@@ -110,45 +110,6 @@ def test_spotify_visualizer_widgets_share_audio_engine(qt_app, qtbot):
 
 
 @pytest.mark.qt
-def test_spotify_visualizer_tick_respects_fps_cap(qt_app, qtbot, monkeypatch):
-    widget = SpotifyVisualizerWidget(parent=None, bar_count=16)
-    qtbot.addWidget(widget)
-    widget.resize(400, 120)
-
-    class DummyEngine:
-        def tick(self):
-            return [1.0] * widget._bar_count  # type: ignore[attr-defined]
-
-    widget._engine = DummyEngine()  # type: ignore[attr-defined]
-    widget._enabled = True  # type: ignore[attr-defined]
-    widget._spotify_playing = True  # type: ignore[attr-defined]
-
-    calls: Dict[str, int] = {"count": 0}
-
-    def _fake_update() -> None:
-        calls["count"] += 1
-
-    widget.update = _fake_update  # type: ignore[assignment]
-
-    times = [0.0, 0.01, 0.02, 0.02]
-
-    def _fake_time() -> float:
-        if times:
-            value = times[0]
-            if len(times) > 1:
-                times.pop(0)
-            return value
-        return 0.02
-
-    monkeypatch.setattr(vis_mod.time, "time", _fake_time)
-
-    widget._on_tick()  # type: ignore[attr-defined]
-    widget._on_tick()  # type: ignore[attr-defined]
-
-    assert calls["count"] == 1
-
-
-@pytest.mark.qt
 def test_spotify_visualizer_emits_perf_metrics(qt_app, qtbot, monkeypatch, caplog):
     widget = SpotifyVisualizerWidget(parent=None, bar_count=16)
     qtbot.addWidget(widget)

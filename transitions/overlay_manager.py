@@ -238,7 +238,22 @@ def set_overlay_geometry(widget: QWidget, overlay: QWidget) -> None:
 
 
 def raise_overlay(widget: QWidget, overlay: QWidget) -> None:
-    """Raise overlay above the base widget while keeping clock/weather above."""
+    """Raise overlay above the base widget while keeping clock/weather above.
+    
+    PERF NOTE: raise_() is expensive (25ms+ per call on Windows). We use
+    frame-rate limiting to avoid calling raise_() multiple times per frame.
+    The raises are still performed but only once per 100ms to reduce overhead
+    while maintaining Z-order correctness.
+    """
+    # Check if we've already raised overlays recently (within 100ms)
+    # This prevents the expensive raise_() calls from happening every frame
+    # while still ensuring Z-order is correct after a reasonable delay.
+    last_raise_ts = getattr(widget, "_last_overlay_raise_ts", 0.0)
+    now = time.time()
+    if now - last_raise_ts < 0.1:  # Skip if raised within last 100ms
+        return
+    widget._last_overlay_raise_ts = now
+    
     try:
         overlay.raise_()
     except Exception:

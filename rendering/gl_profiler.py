@@ -32,6 +32,11 @@ class TransitionProfile:
     frame_count: int = 0
     min_dt: float = 0.0
     max_dt: float = 0.0
+    # Paint timing (separate from animation tick timing)
+    last_paint_ts: Optional[float] = None
+    paint_count: int = 0
+    paint_min_dt: float = 0.0
+    paint_max_dt: float = 0.0
 
 
 class TransitionProfiler:
@@ -64,6 +69,10 @@ class TransitionProfiler:
             frame_count=0,
             min_dt=0.0,
             max_dt=0.0,
+            last_paint_ts=None,
+            paint_count=0,
+            paint_min_dt=0.0,
+            paint_max_dt=0.0,
         )
     
     def tick(self, name: str) -> None:
@@ -83,6 +92,24 @@ class TransitionProfiler:
                 profile.max_dt = dt
         
         profile.last_ts = now
+    
+    def tick_paint(self, name: str) -> None:
+        """Record a paint tick for a transition (called from paintGL)."""
+        profile = self._profiles.get(name)
+        if profile is None:
+            return
+        
+        now = time.time()
+        profile.paint_count += 1
+        
+        if profile.last_paint_ts is not None:
+            dt = now - profile.last_paint_ts
+            if profile.paint_min_dt == 0.0 or dt < profile.paint_min_dt:
+                profile.paint_min_dt = dt
+            if dt > profile.paint_max_dt:
+                profile.paint_max_dt = dt
+        
+        profile.last_paint_ts = now
     
     def get_metrics(self, name: str) -> Optional[Tuple[float, float, float, float]]:
         """Get current metrics for debug overlay.
@@ -136,29 +163,41 @@ class TransitionProfiler:
         min_dt_ms = profile.min_dt * 1000.0 if profile.min_dt > 0 else 0.0
         max_dt_ms = profile.max_dt * 1000.0 if profile.max_dt > 0 else 0.0
         
+        # Paint timing metrics
+        paint_count = profile.paint_count
+        paint_min_dt_ms = profile.paint_min_dt * 1000.0 if profile.paint_min_dt > 0 else 0.0
+        paint_max_dt_ms = profile.paint_max_dt * 1000.0 if profile.paint_max_dt > 0 else 0.0
+        paint_avg_fps = paint_count / total_time if paint_count > 0 and total_time > 0 else 0.0
+        
         if viewport_size:
             logger.info(
                 "[PERF] [GL COMPOSITOR] %s metrics: duration=%.1fms, frames=%d, "
-                "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, size=%dx%d",
+                "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, "
+                "paint_fps=%.1f, paint_dt_max=%.2fms, size=%dx%d",
                 name.capitalize(),
                 duration_ms,
                 frame_count,
                 avg_fps,
                 min_dt_ms,
                 max_dt_ms,
+                paint_avg_fps,
+                paint_max_dt_ms,
                 viewport_size[0],
                 viewport_size[1],
             )
         else:
             logger.info(
                 "[PERF] [GL COMPOSITOR] %s metrics: duration=%.1fms, frames=%d, "
-                "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms",
+                "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, "
+                "paint_fps=%.1f, paint_dt_max=%.2fms",
                 name.capitalize(),
                 duration_ms,
                 frame_count,
                 avg_fps,
                 min_dt_ms,
                 max_dt_ms,
+                paint_avg_fps,
+                paint_max_dt_ms,
             )
     
     def reset(self, name: str) -> None:

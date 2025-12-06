@@ -3,6 +3,11 @@ Centralized animation framework.
 
 Provides the AnimationManager for coordinating ALL animations in the application.
 NO raw QPropertyAnimation or QTimer should be used outside this module.
+
+FRAME PACING: Animations now support decoupled rendering via FrameState. When
+a frame_state is attached, progress samples are pushed with timestamps, and
+the render thread can interpolate to the actual render time for smooth motion
+even when timer callbacks are delayed.
 """
 import time
 import uuid
@@ -13,6 +18,7 @@ from core.animation.types import (
     PropertyAnimationConfig, CustomAnimationConfig, AnimationGroupConfig
 )
 from core.animation.easing import ease
+from core.animation.frame_interpolator import FrameState
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 
 if TYPE_CHECKING:  # pragma: no cover - imported for typing only
@@ -35,7 +41,7 @@ class Animation(QObject):
     cancelled = Signal()
     
     def __init__(self, animation_id: str, duration: float, easing: EasingCurve, 
-                 delay: float = 0.0):
+                 delay: float = 0.0, frame_state: Optional[FrameState] = None):
         """
         Initialize animation.
         
@@ -44,6 +50,7 @@ class Animation(QObject):
             duration: Duration in seconds
             easing: Easing curve
             delay: Delay before starting (seconds)
+            frame_state: Optional FrameState for decoupled rendering
         """
         super().__init__()
         
@@ -51,6 +58,7 @@ class Animation(QObject):
         self.duration = duration
         self.easing = easing
         self.delay = delay
+        self.frame_state = frame_state
         
         self.state = AnimationState.IDLE
         self.elapsed = 0.0
@@ -131,13 +139,29 @@ class Animation(QObject):
         # Apply easing
         eased_progress = ease(progress, self.easing)
         
-        # Emit progress
+        # Push to frame state for decoupled rendering (if attached)
+        if self.frame_state is not None:
+            self.frame_state.push(eased_progress)
+        
+        # Emit progress - PERF: measure signal emission time
+        _emit_start = time.time()
         self.progress_changed.emit(eased_progress)
+        _emit_elapsed = (time.time() - _emit_start) * 1000.0
+        if _emit_elapsed > 30.0 and is_perf_metrics_enabled():
+            logger.warning("[PERF] [ANIM] Slow progress_changed.emit: %.2fms (anim=%s)", 
+                          _emit_elapsed, self.animation_id[:8])
         
         # Check if complete
         if progress >= 1.0:
             self.state = AnimationState.COMPLETE
+            if self.frame_state is not None:
+                self.frame_state.mark_complete()
+            _complete_start = time.time()
             self.completed.emit()
+            _complete_elapsed = (time.time() - _complete_start) * 1000.0
+            if _complete_elapsed > 30.0 and is_perf_metrics_enabled():
+                logger.warning("[PERF] [ANIM] Slow completed.emit: %.2fms (anim=%s)",
+                              _complete_elapsed, self.animation_id[:8])
             logger.debug(f"Animation completed: {self.animation_id}")
             return False
         
@@ -217,15 +241,17 @@ class PropertyAnimator(Animation):
 class CustomAnimator(Animation):
     """Custom animation with user-provided update callback."""
     
-    def __init__(self, animation_id: str, config: CustomAnimationConfig):
+    def __init__(self, animation_id: str, config: CustomAnimationConfig, 
+                 frame_state: Optional[FrameState] = None):
         """
         Initialize custom animator.
         
         Args:
             animation_id: Unique ID
             config: Custom animation configuration
+            frame_state: Optional FrameState for decoupled rendering
         """
-        super().__init__(animation_id, config.duration, config.easing, config.delay)
+        super().__init__(animation_id, config.duration, config.easing, config.delay, frame_state)
         
         self.update_callback = config.update_callback
         self.on_start_callback = config.on_start
@@ -370,12 +396,29 @@ class AnimationManager(QObject):
         logger.info("AnimationManager cleanup complete")
 
     def add_tick_listener(self, callback: Callable[[float], None]) -> int:
+        """Add a tick listener that receives delta time on each frame.
+        
+        ARCHITECTURAL NOTE: Adding a tick listener will start the timer if not
+        already running, ensuring continuous ticks for overlays like Spotify
+        visualizer even when no animations are active.
+        """
         listener_id = id(callback)
         self._tick_listeners[listener_id] = callback
+        # Start timer if not running - tick listeners need continuous ticks
+        if not self._timer.isActive():
+            self.start()
         return listener_id
 
     def remove_tick_listener(self, callback_id: int) -> None:
+        """Remove a tick listener.
+        
+        If this was the last listener and there are no active animations,
+        the timer will stop to conserve resources.
+        """
         self._tick_listeners.pop(callback_id, None)
+        # Stop timer if no animations and no listeners remain
+        if not self._animations and not self._tick_listeners and self._timer.isActive():
+            self.stop()
     
     def animate_property(self, target: Any, property_name: str, start_value: Any, 
                         end_value: Any, duration: float, 
@@ -427,7 +470,8 @@ class AnimationManager(QObject):
                       easing: EasingCurve = EasingCurve.LINEAR,
                       on_start: Optional[Callable] = None,
                       on_complete: Optional[Callable] = None,
-                      delay: float = 0.0) -> str:
+                      delay: float = 0.0,
+                      frame_state: Optional[FrameState] = None) -> str:
         """
         Create a custom animation with user-provided update callback.
         
@@ -438,6 +482,7 @@ class AnimationManager(QObject):
             on_start: Callback when animation starts
             on_complete: Callback when animation completes
             delay: Delay before starting (seconds)
+            frame_state: Optional FrameState for decoupled rendering
         
         Returns:
             Animation ID
@@ -453,7 +498,7 @@ class AnimationManager(QObject):
             update_callback=update_callback
         )
         
-        animator = CustomAnimator(animation_id, config)
+        animator = CustomAnimator(animation_id, config, frame_state=frame_state)
         self._add_animation(animation_id, animator)
         animator.start()
         
@@ -504,6 +549,9 @@ class AnimationManager(QObject):
             self.animation_cancelled.emit(animation_id)
             # Remove from active animations
             del self._animations[animation_id]
+            # Stop timer only if no animations AND no tick listeners remain
+            if not self._animations and not self._tick_listeners and self._timer.isActive():
+                self.stop()
             return True
         return False
     
@@ -552,8 +600,11 @@ class AnimationManager(QObject):
         if animation_id in self._animations:
             del self._animations[animation_id]
         
-        # Stop timer if no animations left
-        if not self._animations and self._timer.isActive():
+        # ARCHITECTURAL FIX: Keep timer running if there are tick listeners.
+        # Tick listeners (like Spotify visualizer) need continuous ticks even
+        # when no animations are active. Only stop if both animations AND
+        # tick listeners are empty.
+        if not self._animations and not self._tick_listeners and self._timer.isActive():
             self.stop()
 
     def _on_animation_cancelled(self, animation_id: str) -> None:
@@ -562,7 +613,13 @@ class AnimationManager(QObject):
         pass
 
     def _update_all(self) -> None:
-        """Update all active animations (called by timer)."""
+        """Update all active animations (called by timer).
+        
+        FRAME PACING: Uses time-based delta calculation to ensure smooth
+        animations regardless of timer jitter. The delta_time is clamped
+        to prevent teleporting on major stalls (>500ms) but otherwise
+        reflects actual elapsed time for accurate animation progress.
+        """
         current_time = time.time()
 
         if self._last_update_time is None:
@@ -572,18 +629,19 @@ class AnimationManager(QObject):
         delta_time = current_time - self._last_update_time
         self._last_update_time = current_time
 
-        # Optional PERF telemetry: log unusually large frame deltas so
-        # transition stalls can be correlated with other subsystem activity.
-        if is_perf_metrics_enabled() and delta_time > 0.5:
-            try:
+        # FRAME PACING: Clamp extreme deltas to prevent teleporting on major
+        # stalls (e.g., system sleep, heavy GC). 500ms is chosen as a balance
+        # between allowing catch-up and preventing jarring jumps.
+        if delta_time > 0.5:
+            if is_perf_metrics_enabled():
                 logger.info(
-                    "[PERF] [ANIM] Large frame dt=%.2fms (target=%.2fms, active=%d)",
+                    "[PERF] [ANIM] Large frame dt=%.2fms clamped to 500ms (target=%.2fms, active=%d, listeners=%d)",
                     delta_time * 1000.0,
                     self.frame_time * 1000.0,
                     len(self._animations),
+                    len(self._tick_listeners),
                 )
-            except Exception:
-                pass
+            delta_time = 0.5  # Clamp to 500ms max
 
         # Profiling: track timing characteristics without altering behaviour.
         if self._profile_start_ts is None:
@@ -598,12 +656,20 @@ class AnimationManager(QObject):
 
         # Update all animations
         for anim_id, animator in list(self._animations.items()):
+            _anim_start = time.time()
             animator.update(delta_time)
+            _anim_elapsed = (time.time() - _anim_start) * 1000.0
+            if _anim_elapsed > 50.0 and is_perf_metrics_enabled():
+                logger.warning("[PERF] [ANIM] Slow animation update (%s): %.2fms", anim_id[:8], _anim_elapsed)
 
         if self._tick_listeners:
             for cb in list(self._tick_listeners.values()):
                 try:
+                    _cb_start = time.time()
                     cb(delta_time)
+                    _cb_elapsed = (time.time() - _cb_start) * 1000.0
+                    if _cb_elapsed > 50.0 and is_perf_metrics_enabled():
+                        logger.warning("[PERF] [ANIM] Slow tick listener: %.2fms", _cb_elapsed)
                 except Exception as e:
                     logger.debug("[ANIM] Tick listener failed: %s", e, exc_info=True)
 

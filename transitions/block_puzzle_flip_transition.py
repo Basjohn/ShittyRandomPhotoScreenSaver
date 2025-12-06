@@ -7,7 +7,7 @@ with 3D rotation effect. This is the STAR FEATURE transition.
 import random
 import math
 from typing import Optional, List
-from PySide6.QtCore import QRect, Qt
+from PySide6.QtCore import QRect, Qt, QTimer
 from PySide6.QtGui import QPixmap, QPainter, QPainterPath
 from PySide6.QtWidgets import QWidget
 
@@ -218,6 +218,8 @@ class BlockPuzzleFlipTransition(BaseTransition):
         self._current_flip_index = 0
         self._animation_id: Optional[str] = None
         self._overlay: Optional[_BlockFlipWidget] = None
+        self._timer: Optional[QTimer] = None
+        self._flip_timer: Optional[QTimer] = None
         # Optional direction bias reused from the Slide direction model so
         # blocks can flip in a wave from the chosen edge when configured.
         self._direction: Optional[SlideDirection] = direction

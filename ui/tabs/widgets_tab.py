@@ -558,11 +558,6 @@ class WidgetsTab(QWidget):
         )
         weather_border_opacity_row.addWidget(self.weather_border_opacity_label)
         weather_layout.addLayout(weather_border_opacity_row)
-
-        # Condition icons toggle
-        self.weather_show_icons = QCheckBox("Show Condition Icons")
-        self.weather_show_icons.stateChanged.connect(self._save_settings)
-        weather_layout.addWidget(self.weather_show_icons)
         
         self._weather_container = QWidget()
         weather_container_layout = QVBoxLayout(self._weather_container)
@@ -1192,7 +1187,6 @@ class WidgetsTab(QWidget):
                 getattr(self, 'weather_font_combo', None),
                 getattr(self, 'weather_font_size', None),
                 getattr(self, 'weather_show_background', None),
-                getattr(self, 'weather_show_icons', None),
                 getattr(self, 'weather_bg_opacity', None),
                 getattr(self, 'weather_bg_color_btn', None),
                 getattr(self, 'weather_border_color_btn', None),
@@ -1381,8 +1375,6 @@ class WidgetsTab(QWidget):
             self.weather_font_combo.setCurrentFont(QFont(weather_config.get('font_family', 'Segoe UI')))
             self.weather_font_size.setValue(weather_config.get('font_size', 24))
             self.weather_show_background.setChecked(weather_config.get('show_background', False))
-            show_icons = SettingsManager.to_bool(weather_config.get('show_icons', False), False)
-            self.weather_show_icons.setChecked(show_icons)
             weather_opacity_pct = int(weather_config.get('bg_opacity', 0.9) * 100)
             self.weather_bg_opacity.setValue(weather_opacity_pct)
             self.weather_opacity_label.setText(f"{weather_opacity_pct}%")
@@ -1796,7 +1788,6 @@ class WidgetsTab(QWidget):
             'font_family': self.weather_font_combo.currentFont().family(),
             'font_size': self.weather_font_size.value(),
             'show_background': self.weather_show_background.isChecked(),
-            'show_icons': self.weather_show_icons.isChecked(),
             'bg_opacity': self.weather_bg_opacity.value() / 100.0,
             'color': [self._weather_color.red(), self._weather_color.green(), 
                      self._weather_color.blue(), self._weather_color.alpha()],

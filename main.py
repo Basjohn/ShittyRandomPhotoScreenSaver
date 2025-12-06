@@ -5,8 +5,10 @@ Windows screensaver application that displays photos with transitions.
 """
 import sys
 import os
+import gc
 import shutil
 import ctypes
+import time
 from pathlib import Path
 from enum import Enum
 from PySide6.QtWidgets import QApplication, QMessageBox
@@ -346,6 +348,20 @@ def main():
     debug_mode = '--debug' in sys.argv or '-d' in sys.argv
     verbose_mode = '--verbose' in sys.argv or '-v' in sys.argv
     setup_logging(debug=debug_mode, verbose=verbose_mode)
+    
+    # GC tracking for performance debugging
+    if os.environ.get('SRPSS_PERF_METRICS') == '1':
+        _gc_start_time = [0.0]
+        def _gc_callback(phase: str, info: dict) -> None:
+            if phase == 'start':
+                _gc_start_time[0] = time.time()
+            elif phase == 'stop':
+                elapsed_ms = (time.time() - _gc_start_time[0]) * 1000.0
+                if elapsed_ms > 10.0:
+                    logger.warning("[PERF] [GC] Collection took %.2fms (gen=%s, collected=%s)",
+                                   elapsed_ms, info.get('generation', '?'), info.get('collected', '?'))
+        gc.callbacks.append(_gc_callback)
+        logger.info("[PERF] GC tracking enabled")
     
     logger.info("=" * 60)
     logger.info("ShittyRandomPhotoScreenSaver Starting")

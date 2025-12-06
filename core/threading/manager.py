@@ -11,8 +11,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 from utils.lockfree import SPSCQueue, TripleBuffer
-from PySide6.QtCore import QTimer, QObject, QThread, QCoreApplication, Signal
-from core.logging.logger import get_logger, is_verbose_logging
+from PySide6.QtCore import QTimer, QObject, QThread, QCoreApplication, Signal, Qt
+from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 
 logger = get_logger(__name__)
 
@@ -504,13 +504,21 @@ class ThreadManager:
         Returns:
             QTimer: Timer instance (keep reference to prevent GC)
         """
+        _last_invoke_ts = [0.0]
         def _invoke():
             try:
+                now = time.time()
+                if _last_invoke_ts[0] > 0.0:
+                    gap_ms = (now - _last_invoke_ts[0]) * 1000.0
+                    if gap_ms > 100.0 and is_perf_metrics_enabled():
+                        logger.warning("[PERF] [TIMER] Large gap between recurring timer invocations: %.2fms (interval=%dms)", gap_ms, interval_ms)
+                _last_invoke_ts[0] = now
                 func(*args, **(kwargs or {}))
             except Exception as e:
                 logger.exception("Recurring task raised: %s", e)
         
         timer = QTimer()
+        timer.setTimerType(Qt.TimerType.PreciseTimer)
         timer.timeout.connect(_invoke)
         timer.start(max(1, int(interval_ms)))
         

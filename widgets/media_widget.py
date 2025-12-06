@@ -570,15 +570,13 @@ class MediaWidget(QLabel):
             self._refresh_async()
             return
 
-        info: Optional[MediaTrackInfo]
-        try:
-            info = self._controller.get_current_track()
-        except Exception:
-            if is_verbose_logging():
-                logger.debug("[MEDIA] get_current_track failed", exc_info=True)
-            info = None
-
-        self._update_display(info)
+        # PERFORMANCE FIX: When ThreadManager is unavailable, skip the blocking
+        # get_current_track() call entirely. The WinRT/GSMTC API uses
+        # asyncio.run_until_complete() which can block the UI thread for up to
+        # 2 seconds. Better to show stale/no data than to freeze the UI.
+        if is_verbose_logging():
+            logger.debug("[MEDIA_WIDGET] No ThreadManager available, skipping blocking refresh")
+        # Don't call get_current_track() synchronously - it blocks!
 
     def _refresh_async(self) -> None:
         if self._refresh_in_flight:
