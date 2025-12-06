@@ -14,7 +14,7 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QWidget, QPushButton,
     QLabel, QStackedWidget, QGraphicsDropShadowEffect, QSizeGrip,
-    QMessageBox, QSizePolicy, QFileDialog,
+    QSizePolicy, QFileDialog, QMenu,
 )
 from PySide6.QtCore import Qt, QPoint, Signal, QUrl, QTimer
 from PySide6.QtGui import QFont, QColor, QPixmap, QDesktopServices, QPainter, QPen, QGuiApplication
@@ -23,6 +23,7 @@ from core.logging.logger import get_logger
 from core.settings.settings_manager import SettingsManager
 from core.animation import AnimationManager
 from ui.tabs import SourcesTab, TransitionsTab, WidgetsTab, DisplayTab
+from ui.styled_popup import StyledPopup
 
 logger = get_logger(__name__)
 
@@ -910,6 +911,27 @@ class SettingsDialog(QDialog):
         self.export_settings_btn.setStyleSheet("font-size: 11px; padding: 4px 10px;")
         self.export_settings_btn.clicked.connect(self._on_export_settings_clicked)
         button_row.addWidget(self.export_settings_btn)
+        
+        # More options button (context menu)
+        self.more_options_btn = QPushButton("⋮")
+        self.more_options_btn.setFixedSize(24, 24)
+        self.more_options_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 14px;
+                font-weight: bold;
+                padding: 0;
+                border: 1px solid rgba(80, 80, 90, 150);
+                border-radius: 4px;
+                background-color: rgba(40, 40, 45, 200);
+                color: rgba(200, 200, 210, 220);
+            }
+            QPushButton:hover {
+                background-color: rgba(60, 60, 70, 220);
+            }
+        """)
+        self.more_options_btn.setToolTip("More options")
+        self.more_options_btn.clicked.connect(self._show_more_options_menu)
+        button_row.addWidget(self.more_options_btn)
         layout.addLayout(button_row)
 
         self.reset_notice_label = QLabel("Settings reverted to defaults!")
@@ -1122,12 +1144,80 @@ class SettingsDialog(QDialog):
                 logger.debug("Failed to show reset notice label", exc_info=True)
         except Exception as exc:
             logger.exception("Failed to reset settings to defaults: %s", exc)
-            QMessageBox.warning(
+            StyledPopup.show_error(
                 self,
                 "Error",
-                "Failed to reset settings to defaults. See log for details.",
+                "Failed to reset settings to defaults.\nSee log for details.",
             )
     
+    def _show_more_options_menu(self) -> None:
+        """Show the more options context menu."""
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: rgba(25, 25, 30, 240);
+                border: 1px solid rgba(80, 80, 90, 180);
+                border-radius: 6px;
+                padding: 4px 2px;
+            }
+            QMenu::item {
+                background-color: transparent;
+                color: rgba(220, 220, 225, 230);
+                padding: 6px 16px;
+                margin: 1px 3px;
+                border-radius: 3px;
+                font-size: 11px;
+            }
+            QMenu::item:selected {
+                background-color: rgba(60, 60, 75, 200);
+            }
+            QMenu::separator {
+                height: 1px;
+                background-color: rgba(80, 80, 90, 120);
+                margin: 3px 8px;
+            }
+        """)
+        
+        # Open logs folder
+        logs_action = menu.addAction("📁  Open Logs Folder")
+        logs_action.triggered.connect(self._open_logs_folder)
+        
+        # Open settings folder
+        settings_action = menu.addAction("⚙  Open Settings Folder")
+        settings_action.triggered.connect(self._open_settings_folder)
+        
+        menu.addSeparator()
+        
+        # GitHub link
+        github_action = menu.addAction("🔗  GitHub Repository")
+        github_action.triggered.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/Basjohn/ShittyRandomPhotoScreenSaver")))
+        
+        # Show menu below the button
+        btn = self.more_options_btn
+        menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
+    
+    def _open_logs_folder(self) -> None:
+        """Open the logs folder in file explorer."""
+        try:
+            logs_path = Path.cwd() / "logs"
+            if not logs_path.exists():
+                logs_path.mkdir(parents=True, exist_ok=True)
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(logs_path)))
+        except Exception:
+            logger.debug("Failed to open logs folder", exc_info=True)
+    
+    def _open_settings_folder(self) -> None:
+        """Open the settings folder in file explorer."""
+        try:
+            # QSettings stores in AppData/Local or similar
+            settings_path = Path.home() / "AppData" / "Local" / "SRPSS"
+            if not settings_path.exists():
+                # Fallback to current directory
+                settings_path = Path.cwd()
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(settings_path)))
+        except Exception:
+            logger.debug("Failed to open settings folder", exc_info=True)
+
     def _on_export_settings_clicked(self) -> None:
         """Export the current settings profile to an SST snapshot file."""
 
@@ -1168,23 +1258,23 @@ class SettingsDialog(QDialog):
                 ok = False
 
             if not ok:
-                QMessageBox.warning(
+                StyledPopup.show_error(
                     self,
                     "Export Failed",
-                    "Failed to export settings snapshot. See log for details.",
+                    "Failed to export settings snapshot.\nSee log for details.",
                 )
             else:
-                QMessageBox.information(
+                StyledPopup.show_success(
                     self,
                     "Export Complete",
-                    "Settings snapshot exported successfully.",
+                    f"Settings exported to:\n{Path(file_path).name}",
                 )
         except Exception as exc:
             logger.exception("Unexpected error during settings export: %s", exc)
-            QMessageBox.warning(
+            StyledPopup.show_error(
                 self,
                 "Export Failed",
-                "Failed to export settings snapshot. See log for details.",
+                "Failed to export settings snapshot.\nSee log for details.",
             )
 
     def _on_import_settings_clicked(self) -> None:
@@ -1217,10 +1307,10 @@ class SettingsDialog(QDialog):
                 ok = False
 
             if not ok:
-                QMessageBox.warning(
+                StyledPopup.show_error(
                     self,
                     "Import Failed",
-                    "Failed to import settings snapshot. See log for details.",
+                    "Failed to import settings snapshot.\nSee log for details.",
                 )
                 return
 
@@ -1238,17 +1328,17 @@ class SettingsDialog(QDialog):
             except Exception:
                 logger.debug("Failed to reload settings tabs after SST import", exc_info=True)
 
-            QMessageBox.information(
+            StyledPopup.show_success(
                 self,
                 "Import Complete",
-                "Settings snapshot imported successfully.",
+                f"Settings imported from:\n{Path(file_path).name}",
             )
         except Exception as exc:
             logger.exception("Unexpected error during settings import: %s", exc)
-            QMessageBox.warning(
+            StyledPopup.show_error(
                 self,
                 "Import Failed",
-                "Failed to import settings snapshot. See log for details.",
+                "Failed to import settings snapshot.\nSee log for details.",
             )
     
     def _toggle_maximize(self) -> None:

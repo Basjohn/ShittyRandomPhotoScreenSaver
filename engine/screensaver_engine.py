@@ -97,16 +97,17 @@ class ScreensaverEngine(QObject):
         # Shuffle transition has been retired for v1.2 and no longer appears in
         # the active rotation.
         self._transition_types: List[str] = [
-            "Crossfade",
-            "Slide",
-            "Wipe",
-            "Peel",
-            "Diffuse",
-            "Block Puzzle Flip",
-            "3D Block Spins",
-            "Ripple",  # formerly "Rain Drops"
-            "Warp Dissolve",
-            "Blinds",
+            "Ripple",            # 1. GL-only (formerly "Rain Drops")
+            "Wipe",              # 2. Directional
+            "3D Block Spins",    # 3. GL-only
+            "Diffuse",           # 4. Particle dissolve
+            "Slide",             # 5. Directional
+            "Crossfade",         # 6. Classic fallback
+            "Peel",              # 7. GL-only, directional
+            "Block Puzzle Flip", # 8. Tile flip
+            "Warp Dissolve",     # 9. GL-only
+            "Blinds",            # 10. GL-only
+            "Crumble",           # 11. GL-only, falling pieces
         ]
         self._current_transition_index: int = 0  # Will sync with settings in initialize()
         # Caching / prefetch
@@ -1791,6 +1792,8 @@ class ScreensaverEngine(QObject):
             self._update_display_mode()
         elif setting_key.startswith('queue.shuffle'):
             self._update_shuffle_mode()
+        elif setting_key.startswith('sources'):
+            self._on_sources_changed()
     
     def _on_monitors_changed(self, new_count: int) -> None:
         """Handle monitor configuration change."""
@@ -1835,6 +1838,49 @@ class ScreensaverEngine(QObject):
         shuffle = self.settings_manager.get('queue.shuffle', True)
         self.image_queue.set_shuffle_enabled(shuffle)
         logger.info(f"Shuffle mode updated: {shuffle}")
+    
+    def _on_sources_changed(self) -> None:
+        """Handle source configuration changes.
+        
+        Reinitializes sources and rebuilds the image queue when the user
+        adds/removes folders or RSS feeds in settings. This ensures new
+        sources are available immediately without restarting the screensaver.
+        """
+        logger.info("Sources changed, reinitializing...")
+        
+        # Clear existing sources
+        self.folder_sources.clear()
+        self.rss_sources.clear()
+        
+        # Reinitialize sources from updated settings
+        if self._initialize_sources():
+            # Rebuild the queue with new sources
+            if self._build_image_queue():
+                logger.info("Image queue rebuilt with updated sources")
+                
+                # Restart prefetcher with new queue
+                if hasattr(self, '_prefetcher') and self._prefetcher:
+                    try:
+                        self._prefetcher.stop()
+                    except Exception:
+                        pass
+                
+                # Initialize prefetcher for new queue
+                try:
+                    from utils.image_prefetcher import ImagePrefetcher
+                    self._prefetcher = ImagePrefetcher(
+                        self.image_queue,
+                        prefetch_count=3,
+                        thread_manager=self._thread_manager,
+                    )
+                    self._prefetcher.start()
+                    logger.info("Prefetcher restarted with updated queue")
+                except Exception as e:
+                    logger.warning(f"Failed to restart prefetcher: {e}")
+            else:
+                logger.warning("Failed to rebuild image queue after source change")
+        else:
+            logger.warning("No valid sources after source change")
     
     def get_stats(self) -> Dict:
         """

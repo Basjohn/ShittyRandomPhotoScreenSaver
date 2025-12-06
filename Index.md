@@ -129,6 +129,8 @@ A living map of modules, purposes, and key classes. Keep this up to date.
    - Spotify-only vertical volume slider paired with the media card; gated on a Spotify GSMTC session and participating in the secondary Spotify fade wave via a GPU fade factor derived from the visualiser card’s `ShadowFadeProfile` progress so it fades in slightly after the card while respecting the same hard-exit / Ctrl interaction gating as the media widget.
   - widgets/reddit_widget.py
    - Reddit overlay widget showing top posts from a configured subreddit with 4- and 10-item layouts, per-monitor selection via `widgets.reddit`, shared overlay fade-in coordination, and click-through to the system browser.
+ - widgets/context_menu.py
+   - `ScreensaverContextMenu`: Dark glass themed right-click context menu for screensaver. Provides Previous/Next image, transition selection submenu, Settings, Hard Exit Mode toggle, and Exit. Activated by right-click in hard exit mode or Ctrl+right-click in normal mode. Lazy-initialized by DisplayWidget for performance.
  - widgets/overlay_timers.py
    - Centralised overlay timer helper providing `create_overlay_timer()` and `OverlayTimerHandle` for recurring UI-thread timers (clock/weather/media/Reddit). Prefers `ThreadManager.schedule_recurring` with ResourceManager tracking and falls back to a widget-local `QTimer` when no ThreadManager is available.
  - widgets/beat_engine.py

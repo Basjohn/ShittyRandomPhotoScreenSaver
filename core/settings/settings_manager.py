@@ -682,13 +682,74 @@ class SettingsManager(QObject):
         logger.debug(f"Registered change handler for {key}")
     
     def reset_to_defaults(self) -> None:
-        """Reset all settings to default values."""
+        """Reset all settings to default values, preserving user-specific data.
+        
+        Preserved settings (not reset):
+        - sources.folders (user's image folders)
+        - sources.rss_feeds (user's RSS feeds)  
+        - widgets.weather.location (auto-detected or user-set)
+        - widgets.weather.latitude (auto-detected)
+        - widgets.weather.longitude (auto-detected)
+        """
+        from core.settings.defaults import get_default_settings
+        
         with self._lock:
+            # Preserve user-specific data before clearing
+            preserved: dict = {}
+            
+            # Preserve source folders and feeds
+            folders = self._settings.value('sources.folders')
+            if folders:
+                preserved['sources.folders'] = folders
+            rss_feeds = self._settings.value('sources.rss_feeds')
+            if rss_feeds:
+                preserved['sources.rss_feeds'] = rss_feeds
+            
+            # Preserve weather location/geo data from widgets map
+            widgets_raw = self._settings.value('widgets')
+            if isinstance(widgets_raw, dict):
+                weather = widgets_raw.get('weather', {})
+                if isinstance(weather, dict):
+                    for key in ('location', 'latitude', 'longitude'):
+                        if key in weather:
+                            preserved[f'widgets.weather.{key}'] = weather[key]
+            
+            # Clear and apply canonical defaults
             self._settings.clear()
-            self._set_defaults()
+            
+            # Apply new defaults from defaults module
+            defaults = get_default_settings()
+            for section, value in defaults.items():
+                self._settings.setValue(section, value)
+            
+            # Restore preserved user-specific data
+            if 'sources.folders' in preserved:
+                sources = self._settings.value('sources', {})
+                if isinstance(sources, dict):
+                    sources['folders'] = preserved['sources.folders']
+                    self._settings.setValue('sources', sources)
+            
+            if 'sources.rss_feeds' in preserved:
+                sources = self._settings.value('sources', {})
+                if isinstance(sources, dict):
+                    sources['rss_feeds'] = preserved['sources.rss_feeds']
+                    self._settings.setValue('sources', sources)
+            
+            # Restore weather geo data
+            widgets = self._settings.value('widgets', {})
+            if isinstance(widgets, dict):
+                weather = widgets.get('weather', {})
+                if isinstance(weather, dict):
+                    for key in ('location', 'latitude', 'longitude'):
+                        pkey = f'widgets.weather.{key}'
+                        if pkey in preserved:
+                            weather[key] = preserved[pkey]
+                    widgets['weather'] = weather
+                    self._settings.setValue('widgets', widgets)
+            
             self._settings.sync()
         
-        logger.info("Settings reset to defaults")
+        logger.info("Settings reset to defaults (preserved: %s)", list(preserved.keys()))
         self.settings_changed.emit('*', None)  # Signal that all changed
     
     def get_all_keys(self) -> List[str]:

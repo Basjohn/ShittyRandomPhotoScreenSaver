@@ -57,6 +57,7 @@ from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
 from widgets.spotify_volume_widget import SpotifyVolumeWidget
 from widgets.shadow_utils import apply_widget_shadow
+from widgets.context_menu import ScreensaverContextMenu
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.logging.overlay_telemetry import record_overlay_ready
 from core.resources.manager import ResourceManager
@@ -203,6 +204,10 @@ class DisplayWidget(QWidget):
         self._overlay_fade_started: bool = False
         self._overlay_fade_timeout: Optional[QTimer] = None
         self._reddit_exit_on_click: bool = True
+        
+        # Context menu for right-click actions
+        self._context_menu: Optional[ScreensaverContextMenu] = None
+        self._context_menu_active: bool = False
 
         # Central ResourceManager wiring
         self._resource_manager: Optional[ResourceManager] = resource_manager
@@ -1323,6 +1328,13 @@ class DisplayWidget(QWidget):
 
                     try:
                         vol.set_shadow_config(shadows_config)
+                    except Exception:
+                        pass
+                    
+                    # Set anchor to media widget for visibility gating
+                    try:
+                        if hasattr(vol, "set_anchor_media_widget"):
+                            vol.set_anchor_media_widget(self.media_widget)
                     except Exception:
                         pass
 
@@ -4128,6 +4140,18 @@ class DisplayWidget(QWidget):
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """Handle mouse press - exit on any click unless hard exit is enabled."""
         ctrl_mode_active = self._ctrl_held or DisplayWidget._global_ctrl_held
+        
+        # Right-click context menu handling:
+        # - In hard exit mode: right-click shows menu
+        # - In normal mode: Ctrl+right-click shows menu (temporarily enables interaction)
+        if event.button() == Qt.MouseButton.RightButton:
+            if self._is_hard_exit_enabled() or ctrl_mode_active:
+                # Show context menu
+                self._show_context_menu(event.globalPosition().toPoint())
+                event.accept()
+                return
+            # Normal mode without Ctrl - fall through to exit
+        
         if self._is_hard_exit_enabled() or ctrl_mode_active:
             # In hard-exit or Ctrl-held interaction mode, route clicks over
             # interactive widgets (e.g. media / Spotify volume / reddit widget). Media
@@ -4330,6 +4354,11 @@ class DisplayWidget(QWidget):
     
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         """Handle mouse move - exit if moved beyond threshold (unless hard exit)."""
+        # Don't exit while context menu is active
+        if self._context_menu_active:
+            event.accept()
+            return
+        
         ctrl_mode_active = DisplayWidget._global_ctrl_held
         if self._is_hard_exit_enabled() or ctrl_mode_active:
             # Hard exit or Ctrl-held mode disables mouse-move exit entirely.
@@ -4459,6 +4488,76 @@ class DisplayWidget(QWidget):
             return
 
         super().wheelEvent(event)
+
+    def _show_context_menu(self, global_pos) -> None:
+        """Show the context menu at the given global position."""
+        try:
+            # Get current transition from settings
+            current_transition = "Crossfade"
+            if self.settings_manager:
+                trans_cfg = self.settings_manager.get("transitions", {})
+                if isinstance(trans_cfg, dict):
+                    current_transition = trans_cfg.get("type", "Crossfade")
+            
+            hard_exit = self._is_hard_exit_enabled()
+            
+            # Create menu if needed (lazy init for performance)
+            if self._context_menu is None:
+                self._context_menu = ScreensaverContextMenu(
+                    parent=self,
+                    current_transition=current_transition,
+                    hard_exit_enabled=hard_exit,
+                )
+                # Connect signals
+                self._context_menu.previous_requested.connect(self.previous_requested.emit)
+                self._context_menu.next_requested.connect(self.next_requested.emit)
+                self._context_menu.transition_selected.connect(self._on_context_transition_selected)
+                self._context_menu.settings_requested.connect(self.settings_requested.emit)
+                self._context_menu.hard_exit_toggled.connect(self._on_context_hard_exit_toggled)
+                self._context_menu.exit_requested.connect(self._on_context_exit_requested)
+            else:
+                # Update state before showing
+                self._context_menu.update_current_transition(current_transition)
+                self._context_menu.update_hard_exit_state(hard_exit)
+            
+            self._context_menu_active = True
+            self._context_menu.exec(global_pos)
+            self._context_menu_active = False
+            
+        except Exception:
+            logger.debug("Failed to show context menu", exc_info=True)
+            self._context_menu_active = False
+    
+    def _on_context_transition_selected(self, name: str) -> None:
+        """Handle transition selection from context menu."""
+        try:
+            if self.settings_manager:
+                trans_cfg = self.settings_manager.get("transitions", {})
+                if not isinstance(trans_cfg, dict):
+                    trans_cfg = {}
+                trans_cfg["type"] = name
+                trans_cfg["random_always"] = False
+                self.settings_manager.set("transitions", trans_cfg)
+                self.settings_manager.save()
+                logger.info("Context menu: transition changed to %s", name)
+        except Exception:
+            logger.debug("Failed to set transition from context menu", exc_info=True)
+    
+    def _on_context_hard_exit_toggled(self, enabled: bool) -> None:
+        """Handle hard exit toggle from context menu."""
+        try:
+            if self.settings_manager:
+                self.settings_manager.set("input.hard_exit", enabled)
+                self.settings_manager.save()
+                logger.info("Context menu: hard exit mode set to %s", enabled)
+        except Exception:
+            logger.debug("Failed to toggle hard exit from context menu", exc_info=True)
+    
+    def _on_context_exit_requested(self) -> None:
+        """Handle exit request from context menu."""
+        logger.info("Context menu: exit requested")
+        self._exiting = True
+        self.exit_requested.emit()
 
     def focusOutEvent(self, event: QFocusEvent) -> None:  # type: ignore[override]
         """Diagnostic: log once if we lose focus while still visible.

@@ -160,19 +160,64 @@ void getPieceTransform(vec2 cellId, float scale, float t, float seed,
     float pieceRand = hash1(cellId + seed);
     float pieceRand2 = hash1(cellId * 1.7 + seed + 100.0);
     
-    float fallPhase = (t - 0.35) / 0.65;
+    // Start falling earlier (at t=0.25) to give pieces more time to exit screen
+    // Fall phase now spans 75% of the transition instead of 65%
+    float fallPhase = (t - 0.25) / 0.75;
     fallPhase = clamp(fallPhase, 0.0, 1.0);
     
+    // Stagger based on position - top pieces fall first, bottom pieces last
+    // Reduced random delay so pieces start falling sooner
     float normalizedY = cellId.y / scale;
-    float fallDelay = pieceRand * 0.25 + normalizedY * 0.35;
+    float fallDelay = pieceRand * 0.15 + normalizedY * 0.25;
     
     pieceFall = fallPhase > fallDelay ? (fallPhase - fallDelay) / (1.0 - fallDelay) : 0.0;
     pieceFall = clamp(pieceFall, 0.0, 1.0);
     
+    // Accelerating fall with more distance so pieces fully exit
+    // At pieceFall=1.0, piece will have fallen 2.2 units (well past screen edge)
     float accel = pieceFall * pieceFall;
-    fallDist = accel * 1.5;
-    driftX = pieceFall * (pieceRand - 0.5) * 0.2;
-    rotAngle = pieceFall * (pieceRand2 - 0.5) * 0.6;
+    fallDist = accel * 2.2;
+    driftX = pieceFall * (pieceRand - 0.5) * 0.25;
+    rotAngle = pieceFall * (pieceRand2 - 0.5) * 0.7;
+}
+
+// Check if a piece casts a shadow onto this UV position
+// Returns shadow intensity (0.0 = no shadow, 1.0 = full shadow)
+float checkPieceShadow(vec2 uv, vec2 candidateCell, float scale, float t, float seed, float complexity) {
+    float pieceFall, fallDist, driftX, rotAngle;
+    getPieceTransform(candidateCell, scale, t, seed, pieceFall, fallDist, driftX, rotAngle);
+    
+    if (pieceFall < 0.01) return 0.0; // Piece hasn't started falling - no shadow
+    
+    // Shadow offset - grows as piece falls (simulates height above surface)
+    float shadowOffsetY = pieceFall * 0.04;  // Shadow below piece
+    float shadowOffsetX = pieceFall * 0.015; // Slight diagonal
+    
+    // Check if this UV is under the piece's shadow
+    vec2 originalCenter = (candidateCell + 0.5) / scale;
+    vec2 movedCenter = originalCenter + vec2(driftX, fallDist);
+    vec2 shadowCenter = movedCenter + vec2(shadowOffsetX, shadowOffsetY);
+    
+    // Inverse transform from shadow position
+    vec2 fromShadow = uv - shadowCenter;
+    float cosR = cos(-rotAngle);
+    float sinR = sin(-rotAngle);
+    vec2 unrotated = vec2(
+        fromShadow.x * cosR - fromShadow.y * sinR,
+        fromShadow.x * sinR + fromShadow.y * cosR
+    );
+    vec2 shadowOriginal = originalCenter + unrotated;
+    
+    // Check if this maps to the same cell
+    vec4 vorCheck = voronoi(shadowOriginal, scale, seed, complexity);
+    if (vorCheck.xy == candidateCell && 
+        shadowOriginal.x >= 0.0 && shadowOriginal.x <= 1.0 &&
+        shadowOriginal.y >= 0.0 && shadowOriginal.y <= 1.0) {
+        // Shadow intensity based on fall progress and edge softness
+        float edgeSoft = smoothstep(0.0, 0.03, vorCheck.z);
+        return pieceFall * 0.5 * edgeSoft; // Max 50% darkening
+    }
+    return 0.0;
 }
 
 void main() {
@@ -193,24 +238,25 @@ void main() {
     float scale = max(4.0, u_piece_count);
     float complexity = clamp(u_crack_complexity, 0.5, 2.0);
     
-    // Crack width - thin lines
-    float crackWidth = 0.012 + complexity * 0.005;
-    
-    // For this screen pixel, search for which Voronoi piece covers it.
-    // We check multiple candidate cells by searching around.
+    // Crack width - visible borders on pieces
+    float crackWidth = 0.025 + complexity * 0.012;
     
     vec3 finalColor = newColor.rgb;
     bool pixelCovered = false;
     float bestFall = 1.0;
+    float totalShadow = 0.0;
     
     // Get the cell at current screen position as starting point
     vec4 vorHere = voronoi(uv, scale, u_seed, complexity);
     
-    // Search nearby cells (the piece that covers this pixel might have come from elsewhere)
-    for (int dy = -2; dy <= 2; dy++) {
+    // Search nearby cells
+    for (int dy = -4; dy <= 2; dy++) {
         for (int dx = -2; dx <= 2; dx++) {
-            // Candidate cell
             vec2 candidateCell = vorHere.xy + vec2(float(dx), float(dy));
+            
+            // Check for drop shadow from this piece
+            float shadowHere = checkPieceShadow(uv, candidateCell, scale, t, u_seed, complexity);
+            totalShadow = max(totalShadow, shadowHere);
             
             // Get this cell's transform
             float pieceFall, fallDist, driftX, rotAngle;
@@ -233,16 +279,10 @@ void main() {
             // Check if this original position belongs to this Voronoi cell
             vec4 vorCheck = voronoi(originalPos, scale, u_seed, complexity);
             
-            // If the original position is in THIS cell, then this cell's piece covers our pixel
-            // Don't cut off at pieceFall < 0.98 - let pieces fall off screen naturally
             if (vorCheck.xy == candidateCell) {
-                // Check if ORIGINAL position is in bounds (piece came from valid texture area)
-                // But allow the CURRENT position to be anywhere (piece can fall off screen)
                 if (originalPos.x >= 0.0 && originalPos.x <= 1.0 && 
                     originalPos.y >= 0.0 && originalPos.y <= 1.0) {
                     
-                    // This piece covers the pixel - use it if it's the "frontmost"
-                    // (pieces that haven't fallen as far are in front)
                     if (!pixelCovered || pieceFall < bestFall) {
                         pixelCovered = true;
                         bestFall = pieceFall;
@@ -251,27 +291,28 @@ void main() {
                         vec4 oldColor = texture(uOldTex, originalPos);
                         finalColor = oldColor.rgb;
                         
-                        // Crack lines (at original position)
-                        float crackPhase = t / 0.4;
+                        // Crack lines
+                        float crackPhase = t / 0.35;
                         crackPhase = clamp(crackPhase, 0.0, 1.0);
                         float pieceRandCrack = hash1(candidateCell + u_seed);
-                        float crackAppear = crackPhase > pieceRandCrack * 0.4 ? 1.0 : 0.0;
+                        float crackAppear = crackPhase > pieceRandCrack * 0.3 ? 1.0 : 0.0;
                         
                         if (vorCheck.z < crackWidth && crackAppear > 0.5) {
-                            finalColor *= 0.25; // Dark crack line
+                            finalColor *= 0.15;
                         }
                         
-                        // Shadow on falling pieces
-                        finalColor *= (1.0 - pieceFall * 0.2);
+                        // Piece gets slightly darker as it falls
+                        float pieceShadow = pieceFall * 0.15;
+                        finalColor *= (1.0 - pieceShadow);
                     }
                 }
             }
         }
     }
     
-    // If no piece covers this pixel, show new image (the "hole")
+    // Apply drop shadow to exposed areas (new image showing through)
     if (!pixelCovered) {
-        finalColor = newColor.rgb;
+        finalColor = newColor.rgb * (1.0 - totalShadow);
     }
     
     FragColor = vec4(finalColor, 1.0);

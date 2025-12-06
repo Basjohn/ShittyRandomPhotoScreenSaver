@@ -110,22 +110,45 @@ class SpotifyVolumeController:
         This call is intentionally resilient: any failures in enumerating
         sessions or querying COM interfaces are logged at debug level and
         treated as "no session" rather than raising.
+        
+        Searches ALL audio devices, not just the default, to handle cases
+        where Spotify outputs to a non-default device (headphones, DAC, etc.).
         """
 
         if not self._available or AudioUtilities is None or ISimpleAudioVolume is None:
             return None
 
+        # Search all sessions on the default device
+        # Note: Spotify only appears as an audio session when actively playing audio.
+        # If Spotify is paused or stopped, no session will be found.
         try:
-            sessions = AudioUtilities.GetAllSessions()  # type: ignore[call-arg]
+            sessions = AudioUtilities.GetAllSessions()
         except Exception:
-            logger.debug("[SPOTIFY_VOL] AudioUtilities.GetAllSessions failed", exc_info=True)
+            logger.debug("[SPOTIFY_VOL] GetAllSessions failed", exc_info=True)
             return None
-
+        
+        result = self._search_sessions_for_spotify(sessions)
+        if result is not None:
+            return result
+        
+        # Log available sessions for debugging
+        if is_verbose_logging():
+            session_names = []
+            for s in sessions:
+                try:
+                    if s.Process:
+                        session_names.append(s.Process.name())
+                except Exception:
+                    pass
+            logger.debug("[SPOTIFY_VOL] No Spotify session found. Active sessions: %s", session_names)
+        
+        return None
+    
+    def _search_sessions_for_spotify(self, sessions) -> Optional[Any]:
+        """Search a list of audio sessions for Spotify."""
         if not sessions:
-            if is_verbose_logging():
-                logger.debug("[SPOTIFY_VOL] No audio sessions available")
             return None
-
+        
         for session in sessions:
             proc = None
             try:
@@ -159,7 +182,5 @@ class SpotifyVolumeController:
                     "[SPOTIFY_VOL] Failed to obtain ISimpleAudioVolume for %r", name, exc_info=True
                 )
                 continue
-
-        if is_verbose_logging():
-            logger.debug("[SPOTIFY_VOL] No Spotify audio session found")
+        
         return None

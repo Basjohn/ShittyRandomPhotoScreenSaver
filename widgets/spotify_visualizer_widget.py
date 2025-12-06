@@ -1451,6 +1451,21 @@ class SpotifyVisualizerWidget(QWidget):
                 )
             except Exception:
                 pass
+        
+        # Show/hide based on anchor media widget visibility
+        anchor = self._anchor_media
+        if anchor is not None:
+            try:
+                anchor_visible = anchor.isVisible()
+                if anchor_visible and not self.isVisible():
+                    # Media widget became visible - show visualizer
+                    self._start_widget_fade_in(1500)
+                elif not anchor_visible and self.isVisible():
+                    # Media widget hidden - hide visualizer
+                    self.hide()
+            except Exception:
+                pass
+        
         if not self._spotify_playing:
             # Drive target bars to zero; smoothing path will fade them out.
             self._target_bars = [0.0] * self._bar_count
@@ -1493,11 +1508,21 @@ class SpotifyVisualizerWidget(QWidget):
                 self._bars_timer = None
 
         # Coordinate the visualiser card fade-in with the primary overlay
-        # group so it joins the main wave on this display regardless of
-        # current Spotify playback state.
+        # group so it joins the main wave on this display. Only show if the
+        # anchor media widget is visible (Spotify is active).
         parent = self.parent()
 
         def _starter() -> None:
+            # Only show if anchor media widget is visible (Spotify is playing)
+            anchor = self._anchor_media
+            if anchor is not None:
+                try:
+                    if not anchor.isVisible():
+                        # Media widget not visible - don't show visualizer yet
+                        return
+                except Exception:
+                    pass
+            
             try:
                 self._start_widget_fade_in(1500)
             except Exception:

@@ -298,6 +298,35 @@ class MediaWidget(QLabel):
                     parent._position_spotify_volume()
                 except Exception:
                     pass
+    
+    def _notify_spotify_widgets_visibility(self) -> None:
+        """Notify Spotify-related widgets to sync their visibility with this widget.
+        
+        Called when the media widget shows or hides so the visualizer and
+        volume widgets can show/hide accordingly.
+        """
+        parent = self.parent()
+        if parent is None:
+            return
+        
+        # Notify visualizer
+        vis = getattr(parent, "spotify_visualizer_widget", None)
+        if vis is not None:
+            try:
+                if hasattr(vis, "handle_media_update"):
+                    # Trigger a visibility sync via the existing media update handler
+                    vis.handle_media_update({"state": "playing" if self.isVisible() else "stopped"})
+            except Exception:
+                pass
+        
+        # Notify volume widget
+        vol = getattr(parent, "spotify_volume_widget", None)
+        if vol is not None:
+            try:
+                if hasattr(vol, "sync_visibility_with_anchor"):
+                    vol.sync_visibility_with_anchor()
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     # Styling
@@ -675,6 +704,8 @@ class MediaWidget(QLabel):
                 self.hide()
             except Exception:
                 pass
+            # Notify parent to hide Spotify-related widgets
+            self._notify_spotify_widgets_visibility()
             return
 
         # Metadata: title and artist on separate lines; album is intentionally
@@ -863,6 +894,8 @@ class MediaWidget(QLabel):
 
             def _starter() -> None:
                 self._start_widget_fade_in(1500)
+                # Notify Spotify widgets to show now that media is visible
+                self._notify_spotify_widgets_visibility()
 
             if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
                 try:
@@ -876,6 +909,8 @@ class MediaWidget(QLabel):
                 self.show()
             except Exception:
                 pass
+            # Notify Spotify widgets in case they need to sync visibility
+            self._notify_spotify_widgets_visibility()
 
     # ------------------------------------------------------------------
     # Painting

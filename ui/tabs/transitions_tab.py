@@ -88,17 +88,17 @@ class TransitionsTab(QWidget):
         type_row.addWidget(QLabel("Transition:"))
         self.transition_combo = QComboBox()
         self.transition_combo.addItems([
-            "Crossfade",
-            "Slide",
-            "Wipe",
-            "Peel",              # GL-only, directional
-            "Diffuse",
-            "Block Puzzle Flip",
-            "3D Block Spins",    # GL-only
-            "Ripple",            # GL-only (formerly Rain Drops)
-            "Warp Dissolve",     # GL-only
-            "Blinds",            # GL-only
-            "Crumble",           # GL-only, falling rock pieces
+            "Ripple",            # 1. GL-only (formerly Rain Drops)
+            "Wipe",              # 2. Directional
+            "3D Block Spins",    # 3. GL-only
+            "Diffuse",           # 4. Particle dissolve
+            "Slide",             # 5. Directional
+            "Crossfade",         # 6. Classic fallback
+            "Peel",              # 7. GL-only, directional
+            "Block Puzzle Flip", # 8. Tile flip
+            "Warp Dissolve",     # 9. GL-only
+            "Blinds",            # 10. GL-only
+            "Crumble",           # 11. GL-only, falling pieces
         ])
         self.transition_combo.currentTextChanged.connect(self._on_transition_changed)
         type_row.addWidget(self.transition_combo)

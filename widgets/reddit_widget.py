@@ -25,6 +25,7 @@ import requests
 from PySide6.QtCore import Qt, QTimer, QRect, QPoint, QUrl
 from PySide6.QtGui import QFont, QColor, QPainter, QFontMetrics, QDesktopServices, QPixmap, QPainterPath
 from PySide6.QtWidgets import QLabel, QWidget, QToolTip
+from shiboken6 import isValid as shiboken_isValid
 
 from core.logging.logger import get_logger, is_verbose_logging
 from core.threading.manager import ThreadManager
@@ -417,6 +418,10 @@ class RedditWidget(QLabel):
             self._on_fetch_error(str(exc))
 
     def _on_feed_fetched(self, posts_data: List[Dict[str, Any]]) -> None:
+        # Guard against callback arriving after widget destruction
+        if not shiboken_isValid(self):
+            return
+        
         if not posts_data:
             logger.warning("[REDDIT] Empty listing for subreddit %s", self._subreddit)
             if not self._has_displayed_valid_data:
@@ -529,6 +534,10 @@ class RedditWidget(QLabel):
         self._has_displayed_valid_data = True
 
     def _on_fetch_error(self, error: str) -> None:
+        # Guard against callback arriving after widget destruction
+        if not shiboken_isValid(self):
+            return
+        
         if is_verbose_logging():
             logger.warning("[REDDIT] Fetch error: %s", error)
 

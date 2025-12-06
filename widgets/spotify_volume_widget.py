@@ -54,6 +54,7 @@ class SpotifyVolumeWidget(QWidget):
         self._pending_volume: Optional[float] = None
         self._flush_timer: Optional[QTimer] = None
         self._has_faded_in: bool = False
+        self._anchor_media: Optional[QWidget] = None
 
         try:
             SpotifyVolumeWidget._instances.add(self)
@@ -111,6 +112,31 @@ class SpotifyVolumeWidget(QWidget):
             self.update()
         except Exception:
             pass
+    
+    def set_anchor_media_widget(self, widget: Optional[QWidget]) -> None:
+        """Set the anchor media widget for visibility gating."""
+        self._anchor_media = widget
+    
+    def sync_visibility_with_anchor(self) -> None:
+        """Show/hide based on anchor media widget visibility.
+        
+        Called when the media widget visibility changes to keep the
+        volume widget in sync.
+        """
+        anchor = self._anchor_media
+        if anchor is None:
+            return
+        
+        try:
+            anchor_visible = anchor.isVisible()
+            if anchor_visible and not self.isVisible() and self._enabled:
+                # Media widget became visible - show volume widget
+                self._start_widget_fade_in(1500)
+            elif not anchor_visible and self.isVisible():
+                # Media widget hidden - hide volume widget
+                self.hide()
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -147,6 +173,19 @@ class SpotifyVolumeWidget(QWidget):
             return
 
         self._ensure_flush_timer()
+        
+        # Only show if anchor media widget is visible (Spotify is active)
+        anchor = self._anchor_media
+        anchor_visible = True
+        if anchor is not None:
+            try:
+                anchor_visible = anchor.isVisible()
+            except Exception:
+                anchor_visible = True
+        
+        if not anchor_visible:
+            # Media widget not visible - don't show volume widget yet
+            return
 
         if self._thread_manager is None:
             try:
@@ -383,20 +422,25 @@ class SpotifyVolumeWidget(QWidget):
 
     def _submit_volume_set(self, level: float) -> None:
         if not self._controller.is_available():
+            logger.debug("[SPOTIFY_VOL] Controller not available, cannot set volume")
             return
 
         clamped = float(max(0.0, min(1.0, level)))
 
         if self._thread_manager is None:
             try:
-                self._controller.set_volume(clamped)
+                result = self._controller.set_volume(clamped)
+                if is_verbose_logging():
+                    logger.debug("[SPOTIFY_VOL] set_volume direct: %.2f -> %s", clamped, result)
             except Exception:
                 logger.debug("[SPOTIFY_VOL] set_volume direct call failed", exc_info=True)
             return
 
         def _do_set(target: float) -> None:
             try:
-                self._controller.set_volume(target)
+                result = self._controller.set_volume(target)
+                if is_verbose_logging():
+                    logger.debug("[SPOTIFY_VOL] set_volume async: %.2f -> %s", target, result)
             except Exception:
                 logger.debug("[SPOTIFY_VOL] set_volume task failed", exc_info=True)
 
