@@ -315,8 +315,13 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 # PERF: show()/raise_() take 25ms+ each - avoid calling them
                 # Instead of hiding/showing, we control visibility via _enabled flag
                 # and let paintGL skip rendering when disabled
-                if not self.isVisible():
-                    # Only show once when first becoming visible
+                #
+                # IMPORTANT: Only show() when fade > 0 to prevent startup flash.
+                # The bars should fade in smoothly, not appear instantly on first
+                # set_state call. This defers the expensive show() until the fade
+                # animation actually starts.
+                if not self.isVisible() and self._fade > 0.0:
+                    # Only show once when first becoming visible AND fading in
                     self.show()
                 # Skip raise_() entirely - it's expensive and unnecessary
                 # The overlay is created on top and stays there

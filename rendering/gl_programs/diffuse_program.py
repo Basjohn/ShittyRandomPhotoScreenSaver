@@ -176,12 +176,12 @@ void main() {
     // Global tail for clean landing.
     float tail;
     if (u_shapeMode == 1) {
-        float blockFade = 1.0 - smoothstep(0.80, 0.92, t);
-        blockMix *= blockFade;
-        tail = smoothstep(0.80, 1.0, t);
-        if (t > 0.92) {
-            blockMix = min(blockMix, tail);
-        }
+        // Membrane mode: circles expand to cover everything naturally.
+        // Use a late tail (0.92-1.0) to ensure full coverage at the end
+        // without fading out the circles prematurely, which would cause
+        // a flash of the old image.
+        tail = smoothstep(0.92, 1.0, t);
+        // Don't fade out blockMix - let circles expand fully
     } else {
         tail = smoothstep(0.96, 1.0, t);
     }

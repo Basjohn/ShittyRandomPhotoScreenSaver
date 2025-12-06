@@ -499,3 +499,86 @@ These behaviours are canonical for any future beat-style visualisers: keep the
 card/overlay split, guarantee a minimal idle floor, and route any ghosting or
 trailing effects through explicit, documented settings rather than implicit
 framebuffer residue.
+
+---
+
+## 10. Widget Flicker Prevention (CRITICAL)
+
+Widget flicker during GL compositor transitions is a recurring issue that has
+been solved. **Follow these rules strictly to prevent regressions.**
+
+### Root Causes of Widget Flicker
+
+1. **Deferred widget raises** — If widgets are raised via `QTimer.singleShot(0, ...)`
+   after `transition.start()`, the compositor may render 1+ frames before widgets
+   are raised above it, causing them to briefly disappear.
+
+2. **Compositor `snap_to_new=False`** — When a transition's `cleanup()` method
+   calls `compositor.cancel_current_transition(snap_to_new=False)`, the compositor's
+   `_base_pixmap` remains the OLD image. The next `paintGL` (triggered by `update()`)
+   draws the old image, causing a flash of the previous image.
+
+3. **GL overlay `show()` before fade** — Calling `show()` on a QOpenGLWidget before
+   its fade value is > 0 causes a flash of uninitialized or partially-rendered content.
+
+### Mandatory Fixes (Already Implemented)
+
+1. **Synchronous widget raises** — In `display_widget.py`, widget `raise_()` calls
+   happen **synchronously** immediately after `transition.start()` returns, NOT via
+   `QTimer.singleShot(0, ...)`. This ensures widgets are above the compositor before
+   any frames are rendered.
+
+   ```python
+   # CORRECT: Synchronous raises after transition.start()
+   success = transition.start(old_pixmap, new_pixmap, self)
+   if success:
+       for widget in overlay_widgets:
+           widget.raise_()
+   ```
+
+2. **All transitions use `snap_to_new=True`** — Every GL compositor transition's
+   `cleanup()` and `stop()` methods MUST call:
+   ```python
+   self._compositor.cancel_current_transition(snap_to_new=True)
+   ```
+   This ensures the compositor's `_base_pixmap` is updated to the new image before
+   the transition state is cleared.
+
+3. **GL overlays defer `show()` until fade > 0** — QOpenGLWidget overlays (like
+   `SpotifyBarsGLOverlay`) must NOT call `show()` until their fade value is > 0:
+   ```python
+   if not self.isVisible() and self._fade > 0.0:
+       self.show()
+   ```
+
+4. **GL initialization guard** — QOpenGLWidget subclasses should skip `paintGL()`
+   until `initializeGL()` has completed:
+   ```python
+   def initializeGL(self):
+       # ... init code ...
+       self._gl_initialized = True
+   
+   def paintGL(self):
+       if not self._gl_initialized:
+           return
+       # ... paint code ...
+   ```
+
+### Widget Attributes for GL Compositor Siblings
+
+All overlay widgets that coexist with the GL compositor must use:
+```python
+from rendering.gl_format import configure_overlay_widget_attributes
+configure_overlay_widget_attributes(widget)
+```
+
+This sets `WA_StyledBackground=True` which prevents background artifacts when
+widgets are siblings of QOpenGLWidget.
+
+### Debugging Widget Flicker
+
+1. Check if `raise_()` calls are synchronous (not deferred)
+2. Verify all transitions use `snap_to_new=True` in cleanup
+3. Confirm GL overlays defer `show()` until fade > 0
+4. Check `_gl_initialized` guard in QOpenGLWidget subclasses
+5. Verify `configure_overlay_widget_attributes()` is called on all overlay widgets
