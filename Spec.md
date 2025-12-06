@@ -141,7 +141,7 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
 - `display.hw_accel`: bool
 - `display.mode`: fill|fit|shrink
 - `input.hard_exit`: bool (when true, mouse movement/clicks do not exit; only ESC/Q and hotkeys remain active). Additionally, while the Ctrl key is held, `DisplayWidget` temporarily suppresses mouse-move and left-click exit even when `input.hard_exit` is false, allowing interaction with widgets without persisting a hard-exit setting change. MC builds default this setting to true at startup in their own QSettings profile, while the normal screensaver build respects the saved value.
-- `transitions.type`: Crossfade|Slide|Wipe|Diffuse|Block Puzzle Flip|Blinds|Peel|"3D Block Spins"|"Ripple"|"Warp Dissolve" (legacy `Shuffle` values are mapped to `Crossfade` for back-compat and are no longer exposed in the UI)
+- `transitions.type`: Crossfade|Slide|Wipe|Diffuse|Block Puzzle Flip|Blinds|Peel|"3D Block Spins"|"Ripple"|"Warp Dissolve"|Crumble (legacy `Shuffle` values are mapped to `Crossfade` for back-compat and are no longer exposed in the UI)
 - `transitions.random_always`: bool
 - `transitions.random_choice`: str (current random pick for this rotation; cleared on manual type changes)
 - `transitions.slide.direction`, `transitions.slide.last_direction` (legacy flat keys maintained).

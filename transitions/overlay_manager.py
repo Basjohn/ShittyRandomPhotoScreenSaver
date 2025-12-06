@@ -283,6 +283,23 @@ def raise_overlay(widget: QWidget, overlay: QWidget) -> None:
     except Exception:
         pass
 
+    try:
+        # Spotify Volume Widget should stay above transition overlays so
+        # the volume slider remains visible and interactive.
+        vol = getattr(widget, "spotify_volume_widget", None)
+        if vol is not None:
+            vol.raise_()
+    except Exception:
+        pass
+
+    try:
+        # Reddit widget should stay above transition overlays.
+        reddit = getattr(widget, "reddit_widget", None)
+        if reddit is not None:
+            reddit.raise_()
+    except Exception:
+        pass
+
 
 def notify_overlay_stage(overlay: QWidget, stage: str, **details) -> None:
     """Forward overlay readiness diagnostics to the parent DisplayWidget."""

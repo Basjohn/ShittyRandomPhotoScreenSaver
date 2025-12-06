@@ -105,6 +105,15 @@ def _get_wipe_program():
 
 _warp_program_instance = None
 _raindrops_program_instance = None
+_crumble_program_instance = None
+
+def _get_crumble_program():
+    """Lazy-load the CrumbleProgram singleton."""
+    global _crumble_program_instance
+    if _crumble_program_instance is None:
+        from rendering.gl_programs.crumble_program import crumble_program
+        _crumble_program_instance = crumble_program
+    return _crumble_program_instance
 
 def _get_warp_program():
     """Lazy-load the WarpProgram singleton."""
@@ -282,6 +291,7 @@ class _GLPipelineState:
     slide_program: int = 0
     wipe_program: int = 0
     blinds_program: int = 0
+    crumble_program: int = 0
 
     # Textures for the current pair of images being blended/transitioned.
     old_tex_id: int = 0
@@ -365,6 +375,9 @@ class _GLPipelineState:
     blinds_u_grid: int = -1
     # New: dict of uniform locations from BlindsProgram.cache_uniforms()
     blinds_uniforms: dict = field(default_factory=dict)
+
+    # Cached uniform locations for the Crumble shader program.
+    crumble_uniforms: dict = field(default_factory=dict)
 
     # Cached uniform locations for the Shuffle shader program.
     shuffle_u_progress: int = -1
@@ -484,6 +497,21 @@ class DiffuseState:
     shape_mode: int = 0
 
 
+@dataclass
+class CrumbleState:
+    """State for a compositor-driven crumble transition.
+
+    Crumble creates a rock-like crack pattern across the old image, then the
+    pieces fall away with physics-based motion to reveal the new image.
+    """
+
+    old_pixmap: Optional[QPixmap]
+    new_pixmap: Optional[QPixmap]
+    progress: float = 0.0  # 0..1
+    seed: float = 0.0  # Random seed for crack pattern variation
+    piece_count: float = 8.0  # Approximate number of pieces (grid density)
+
+
 class GLCompositorWidget(QOpenGLWidget):
     """Single GL compositor that renders the base image and transitions.
 
@@ -522,6 +550,7 @@ class GLCompositorWidget(QOpenGLWidget):
         self._diffuse: Optional[DiffuseState] = None
         self._raindrops: Optional[RaindropsState] = None
         self._peel: Optional[PeelState] = None
+        self._crumble: Optional[CrumbleState] = None
         # NOTE: _shuffle and _shooting_stars removed - these transitions are retired.
 
         # Centralized profiler for all compositor-driven transitions.
@@ -1709,6 +1738,106 @@ class GLCompositorWidget(QOpenGLWidget):
         self._current_anim_id = anim_id
         return anim_id
 
+    def start_crumble(
+        self,
+        old_pixmap: Optional[QPixmap],
+        new_pixmap: QPixmap,
+        *,
+        duration_ms: int,
+        easing: EasingCurve,
+        animation_manager: AnimationManager,
+        on_finished: Optional[Callable[[], None]] = None,
+        piece_count: int = 8,
+        seed: Optional[float] = None,
+    ) -> Optional[str]:
+        """Begin a crumble transition using the compositor.
+
+        The crumble effect creates a rock-like crack pattern across the old
+        image, then the pieces fall away to reveal the new image.
+        """
+        import random as _random
+
+        if not new_pixmap or new_pixmap.isNull():
+            logger.error("[GL COMPOSITOR] Invalid new pixmap for crumble")
+            return None
+
+        # If there is no old image, simply set the base pixmap and repaint.
+        if old_pixmap is None or old_pixmap.isNull():
+            logger.debug("[GL COMPOSITOR] No old image; showing new image immediately (crumble)")
+            self._crossfade = None
+            self._slide = None
+            self._wipe = None
+            self._crumble = None
+            self._base_pixmap = new_pixmap
+            self.update()
+            if on_finished:
+                try:
+                    on_finished()
+                except Exception:
+                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
+            return None
+
+        # Crumble is mutually exclusive with other transitions.
+        self._crossfade = None
+        self._slide = None
+        self._wipe = None
+        self._blockflip = None
+        self._blockspin = None
+        self._blinds = None
+        self._diffuse = None
+        self._raindrops = None
+        self._peel = None
+
+        # Generate random seed if not provided
+        actual_seed = seed if seed is not None else _random.random() * 1000.0
+
+        self._crumble = CrumbleState(
+            old_pixmap=old_pixmap,
+            new_pixmap=new_pixmap,
+            progress=0.0,
+            seed=actual_seed,
+            piece_count=float(max(4, piece_count)),
+        )
+        self._animation_manager = animation_manager
+        self._current_easing = easing
+
+        # PERFORMANCE: Pre-upload textures BEFORE animation starts
+        if self._gl_pipeline is not None and self._use_shaders:
+            try:
+                self.makeCurrent()
+                self._prepare_crumble_textures()
+                self.doneCurrent()
+            except Exception:
+                logger.debug("[GL COMPOSITOR] Pre-upload textures failed", exc_info=True)
+
+        # Cancel any previous animation on this compositor.
+        if self._current_anim_id and self._animation_manager:
+            try:
+                self._animation_manager.cancel_animation(self._current_anim_id)
+            except Exception:
+                pass
+            self._current_anim_id = None
+
+        self._profiler.start("crumble")
+
+        def _crumble_update(progress: float) -> None:
+            self._profiler.tick("crumble")
+            if self._crumble is not None:
+                p = max(0.0, min(1.0, float(progress)))
+                self._crumble.progress = p
+
+        duration_sec = max(0.001, duration_ms / 1000.0)
+        frame_state = self._start_frame_pacing(duration_sec)
+        anim_id = animation_manager.animate_custom(
+            duration=duration_sec,
+            easing=easing,
+            update_callback=_crumble_update,
+            on_complete=lambda: self._on_crumble_complete(on_finished),
+            frame_state=frame_state,
+        )
+        self._current_anim_id = anim_id
+        return anim_id
+
     # ------------------------------------------------------------------
     # Animation callbacks
     # ------------------------------------------------------------------
@@ -2062,6 +2191,33 @@ class GLCompositorWidget(QOpenGLWidget):
         except Exception as e:
             logger.debug("[GL COMPOSITOR] Blinds complete handler failed: %s", e, exc_info=True)
 
+    def _on_crumble_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
+        """Completion handler for compositor-driven crumble transitions."""
+        try:
+            self._profiler.complete("crumble", viewport_size=(self.width(), self.height()))
+            self._stop_frame_pacing()
+
+            if self._crumble is not None:
+                try:
+                    self._base_pixmap = self._crumble.new_pixmap
+                except Exception:
+                    pass
+            self._crumble = None
+            self._current_anim_id = None
+
+            try:
+                self.update()
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Crumble complete update failed: %s", e, exc_info=True)
+
+            if on_finished:
+                try:
+                    on_finished()
+                except Exception:
+                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Crumble complete handler failed: %s", e, exc_info=True)
+
     def set_blockflip_region(self, region: Optional[QRegion]) -> None:
         """Update the reveal region for an in-flight block flip transition."""
 
@@ -2160,6 +2316,12 @@ class GLCompositorWidget(QOpenGLWidget):
             except Exception:
                 new_pm = None
 
+        if new_pm is None and self._crumble is not None:
+            try:
+                new_pm = self._crumble.new_pixmap
+            except Exception:
+                new_pm = None
+
         # NOTE: _shooting_stars and _shuffle snap-to-new removed - these transitions are retired.
 
         if snap_to_new and new_pm is not None:
@@ -2175,6 +2337,7 @@ class GLCompositorWidget(QOpenGLWidget):
         self._diffuse = None
         self._raindrops = None
         self._peel = None
+        self._crumble = None
 
         # Ensure any transition textures are freed when a transition is
         # cancelled so we do not leak VRAM across many rotations.
@@ -2470,6 +2633,19 @@ class GLCompositorWidget(QOpenGLWidget):
             except Exception:
                 logger.debug("[GL SHADER] Failed to initialize blinds shader program", exc_info=True)
                 self._gl_pipeline.blinds_program = 0
+                self._gl_disabled_for_session = True
+                self._use_shaders = False
+                return
+
+            # Initialize Crumble shader program
+            try:
+                crumble_helper = _get_crumble_program()
+                cp = crumble_helper.create_program()
+                self._gl_pipeline.crumble_program = cp
+                self._gl_pipeline.crumble_uniforms = crumble_helper.cache_uniforms(cp)
+            except Exception:
+                logger.debug("[GL SHADER] Failed to initialize crumble shader program", exc_info=True)
+                self._gl_pipeline.crumble_program = 0
                 self._gl_disabled_for_session = True
                 self._use_shaders = False
                 return
@@ -3135,6 +3311,9 @@ void main() {
             return False
         return self._can_use_simple_shader(st, getattr(self._gl_pipeline, "blinds_program", 0))
 
+    def _can_use_crumble_shader(self) -> bool:
+        return self._can_use_simple_shader(self._crumble, getattr(self._gl_pipeline, "crumble_program", 0))
+
     def _can_use_crossfade_shader(self) -> bool:
         return self._can_use_simple_shader(self._crossfade, getattr(self._gl_pipeline, "crossfade_program", 0))
 
@@ -3212,6 +3391,9 @@ void main() {
 
         Returns 0 on failure. Caller is responsible for deleting the texture
         when no longer needed.
+        
+        Uses PBO (Pixel Buffer Object) for async DMA transfer when available,
+        reducing UI thread blocking during texture uploads.
         """
         _upload_start = time.time()
 
@@ -3239,8 +3421,34 @@ void main() {
             logger.debug("[GL SHADER] Failed to access image bits for texture upload", exc_info=True)
             return 0
 
+        data_size = len(data)
         tex = gl.glGenTextures(1)
         tex_id = int(tex)
+        
+        # Try PBO-based async upload for better performance
+        use_pbo = False
+        pbo_id = 0
+        try:
+            # Check if PBO is available (OpenGL 2.1+)
+            if hasattr(gl, 'GL_PIXEL_UNPACK_BUFFER') and data_size > 0:
+                pbo = gl.glGenBuffers(1)
+                pbo_id = int(pbo)
+                if pbo_id > 0:
+                    gl.glBindBuffer(gl.GL_PIXEL_UNPACK_BUFFER, pbo_id)
+                    # Allocate PBO with GL_STREAM_DRAW for one-time upload
+                    gl.glBufferData(gl.GL_PIXEL_UNPACK_BUFFER, data_size, data, gl.GL_STREAM_DRAW)
+                    use_pbo = True
+        except Exception:
+            # PBO not available or failed - fall back to direct upload
+            use_pbo = False
+            if pbo_id > 0:
+                try:
+                    gl.glBindBuffer(gl.GL_PIXEL_UNPACK_BUFFER, 0)
+                    gl.glDeleteBuffers(1, [pbo_id])
+                except Exception:
+                    pass
+                pbo_id = 0
+
         gl.glBindTexture(gl.GL_TEXTURE_2D, tex_id)
         try:
             gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR)
@@ -3248,31 +3456,60 @@ void main() {
             gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_S, gl.GL_CLAMP_TO_EDGE)
             gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_T, gl.GL_CLAMP_TO_EDGE)
             gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 1)
-            gl.glTexImage2D(
-                gl.GL_TEXTURE_2D,
-                0,
-                gl.GL_RGBA8,
-                w,
-                h,
-                0,
-                gl.GL_BGRA,
-                gl.GL_UNSIGNED_BYTE,
-                data,
-            )
+            
+            if use_pbo:
+                # Upload from PBO (async DMA transfer)
+                gl.glTexImage2D(
+                    gl.GL_TEXTURE_2D,
+                    0,
+                    gl.GL_RGBA8,
+                    w,
+                    h,
+                    0,
+                    gl.GL_BGRA,
+                    gl.GL_UNSIGNED_BYTE,
+                    None,  # Data comes from bound PBO
+                )
+            else:
+                # Direct upload (synchronous)
+                gl.glTexImage2D(
+                    gl.GL_TEXTURE_2D,
+                    0,
+                    gl.GL_RGBA8,
+                    w,
+                    h,
+                    0,
+                    gl.GL_BGRA,
+                    gl.GL_UNSIGNED_BYTE,
+                    data,
+                )
         except Exception:
             logger.debug("[GL SHADER] Texture upload failed", exc_info=True)
             try:
                 gl.glDeleteTextures(int(tex_id))
             except Exception:
                 pass
+            if pbo_id > 0:
+                try:
+                    gl.glBindBuffer(gl.GL_PIXEL_UNPACK_BUFFER, 0)
+                    gl.glDeleteBuffers(1, [pbo_id])
+                except Exception:
+                    pass
             return 0
         finally:
             gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
+            # Clean up PBO
+            if pbo_id > 0:
+                try:
+                    gl.glBindBuffer(gl.GL_PIXEL_UNPACK_BUFFER, 0)
+                    gl.glDeleteBuffers(1, [pbo_id])
+                except Exception:
+                    pass
 
         # Log slow texture uploads
         _upload_elapsed = (time.time() - _upload_start) * 1000.0
         if _upload_elapsed > 30.0 and is_perf_metrics_enabled():
-            logger.warning("[PERF] [GL COMPOSITOR] Slow texture upload: %.2fms (%dx%d)", _upload_elapsed, w, h)
+            logger.warning("[PERF] [GL COMPOSITOR] Slow texture upload: %.2fms (%dx%d, pbo=%s)", _upload_elapsed, w, h, use_pbo)
 
         return tex_id
 
@@ -3454,6 +3691,19 @@ void main() {
         if self._blinds is None:
             return False
         st = self._blinds
+        return self._prepare_pair_textures(st.old_pixmap, st.new_pixmap)
+
+    def _prepare_crumble_textures(self) -> bool:
+        if not self._can_use_crumble_shader():
+            return False
+        if self._gl_pipeline is None:
+            return False
+        # PERFORMANCE: Early exit if textures already prepared
+        if self._gl_pipeline.old_tex_id and self._gl_pipeline.new_tex_id:
+            return True
+        if self._crumble is None:
+            return False
+        st = self._crumble
         return self._prepare_pair_textures(st.old_pixmap, st.new_pixmap)
 
     def _prepare_crossfade_textures(self) -> bool:
@@ -3646,6 +3896,39 @@ void main() {
 
     # NOTE: _paint_claws_shader() REMOVED - Claws/Shooting Stars transition was retired (dead code)
 
+    def _paint_crumble_shader(self, target: QRect) -> None:
+        """Render Crumble transition using the CrumbleProgram helper."""
+        if not self._can_use_crumble_shader() or self._gl_pipeline is None or self._crumble is None:
+            return
+        st = self._crumble
+        if not st.old_pixmap or st.old_pixmap.isNull() or not st.new_pixmap or st.new_pixmap.isNull():
+            return
+        if not self._prepare_crumble_textures():
+            return
+        # Track paint timing and approximate GPU duration around the shader
+        # draw call. This is only used when PERF metrics are enabled and
+        # adds negligible overhead compared to the actual GL work.
+        self._profiler.tick_paint("crumble")
+
+        start_gpu = time.perf_counter()
+        vp_w, vp_h = self._get_viewport_size()
+        crumble_helper = _get_crumble_program()
+        crumble_helper.render(
+            program=self._gl_pipeline.crumble_program,
+            uniforms=self._gl_pipeline.crumble_uniforms,
+            viewport=(vp_w, vp_h),
+            old_tex=self._gl_pipeline.old_tex_id,
+            new_tex=self._gl_pipeline.new_tex_id,
+            state=st,
+            quad_vao=self._gl_pipeline.quad_vao,
+        )
+        try:
+            gpu_ms = max(0.0, float((time.perf_counter() - start_gpu) * 1000.0))
+            self._profiler.tick_gpu("crumble", gpu_ms)
+        except Exception:
+            # GPU timing is best-effort only; never affect rendering.
+            pass
+
     def _paint_blinds_shader(self, target: QRect) -> None:
         """Render Blinds transition using the BlindsProgram helper."""
         if not self._can_use_blinds_shader() or self._gl_pipeline is None or self._blinds is None:
@@ -3723,6 +4006,7 @@ void main() {
         new_x = (st._new_start_x + st._new_delta_x * t) * inv_w
         new_y = (st._new_start_y + st._new_delta_y * t) * inv_h
 
+        start_gpu = time.perf_counter()
         vp_w, vp_h = self._get_viewport_size()
         slide_helper = _get_slide_program()
         slide_helper.render(
@@ -3736,6 +4020,11 @@ void main() {
             old_rect=(old_x, old_y, 1.0, 1.0),
             new_rect=(new_x, new_y, 1.0, 1.0),
         )
+        try:
+            gpu_ms = max(0.0, float((time.perf_counter() - start_gpu) * 1000.0))
+            self._profiler.tick_gpu("slide", gpu_ms)
+        except Exception:
+            pass
 
     def _paint_crossfade_shader(self, target: QRect) -> None:
         """Render Crossfade transition using the CrossfadeProgram helper."""
@@ -4204,6 +4493,21 @@ void main() {
                 )
                 logger.debug(
                     "[GL COMPOSITOR] Shader blinds path failed; disabling shader pipeline",
+                    exc_info=True,
+                )
+                self._gl_disabled_for_session = True
+                self._use_shaders = False
+
+        if self._crumble is not None and self._can_use_crumble_shader():
+            try:
+                self._paint_crumble_shader(target)
+                self._paint_spotify_visualizer_gl()
+                if is_perf_metrics_enabled():
+                    self._paint_debug_overlay_gl()
+                return
+            except Exception:
+                logger.debug(
+                    "[GL SHADER] Shader crumble path failed; disabling shader pipeline",
                     exc_info=True,
                 )
                 self._gl_disabled_for_session = True

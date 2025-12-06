@@ -132,7 +132,7 @@ class GLCompositorWarpTransition(BaseTransition):
             try:
                 # Ensure compositor is no longer animating; do not force snap
                 # here, as DisplayWidget will already have updated its base.
-                self._compositor.cancel_current_transition(snap_to_new=False)
+                self._compositor.cancel_current_transition(snap_to_new=True)
             except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to cleanup warp compositor", exc_info=True)
             self._compositor = None

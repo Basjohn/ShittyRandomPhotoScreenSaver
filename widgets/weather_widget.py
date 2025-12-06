@@ -16,7 +16,7 @@ from PySide6.QtGui import QFont, QColor
 from core.logging.logger import get_logger
 from core.threading.manager import ThreadManager
 from weather.open_meteo_provider import OpenMeteoProvider
-from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
+from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile, configure_overlay_widget_attributes
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 
 logger = get_logger(__name__)
@@ -131,6 +131,14 @@ class WeatherWidget(QLabel):
         self._font_size = 24
         self._text_color = QColor(255, 255, 255, 230)
         self._margin = 20
+        # Padding: slightly more at top/bottom, 15% more on right
+        self._padding_top = 8
+        self._padding_bottom = 8
+        self._padding_left = 16
+        self._padding_right = 18  # ~15% more than left
+        # Optional forecast line
+        self._show_forecast = False
+        self._forecast_data: Optional[str] = None
         # Background frame settings
         self._show_background = False
         self._bg_opacity = 0.9  # 90% opacity default
@@ -146,6 +154,9 @@ class WeatherWidget(QLabel):
     
     def _setup_ui(self) -> None:
         """Setup widget UI."""
+        # Configure attributes to prevent flicker with GL compositor
+        configure_overlay_widget_attributes(self)
+        
         self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         try:
             self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
@@ -522,14 +533,22 @@ class WeatherWidget(QLabel):
             # Relative sizing
             city_pt = max(6, self._font_size + 2)
             details_pt = max(6, self._font_size - 2)
+            forecast_pt = max(6, self._font_size - 4)
             city_html = f"<div style='font-size:{city_pt}pt; font-weight:700;'>{location_display}</div>"
 
-            details_text = f"{temp:.0f}°C - {condition_display}"
-            details_html = f"<div style='font-size:{details_pt}pt; font-weight:600;'>{details_text}</div>"
+            # Temperature is bold (700), condition is semi-bold (600)
+            temp_html = f"<span style='font-weight:700;'>{temp:.0f}°C</span>"
+            details_text = f"{temp_html} - <span style='font-weight:600;'>{condition_display}</span>"
+            details_html = f"<div style='font-size:{details_pt}pt;'>{details_text}</div>"
+
+            # Optional forecast line (italic, smaller)
+            forecast_html = ""
+            if self._show_forecast and self._forecast_data:
+                forecast_html = f"<div style='font-size:{forecast_pt}pt; font-style:italic; font-weight:400;'>{self._forecast_data}</div>"
 
             html = (
                 f"<div style='line-height:1.0'>"
-                f"{city_html}{details_html}</div>"
+                f"{city_html}{details_html}{forecast_html}</div>"
             )
             self.setTextFormat(Qt.TextFormat.RichText)
             self.setText(html)
@@ -605,6 +624,26 @@ class WeatherWidget(QLabel):
     
     def set_thread_manager(self, thread_manager) -> None:
         self._thread_manager = thread_manager
+
+    def set_show_forecast(self, show: bool) -> None:
+        """Enable or disable the optional forecast line.
+        
+        Args:
+            show: True to show forecast line when data is available
+        """
+        self._show_forecast = show
+        if self._cached_data:
+            self._update_display(self._cached_data)
+
+    def set_forecast_data(self, forecast: Optional[str]) -> None:
+        """Set the forecast text to display.
+        
+        Args:
+            forecast: Forecast text (e.g. "Tomorrow: 18°C, Partly Cloudy")
+        """
+        self._forecast_data = forecast
+        if self._show_forecast and self._cached_data:
+            self._update_display(self._cached_data)
     
     def set_shadow_config(self, config: Optional[Dict[str, Any]]) -> None:
         """Store shared shadow configuration for post-fade drop shadows."""
@@ -696,6 +735,8 @@ class WeatherWidget(QLabel):
     
     def _update_stylesheet(self) -> None:
         """Update widget stylesheet based on current settings."""
+        # Padding: top right bottom left
+        padding = f"{self._padding_top}px {self._padding_right}px {self._padding_bottom}px {self._padding_left}px"
         if self._show_background:
             # With background frame
             self.setStyleSheet(f"""
@@ -709,7 +750,7 @@ class WeatherWidget(QLabel):
                                                                  {self._bg_border_color.blue()}, 
                                                                  {self._bg_border_color.alpha()});
                     border-radius: 8px;
-                    padding: 6px 16px 6px 16px;
+                    padding: {padding};
                 }}
             """)
         else:
@@ -719,7 +760,7 @@ class WeatherWidget(QLabel):
                     color: rgba({self._text_color.red()}, {self._text_color.green()}, 
                                {self._text_color.blue()}, {self._text_color.alpha()});
                     background-color: transparent;
-                    padding: 6px 16px 6px 16px;
+                    padding: {padding};
                 }}
             """)
     

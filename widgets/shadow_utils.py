@@ -1,4 +1,4 @@
-"""Shared helpers for widget drop shadows.
+"""Shared helpers for widget drop shadows and overlay widget attributes.
 
 Centralizes configuration for overlay widget shadows (clocks, weather,
 media, and future widgets) so behaviour can be tuned in one place.
@@ -6,18 +6,47 @@ media, and future widgets) so behaviour can be tuned in one place.
 Shadows are applied via QGraphicsDropShadowEffect where possible, but
 will gracefully skip widgets that already use a different graphics
 effect (e.g. MediaWidget's opacity effect) to avoid conflicts.
+
+Also provides `configure_overlay_widget_attributes()` to set Qt widget
+attributes that prevent flickering when sibling QOpenGLWidgets repaint.
 """
 from __future__ import annotations
 
 from typing import Any, Mapping
 
 from PySide6.QtWidgets import QWidget, QGraphicsDropShadowEffect, QGraphicsOpacityEffect
-from PySide6.QtCore import QVariantAnimation, QEasingCurve
+from PySide6.QtCore import QVariantAnimation, QEasingCurve, Qt
 from PySide6.QtGui import QColor
 
 from core.logging.logger import get_logger, is_verbose_logging
 
 logger = get_logger(__name__)
+
+
+def configure_overlay_widget_attributes(widget: QWidget) -> None:
+    """Configure Qt widget attributes to reduce flicker with GL siblings.
+    
+    On Windows, QOpenGLWidget repaints can cause sibling widgets to flicker.
+    These settings help reduce (but may not eliminate) the flicker by:
+    1. Disabling auto-fill to prevent redundant background paints
+    2. Setting styled background so QSS backgrounds still work
+    
+    Note: WA_NoSystemBackground was tried but breaks widget backgrounds entirely.
+    The real fix for GL flicker is ensuring proper Z-order via raise_overlay().
+    
+    This should be called in the __init__ or _setup_ui of ALL overlay widgets
+    (clock, weather, media, spotify_visualizer, reddit, etc.).
+    
+    Args:
+        widget: The overlay widget to configure.
+    """
+    try:
+        # Disable auto-fill to reduce redundant background paints
+        widget.setAutoFillBackground(False)
+        # Ensure QSS-based backgrounds still work
+        widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+    except Exception:
+        pass
 
 # Global multiplier to make widget shadows slightly larger/softer by
 # increasing their blur radius. This applies both to immediate shadows

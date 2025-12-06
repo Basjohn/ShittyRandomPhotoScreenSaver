@@ -15,7 +15,7 @@ from shiboken6 import Shiboken
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.threading.manager import ThreadManager
 from utils.lockfree import TripleBuffer
-from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
+from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile, configure_overlay_widget_attributes
 from utils.profiler import profile
 
 logger = get_logger(__name__)
@@ -777,43 +777,39 @@ class SpotifyVisualizerAudioWorker(QObject):
 
         try:
             if getattr(self, "_weight_bands", None) != bands:
-                positions = np.linspace(-1.0, 1.0, bands, dtype="float32")
                 band_idx_f = np.arange(bands, dtype="float32")
                 t = band_idx_f / max(1.0, float(bands - 1))
 
-                # Keep a visual "hill" in the centre, but shift it slightly
-                # to the right and narrow it so fewer bars sit at the same
-                # height. This preserves the appealing centre focus while
-                # avoiding a flat plateau and helping right-hand bands.
-                tilt = 0.45 + 0.6 * t
-                sigma = 0.60
-                center_shift = 0.18
+                # High frequencies (right side) naturally have less energy.
+                # Apply exponential boost to compensate - stronger as we go right.
+                # This is the PRIMARY fix for right-side bars being too low.
+                freq_compensation = 1.0 + 2.5 * (t ** 1.5)
+                
+                # Gentle center hill for visual appeal (shifted slightly right)
+                positions = np.linspace(-1.0, 1.0, bands, dtype="float32")
+                sigma = 0.7
+                center_shift = 0.15
                 center_profile = np.exp(-0.5 * ((positions - center_shift) / sigma) ** 2).astype(
                     "float32"
                 )
                 peak_profile = float(center_profile.max()) if center_profile.size else 0.0
                 if peak_profile > 1e-6:
                     center_profile = center_profile / peak_profile
-
-                center_weight = 0.40
+                
+                # Blend: mostly frequency compensation, some center shaping
+                center_weight = 0.25
                 base_weights = (1.0 - center_weight) + center_weight * center_profile
 
-                # Slightly stronger right bias so the main energy cluster is
-                # at least one bar further right on average, without making
-                # highs dominate.
-                bias_strength = 0.75
-                right_bias = 1.0 + bias_strength * positions
-                right_bias = np.clip(
-                    right_bias,
-                    1.0 - bias_strength,
-                    1.0 + bias_strength,
-                )
-
-                # Gently attenuate the lowest bands so they do not visually
-                # swamp the spectrum even on bass-heavy tracks, without
-                # flattening the overall curve.
-                bass_atten = 1.0 - 0.16 * (1.0 - t) * (1.0 - t)
-                total_weights = base_weights * tilt * right_bias * bass_atten
+                # Attenuate bass slightly to prevent it from dominating
+                bass_atten = 0.7 + 0.3 * t
+                
+                total_weights = base_weights * freq_compensation * bass_atten
+                
+                # Normalize weights so average is ~1.0
+                avg_weight = float(total_weights.mean()) if total_weights.size else 1.0
+                if avg_weight > 1e-6:
+                    total_weights = total_weights / avg_weight
+                
                 self._weight_bands = bands
                 self._weight_factors = total_weights.astype("float32", copy=False)
             weights = self._weight_factors
@@ -836,9 +832,13 @@ class SpotifyVisualizerAudioWorker(QObject):
         except Exception:
             pass
 
+        # Normalize but add headroom so the top bar requires more energy
+        # to reach 1.0. This prevents bars from getting stuck at max.
         peak2 = float(arr.max()) if arr.size else 0.0
         if peak2 > 1e-6:
-            arr = arr / peak2
+            # Scale so typical peaks hit ~0.85, requiring louder audio for 1.0
+            headroom = 1.18
+            arr = arr / (peak2 * headroom)
         arr = np.clip(arr, 0.0, 1.0)
         return [float(x) for x in arr.tolist()]
 
@@ -1566,6 +1566,8 @@ class SpotifyVisualizerWidget(QWidget):
     # ------------------------------------------------------------------
 
     def _setup_ui(self) -> None:
+        # Configure attributes to prevent flicker with GL compositor
+        configure_overlay_widget_attributes(self)
         try:
             self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
             self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -1657,9 +1659,14 @@ class SpotifyVisualizerWidget(QWidget):
             t = t * t * t
             return max(0.0, min(1.0, t))
 
-        # Fallback: when ShadowFadeProfile progress is unavailable, keep the
-        # bars fully hidden so they never jump to full opacity ahead of the
-        # card/shadow fade.
+        # Fallback: when ShadowFadeProfile progress is unavailable, return 1.0
+        # if the widget is visible so bars show. The previous behavior of
+        # returning 0.0 caused bars to never appear when fade tracking failed.
+        try:
+            if self.isVisible():
+                return 1.0
+        except Exception:
+            pass
         return 0.0
 
     def _rebuild_geometry_cache(self, rect: QRect) -> None:

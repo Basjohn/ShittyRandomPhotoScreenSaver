@@ -23,7 +23,7 @@ from PySide6.QtWidgets import QWidget
 from core.logging.logger import get_logger, is_verbose_logging
 from core.media.spotify_volume import SpotifyVolumeController
 from core.threading.manager import ThreadManager
-from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
+from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile, configure_overlay_widget_attributes
 
 logger = get_logger(__name__)
 
@@ -117,6 +117,9 @@ class SpotifyVolumeWidget(QWidget):
     # ------------------------------------------------------------------
 
     def _setup_ui(self) -> None:
+        # Configure attributes to prevent flicker with GL compositor
+        configure_overlay_widget_attributes(self)
+        
         self.setMinimumWidth(32)
         self.setMinimumHeight(180)
         try:

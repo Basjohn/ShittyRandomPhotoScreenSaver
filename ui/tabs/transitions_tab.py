@@ -98,6 +98,7 @@ class TransitionsTab(QWidget):
             "Ripple",            # GL-only (formerly Rain Drops)
             "Warp Dissolve",     # GL-only
             "Blinds",            # GL-only
+            "Crumble",           # GL-only, falling rock pieces
         ])
         self.transition_combo.currentTextChanged.connect(self._on_transition_changed)
         type_row.addWidget(self.transition_combo)
@@ -363,6 +364,7 @@ class TransitionsTab(QWidget):
             "Ripple",       # UI label for the former Rain Drops transition
             "Warp Dissolve",
             "Blinds",
+            "Crumble",
         ]
         self._duration_by_type = {}
         for name in type_keys:
@@ -601,7 +603,7 @@ class TransitionsTab(QWidget):
         try:
             from PySide6.QtCore import Qt
             hw = self._settings.get_bool('display.hw_accel', True)
-            gl_only = ["Blinds", "Peel", "3D Block Spins", "Ripple", "Warp Dissolve"]
+            gl_only = ["Blinds", "Peel", "3D Block Spins", "Ripple", "Warp Dissolve", "Crumble"]
             for name in gl_only:
                 idx = self.transition_combo.findText(name)
                 if idx >= 0:
@@ -625,7 +627,7 @@ class TransitionsTab(QWidget):
         """If a GL-only transition is selected with HW off, switch to Crossfade and persist."""
         hw = self._settings.get_bool('display.hw_accel', True)
         cur = self.transition_combo.currentText()
-        gl_only = {"Blinds", "Peel", "3D Block Spins", "Ripple", "Warp Dissolve"}
+        gl_only = {"Blinds", "Peel", "3D Block Spins", "Ripple", "Warp Dissolve", "Crumble"}
         if cur in gl_only and not hw:
             idx = self.transition_combo.findText("Crossfade")
             if idx >= 0:

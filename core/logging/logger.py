@@ -12,7 +12,9 @@ from pathlib import Path
 
 
 _VERBOSE: bool = False
-_PERF_METRICS_ENABLED: bool = True
+# PERF metrics default to False for production builds. Script mode (development)
+# can enable via SRPSS_PERF_METRICS=1 env var; Nuitka builds use .perf.cfg files.
+_PERF_METRICS_ENABLED: bool = False
 # Base directory for logs and related artefacts. This is initialised to the
 # project root by default and updated by setup_logging() for frozen builds so
 # helpers like get_log_dir() always point at the effective runtime location.
@@ -26,7 +28,7 @@ if _env_perf is not None:
         elif str(_env_perf).strip().lower() in ("1", "true", "on", "yes"):
             _PERF_METRICS_ENABLED = True
     except Exception:
-        _PERF_METRICS_ENABLED = True
+        pass  # Keep default (False) on parse failure
 
 
 class ColoredFormatter(logging.Formatter):

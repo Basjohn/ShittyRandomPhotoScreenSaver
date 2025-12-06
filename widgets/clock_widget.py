@@ -19,7 +19,7 @@ from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtGui import QFont, QColor, QPainter, QPen, QPaintEvent
 from shiboken6 import Shiboken
 
-from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
+from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile, configure_overlay_widget_attributes
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 from core.logging.logger import get_logger
 
@@ -126,6 +126,9 @@ class ClockWidget(QLabel):
     
     def _setup_ui(self) -> None:
         """Setup widget UI."""
+        # Configure attributes to prevent flicker with GL compositor
+        configure_overlay_widget_attributes(self)
+        
         # Set label properties
         self.setObjectName("clock_main")
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)

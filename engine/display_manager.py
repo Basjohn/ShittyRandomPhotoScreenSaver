@@ -191,10 +191,21 @@ class DisplayManager(QObject):
         # Resolve which screens should actually create DisplayWidgets
         allowed_indices = self._get_allowed_screen_indices(screen_count)
         
-        # Create display for each allowed screen
+        # Create display for each allowed screen with staggered initialization.
+        # This prevents simultaneous GL compositor init on multiple displays
+        # which can cause 100-200ms UI thread blocks.
+        stagger_ms = 50  # 50ms between display creations
+        created_count = 0
         for i in range(screen_count):
             if i in allowed_indices:
+                # Stagger after first display to spread GL init load
+                if created_count > 0 and stagger_ms > 0:
+                    from PySide6.QtCore import QCoreApplication
+                    # Process events and wait to stagger GL compositor init
+                    QCoreApplication.processEvents()
+                    time.sleep(stagger_ms / 1000.0)
                 self._create_display_for_screen(i)
+                created_count += 1
             else:
                 logger.info(
                     "[DISPLAY] Skipping display for screen %d due to show_on_monitors",

@@ -28,7 +28,7 @@ from core.media.media_controller import (
     create_media_controller,
 )
 from core.threading.manager import ThreadManager
-from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
+from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile, configure_overlay_widget_attributes
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 
 logger = get_logger(__name__)
@@ -148,6 +148,9 @@ class MediaWidget(QLabel):
     # Lifecycle
     # ------------------------------------------------------------------
     def _setup_ui(self) -> None:
+        # Configure attributes to prevent flicker with GL compositor
+        configure_overlay_widget_attributes(self)
+        
         # Align content to the top-left so the header/logo sit close to the
         # top edge rather than vertically centered in the card.
         self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)

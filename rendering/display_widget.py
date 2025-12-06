@@ -47,6 +47,7 @@ from transitions.gl_compositor_blockspin_transition import GLCompositorBlockSpin
 from transitions.gl_compositor_raindrops_transition import GLCompositorRainDropsTransition
 from transitions.gl_compositor_warp_transition import GLCompositorWarpTransition
 from transitions.gl_compositor_diffuse_transition import GLCompositorDiffuseTransition
+from transitions.gl_compositor_crumble_transition import GLCompositorCrumbleTransition
 from transitions.diffuse_transition import DiffuseTransition
 from widgets.clock_widget import ClockWidget, TimeFormat, ClockPosition
 from widgets.weather_widget import WeatherWidget, WeatherPosition
@@ -911,6 +912,12 @@ class DisplayWidget(QWidget):
                     self.weather_widget.set_background_border(2, border_qcolor)
                 except Exception:
                     pass
+
+                # Optional forecast line
+                show_forecast = SettingsManager.to_bool(
+                    weather_settings.get('show_forecast', False), False
+                )
+                self.weather_widget.set_show_forecast(show_forecast)
 
                 # Global widget drop shadow (shared config for all widgets).
                 #
@@ -2205,6 +2212,34 @@ class DisplayWidget(QWidget):
                 self._log_transition_selection(requested_type, label, random_mode, random_choice_value)
                 return transition
 
+            if transition_type == 'Crumble':
+                crumble_settings = transitions_settings.get('crumble', {}) if isinstance(transitions_settings.get('crumble', {}), dict) else {}
+                piece_count_raw = crumble_settings.get('piece_count', 8)
+                try:
+                    piece_count = int(piece_count_raw)
+                except Exception:
+                    piece_count = 8
+
+                if hw_accel:
+                    try:
+                        self._ensure_gl_compositor()
+                    except Exception:
+                        logger.debug("[GL COMPOSITOR] Failed to ensure compositor during crumble selection", exc_info=True)
+                    use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
+                    if use_compositor:
+                        transition = GLCompositorCrumbleTransition(duration_ms, piece_count)
+                    else:
+                        # When compositor cannot be used, prefer a CPU
+                        # Crossfade fallback.
+                        transition = CrossfadeTransition(duration_ms)
+                else:
+                    transition = CrossfadeTransition(duration_ms)
+
+                transition.set_resource_manager(self._resource_manager)
+                label = 'Crumble' if hw_accel else 'Crossfade'
+                self._log_transition_selection(requested_type, label, random_mode, random_choice_value)
+                return transition
+
             logger.warning("Unknown transition type: %s, using Crossfade", transition_type)
             transition = CrossfadeTransition(duration_ms)
             transition.set_resource_manager(self._resource_manager)
@@ -2395,37 +2430,19 @@ class DisplayWidget(QWidget):
                             "[GL COMPOSITOR] warm_shader_textures failed during pre-warm",
                             exc_info=True,
                         )
-                    for attr_name in ("clock_widget", "clock2_widget", "clock3_widget"):
-                        clock = getattr(self, attr_name, None)
-                        if clock is not None:
+                    # Raise all overlay widgets above the compositor ONCE here.
+                    # The rate-limited raise_overlay() handles ongoing raises.
+                    for attr_name in (
+                        "clock_widget", "clock2_widget", "clock3_widget",
+                        "weather_widget", "media_widget", "spotify_visualizer_widget",
+                        "_spotify_bars_overlay", "spotify_volume_widget", "reddit_widget",
+                    ):
+                        w = getattr(self, attr_name, None)
+                        if w is not None:
                             try:
-                                clock.raise_()
-                                if hasattr(clock, "_tz_label") and clock._tz_label:
-                                    clock._tz_label.raise_()
+                                w.raise_()
                             except Exception:
                                 pass
-                    if getattr(self, "weather_widget", None) is not None:
-                        try:
-                            self.weather_widget.raise_()
-                        except Exception:
-                            pass
-                    # Keep media widget above compositor as well so the
-                    # Spotify overlay never disappears during GL transitions.
-                    mw = getattr(self, "media_widget", None)
-                    if mw is not None:
-                        try:
-                            mw.raise_()
-                        except Exception:
-                            pass
-                    # Raise Reddit widget too so it remains above transitions,
-                    # but do not force it visible here; first visibility is
-                    # owned by the widget's own fade-in path.
-                    rw = getattr(self, "reddit_widget", None)
-                    if rw is not None:
-                        try:
-                            rw.raise_()
-                        except Exception:
-                            pass
                 except Exception:
                     logger.debug("[GL COMPOSITOR] Failed to pre-warm compositor with base frame", exc_info=True)
 
@@ -2499,55 +2516,59 @@ class DisplayWidget(QWidget):
                     success = transition.start(self.previous_pixmap, new_pixmap, self)
                     if success:
                         self._start_transition_watchdog(overlay_key, transition)
-                        # PERF: Raise widgets ONCE at transition start, not every frame.
-                        # Use QTimer.singleShot to defer raises slightly so they don't
-                        # block the transition start. This keeps widgets visible without
-                        # blocking the UI thread synchronously.
-                        def _deferred_raise():
-                            try:
-                                for attr_name in ("clock_widget", "clock2_widget", "clock3_widget"):
-                                    clock = getattr(self, attr_name, None)
-                                    if clock is not None:
-                                        try:
-                                            clock.raise_()
-                                            if hasattr(clock, '_tz_label') and clock._tz_label:
-                                                clock._tz_label.raise_()
-                                        except Exception:
-                                            pass
-                                if self.weather_widget:
+                        # Raise widgets SYNCHRONOUSLY after transition.start() so they
+                        # are above the compositor BEFORE the first frame is rendered.
+                        # Previously this was deferred via QTimer.singleShot(0, ...) which
+                        # allowed the compositor to render 1+ frames with widgets hidden.
+                        try:
+                            for attr_name in ("clock_widget", "clock2_widget", "clock3_widget"):
+                                clock = getattr(self, attr_name, None)
+                                if clock is not None:
                                     try:
-                                        self.weather_widget.raise_()
+                                        clock.raise_()
+                                        if hasattr(clock, '_tz_label') and clock._tz_label:
+                                            clock._tz_label.raise_()
                                     except Exception:
                                         pass
-                                mw = getattr(self, "media_widget", None)
-                                if mw is not None:
-                                    try:
-                                        mw.raise_()
-                                    except Exception:
-                                        pass
-                                rw = getattr(self, "reddit_widget", None)
-                                if rw is not None:
-                                    try:
-                                        rw.raise_()
-                                    except Exception:
-                                        pass
-                                sv = getattr(self, "spotify_visualizer_widget", None)
-                                if sv is not None:
-                                    try:
-                                        sv.raise_()
-                                    except Exception:
-                                        pass
-                                # Also raise the bars GL overlay
-                                bars_overlay = getattr(self, "_spotify_bars_overlay", None)
-                                if bars_overlay is not None:
-                                    try:
-                                        bars_overlay.raise_()
-                                    except Exception:
-                                        pass
-                            except Exception:
-                                pass
-                        # Defer to next event loop iteration
-                        QTimer.singleShot(0, _deferred_raise)
+                            if self.weather_widget:
+                                try:
+                                    self.weather_widget.raise_()
+                                except Exception:
+                                    pass
+                            mw = getattr(self, "media_widget", None)
+                            if mw is not None:
+                                try:
+                                    mw.raise_()
+                                except Exception:
+                                    pass
+                            rw = getattr(self, "reddit_widget", None)
+                            if rw is not None:
+                                try:
+                                    rw.raise_()
+                                except Exception:
+                                    pass
+                            sv = getattr(self, "spotify_visualizer_widget", None)
+                            if sv is not None:
+                                try:
+                                    sv.raise_()
+                                except Exception:
+                                    pass
+                            # Also raise the bars GL overlay
+                            bars_overlay = getattr(self, "_spotify_bars_overlay", None)
+                            if bars_overlay is not None:
+                                try:
+                                    bars_overlay.raise_()
+                                except Exception:
+                                    pass
+                            # Spotify volume widget
+                            vw = getattr(self, "spotify_volume_widget", None)
+                            if vw is not None:
+                                try:
+                                    vw.raise_()
+                                except Exception:
+                                    pass
+                        except Exception:
+                            pass
                         logger.debug(f"Transition started: {transition.__class__.__name__}")
                         return
                     else:

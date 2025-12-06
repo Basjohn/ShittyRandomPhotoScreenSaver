@@ -37,6 +37,13 @@ class TransitionProfile:
     paint_count: int = 0
     paint_min_dt: float = 0.0
     paint_max_dt: float = 0.0
+    # Optional GPU timing (per-frame GPU duration in milliseconds). Only
+    # populated when the caller records GPU samples explicitly; otherwise
+    # these remain zero and are omitted from logs.
+    gpu_sample_count: int = 0
+    gpu_total_ms: float = 0.0
+    gpu_min_ms: float = 0.0
+    gpu_max_ms: float = 0.0
 
 
 class TransitionProfiler:
@@ -111,6 +118,32 @@ class TransitionProfiler:
         
         profile.last_paint_ts = now
     
+    def tick_gpu(self, name: str, gpu_time_ms: float) -> None:
+        """Record a GPU timing sample for a transition.
+
+        The compositor is expected to measure GPU time (for example via
+        GL timer queries or a `glFinish()`-bounded span) and call this with
+        the elapsed duration in milliseconds. When no GPU samples are
+        recorded, GPU metrics remain zero and are omitted from logs.
+        """
+        profile = self._profiles.get(name)
+        if profile is None:
+            return
+        # Ignore obviously invalid samples to keep metrics robust.
+        try:
+            value = float(gpu_time_ms)
+        except Exception:
+            return
+        if value <= 0.0:
+            return
+
+        profile.gpu_sample_count += 1
+        profile.gpu_total_ms += value
+        if profile.gpu_min_ms == 0.0 or value < profile.gpu_min_ms:
+            profile.gpu_min_ms = value
+        if value > profile.gpu_max_ms:
+            profile.gpu_max_ms = value
+    
     def get_metrics(self, name: str) -> Optional[Tuple[float, float, float, float]]:
         """Get current metrics for debug overlay.
         
@@ -169,11 +202,23 @@ class TransitionProfiler:
         paint_max_dt_ms = profile.paint_max_dt * 1000.0 if profile.paint_max_dt > 0 else 0.0
         paint_avg_fps = paint_count / total_time if paint_count > 0 and total_time > 0 else 0.0
         
+        # Optional GPU metrics (only populated when the compositor records
+        # GPU samples via tick_gpu()).
+        gpu_samples = getattr(profile, "gpu_sample_count", 0)
+        if gpu_samples and total_time > 0:
+            gpu_avg_ms = profile.gpu_total_ms / float(gpu_samples)
+        else:
+            gpu_avg_ms = 0.0
+        gpu_min_ms = getattr(profile, "gpu_min_ms", 0.0)
+        gpu_max_ms = getattr(profile, "gpu_max_ms", 0.0)
+        
         if viewport_size:
             logger.info(
                 "[PERF] [GL COMPOSITOR] %s metrics: duration=%.1fms, frames=%d, "
                 "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, "
-                "paint_fps=%.1f, paint_dt_max=%.2fms, size=%dx%d",
+                "paint_fps=%.1f, paint_dt_max=%.2fms, "
+                "gpu_avg=%.2fms, gpu_dt_min=%.2fms, gpu_dt_max=%.2fms, "
+                "size=%dx%d",
                 name.capitalize(),
                 duration_ms,
                 frame_count,
@@ -182,6 +227,9 @@ class TransitionProfiler:
                 max_dt_ms,
                 paint_avg_fps,
                 paint_max_dt_ms,
+                gpu_avg_ms,
+                gpu_min_ms,
+                gpu_max_ms,
                 viewport_size[0],
                 viewport_size[1],
             )
@@ -189,7 +237,8 @@ class TransitionProfiler:
             logger.info(
                 "[PERF] [GL COMPOSITOR] %s metrics: duration=%.1fms, frames=%d, "
                 "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, "
-                "paint_fps=%.1f, paint_dt_max=%.2fms",
+                "paint_fps=%.1f, paint_dt_max=%.2fms, "
+                "gpu_avg=%.2fms, gpu_dt_min=%.2fms, gpu_dt_max=%.2fms",
                 name.capitalize(),
                 duration_ms,
                 frame_count,
@@ -198,6 +247,9 @@ class TransitionProfiler:
                 max_dt_ms,
                 paint_avg_fps,
                 paint_max_dt_ms,
+                gpu_avg_ms,
+                gpu_min_ms,
+                gpu_max_ms,
             )
     
     def reset(self, name: str) -> None:

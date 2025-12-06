@@ -94,8 +94,13 @@ void main() {
     vec2 cellSize = vec2(1.0) / grid;
     vec2 uvLocal = (uv - cellOrigin) / cellSize; // 0..1 inside block
 
-    // Rectangle (0): whole-block transition using the local timing only.
-    float rectMix = local;
+    // Rectangle (0): whole-block transition with slight edge feathering.
+    // Add a small feather to soften the hard block edges.
+    vec2 cellFrac = fract(uv * grid);
+    float edgeDist = min(min(cellFrac.x, 1.0 - cellFrac.x), 
+                        min(cellFrac.y, 1.0 - cellFrac.y));
+    float rectEdgeFeather = smoothstep(0.0, 0.08, edgeDist);
+    float rectMix = local * mix(0.92, 1.0, rectEdgeFeather);
 
     // Per-block shape progress.
     float shapeProgress = 0.0;
@@ -107,48 +112,65 @@ void main() {
     float blockMix = rectMix;
 
     if (u_shapeMode == 1) {
-        // Membrane mode: soft feathered circles that break apart organically.
-        // Use continuous UV coordinates to avoid hard block edges.
-        vec2 centred = uvLocal - vec2(0.5);
+        // Membrane mode: cohesive overlapping circles that blend together.
+        // Sample multiple nearby cell centers and blend their contributions.
+        float totalMask = 0.0;
         
-        // Per-cell random offset to break up the grid pattern.
-        float cellRnd1 = hash1(cellIndex * 91.0 + 7.0);
-        float cellRnd2 = hash1(cellIndex * 53.0 + 23.0);
-        vec2 offset = (vec2(cellRnd1, cellRnd2) - 0.5) * 0.3;
-        centred += offset * shapeProgress;
+        // Check current cell and 8 neighbors for overlapping circles
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                vec2 neighborCell = cell + vec2(float(dx), float(dy));
+                
+                // Skip out-of-bounds cells
+                if (neighborCell.x < 0.0 || neighborCell.x >= cols ||
+                    neighborCell.y < 0.0 || neighborCell.y >= rows) {
+                    continue;
+                }
+                
+                float neighborIndex = neighborCell.y * cols + neighborCell.x;
+                
+                // Per-cell random threshold
+                float neighborRnd = hash1(neighborIndex * 37.0 + 13.0);
+                float neighborShaped = pow(neighborRnd, 1.35);
+                float neighborThreshold = min(neighborShaped, 1.0 - width);
+                
+                // This cell's progress
+                float neighborProgress = 0.0;
+                if (t > neighborThreshold) {
+                    float span = max(1e-4, 1.0 - neighborThreshold);
+                    neighborProgress = clamp((t - neighborThreshold) / span, 0.0, 1.0);
+                }
+                
+                if (neighborProgress <= 0.0) continue;
+                
+                // Cell center in UV space
+                vec2 neighborCenter = (neighborCell + vec2(0.5)) / grid;
+                
+                // Per-cell random offset for organic placement
+                float cellRnd1 = hash1(neighborIndex * 91.0 + 7.0);
+                float cellRnd2 = hash1(neighborIndex * 53.0 + 23.0);
+                vec2 offset = (vec2(cellRnd1, cellRnd2) - 0.5) * 0.3 / grid;
+                neighborCenter += offset * neighborProgress;
+                
+                // Distance from this pixel to the circle center
+                vec2 toCenter = uv - neighborCenter;
+                float dist = length(toCenter);
+                
+                // Expanding circle radius (in UV space, so scale by grid)
+                float baseRadius = 0.6 / min(cols, rows);  // Base radius
+                float maxRadius = 1.2 / min(cols, rows);   // Max radius to overlap
+                float circleR = mix(0.0, maxRadius, neighborProgress);
+                
+                // Soft feathered edge
+                float feather = 0.15 / min(cols, rows);
+                float circleMask = 1.0 - smoothstep(circleR - feather, circleR + feather, dist);
+                
+                // Accumulate (max blend for overlapping circles)
+                totalMask = max(totalMask, circleMask);
+            }
+        }
         
-        float baseR = length(centred);
-        
-        // Angular wobble to make circles look like breaking membranes.
-        float angle = atan(centred.y, centred.x);
-        float wobbleFreq = 3.0 + cellRnd1 * 4.0;
-        float wobbleAmp = 0.15 + cellRnd2 * 0.15;
-        float wobble = sin(angle * wobbleFreq + cellIndex * 1.7) * wobbleAmp;
-        wobble *= shapeProgress;  // Wobble grows as membrane breaks
-        
-        float r = baseR * (1.0 + wobble);
-        
-        // Expanding circle with very soft feathered edge.
-        float memMinR = 0.05;
-        float memMaxR = 0.75;  // Larger to ensure full coverage
-        float memR = mix(memMinR, memMaxR, shapeProgress);
-        
-        // Wide feather for soft membrane edge.
-        float feather = 0.35 + 0.15 * shapeProgress;
-        float memInner = max(0.0, memR - feather);
-        float memOuter = memR + feather * 0.5;
-        
-        float membraneMask = 1.0 - smoothstep(memInner, memOuter, r);
-        blockMix = local * membraneMask;
-        
-        // Blend with neighboring cells to soften grid edges.
-        // Sample nearby cells and blend their contributions.
-        float edgeSoftness = 0.0;
-        vec2 cellFrac = fract(uv * grid);
-        float edgeDist = min(min(cellFrac.x, 1.0 - cellFrac.x), 
-                            min(cellFrac.y, 1.0 - cellFrac.y));
-        float edgeBlend = smoothstep(0.0, 0.15, edgeDist);
-        blockMix *= mix(0.7, 1.0, edgeBlend);
+        blockMix = totalMask;
     }
 
     // Global tail for clean landing.

@@ -195,9 +195,10 @@ class GLCompositorDiffuseTransition(BaseTransition):
 
         if self._compositor is not None:
             try:
-                # Ensure compositor is no longer animating; do not force snap
-                # here, as DisplayWidget will already have updated its base.
-                self._compositor.cancel_current_transition(snap_to_new=False)
+                # Snap to new image so compositor's _base_pixmap matches the
+                # final frame. Without this, the compositor may briefly show
+                # the old image after transition state is cleared.
+                self._compositor.cancel_current_transition(snap_to_new=True)
             except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to cleanup diffuse compositor", exc_info=True)
             self._compositor = None

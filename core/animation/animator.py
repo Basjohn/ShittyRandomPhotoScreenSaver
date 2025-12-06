@@ -367,7 +367,24 @@ class AnimationManager(QObject):
             logger.debug("AnimationManager started")
     
     def stop(self) -> None:
-        """Stop the animation manager's update loop."""
+        """Stop the animation manager's update loop.
+        
+        Thread-safe: Uses QTimer.singleShot to ensure timer operations
+        happen on the UI thread.
+        """
+        try:
+            # Check if we're on the UI thread by checking timer's thread affinity
+            if self._timer.thread() != QTimer().thread():
+                # We're on a different thread - schedule stop on UI thread
+                QTimer.singleShot(0, self._do_stop)
+            else:
+                self._do_stop()
+        except Exception:
+            # Fallback: try direct stop
+            self._do_stop()
+    
+    def _do_stop(self) -> None:
+        """Internal stop implementation - must be called on UI thread."""
         if self._timer.isActive():
             self._timer.stop()
             self._log_profile_summary()
@@ -538,6 +555,8 @@ class AnimationManager(QObject):
         """
         Cancel an animation.
         
+        Thread-safe: Can be called from any thread.
+        
         Args:
             animation_id: Animation ID
         
@@ -546,12 +565,21 @@ class AnimationManager(QObject):
         """
         if animation_id in self._animations:
             self._animations[animation_id].cancel()
-            self.animation_cancelled.emit(animation_id)
+            try:
+                self.animation_cancelled.emit(animation_id)
+            except Exception:
+                pass
             # Remove from active animations
             del self._animations[animation_id]
             # Stop timer only if no animations AND no tick listeners remain
-            if not self._animations and not self._tick_listeners and self._timer.isActive():
-                self.stop()
+            # Use thread-safe stop() which handles cross-thread calls
+            if not self._animations and not self._tick_listeners:
+                try:
+                    if self._timer.isActive():
+                        self.stop()
+                except Exception:
+                    # Timer check from wrong thread - schedule stop
+                    QTimer.singleShot(0, self._do_stop)
             return True
         return False
     

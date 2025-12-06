@@ -510,7 +510,13 @@ class ThreadManager:
                 now = time.time()
                 if _last_invoke_ts[0] > 0.0:
                     gap_ms = (now - _last_invoke_ts[0]) * 1000.0
-                    if gap_ms > 100.0 and is_perf_metrics_enabled():
+                    # Only warn if gap exceeds 2x the expected interval AND is
+                    # significant (>100ms). For slow timers (e.g. 1000ms weather
+                    # refresh) a gap of 1007ms is normal jitter, not a problem.
+                    # Modal dialogs (settings) also block the event loop, causing
+                    # expected gaps that should not spam warnings.
+                    threshold_ms = max(100.0, float(interval_ms) * 2.0)
+                    if gap_ms > threshold_ms and is_perf_metrics_enabled():
                         logger.warning("[PERF] [TIMER] Large gap between recurring timer invocations: %.2fms (interval=%dms)", gap_ms, interval_ms)
                 _last_invoke_ts[0] = now
                 func(*args, **(kwargs or {}))

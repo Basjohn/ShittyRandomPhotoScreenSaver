@@ -28,7 +28,7 @@ from PySide6.QtWidgets import QLabel, QWidget, QToolTip
 
 from core.logging.logger import get_logger, is_verbose_logging
 from core.threading.manager import ThreadManager
-from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
+from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile, configure_overlay_widget_attributes
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 
 logger = get_logger(__name__)
@@ -139,6 +139,8 @@ class RedditWidget(QLabel):
 
     def _setup_ui(self) -> None:
         """Initialise widget appearance and layout."""
+        # Configure attributes to prevent flicker with GL compositor
+        configure_overlay_widget_attributes(self)
 
         self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         try:

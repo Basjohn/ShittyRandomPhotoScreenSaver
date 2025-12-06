@@ -74,6 +74,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - `wipe_program.py`: `WipeProgram` for the Wipe transition GLSL. Optimized with direction vector approach instead of mode branching.
   - `warp_program.py`: `WarpProgram` for the Warp Dissolve transition GLSL.
   - `raindrops_program.py`: `RaindropsProgram` for the Raindrops/Ripple transition GLSL.
+  - `crumble_program.py`: `CrumbleProgram` for the Crumble transition GLSL (Voronoi crack pattern with falling pieces).
 - rendering/gl_profiler.py
   - `TransitionProfiler`: centralized profiling helper for GL compositor transitions. Tracks frame timing, min/max frame durations, and emits PERF logs. All compositor transitions (Slide, Wipe, Peel, BlockSpin, Warp, Raindrops, BlockFlip, Diffuse, Blinds) now use this single profiler instance instead of per-transition profiling fields.
 
@@ -99,6 +100,8 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - Compositor-backed GL-only Rain Drops transition using a raindrop-like diffuse region to reveal the new image.
 - transitions/gl_compositor_warp_transition.py
   - Compositor-backed GL-only Warp Dissolve transition using a banded horizontal warp of the old image over a stable new image.
+- transitions/gl_compositor_crumble_transition.py
+  - Compositor-backed GL-only Crumble transition creating a rock-like Voronoi crack pattern across the old image, then pieces fall away with physics-based motion (gravity, rotation, drift) to reveal the new image.
 - transitions/gl_compositor_clawmarks_transition.py
   - Legacy compositor-backed GL-only Claw Marks / Shooting Stars transition. This effect has been removed from the active transition pool and its GLSL "claws" shader path is hard-disabled; the module is kept only as a reference and any legacy requests are mapped to a safe Crossfade-style fallback instead of a dedicated Claw transition.
 - transitions/gl_compositor_shuffle_transition.py
@@ -148,7 +151,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - display.refresh_sync: bool
 - display.hw_accel: bool
 - display.mode: fill|fit|shrink
- - transitions.type (includes all CPU and GL/compositor-backed transition types such as Crossfade, Slide, Wipe, Diffuse, Block Puzzle Flip, Blinds, Peel, 3D Block Spins, Rain Drops, Warp Dissolve; legacy `Shuffle` values are mapped to `Crossfade` for back-compat)
+ - transitions.type (includes all CPU and GL/compositor-backed transition types such as Crossfade, Slide, Wipe, Diffuse, Block Puzzle Flip, Blinds, Peel, 3D Block Spins, Rain Drops, Warp Dissolve, Crumble; legacy `Shuffle` values are mapped to `Crossfade` for back-compat)
 - transitions.random_always: bool
 - transitions.random_choice: str
 - transitions.duration_ms: int (global default duration in milliseconds for transitions)

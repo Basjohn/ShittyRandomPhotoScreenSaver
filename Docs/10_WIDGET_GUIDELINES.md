@@ -316,20 +316,25 @@ It must do **two things**:
    for attr_name in (
        "clock_widget", "clock2_widget", "clock3_widget",
        "weather_widget", "media_widget",
-       "spotify_visualizer_widget", "reddit_widget",
+       "spotify_visualizer_widget", "_spotify_bars_overlay",
+       "spotify_volume_widget", "reddit_widget",
    ):
        w = getattr(self, attr_name, None)
        if w is not None and w.isVisible():
            w.raise_()
    ```
 
-This pattern – especially the explicit re‑raise of `media_widget` and
-`spotify_visualizer_widget` – is the **exact fix** for the historical bug
-where the Spotify Beat Visualizer (and sometimes the media card) vanished or
-only reappeared late in a GL transition.
+This pattern – especially the explicit re‑raise of `media_widget`,
+`spotify_visualizer_widget`, `_spotify_bars_overlay`, and `spotify_volume_widget`
+– is the **exact fix** for the historical bug where the Spotify Beat Visualizer
+(and sometimes the media card or volume slider) vanished or only reappeared
+late in a GL transition.
 
-Any new overlay widget must be added to this re‑raise list once it participates
-in the shared overlay fade/shadow system.
+**CRITICAL**: Any new overlay widget must be added to **four places**:
+1. `transitions/overlay_manager.py::raise_overlay()` - for rate-limited raises
+2. `rendering/display_widget.py::_deferred_raise()` - for transition start raises
+3. `rendering/display_widget.py` pre-warm section - for compositor pre-warm raises
+4. Widget's `_setup_ui()` must call `configure_overlay_widget_attributes(self)` from `shadow_utils.py` to prevent flicker with GL compositor
 
 ---
 
