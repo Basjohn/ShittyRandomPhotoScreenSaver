@@ -15,14 +15,17 @@ Shitty Showcase where I cut off the Spotify controls in recording.
   - Optional RSS/JSON image feeds (e.g. curated Reddit wallpaper feeds)
   - Mixed mode (folders + RSS) support
   - High‑quality scaling with optional sharpening
-  - Transitions:
+  - 10 GLSL Transitions:
     - Crossfade
     - Slide
     - Wipe
     - Diffuse
     - Block Puzzle Flip
-    - Blinds (GL‑only)
-  - Pan & scan (Ken Burns effect) coordinated with the image interval, but don't use it, please, it fucks everything up.
+    - Blinds
+    - Ripple
+    - Warp
+    - 3D Block Spin
+    - Crumble
   - Multi‑monitor aware: same image on all screens or independent images per screen
 
 - **Overlay widgets**
