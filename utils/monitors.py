@@ -264,14 +264,14 @@ def get_screen_info_dict(screen: QScreen) -> dict:
 def log_screen_configuration():
     """Log the current screen configuration for debugging."""
     screens = get_all_screens()
-    logger.info(f"=== Screen Configuration ===")
+    logger.info("=== Screen Configuration ===")
     logger.info(f"Total screens: {len(screens)}")
     logger.info(f"Multi-monitor: {is_multi_monitor()}")
     logger.info(f"Virtual desktop: {get_virtual_desktop_rect()}")
     
     for i, screen in enumerate(screens):
         info = get_screen_info_dict(screen)
-        logger.info(f"")
+        logger.info("")
         logger.info(f"Screen {i}: {info['name']}")
         logger.info(f"  Primary: {info['is_primary']}")
         logger.info(f"  Physical Resolution: {info['physical_geometry']['width']}x{info['physical_geometry']['height']} "
@@ -283,4 +283,4 @@ def log_screen_configuration():
                    f"Physical={info['physical_dpi_x']:.1f}x{info['physical_dpi_y']:.1f}")
         logger.info(f"  Refresh rate: {info['refresh_rate']} Hz")
     
-    logger.info(f"=== End Screen Configuration ===")
+    logger.info("=== End Screen Configuration ===")

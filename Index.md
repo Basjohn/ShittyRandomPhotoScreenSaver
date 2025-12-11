@@ -82,6 +82,8 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - `TransitionStateManager`: Clean interface for getting/setting transition state with change notifications.
 - rendering/transition_factory.py
   - `TransitionFactory`: Factory for creating transition instances based on settings and hardware capabilities. **Integrated into DisplayWidget**, removing 535 lines of duplicate code and 20+ unused imports. Handles all transition type selection, direction randomization, and compositor/CPU fallback logic.
+- rendering/widget_setup.py
+  - Widget setup helpers extracted from DisplayWidget: `parse_color_to_qcolor`, `resolve_monitor_visibility`, `setup_dimming`, `get_widget_shadow_config`, `compute_expected_overlays`. Reduces nested try/except and prepares for further _setup_widgets decomposition.
 - rendering/widget_manager.py
   - `WidgetManager`: Extracted from DisplayWidget. Manages overlay widget lifecycle, positioning, visibility, Z-order, and rate-limited raise operations.
 
@@ -164,6 +166,11 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - utils/profiler.py
 - utils/lockfree/spsc_queue.py
 - utils/monitors.py
+- utils/audio_capture.py
+  - `AudioCaptureBackend`: Abstract base class for audio capture
+  - `PyAudioWPatchBackend`: WASAPI loopback capture (Windows)
+  - `SounddeviceBackend`: Cross-platform fallback using sounddevice
+  - `create_audio_capture()`: Factory function for best available backend
 
 ## Docs
 - Docs/TestSuite.md – canonical tests

@@ -2313,3 +2313,5 @@
 2025-12-11 18:22:01,144 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_ctrl_interaction_mode.py::test_ctrl_held_global_across_multiple_widgets', '-v']
 2025-12-11 18:22:02,512 - pytest_runner - INFO - pytest finished with exit code 0
 2025-12-11 18:22:07,961 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_ctrl_interaction_mode.py', '-v']
+2025-12-11 21:32:05,370 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_ctrl_interaction_mode.py', '-v', '--tb=short']
+2025-12-11 21:32:13,890 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_ctrl_interaction_mode.py', '-v', '--tb=short']

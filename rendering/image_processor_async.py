@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Optional, Callable
 
-from PySide6.QtCore import Qt, QSize, QRect
+from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QImage
 
 from core.logging.logger import get_logger

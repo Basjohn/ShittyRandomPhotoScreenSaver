@@ -33,9 +33,6 @@ def get_local_timezone() -> str:
         else:
             offset = -time.timezone
         
-        # Get timezone name
-        tz_name = time.tzname[time.daylight]
-        
         # Try to match with pytz timezone
         # First, try common_timezones matching the abbreviation
         for tz in pytz.common_timezones:

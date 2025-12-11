@@ -198,7 +198,6 @@ class TransitionProfiler:
         
         # Paint timing metrics
         paint_count = profile.paint_count
-        paint_min_dt_ms = profile.paint_min_dt * 1000.0 if profile.paint_min_dt > 0 else 0.0
         paint_max_dt_ms = profile.paint_max_dt * 1000.0 if profile.paint_max_dt > 0 else 0.0
         paint_avg_fps = paint_count / total_time if paint_count > 0 and total_time > 0 else 0.0
         

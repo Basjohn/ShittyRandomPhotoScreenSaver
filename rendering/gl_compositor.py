@@ -2001,14 +2001,6 @@ class GLCompositorWidget(QOpenGLWidget):
         except Exception as e:
             logger.debug("[GL COMPOSITOR] Peel complete handler failed: %s", e, exc_info=True)
 
-    def _on_blockflip_update(self, progress: float) -> None:
-        if self._blockflip is None:
-            return
-        p = max(0.0, min(1.0, float(progress)))
-        self._blockflip.progress = p
-        self._profiler.tick("blockflip")
-        # NOTE: Do NOT call self.update() here - the render timer drives repaints
-
     def _on_blockflip_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
         """Completion handler for compositor-driven block flip transitions."""
         try:

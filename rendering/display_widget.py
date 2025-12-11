@@ -40,6 +40,7 @@ from widgets.spotify_volume_widget import SpotifyVolumeWidget
 from widgets.shadow_utils import apply_widget_shadow
 from widgets.context_menu import ScreensaverContextMenu
 from widgets.cursor_halo import CursorHaloWidget
+from rendering.widget_setup import parse_color_to_qcolor
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.logging.overlay_telemetry import record_overlay_ready
 from core.resources.manager import ResourceManager
@@ -183,7 +184,6 @@ class DisplayWidget(QWidget):
         self._last_overlay_ready_ts: Optional[float] = None
         self._overlay_swap_warned: set[str] = set()
         self._updates_blocked_until_seed = False
-        self._gl_initial_flush_done = False
         self._overlay_stage_counts: defaultdict[str, int] = defaultdict(int)
         self._overlay_timeouts: dict[str, float] = {}
         self._transitions_enabled: bool = True
@@ -776,35 +776,23 @@ class DisplayWidget(QWidget):
                 clock.set_font_size(font_size)
                 clock.set_margin(margin)
 
-                from PySide6.QtGui import QColor
-                qcolor = QColor(color[0], color[1], color[2], color[3])
-                clock.set_text_color(qcolor)
+                qcolor = parse_color_to_qcolor(color)
+                if qcolor:
+                    clock.set_text_color(qcolor)
 
                 # Background color (inherits from main clock for clock2/clock3)
-                try:
-                    bg_r, bg_g, bg_b = bg_color_data[0], bg_color_data[1], bg_color_data[2]
-                    bg_a = bg_color_data[3] if len(bg_color_data) > 3 else 255
-                    bg_qcolor = QColor(bg_r, bg_g, bg_b, bg_a)
-                    if hasattr(clock, "set_background_color"):
-                        clock.set_background_color(bg_qcolor)
-                except Exception:
-                    pass
+                bg_qcolor = parse_color_to_qcolor(bg_color_data)
+                if bg_qcolor and hasattr(clock, "set_background_color"):
+                    clock.set_background_color(bg_qcolor)
 
                 # Background border customization (inherits from main clock for clock2/clock3)
                 try:
-                    br_r, br_g, br_b = border_color_data[0], border_color_data[1], border_color_data[2]
-                    base_alpha = border_color_data[3] if len(border_color_data) > 3 else 255
-                    try:
-                        bo = float(border_opacity_val)
-                    except Exception:
-                        bo = 0.8
-                    bo = max(0.0, min(1.0, bo))
-                    br_a = int(bo * base_alpha)
-                    border_qcolor = QColor(br_r, br_g, br_b, br_a)
-                    if hasattr(clock, "set_background_border"):
-                        clock.set_background_border(2, border_qcolor)
+                    bo = float(border_opacity_val)
                 except Exception:
-                    pass
+                    bo = 0.8
+                border_qcolor = parse_color_to_qcolor(border_color_data, opacity_override=bo)
+                if border_qcolor and hasattr(clock, "set_background_border"):
+                    clock.set_background_border(2, border_qcolor)
 
                 show_bg_val = _resolve_clock_style('show_background', False, clock_settings, settings_key)
                 show_background = SettingsManager.to_bool(show_bg_val, False)
@@ -920,9 +908,9 @@ class DisplayWidget(QWidget):
                 self.weather_widget.set_font_size(font_size)
                 
                 # Convert color arrays to QColor
-                from PySide6.QtGui import QColor
-                qcolor = QColor(color[0], color[1], color[2], color[3])
-                self.weather_widget.set_text_color(qcolor)
+                qcolor = parse_color_to_qcolor(color)
+                if qcolor:
+                    self.weather_widget.set_text_color(qcolor)
 
                 # Background/frame customization
                 show_background = SettingsManager.to_bool(
@@ -932,13 +920,9 @@ class DisplayWidget(QWidget):
 
                 # Background color (RGB+alpha), default matches WeatherWidget internal default
                 bg_color_data = weather_settings.get('bg_color', [35, 35, 35, 255])
-                try:
-                    bg_r, bg_g, bg_b = bg_color_data[0], bg_color_data[1], bg_color_data[2]
-                    bg_a = bg_color_data[3] if len(bg_color_data) > 3 else 255
-                    bg_qcolor = QColor(bg_r, bg_g, bg_b, bg_a)
+                bg_qcolor = parse_color_to_qcolor(bg_color_data)
+                if bg_qcolor:
                     self.weather_widget.set_background_color(bg_qcolor)
-                except Exception:
-                    pass
 
                 # Background opacity (scales alpha regardless of bg_color alpha)
                 bg_opacity = weather_settings.get('bg_opacity', 0.7)
@@ -948,18 +932,12 @@ class DisplayWidget(QWidget):
                 border_color_data = weather_settings.get('border_color', [255, 255, 255, 255])
                 border_opacity = weather_settings.get('border_opacity', 1.0)
                 try:
-                    br_r, br_g, br_b = (
-                        border_color_data[0],
-                        border_color_data[1],
-                        border_color_data[2],
-                    )
-                    base_alpha = border_color_data[3] if len(border_color_data) > 3 else 255
-                    br_a = int(max(0.0, min(1.0, float(border_opacity))) * base_alpha)
-                    border_qcolor = QColor(br_r, br_g, br_b, br_a)
-                    # Border width remains driven by WeatherWidget's defaults (2px)
-                    self.weather_widget.set_background_border(2, border_qcolor)
+                    bo = float(border_opacity)
                 except Exception:
-                    pass
+                    bo = 1.0
+                border_qcolor = parse_color_to_qcolor(border_color_data, opacity_override=bo)
+                if border_qcolor:
+                    self.weather_widget.set_background_border(2, border_qcolor)
 
                 # Optional forecast line
                 show_forecast = SettingsManager.to_bool(
@@ -1072,13 +1050,9 @@ class DisplayWidget(QWidget):
                     margin_val = 20
                 self.reddit_widget.set_margin(margin_val)
 
-                from PySide6.QtGui import QColor
-
-                try:
-                    qcolor = QColor(color[0], color[1], color[2], color[3])
+                qcolor = parse_color_to_qcolor(color)
+                if qcolor:
                     self.reddit_widget.set_text_color(qcolor)
-                except Exception:
-                    pass
 
                 self.reddit_widget.set_show_background(show_background)
 
@@ -1088,13 +1062,9 @@ class DisplayWidget(QWidget):
                     pass
 
                 # Background color
-                try:
-                    bg_r, bg_g, bg_b = bg_color_data[0], bg_color_data[1], bg_color_data[2]
-                    bg_a = bg_color_data[3] if len(bg_color_data) > 3 else 255
-                    bg_qcolor = QColor(bg_r, bg_g, bg_b, bg_a)
+                bg_qcolor = parse_color_to_qcolor(bg_color_data)
+                if bg_qcolor:
                     self.reddit_widget.set_background_color(bg_qcolor)
-                except Exception:
-                    pass
 
                 # Background opacity
                 try:
@@ -1105,18 +1075,12 @@ class DisplayWidget(QWidget):
 
                 # Border color and opacity
                 try:
-                    br_r, br_g, br_b = border_color_data[0], border_color_data[1], border_color_data[2]
-                    base_alpha = border_color_data[3] if len(border_color_data) > 3 else 255
-                    try:
-                        bo = float(border_opacity)
-                    except Exception:
-                        bo = 0.8
-                    bo = max(0.0, min(1.0, bo))
-                    br_a = int(bo * base_alpha)
-                    border_qcolor = QColor(br_r, br_g, br_b, br_a)
-                    self.reddit_widget.set_background_border(2, border_qcolor)
+                    bo = float(border_opacity)
                 except Exception:
-                    pass
+                    bo = 0.8
+                border_qcolor = parse_color_to_qcolor(border_color_data, opacity_override=bo)
+                if border_qcolor:
+                    self.reddit_widget.set_background_border(2, border_qcolor)
 
                 # Item limit and shadow config
                 try:
@@ -1261,13 +1225,9 @@ class DisplayWidget(QWidget):
                 pass
 
             # Colors
-            from PySide6.QtGui import QColor
-
-            try:
-                qcolor = QColor(color[0], color[1], color[2], color[3])
+            qcolor = parse_color_to_qcolor(color)
+            if qcolor:
                 self.media_widget.set_text_color(qcolor)
-            except Exception:
-                pass
 
             # Default to a visible background frame for media so the
             # Spotify block stands out even on bright images. Users can
@@ -1279,17 +1239,9 @@ class DisplayWidget(QWidget):
 
             # Background color
             bg_color_data = media_settings.get('bg_color', [64, 64, 64, 255])
-            bg_qcolor = QColor(64, 64, 64, 255)
-            try:
-                bg_r, bg_g, bg_b = bg_color_data[0], bg_color_data[1], bg_color_data[2]
-                bg_a = bg_color_data[3] if len(bg_color_data) > 3 else 255
-                bg_qcolor = QColor(bg_r, bg_g, bg_b, bg_a)
+            bg_qcolor = parse_color_to_qcolor(bg_color_data)
+            if bg_qcolor:
                 self.media_widget.set_background_color(bg_qcolor)
-            except Exception:
-                try:
-                    self.media_widget.set_background_color(bg_qcolor)
-                except Exception:
-                    pass
 
             # Background opacity
             try:
@@ -1301,27 +1253,13 @@ class DisplayWidget(QWidget):
             # Border color and opacity
             border_color_data = media_settings.get('border_color', [128, 128, 128, 255])
             border_opacity = media_settings.get('border_opacity', 0.8)
-            border_qcolor = QColor(128, 128, 128, 255)
             try:
-                br_r, br_g, br_b = (
-                    border_color_data[0],
-                    border_color_data[1],
-                    border_color_data[2],
-                )
-                base_alpha = border_color_data[3] if len(border_color_data) > 3 else 255
-                try:
-                    bo = float(border_opacity)
-                except Exception:
-                    bo = 0.8
-                bo = max(0.0, min(1.0, bo))
-                br_a = int(bo * base_alpha)
-                border_qcolor = QColor(br_r, br_g, br_b, br_a)
-                self.media_widget.set_background_border(2, border_qcolor)
+                bo = float(border_opacity)
             except Exception:
-                try:
-                    self.media_widget.set_background_border(2, border_qcolor)
-                except Exception:
-                    pass
+                bo = 0.8
+            border_qcolor = parse_color_to_qcolor(border_color_data, opacity_override=bo)
+            if border_qcolor:
+                self.media_widget.set_background_border(2, border_qcolor)
 
             # Global widget drop shadow (shared config for all widgets).
             #
@@ -1616,11 +1554,6 @@ class DisplayWidget(QWidget):
             self._pixel_shift_manager.set_enabled(False)
             logger.debug("Pixel shift disabled")
 
-    def _warm_up_gl_overlay(self, base_pixmap: QPixmap) -> None:
-        """Legacy GL overlay warm-up disabled (compositor-only pipeline)."""
-        logger.debug("[WARMUP] Skipping legacy GL overlay warm-up (compositor-only pipeline)")
-        return
-
     def _on_animation_manager_ready(self, animation_manager) -> None:
         """Hook called by BaseTransition when an AnimationManager is available.
 
@@ -1674,13 +1607,6 @@ class DisplayWidget(QWidget):
         # The raise_overlay function already handles all the necessary raises with
         # frame-rate limiting, so we don't need to duplicate the work here.
         pass
-
-    def _prewarm_gl_contexts(self) -> None:
-        """
-        Legacy GL overlay prewarm disabled now that compositor is the only GL path.
-        """
-        logger.debug("[PREWARM] Skipping legacy GL overlay prewarm (compositor-only pipeline)")
-        return
 
     def _force_overlay_ready(self, overlay: QWidget, stage: str, *, gl_available: Optional[bool] = None) -> None:
         """Fallback: force overlay readiness when GL initialization fails."""
@@ -1745,53 +1671,6 @@ class DisplayWidget(QWidget):
                 overlay.hide()  # stay hidden until transition starts
             except Exception:
                 continue
-
-    def _perform_initial_gl_flush(self) -> None:
-        """Force a synchronous Present/flush on persistent overlays to avoid black frames."""
-
-        if self._gl_initial_flush_done:
-            return
-
-        if GL is None:
-            logger.info("[INIT] Skipping low-level GL flush; PyOpenGL not available (using QOpenGLWidget/QSurface flush only)")
-            self._gl_initial_flush_done = True
-            return
-
-        flushed = 0
-        for attr_name in GL_OVERLAY_KEYS:
-            overlay = getattr(self, attr_name, None)
-            if overlay is None:
-                continue
-            try:
-                if hasattr(overlay, "makeCurrent"):
-                    overlay.makeCurrent()
-                try:
-                    overlay.repaint()
-                except Exception:
-                    pass
-                try:
-                    GL.glFinish()
-                except Exception:
-                    pass
-                try:
-                    ctx = overlay.context() if hasattr(overlay, "context") else None
-                    if ctx is not None:
-                        funcs = ctx.functions()
-                        if funcs is not None:
-                            funcs.glFlush()
-                except Exception:
-                    pass
-                try:
-                    if hasattr(overlay, "doneCurrent"):
-                        overlay.doneCurrent()
-                except Exception:
-                    pass
-                flushed += 1
-            except Exception as exc:
-                logger.debug(f"[INIT] Failed to flush overlay '{attr_name}': {exc}")
-
-        self._gl_initial_flush_done = True
-        logger.info("[INIT] Initial GL flush complete (flushed %s overlays)", flushed)
     
     def _create_transition(self) -> Optional[BaseTransition]:
         """Create the next transition, honoring live settings overrides.
@@ -4236,17 +4115,3 @@ class DisplayWidget(QWidget):
             return bool(ct and ct.is_running())
         except Exception:
             return False
-
-    def _preserve_base_before_overlay(self) -> None:
-        """Diagnostic: log when an overlay raises while the base pixmap is absent.
-
-        Helps confirm whether the base widget is the source of the black flash.
-        Remove once flicker is conclusively solved.
-        """
-        try:
-            if (self.current_pixmap is None or self.current_pixmap.isNull()) and any_gl_overlay_visible(self):
-                if not self._pre_raise_log_emitted:
-                    logger.debug("[DIAG] Base pixmap absent as overlay raises (leaving untouched)")
-                    self._pre_raise_log_emitted = True
-        except Exception:
-            pass
