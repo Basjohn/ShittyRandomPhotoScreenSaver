@@ -115,7 +115,8 @@ class AccessibilityTab(QWidget):
         self.dimming_enabled = QCheckBox("Enable Background Dimming")
         self.dimming_enabled.setToolTip(
             "Adds a semi-transparent black overlay behind all widgets to reduce "
-            "brightness and improve widget readability on bright images."
+            "brightness and improve widget readability on bright images.\n\n"
+            "⚠️ Medium Performance Penalty"
         )
         self.dimming_enabled.stateChanged.connect(self._on_dimming_enabled_changed)
         layout.addWidget(self.dimming_enabled)

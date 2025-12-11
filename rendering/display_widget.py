@@ -10,7 +10,7 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     GL = None
 from PySide6.QtWidgets import QWidget, QApplication
-from PySide6.QtCore import Qt, Signal, QSize, QTimer, QPropertyAnimation, QVariantAnimation, QEasingCurve, QEvent
+from PySide6.QtCore import Qt, Signal, QSize, QTimer, QPropertyAnimation, QEvent
 from PySide6.QtGui import (
     QPixmap,
     QPainter,
@@ -63,6 +63,8 @@ from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_
 from core.logging.overlay_telemetry import record_overlay_ready
 from core.resources.manager import ResourceManager
 from core.settings.settings_manager import SettingsManager
+from core.animation.animator import AnimationManager
+from core.animation.types import EasingCurve
 from transitions.overlay_manager import (
     hide_all_overlays,
     any_overlay_ready_for_display,
@@ -127,6 +129,7 @@ class DisplayWidget(QWidget):
     next_requested = Signal()  # X key - go to next image
     cycle_transition_requested = Signal()  # C key - cycle transition mode
     settings_requested = Signal()  # S key - open settings
+    dimming_changed = Signal(bool, float)  # enabled, opacity - sync dimming across displays
     
     # Global Ctrl-held interaction mode flag shared across all display instances.
     # This ensures that holding Ctrl on any screen suppresses mouse-based exit
@@ -3911,9 +3914,11 @@ class DisplayWidget(QWidget):
         if mode == "none":
             return
 
+        # Cancel any existing halo animation
         if self._ctrl_cursor_hint_anim is not None:
             try:
-                self._ctrl_cursor_hint_anim.stop()
+                manager = AnimationManager()
+                manager.cancel_animation(self._ctrl_cursor_hint_anim)
             except Exception:
                 pass
             self._ctrl_cursor_hint_anim = None
@@ -3931,24 +3936,17 @@ class DisplayWidget(QWidget):
         except Exception:
             pass
 
-        anim = QVariantAnimation(self)
-        if fade_in:
-            anim.setDuration(600)
-            anim.setStartValue(0.0)
-            anim.setEndValue(1.0)
-        else:
-            anim.setDuration(1200)
-            anim.setStartValue(1.0)
-            anim.setEndValue(0.0)
-        anim.setEasingCurve(QEasingCurve.OutQuad)
-
-        def _on_value_changed(value):
+        # Use AnimationManager for centralized animation tracking
+        duration_ms = 600 if fade_in else 1200
+        start_val = 0.0 if fade_in else 1.0
+        end_val = 1.0 if fade_in else 0.0
+        
+        def _on_tick(progress: float) -> None:
             try:
+                value = start_val + (end_val - start_val) * progress
                 hint.setOpacity(float(value))
             except Exception:
                 pass
-
-        anim.valueChanged.connect(_on_value_changed)
 
         def _on_finished() -> None:
             if fade_out:
@@ -3963,9 +3961,17 @@ class DisplayWidget(QWidget):
             # Allow future fades after this one completes.
             self._ctrl_cursor_hint_anim = None
 
-        anim.finished.connect(_on_finished)
-        self._ctrl_cursor_hint_anim = anim
-        anim.start()
+        try:
+            manager = AnimationManager()
+            anim_id = manager.animate_custom(
+                duration_ms=duration_ms,
+                on_tick=_on_tick,
+                on_finished=_on_finished,
+                easing=EasingCurve.QUAD_OUT,
+            )
+            self._ctrl_cursor_hint_anim = anim_id
+        except Exception:
+            logger.debug("Failed to start halo animation via AnimationManager", exc_info=True)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """Handle key press - hotkeys and exit."""
@@ -4719,11 +4725,14 @@ class DisplayWidget(QWidget):
                 self.settings_manager.save()
                 logger.info("Context menu: dimming set to %s", enabled)
             
-            # Update GL compositor dimming
+            # Update local GL compositor dimming
             self._dimming_enabled = enabled
             comp = getattr(self, "_gl_compositor", None)
             if comp is not None and hasattr(comp, "set_dimming"):
                 comp.set_dimming(enabled, self._dimming_opacity)
+            
+            # Emit signal to sync dimming across ALL displays
+            self.dimming_changed.emit(enabled, self._dimming_opacity)
         except Exception:
             logger.debug("Failed to toggle dimming from context menu", exc_info=True)
     

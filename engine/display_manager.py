@@ -244,6 +244,9 @@ class DisplayManager(QObject):
             display.cycle_transition_requested.connect(self.cycle_transition_requested.emit)
             display.settings_requested.connect(self.settings_requested.emit)
             
+            # Connect dimming sync signal - when one display changes dimming, update all
+            display.dimming_changed.connect(self.set_dimming_all_displays)
+            
             # Show fullscreen
             display.show_on_screen()
             
@@ -376,6 +379,29 @@ class DisplayManager(QObject):
         """
         self.same_image_mode = enabled
         logger.info(f"Same image mode: {enabled}")
+    
+    def set_dimming_all_displays(self, enabled: bool, opacity: float) -> None:
+        """
+        Update dimming on ALL displays.
+        
+        Called when dimming is toggled via context menu to ensure all displays
+        stay synchronized.
+        
+        Args:
+            enabled: True to enable dimming, False to disable
+            opacity: Dimming opacity 0.0-1.0
+        """
+        for display in self.displays:
+            try:
+                display._dimming_enabled = enabled
+                display._dimming_opacity = opacity
+                comp = getattr(display, "_gl_compositor", None)
+                if comp is not None and hasattr(comp, "set_dimming"):
+                    comp.set_dimming(enabled, opacity)
+            except Exception:
+                pass
+        logger.debug("Dimming updated on all %d displays: enabled=%s, opacity=%.0f%%",
+                     len(self.displays), enabled, opacity * 100)
     
     def get_display_count(self) -> int:
         """Get number of active displays."""
