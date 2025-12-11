@@ -132,7 +132,7 @@ class TransitionsTab(QWidget):
         duration_row = QHBoxLayout()
         duration_row.addWidget(QLabel("Duration (short → long):"))
         self.duration_slider = NoWheelSlider(Qt.Orientation.Horizontal)
-        self.duration_slider.setRange(100, 10000)  # store milliseconds directly
+        self.duration_slider.setRange(100, 12000)  # store milliseconds directly (12s max for Crumble)
         self.duration_slider.setSingleStep(100)
         self.duration_slider.setPageStep(500)
         self.duration_slider.setValue(1300)  # BUG FIX #5: Increased from 1000ms (30% slower)

@@ -12,7 +12,7 @@ compositor over time.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field  # Still needed for _GLPipelineState
 from typing import Optional, Callable
 import math
 import ctypes
@@ -31,6 +31,19 @@ from rendering.gl_profiler import TransitionProfiler
 from transitions.wipe_transition import WipeDirection, _compute_wipe_region
 from transitions.slide_transition import SlideDirection
 from core.resources.manager import ResourceManager
+from rendering.transition_state import (
+    CrossfadeState,
+    SlideState,
+    WipeState,
+    WarpState,
+    BlockFlipState,
+    RaindropsState,
+    BlockSpinState,
+    PeelState,
+    BlindsState,
+    DiffuseState,
+    CrumbleState,
+)
 
 try:  # Optional dependency; shaders are disabled if unavailable.
     # Disable OpenGL_accelerate to avoid Nuitka compilation issues.
@@ -186,113 +199,9 @@ def _blockspin_spin_from_progress(p: float) -> float:
     return t * t * (3.0 - 2.0 * t)
 
 
-@dataclass
-class CrossfadeState:
-    """State for a compositor-driven crossfade transition."""
-
-    old_pixmap: Optional[QPixmap]
-    new_pixmap: Optional[QPixmap]
-    progress: float = 0.0  # 0..1
-
-
-# NOTE: ShuffleShaderState removed - Shuffle transition is retired.
-
-
-@dataclass
-class SlideState:
-    """State for a compositor-driven slide transition.
-    
-    PERFORMANCE: Float coordinates are pre-computed at creation time to avoid
-    repeated QPoint.x()/y() calls and float() conversions in the hot render path.
-    """
-
-    old_pixmap: Optional[QPixmap]
-    new_pixmap: Optional[QPixmap]
-    old_start: QPoint
-    old_end: QPoint
-    new_start: QPoint
-    new_end: QPoint
-    progress: float = 0.0  # 0..1
-    
-    # Pre-computed float coordinates for hot path (set in __post_init__)
-    _old_start_x: float = 0.0
-    _old_start_y: float = 0.0
-    _old_delta_x: float = 0.0  # old_end.x - old_start.x
-    _old_delta_y: float = 0.0  # old_end.y - old_start.y
-    _new_start_x: float = 0.0
-    _new_start_y: float = 0.0
-    _new_delta_x: float = 0.0  # new_end.x - new_start.x
-    _new_delta_y: float = 0.0  # new_end.y - new_start.y
-    
-    def __post_init__(self) -> None:
-        """Pre-compute float coordinates to avoid per-frame conversions."""
-        self._old_start_x = float(self.old_start.x())
-        self._old_start_y = float(self.old_start.y())
-        self._old_delta_x = float(self.old_end.x()) - self._old_start_x
-        self._old_delta_y = float(self.old_end.y()) - self._old_start_y
-        self._new_start_x = float(self.new_start.x())
-        self._new_start_y = float(self.new_start.y())
-        self._new_delta_x = float(self.new_end.x()) - self._new_start_x
-        self._new_delta_y = float(self.new_end.y()) - self._new_start_y
-
-
-@dataclass
-class WipeState:
-    """State for a compositor-driven wipe transition."""
-
-    old_pixmap: Optional[QPixmap]
-    new_pixmap: Optional[QPixmap]
-    direction: WipeDirection
-    progress: float = 0.0  # 0..1
-
-
-@dataclass
-class WarpState:
-    """State for a compositor-driven warp dissolve transition.
-
-    Warp dissolve is modelled as a band-based distortion of the old image over
-    the new one. The compositor always draws the new image fully and overlays
-    horizontally sliced bands of the old image that jitter and fade out over
-    time according to ``progress``.
-    """
-
-    old_pixmap: Optional[QPixmap]
-    new_pixmap: Optional[QPixmap]
-    progress: float = 0.0  # 0..1
-
-
-@dataclass
-class BlockFlipState:
-    """State for a compositor-driven block puzzle flip transition.
-
-    The detailed per-block progression is managed by the controller; the
-    compositor only needs the reveal region to clip the new pixmap.
-    """
-
-    old_pixmap: Optional[QPixmap]
-    new_pixmap: Optional[QPixmap]
-    region: Optional[QRegion] = None
-    progress: float = 0.0  # 0..1
-    cols: int = 0
-    rows: int = 0
-    direction: Optional[SlideDirection] = None
-
-
-@dataclass
-class RaindropsState:
-    """State for a shader-driven raindrops transition.
-
-    This models a full-frame droplet field where the compositor draws the
-    effect using GLSL; controllers only need to provide the old/new pixmaps
-    and timeline progress.
-    """
-
-    old_pixmap: Optional[QPixmap]
-    new_pixmap: Optional[QPixmap]
-    progress: float = 0.0  # 0..1
-
-
-# NOTE: ShootingStarsState removed - Claws/Shooting Stars transition is retired.
+# NOTE: State dataclasses (CrossfadeState, SlideState, WipeState, WarpState,
+# BlockFlipState, RaindropsState, BlockSpinState, PeelState, BlindsState,
+# DiffuseState, CrumbleState) are imported from rendering.transition_state
 
 
 @dataclass
@@ -467,99 +376,6 @@ class _GLPipelineState:
     initialized: bool = False
 
 
-@dataclass
-class BlockSpinState:
-    """State for a compositor-driven block spin transition.
-
-    GLSL-backed Block Spins render a single thin 3D slab that flips the old
-    image to the new one over a black void, with edge-only specular highlights.
-    The grid-based variant has been removed; direction + progress fully define
-    the animation.
-    """
-
-    old_pixmap: Optional[QPixmap]
-    new_pixmap: Optional[QPixmap]
-    direction: SlideDirection = SlideDirection.LEFT
-    progress: float = 0.0  # 0..1
-
-
-@dataclass
-class PeelState:
-    """State for a compositor-driven peel transition.
-
-    Peel is modelled as a strip-based effect that peels the old image away in
-    a chosen cardinal direction while revealing the new image underneath. The
-    compositor draws the new image fully and then overlays shrinking, drifting
-    strips of the old image according to ``progress`` and ``strips``.
-    """
-
-    old_pixmap: Optional[QPixmap]
-    new_pixmap: Optional[QPixmap]
-    direction: SlideDirection
-    strips: int
-    progress: float = 0.0  # 0..1
-
-
-@dataclass
-class BlindsState:
-    """State for a compositor-driven blinds transition.
-
-    Like BlockFlip, the controller owns per-slat progression and provides an
-    aggregate reveal region; the compositor only clips the new pixmap.
-    """
-
-    old_pixmap: Optional[QPixmap]
-    new_pixmap: Optional[QPixmap]
-    region: Optional[QRegion] = None
-    progress: float = 0.0  # 0..1
-    cols: int = 0
-    rows: int = 0
-
-
-@dataclass
-class DiffuseState:
-    """State for a compositor-driven diffuse transition.
-
-    The controller owns per-cell progression and provides an aggregate reveal
-    region; the compositor only clips the new pixmap.
-    """
-
-    old_pixmap: Optional[QPixmap]
-    new_pixmap: Optional[QPixmap]
-    region: Optional[QRegion] = None
-    progress: float = 0.0  # 0..1
-    # Optional grid hints for shader-backed Diffuse paths. When non-zero,
-    # these represent the logical (cols, rows) block grid used by the shader
-    # to mirror the CPU/region-based Diffuse layout.
-    cols: int = 0
-    rows: int = 0
-    # Integer shape mode for GLSL diffuse. 0 = Rectangle, 1 = Membrane,
-    # 2 = Circle, 3 = Diamond, 4 = Plus, 5 = Triangle.
-    shape_mode: int = 0
-
-
-@dataclass
-class CrumbleState:
-    """State for a compositor-driven crumble transition.
-
-    Crumble creates a rock-like crack pattern across the old image, then the
-    pieces fall away with physics-based motion to reveal the new image.
-    
-    Settings:
-    - piece_count: Number of pieces (4-16, default 8)
-    - crack_complexity: Crack detail level (0.5-2.0, default 1.0)
-    - mosaic_mode: If True, uses glass shatter effect with 3D depth
-    """
-
-    old_pixmap: Optional[QPixmap]
-    new_pixmap: Optional[QPixmap]
-    progress: float = 0.0  # 0..1
-    seed: float = 0.0  # Random seed for crack pattern variation
-    piece_count: float = 8.0  # Approximate number of pieces (grid density)
-    crack_complexity: float = 1.0  # Crack detail level (0.5-2.0)
-    mosaic_mode: bool = False  # Glass shatter mode
-
-
 class GLCompositorWidget(QOpenGLWidget):
     """Single GL compositor that renders the base image and transitions.
 
@@ -672,10 +488,18 @@ class GLCompositorWidget(QOpenGLWidget):
             enabled: True to show dimming, False to hide
             opacity: Dimming opacity 0.0-1.0 (default 0.3 = 30%)
         """
+        old_enabled = getattr(self, "_dimming_enabled", False)
+        old_opacity = getattr(self, "_dimming_opacity", 0.0)
         self._dimming_enabled = enabled
         self._dimming_opacity = max(0.0, min(1.0, opacity))
+        
+        # Log if dimming state actually changed (helps debug brightness flicker)
+        if old_enabled != enabled or abs(old_opacity - self._dimming_opacity) > 0.01:
+            logger.info(
+                "[DIMMING] GL dimming changed: enabled=%s→%s, opacity=%.0f%%→%.0f%%",
+                old_enabled, enabled, old_opacity * 100, self._dimming_opacity * 100
+            )
         self.update()
-        logger.debug("GL dimming: enabled=%s, opacity=%.0f%%", enabled, self._dimming_opacity * 100)
 
     def _get_render_progress(self, fallback: float = 0.0) -> float:
         """Get interpolated progress for rendering.
@@ -2275,6 +2099,7 @@ class GLCompositorWidget(QOpenGLWidget):
             if self._crumble is not None:
                 try:
                     self._base_pixmap = self._crumble.new_pixmap
+                    logger.debug("[CRUMBLE] Transition complete, base pixmap set to new image")
                 except Exception:
                     pass
             self._crumble = None
@@ -5079,7 +4904,7 @@ void main() {
             painter.end()
     
     def _paint_dimming(self, painter: QPainter) -> None:
-        """Paint the dimming overlay if enabled."""
+        """Paint the dimming overlay if enabled (QPainter fallback path)."""
         if not self._dimming_enabled or self._dimming_opacity <= 0.0:
             return
         
@@ -5092,12 +4917,40 @@ void main() {
             pass
     
     def _paint_dimming_gl(self) -> None:
-        """Paint dimming overlay in GL context (for shader paths)."""
+        """Paint dimming overlay using native GL blending (faster than QPainter)."""
         if not self._dimming_enabled or self._dimming_opacity <= 0.0:
             return
         
-        painter = QPainter(self)
+        if gl is None:
+            # Fallback to QPainter if GL not available
+            painter = QPainter(self)
+            try:
+                self._paint_dimming(painter)
+            finally:
+                painter.end()
+            return
+        
         try:
-            self._paint_dimming(painter)
-        finally:
-            painter.end()
+            # Use native GL blending for dimming - much faster than QPainter
+            gl.glEnable(gl.GL_BLEND)
+            gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
+            
+            # Draw a black quad with the dimming opacity
+            gl.glColor4f(0.0, 0.0, 0.0, self._dimming_opacity)
+            gl.glBegin(gl.GL_QUADS)
+            gl.glVertex2f(-1.0, -1.0)
+            gl.glVertex2f(1.0, -1.0)
+            gl.glVertex2f(1.0, 1.0)
+            gl.glVertex2f(-1.0, 1.0)
+            gl.glEnd()
+            
+            # Reset color to white for subsequent draws
+            gl.glColor4f(1.0, 1.0, 1.0, 1.0)
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] GL dimming failed, falling back to QPainter: %s", e)
+            # Fallback to QPainter
+            painter = QPainter(self)
+            try:
+                self._paint_dimming(painter)
+            finally:
+                painter.end()

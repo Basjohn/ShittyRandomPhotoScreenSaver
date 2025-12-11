@@ -65,10 +65,10 @@ class TestCtrlHaloAttributes:
         The halo needs WA_TranslucentBackground to be truly transparent.
         Z-order (via raise_overlay) ensures it's always above the dimming overlay.
         """
-        from rendering.display_widget import DisplayWidget
+        from widgets.cursor_halo import CursorHaloWidget
         
-        # Check the source code of _ensure_ctrl_cursor_hint for correct attributes
-        source = inspect.getsource(DisplayWidget._ensure_ctrl_cursor_hint)
+        # Check the source code of CursorHaloWidget for correct attributes
+        source = inspect.getsource(CursorHaloWidget.__init__)
         
         # Must use WA_TranslucentBackground for true transparency
         assert 'WA_TranslucentBackground' in source
@@ -123,17 +123,23 @@ class TestCrumbleShaderPerformance:
     """Test Crumble shader has reasonable search range for performance."""
 
     def test_crumble_search_range_is_reduced(self):
-        """Verify Crumble shader search range is not excessive."""
+        """Verify Crumble shader search range has early-exit optimizations."""
         from rendering.gl_programs.crumble_program import CrumbleProgram
         
         program = CrumbleProgram()
         fragment_source = program.fragment_source
         
-        # The search range should be reduced (not -10 to +4)
-        # Check for the reduced range pattern
-        assert 'dy = -6' in fragment_source or 'dy = -5' in fragment_source
-        # Should NOT have the old excessive range
-        assert 'dy = -10' not in fragment_source
+        # The search range needs to be large enough for pieces to fall off screen
+        # but MUST have early-exit optimizations to avoid performance issues
+        # Key optimizations that MUST be present:
+        assert 'pieceFall < 0.001' in fragment_source  # Skip non-falling pieces
+        assert 'candidateCell.y < -1.0' in fragment_source  # Skip cells far above screen
+        assert 'abs(uv.x - movedCenter.x)' in fragment_source  # Bounds check
+        assert 'abs(uv.y - movedCenter.y)' in fragment_source  # Bounds check
+        # Shadow should fade out to prevent brightness pop
+        assert 'shadowFadeOut' in fragment_source  # Shadow fades out at end
+        # Should NOT have the old expensive shadow raycast
+        assert 'checkPieceShadow' not in fragment_source
 
 
 class TestSettingsDotNotation:

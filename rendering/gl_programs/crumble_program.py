@@ -160,64 +160,27 @@ void getPieceTransform(vec2 cellId, float scale, float t, float seed,
     float pieceRand = hash1(cellId + seed);
     float pieceRand2 = hash1(cellId * 1.7 + seed + 100.0);
     
-    // Start falling very early (at t=0.10) to give pieces maximum time to exit screen
-    // Fall phase now spans 90% of the transition
-    float fallPhase = (t - 0.10) / 0.90;
+    // Stagger: top pieces (low Y) fall first, bottom pieces (high Y) fall last
+    // REDUCED delay so bottom pieces have more time to fall off-screen
+    float normalizedY = cellId.y / scale;
+    float fallDelay = normalizedY * 0.15 + pieceRand * 0.03;  // Max delay ~0.18 instead of ~0.30
+    
+    // Fall phase: starts at t=0.05 (cracks form first), ends at t=0.95
+    // This gives 5% buffer at the end for all pieces to clear
+    float fallPhase = (t - 0.05) / 0.90;
     fallPhase = clamp(fallPhase, 0.0, 1.0);
     
-    // Stagger based on position - top pieces fall first, bottom pieces last
-    // Minimal delays so even bottom pieces have plenty of time to fully exit
-    float normalizedY = cellId.y / scale;
-    float fallDelay = pieceRand * 0.05 + normalizedY * 0.10;  // Max delay ~0.15
-    
+    // Per-piece progress accounting for staggered start
     pieceFall = fallPhase > fallDelay ? (fallPhase - fallDelay) / (1.0 - fallDelay) : 0.0;
     pieceFall = clamp(pieceFall, 0.0, 1.0);
     
-    // Accelerating fall with generous distance so pieces fully exit
-    // At pieceFall=1.0, piece will have fallen 3.5 units (well past screen edge at y=1.0)
-    float accel = pieceFall * pieceFall;
-    fallDist = accel * 3.5;
-    driftX = pieceFall * (pieceRand - 0.5) * 0.35;
-    rotAngle = pieceFall * (pieceRand2 - 0.5) * 0.9;
-}
-
-// Check if a piece casts a shadow onto this UV position
-// Returns shadow intensity (0.0 = no shadow, 1.0 = full shadow)
-float checkPieceShadow(vec2 uv, vec2 candidateCell, float scale, float t, float seed, float complexity) {
-    float pieceFall, fallDist, driftX, rotAngle;
-    getPieceTransform(candidateCell, scale, t, seed, pieceFall, fallDist, driftX, rotAngle);
+    // Accelerating fall with cubic easing for more dramatic acceleration
+    // All pieces fall 4.0 units - bottom pieces need extra distance
+    float accel = pieceFall * pieceFall * pieceFall;  // Cubic for faster acceleration
+    fallDist = accel * 4.0;
     
-    if (pieceFall < 0.01) return 0.0; // Piece hasn't started falling - no shadow
-    
-    // Shadow offset - grows as piece falls (simulates height above surface)
-    float shadowOffsetY = pieceFall * 0.04;  // Shadow below piece
-    float shadowOffsetX = pieceFall * 0.015; // Slight diagonal
-    
-    // Check if this UV is under the piece's shadow
-    vec2 originalCenter = (candidateCell + 0.5) / scale;
-    vec2 movedCenter = originalCenter + vec2(driftX, fallDist);
-    vec2 shadowCenter = movedCenter + vec2(shadowOffsetX, shadowOffsetY);
-    
-    // Inverse transform from shadow position
-    vec2 fromShadow = uv - shadowCenter;
-    float cosR = cos(-rotAngle);
-    float sinR = sin(-rotAngle);
-    vec2 unrotated = vec2(
-        fromShadow.x * cosR - fromShadow.y * sinR,
-        fromShadow.x * sinR + fromShadow.y * cosR
-    );
-    vec2 shadowOriginal = originalCenter + unrotated;
-    
-    // Check if this maps to the same cell
-    vec4 vorCheck = voronoi(shadowOriginal, scale, seed, complexity);
-    if (vorCheck.xy == candidateCell && 
-        shadowOriginal.x >= 0.0 && shadowOriginal.x <= 1.0 &&
-        shadowOriginal.y >= 0.0 && shadowOriginal.y <= 1.0) {
-        // Shadow intensity based on fall progress and edge softness
-        float edgeSoft = smoothstep(0.0, 0.03, vorCheck.z);
-        return pieceFall * 0.5 * edgeSoft; // Max 50% darkening
-    }
-    return 0.0;
+    driftX = pieceFall * (pieceRand - 0.5) * 0.3;
+    rotAngle = pieceFall * (pieceRand2 - 0.5) * 0.8;
 }
 
 void main() {
@@ -230,7 +193,10 @@ void main() {
         FragColor = texture(uOldTex, uv);
         return;
     }
-    if (t >= 1.0) {
+    // At t >= 0.995, all pieces should be off-screen, show clean new image
+    // With the compressed fall phase (ends at t=0.95), pieces have 5% buffer
+    // to fully exit before this cutoff
+    if (t >= 0.995) {
         FragColor = newColor;
         return;
     }
@@ -240,8 +206,8 @@ void main() {
     
     // Crack width - visible borders on pieces
     float crackWidth = 0.025 + complexity * 0.012;
-    // Border width for dark outline around cracks (0.5px equivalent in UV space)
-    float borderWidth = crackWidth + 0.008;
+    // Border width for dark outline around cracks (thicker for visibility with dimming)
+    float borderWidth = crackWidth + 0.020;
     
     vec3 finalColor = newColor.rgb;
     bool pixelCovered = false;
@@ -251,25 +217,41 @@ void main() {
     // Get the cell at current screen position as starting point
     vec4 vorHere = voronoi(uv, scale, u_seed, complexity);
     
-    // Search nearby cells - reduced range for better performance
-    // The search range is a tradeoff between catching all falling pieces and
-    // shader performance. With 12 pieces and fallDist up to 3.5, we need to
-    // search a reasonable range without killing performance.
-    for (int dy = -6; dy <= 2; dy++) {
-        for (int dx = -2; dx <= 2; dx++) {
+    // Search nearby cells - pieces fall DOWNWARD so we need to search UPWARD
+    // (negative dy in cell space) to find pieces that started above and fell here.
+    // 
+    // Max fall distance is ~1.4 UV units (top piece falling to bottom + margin).
+    // In cell space with scale=8, that's ~11 cells. But we use aggressive early-exit
+    // to skip most iterations. The bounds check eliminates ~90% of candidates.
+    //
+    // Search range: dy from -10 to +1 (pieces above that fell down to here)
+    // With early exits, actual work per pixel is typically 2-4 voronoi calls.
+    for (int dy = -10; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
             vec2 candidateCell = vorHere.xy + vec2(float(dx), float(dy));
             
-            // Check for drop shadow from this piece
-            float shadowHere = checkPieceShadow(uv, candidateCell, scale, t, u_seed, complexity);
-            totalShadow = max(totalShadow, shadowHere);
+            // Skip cells far outside valid range
+            // Allow y < 0 (cells above screen) to cover top edge voronoi patterns
+            // Allow y >= scale (cells below screen) for bottom edge
+            if (candidateCell.y < -1.0 || candidateCell.y > scale) continue;
+            if (candidateCell.x < -1.0 || candidateCell.x > scale) continue;
             
             // Get this cell's transform
             float pieceFall, fallDist, driftX, rotAngle;
             getPieceTransform(candidateCell, scale, t, u_seed, pieceFall, fallDist, driftX, rotAngle);
             
+            // Early exit: if piece hasn't started falling and isn't our cell, skip
+            if (pieceFall < 0.001 && candidateCell != vorHere.xy) continue;
+            
             // Where is this cell's center now?
             vec2 originalCenter = (candidateCell + 0.5) / scale;
             vec2 movedCenter = originalCenter + vec2(driftX, fallDist);
+            
+            // Quick bounds check - skip if piece is nowhere near this pixel
+            // This eliminates most candidates without expensive voronoi call
+            float cellSize = 1.0 / scale;
+            if (abs(uv.x - movedCenter.x) > cellSize * 1.2) continue;
+            if (abs(uv.y - movedCenter.y) > cellSize * 1.2) continue;
             
             // Inverse transform: find what original point maps to current screen pos
             vec2 fromMoved = uv - movedCenter;
@@ -326,6 +308,16 @@ void main() {
                 }
             }
         }
+    }
+    
+    // Simplified shadow: just darken areas where new image is exposed
+    // based on proximity to falling pieces (skip expensive shadow raycast)
+    // Shadow fades in from t=0.15 to t=0.5, then fades out from t=0.85 to t=0.995
+    // This prevents the brightness pop when transition ends
+    if (!pixelCovered && t > 0.15) {
+        float shadowFadeIn = smoothstep(0.15, 0.5, t);
+        float shadowFadeOut = 1.0 - smoothstep(0.85, 0.995, t);
+        totalShadow = shadowFadeIn * shadowFadeOut * 0.15;  // Reduced shadow intensity
     }
     
     // Apply drop shadow to exposed areas (new image showing through)

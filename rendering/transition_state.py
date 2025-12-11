@@ -69,24 +69,37 @@ class WipeState(TransitionStateBase):
 
 @dataclass
 class BlockFlipState(TransitionStateBase):
-    """State for a compositor-driven block flip transition."""
-    cols: int = 4
-    rows: int = 4
-    direction: int = 0  # 0=left, 1=right, 2=up, 3=down
+    """State for a compositor-driven block flip transition.
+    
+    The detailed per-block progression is managed by the controller; the
+    compositor only needs the reveal region to clip the new pixmap.
+    """
+    region: Optional[QRegion] = None
+    cols: int = 0
+    rows: int = 0
+    direction: Optional[int] = None  # SlideDirection enum value
 
 
 @dataclass
 class BlockSpinState(TransitionStateBase):
-    """State for a compositor-driven block spin transition."""
-    direction: int = 0  # 0=left, 1=right, 2=up, 3=down
-    spin_progress: float = 0.0
+    """State for a compositor-driven block spin transition.
+    
+    GLSL-backed Block Spins render a single thin 3D slab that flips the old
+    image to the new one over a black void, with edge-only specular highlights.
+    """
+    direction: int = 0  # SlideDirection enum value (0=left, 1=right, 2=up, 3=down)
 
 
 @dataclass
 class BlindsState(TransitionStateBase):
-    """State for a compositor-driven blinds transition."""
-    cols: int = 10
-    rows: int = 1
+    """State for a compositor-driven blinds transition.
+    
+    Like BlockFlip, the controller owns per-slat progression and provides an
+    aggregate reveal region; the compositor only clips the new pixmap.
+    """
+    region: Optional[QRegion] = None
+    cols: int = 0
+    rows: int = 0
 
 
 @dataclass

@@ -285,12 +285,34 @@ class MediaWidget(QLabel):
             x = edge_margin
             y = parent_height - widget_height - edge_margin
 
+        # Log unexpected position changes (helps debug teleport issues)
+        old_pos = self.pos()
+        if old_pos.x() != x or old_pos.y() != y:
+            # Only log if moving more than 10 pixels (ignore minor adjustments)
+            if abs(old_pos.x() - x) > 10 or abs(old_pos.y() - y) > 10:
+                logger.debug(
+                    "[MEDIA_WIDGET] Position changed: (%d,%d) → (%d,%d), size=%dx%d, parent=%dx%d",
+                    old_pos.x(), old_pos.y(), x, y,
+                    widget_width, widget_height, parent_width, parent_height
+                )
+        
         self.move(x, y)
+        
+        # Notify PixelShiftManager of our new "original" position so it doesn't
+        # apply offsets to a stale position. This prevents the teleport bug where
+        # the widget briefly appears at (0,0) or an old position during transitions.
+        parent = self.parent()
+        if parent is not None:
+            psm = getattr(parent, "_pixel_shift_manager", None)
+            if psm is not None and hasattr(psm, "update_original_position"):
+                try:
+                    psm.update_original_position(self)
+                except Exception:
+                    pass
 
         # Keep the Spotify Beat Visualizer anchored just above the media
         # card whenever we recompute our own position. We duck-type the
         # parent so MediaWidget remains reusable outside DisplayWidget.
-        parent = self.parent()
         if parent is not None:
             # Keep Spotify-related overlays anchored to the card whenever we
             # recompute our own position. We duck-type the parent so
@@ -1373,6 +1395,14 @@ class MediaWidget(QLabel):
 
     def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:
         """Fade the entire widget in, then attach the global drop shadow."""
+        # CRITICAL: Position the widget BEFORE showing to prevent teleport flash
+        # The widget starts at (0,0) and must be moved to its correct position
+        # before becoming visible to avoid a brief flash in the wrong location.
+        try:
+            self._update_position()
+        except Exception:
+            pass
+        
         if duration_ms <= 0:
             try:
                 self.show()

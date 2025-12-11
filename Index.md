@@ -77,11 +77,13 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - `crumble_program.py`: `CrumbleProgram` for the Crumble transition GLSL (Voronoi crack pattern with falling pieces).
 - rendering/gl_profiler.py
   - `TransitionProfiler`: centralized profiling helper for GL compositor transitions. Tracks frame timing, min/max frame durations, and emits PERF logs. All compositor transitions (Slide, Wipe, Peel, BlockSpin, Warp, Raindrops, BlockFlip, Diffuse, Blinds) now use this single profiler instance instead of per-transition profiling fields.
-- rendering/widget_manager.py
-  - `WidgetManager`: Extracted from DisplayWidget. Manages overlay widget lifecycle, positioning, visibility, Z-order, and rate-limited raise operations.
 - rendering/transition_state.py
   - Transition state dataclasses extracted from GLCompositor: `TransitionStateBase`, `CrossfadeState`, `SlideState`, `WipeState`, `BlockFlipState`, `BlockSpinState`, `BlindsState`, `DiffuseState`, `PeelState`, `WarpState`, `RaindropsState`, `CrumbleState`.
   - `TransitionStateManager`: Clean interface for getting/setting transition state with change notifications.
+- rendering/transition_factory.py
+  - `TransitionFactory`: Factory for creating transition instances based on settings and hardware capabilities. Extracted from DisplayWidget to reduce file size and improve testability.
+- rendering/widget_manager.py
+  - `WidgetManager`: Extracted from DisplayWidget. Manages overlay widget lifecycle, positioning, visibility, Z-order, and rate-limited raise operations.
 
 ## Transitions
 - transitions/base_transition.py
@@ -136,6 +138,8 @@ A living map of modules, purposes, and key classes. Keep this up to date.
    - `PixelShiftManager`: Manages periodic 1px shifts of overlay widgets for burn-in prevention. Maximum drift of 4px in any direction with automatic drift-back. Defers during transitions.
  - widgets/context_menu.py
    - `ScreensaverContextMenu`: Dark-themed right-click context menu matching settings dialog styling. Provides Previous/Next image, transition selection submenu, Settings, Background Dimming toggle, Hard Exit Mode toggle, and Exit. Uses monochromatic icons and app-owned dark theme (no Windows accent bleed). Activated by right-click in hard exit mode or Ctrl+right-click in normal mode. Lazy-initialized by DisplayWidget for performance.
+ - widgets/cursor_halo.py
+   - `CursorHaloWidget`: Visual cursor indicator for Ctrl-held interaction mode. Displays a semi-transparent ring with center dot that follows the cursor. Supports fade-in/fade-out animations via AnimationManager.
  - widgets/overlay_timers.py
    - Centralised overlay timer helper providing `create_overlay_timer()` and `OverlayTimerHandle` for recurring UI-thread timers (clock/weather/media/Reddit). Prefers `ThreadManager.schedule_recurring` with ResourceManager tracking and falls back to a widget-local `QTimer` when no ThreadManager is available.
  - widgets/beat_engine.py
@@ -165,6 +169,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - Docs/TestSuite.md – canonical tests
 - Docs/AUDIT_*.md – technical audits
 - Docs/FlashFlickerDiagnostic.md – flicker/banding symptom tracker and mitigation history
+- Docs/SAKURA_PETALS_TRANSITION_DESIGN.md – design document for future sakura petals transition (low priority)
  - Docs/10_WIDGET_GUIDELINES.md – canonical overlay widget design (card styling, fade/shadow via ShadowFadeProfile, Z-order/integration with DisplayWidget and overlay_manager, interaction gating)
  - audits/*.md – repository-level Cleaning/Architecture/Optimization audit documents with live checklists
 

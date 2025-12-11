@@ -1213,6 +1213,18 @@ class RedditWidget(QLabel):
             y = edge
 
         self.move(x, y)
+        
+        # Notify PixelShiftManager of our new "original" position so it doesn't
+        # apply offsets to a stale position. This prevents the teleport bug where
+        # the widget briefly appears at an old position during transitions.
+        parent = self.parent()
+        if parent is not None:
+            psm = getattr(parent, "_pixel_shift_manager", None)
+            if psm is not None and hasattr(psm, "update_original_position"):
+                try:
+                    psm.update_original_position(self)
+                except Exception:
+                    pass
 
     def _load_brand_pixmap(self) -> Optional[QPixmap]:
         """Load Reddit logo glyph from images/Reddit_Logo_C.png if present."""

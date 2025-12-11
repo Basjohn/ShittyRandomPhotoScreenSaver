@@ -10,7 +10,7 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     GL = None
 from PySide6.QtWidgets import QWidget, QApplication
-from PySide6.QtCore import Qt, Signal, QSize, QTimer, QPropertyAnimation, QEvent
+from PySide6.QtCore import Qt, Signal, QSize, QTimer, QEvent
 from PySide6.QtGui import (
     QPixmap,
     QPainter,
@@ -59,12 +59,11 @@ from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
 from widgets.spotify_volume_widget import SpotifyVolumeWidget
 from widgets.shadow_utils import apply_widget_shadow
 from widgets.context_menu import ScreensaverContextMenu
+from widgets.cursor_halo import CursorHaloWidget
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.logging.overlay_telemetry import record_overlay_ready
 from core.resources.manager import ResourceManager
 from core.settings.settings_manager import SettingsManager
-from core.animation.animator import AnimationManager
-from core.animation.types import EasingCurve
 from transitions.overlay_manager import (
     hide_all_overlays,
     any_overlay_ready_for_display,
@@ -200,8 +199,7 @@ class DisplayWidget(QWidget):
         self._overlay_timeouts: dict[str, float] = {}
         self._transitions_enabled: bool = True
         self._ctrl_held: bool = False
-        self._ctrl_cursor_hint = None
-        self._ctrl_cursor_hint_anim: Optional[QPropertyAnimation] = None
+        self._ctrl_cursor_hint: Optional[CursorHaloWidget] = None
         self._exiting: bool = False
         self._focus_loss_logged: bool = False
         self._transition_watchdog: Optional[QTimer] = None
@@ -3305,6 +3303,33 @@ class DisplayWidget(QWidget):
         finally:
             self._render_surface = None
 
+    def _cleanup_widget(self, attr_name: str, tag: str, stop_method: str = "cleanup") -> None:
+        """Helper to safely cleanup a widget attribute.
+        
+        Args:
+            attr_name: Name of the widget attribute (e.g., "media_widget")
+            tag: Log tag for debug messages (e.g., "MEDIA")
+            stop_method: Method to call for cleanup ("cleanup", "stop", or None)
+        """
+        try:
+            widget = getattr(self, attr_name, None)
+            if widget is None:
+                return
+            if stop_method:
+                method = getattr(widget, stop_method, None)
+                if callable(method):
+                    try:
+                        method()
+                    except Exception:
+                        pass
+            try:
+                widget.hide()
+            except Exception:
+                pass
+            setattr(self, attr_name, None)
+        except Exception as e:
+            logger.debug("[%s] Failed to cleanup in _on_destroyed: %s", tag, e, exc_info=True)
+
     def _on_destroyed(self, *_args) -> None:
         """Ensure active transitions are stopped when the widget is destroyed."""
         # Open any pending Reddit URL that was deferred in hard-exit mode
@@ -3320,97 +3345,30 @@ class DisplayWidget(QWidget):
             DisplayWidget._event_filter_owner = None
         
         self._destroy_render_surface()
+        
         # Ensure compositor is torn down cleanly
         try:
             if self._gl_compositor is not None:
-                try:
-                    cleanup = getattr(self._gl_compositor, "cleanup", None)
-                    if callable(cleanup):
+                cleanup = getattr(self._gl_compositor, "cleanup", None)
+                if callable(cleanup):
+                    try:
                         cleanup()
-                except Exception as e:
-                    logger.debug("[GL COMPOSITOR] Cleanup failed in _on_destroyed: %s", e, exc_info=True)
+                    except Exception as e:
+                        logger.debug("[GL COMPOSITOR] Cleanup failed: %s", e, exc_info=True)
                 self._gl_compositor.hide()
                 self._gl_compositor.setParent(None)
+                self._gl_compositor = None
         except Exception as e:
-            logger.debug("[GL COMPOSITOR] Failed to tear down compositor in _on_destroyed: %s", e, exc_info=True)
-        self._gl_compositor = None
-        # Stop Spotify Beat Visualizer if present
-        try:
-            vis = getattr(self, "spotify_visualizer_widget", None)
-            if vis is not None:
-                try:
-                    vis.stop()
-                except Exception:
-                    pass
-                try:
-                    vis.hide()
-                except Exception:
-                    pass
-                self.spotify_visualizer_widget = None
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Failed to stop visualizer in _on_destroyed: %s", e, exc_info=True)
-        # Stop Media widget if present
-        try:
-            mw = getattr(self, "media_widget", None)
-            if mw is not None:
-                try:
-                    cleanup = getattr(mw, "cleanup", None)
-                    if callable(cleanup):
-                        cleanup()
-                except Exception:
-                    pass
-                try:
-                    mw.hide()
-                except Exception:
-                    pass
-                self.media_widget = None
-        except Exception as e:
-            logger.debug("[MEDIA] Failed to stop media widget in _on_destroyed: %s", e, exc_info=True)
-        # Stop Weather widget if present
-        try:
-            ww = getattr(self, "weather_widget", None)
-            if ww is not None:
-                try:
-                    cleanup = getattr(ww, "cleanup", None)
-                    if callable(cleanup):
-                        cleanup()
-                except Exception:
-                    pass
-                try:
-                    ww.hide()
-                except Exception:
-                    pass
-                self.weather_widget = None
-        except Exception as e:
-            logger.debug("[WEATHER] Failed to stop weather widget in _on_destroyed: %s", e, exc_info=True)
-        # Stop Reddit widget if present
-        try:
-            rw = getattr(self, "reddit_widget", None)
-            if rw is not None:
-                try:
-                    cleanup = getattr(rw, "cleanup", None)
-                    if callable(cleanup):
-                        cleanup()
-                except Exception:
-                    pass
-                try:
-                    rw.hide()
-                except Exception:
-                    pass
-                self.reddit_widget = None
-        except Exception as e:
-            logger.debug("[REDDIT] Failed to stop Reddit widget in _on_destroyed: %s", e, exc_info=True)
-        # Cleanup pixel shift manager if present
-        try:
-            psm = getattr(self, "_pixel_shift_manager", None)
-            if psm is not None:
-                try:
-                    psm.cleanup()
-                except Exception:
-                    pass
-                self._pixel_shift_manager = None
-        except Exception as e:
-            logger.debug("[PIXEL_SHIFT] Failed to cleanup pixel shift manager in _on_destroyed: %s", e, exc_info=True)
+            logger.debug("[GL COMPOSITOR] Teardown failed: %s", e, exc_info=True)
+            self._gl_compositor = None
+        
+        # Cleanup all overlay widgets using helper
+        self._cleanup_widget("spotify_visualizer_widget", "SPOTIFY_VIS", "stop")
+        self._cleanup_widget("media_widget", "MEDIA", "cleanup")
+        self._cleanup_widget("weather_widget", "WEATHER", "cleanup")
+        self._cleanup_widget("reddit_widget", "REDDIT", "cleanup")
+        self._cleanup_widget("_pixel_shift_manager", "PIXEL_SHIFT", "cleanup")
+        
         # Stop and clean up any active transition
         try:
             if self._current_transition:
@@ -3424,12 +3382,13 @@ class DisplayWidget(QWidget):
                     pass
                 self._current_transition = None
         except Exception as e:
-            logger.debug("[TRANSITION] Failed to stop/cleanup current transition in _on_destroyed: %s", e, exc_info=True)
+            logger.debug("[TRANSITION] Cleanup failed: %s", e, exc_info=True)
+        
         # Hide overlays and cancel watchdog timer
         try:
             hide_all_overlays(self)
         except Exception as e:
-            logger.debug("[OVERLAYS] Failed to hide overlays in _on_destroyed: %s", e, exc_info=True)
+            logger.debug("[OVERLAYS] Hide failed: %s", e, exc_info=True)
         self._cancel_transition_watchdog()
 
     def _update_backend_fallback_overlay(self) -> None:
@@ -3842,69 +3801,24 @@ class DisplayWidget(QWidget):
         return dict(self._overlay_stage_counts)
 
     def _ensure_ctrl_cursor_hint(self) -> None:
+        """Create the cursor halo widget if it doesn't exist."""
         if self._ctrl_cursor_hint is not None:
             return
-        from PySide6.QtWidgets import QWidget as _W
-        from PySide6.QtGui import QColor
-
-        class _CtrlCursorHint(_W):
-            def __init__(self, parent: _W) -> None:
-                super().__init__(parent)
-                self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-                # WA_TranslucentBackground is REQUIRED for true transparency.
-                # The halo must be raised ABOVE the dimming overlay via Z-order,
-                # not by using opaque widget attributes. The "punch-through" issue
-                # was caused by incorrect Z-order, not by WA_TranslucentBackground.
-                self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-                self.setAutoFillBackground(False)
-                self.resize(40, 40)
-                self._opacity = 1.0
-
-            def setOpacity(self, value: float) -> None:
-                try:
-                    self._opacity = max(0.0, min(1.0, float(value)))
-                except Exception:
-                    self._opacity = 1.0
-                self.update()
-
-            def opacity(self) -> float:
-                return float(self._opacity)
-
-            def paintEvent(self, event: QPaintEvent) -> None:  # type: ignore[override]
-                painter = QPainter(self)
-                painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-                
-                # No background fill needed - WA_TranslucentBackground handles it
-                
-                base_alpha = 200
-                alpha = int(max(0.0, min(1.0, self._opacity)) * base_alpha)
-                color = QColor(255, 255, 255, alpha)
-
-                # Thicker outer ring
-                pen = painter.pen()
-                pen.setColor(color)
-                pen.setWidth(4)
-                painter.setPen(pen)
-                painter.setBrush(Qt.BrushStyle.NoBrush)
-                r = min(self.width(), self.height()) - 8
-                painter.drawEllipse(4, 4, r, r)
-
-                # Inner solid dot to suggest the click position
-                inner_radius = max(2, r // 6)
-                cx = self.width() // 2
-                cy = self.height() // 2
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.setBrush(color)
-                painter.drawEllipse(cx - inner_radius, cy - inner_radius, inner_radius * 2, inner_radius * 2)
-                painter.end()
-
-        self._ctrl_cursor_hint = _CtrlCursorHint(self)
+        self._ctrl_cursor_hint = CursorHaloWidget(self)
 
     def _show_ctrl_cursor_hint(self, pos, mode: str = "none") -> None:
+        """Show/animate the cursor halo at the given position.
+        
+        Args:
+            pos: Position to center the halo on
+            mode: "none" for reposition only, "fade_in" or "fade_out" for animation
+        """
         self._ensure_ctrl_cursor_hint()
         hint = self._ctrl_cursor_hint
         if hint is None:
             return
+        
+        # Position and show
         size = hint.size()
         hint.move(pos.x() - size.width() // 2, pos.y() - size.height() // 2)
         hint.show()
@@ -3914,64 +3828,11 @@ class DisplayWidget(QWidget):
         if mode == "none":
             return
 
-        # Cancel any existing halo animation
-        if self._ctrl_cursor_hint_anim is not None:
-            try:
-                manager = AnimationManager()
-                manager.cancel_animation(self._ctrl_cursor_hint_anim)
-            except Exception:
-                pass
-            self._ctrl_cursor_hint_anim = None
-
-        fade_in = mode == "fade_in"
-        fade_out = mode == "fade_out"
-        if not (fade_in or fade_out):
-            return
-
-        try:
-            if fade_in:
-                hint.setOpacity(0.0)
-            else:
-                hint.setOpacity(1.0)
-        except Exception:
-            pass
-
-        # Use AnimationManager for centralized animation tracking
-        duration_ms = 600 if fade_in else 1200
-        start_val = 0.0 if fade_in else 1.0
-        end_val = 1.0 if fade_in else 0.0
-        
-        def _on_tick(progress: float) -> None:
-            try:
-                value = start_val + (end_val - start_val) * progress
-                hint.setOpacity(float(value))
-            except Exception:
-                pass
-
-        def _on_finished() -> None:
-            if fade_out:
-                try:
-                    hint.hide()
-                except Exception:
-                    pass
-            try:
-                hint.setWindowOpacity(1.0)
-            except Exception:
-                pass
-            # Allow future fades after this one completes.
-            self._ctrl_cursor_hint_anim = None
-
-        try:
-            manager = AnimationManager()
-            anim_id = manager.animate_custom(
-                duration_ms=duration_ms,
-                on_tick=_on_tick,
-                on_finished=_on_finished,
-                easing=EasingCurve.QUAD_OUT,
-            )
-            self._ctrl_cursor_hint_anim = anim_id
-        except Exception:
-            logger.debug("Failed to start halo animation via AnimationManager", exc_info=True)
+        # Delegate animation to CursorHaloWidget
+        if mode == "fade_in":
+            hint.fade_in()
+        elif mode == "fade_out":
+            hint.fade_out()
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """Handle key press - hotkeys and exit."""
@@ -4017,16 +3878,10 @@ class DisplayWidget(QWidget):
                 for w in display_widgets:
                     try:
                         w._ctrl_held = False
-                        anim = getattr(w, "_ctrl_cursor_hint_anim", None)
-                        if anim is not None:
-                            try:
-                                anim.stop()
-                            except Exception:
-                                pass
-                            w._ctrl_cursor_hint_anim = None
                         hint = getattr(w, "_ctrl_cursor_hint", None)
                         if hint is not None:
                             try:
+                                hint.cancel_animation()
                                 hint.hide()
                             except Exception:
                                 pass
