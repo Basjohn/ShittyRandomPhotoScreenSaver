@@ -1,7 +1,6 @@
 """Display widget for OpenGL/software rendered screensaver overlays."""
 from collections import defaultdict
-from typing import Optional, Iterable, Tuple, Callable, Dict, Any
-import random
+from typing import Optional, Iterable, Tuple, Callable, Dict, Any, List
 import time
 import weakref
 import sys
@@ -29,26 +28,7 @@ from rendering.display_modes import DisplayMode
 from rendering.image_processor import ImageProcessor
 from rendering.gl_compositor import GLCompositorWidget
 from transitions.base_transition import BaseTransition
-from transitions import (
-    CrossfadeTransition,
-    SlideTransition,
-    SlideDirection,
-    WipeTransition,
-    WipeDirection,
-    BlockPuzzleFlipTransition,
-)
-from transitions.gl_compositor_crossfade_transition import GLCompositorCrossfadeTransition
-from transitions.gl_compositor_slide_transition import GLCompositorSlideTransition
-from transitions.gl_compositor_wipe_transition import GLCompositorWipeTransition
-from transitions.gl_compositor_blockflip_transition import GLCompositorBlockFlipTransition
-from transitions.gl_compositor_blinds_transition import GLCompositorBlindsTransition
-from transitions.gl_compositor_peel_transition import GLCompositorPeelTransition
-from transitions.gl_compositor_blockspin_transition import GLCompositorBlockSpinTransition
-from transitions.gl_compositor_raindrops_transition import GLCompositorRainDropsTransition
-from transitions.gl_compositor_warp_transition import GLCompositorWarpTransition
-from transitions.gl_compositor_diffuse_transition import GLCompositorDiffuseTransition
-from transitions.gl_compositor_crumble_transition import GLCompositorCrumbleTransition
-from transitions.diffuse_transition import DiffuseTransition
+from rendering.transition_factory import TransitionFactory
 from widgets.clock_widget import ClockWidget, TimeFormat, ClockPosition
 from widgets.weather_widget import WeatherWidget, WeatherPosition
 from widgets.media_widget import MediaWidget, MediaPosition
@@ -142,6 +122,15 @@ class DisplayWidget(QWidget):
     
     # PERF: Cache of DisplayWidget instances by screen to avoid iterating topLevelWidgets
     _instances_by_screen: Dict[Any, "DisplayWidget"] = {}
+    
+    @classmethod
+    def get_all_instances(cls) -> List["DisplayWidget"]:
+        """Get all DisplayWidget instances from the cache.
+        
+        PERF: Uses cached instances instead of iterating QApplication.topLevelWidgets().
+        Returns a copy of the values to avoid modification during iteration.
+        """
+        return list(cls._instances_by_screen.values())
 
     def __init__(
         self,
@@ -284,6 +273,16 @@ class DisplayWidget(QWidget):
         self._has_rendered_first_frame = False
         self._gl_compositor: Optional[GLCompositorWidget] = None
         self._init_renderer_backend()
+        
+        # Initialize transition factory (delegates transition creation logic)
+        self._transition_factory: Optional[TransitionFactory] = None
+        if self.settings_manager:
+            self._transition_factory = TransitionFactory(
+                settings_manager=self.settings_manager,
+                resource_manager=self._resource_manager,
+                compositor_checker=self._has_gl_compositor,
+                compositor_ensurer=self._ensure_gl_compositor,
+            )
 
         # Ensure transitions are cleaned up if the widget is destroyed
         try:
@@ -1795,581 +1794,25 @@ class DisplayWidget(QWidget):
         logger.info("[INIT] Initial GL flush complete (flushed %s overlays)", flushed)
     
     def _create_transition(self) -> Optional[BaseTransition]:
-        """Create the next transition, honoring live settings overrides."""
-        if not self.settings_manager:
-            return None
-
-        transitions_settings = self.settings_manager.get('transitions', {})
-        if not isinstance(transitions_settings, dict):
-            transitions_settings = {}
-
-        # Canonical transition type comes from nested config
-        transition_type = transitions_settings.get('type') or 'Crossfade'
-        requested_type = transition_type
-
-        try:
-            # Random mode configured via nested flag; engine may still publish
-            # a per-rotation choice in 'transitions.random_choice'.
-            rnd = transitions_settings.get('random_always', False)
-            rnd = SettingsManager.to_bool(rnd, False)
-            random_mode = bool(rnd)
-            random_choice_value = None
-            if random_mode:
-                chosen = self.settings_manager.get('transitions.random_choice', None)
-                if isinstance(chosen, str) and chosen:
-                    transition_type = chosen
-                    random_choice_value = chosen
-        except Exception:
-            random_mode = False
-            random_choice_value = None
-
-        base_duration_raw = transitions_settings.get('duration_ms', 1300)
-        try:
-            base_duration_ms = int(base_duration_raw)
-        except Exception:
-            base_duration_ms = 1300
-
-        duration_ms = base_duration_ms
-        try:
-            durations_cfg = transitions_settings.get('durations', {})
-            if isinstance(durations_cfg, dict):
-                per_type_raw = durations_cfg.get(transition_type)
-                if per_type_raw is not None:
-                    try:
-                        duration_ms = int(per_type_raw)
-                    except Exception:
-                        duration_ms = base_duration_ms
-        except Exception:
-            duration_ms = base_duration_ms
-
-        try:
-            easing_str = transitions_settings.get('easing') or 'Auto'
-
-            try:
-                hw_raw = self.settings_manager.get('display.hw_accel', True)
-            except Exception:
-                hw_raw = True
-            hw_accel = SettingsManager.to_bool(hw_raw, True)
-
-            if transition_type == 'Crossfade':
-                if hw_accel:
-                    try:
-                        self._ensure_gl_compositor()
-                    except Exception:
-                        logger.debug("[GL COMPOSITOR] Failed to ensure compositor during crossfade selection", exc_info=True)
-                    use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
-                    if use_compositor:
-                        transition = GLCompositorCrossfadeTransition(duration_ms, easing_str)
-                    else:
-                        # If compositor cannot be used, prefer CPU crossfade over
-                        # the legacy GL overlay path to avoid reintroducing
-                        # overlay-related flicker.
-                        transition = CrossfadeTransition(duration_ms, easing_str)
-                else:
-                    transition = CrossfadeTransition(duration_ms, easing_str)
-                transition.set_resource_manager(self._resource_manager)
-                self._log_transition_selection(requested_type, 'Crossfade', random_mode, random_choice_value)
-                return transition
-
-            if transition_type == 'Slide':
-                slide_settings = transitions_settings.get('slide', {}) if isinstance(transitions_settings.get('slide', {}), dict) else {}
-                direction_str = slide_settings.get('direction', 'Random') or 'Random'
-
-                direction_map = {
-                    'Left to Right': SlideDirection.LEFT,
-                    'Right to Left': SlideDirection.RIGHT,
-                    'Top to Bottom': SlideDirection.DOWN,
-                    'Bottom to Top': SlideDirection.UP,
-                }
-
-                rnd_always = SettingsManager.to_bool(transitions_settings.get('random_always', False), False)
-
-                if direction_str == 'Random' and not rnd_always:
-                    all_dirs = [SlideDirection.LEFT, SlideDirection.RIGHT, SlideDirection.UP, SlideDirection.DOWN]
-                    last_dir = slide_settings.get('last_direction')
-                    str_to_enum = {
-                        'Left to Right': SlideDirection.LEFT,
-                        'Right to Left': SlideDirection.RIGHT,
-                        'Top to Bottom': SlideDirection.DOWN,
-                        'Bottom to Top': SlideDirection.UP,
-                    }
-                    last_enum = str_to_enum.get(last_dir) if isinstance(last_dir, str) else None
-                    candidates = [d for d in all_dirs if d != last_enum] if last_enum in all_dirs else all_dirs
-                    direction = random.choice(candidates) if candidates else random.choice(all_dirs)
-                    enum_to_str = {
-                        SlideDirection.LEFT: 'Left to Right',
-                        SlideDirection.RIGHT: 'Right to Left',
-                        SlideDirection.DOWN: 'Top to Bottom',
-                        SlideDirection.UP: 'Bottom to Top',
-                    }
-                    try:
-                        slide_settings['last_direction'] = enum_to_str.get(direction, 'Left to Right')
-                        transitions_settings['slide'] = slide_settings
-                        self.settings_manager.set('transitions', transitions_settings)
-                    except Exception:
-                        pass
-                else:
-                    direction = direction_map.get(direction_str, SlideDirection.LEFT)
-
-                if hw_accel:
-                    try:
-                        self._ensure_gl_compositor()
-                    except Exception:
-                        logger.debug("[GL COMPOSITOR] Failed to ensure compositor during slide selection", exc_info=True)
-                    use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
-                    if use_compositor:
-                        transition = GLCompositorSlideTransition(duration_ms, direction, easing_str)
-                    else:
-                        # If compositor cannot be used, prefer CPU slide over
-                        # the legacy GL overlay path.
-                        transition = SlideTransition(duration_ms, direction, easing_str)
-                else:
-                    transition = SlideTransition(duration_ms, direction, easing_str)
-                transition.set_resource_manager(self._resource_manager)
-                self._log_transition_selection(requested_type, 'Slide', random_mode, random_choice_value)
-                return transition
-
-            if transition_type == 'Wipe':
-                wipe_settings = transitions_settings.get('wipe', {}) if isinstance(transitions_settings.get('wipe', {}), dict) else {}
-                wipe_dir_str = wipe_settings.get('direction', 'Random') or 'Random'
-
-                direction_map = {
-                    'Left to Right': WipeDirection.LEFT_TO_RIGHT,
-                    'Right to Left': WipeDirection.RIGHT_TO_LEFT,
-                    'Top to Bottom': WipeDirection.TOP_TO_BOTTOM,
-                    'Bottom to Top': WipeDirection.BOTTOM_TO_TOP,
-                    'Diagonal TL-BR': WipeDirection.DIAG_TL_BR,
-                    'Diagonal TR-BL': WipeDirection.DIAG_TR_BL,
-                }
-
-                rnd_always = self.settings_manager.get('transitions.random_always', None)
-                if rnd_always is None:
-                    rnd_always = transitions_settings.get('random_always', False)
-                rnd_always = SettingsManager.to_bool(rnd_always, False)
-
-                if wipe_dir_str and wipe_dir_str in direction_map and not (wipe_dir_str == 'Random' and not rnd_always):
-                    direction = direction_map[wipe_dir_str]
-                else:
-                    all_wipes = list(direction_map.values())
-                    last_wipe = wipe_settings.get('last_direction')
-                    str_to_enum = {name: enum for name, enum in direction_map.items()}
-                    last_enum = str_to_enum.get(last_wipe) if isinstance(last_wipe, str) else None
-                    candidates = [d for d in all_wipes if d != last_enum] if last_enum in all_wipes else all_wipes
-                    direction = random.choice(candidates) if candidates else random.choice(all_wipes)
-                    enum_to_str = {enum: name for name, enum in direction_map.items()}
-                    try:
-                        wipe_settings['last_direction'] = enum_to_str.get(direction, 'Left to Right')
-                        transitions_settings['wipe'] = wipe_settings
-                        self.settings_manager.set('transitions', transitions_settings)
-                    except Exception:
-                        pass
-
-                if hw_accel:
-                    try:
-                        self._ensure_gl_compositor()
-                    except Exception:
-                        logger.debug("[GL COMPOSITOR] Failed to ensure compositor during wipe selection", exc_info=True)
-                    use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
-                    if use_compositor:
-                        transition = GLCompositorWipeTransition(duration_ms, direction, easing_str)
-                    else:
-                        # Prefer CPU wipe over the legacy GL overlay path when the
-                        # compositor cannot be used, to avoid reintroducing
-                        # overlay-related flicker.
-                        transition = WipeTransition(duration_ms, direction, easing_str)
-                else:
-                    transition = WipeTransition(duration_ms, direction, easing_str)
-
-                transition.set_resource_manager(self._resource_manager)
-                self._log_transition_selection(requested_type, 'Wipe', random_mode, random_choice_value)
-                return transition
-
-            if transition_type == 'Peel':
-                peel_settings = transitions_settings.get('peel', {}) if isinstance(transitions_settings.get('peel', {}), dict) else {}
-                peel_dir_str = peel_settings.get('direction', 'Random') or 'Random'
-
-                direction_map = {
-                    'Left to Right': SlideDirection.LEFT,
-                    'Right to Left': SlideDirection.RIGHT,
-                    'Top to Bottom': SlideDirection.DOWN,
-                    'Bottom to Top': SlideDirection.UP,
-                }
-
-                rnd_always = SettingsManager.to_bool(transitions_settings.get('random_always', False), False)
-
-                if peel_dir_str == 'Random' and not rnd_always:
-                    all_dirs = [
-                        SlideDirection.LEFT,
-                        SlideDirection.RIGHT,
-                        SlideDirection.UP,
-                        SlideDirection.DOWN,
-                    ]
-                    last_dir = peel_settings.get('last_direction')
-                    str_to_enum = {
-                        'Left to Right': SlideDirection.LEFT,
-                        'Right to Left': SlideDirection.RIGHT,
-                        'Top to Bottom': SlideDirection.DOWN,
-                        'Bottom to Top': SlideDirection.UP,
-                    }
-                    last_enum = str_to_enum.get(last_dir) if isinstance(last_dir, str) else None
-                    candidates = [d for d in all_dirs if d != last_enum] if last_enum in all_dirs else all_dirs
-                    direction = random.choice(candidates) if candidates else random.choice(all_dirs)
-                    enum_to_str = {
-                        SlideDirection.LEFT: 'Left to Right',
-                        SlideDirection.RIGHT: 'Right to Left',
-                        SlideDirection.DOWN: 'Top to Bottom',
-                        SlideDirection.UP: 'Bottom to Top',
-                    }
-                    try:
-                        peel_settings['last_direction'] = enum_to_str.get(direction, 'Left to Right')
-                        transitions_settings['peel'] = peel_settings
-                        self.settings_manager.set('transitions', transitions_settings)
-                    except Exception:
-                        pass
-                else:
-                    direction = direction_map.get(peel_dir_str, SlideDirection.LEFT)
-
-                strips = 12  # Moderate default strip count for a smooth peel
-
-                if hw_accel:
-                    try:
-                        self._ensure_gl_compositor()
-                    except Exception:
-                        logger.debug("[GL COMPOSITOR] Failed to ensure compositor during peel selection", exc_info=True)
-                    use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
-                    if use_compositor:
-                        transition = GLCompositorPeelTransition(duration_ms, direction, strips, easing_str)
-                    else:
-                        # When compositor cannot be used, prefer a CPU
-                        # Crossfade fallback instead of attempting a partial
-                        # peel implementation.
-                        transition = CrossfadeTransition(duration_ms, easing_str)
-                else:
-                    transition = CrossfadeTransition(duration_ms, easing_str)
-
-                transition.set_resource_manager(self._resource_manager)
-                label = 'Peel' if hw_accel else 'Crossfade'
-                self._log_transition_selection(requested_type, label, random_mode, random_choice_value)
-                return transition
-
-            if transition_type == 'Shuffle':
-                # Shuffle has been retired for v1.2. Any legacy configurations
-                # that still reference this label are mapped to a simple
-                # Crossfade so settings remain valid without exposing Shuffle
-                # in the active transition set.
-
-                transition = CrossfadeTransition(duration_ms, easing_str)
-                transition.set_resource_manager(self._resource_manager)
-                label = 'Crossfade'
-                self._log_transition_selection(requested_type, label, random_mode, random_choice_value)
-                return transition
-
-            if transition_type == 'Warp Dissolve':
-                # Warp Dissolve is implemented as a compositor-driven banded
-                # warp of the old image over a stable new image. It is GL-only
-                # and falls back to a simple crossfade when GPU acceleration
-                # or the compositor is unavailable.
-
-                if hw_accel:
-                    try:
-                        self._ensure_gl_compositor()
-                    except Exception:
-                        logger.debug("[GL COMPOSITOR] Failed to ensure compositor during warp dissolve selection", exc_info=True)
-                    use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
-                    if use_compositor:
-                        transition = GLCompositorWarpTransition(duration_ms, easing_str)
-                    else:
-                        transition = CrossfadeTransition(duration_ms, easing_str)
-                else:
-                    transition = CrossfadeTransition(duration_ms, easing_str)
-
-                transition.set_resource_manager(self._resource_manager)
-                label = 'Warp Dissolve' if hw_accel else 'Crossfade'
-                self._log_transition_selection(requested_type, label, random_mode, random_choice_value)
-                return transition
-
-            if transition_type == 'Diffuse':
-                diffuse_settings = transitions_settings.get('diffuse', {}) if isinstance(transitions_settings.get('diffuse', {}), dict) else {}
-                block_size_raw = diffuse_settings.get('block_size', 50)
-                try:
-                    block_size = int(block_size_raw)
-                except Exception:
-                    block_size = 50
-                shape = diffuse_settings.get('shape', 'Rectangle') or 'Rectangle'
-
-                if hw_accel:
-                    try:
-                        self._ensure_gl_compositor()
-                    except Exception:
-                        logger.debug("[GL COMPOSITOR] Failed to ensure compositor during diffuse selection", exc_info=True)
-                    use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
-                    if use_compositor:
-                        transition = GLCompositorDiffuseTransition(duration_ms, block_size, shape, easing_str)
-                    else:
-                        transition = DiffuseTransition(duration_ms, block_size, shape)
-                else:
-                    transition = DiffuseTransition(duration_ms, block_size, shape)
-
-                transition.set_resource_manager(self._resource_manager)
-                self._log_transition_selection(requested_type, 'Diffuse', random_mode, random_choice_value)
-                return transition
-
-            if transition_type in ('Rain Drops', 'Ripple'):
-                # Ripple is implemented as a compositor-driven variant of
-                # the diffuse mask using circular, expanding droplets. It is
-                # GL-only and falls back to a simple crossfade when GPU
-                # acceleration or the compositor is unavailable.
-
-                if hw_accel:
-                    try:
-                        self._ensure_gl_compositor()
-                    except Exception:
-                        logger.debug("[GL COMPOSITOR] Failed to ensure compositor during rain drops selection", exc_info=True)
-                    use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
-                    if use_compositor:
-                        transition = GLCompositorRainDropsTransition(duration_ms, easing_str)
-                    else:
-                        transition = CrossfadeTransition(duration_ms, easing_str)
-                else:
-                    transition = CrossfadeTransition(duration_ms, easing_str)
-
-                transition.set_resource_manager(self._resource_manager)
-                label = 'Ripple' if hw_accel else 'Crossfade'
-                self._log_transition_selection(requested_type, label, random_mode, random_choice_value)
-                return transition
-
-            if transition_type == 'Claw Marks':
-                # Claw Marks / Shooting Stars has been removed as a transition
-                # type. Any legacy requests for this label are now mapped to a
-                # safe Crossfade so existing settings do not break.
-
-                transition = CrossfadeTransition(duration_ms, easing_str)
-                transition.set_resource_manager(self._resource_manager)
-                self._log_transition_selection(requested_type, 'Crossfade', random_mode, random_choice_value)
-                return transition
-
-            if transition_type == 'Block Puzzle Flip':
-                block_flip_settings = transitions_settings.get('block_flip', {}) if isinstance(transitions_settings.get('block_flip', {}), dict) else {}
-                rows_raw = block_flip_settings.get('rows', 4)
-                cols_raw = block_flip_settings.get('cols', 6)
-                try:
-                    rows = int(rows_raw)
-                except Exception:
-                    rows = 4
-                try:
-                    cols = int(cols_raw)
-                except Exception:
-                    cols = 6
-
-                # Direction bias: reuse the Slide cardinal direction model so
-                # Block Puzzle Flip can emit a wave that respects the selected
-                # edge (Left/Right/Top/Bottom). When no usable direction is
-                # configured we fall back to the original fully-random order.
-                blockflip_direction: Optional[SlideDirection] = None
-                try:
-                    slide_cfg = transitions_settings.get('slide', {}) if isinstance(transitions_settings.get('slide', {}), dict) else {}
-                    dir_str = slide_cfg.get('direction', 'Random') or 'Random'
-
-                    direction_map = {
-                        'Left to Right': SlideDirection.LEFT,
-                        'Right to Left': SlideDirection.RIGHT,
-                        'Top to Bottom': SlideDirection.DOWN,
-                        'Bottom to Top': SlideDirection.UP,
-                    }
-
-                    rnd_always = SettingsManager.to_bool(transitions_settings.get('random_always', False), False)
-
-                    if dir_str == 'Random' and not rnd_always:
-                        # Mirror the Slide transition's non-repeating random
-                        # selection so BlockFlip shares the same edge bias.
-                        all_dirs = [
-                            SlideDirection.LEFT,
-                            SlideDirection.RIGHT,
-                            SlideDirection.UP,
-                            SlideDirection.DOWN,
-                        ]
-                        last_dir = slide_cfg.get('last_direction')
-                        str_to_enum = {
-                            'Left to Right': SlideDirection.LEFT,
-                            'Right to Left': SlideDirection.RIGHT,
-                            'Top to Bottom': SlideDirection.DOWN,
-                            'Bottom to Top': SlideDirection.UP,
-                        }
-                        last_enum = str_to_enum.get(last_dir) if isinstance(last_dir, str) else None
-                        candidates = [d for d in all_dirs if d != last_enum] if last_enum in all_dirs else all_dirs
-                        blockflip_direction = random.choice(candidates) if candidates else random.choice(all_dirs)
-
-                        enum_to_str = {
-                            SlideDirection.LEFT: 'Left to Right',
-                            SlideDirection.RIGHT: 'Right to Left',
-                            SlideDirection.DOWN: 'Top to Bottom',
-                            SlideDirection.UP: 'Bottom to Top',
-                        }
-                        try:
-                            slide_cfg['last_direction'] = enum_to_str.get(blockflip_direction, 'Left to Right')
-                            transitions_settings['slide'] = slide_cfg
-                            self.settings_manager.set('transitions', transitions_settings)
-                        except Exception:
-                            pass
-                    else:
-                        blockflip_direction = direction_map.get(dir_str, None)
-                except Exception:
-                    # On any error, keep direction bias disabled for this run.
-                    blockflip_direction = None
-
-                if hw_accel:
-                    try:
-                        self._ensure_gl_compositor()
-                    except Exception:
-                        logger.debug("[GL COMPOSITOR] Failed to ensure compositor during block flip selection", exc_info=True)
-                    use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
-                    if use_compositor:
-                        transition = GLCompositorBlockFlipTransition(duration_ms, rows, cols, flip_duration_ms=500, direction=blockflip_direction)
-                    else:
-                        # Prefer CPU BlockPuzzleFlipTransition over the legacy GL
-                        # overlay path when the compositor cannot be used.
-                        transition = BlockPuzzleFlipTransition(duration_ms, rows, cols, flip_duration_ms=500, direction=blockflip_direction)
-                else:
-                    transition = BlockPuzzleFlipTransition(duration_ms, rows, cols, flip_duration_ms=500, direction=blockflip_direction)
-
-                transition.set_resource_manager(self._resource_manager)
-                self._log_transition_selection(requested_type, 'Block Puzzle Flip', random_mode, random_choice_value)
-                return transition
-
-            if transition_type == '3D Block Spins':
-                # Direction configuration for the single-slab 3D Block Spins
-                # transition. Grid mode has been removed; the shader always
-                # renders a single full-frame slab driven by this direction.
-                blockspin_settings = transitions_settings.get('blockspin', {}) if isinstance(transitions_settings.get('blockspin', {}), dict) else {}
-                dir_str = blockspin_settings.get('direction', 'Random') or 'Random'
-
-                # Map UI string to SlideDirection, with Random choosing a
-                # random cardinal direction at selection time.
-                if dir_str == 'Random':
-                    dir_choice = random.choice([
-                        SlideDirection.LEFT,
-                        SlideDirection.RIGHT,
-                        SlideDirection.UP,
-                        SlideDirection.DOWN,
-                    ])
-                else:
-                    direction_map = {
-                        'Left to Right': SlideDirection.LEFT,
-                        'Right to Left': SlideDirection.RIGHT,
-                        'Top to Bottom': SlideDirection.DOWN,
-                        'Bottom to Top': SlideDirection.UP,
-                    }
-                    dir_choice = direction_map.get(dir_str, SlideDirection.LEFT)
-
-                if hw_accel:
-                    try:
-                        self._ensure_gl_compositor()
-                    except Exception:
-                        logger.debug("[GL COMPOSITOR] Failed to ensure compositor during block spins selection", exc_info=True)
-                    use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
-                    if use_compositor:
-                        transition = GLCompositorBlockSpinTransition(duration_ms, easing_str, dir_choice)
-                    else:
-                        # When compositor cannot be used, prefer a CPU Crossfade
-                        # fallback instead of attempting a partial block spins
-                        # implementation.
-                        transition = CrossfadeTransition(duration_ms, easing_str)
-                else:
-                    transition = CrossfadeTransition(duration_ms, easing_str)
-
-                transition.set_resource_manager(self._resource_manager)
-                label = '3D Block Spins' if hw_accel else 'Crossfade'
-                self._log_transition_selection(requested_type, label, random_mode, random_choice_value)
-                return transition
-
-            if transition_type == 'Blinds':
-                if hw_accel:
-                    try:
-                        self._ensure_gl_compositor()
-                    except Exception:
-                        logger.debug("[GL COMPOSITOR] Failed to ensure compositor during blinds selection", exc_info=True)
-                    use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
-                    if use_compositor:
-                        transition = GLCompositorBlindsTransition(duration_ms)
-                    else:
-                        # When compositor cannot be used, prefer a CPU
-                        # Crossfade fallback instead of the legacy GL Blinds
-                        # overlay path.
-                        transition = CrossfadeTransition(duration_ms)
-                else:
-                    transition = CrossfadeTransition(duration_ms)
-
-                transition.set_resource_manager(self._resource_manager)
-                label = 'Blinds' if hw_accel else 'Crossfade'
-                self._log_transition_selection(requested_type, label, random_mode, random_choice_value)
-                return transition
-
-            if transition_type == 'Crumble':
-                crumble_settings = transitions_settings.get('crumble', {}) if isinstance(transitions_settings.get('crumble', {}), dict) else {}
-                piece_count_raw = crumble_settings.get('piece_count', 8)
-                try:
-                    piece_count = int(piece_count_raw)
-                except Exception:
-                    piece_count = 8
-                crack_complexity_raw = crumble_settings.get('crack_complexity', 1.0)
-                try:
-                    crack_complexity = float(crack_complexity_raw)
-                except Exception:
-                    crack_complexity = 1.0
-                mosaic_mode = bool(crumble_settings.get('mosaic_mode', False))
-
-                if hw_accel:
-                    try:
-                        self._ensure_gl_compositor()
-                    except Exception:
-                        logger.debug("[GL COMPOSITOR] Failed to ensure compositor during crumble selection", exc_info=True)
-                    use_compositor = isinstance(getattr(self, "_gl_compositor", None), GLCompositorWidget)
-                    if use_compositor:
-                        transition = GLCompositorCrumbleTransition(
-                            duration_ms, piece_count, crack_complexity, mosaic_mode
-                        )
-                    else:
-                        # When compositor cannot be used, prefer a CPU
-                        # Crossfade fallback.
-                        transition = CrossfadeTransition(duration_ms)
-                else:
-                    transition = CrossfadeTransition(duration_ms)
-
-                transition.set_resource_manager(self._resource_manager)
-                label = 'Crumble' if hw_accel else 'Crossfade'
-                self._log_transition_selection(requested_type, label, random_mode, random_choice_value)
-                return transition
-
-            logger.warning("Unknown transition type: %s, using Crossfade", transition_type)
-            transition = CrossfadeTransition(duration_ms)
-            transition.set_resource_manager(self._resource_manager)
-            self._log_transition_selection(requested_type, 'Crossfade', random_mode, random_choice_value)
-            return transition
-
-        except Exception as exc:
-            logger.error("Failed to create transition: %s", exc, exc_info=True)
-            return None
-
-    def _log_transition_selection(self, requested: str, actual: str, random_mode: bool, random_choice: Optional[str]) -> None:
-        try:
-            if requested != actual:
-                logger.info(
-                    "[TRANSITIONS] Requested '%s' but instantiating '%s' (random_mode=%s, random_choice=%s)",
-                    requested,
-                    actual,
-                    random_mode,
-                    random_choice,
-                )
-            else:
-                logger.debug(
-                    "[TRANSITIONS] Instantiating '%s' (requested=%s, random_mode=%s, random_choice=%s)",
-                    actual,
-                    requested,
-                    random_mode,
-                    random_choice,
-                )
-        except Exception:
-            pass
+        """Create the next transition, honoring live settings overrides.
+        
+        Delegates to TransitionFactory for actual transition instantiation.
+        This reduces display_widget.py by ~550 lines while maintaining
+        identical behavior.
+        """
+        if self._transition_factory is None:
+            # Fallback if factory wasn't initialized (no settings_manager)
+            if not self.settings_manager:
+                return None
+            # Late initialization
+            self._transition_factory = TransitionFactory(
+                settings_manager=self.settings_manager,
+                resource_manager=self._resource_manager,
+                compositor_checker=self._has_gl_compositor,
+                compositor_ensurer=self._ensure_gl_compositor,
+            )
+        
+        return self._transition_factory.create_transition()
     
     def get_target_size(self) -> QSize:
         """Get the target physical size for image processing.
@@ -3292,6 +2735,10 @@ class DisplayWidget(QWidget):
             except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to update compositor geometry", exc_info=True)
 
+    def _has_gl_compositor(self) -> bool:
+        """Check if the GL compositor is available and ready."""
+        return isinstance(self._gl_compositor, GLCompositorWidget)
+
     def _destroy_render_surface(self) -> None:
         if self._render_surface is None or self._renderer_backend is None:
             self._render_surface = None
@@ -3858,19 +3305,8 @@ class DisplayWidget(QWidget):
                     except Exception:
                         cursor_screen = None
 
-                try:
-                    widgets = QApplication.topLevelWidgets()
-                except Exception:
-                    widgets = []
-
-                display_widgets = []
-                for w in widgets:
-                    try:
-                        if not isinstance(w, DisplayWidget):
-                            continue
-                        display_widgets.append(w)
-                    except Exception:
-                        continue
+                # PERF: Use cached instances instead of iterating topLevelWidgets
+                display_widgets = DisplayWidget.get_all_instances()
 
                 # First, reset Ctrl state and any existing halos on all
                 # DisplayWidgets so we never end up with multiple visible
@@ -4046,6 +3482,8 @@ class DisplayWidget(QWidget):
 
             if hard_exit:
                 DisplayWidget._global_ctrl_held = False
+                # Also clear instance _ctrl_held so click-to-exit works after Ctrl release
+                self._ctrl_held = False
                 event.accept()
                 return
 
@@ -4055,25 +3493,19 @@ class DisplayWidget(QWidget):
             DisplayWidget._global_ctrl_held = False
             owner = DisplayWidget._halo_owner
             DisplayWidget._halo_owner = None
-
-            try:
-                widgets = QApplication.topLevelWidgets()
-            except Exception:
-                widgets = []
+            
+            # CRITICAL: Always clear _ctrl_held on the widget that received the
+            # key release, regardless of whether it's the halo owner or in the cache.
+            # This fixes the bug where _ctrl_held remained True after Ctrl release.
+            self._ctrl_held = False
 
             try:
                 global_pos = QCursor.pos()
             except Exception:
                 global_pos = None
 
-            display_widgets = []
-            for w in widgets:
-                try:
-                    if not isinstance(w, DisplayWidget):
-                        continue
-                    display_widgets.append(w)
-                except Exception:
-                    continue
+            # PERF: Use cached instances instead of iterating topLevelWidgets
+            display_widgets = DisplayWidget.get_all_instances()
 
             # Fade out the halo for the current owner, if any.
             if isinstance(owner, DisplayWidget) and owner in display_widgets:

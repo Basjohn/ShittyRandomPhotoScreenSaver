@@ -17,6 +17,9 @@ from rendering.display_modes import DisplayMode
 @pytest.mark.qt
 def test_ctrl_held_suppresses_mouse_exit_single_widget(qt_app, settings_manager, qtbot):
     """Holding Ctrl prevents mouse movement/click from exiting for one widget."""
+    # Disable hard_exit mode so clicks can trigger exit after Ctrl release
+    settings_manager.set("input.hard_exit", False)
+    
     widget = DisplayWidget(
         screen_index=0,
         display_mode=DisplayMode.FILL,
@@ -53,6 +56,9 @@ def test_ctrl_held_global_across_multiple_widgets(qt_app, settings_manager, qtbo
     Pressing Ctrl while one DisplayWidget has focus should suppress mouse-exit
     behaviour on another DisplayWidget as well.
     """
+    # Disable hard_exit mode so clicks can trigger exit after Ctrl release
+    settings_manager.set("input.hard_exit", False)
+    
     w0 = DisplayWidget(
         screen_index=0,
         display_mode=DisplayMode.FILL,

@@ -288,15 +288,22 @@ void main() {
                         bool showBorder = crackAppear > 0.5 || pieceFall > 0.01;
                         
                         if (showBorder) {
+                            // Calculate distance to screen edge (for pieces at screen boundary)
+                            // This ensures top/left/right/bottom pieces have visible borders
+                            float edgeDist = min(min(originalPos.x, 1.0 - originalPos.x),
+                                                 min(originalPos.y, 1.0 - originalPos.y));
+                            // Use the minimum of Voronoi edge distance and screen edge distance
+                            float effectiveEdge = min(vorCheck.z, edgeDist * 8.0);  // Scale screen edge to match Voronoi units
+                            
                             // Dark border zone (outer edge of piece)
-                            if (vorCheck.z < borderWidth && vorCheck.z >= crackWidth) {
+                            if (effectiveEdge < borderWidth && effectiveEdge >= crackWidth) {
                                 // Soft dark border - blend based on distance
-                                float borderBlend = 1.0 - (vorCheck.z - crackWidth) / (borderWidth - crackWidth);
+                                float borderBlend = 1.0 - (effectiveEdge - crackWidth) / (borderWidth - crackWidth);
                                 borderBlend = borderBlend * borderBlend; // Quadratic falloff
                                 finalColor = mix(finalColor, vec3(0.0), borderBlend * 0.6);
                             }
                             // Inner crack (darkest)
-                            if (vorCheck.z < crackWidth) {
+                            if (effectiveEdge < crackWidth) {
                                 finalColor = vec3(0.0);  // Pure black crack
                             }
                         }

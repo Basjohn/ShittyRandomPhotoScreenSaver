@@ -344,9 +344,25 @@ class ResourceManager:
                    if info.resource_type == resource_type]
     
     def cleanup_all(self) -> None:
-        """Clean up all registered resources."""
+        """Clean up all registered resources.
+        
+        WARNING: This method should only be called from the main/UI thread.
+        Calling from a ThreadManager callback can cause deadlocks.
+        """
         if self._shutdown:
             return
+        
+        # Safety check: warn if called from non-main thread
+        # This helps catch potential deadlock scenarios where cleanup_all()
+        # is called from a ThreadManager callback
+        main_thread = threading.main_thread()
+        current_thread = threading.current_thread()
+        if current_thread != main_thread:
+            self._logger.warning(
+                "[THREAD_SAFETY] cleanup_all() called from non-main thread '%s'. "
+                "This may cause deadlocks. Should be called from UI thread only.",
+                current_thread.name
+            )
         
         self._logger.info("Cleaning up all resources...")
         self._shutdown = True

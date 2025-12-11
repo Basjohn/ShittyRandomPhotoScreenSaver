@@ -81,7 +81,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - Transition state dataclasses extracted from GLCompositor: `TransitionStateBase`, `CrossfadeState`, `SlideState`, `WipeState`, `BlockFlipState`, `BlockSpinState`, `BlindsState`, `DiffuseState`, `PeelState`, `WarpState`, `RaindropsState`, `CrumbleState`.
   - `TransitionStateManager`: Clean interface for getting/setting transition state with change notifications.
 - rendering/transition_factory.py
-  - `TransitionFactory`: Factory for creating transition instances based on settings and hardware capabilities. Extracted from DisplayWidget to reduce file size and improve testability.
+  - `TransitionFactory`: Factory for creating transition instances based on settings and hardware capabilities. **Integrated into DisplayWidget**, removing 535 lines of duplicate code and 20+ unused imports. Handles all transition type selection, direction randomization, and compositor/CPU fallback logic.
 - rendering/widget_manager.py
   - `WidgetManager`: Extracted from DisplayWidget. Manages overlay widget lifecycle, positioning, visibility, Z-order, and rate-limited raise operations.
 

@@ -3858,6 +3858,11 @@ void main() {
             gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
             gl.glActiveTexture(gl.GL_TEXTURE0)
             gl.glUseProgram(0)
+            # CRITICAL: Disable depth testing after BlockSpin so subsequent draws
+            # (dimming overlay, Spotify visualizer) are not depth-culled against
+            # the 3D slab geometry. This was causing the dimming overlay to glitch.
+            gl.glDisable(gl.GL_DEPTH_TEST)
+            gl.glDepthMask(gl.GL_FALSE)
 
     def _paint_peel_shader(self, target: QRect) -> None:
         """Render Peel transition using the PeelProgram helper."""

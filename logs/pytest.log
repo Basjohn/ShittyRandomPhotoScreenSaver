@@ -2294,3 +2294,22 @@
 2025-12-11 16:59:23,382 - pytest_runner - INFO - pytest finished with exit code 0
 2025-12-11 17:14:17,999 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_dimming_and_interaction_fixes.py', '-v', '--tb=short']
 2025-12-11 17:14:19,271 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 17:39:18,160 - pytest_runner - INFO - pytest.py starting with args: ['tests/', '-v', '--tb=short', '-x']
+2025-12-11 17:39:28,727 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-11 17:39:37,072 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_transition*.py', '-v', '--tb=short']
+2025-12-11 17:39:37,424 - pytest_runner - INFO - pytest finished with exit code 4
+2025-12-11 17:39:44,325 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_dimming*.py', 'tests/test_display*.py', '-v', '--tb=short']
+2025-12-11 17:39:44,657 - pytest_runner - INFO - pytest finished with exit code 4
+2025-12-11 17:39:52,374 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_dimming_and_interaction_fixes.py', 'tests/test_display_widget.py', '-v', '--tb=short']
+2025-12-11 17:39:52,717 - pytest_runner - INFO - pytest finished with exit code 4
+2025-12-11 17:39:59,619 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_dimming_and_interaction_fixes.py', '-v', '--tb=short']
+2025-12-11 17:40:01,024 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 18:21:41,968 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_ctrl_interaction_mode.py::test_ctrl_held_suppresses_mouse_exit_single_widget', '-v', '--timeout=30']
+2025-12-11 18:21:42,407 - pytest_runner - INFO - pytest finished with exit code 4
+2025-12-11 18:21:47,998 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_ctrl_interaction_mode.py::test_ctrl_held_suppresses_mouse_exit_single_widget', '-v', '--timeout=30']
+2025-12-11 18:21:48,309 - pytest_runner - INFO - pytest finished with exit code 4
+2025-12-11 18:21:53,733 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_ctrl_interaction_mode.py::test_ctrl_held_suppresses_mouse_exit_single_widget', '-v']
+2025-12-11 18:21:55,038 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 18:22:01,144 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_ctrl_interaction_mode.py::test_ctrl_held_global_across_multiple_widgets', '-v']
+2025-12-11 18:22:02,512 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 18:22:07,961 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_ctrl_interaction_mode.py', '-v']
