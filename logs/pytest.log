@@ -2147,3 +2147,90 @@
 2025-12-06 17:19:27,473 - pytest_runner - INFO - pytest finished with exit code 0
 2025-12-06 17:20:34,929 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_settings.py', 'tests/test_animation.py', 'tests/test_resources.py', '-v', '--tb=short']
 2025-12-06 17:20:37,259 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 03:00:10,965 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_dimming_and_interaction_fixes.py', '-v', '--tb=short']
+2025-12-11 03:00:12,930 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-11 03:00:52,301 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_dimming_and_interaction_fixes.py', '-v', '--tb=short']
+2025-12-11 03:00:53,911 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-11 03:01:20,318 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_dimming_and_interaction_fixes.py', '-v', '--tb=short']
+2025-12-11 03:01:21,930 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 03:18:53,371 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_dimming_and_interaction_fixes.py', '-v', '--tb=short']
+2025-12-11 03:18:54,826 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 03:19:31,630 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_dimming_and_interaction_fixes.py', '-v', '--tb=short']
+2025-12-11 03:19:32,754 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 03:20:50,641 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_dimming_and_interaction_fixes.py', '-v', '--tb=short']
+2025-12-11 03:20:51,869 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 04:12:35,080 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_dimming_and_interaction_fixes.py', '-v', '--tb=short']
+2025-12-11 04:12:36,950 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-11 04:13:09,732 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_dimming_and_interaction_fixes.py', '-v', '--tb=short']
+2025-12-11 04:13:11,596 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 11:55:32,718 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_dimming_and_interaction_fixes.py', 'tests/test_threading.py', '-v', '--tb=short']
+2025-12-11 11:55:34,007 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 11:57:37,085 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_threading.py', 'tests/test_event_system.py', '-v', '--tb=short']
+2025-12-11 11:57:37,355 - pytest_runner - INFO - pytest finished with exit code 4
+2025-12-11 11:57:43,552 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_threading.py', '-v', '--tb=short']
+2025-12-11 11:57:44,125 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 11:58:19,339 - pytest_runner - INFO - pytest.py starting with args: ['tests/', '-v', '--tb=short', '-x', '-q']
+2025-12-11 11:58:26,385 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-11 11:58:36,054 - pytest_runner - INFO - pytest.py starting with args: ['tests/', '-v', '--tb=short', '--ignore=tests/test_clock_widget.py', '-q']
+2025-12-11 11:58:47,857 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_dimming_and_interaction_fixes.py', 'tests/test_threading.py', 'tests/test_animation.py', '-v', '--tb=short']
+2025-12-11 11:58:50,772 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 12:02:07,001 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_clock_widget.py', '-v', '--tb=short']
+2025-12-11 12:02:11,611 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 12:03:38,747 - pytest_runner - INFO - pytest.py starting with args: ['tests/', '-v', '--tb=short', '-q']
+2025-12-11 12:03:53,707 - pytest_runner - INFO - pytest.py starting with args: ['tests/', '--tb=short', '-q', '--timeout=120']
+2025-12-11 12:03:53,941 - pytest_runner - INFO - pytest finished with exit code 4
+2025-12-11 12:03:59,392 - pytest_runner - INFO - pytest.py starting with args: ['tests/', '--tb=short', '-q']
+2025-12-11 12:04:17,882 - pytest_runner - INFO - pytest.py starting with args: ['--run-all']
+2025-12-11 12:04:18,108 - pytest_runner - INFO - pytest finished with exit code 4
+2025-12-11 12:04:37,737 - pytest_runner - INFO - pytest.py starting with args: ['tests/', '-q']
+2025-12-11 12:05:04,624 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_perf_dt_max.py', '-v', '--tb=short']
+2025-12-11 12:05:30,066 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 12:05:36,489 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_perf_integration.py', '-v', '--tb=short']
+2025-12-11 12:05:36,827 - pytest_runner - INFO - pytest finished with exit code 5
+2025-12-11 12:05:42,857 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_frame_timing_workload.py', '-v', '--tb=short']
+2025-12-11 12:05:56,582 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 12:06:02,562 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_slide_jitter.py', '-v', '--tb=short']
+2025-12-11 12:06:05,694 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 12:06:14,432 - pytest_runner - INFO - pytest.py starting with args: ['tests/', '-q', '--tb=line']
+2025-12-11 12:07:23,583 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_perf_dt_max.py', 'tests/test_frame_timing_workload.py', 'tests/test_slide_jitter.py', 'tests/test_clock_widget.py', 'tests/test_dimming_and_interaction_fixes.py', 'tests/test_threading.py', '-v', '--tb=short']
+2025-12-11 12:08:12,752 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_perf_dt_max.py', 'tests/test_frame_timing_workload.py', 'tests/test_slide_jitter.py', 'tests/test_dimming_and_interaction_fixes.py', 'tests/test_threading.py', '-v', '--tb=short']
+2025-12-11 12:08:59,763 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_perf_dt_max.py', 'tests/test_frame_timing_workload.py', 'tests/test_slide_jitter.py', '-v', '--tb=short']
+2025-12-11 12:09:40,340 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 12:09:46,160 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_dimming_and_interaction_fixes.py', '-v', '--tb=short']
+2025-12-11 12:09:47,107 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 12:09:54,364 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_clock_widget.py', 'tests/test_threading.py', '-v', '--tb=short']
+2025-12-11 12:09:59,252 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 12:10:27,142 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_animation.py', 'tests/test_settings.py', 'tests/test_resources.py', '-v', '--tb=short']
+2025-12-11 12:10:29,403 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-11 12:15:25,142 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_settings.py', '-v', '--tb=short']
+2025-12-11 12:15:25,639 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-11 12:16:17,966 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_settings.py', '-v', '--tb=short']
+2025-12-11 12:16:18,389 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 12:16:44,198 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_perf_dt_max.py', 'tests/test_frame_timing_workload.py', 'tests/test_slide_jitter.py', '-v', '--tb=short']
+2025-12-11 12:17:24,811 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-11 12:17:32,769 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_perf_dt_max.py::TestPerfDtMax::test_sustained_visualizer_load', '-v', '--tb=short']
+2025-12-11 12:17:49,801 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-11 12:18:29,434 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_perf_dt_max.py', '-v', '--tb=short']
+2025-12-11 12:18:54,856 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 12:20:02,437 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_perf_dt_max.py', 'tests/test_frame_timing_workload.py', 'tests/test_slide_jitter.py', 'tests/test_settings.py', 'tests/test_threading.py', 'tests/test_animation.py', 'tests/test_resources.py', '-v', '--tb=short']
+2025-12-11 12:20:45,261 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 12:21:04,226 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_clock_widget.py', 'tests/test_dimming_and_interaction_fixes.py', '-v', '--tb=short']
+2025-12-11 12:21:09,506 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 12:24:41,460 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_perf_dt_max.py', 'tests/test_frame_timing_workload.py', 'tests/test_slide_jitter.py', '-v', '--tb=short']
+2025-12-11 12:25:21,931 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 12:33:23,097 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_perf_integration.py', '-v', '--tb=short']
+2025-12-11 12:33:23,442 - pytest_runner - INFO - pytest finished with exit code 5
+2025-12-11 12:37:03,304 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_dimming_and_interaction_fixes.py', '-v', '--tb=short']
+2025-12-11 12:37:04,491 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 12:43:07,754 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_clock_widget.py', 'tests/test_settings.py', 'tests/test_threading.py', 'tests/test_animation.py', '-v', '--tb=short']
+2025-12-11 12:43:14,675 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 13:12:32,213 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_dimming_and_interaction_fixes.py', '-v', '--tb=short']
+2025-12-11 13:12:34,288 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 13:33:39,475 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_dimming_and_interaction_fixes.py', '-v', '--tb=short']
+2025-12-11 13:33:41,300 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 13:43:03,930 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_dimming_and_interaction_fixes.py', '-v', '--tb=short']
+2025-12-11 13:43:05,689 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-11 13:46:53,033 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_dimming_and_interaction_fixes.py', '-v', '--tb=short']
+2025-12-11 13:46:54,614 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-11 13:47:24,226 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_dimming_and_interaction_fixes.py', '-v', '--tb=short']
+2025-12-11 13:47:25,696 - pytest_runner - INFO - pytest finished with exit code 0

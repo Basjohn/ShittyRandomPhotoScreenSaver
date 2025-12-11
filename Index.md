@@ -129,14 +129,28 @@ A living map of modules, purposes, and key classes. Keep this up to date.
    - Spotify-only vertical volume slider paired with the media card; gated on a Spotify GSMTC session and participating in the secondary Spotify fade wave via a GPU fade factor derived from the visualiser card’s `ShadowFadeProfile` progress so it fades in slightly after the card while respecting the same hard-exit / Ctrl interaction gating as the media widget.
   - widgets/reddit_widget.py
    - Reddit overlay widget showing top posts from a configured subreddit with 4- and 10-item layouts, per-monitor selection via `widgets.reddit`, shared overlay fade-in coordination, and click-through to the system browser.
+   - In hard-exit mode, `handle_click(deferred=True)` returns the URL instead of opening it immediately; DisplayWidget stores this and opens it when the user exits, avoiding the edge case where Firefox gets stuck behind the screensaver.
+ - widgets/dimming_overlay.py
+   - `DimmingOverlay`: Semi-transparent black overlay for background dimming. Sits above transitions but below all widgets to reduce brightness and improve widget readability.
+ - widgets/pixel_shift_manager.py
+   - `PixelShiftManager`: Manages periodic 1px shifts of overlay widgets for burn-in prevention. Maximum drift of 4px in any direction with automatic drift-back. Defers during transitions.
  - widgets/context_menu.py
-   - `ScreensaverContextMenu`: Dark glass themed right-click context menu for screensaver. Provides Previous/Next image, transition selection submenu, Settings, Hard Exit Mode toggle, and Exit. Activated by right-click in hard exit mode or Ctrl+right-click in normal mode. Lazy-initialized by DisplayWidget for performance.
+   - `ScreensaverContextMenu`: Dark-themed right-click context menu matching settings dialog styling. Provides Previous/Next image, transition selection submenu, Settings, Background Dimming toggle, Hard Exit Mode toggle, and Exit. Uses monochromatic icons and app-owned dark theme (no Windows accent bleed). Activated by right-click in hard exit mode or Ctrl+right-click in normal mode. Lazy-initialized by DisplayWidget for performance.
  - widgets/overlay_timers.py
    - Centralised overlay timer helper providing `create_overlay_timer()` and `OverlayTimerHandle` for recurring UI-thread timers (clock/weather/media/Reddit). Prefers `ThreadManager.schedule_recurring` with ResourceManager tracking and falls back to a widget-local `QTimer` when no ThreadManager is available.
  - widgets/beat_engine.py
    - `BeatEngine`: Extracted from SpotifyVisualizerWidget. Handles FFT processing, beat detection, and bar smoothing on the COMPUTE pool. Thread-safe state access for UI thread consumption.
    - `BeatEngineConfig`: Configuration dataclass for bar count, smoothing, decay, ghosting.
    - `BeatEngineState`: Current state dataclass with bars, peaks, and playing status.
+
+## UI
+- ui/settings_dialog.py
+  - Main settings dialog with custom title bar, dark theme, and tabbed interface
+- ui/tabs/sources_tab.py - Image source configuration (folders, RSS feeds)
+- ui/tabs/display_tab.py - Display mode and hardware acceleration settings
+- ui/tabs/transitions_tab.py - Transition type, duration, and direction settings
+- ui/tabs/widgets_tab.py - Overlay widget configuration (clocks, weather, media, Reddit)
+- ui/tabs/accessibility_tab.py - Accessibility features (background dimming, pixel shift)
 
 ## Utilities
 - utils/image_cache.py
@@ -180,6 +194,10 @@ A living map of modules, purposes, and key classes. Keep this up to date.
  - widgets.media.monitor: 'ALL'|1|2|3
  - widgets.reddit.monitor: 'ALL'|1|2|3
  - widgets.shadows.*: global widget shadow configuration shared by all overlay widgets
+- accessibility.dimming.enabled: bool (default false) - enable background dimming overlay
+- accessibility.dimming.opacity: int (10-90, default 30) - dimming overlay opacity percentage
+- accessibility.pixel_shift.enabled: bool (default false) - enable widget pixel shift for burn-in prevention
+- accessibility.pixel_shift.rate: int (1-5, default 1) - shifts per minute
 
 ## Audits
 - audits/v1_2 ROADMAP.md: Living roadmap for v1.2 features and performance goals
@@ -188,6 +206,8 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - audits/FLICKER_INVESTIGATION.md: Widget and transition flicker root cause analysis and fixes
 - audits/UI_THREAD_AUDIT.md: UI thread blocking operations inventory and optimization plan
 - audits/ARCHITECTURE_AUDIT.md: Exhaustive architecture audit with prioritized action plan
+- audits/ARCHITECTURE_AUDIT_2025_12.md: December 2025 deep audit with live checklists (threading, centralization, resources, performance, deadlocks, cache) - 24 items completed
+- audits/DIMMING_WIDGET_BUGS_2025_12.md: Dimming overlay and widget startup bugs investigation and fixes
 
 ## Notes
 - DPR-aware scaling in DisplayWidget → ImageProcessor to reduce GL upload cost

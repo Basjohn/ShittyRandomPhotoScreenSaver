@@ -33,6 +33,15 @@ from transitions.slide_transition import SlideDirection
 from core.resources.manager import ResourceManager
 
 try:  # Optional dependency; shaders are disabled if unavailable.
+    # Disable OpenGL_accelerate to avoid Nuitka compilation issues.
+    # The accelerate module is optional and not required for functionality.
+    # Setting PYOPENGL_PLATFORM before import prevents accelerate from loading.
+    import os
+    os.environ.setdefault("PYOPENGL_PLATFORM", "nt")  # Windows native
+    import OpenGL
+    # Disable accelerate module - it causes issues with Nuitka builds
+    # and is not required for our use case (we don't do heavy GL array ops)
+    OpenGL.ERROR_ON_COPY = True  # Catch accidental array copies
     from OpenGL import GL as gl  # type: ignore[import]
 except Exception:  # pragma: no cover - PyOpenGL not required for CPU paths
     gl = None
@@ -130,6 +139,31 @@ def _get_raindrops_program():
         from rendering.gl_programs.raindrops_program import raindrops_program
         _raindrops_program_instance = raindrops_program
     return _raindrops_program_instance
+
+
+def cleanup_global_shader_programs() -> None:
+    """Clear all global shader program singleton instances.
+    
+    Call this on application shutdown to ensure GL resources are released.
+    This is safe to call even if programs were never loaded.
+    """
+    global _peel_program_instance, _blockflip_program_instance, _crossfade_program_instance
+    global _blinds_program_instance, _diffuse_program_instance, _slide_program_instance
+    global _wipe_program_instance, _warp_program_instance, _raindrops_program_instance
+    global _crumble_program_instance
+    
+    # Clear all program instances - they will be garbage collected
+    # and their GL resources released when the context is destroyed
+    _peel_program_instance = None
+    _blockflip_program_instance = None
+    _crossfade_program_instance = None
+    _blinds_program_instance = None
+    _diffuse_program_instance = None
+    _slide_program_instance = None
+    _wipe_program_instance = None
+    _warp_program_instance = None
+    _raindrops_program_instance = None
+    _crumble_program_instance = None
 
 
 logger = get_logger(__name__)
@@ -620,10 +654,28 @@ class GLCompositorWidget(QOpenGLWidget):
         self._spotify_vis_fill_color: Optional[QColor] = None
         self._spotify_vis_border_color: Optional[QColor] = None
         self._spotify_vis_fade: float = 0.0
+        
+        # GL-based dimming overlay. Rendered AFTER the wallpaper/transition
+        # but BEFORE widgets (which are Qt siblings above the compositor).
+        # This ensures proper compositing without Z-order issues.
+        self._dimming_enabled: bool = False
+        self._dimming_opacity: float = 0.0  # 0.0-1.0
 
     # ------------------------------------------------------------------
     # Public API used by DisplayWidget / transitions
     # ------------------------------------------------------------------
+    
+    def set_dimming(self, enabled: bool, opacity: float = 0.3) -> None:
+        """Enable or disable GL-based dimming overlay.
+        
+        Args:
+            enabled: True to show dimming, False to hide
+            opacity: Dimming opacity 0.0-1.0 (default 0.3 = 30%)
+        """
+        self._dimming_enabled = enabled
+        self._dimming_opacity = max(0.0, min(1.0, opacity))
+        self.update()
+        logger.debug("GL dimming: enabled=%s, opacity=%.0f%%", enabled, self._dimming_opacity * 100)
 
     def _get_render_progress(self, fallback: float = 0.0) -> float:
         """Get interpolated progress for rendering.
@@ -4459,6 +4511,7 @@ void main() {
             try:
                 if self._prepare_blockspin_textures():
                     self._paint_blockspin_shader(target)
+                    self._paint_dimming_gl()
                     self._paint_spotify_visualizer_gl()
                     if is_perf_metrics_enabled():
                         self._paint_debug_overlay_gl()
@@ -4479,6 +4532,7 @@ void main() {
         if self._blockflip is not None and self._can_use_blockflip_shader():
             try:
                 self._paint_blockflip_shader(target)
+                self._paint_dimming_gl()
                 self._paint_spotify_visualizer_gl()
                 if is_perf_metrics_enabled():
                     self._paint_debug_overlay_gl()
@@ -4502,6 +4556,7 @@ void main() {
         if self._raindrops is not None and self._can_use_raindrops_shader():
             try:
                 self._paint_raindrops_shader(target)
+                self._paint_dimming_gl()
                 self._paint_spotify_visualizer_gl()
                 if is_perf_metrics_enabled():
                     self._paint_debug_overlay_gl()
@@ -4523,6 +4578,7 @@ void main() {
         if self._warp is not None and self._can_use_warp_shader():
             try:
                 self._paint_warp_shader(target)
+                self._paint_dimming_gl()
                 self._paint_spotify_visualizer_gl()
                 if is_perf_metrics_enabled():
                     self._paint_debug_overlay_gl()
@@ -4546,6 +4602,7 @@ void main() {
         if self._diffuse is not None and self._can_use_diffuse_shader():
             try:
                 self._paint_diffuse_shader(target)
+                self._paint_dimming_gl()
                 self._paint_spotify_visualizer_gl()
                 if is_perf_metrics_enabled():
                     self._paint_debug_overlay_gl()
@@ -4570,6 +4627,7 @@ void main() {
         if self._peel is not None and self._can_use_peel_shader():
             try:
                 self._paint_peel_shader(target)
+                self._paint_dimming_gl()
                 self._paint_spotify_visualizer_gl()
                 if is_perf_metrics_enabled():
                     self._paint_debug_overlay_gl()
@@ -4594,6 +4652,7 @@ void main() {
         if self._blinds is not None and self._can_use_blinds_shader():
             try:
                 self._paint_blinds_shader(target)
+                self._paint_dimming_gl()
                 self._paint_spotify_visualizer_gl()
                 if is_perf_metrics_enabled():
                     self._paint_debug_overlay_gl()
@@ -4613,6 +4672,7 @@ void main() {
         if self._crumble is not None and self._can_use_crumble_shader():
             try:
                 self._paint_crumble_shader(target)
+                self._paint_dimming_gl()
                 self._paint_spotify_visualizer_gl()
                 if is_perf_metrics_enabled():
                     self._paint_debug_overlay_gl()
@@ -4628,6 +4688,7 @@ void main() {
         if self._crossfade is not None and self._can_use_crossfade_shader():
             try:
                 self._paint_crossfade_shader(target)
+                self._paint_dimming_gl()
                 self._paint_spotify_visualizer_gl()
                 if is_perf_metrics_enabled():
                     self._paint_debug_overlay_gl()
@@ -4647,6 +4708,7 @@ void main() {
         if self._slide is not None and self._can_use_slide_shader():
             try:
                 self._paint_slide_shader(target)
+                self._paint_dimming_gl()
                 self._paint_spotify_visualizer_gl()
                 if is_perf_metrics_enabled():
                     self._paint_debug_overlay_gl()
@@ -4666,6 +4728,7 @@ void main() {
         if self._wipe is not None and self._can_use_wipe_shader():
             try:
                 self._paint_wipe_shader(target)
+                self._paint_dimming_gl()
                 self._paint_spotify_visualizer_gl()
                 if is_perf_metrics_enabled():
                     self._paint_debug_overlay_gl()
@@ -4973,6 +5036,7 @@ void main() {
                     painter.setOpacity(1.0)
                     new_rect = QRect(new_pos.x(), new_pos.y(), w, h)
                     painter.drawPixmap(new_rect, st.new_pixmap)
+                self._paint_dimming(painter)
                 self._paint_spotify_visualizer(painter)
                 self._paint_debug_overlay(painter)
                 return
@@ -4986,6 +5050,7 @@ void main() {
                 if cf.new_pixmap and not cf.new_pixmap.isNull():
                     painter.setOpacity(cf.progress)
                     painter.drawPixmap(target, cf.new_pixmap)
+                self._paint_dimming(painter)
                 self._paint_spotify_visualizer(painter)
                 self._paint_debug_overlay(painter)
                 return
@@ -4998,6 +5063,7 @@ void main() {
                 # As a last resort, fill black.
                 painter.fillRect(target, Qt.GlobalColor.black)
 
+            self._paint_dimming(painter)
             self._paint_spotify_visualizer(painter)
             self._paint_debug_overlay(painter)
         finally:
@@ -5009,5 +5075,29 @@ void main() {
         painter = QPainter(self)
         try:
             self._paint_spotify_visualizer(painter)
+        finally:
+            painter.end()
+    
+    def _paint_dimming(self, painter: QPainter) -> None:
+        """Paint the dimming overlay if enabled."""
+        if not self._dimming_enabled or self._dimming_opacity <= 0.0:
+            return
+        
+        try:
+            painter.save()
+            painter.setOpacity(self._dimming_opacity)
+            painter.fillRect(self.rect(), Qt.GlobalColor.black)
+            painter.restore()
+        except Exception:
+            pass
+    
+    def _paint_dimming_gl(self) -> None:
+        """Paint dimming overlay in GL context (for shader paths)."""
+        if not self._dimming_enabled or self._dimming_opacity <= 0.0:
+            return
+        
+        painter = QPainter(self)
+        try:
+            self._paint_dimming(painter)
         finally:
             painter.end()

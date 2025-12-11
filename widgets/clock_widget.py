@@ -185,6 +185,9 @@ class ClockWidget(QLabel):
         parent = self.parent()
 
         def _starter() -> None:
+            # Guard against widget being deleted before deferred callback runs
+            if not Shiboken.isValid(self):
+                return
             self._start_widget_fade_in(1500)
 
         if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
@@ -224,6 +227,10 @@ class ClockWidget(QLabel):
         logger.debug("Clock widget stopped")
     
     def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:
+        # Guard against widget being deleted before this method runs
+        if not Shiboken.isValid(self):
+            return
+            
         if duration_ms <= 0:
             try:
                 self.show()
@@ -246,7 +253,7 @@ class ClockWidget(QLabel):
             self._has_faded_in = True
             return
 
-        if self.parent():
+        if Shiboken.isValid(self) and self.parent():
             try:
                 self._update_position()
             except Exception:

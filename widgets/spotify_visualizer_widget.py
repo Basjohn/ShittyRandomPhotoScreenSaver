@@ -1513,6 +1513,9 @@ class SpotifyVisualizerWidget(QWidget):
         parent = self.parent()
 
         def _starter() -> None:
+            # Guard against widget being deleted before deferred callback runs
+            if not Shiboken.isValid(self):
+                return
             # Only show if anchor media widget is visible (Spotify is playing)
             anchor = self._anchor_media
             if anchor is not None:
@@ -1838,8 +1841,20 @@ class SpotifyVisualizerWidget(QWidget):
             # Get pre-smoothed bars (no computation on UI thread!)
             # The engine handles decay naturally via exponential smoothing -
             # when audio stops, raw bars go to zero and smoothed bars decay.
-            # We do NOT force zeros here as that breaks the decay animation.
             smoothed = engine.get_smoothed_bars()
+            
+            # CRITICAL: Only show bars when Spotify is actually playing.
+            # The audio engine captures ALL system audio (WASAPI loopback),
+            # so we must gate the display on Spotify's playback state to
+            # avoid showing visualizations for other apps' audio.
+            # NOTE: We do NOT force zeros here - the 1-bar floor in paintEvent
+            # handles the visual minimum when Spotify IS playing. Instead we
+            # just suppress the audio-derived values when Spotify is NOT playing.
+            if not self._spotify_playing:
+                # Suppress audio-derived bars when Spotify isn't playing.
+                # This prevents other apps' audio from driving the visualizer.
+                for i in range(len(smoothed)):
+                    smoothed[i] = 0.0
             
             # Debug constant-bar mode
             if _DEBUG_CONST_BARS > 0.0:
@@ -1859,7 +1874,7 @@ class SpotifyVisualizerWidget(QWidget):
                     any_nonzero = True
                 display_bars[i] = new_val
             
-            # Force update during decay
+            # Force update during decay (when bars are non-zero but Spotify stopped)
             if any_nonzero and not self._spotify_playing:
                 changed = True
 

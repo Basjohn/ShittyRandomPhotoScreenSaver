@@ -1076,6 +1076,14 @@ class ScreensaverEngine(QObject):
             self.folder_sources.clear()
             self.rss_sources.clear()
             
+            # Cleanup global shader program singletons
+            try:
+                from rendering.gl_compositor import cleanup_global_shader_programs
+                cleanup_global_shader_programs()
+                logger.debug("Global shader programs cleaned up")
+            except Exception as e:
+                logger.debug("Shader cleanup skipped: %s", e)
+            
             logger.info("Engine cleanup complete")
         
         except Exception as e:
@@ -1847,6 +1855,21 @@ class ScreensaverEngine(QObject):
         sources are available immediately without restarting the screensaver.
         """
         logger.info("Sources changed, reinitializing...")
+        
+        # Clear image cache - old cached images may no longer be valid
+        if self._image_cache:
+            try:
+                self._image_cache.clear()
+                logger.info("Image cache cleared due to source change")
+            except Exception as e:
+                logger.debug(f"Failed to clear image cache: {e}")
+        
+        # Clear prefetcher inflight set to avoid stale paths
+        if self._prefetcher:
+            try:
+                self._prefetcher.clear_inflight()
+            except Exception as e:
+                logger.debug(f"Failed to clear prefetcher inflight: {e}")
         
         # Clear existing sources
         self.folder_sources.clear()

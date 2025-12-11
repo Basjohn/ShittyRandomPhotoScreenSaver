@@ -259,6 +259,13 @@ class MediaWidget(QLabel):
         parent_height = self.parent().height()
         widget_width = self.width()
         widget_height = self.height()
+        
+        # Guard against positioning before widget has valid size
+        # This prevents the "jump from top-left to bottom-left" issue
+        if widget_width <= 0 or widget_height <= 0:
+            # Schedule a deferred position update after the widget gets its size
+            QTimer.singleShot(16, self._update_position)
+            return
 
         edge_margin = max(0, int(self._margin))
 
@@ -893,6 +900,9 @@ class MediaWidget(QLabel):
             parent = self.parent()
 
             def _starter() -> None:
+                # Guard against widget being deleted before deferred callback runs
+                if not Shiboken.isValid(self):
+                    return
                 self._start_widget_fade_in(1500)
                 # Notify Spotify widgets to show now that media is visible
                 self._notify_spotify_widgets_visibility()
@@ -992,16 +1002,19 @@ class MediaWidget(QLabel):
                             max_card_h = max(48, self.height() - 80)
                             frame_h = max(48, min(natural_h, max_card_h))
 
-                    max_dim = max(frame_w, frame_h)
-                    target_px = int(max_dim * scale_dpr)
                     # Scale-to-fill inside the frame while preserving aspect
                     # ratio (object-fit: cover). We scale with
                     # KeepAspectRatioByExpanding and then centre the pixmap
                     # behind the frame, letting the clip path define the
                     # visible region.
+                    #
+                    # For non-square frames (e.g., video content), we must
+                    # scale to the actual frame dimensions, not a square.
+                    target_w_px = int(frame_w * scale_dpr)
+                    target_h_px = int(frame_h * scale_dpr)
                     scaled = pm.scaled(
-                        target_px,
-                        target_px,
+                        target_w_px,
+                        target_h_px,
                         Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                         Qt.TransformationMode.SmoothTransformation,
                     )

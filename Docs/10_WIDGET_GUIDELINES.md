@@ -175,6 +175,9 @@ settings + Ctrl state:
     - Left‑click in the **left third** of the widget → `previous_track()`.
     - Left‑click in the **middle third** → `play_pause()`.
     - Left‑click in the **right third** → `next_track()`.
+  - **IMPORTANT**: Click detection must check **both X and Y coordinates**.
+    Transport controls are only in the bottom ~60px of the widget. Clicks
+    above the controls row should not trigger transport actions.
   - This ensures clicking the left/right arrows or centre play/pause glyph
     does what the icon suggests, while the exact pixel hit‑test remains
     layout‑agnostic.

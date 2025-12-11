@@ -144,7 +144,29 @@ class AsyncImageProcessor:
                 img_data,
             )
 
-            scaled_pil = pil_image.resize((width, height), Image.Resampling.LANCZOS)
+            # Calculate target size preserving aspect ratio (matching Qt's KeepAspectRatio)
+            # This is critical for video frames which may have non-square pixels
+            src_w, src_h = pil_image.size
+            if src_w == 0 or src_h == 0:
+                scaled_pil = pil_image
+            else:
+                src_ratio = src_w / src_h
+                target_ratio = width / height if height > 0 else src_ratio
+                
+                if src_ratio > target_ratio:
+                    # Source is wider - fit to width
+                    new_w = width
+                    new_h = int(width / src_ratio)
+                else:
+                    # Source is taller - fit to height
+                    new_h = height
+                    new_w = int(height * src_ratio)
+                
+                # Ensure we don't exceed requested dimensions
+                new_w = min(new_w, width)
+                new_h = min(new_h, height)
+                
+                scaled_pil = pil_image.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
             if sharpen and (width < qimage.width() or height < qimage.height()):
                 scale_factor = min(width / qimage.width(), height / qimage.height())

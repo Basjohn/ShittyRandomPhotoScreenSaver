@@ -5,6 +5,7 @@ Provides quick access to:
 - Previous/Next image
 - Transition selection
 - Settings
+- Background dimming toggle
 - Hard exit mode toggle
 - Exit
 """
@@ -17,71 +18,91 @@ from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Dark glass theme colors matching existing widgets
+# Dark theme matching settings dialog - app-owned, no Windows accent bleed
+# Uses same color palette as settings_dialog.py for consistency
 MENU_STYLE = """
 QMenu {
-    background-color: rgba(20, 20, 25, 220);
-    border: 1px solid rgba(80, 80, 90, 180);
+    background-color: rgba(43, 43, 43, 245);
+    border: 2px solid rgba(154, 154, 154, 200);
     border-radius: 8px;
     padding: 6px 4px;
 }
 QMenu::item {
     background-color: transparent;
-    color: rgba(240, 240, 245, 230);
+    color: #ffffff;
     padding: 8px 24px 8px 16px;
     margin: 2px 4px;
     border-radius: 4px;
     font-size: 13px;
 }
 QMenu::item:selected {
-    background-color: rgba(70, 70, 85, 200);
+    background-color: rgba(62, 62, 62, 220);
 }
 QMenu::item:disabled {
     color: rgba(120, 120, 130, 150);
 }
 QMenu::separator {
     height: 1px;
-    background-color: rgba(80, 80, 90, 120);
+    background-color: rgba(90, 90, 90, 150);
     margin: 4px 12px;
 }
 QMenu::indicator {
     width: 16px;
     height: 16px;
-    margin-left: 4px;
+    margin-left: 6px;
+    margin-right: 4px;
 }
 QMenu::indicator:checked {
-    background-color: rgba(100, 180, 255, 200);
-    border: 1px solid rgba(120, 200, 255, 220);
+    background-color: #ffffff;
+    border: 2px solid #888888;
     border-radius: 3px;
+    image: url(none);
 }
 QMenu::indicator:unchecked {
-    background-color: rgba(50, 50, 60, 150);
-    border: 1px solid rgba(80, 80, 90, 180);
+    background-color: rgba(30, 30, 30, 220);
+    border: 2px solid #555555;
     border-radius: 3px;
 }
 """
 
 SUBMENU_STYLE = """
 QMenu {
-    background-color: rgba(25, 25, 30, 225);
-    border: 1px solid rgba(80, 80, 90, 180);
+    background-color: rgba(43, 43, 43, 245);
+    border: 2px solid rgba(154, 154, 154, 200);
     border-radius: 6px;
     padding: 4px 2px;
 }
 QMenu::item {
     background-color: transparent;
-    color: rgba(235, 235, 240, 220);
+    color: #ffffff;
     padding: 6px 20px 6px 12px;
     margin: 1px 3px;
     border-radius: 3px;
     font-size: 12px;
 }
 QMenu::item:selected {
-    background-color: rgba(65, 65, 80, 190);
+    background-color: rgba(62, 62, 62, 220);
 }
 QMenu::item:checked {
-    color: rgba(130, 200, 255, 255);
+    color: #ffffff;
     font-weight: bold;
+    background-color: rgba(62, 62, 62, 220);
+}
+QMenu::indicator {
+    width: 14px;
+    height: 14px;
+    margin-left: 4px;
+    margin-right: 2px;
+}
+QMenu::indicator:checked {
+    background-color: #ffffff;
+    border: 2px solid #888888;
+    border-radius: 3px;
+}
+QMenu::indicator:unchecked {
+    background-color: rgba(30, 30, 30, 220);
+    border: 2px solid #555555;
+    border-radius: 3px;
 }
 """
 
@@ -94,6 +115,7 @@ class ScreensaverContextMenu(QMenu):
     next_requested = Signal()
     transition_selected = Signal(str)  # transition name
     settings_requested = Signal()
+    dimming_toggled = Signal(bool)  # new state
     hard_exit_toggled = Signal(bool)  # new state
     exit_requested = Signal()
     
@@ -102,6 +124,7 @@ class ScreensaverContextMenu(QMenu):
         parent: Optional[QWidget] = None,
         transition_types: Optional[List[str]] = None,
         current_transition: str = "Crossfade",
+        dimming_enabled: bool = False,
         hard_exit_enabled: bool = False,
     ):
         super().__init__(parent)
@@ -112,6 +135,7 @@ class ScreensaverContextMenu(QMenu):
             "Blinds", "Crumble",
         ]
         self._current_transition = current_transition
+        self._dimming_enabled = dimming_enabled
         self._hard_exit_enabled = hard_exit_enabled
         
         self.setStyleSheet(MENU_STYLE)
@@ -123,18 +147,18 @@ class ScreensaverContextMenu(QMenu):
     
     def _setup_menu(self) -> None:
         """Build the menu structure."""
-        # Previous Image
-        prev_action = self.addAction("◀  Previous Image")
+        # Previous Image - monochrome triangle
+        prev_action = self.addAction("◂  Previous Image")
         prev_action.triggered.connect(self.previous_requested.emit)
         
-        # Next Image
-        next_action = self.addAction("▶  Next Image")
+        # Next Image - monochrome triangle
+        next_action = self.addAction("▸  Next Image")
         next_action.triggered.connect(self.next_requested.emit)
         
         self.addSeparator()
         
-        # Transition submenu
-        self._transition_menu = QMenu("🔄  Change Transition", self)
+        # Transition submenu - monochrome arrows
+        self._transition_menu = QMenu("⟳  Change Transition", self)
         self._transition_menu.setStyleSheet(SUBMENU_STYLE)
         self._transition_actions: dict[str, QAction] = {}
         
@@ -149,21 +173,27 @@ class ScreensaverContextMenu(QMenu):
         
         self.addSeparator()
         
-        # Settings
+        # Settings - monochrome gear
         settings_action = self.addAction("⚙  Settings")
         settings_action.triggered.connect(self.settings_requested.emit)
         
         self.addSeparator()
         
-        # Hard Exit Mode toggle
-        self._hard_exit_action = self.addAction("🔒  Hard Exit Mode")
+        # Background Dimming toggle - monochrome circle
+        self._dimming_action = self.addAction("◐  Background Dimming")
+        self._dimming_action.setCheckable(True)
+        self._dimming_action.setChecked(self._dimming_enabled)
+        self._dimming_action.triggered.connect(self._on_dimming_toggled)
+        
+        # Hard Exit Mode toggle - monochrome lock
+        self._hard_exit_action = self.addAction("⊘  Hard Exit Mode")
         self._hard_exit_action.setCheckable(True)
         self._hard_exit_action.setChecked(self._hard_exit_enabled)
         self._hard_exit_action.triggered.connect(self._on_hard_exit_toggled)
         
         self.addSeparator()
         
-        # Exit
+        # Exit - monochrome X
         exit_action = self.addAction("✕  Exit Screensaver")
         exit_action.triggered.connect(self.exit_requested.emit)
     
@@ -176,6 +206,12 @@ class ScreensaverContextMenu(QMenu):
         self.transition_selected.emit(name)
         logger.debug("Context menu: transition selected: %s", name)
     
+    def _on_dimming_toggled(self) -> None:
+        """Handle dimming toggle."""
+        self._dimming_enabled = self._dimming_action.isChecked()
+        self.dimming_toggled.emit(self._dimming_enabled)
+        logger.debug("Context menu: dimming toggled: %s", self._dimming_enabled)
+    
     def _on_hard_exit_toggled(self) -> None:
         """Handle hard exit toggle."""
         self._hard_exit_enabled = self._hard_exit_action.isChecked()
@@ -187,6 +223,11 @@ class ScreensaverContextMenu(QMenu):
         self._current_transition = name
         for trans_name, action in self._transition_actions.items():
             action.setChecked(trans_name == name)
+    
+    def update_dimming_state(self, enabled: bool) -> None:
+        """Update the dimming checkbox state."""
+        self._dimming_enabled = enabled
+        self._dimming_action.setChecked(enabled)
     
     def update_hard_exit_state(self, enabled: bool) -> None:
         """Update the hard exit checkbox state."""

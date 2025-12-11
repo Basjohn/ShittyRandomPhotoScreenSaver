@@ -1,7 +1,7 @@
 # ShittyRandomPhotoScreenSaver - Technical Specification
 
 **Version**: 1.0  
-**Last Updated**: Dec 4, 2025 02:10 - Canonical settings + GL compositor path + Spotify Beat Visualizer GPU overlay ghosting defaults  
+**Last Updated**: Dec 11, 2025 01:15 - Crumble transition, dimming overlay, media widget click detection, hard-exit halo, Spotify video AR  
 **Status**: Architecture solid; GL compositor route and settings schema stabilised; GL transition visuals (Diffuse/Wipe/BlockPuzzle) still pending final tuning
 
 ---

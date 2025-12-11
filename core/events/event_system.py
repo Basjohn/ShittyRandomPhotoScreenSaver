@@ -6,7 +6,7 @@ Provides publish-subscribe pattern for inter-module communication.
 """
 from typing import Any, Callable, Dict, List, Optional
 import threading
-from collections import defaultdict
+from collections import defaultdict, deque
 from core.logging.logger import get_logger
 from core.events.event_types import Event, Subscription
 
@@ -19,15 +19,24 @@ class EventSystem:
     
     Implements publish-subscribe pattern for loose coupling between components.
     Thread-safe with priority-based subscription ordering.
+    
+    PERF: Lock is released before calling subscribers to avoid blocking other
+    threads during potentially slow callback execution.
     """
+    
+    # Maximum recursion depth for publish() to prevent infinite loops
+    MAX_PUBLISH_DEPTH = 10
     
     def __init__(self):
         """Initialize the event system."""
         self._subscriptions: Dict[str, List[Subscription]] = defaultdict(list)
         self._subscription_map: Dict[str, Subscription] = {}
-        self._event_history: List[Event] = []
+        # Use deque with maxlen for automatic size limiting (no manual trimming needed)
+        self._event_history: deque[Event] = deque(maxlen=1000)
         self._max_history = 1000
         self._lock = threading.RLock()
+        # Track publish recursion depth per thread to prevent infinite loops
+        self._publish_depth: Dict[int, int] = {}
         
         logger.info("EventSystem initialized")
     
@@ -107,6 +116,13 @@ class EventSystem:
         """
         Publish an event to all subscribers.
         
+        PERF: Copies subscriber list under lock, then releases lock before
+        calling callbacks. This prevents slow callbacks from blocking other
+        threads that need to subscribe/unsubscribe.
+        
+        SAFETY: Tracks recursion depth per thread to prevent infinite loops
+        when a subscriber publishes another event.
+        
         Args:
             event_type: Type of event
             data: Optional event data
@@ -118,11 +134,24 @@ class EventSystem:
         if not isinstance(event_type, str) or not event_type.strip():
             raise ValueError("event_type must be a non-empty string")
         
-        event = Event(event_type, data, source)
+        # Check recursion depth to prevent infinite loops
+        thread_id = threading.get_ident()
+        current_depth = self._publish_depth.get(thread_id, 0)
+        if current_depth >= self.MAX_PUBLISH_DEPTH:
+            logger.warning(
+                f"Event publish recursion limit ({self.MAX_PUBLISH_DEPTH}) reached for {event_type}, "
+                "dropping event to prevent infinite loop"
+            )
+            return Event(event_type, data, source)
         
-        with self._lock:
-            # Get matching subscriptions
-            matching_subs = self._subscriptions.get(event_type, [])
+        self._publish_depth[thread_id] = current_depth + 1
+        
+        try:
+            event = Event(event_type, data, source)
+            
+            # Copy subscriber list under lock, then release before calling
+            with self._lock:
+                matching_subs = list(self._subscriptions.get(event_type, []))
             
             if not matching_subs:
                 self._add_to_history(event)
@@ -131,27 +160,32 @@ class EventSystem:
             
             logger.debug(f"Publishing event: {event_type}, subscribers={len(matching_subs)}")
             
-            # Call all matching subscribers in priority order
+            # Call subscribers WITHOUT holding the lock
             for subscription in matching_subs:
                 if event.is_handled:
                     break
+                
+                # Skip if subscription was deactivated while we were iterating
+                if not subscription.active:
+                    continue
                 
                 try:
                     subscription(event)
                 except Exception as e:
                     logger.error(f"Error in event handler for {event_type}: {e}", exc_info=True)
-        
-        self._add_to_history(event)
-        return event
+            
+            self._add_to_history(event)
+            return event
+        finally:
+            # Decrement depth, clean up if back to zero
+            self._publish_depth[thread_id] = current_depth
+            if current_depth == 0:
+                self._publish_depth.pop(thread_id, None)
     
     def _add_to_history(self, event: Event) -> None:
-        """Add event to history."""
+        """Add event to history. Deque maxlen handles size limiting automatically."""
         with self._lock:
             self._event_history.append(event)
-            
-            # Keep history size limited
-            if len(self._event_history) > self._max_history:
-                self._event_history = self._event_history[-self._max_history:]
     
     def get_event_history(self, limit: int = 100) -> List[Event]:
         """

@@ -244,7 +244,23 @@ def raise_overlay(widget: QWidget, overlay: QWidget) -> None:
     frame-rate limiting to avoid calling raise_() multiple times per frame.
     The raises are still performed but only once per 100ms to reduce overhead
     while maintaining Z-order correctness.
+    
+    EXCEPTION: The cursor halo is ALWAYS raised regardless of rate limiting
+    because it's critical for user interaction responsiveness.
+    
+    Z-ORDER (bottom to top):
+    1. GL Compositor / Transition overlay (dimming is now part of GL render)
+    2. All other widgets (clock, weather, media, reddit, etc.)
+    3. Ctrl cursor halo (topmost)
     """
+    # Always raise the halo first (before rate limit check) to ensure responsiveness
+    try:
+        halo = getattr(widget, "_ctrl_cursor_hint", None)
+        if halo is not None and halo.isVisible():
+            halo.raise_()
+    except Exception:
+        pass
+    
     # Check if we've already raised overlays recently (within 100ms)
     # This prevents the expensive raise_() calls from happening every frame
     # while still ensuring Z-order is correct after a reasonable delay.
@@ -258,6 +274,9 @@ def raise_overlay(widget: QWidget, overlay: QWidget) -> None:
         overlay.raise_()
     except Exception:
         pass
+    
+    # NOTE: Dimming is now handled by GL compositor, no widget to raise
+    
     raise_clock_if_present(widget)
     try:
         if hasattr(widget, "weather_widget") and getattr(widget, "weather_widget"):
@@ -297,6 +316,15 @@ def raise_overlay(widget: QWidget, overlay: QWidget) -> None:
         reddit = getattr(widget, "reddit_widget", None)
         if reddit is not None:
             reddit.raise_()
+    except Exception:
+        pass
+
+    # Ctrl cursor halo should always be topmost - NO rate limiting for halo
+    # because it's critical for user interaction responsiveness
+    try:
+        halo = getattr(widget, "_ctrl_cursor_hint", None)
+        if halo is not None and halo.isVisible():
+            halo.raise_()
     except Exception:
         pass
 

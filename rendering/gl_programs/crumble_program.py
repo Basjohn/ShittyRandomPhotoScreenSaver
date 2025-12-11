@@ -160,25 +160,25 @@ void getPieceTransform(vec2 cellId, float scale, float t, float seed,
     float pieceRand = hash1(cellId + seed);
     float pieceRand2 = hash1(cellId * 1.7 + seed + 100.0);
     
-    // Start falling earlier (at t=0.25) to give pieces more time to exit screen
-    // Fall phase now spans 75% of the transition instead of 65%
-    float fallPhase = (t - 0.25) / 0.75;
+    // Start falling very early (at t=0.10) to give pieces maximum time to exit screen
+    // Fall phase now spans 90% of the transition
+    float fallPhase = (t - 0.10) / 0.90;
     fallPhase = clamp(fallPhase, 0.0, 1.0);
     
     // Stagger based on position - top pieces fall first, bottom pieces last
-    // Reduced random delay so pieces start falling sooner
+    // Minimal delays so even bottom pieces have plenty of time to fully exit
     float normalizedY = cellId.y / scale;
-    float fallDelay = pieceRand * 0.15 + normalizedY * 0.25;
+    float fallDelay = pieceRand * 0.05 + normalizedY * 0.10;  // Max delay ~0.15
     
     pieceFall = fallPhase > fallDelay ? (fallPhase - fallDelay) / (1.0 - fallDelay) : 0.0;
     pieceFall = clamp(pieceFall, 0.0, 1.0);
     
-    // Accelerating fall with more distance so pieces fully exit
-    // At pieceFall=1.0, piece will have fallen 2.2 units (well past screen edge)
+    // Accelerating fall with generous distance so pieces fully exit
+    // At pieceFall=1.0, piece will have fallen 3.5 units (well past screen edge at y=1.0)
     float accel = pieceFall * pieceFall;
-    fallDist = accel * 2.2;
-    driftX = pieceFall * (pieceRand - 0.5) * 0.25;
-    rotAngle = pieceFall * (pieceRand2 - 0.5) * 0.7;
+    fallDist = accel * 3.5;
+    driftX = pieceFall * (pieceRand - 0.5) * 0.35;
+    rotAngle = pieceFall * (pieceRand2 - 0.5) * 0.9;
 }
 
 // Check if a piece casts a shadow onto this UV position
@@ -240,6 +240,8 @@ void main() {
     
     // Crack width - visible borders on pieces
     float crackWidth = 0.025 + complexity * 0.012;
+    // Border width for dark outline around cracks (0.5px equivalent in UV space)
+    float borderWidth = crackWidth + 0.008;
     
     vec3 finalColor = newColor.rgb;
     bool pixelCovered = false;
@@ -249,8 +251,11 @@ void main() {
     // Get the cell at current screen position as starting point
     vec4 vorHere = voronoi(uv, scale, u_seed, complexity);
     
-    // Search nearby cells
-    for (int dy = -4; dy <= 2; dy++) {
+    // Search nearby cells - reduced range for better performance
+    // The search range is a tradeoff between catching all falling pieces and
+    // shader performance. With 12 pieces and fallDist up to 3.5, we need to
+    // search a reasonable range without killing performance.
+    for (int dy = -6; dy <= 2; dy++) {
         for (int dx = -2; dx <= 2; dx++) {
             vec2 candidateCell = vorHere.xy + vec2(float(dx), float(dy));
             
@@ -291,18 +296,31 @@ void main() {
                         vec4 oldColor = texture(uOldTex, originalPos);
                         finalColor = oldColor.rgb;
                         
-                        // Crack lines
-                        float crackPhase = t / 0.35;
+                        // Crack lines with dark border
+                        float crackPhase = t / 0.25;  // Cracks appear early
                         crackPhase = clamp(crackPhase, 0.0, 1.0);
                         float pieceRandCrack = hash1(candidateCell + u_seed);
-                        float crackAppear = crackPhase > pieceRandCrack * 0.3 ? 1.0 : 0.0;
+                        float crackAppear = crackPhase > pieceRandCrack * 0.2 ? 1.0 : 0.0;
                         
-                        if (vorCheck.z < crackWidth && crackAppear > 0.5) {
-                            finalColor *= 0.15;
+                        // Once piece starts falling, always show the border
+                        bool showBorder = crackAppear > 0.5 || pieceFall > 0.01;
+                        
+                        if (showBorder) {
+                            // Dark border zone (outer edge of piece)
+                            if (vorCheck.z < borderWidth && vorCheck.z >= crackWidth) {
+                                // Soft dark border - blend based on distance
+                                float borderBlend = 1.0 - (vorCheck.z - crackWidth) / (borderWidth - crackWidth);
+                                borderBlend = borderBlend * borderBlend; // Quadratic falloff
+                                finalColor = mix(finalColor, vec3(0.0), borderBlend * 0.6);
+                            }
+                            // Inner crack (darkest)
+                            if (vorCheck.z < crackWidth) {
+                                finalColor = vec3(0.0);  // Pure black crack
+                            }
                         }
                         
                         // Piece gets slightly darker as it falls
-                        float pieceShadow = pieceFall * 0.15;
+                        float pieceShadow = pieceFall * 0.12;
                         finalColor *= (1.0 - pieceShadow);
                     }
                 }

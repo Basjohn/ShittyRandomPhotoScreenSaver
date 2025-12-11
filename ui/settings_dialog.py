@@ -22,7 +22,7 @@ from PySide6.QtGui import QFont, QColor, QPixmap, QDesktopServices, QPainter, QP
 from core.logging.logger import get_logger
 from core.settings.settings_manager import SettingsManager
 from core.animation import AnimationManager
-from ui.tabs import SourcesTab, TransitionsTab, WidgetsTab, DisplayTab
+from ui.tabs import SourcesTab, TransitionsTab, WidgetsTab, DisplayTab, AccessibilityTab
 from ui.styled_popup import StyledPopup
 
 logger = get_logger(__name__)
@@ -622,6 +622,8 @@ class SettingsDialog(QDialog):
         self.display_tab_btn = TabButton("Display", "🖥")
         self.transitions_tab_btn = TabButton("Transitions", "✨")
         self.widgets_tab_btn = TabButton("Widgets", "🕐")
+        # Accessibility icon: wheelchair symbol for universal accessibility
+        self.accessibility_tab_btn = TabButton("Accessibility", "♿")
         # Use a circled information glyph for About so the icon's
         # bounding box and spacing match the other emoji-style icons.
         self.about_tab_btn = TabButton("About", "ⓘ")
@@ -631,6 +633,7 @@ class SettingsDialog(QDialog):
             self.display_tab_btn,
             self.transitions_tab_btn,
             self.widgets_tab_btn,
+            self.accessibility_tab_btn,
             self.about_tab_btn
         ]
         
@@ -638,6 +641,7 @@ class SettingsDialog(QDialog):
         sidebar_layout.addWidget(self.display_tab_btn)
         sidebar_layout.addWidget(self.transitions_tab_btn)
         sidebar_layout.addWidget(self.widgets_tab_btn)
+        sidebar_layout.addWidget(self.accessibility_tab_btn)
         sidebar_layout.addWidget(self.about_tab_btn)
         sidebar_layout.addStretch()
         
@@ -650,12 +654,14 @@ class SettingsDialog(QDialog):
         self.display_tab = DisplayTab(self._settings)
         self.transitions_tab = TransitionsTab(self._settings)
         self.widgets_tab = WidgetsTab(self._settings)
+        self.accessibility_tab = AccessibilityTab(self._settings)
         self.about_tab = self._create_about_tab()
         
         self.content_stack.addWidget(self.sources_tab)
         self.content_stack.addWidget(self.display_tab)
         self.content_stack.addWidget(self.transitions_tab)
         self.content_stack.addWidget(self.widgets_tab)
+        self.content_stack.addWidget(self.accessibility_tab)
         self.content_stack.addWidget(self.about_tab)
         
         content_layout.addWidget(sidebar)
@@ -1053,12 +1059,13 @@ class SettingsDialog(QDialog):
         self.title_bar.minimize_clicked.connect(self.showMinimized)
         self.title_bar.maximize_clicked.connect(self._toggle_maximize)
         
-        # Tab buttons
+        # Tab buttons (indices match content_stack order)
         self.sources_tab_btn.clicked.connect(lambda: self._switch_tab(0))
         self.display_tab_btn.clicked.connect(lambda: self._switch_tab(1))
         self.transitions_tab_btn.clicked.connect(lambda: self._switch_tab(2))
         self.widgets_tab_btn.clicked.connect(lambda: self._switch_tab(3))
-        self.about_tab_btn.clicked.connect(lambda: self._switch_tab(4))
+        self.accessibility_tab_btn.clicked.connect(lambda: self._switch_tab(4))
+        self.about_tab_btn.clicked.connect(lambda: self._switch_tab(5))
     
     def _switch_tab(self, index: int) -> None:
         """
@@ -1082,7 +1089,7 @@ class SettingsDialog(QDialog):
             self.content_stack.setCurrentIndex(index)
             new_widget = self.content_stack.currentWidget()
 
-            if index == 4:
+            if index == 5:  # About tab
                 try:
                     self._about_last_card_width = 0
                 except Exception:

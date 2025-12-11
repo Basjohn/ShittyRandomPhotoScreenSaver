@@ -36,6 +36,13 @@ class ImagePrefetcher:
         if isinstance(img, QImage):
             return img
         return None
+    
+    def clear_inflight(self) -> None:
+        """Clear the inflight set. Call when sources change to avoid stale paths."""
+        with self._lock:
+            self._inflight.clear()
+        if is_verbose_logging():
+            logger.debug("Prefetcher inflight set cleared")
 
     def prefetch_paths(self, paths: List[str]) -> None:
         if not paths:

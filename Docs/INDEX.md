@@ -17,7 +17,7 @@
 # ShittyRandomPhotoScreenSaver - Module Index
 
 **Purpose**: Living file map of all modules, their purposes, and key classes/functions.  
-**Last Updated**: Dec 4, 2025 02:10 UTC+2 - Route 3 stable; GL compositor and Spotify Beat Visualizer GPU overlay + ghosting documented  
+**Last Updated**: Dec 11, 2025 01:15 UTC+2 - Crumble transition fixes, dimming overlay Z-order, media widget click detection, hard-exit halo visibility, Spotify video aspect ratio  
 **Implementation Status**: 🟢 Core Framework | 🟢 Animation | 🟢 Entry Point | 🟢 Image Sources | 🟢 Display & Rendering | 🟢 Engine | 🟠 **Transitions (GL compositor + Blinds tuned, remaining GL visuals pending review)** | 🟢 Pan & Scan | 🟢 Widgets | 🟢 UI  
 **Test Status**: Runs locally; GL compositor route and settings schema stable, transitions still require targeted visual/manual verification  
 **Note**: Update this file after any major structural changes.

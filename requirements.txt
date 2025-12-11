@@ -1,10 +1,28 @@
+# Core UI framework
 PySide6>=6.5.0
+
+# Image processing
 Pillow>=10.0.0
-requests>=2.31.0
-pytz>=2023.3
-feedparser>=6.0.10
-pytest>=7.4.0
-pytest-qt>=4.2.0
 numpy>=1.23.0
+
+# Network/feeds
+requests>=2.31.0
+feedparser>=6.0.10
+
+# Timezone support
+pytz>=2023.3
+
+# Windows Media Session API (for Spotify/media widget)
+winrt-runtime>=2.0.0
+winrt-Windows.Foundation>=2.0.0
+winrt-Windows.Foundation.Collections>=2.0.0
+winrt-Windows.Media.Control>=2.0.0
+winrt-Windows.Storage.Streams>=2.0.0
+
+# Audio (Spotify visualizer and volume control)
 sounddevice>=0.4.6
 pycaw>=20230407
+
+# Testing (dev only)
+pytest>=7.4.0
+pytest-qt>=4.2.0

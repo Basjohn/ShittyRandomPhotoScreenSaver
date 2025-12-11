@@ -12,6 +12,7 @@ import json
 from PySide6.QtWidgets import QLabel, QWidget
 from PySide6.QtCore import QTimer, Qt, Signal, QThread, QObject
 from PySide6.QtGui import QFont, QColor
+from shiboken6 import Shiboken
 
 from core.logging.logger import get_logger
 from core.threading.manager import ThreadManager
@@ -196,6 +197,9 @@ class WeatherWidget(QLabel):
             self._enabled = True
 
             def _starter() -> None:
+                # Guard against widget being deleted before deferred callback runs
+                if not Shiboken.isValid(self):
+                    return
                 self._fade_in()
 
             parent = self.parent()
@@ -369,6 +373,9 @@ class WeatherWidget(QLabel):
             self._has_displayed_valid_data = True
 
             def _starter() -> None:
+                # Guard against widget being deleted before deferred callback runs
+                if not Shiboken.isValid(self):
+                    return
                 self._fade_in()
 
             parent = self.parent()

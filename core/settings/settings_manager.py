@@ -411,112 +411,10 @@ class SettingsManager(QObject):
         safe for UI code to call when it needs a fresh baseline.
         """
 
-        widgets_defaults: Dict[str, Any] = {
-            'clock': {
-                'enabled': True,
-                'monitor': 1,
-                'format': '24h',
-                'position': 'Top Right',
-                'show_seconds': True,
-                'timezone': 'local',
-                'show_timezone': True,
-                'font_family': 'Segoe UI',
-                'font_size': 48,
-                'margin': 20,
-                'show_background': True,
-                'bg_opacity': 0.7,
-                'bg_color': [35, 35, 35, 255],
-                'color': [255, 255, 255, 230],
-                'border_color': [255, 255, 255, 255],
-                'border_opacity': 1.0,
-                'display_mode': 'analog',
-                'show_numerals': True,
-                'analog_face_shadow': True,
-            },
-            'clock2': {
-                'enabled': False,
-                'monitor': 2,
-                'format': '24h',
-                'position': 'Bottom Right',
-                'show_seconds': False,
-                'timezone': 'local',
-                'show_timezone': True,
-                'font_family': 'Segoe UI',
-                'font_size': 32,
-                'margin': 20,
-                'color': [255, 255, 255, 230],
-                'display_mode': 'digital',
-                'show_numerals': True,
-            },
-            'clock3': {
-                'enabled': False,
-                'monitor': 'ALL',
-                'format': '24h',
-                'position': 'Bottom Left',
-                'show_seconds': False,
-                'timezone': 'local',
-                'show_timezone': True,
-                'font_family': 'Segoe UI',
-                'font_size': 32,
-                'margin': 20,
-                'color': [255, 255, 255, 230],
-                'display_mode': 'digital',
-                'show_numerals': True,
-            },
-            'weather': {
-                'enabled': True,
-                'monitor': 1,
-                'position': 'Top Left',
-                'location': 'New York',
-                'font_family': 'Segoe UI',
-                'font_size': 24,
-                'color': [255, 255, 255, 230],
-                'show_background': True,
-                'bg_opacity': 0.7,
-                'bg_color': [35, 35, 35, 255],
-                'border_color': [255, 255, 255, 255],
-                'border_opacity': 1.0,
-            },
-            'media': {
-                'enabled': True,
-                'monitor': 1,
-                'position': 'Bottom Left',
-                'font_family': 'Segoe UI',
-                'font_size': 20,
-                'margin': 20,
-                'color': [255, 255, 255, 230],
-                'show_background': True,
-                'bg_opacity': 0.7,
-                'bg_color': [35, 35, 35, 255],
-                'border_color': [255, 255, 255, 255],
-                'border_opacity': 1.0,
-                'artwork_size': 200,
-                'rounded_artwork_border': True,
-                'show_controls': True,
-                'show_header_frame': True,
-                'spotify_volume_enabled': True,
-            },
-            'spotify_visualizer': {
-                'enabled': True,
-                'monitor': 'ALL',
-                'bar_count': 16,
-                'bar_fill_color': [24, 24, 24, 255],
-                'bar_border_color': [255, 255, 255, 255],
-                'bar_border_opacity': 1.0,
-                'ghosting_enabled': True,
-                'ghost_alpha': 0.4,
-                'ghost_decay': 0.4,
-                'software_visualizer_enabled': False,
-            },
-            'shadows': {
-                'enabled': True,
-                'color': [0, 0, 0, 255],
-                'offset': [4, 4],
-                'blur_radius': 18,
-                'text_opacity': 0.3,
-                'frame_opacity': 0.7,
-            },
-        }
+        # Import canonical defaults to ensure consistency
+        from core.settings.defaults import get_default_settings
+        defaults = get_default_settings()
+        widgets_defaults = defaults.get('widgets', {})
 
         key = str(section) if section is not None else ''
         base = widgets_defaults.get(key, {})
@@ -718,24 +616,44 @@ class SettingsManager(QObject):
             self._settings.clear()
             
             # Apply new defaults from defaults module
+            # Some sections (widgets, transitions) are stored as nested dicts,
+            # while others use flat dot-notation keys for QSettings compatibility
             defaults = get_default_settings()
-            for section, value in defaults.items():
-                self._settings.setValue(section, value)
             
-            # Restore preserved user-specific data
+            # Sections that should be stored as nested dicts (not flattened)
+            nested_sections = {'widgets', 'transitions'}
+            
+            def flatten_dict(d: dict, parent_key: str = '') -> dict:
+                """Flatten nested dict to dot-notation keys."""
+                items = {}
+                for k, v in d.items():
+                    new_key = f"{parent_key}.{k}" if parent_key else k
+                    if isinstance(v, dict):
+                        items.update(flatten_dict(v, new_key))
+                    else:
+                        items[new_key] = v
+                return items
+            
+            for section, value in defaults.items():
+                if section in nested_sections:
+                    # Store as nested dict
+                    self._settings.setValue(section, value)
+                elif isinstance(value, dict):
+                    # Flatten to dot-notation keys
+                    flat = flatten_dict(value, section)
+                    for key, val in flat.items():
+                        self._settings.setValue(key, val)
+                else:
+                    self._settings.setValue(section, value)
+            
+            # Restore preserved user-specific data using flat dot-notation keys
             if 'sources.folders' in preserved:
-                sources = self._settings.value('sources', {})
-                if isinstance(sources, dict):
-                    sources['folders'] = preserved['sources.folders']
-                    self._settings.setValue('sources', sources)
+                self._settings.setValue('sources.folders', preserved['sources.folders'])
             
             if 'sources.rss_feeds' in preserved:
-                sources = self._settings.value('sources', {})
-                if isinstance(sources, dict):
-                    sources['rss_feeds'] = preserved['sources.rss_feeds']
-                    self._settings.setValue('sources', sources)
+                self._settings.setValue('sources.rss_feeds', preserved['sources.rss_feeds'])
             
-            # Restore weather geo data
+            # Restore weather geo data into the nested widgets dict
             widgets = self._settings.value('widgets', {})
             if isinstance(widgets, dict):
                 weather = widgets.get('weather', {})

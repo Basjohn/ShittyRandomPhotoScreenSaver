@@ -516,6 +516,9 @@ class RedditWidget(QLabel):
             parent = self.parent()
 
             def _starter() -> None:
+                # Guard against widget being deleted before deferred callback runs
+                if not shiboken_isValid(self):
+                    return
                 self._start_widget_fade_in(1500)
 
             if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
@@ -747,11 +750,18 @@ class RedditWidget(QLabel):
             except Exception:
                 pass
 
-    def handle_click(self, local_pos: QPoint) -> bool:
+    def handle_click(self, local_pos: QPoint, deferred: bool = False) -> bool | str:
         """Handle a click in widget-local coordinates.
 
-        Returns True if a row or the header was hit and a browser open attempt
-        was made.
+        Args:
+            local_pos: Click position in widget-local coordinates
+            deferred: If True, return the URL instead of opening it immediately.
+                      This is used when hard-exit mode is enabled so the browser
+                      open can be scheduled for when the user actually exits.
+
+        Returns:
+            If deferred=False: True if a link was clicked and opened, False otherwise.
+            If deferred=True: The URL string if a link was clicked, False otherwise.
         """
         header_rect = self._header_hit_rect
         if header_rect is not None and header_rect.contains(local_pos):
@@ -760,6 +770,11 @@ class RedditWidget(QLabel):
                 url = f"https://www.reddit.com/r/{slug}"
             else:
                 url = "https://www.reddit.com"
+            
+            if deferred:
+                logger.info("[REDDIT] Deferred subreddit URL for exit: %s", url)
+                return url
+            
             try:
                 QDesktopServices.openUrl(QUrl(url))
                 logger.info("[REDDIT] Opened subreddit %s", url)
@@ -771,6 +786,10 @@ class RedditWidget(QLabel):
 
         for rect, url, _title in self._row_hit_rects:
             if rect.contains(local_pos):
+                if deferred:
+                    logger.info("[REDDIT] Deferred URL for exit: %s", url)
+                    return url
+                
                 try:
                     QDesktopServices.openUrl(QUrl(url))
                     logger.info("[REDDIT] Opened %s", url)

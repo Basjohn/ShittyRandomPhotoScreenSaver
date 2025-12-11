@@ -19408,3 +19408,307 @@
 2025-12-06 22:52:36 - __main__                       - INFO     - [PERF] [CPU] cProfile stats written to F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\screensaver_run.pstats
 2025-12-06 22:52:36 - __main__                       - WARNING  - [PERF] [GC] Collection took 34.46ms (gen=2, collected=2282)
 2025-12-06 22:52:36 - __main__                       - WARNING  - [PERF] [GC] Collection took 20.40ms (gen=2, collected=17)
+2025-12-11 00:32:38 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=320.6ms, frames=19, avg_fps=59.3, dt_min=3.03ms, dt_max=44.05ms, active_count=0, fps_target=60
+2025-12-11 00:32:39 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=320.1ms, frames=19, avg_fps=59.4, dt_min=1.00ms, dt_max=41.15ms, active_count=0, fps_target=60
+2025-12-11 00:33:38 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=8123.8ms, frames=464, avg_fps=57.1, dt_min=0.52ms, dt_max=39.82ms, active_count=0, fps_target=60
+2025-12-11 00:33:41 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=10965.2ms, frames=587, avg_fps=53.5, dt_min=1.01ms, dt_max=39.33ms, active_count=0, fps_target=55
+2025-12-11 00:33:50 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=8245.7ms, frames=134, avg_fps=16.3, dt_min=1.19ms, dt_max=500.00ms, active_count=0, fps_target=60
+2025-12-11 02:43:04 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=1367.8ms, frames=34, avg_fps=24.9, dt_min=8.07ms, dt_max=89.56ms, active_count=0, fps_target=60
+2025-12-11 02:43:36 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=321.4ms, frames=18, avg_fps=56.0, dt_min=8.00ms, dt_max=41.02ms, active_count=0, fps_target=60
+2025-12-11 02:43:40 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=320.1ms, frames=15, avg_fps=46.9, dt_min=7.01ms, dt_max=49.20ms, active_count=0, fps_target=60
+2025-12-11 02:43:42 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=321.2ms, frames=18, avg_fps=56.0, dt_min=7.66ms, dt_max=40.37ms, active_count=0, fps_target=60
+2025-12-11 02:43:50 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=316.3ms, frames=14, avg_fps=44.3, dt_min=2.07ms, dt_max=51.72ms, active_count=0, fps_target=60
+2025-12-11 02:43:51 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=304.1ms, frames=14, avg_fps=46.0, dt_min=2.20ms, dt_max=42.09ms, active_count=0, fps_target=60
+2025-12-11 02:49:00 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=8105.4ms, frames=468, avg_fps=57.7, dt_min=0.51ms, dt_max=74.74ms, active_count=0, fps_target=60
+2025-12-11 02:49:06 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=14004.4ms, frames=755, avg_fps=53.9, dt_min=1.50ms, dt_max=65.42ms, active_count=0, fps_target=55
+2025-12-11 02:49:14 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=8288.1ms, frames=444, avg_fps=53.6, dt_min=1.00ms, dt_max=47.14ms, active_count=0, fps_target=60
+2025-12-11 02:49:20 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=13572.5ms, frames=701, avg_fps=51.6, dt_min=1.50ms, dt_max=48.32ms, active_count=0, fps_target=55
+2025-12-11 02:49:27 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=7518.9ms, frames=74, avg_fps=9.8, dt_min=1.01ms, dt_max=500.00ms, active_count=0, fps_target=60
+2025-12-11 03:00:08 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=320.4ms, frames=17, avg_fps=53.1, dt_min=11.00ms, dt_max=50.03ms, active_count=0, fps_target=60
+2025-12-11 03:00:10 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=352.7ms, frames=15, avg_fps=42.5, dt_min=7.10ms, dt_max=49.70ms, active_count=0, fps_target=60
+2025-12-11 03:00:40 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=8272.3ms, frames=261, avg_fps=31.6, dt_min=1.50ms, dt_max=500.00ms, active_count=0, fps_target=60
+2025-12-11 03:01:04 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=31916.5ms, frames=1314, avg_fps=41.2, dt_min=0.50ms, dt_max=500.00ms, active_count=0, fps_target=55
+2025-12-11 03:01:16 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=4138.8ms, frames=202, avg_fps=48.8, dt_min=1.02ms, dt_max=48.43ms, active_count=0, fps_target=60
+2025-12-11 03:01:26 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=21846.1ms, frames=593, avg_fps=27.1, dt_min=1.01ms, dt_max=500.00ms, active_count=0, fps_target=55
+2025-12-11 03:01:38 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=3817.0ms, frames=159, avg_fps=41.7, dt_min=2.02ms, dt_max=55.46ms, active_count=0, fps_target=60
+2025-12-11 03:01:49 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=23299.0ms, frames=431, avg_fps=18.5, dt_min=1.02ms, dt_max=500.00ms, active_count=0, fps_target=55
+2025-12-11 03:01:57 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=8112.7ms, frames=437, avg_fps=53.9, dt_min=0.55ms, dt_max=65.38ms, active_count=0, fps_target=60
+2025-12-11 03:28:30 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=7285.7ms, frames=332, avg_fps=45.6, dt_min=0.51ms, dt_max=57.20ms, active_count=0, fps_target=60
+2025-12-11 03:33:55 - __main__                       - INFO     - [PERF] GC tracking enabled
+2025-12-11 03:33:56 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 191.60ms (interval=16ms)
+2025-12-11 03:33:57 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 245.00ms (interval=16ms)
+2025-12-11 03:34:01 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=3842.2ms, frames=197, avg_fps=51.3, dt_min=11.22ms, dt_max=37.67ms, bar_count=16
+2025-12-11 03:34:06 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=8859.5ms, frames=475, avg_fps=53.6, dt_min=11.22ms, dt_max=37.67ms, bar_count=16
+2025-12-11 03:34:11 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=13866.7ms, frames=682, avg_fps=49.2, dt_min=11.22ms, dt_max=47.52ms, bar_count=16
+2025-12-11 03:34:12 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Raindrops metrics: duration=8127.5ms, frames=389, avg_fps=47.9, dt_min=9.25ms, dt_max=47.52ms, paint_fps=0.0, paint_dt_max=0.00ms, gpu_avg=0.00ms, gpu_dt_min=0.00ms, gpu_dt_max=0.00ms, size=1707x959
+2025-12-11 03:34:12 - transitions.base_transition    - INFO     - [PERF] GLCompositorRainDropsTransition completed in 8130.5ms (expected 8100ms, Δ+30.5ms)
+2025-12-11 03:34:12 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Raindrops metrics: duration=8112.7ms, frames=412, avg_fps=50.8, dt_min=5.68ms, dt_max=47.52ms, paint_fps=0.0, paint_dt_max=0.00ms, gpu_avg=0.00ms, gpu_dt_min=0.00ms, gpu_dt_max=0.00ms, size=2560x1439
+2025-12-11 03:34:12 - transitions.base_transition    - INFO     - [PERF] GLCompositorRainDropsTransition completed in 8114.2ms (expected 8100ms, Δ+14.2ms)
+2025-12-11 03:34:12 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=8112.7ms, frames=412, avg_fps=50.8, dt_min=5.68ms, dt_max=47.52ms, active_count=0, fps_target=60
+2025-12-11 03:34:16 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=18866.8ms, frames=953, avg_fps=50.5, dt_min=11.13ms, dt_max=47.52ms, bar_count=16
+2025-12-11 03:34:21 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=23871.6ms, frames=1263, avg_fps=52.9, dt_min=11.12ms, dt_max=47.52ms, bar_count=16
+2025-12-11 03:34:26 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=28882.3ms, frames=1573, avg_fps=54.5, dt_min=11.12ms, dt_max=47.52ms, bar_count=16
+2025-12-11 03:34:31 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=33899.9ms, frames=1880, avg_fps=55.5, dt_min=11.12ms, dt_max=47.52ms, bar_count=16
+2025-12-11 03:34:36 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=38917.6ms, frames=2179, avg_fps=56.0, dt_min=11.12ms, dt_max=47.52ms, bar_count=16
+2025-12-11 03:34:36 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=3590.68ms, min=-1.51ms, max=3590.68ms
+2025-12-11 03:34:38 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=33522.1ms, frames=1794, avg_fps=53.5, dt_min=1.00ms, dt_max=53.74ms, active_count=0, fps_target=55
+2025-12-11 03:34:41 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=43936.1ms, frames=2421, avg_fps=55.1, dt_min=11.12ms, dt_max=55.71ms, bar_count=16
+2025-12-11 03:34:41 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=8598.06ms, min=-1.51ms, max=8598.06ms
+2025-12-11 03:34:42 - transitions.base_transition    - INFO     - [PERF] GLCompositorBlindsTransition completed in 4068.6ms (expected 4057ms, Δ+11.6ms)
+2025-12-11 03:34:42 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Blinds metrics: duration=4069.6ms, frames=203, avg_fps=49.9, dt_min=1.04ms, dt_max=47.44ms, paint_fps=0.0, paint_dt_max=0.00ms, gpu_avg=0.00ms, gpu_dt_min=0.00ms, gpu_dt_max=0.00ms, size=1707x959
+2025-12-11 03:34:42 - transitions.base_transition    - INFO     - [PERF] GLCompositorBlindsTransition completed in 4072.1ms (expected 4057ms, Δ+15.1ms)
+2025-12-11 03:34:42 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=4070.5ms, frames=222, avg_fps=54.5, dt_min=1.00ms, dt_max=49.52ms, active_count=0, fps_target=60
+2025-12-11 03:34:42 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Blinds metrics: duration=4074.5ms, frames=222, avg_fps=54.5, dt_min=1.00ms, dt_max=49.52ms, paint_fps=0.0, paint_dt_max=0.00ms, gpu_avg=0.00ms, gpu_dt_min=0.00ms, gpu_dt_max=0.00ms, size=2560x1439
+2025-12-11 03:34:45 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=7584.4ms, frames=397, avg_fps=52.3, dt_min=1.04ms, dt_max=47.44ms, active_count=0, fps_target=55
+2025-12-11 03:34:45 - transitions.gl_compositor_crumble_transition - INFO     - [PERF] GLCompositorCrumbleTransition started
+2025-12-11 03:34:45 - transitions.gl_compositor_crumble_transition - INFO     - [PERF] GLCompositorCrumbleTransition started
+2025-12-11 03:34:46 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=48945.9ms, frames=2685, avg_fps=54.9, dt_min=11.12ms, dt_max=55.71ms, bar_count=16
+2025-12-11 03:34:46 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=13618.82ms, min=-1.51ms, max=13618.82ms
+2025-12-11 03:34:51 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=53957.4ms, frames=2863, avg_fps=53.1, dt_min=11.12ms, dt_max=59.86ms, bar_count=16
+2025-12-11 03:34:51 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=18618.21ms, min=-1.51ms, max=18618.21ms
+2025-12-11 03:34:52 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Crumble metrics: duration=7273.3ms, frames=275, avg_fps=37.8, dt_min=3.90ms, dt_max=55.98ms, paint_fps=37.5, paint_dt_max=63.70ms, gpu_avg=0.16ms, gpu_dt_min=0.10ms, gpu_dt_max=0.59ms, size=1707x959
+2025-12-11 03:34:53 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Crumble metrics: duration=7285.7ms, frames=289, avg_fps=39.7, dt_min=0.50ms, dt_max=56.26ms, paint_fps=36.4, paint_dt_max=70.75ms, gpu_avg=0.15ms, gpu_dt_min=0.09ms, gpu_dt_max=0.47ms, size=2560x1439
+2025-12-11 03:34:53 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=7284.7ms, frames=289, avg_fps=39.7, dt_min=0.50ms, dt_max=56.26ms, active_count=0, fps_target=60
+2025-12-11 03:34:54 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=8861.8ms, frames=362, avg_fps=40.8, dt_min=3.90ms, dt_max=55.98ms, active_count=0, fps_target=55
+2025-12-11 03:34:56 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=58958.7ms, frames=3091, avg_fps=52.4, dt_min=11.12ms, dt_max=59.86ms, bar_count=16
+2025-12-11 03:34:56 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=23633.10ms, min=-1.51ms, max=23633.10ms
+2025-12-11 03:35:01 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=63990.3ms, frames=3298, avg_fps=51.5, dt_min=11.12ms, dt_max=59.86ms, bar_count=16
+2025-12-11 03:35:01 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=28648.21ms, min=-1.51ms, max=28648.21ms
+2025-12-11 03:35:01 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Slide metrics: duration=7161.1ms, frames=362, avg_fps=50.6, dt_min=20.50ms, dt_max=48.61ms, paint_fps=49.9, paint_dt_max=57.12ms, gpu_avg=0.16ms, gpu_dt_min=0.12ms, gpu_dt_max=0.50ms, size=1707x959
+2025-12-11 03:35:01 - transitions.base_transition    - INFO     - [PERF] GLCompositorSlideTransition completed in 7162.7ms (expected 7150ms, Δ+12.7ms)
+2025-12-11 03:35:01 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Slide metrics: duration=7167.0ms, frames=390, avg_fps=54.4, dt_min=1.01ms, dt_max=51.52ms, paint_fps=51.5, paint_dt_max=76.19ms, gpu_avg=0.16ms, gpu_dt_min=0.10ms, gpu_dt_max=0.35ms, size=2560x1439
+2025-12-11 03:35:01 - transitions.base_transition    - INFO     - [PERF] GLCompositorSlideTransition completed in 7169.6ms (expected 7150ms, Δ+19.6ms)
+2025-12-11 03:35:01 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=7167.0ms, frames=390, avg_fps=54.4, dt_min=1.01ms, dt_max=51.52ms, active_count=0, fps_target=60
+2025-12-11 03:35:05 - engine.screensaver             - INFO     - [PERF] ImageCache: items=14/24, mem=648.7/1024MB, hits=12, misses=0, hit_rate=100.0%%, evictions=0
+2025-12-11 03:35:05 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 586.93ms (interval=16ms)
+2025-12-11 03:35:05 - core.animation.animator        - INFO     - [PERF] [ANIM] Large frame dt=585.94ms clamped to 500ms (target=18.18ms, active=0, listeners=1)
+2025-12-11 03:35:05 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 118.47ms (interval=16ms)
+2025-12-11 03:35:06 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=791.0ms, frames=42, avg_fps=53.1, dt_min=12.16ms, dt_max=34.79ms, bar_count=16
+2025-12-11 03:35:06 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=33676.69ms, min=-1.51ms, max=33676.69ms
+2025-12-11 03:35:07 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=320.4ms, frames=17, avg_fps=53.1, dt_min=2.02ms, dt_max=43.36ms, active_count=0, fps_target=60
+2025-12-11 03:35:07 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=321.0ms, frames=19, avg_fps=59.2, dt_min=6.56ms, dt_max=36.25ms, active_count=0, fps_target=60
+2025-12-11 03:35:08 - __main__                       - WARNING  - [PERF] [GC] Collection took 16.73ms (gen=2, collected=11)
+2025-12-11 03:35:11 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=5806.0ms, frames=298, avg_fps=51.3, dt_min=11.14ms, dt_max=41.85ms, bar_count=16
+2025-12-11 03:35:11 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=38694.23ms, min=-1.51ms, max=38694.23ms
+2025-12-11 03:35:15 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 326.25ms (interval=16ms)
+2025-12-11 03:35:16 - core.animation.animator        - INFO     - [PERF] [ANIM] Large frame dt=699.65ms clamped to 500ms (target=18.18ms, active=0, listeners=1)
+2025-12-11 03:35:21 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=5013.7ms, frames=246, avg_fps=49.1, dt_min=11.48ms, dt_max=84.10ms, bar_count=16
+2025-12-11 03:35:21 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=48622.75ms, min=43626.66ms, max=48622.75ms
+2025-12-11 03:35:26 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=10020.2ms, frames=549, avg_fps=54.8, dt_min=11.15ms, dt_max=84.10ms, bar_count=16
+2025-12-11 03:35:26 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=53627.82ms, min=43626.66ms, max=53627.82ms
+2025-12-11 03:35:31 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=15023.9ms, frames=847, avg_fps=56.4, dt_min=11.13ms, dt_max=84.10ms, bar_count=16
+2025-12-11 03:35:31 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=58634.66ms, min=43626.66ms, max=58634.66ms
+2025-12-11 03:35:31 - engine.screensaver             - INFO     - [PERF] ImageCache: items=16/24, mem=725.4/1024MB, hits=14, misses=0, hit_rate=100.0%%, evictions=0
+2025-12-11 03:35:32 - __main__                       - WARNING  - [PERF] [GC] Collection took 47.95ms (gen=2, collected=2453)
+2025-12-11 12:57:34 - __main__                       - INFO     - [PERF] GC tracking enabled
+2025-12-11 12:57:37 - rendering.gl_compositor        - WARNING  - [PERF] [GL COMPOSITOR] Slow texture upload: 22.85ms (2560x1440, pbo=True)
+2025-12-11 12:57:37 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 298.41ms (interval=16ms)
+2025-12-11 12:57:37 - rendering.gl_compositor        - WARNING  - [PERF] [GL COMPOSITOR] Slow texture upload: 47.50ms (3840x2160, pbo=True)
+2025-12-11 12:57:37 - rendering.gl_compositor        - WARNING  - [PERF] [GL COMPOSITOR] Slow texture upload: 20.24ms (3840x2158, pbo=True)
+2025-12-11 12:57:37 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 142.92ms (interval=16ms)
+2025-12-11 12:57:38 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 514.31ms (interval=16ms)
+2025-12-11 12:57:41 - rendering.gl_compositor        - WARNING  - [PERF] [GL COMPOSITOR] Slow texture upload: 22.66ms (3840x2158, pbo=True)
+2025-12-11 12:57:42 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=3627.0ms, frames=122, avg_fps=33.6, dt_min=11.35ms, dt_max=71.75ms, bar_count=16
+2025-12-11 12:57:47 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=8627.5ms, frames=311, avg_fps=36.0, dt_min=11.35ms, dt_max=71.75ms, bar_count=16
+2025-12-11 12:57:48 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Slide metrics: duration=7176.3ms, frames=369, avg_fps=51.4, dt_min=6.34ms, dt_max=64.59ms, paint_fps=51.0, paint_dt_max=97.72ms, gpu_avg=0.18ms, gpu_dt_min=0.11ms, gpu_dt_max=0.59ms, size=1707x959
+2025-12-11 12:57:48 - transitions.base_transition    - INFO     - [PERF] GLCompositorSlideTransition completed in 7179.8ms (expected 7150ms, Δ+29.8ms)
+2025-12-11 12:57:48 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Slide metrics: duration=7161.0ms, frames=396, avg_fps=55.3, dt_min=14.41ms, dt_max=56.47ms, paint_fps=55.6, paint_dt_max=67.06ms, gpu_avg=0.17ms, gpu_dt_min=0.12ms, gpu_dt_max=0.80ms, size=2560x1439
+2025-12-11 12:57:48 - transitions.base_transition    - INFO     - [PERF] GLCompositorSlideTransition completed in 7162.0ms (expected 7150ms, Δ+12.0ms)
+2025-12-11 12:57:48 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=7160.0ms, frames=396, avg_fps=55.3, dt_min=1.01ms, dt_max=56.47ms, active_count=0, fps_target=60
+2025-12-11 12:57:48 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=7706.2ms, frames=395, avg_fps=51.3, dt_min=6.34ms, dt_max=64.59ms, active_count=0, fps_target=55
+2025-12-11 12:57:52 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=13641.1ms, frames=517, avg_fps=37.9, dt_min=11.35ms, dt_max=71.75ms, bar_count=16
+2025-12-11 12:57:52 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=32.69ms, min=-1.02ms, max=194.63ms
+2025-12-11 12:57:55 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Slide metrics: duration=7170.8ms, frames=376, avg_fps=52.4, dt_min=0.57ms, dt_max=47.72ms, paint_fps=51.6, paint_dt_max=59.66ms, gpu_avg=0.17ms, gpu_dt_min=0.11ms, gpu_dt_max=0.92ms, size=1707x959
+2025-12-11 12:57:55 - transitions.base_transition    - INFO     - [PERF] GLCompositorSlideTransition completed in 7174.3ms (expected 7150ms, Δ+24.3ms)
+2025-12-11 12:57:56 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Slide metrics: duration=7156.8ms, frames=407, avg_fps=56.9, dt_min=1.03ms, dt_max=81.16ms, paint_fps=56.2, paint_dt_max=62.98ms, gpu_avg=0.17ms, gpu_dt_min=0.12ms, gpu_dt_max=0.41ms, size=2560x1439
+2025-12-11 12:57:56 - transitions.base_transition    - INFO     - [PERF] GLCompositorSlideTransition completed in 7156.8ms (expected 7150ms, Δ+6.8ms)
+2025-12-11 12:57:56 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=7155.3ms, frames=407, avg_fps=56.9, dt_min=1.03ms, dt_max=81.16ms, active_count=0, fps_target=60
+2025-12-11 12:57:57 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=18649.2ms, frames=731, avg_fps=39.2, dt_min=11.35ms, dt_max=81.11ms, bar_count=16
+2025-12-11 12:58:02 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=23658.0ms, frames=1029, avg_fps=43.5, dt_min=11.15ms, dt_max=81.11ms, bar_count=16
+2025-12-11 12:58:07 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=28669.5ms, frames=1334, avg_fps=46.5, dt_min=11.14ms, dt_max=81.11ms, bar_count=16
+2025-12-11 12:58:12 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=33672.4ms, frames=1638, avg_fps=48.6, dt_min=11.14ms, dt_max=81.11ms, bar_count=16
+2025-12-11 12:58:17 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=38682.3ms, frames=1924, avg_fps=49.7, dt_min=11.12ms, dt_max=81.11ms, bar_count=16
+2025-12-11 12:58:22 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=43709.4ms, frames=2166, avg_fps=49.6, dt_min=11.12ms, dt_max=81.11ms, bar_count=16
+2025-12-11 12:58:27 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=48713.8ms, frames=2437, avg_fps=50.0, dt_min=11.11ms, dt_max=81.11ms, bar_count=16
+2025-12-11 12:58:32 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=53722.8ms, frames=2728, avg_fps=50.8, dt_min=11.11ms, dt_max=81.11ms, bar_count=16
+2025-12-11 12:58:37 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=48225.8ms, frames=2577, avg_fps=53.4, dt_min=1.00ms, dt_max=84.69ms, active_count=0, fps_target=55
+2025-12-11 12:58:37 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=58724.2ms, frames=3032, avg_fps=51.6, dt_min=11.11ms, dt_max=81.11ms, bar_count=16
+2025-12-11 12:58:42 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=63736.1ms, frames=3209, avg_fps=50.3, dt_min=11.11ms, dt_max=81.11ms, bar_count=16
+2025-12-11 12:58:42 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=27.87ms, min=-1.53ms, max=194.63ms
+2025-12-11 12:58:44 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Slide metrics: duration=7168.4ms, frames=306, avg_fps=42.7, dt_min=7.52ms, dt_max=57.99ms, paint_fps=42.3, paint_dt_max=65.17ms, gpu_avg=0.20ms, gpu_dt_min=0.11ms, gpu_dt_max=1.02ms, size=1707x959
+2025-12-11 12:58:44 - transitions.base_transition    - INFO     - [PERF] GLCompositorSlideTransition completed in 7171.0ms (expected 7150ms, Δ+21.0ms)
+2025-12-11 12:58:44 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Slide metrics: duration=7165.7ms, frames=325, avg_fps=45.4, dt_min=1.50ms, dt_max=57.21ms, paint_fps=38.5, paint_dt_max=78.12ms, gpu_avg=0.19ms, gpu_dt_min=0.12ms, gpu_dt_max=0.45ms, size=2560x1439
+2025-12-11 12:58:44 - transitions.base_transition    - INFO     - [PERF] GLCompositorSlideTransition completed in 7167.2ms (expected 7150ms, Δ+17.2ms)
+2025-12-11 12:58:44 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=7164.7ms, frames=325, avg_fps=45.4, dt_min=1.00ms, dt_max=58.97ms, active_count=0, fps_target=60
+2025-12-11 12:58:46 - engine.screensaver             - INFO     - [PERF] ImageCache: items=10/24, mem=310.7/1024MB, hits=8, misses=0, hit_rate=100.0%%, evictions=0
+2025-12-11 12:58:47 - __main__                       - WARNING  - [PERF] [GC] Collection took 49.15ms (gen=2, collected=2292)
+2025-12-11 12:59:43 - __main__                       - INFO     - [PERF] GC tracking enabled
+2025-12-11 12:59:44 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 144.20ms (interval=16ms)
+2025-12-11 12:59:44 - rendering.gl_compositor        - WARNING  - [PERF] [GL COMPOSITOR] Slow texture upload: 32.15ms (2560x1440, pbo=True)
+2025-12-11 12:59:44 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 162.02ms (interval=16ms)
+2025-12-11 12:59:44 - rendering.gl_compositor        - WARNING  - [PERF] [GL COMPOSITOR] Slow texture upload: 42.05ms (3840x2160, pbo=True)
+2025-12-11 12:59:44 - rendering.gl_compositor        - WARNING  - [PERF] [GL COMPOSITOR] Slow texture upload: 20.05ms (3840x2158, pbo=True)
+2025-12-11 12:59:44 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 127.01ms (interval=16ms)
+2025-12-11 12:59:46 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 506.63ms (interval=16ms)
+2025-12-11 12:59:49 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=2897.3ms, frames=107, avg_fps=36.9, dt_min=11.32ms, dt_max=63.80ms, bar_count=16
+2025-12-11 12:59:54 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=7904.9ms, frames=403, avg_fps=51.0, dt_min=11.28ms, dt_max=69.76ms, bar_count=16
+2025-12-11 12:59:59 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=12913.6ms, frames=681, avg_fps=52.7, dt_min=11.28ms, dt_max=74.91ms, bar_count=16
+2025-12-11 13:00:04 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=17920.9ms, frames=982, avg_fps=54.8, dt_min=11.28ms, dt_max=74.91ms, bar_count=16
+2025-12-11 13:00:04 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=15.29ms, min=-1.50ms, max=195.32ms
+2025-12-11 13:00:07 - engine.screensaver             - INFO     - [PERF] ImageCache: items=4/24, mem=112.5/1024MB, hits=2, misses=0, hit_rate=100.0%%, evictions=0
+2025-12-11 13:00:07 - __main__                       - WARNING  - [PERF] [GC] Collection took 37.29ms (gen=2, collected=2297)
+2025-12-11 13:03:04 - __main__                       - INFO     - [PERF] GC tracking enabled
+2025-12-11 13:03:05 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 164.93ms (interval=16ms)
+2025-12-11 13:03:06 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 170.22ms (interval=16ms)
+2025-12-11 13:03:06 - rendering.gl_compositor        - WARNING  - [PERF] [GL COMPOSITOR] Slow texture upload: 44.98ms (3840x2160, pbo=True)
+2025-12-11 13:03:06 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 127.27ms (interval=16ms)
+2025-12-11 13:03:08 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 502.27ms (interval=16ms)
+2025-12-11 13:03:10 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=2592.1ms, frames=114, avg_fps=44.0, dt_min=14.58ms, dt_max=41.42ms, bar_count=16
+2025-12-11 13:03:15 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=7592.8ms, frames=365, avg_fps=48.1, dt_min=12.11ms, dt_max=54.90ms, bar_count=16
+2025-12-11 13:03:20 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Slide metrics: duration=7155.1ms, frames=376, avg_fps=52.5, dt_min=6.52ms, dt_max=46.63ms, paint_fps=52.4, paint_dt_max=80.06ms, gpu_avg=0.19ms, gpu_dt_min=0.13ms, gpu_dt_max=0.55ms, size=1707x959
+2025-12-11 13:03:20 - transitions.base_transition    - INFO     - [PERF] GLCompositorSlideTransition completed in 7156.6ms (expected 7150ms, Δ+6.6ms)
+2025-12-11 13:03:20 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Slide metrics: duration=7162.5ms, frames=395, avg_fps=55.1, dt_min=1.00ms, dt_max=57.68ms, paint_fps=55.8, paint_dt_max=59.70ms, gpu_avg=0.18ms, gpu_dt_min=0.13ms, gpu_dt_max=0.54ms, size=2560x1439
+2025-12-11 13:03:20 - transitions.base_transition    - INFO     - [PERF] GLCompositorSlideTransition completed in 7163.0ms (expected 7150ms, Δ+13.0ms)
+2025-12-11 13:03:20 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=7161.5ms, frames=395, avg_fps=55.2, dt_min=1.00ms, dt_max=57.68ms, active_count=0, fps_target=60
+2025-12-11 13:03:20 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=12604.9ms, frames=557, avg_fps=44.2, dt_min=12.11ms, dt_max=56.28ms, bar_count=16
+2025-12-11 13:03:21 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=8190.2ms, frames=429, avg_fps=52.4, dt_min=1.03ms, dt_max=59.14ms, active_count=0, fps_target=55
+2025-12-11 13:03:25 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=17620.4ms, frames=781, avg_fps=44.3, dt_min=11.17ms, dt_max=57.77ms, bar_count=16
+2025-12-11 13:03:28 - transitions.base_transition    - INFO     - [PERF] GLCompositorCrossfadeTransition completed in 7116.3ms (expected 7107ms, Δ+9.3ms)
+2025-12-11 13:03:28 - transitions.base_transition    - INFO     - [PERF] GLCompositorCrossfadeTransition completed in 7121.8ms (expected 7107ms, Δ+14.8ms)
+2025-12-11 13:03:28 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=7120.3ms, frames=411, avg_fps=57.7, dt_min=1.00ms, dt_max=57.77ms, active_count=0, fps_target=60
+2025-12-11 13:03:29 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=7423.2ms, frames=390, avg_fps=52.5, dt_min=0.50ms, dt_max=57.77ms, active_count=0, fps_target=55
+2025-12-11 13:03:30 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=22633.1ms, frames=991, avg_fps=43.8, dt_min=11.17ms, dt_max=57.77ms, bar_count=16
+2025-12-11 13:03:32 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 143.88ms (interval=16ms)
+2025-12-11 13:03:35 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=2862.4ms, frames=89, avg_fps=31.1, dt_min=16.72ms, dt_max=71.64ms, bar_count=16
+2025-12-11 13:03:37 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Peel metrics: duration=8482.6ms, frames=365, avg_fps=43.0, dt_min=0.54ms, dt_max=144.88ms, paint_fps=0.0, paint_dt_max=0.00ms, gpu_avg=0.00ms, gpu_dt_min=0.00ms, gpu_dt_max=0.00ms, size=1707x959
+2025-12-11 13:03:37 - transitions.base_transition    - INFO     - [PERF] GLCompositorPeelTransition completed in 8484.6ms (expected 8440ms, Δ+44.6ms)
+2025-12-11 13:03:37 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=8482.6ms, frames=365, avg_fps=43.0, dt_min=0.54ms, dt_max=144.88ms, active_count=0, fps_target=55
+2025-12-11 13:03:37 - transitions.gl_compositor_crumble_transition - INFO     - [PERF] GLCompositorCrumbleTransition started
+2025-12-11 13:03:37 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Peel metrics: duration=8462.9ms, frames=386, avg_fps=45.6, dt_min=9.13ms, dt_max=143.88ms, paint_fps=0.0, paint_dt_max=0.00ms, gpu_avg=0.00ms, gpu_dt_min=0.00ms, gpu_dt_max=0.00ms, size=2560x1439
+2025-12-11 13:03:37 - transitions.base_transition    - INFO     - [PERF] GLCompositorPeelTransition completed in 8465.4ms (expected 8440ms, Δ+25.4ms)
+2025-12-11 13:03:37 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=8462.9ms, frames=386, avg_fps=45.6, dt_min=0.51ms, dt_max=143.88ms, active_count=0, fps_target=60
+2025-12-11 13:03:37 - rendering.gl_compositor        - WARNING  - [PERF] [GL COMPOSITOR] Slow texture upload: 20.11ms (3840x2158, pbo=True)
+2025-12-11 13:03:37 - transitions.gl_compositor_crumble_transition - INFO     - [PERF] GLCompositorCrumbleTransition started
+2025-12-11 13:03:40 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=7879.0ms, frames=265, avg_fps=33.6, dt_min=16.69ms, dt_max=81.35ms, bar_count=16
+2025-12-11 13:03:40 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=88.21ms, min=-1.50ms, max=503.78ms
+2025-12-11 13:03:44 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Crumble metrics: duration=7276.2ms, frames=266, avg_fps=36.6, dt_min=2.32ms, dt_max=79.72ms, paint_fps=36.1, paint_dt_max=84.24ms, gpu_avg=0.20ms, gpu_dt_min=0.11ms, gpu_dt_max=5.49ms, size=1707x959
+2025-12-11 13:03:44 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Crumble metrics: duration=7287.4ms, frames=280, avg_fps=38.4, dt_min=1.01ms, dt_max=82.04ms, paint_fps=37.7, paint_dt_max=100.97ms, gpu_avg=0.18ms, gpu_dt_min=0.12ms, gpu_dt_max=0.89ms, size=2560x1439
+2025-12-11 13:03:44 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=7286.9ms, frames=280, avg_fps=38.4, dt_min=1.01ms, dt_max=82.04ms, active_count=0, fps_target=60
+2025-12-11 13:03:45 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=12890.6ms, frames=439, avg_fps=34.1, dt_min=11.17ms, dt_max=84.56ms, bar_count=16
+2025-12-11 13:03:50 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=17897.2ms, frames=731, avg_fps=40.8, dt_min=11.17ms, dt_max=84.56ms, bar_count=16
+2025-12-11 13:03:53 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=15660.9ms, frames=718, avg_fps=45.8, dt_min=1.00ms, dt_max=79.72ms, active_count=0, fps_target=55
+2025-12-11 13:03:53 - transitions.gl_compositor_crumble_transition - INFO     - [PERF] GLCompositorCrumbleTransition started
+2025-12-11 13:03:53 - transitions.gl_compositor_crumble_transition - INFO     - [PERF] GLCompositorCrumbleTransition started
+2025-12-11 13:03:55 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=22910.6ms, frames=972, avg_fps=42.4, dt_min=11.16ms, dt_max=84.56ms, bar_count=16
+2025-12-11 13:04:00 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Crumble metrics: duration=7273.0ms, frames=263, avg_fps=36.2, dt_min=9.93ms, dt_max=72.82ms, paint_fps=35.2, paint_dt_max=68.62ms, gpu_avg=0.17ms, gpu_dt_min=0.09ms, gpu_dt_max=0.37ms, size=1707x959
+2025-12-11 13:04:00 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Crumble metrics: duration=7276.4ms, frames=270, avg_fps=37.1, dt_min=1.01ms, dt_max=66.17ms, paint_fps=32.8, paint_dt_max=99.71ms, gpu_avg=0.17ms, gpu_dt_min=0.09ms, gpu_dt_max=0.44ms, size=2560x1439
+2025-12-11 13:04:00 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=7275.4ms, frames=270, avg_fps=37.1, dt_min=1.01ms, dt_max=66.17ms, active_count=0, fps_target=60
+2025-12-11 13:04:00 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=27912.1ms, frames=1118, avg_fps=40.1, dt_min=11.16ms, dt_max=84.56ms, bar_count=16
+2025-12-11 13:04:05 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=12457.5ms, frames=544, avg_fps=43.7, dt_min=1.00ms, dt_max=72.82ms, active_count=0, fps_target=55
+2025-12-11 13:04:05 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=32918.8ms, frames=1424, avg_fps=43.3, dt_min=11.11ms, dt_max=84.56ms, bar_count=16
+2025-12-11 13:04:05 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=27.40ms, min=-1.83ms, max=503.78ms
+2025-12-11 13:04:10 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=37948.2ms, frames=1622, avg_fps=42.7, dt_min=11.11ms, dt_max=84.56ms, bar_count=16
+2025-12-11 13:04:10 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=32.81ms, min=-1.83ms, max=503.78ms
+2025-12-11 13:04:13 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=7886.4ms, frames=457, avg_fps=57.9, dt_min=1.00ms, dt_max=50.52ms, active_count=0, fps_target=60
+2025-12-11 13:04:13 - engine.screensaver             - INFO     - [PERF] ImageCache: items=20/24, mem=834.6/1024MB, hits=18, misses=0, hit_rate=100.0%%, evictions=0
+2025-12-11 13:04:14 - __main__                       - WARNING  - [PERF] [GC] Collection took 74.74ms (gen=2, collected=2313)
+2025-12-11 13:26:51 - __main__                       - INFO     - [PERF] GC tracking enabled
+2025-12-11 13:26:53 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 184.69ms (interval=16ms)
+2025-12-11 13:26:53 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 222.94ms (interval=16ms)
+2025-12-11 13:26:53 - rendering.gl_compositor        - WARNING  - [PERF] [GL COMPOSITOR] Slow texture upload: 43.25ms (3840x2160, pbo=True)
+2025-12-11 13:26:53 - rendering.gl_compositor        - WARNING  - [PERF] [GL COMPOSITOR] Slow texture upload: 21.92ms (3840x2158, pbo=True)
+2025-12-11 13:26:53 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 161.36ms (interval=16ms)
+2025-12-11 13:26:54 - widgets.spotify_bars_gl_overlay - WARNING  - [PERF] [SPOTIFY_BARS_GL] set_state breakdown: geom=8.83ms, show=0.00ms, update=0.00ms
+2025-12-11 13:26:55 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 533.30ms (interval=16ms)
+2025-12-11 13:26:57 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=2232.3ms, frames=80, avg_fps=35.8, dt_min=13.51ms, dt_max=46.28ms, bar_count=16
+2025-12-11 13:27:02 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=7275.8ms, frames=274, avg_fps=37.7, dt_min=13.51ms, dt_max=61.73ms, bar_count=16
+2025-12-11 13:27:02 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=161.54ms, min=-1.52ms, max=533.34ms
+2025-12-11 13:27:06 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Raindrops metrics: duration=8100.6ms, frames=373, avg_fps=46.0, dt_min=1.01ms, dt_max=83.35ms, paint_fps=0.0, paint_dt_max=0.00ms, gpu_avg=0.00ms, gpu_dt_min=0.00ms, gpu_dt_max=0.00ms, size=1707x959
+2025-12-11 13:27:06 - transitions.base_transition    - INFO     - [PERF] GLCompositorRainDropsTransition completed in 8103.1ms (expected 8100ms, Δ+3.1ms)
+2025-12-11 13:27:06 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Raindrops metrics: duration=8115.7ms, frames=403, avg_fps=49.7, dt_min=1.02ms, dt_max=80.30ms, paint_fps=0.0, paint_dt_max=0.00ms, gpu_avg=0.00ms, gpu_dt_min=0.00ms, gpu_dt_max=0.00ms, size=2560x1439
+2025-12-11 13:27:06 - transitions.base_transition    - INFO     - [PERF] GLCompositorRainDropsTransition completed in 8117.2ms (expected 8100ms, Δ+17.2ms)
+2025-12-11 13:27:06 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=8115.7ms, frames=403, avg_fps=49.7, dt_min=1.02ms, dt_max=80.30ms, active_count=0, fps_target=60
+2025-12-11 13:27:07 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=12285.1ms, frames=477, avg_fps=38.8, dt_min=11.30ms, dt_max=97.18ms, bar_count=16
+2025-12-11 13:27:12 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=17286.3ms, frames=768, avg_fps=44.4, dt_min=11.14ms, dt_max=97.18ms, bar_count=16
+2025-12-11 13:27:12 - engine.screensaver             - INFO     - [PERF] ImageCache: items=6/24, mem=178.0/1024MB, hits=4, misses=0, hit_rate=100.0%%, evictions=0
+2025-12-11 13:27:13 - __main__                       - WARNING  - [PERF] [GC] Collection took 38.12ms (gen=2, collected=2288)
+2025-12-11 13:27:51 - __main__                       - INFO     - [PERF] GC tracking enabled
+2025-12-11 13:27:53 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 188.96ms (interval=16ms)
+2025-12-11 13:27:53 - rendering.gl_compositor        - WARNING  - [PERF] [GL COMPOSITOR] Slow texture upload: 52.21ms (2560x1440, pbo=True)
+2025-12-11 13:27:53 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 189.67ms (interval=16ms)
+2025-12-11 13:27:53 - rendering.gl_compositor        - WARNING  - [PERF] [GL COMPOSITOR] Slow texture upload: 25.31ms (3840x2160, pbo=True)
+2025-12-11 13:27:53 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 112.24ms (interval=16ms)
+2025-12-11 13:27:55 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 529.20ms (interval=16ms)
+2025-12-11 13:27:58 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=2556.9ms, frames=97, avg_fps=37.9, dt_min=13.60ms, dt_max=52.75ms, bar_count=16
+2025-12-11 13:28:03 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=7560.1ms, frames=376, avg_fps=49.7, dt_min=11.30ms, dt_max=52.75ms, bar_count=16
+2025-12-11 13:28:03 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=57.38ms, min=-1.01ms, max=188.96ms
+2025-12-11 13:28:08 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 142.93ms (interval=16ms)
+2025-12-11 13:28:10 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Raindrops metrics: duration=8112.3ms, frames=398, avg_fps=49.1, dt_min=1.00ms, dt_max=143.44ms, paint_fps=0.0, paint_dt_max=0.00ms, gpu_avg=0.00ms, gpu_dt_min=0.00ms, gpu_dt_max=0.00ms, size=1707x959
+2025-12-11 13:28:10 - transitions.base_transition    - INFO     - [PERF] GLCompositorRainDropsTransition completed in 8114.5ms (expected 8100ms, Δ+14.5ms)
+2025-12-11 13:28:10 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Raindrops metrics: duration=8113.8ms, frames=430, avg_fps=53.0, dt_min=0.54ms, dt_max=141.93ms, paint_fps=0.0, paint_dt_max=0.00ms, gpu_avg=0.00ms, gpu_dt_min=0.00ms, gpu_dt_max=0.00ms, size=2560x1439
+2025-12-11 13:28:10 - transitions.base_transition    - INFO     - [PERF] GLCompositorRainDropsTransition completed in 8116.3ms (expected 8100ms, Δ+16.3ms)
+2025-12-11 13:28:10 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=8113.8ms, frames=430, avg_fps=53.0, dt_min=0.54ms, dt_max=141.93ms, active_count=0, fps_target=60
+2025-12-11 13:28:13 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=5014.3ms, frames=241, avg_fps=48.1, dt_min=11.16ms, dt_max=57.43ms, bar_count=16
+2025-12-11 13:28:18 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=10019.7ms, frames=544, avg_fps=54.3, dt_min=11.16ms, dt_max=57.43ms, bar_count=16
+2025-12-11 13:28:22 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=20568.3ms, frames=1080, avg_fps=52.5, dt_min=1.00ms, dt_max=143.44ms, active_count=0, fps_target=55
+2025-12-11 13:28:23 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=15043.0ms, frames=845, avg_fps=56.2, dt_min=11.16ms, dt_max=57.43ms, bar_count=16
+2025-12-11 13:28:28 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=20043.9ms, frames=1036, avg_fps=51.7, dt_min=11.16ms, dt_max=57.43ms, bar_count=16
+2025-12-11 13:28:28 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=26.61ms, min=-1.50ms, max=226.75ms
+2025-12-11 13:28:30 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=7682.5ms, frames=432, avg_fps=56.2, dt_min=1.02ms, dt_max=44.83ms, active_count=0, fps_target=60
+2025-12-11 13:28:30 - engine.screensaver             - INFO     - [PERF] ImageCache: items=8/24, mem=260.8/1024MB, hits=6, misses=0, hit_rate=100.0%%, evictions=0
+2025-12-11 13:28:31 - __main__                       - WARNING  - [PERF] [GC] Collection took 43.25ms (gen=2, collected=2301)
+2025-12-11 13:36:33 - __main__                       - INFO     - [PERF] GC tracking enabled
+2025-12-11 13:36:35 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 220.19ms (interval=16ms)
+2025-12-11 13:36:35 - rendering.gl_compositor        - WARNING  - [PERF] [GL COMPOSITOR] Slow texture upload: 25.68ms (2560x1440, pbo=True)
+2025-12-11 13:36:35 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 157.52ms (interval=16ms)
+2025-12-11 13:36:35 - rendering.gl_compositor        - WARNING  - [PERF] [GL COMPOSITOR] Slow texture upload: 46.50ms (3840x2160, pbo=True)
+2025-12-11 13:36:35 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 160.30ms (interval=16ms)
+2025-12-11 13:36:37 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 546.34ms (interval=16ms)
+2025-12-11 13:36:40 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=2851.0ms, frames=113, avg_fps=39.6, dt_min=11.78ms, dt_max=66.93ms, bar_count=16
+2025-12-11 13:36:44 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 110.76ms (interval=16ms)
+2025-12-11 13:36:45 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=1120.1ms, frames=65, avg_fps=58.0, dt_min=12.19ms, dt_max=29.57ms, bar_count=16
+2025-12-11 13:36:47 - rendering.gl_compositor        - WARNING  - [PERF] [GL COMPOSITOR] Slow texture upload: 28.27ms (3840x2158, pbo=True)
+2025-12-11 13:36:50 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=6145.4ms, frames=284, avg_fps=46.2, dt_min=11.14ms, dt_max=67.40ms, bar_count=16
+2025-12-11 13:36:50 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=25.25ms, min=-1.54ms, max=189.66ms
+2025-12-11 13:36:55 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=11148.8ms, frames=460, avg_fps=41.3, dt_min=11.14ms, dt_max=79.34ms, bar_count=16
+2025-12-11 13:36:55 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=96.18ms, min=-2.09ms, max=189.66ms
+2025-12-11 13:36:55 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Raindrops metrics: duration=8128.0ms, frames=364, avg_fps=44.8, dt_min=1.50ms, dt_max=79.34ms, paint_fps=0.0, paint_dt_max=0.00ms, gpu_avg=0.00ms, gpu_dt_min=0.00ms, gpu_dt_max=0.00ms, size=1707x959
+2025-12-11 13:36:55 - transitions.base_transition    - INFO     - [PERF] GLCompositorRainDropsTransition completed in 8131.5ms (expected 8100ms, Δ+31.5ms)
+2025-12-11 13:36:55 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Raindrops metrics: duration=8107.9ms, frames=389, avg_fps=48.0, dt_min=0.52ms, dt_max=74.54ms, paint_fps=0.0, paint_dt_max=0.00ms, gpu_avg=0.00ms, gpu_dt_min=0.00ms, gpu_dt_max=0.00ms, size=2560x1439
+2025-12-11 13:36:55 - transitions.base_transition    - INFO     - [PERF] GLCompositorRainDropsTransition completed in 8108.9ms (expected 8100ms, Δ+8.9ms)
+2025-12-11 13:36:55 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=8105.7ms, frames=389, avg_fps=48.0, dt_min=0.52ms, dt_max=74.54ms, active_count=0, fps_target=60
+2025-12-11 13:36:58 - engine.screensaver             - INFO     - [PERF] ImageCache: items=8/24, mem=337.5/1024MB, hits=6, misses=0, hit_rate=100.0%%, evictions=0
+2025-12-11 13:36:59 - __main__                       - WARNING  - [PERF] [GC] Collection took 57.46ms (gen=2, collected=2290)
+2025-12-11 13:47:56 - __main__                       - INFO     - [PERF] GC tracking enabled
+2025-12-11 13:47:57 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 188.24ms (interval=16ms)
+2025-12-11 13:47:58 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 150.21ms (interval=16ms)
+2025-12-11 13:47:58 - rendering.gl_compositor        - WARNING  - [PERF] [GL COMPOSITOR] Slow texture upload: 44.26ms (3840x2160, pbo=True)
+2025-12-11 13:47:58 - rendering.gl_compositor        - WARNING  - [PERF] [GL COMPOSITOR] Slow texture upload: 21.45ms (3840x2158, pbo=True)
+2025-12-11 13:47:58 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 174.36ms (interval=16ms)
+2025-12-11 13:48:00 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 544.47ms (interval=16ms)
+2025-12-11 13:48:02 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=2547.5ms, frames=110, avg_fps=43.2, dt_min=12.75ms, dt_max=49.40ms, bar_count=16
+2025-12-11 13:48:07 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=7554.4ms, frames=382, avg_fps=50.6, dt_min=11.14ms, dt_max=62.44ms, bar_count=16
+2025-12-11 13:48:12 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=12577.5ms, frames=580, avg_fps=46.1, dt_min=11.14ms, dt_max=62.44ms, bar_count=16
+2025-12-11 13:48:12 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=26.62ms, min=-1.67ms, max=320.66ms
+2025-12-11 13:48:14 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Raindrops metrics: duration=8101.4ms, frames=422, avg_fps=52.1, dt_min=4.71ms, dt_max=46.74ms, paint_fps=0.0, paint_dt_max=0.00ms, gpu_avg=0.00ms, gpu_dt_min=0.00ms, gpu_dt_max=0.00ms, size=1707x959
+2025-12-11 13:48:14 - transitions.base_transition    - INFO     - [PERF] GLCompositorRainDropsTransition completed in 8104.5ms (expected 8100ms, Δ+4.5ms)
+2025-12-11 13:48:14 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Raindrops metrics: duration=8130.4ms, frames=449, avg_fps=55.2, dt_min=0.51ms, dt_max=63.83ms, paint_fps=0.0, paint_dt_max=0.00ms, gpu_avg=0.00ms, gpu_dt_min=0.00ms, gpu_dt_max=0.00ms, size=2560x1439
+2025-12-11 13:48:14 - transitions.base_transition    - INFO     - [PERF] GLCompositorRainDropsTransition completed in 8132.0ms (expected 8100ms, Δ+32.0ms)
+2025-12-11 13:48:14 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=8129.4ms, frames=449, avg_fps=55.2, dt_min=0.51ms, dt_max=64.86ms, active_count=0, fps_target=60
+2025-12-11 13:48:15 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=8830.6ms, frames=456, avg_fps=51.6, dt_min=4.05ms, dt_max=63.83ms, active_count=0, fps_target=55
+2025-12-11 13:48:15 - rendering.gl_compositor        - WARNING  - [PERF] [GL COMPOSITOR] Slow texture upload: 27.07ms (3840x2158, pbo=True)
+2025-12-11 13:48:17 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=17604.0ms, frames=786, avg_fps=44.6, dt_min=11.14ms, dt_max=62.44ms, bar_count=16
+2025-12-11 13:48:17 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=33.60ms, min=-1.67ms, max=320.66ms
+2025-12-11 13:48:22 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=22619.1ms, frames=978, avg_fps=43.2, dt_min=11.14ms, dt_max=62.44ms, bar_count=16
+2025-12-11 13:48:22 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=56.81ms, min=-1.67ms, max=320.66ms
+2025-12-11 13:48:23 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 151.15ms (interval=16ms)
+2025-12-11 13:48:23 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Wipe metrics: duration=8280.9ms, frames=406, avg_fps=49.0, dt_min=1.00ms, dt_max=151.15ms, paint_fps=0.0, paint_dt_max=0.00ms, gpu_avg=0.00ms, gpu_dt_min=0.00ms, gpu_dt_max=0.00ms, size=1707x959
+2025-12-11 13:48:23 - transitions.base_transition    - INFO     - [PERF] GLCompositorWipeTransition completed in 8293.2ms (expected 8283ms, Δ+10.2ms)
+2025-12-11 13:48:23 - rendering.gl_profiler          - INFO     - [PERF] [GL COMPOSITOR] Wipe metrics: duration=8298.8ms, frames=447, avg_fps=53.9, dt_min=3.53ms, dt_max=157.71ms, paint_fps=0.0, paint_dt_max=0.00ms, gpu_avg=0.00ms, gpu_dt_min=0.00ms, gpu_dt_max=0.00ms, size=2560x1439
+2025-12-11 13:48:23 - transitions.base_transition    - INFO     - [PERF] GLCompositorWipeTransition completed in 8299.8ms (expected 8283ms, Δ+16.8ms)
+2025-12-11 13:48:23 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=8297.3ms, frames=447, avg_fps=53.9, dt_min=3.53ms, dt_max=157.71ms, active_count=0, fps_target=60
+2025-12-11 13:48:27 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=4760.9ms, frames=254, avg_fps=53.4, dt_min=11.11ms, dt_max=88.86ms, bar_count=16
+2025-12-11 13:48:32 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=9768.6ms, frames=532, avg_fps=54.5, dt_min=11.11ms, dt_max=88.86ms, bar_count=16
+2025-12-11 13:48:37 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=14776.9ms, frames=824, avg_fps=55.8, dt_min=11.11ms, dt_max=88.86ms, bar_count=16
+2025-12-11 13:48:39 - engine.screensaver             - INFO     - [PERF] ImageCache: items=8/24, mem=196.5/1024MB, hits=6, misses=0, hit_rate=100.0%%, evictions=0
+2025-12-11 13:48:39 - __main__                       - WARNING  - [PERF] [GC] Collection took 57.99ms (gen=2, collected=2290)

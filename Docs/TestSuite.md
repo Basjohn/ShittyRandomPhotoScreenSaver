@@ -1,10 +1,14 @@
 # Test Suite Documentation
-Document is more than 10days old, update for current architecture!
+
 **Purpose**: Canonical reference for all test modules, test cases, and testing procedures.  
-**Last Updated**: Nov 18, 2025 - Scenario coverage (Ctrl mode, transition cycling, overlay tools)  
-**Test Count**: 343 tests across 25+ modules  
-**Pass Rate**: 97.1% (333 passing, 5 failing, 5 skipped)  
-**Recent**: Transition factory now honours SettingsManager overrides; `Shiboken.isValid` guard prevents teardown crashes during tests (pyqt slot callbacks).
+**Last Updated**: Dec 11, 2025 - Architecture audit fixes and test robustness improvements  
+**Test Count**: 360+ tests across 26+ modules  
+**Pass Rate**: ~98% (known failures in timezone/settings dialog tests)  
+**Recent**: 
+- Fixed `test_perf_dt_max.py` to use median-based threshold (robust against transient system spikes)
+- Fixed `test_settings.py` - all 9 tests now pass after SettingsManager fixes
+- Fixed ClockWidget deferred callback crash with Shiboken.isValid guard
+- Architecture audit completed 12 items (see `audits/ARCHITECTURE_AUDIT_2024_12.md`)
 
 ### Phase 6 Bug Fix Summary
 **All 8 Critical Bugs Fixed:**
@@ -752,6 +756,54 @@ pytest tests/ --tb=short || exit 1
 - `test_console_handler_preserves_unicode_on_utf8_console` – Asserts that UTF-8 console streams still display the full Unicode message with no replacement, keeping debug readability high on modern terminals.
 
 **Purpose**: Provide a regression harness for the console encoding roadmap item so future logging changes cannot reintroduce cp1252 `UnicodeEncodeError` issues during interactive debug sessions. Combined with the dedicated rotating `screensaver_perf.log` (which captures all `[PERF]` lines via a PERF-only filter), this keeps both console and file-based diagnostics robust while making performance metrics easy to inspect across rotated logs.
+
+---
+
+### 26. `tests/test_dimming_and_interaction_fixes.py` - Dimming & Interaction Regression Tests
+
+**Purpose**: Regression tests for dimming overlay, halo interaction, deferred Reddit URL, media widget click detection, settings dot notation, and Z-order management fixes.
+
+**Test Classes:**
+
+- **`TestDimmingOverlayAttributes`** (3 tests)
+  - `test_dimming_overlay_uses_translucent_background` – Verifies dimming overlay uses `WA_TranslucentBackground` for proper alpha compositing over GL compositor
+  - `test_dimming_overlay_opacity_calculation` – Verifies opacity percentage (0-100) is correctly converted to alpha (0-255)
+  - `test_dimming_overlay_opacity_clamping` – Verifies opacity is clamped to valid 0-100 range
+
+- **`TestCtrlHaloAttributes`** (1 test)
+  - `test_halo_code_uses_styled_background` – Verifies ctrl cursor halo uses `WA_StyledBackground` (not `WA_TranslucentBackground`) to avoid punching through dimming overlay
+
+- **`TestDeferredRedditUrl`** (2 tests)
+  - `test_open_pending_reddit_url_method_exists` – Verifies `_open_pending_reddit_url` method exists on DisplayWidget
+  - `test_pending_reddit_url_attribute_exists` – Verifies `_pending_reddit_url` attribute is initialized in DisplayWidget
+
+- **`TestMediaWidgetClickDetection`** (2 tests)
+  - `test_click_detection_checks_y_coordinate` – Verifies media widget click detection checks Y coordinate for controls row
+  - `test_controls_row_height_is_reasonable` – Verifies controls row height constant is 60px
+
+- **`TestCrumbleShaderPerformance`** (1 test)
+  - `test_crumble_search_range_is_reduced` – Verifies Crumble shader search range is reduced for performance (not -10 to +4)
+
+- **`TestSettingsDotNotation`** (3 tests)
+  - `test_dimming_settings_use_dot_notation` – Verifies dimming settings are read with dot notation (not nested dict access)
+  - `test_pixel_shift_settings_use_dot_notation` – Verifies pixel shift settings are read with dot notation
+  - `test_context_menu_dimming_uses_dot_notation` – Verifies context menu reads dimming state with dot notation
+
+- **`TestDimmingOverlayZOrder`** (2 tests)
+  - `test_raise_overlay_includes_dimming` – Verifies `raise_overlay` includes dimming overlay and ctrl halo in Z-order
+  - `test_raise_overlay_zorder_documented` – Verifies Z-order is documented in `raise_overlay`
+
+- **`TestDeferredRedditUrlAllExitPaths`** (3 tests)
+  - `test_key_press_exit_opens_reddit_url` – Verifies keyPressEvent calls `_open_pending_reddit_url` before exit
+  - `test_mouse_click_exit_opens_reddit_url` – Verifies mousePressEvent calls `_open_pending_reddit_url` before exit
+  - `test_mouse_move_exit_opens_reddit_url` – Verifies mouseMoveEvent calls `_open_pending_reddit_url` before exit
+
+**Critical Tests:**
+- `test_dimming_overlay_uses_translucent_background` – Prevents regression where dimming overlay appears invisible due to wrong widget attributes
+- `test_halo_code_uses_styled_background` – Prevents regression where halo punches holes through dimming overlay
+- `test_crumble_search_range_is_reduced` – Prevents regression where Crumble transition causes severe performance degradation
+- `test_dimming_settings_use_dot_notation` – Prevents regression where dimming opacity is always 30% regardless of settings
+- `test_raise_overlay_includes_dimming` – Prevents regression where dimming disappears around widget edges after transitions
 
 ---
 

@@ -1,6 +1,6 @@
 """Display widget for OpenGL/software rendered screensaver overlays."""
 from collections import defaultdict
-from typing import Optional, Iterable, Tuple, Callable, Dict
+from typing import Optional, Iterable, Tuple, Callable, Dict, Any
 import random
 import time
 import weakref
@@ -53,6 +53,7 @@ from widgets.clock_widget import ClockWidget, TimeFormat, ClockPosition
 from widgets.weather_widget import WeatherWidget, WeatherPosition
 from widgets.media_widget import MediaWidget, MediaPosition
 from widgets.reddit_widget import RedditWidget, RedditPosition
+from widgets.pixel_shift_manager import PixelShiftManager
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
 from widgets.spotify_volume_widget import SpotifyVolumeWidget
@@ -132,6 +133,13 @@ class DisplayWidget(QWidget):
     # (movement/click) on all displays simultaneously.
     _global_ctrl_held: bool = False
     _halo_owner: Optional["DisplayWidget"] = None
+    
+    # PERF: Single eventFilter for all DisplayWidgets to avoid redundant processing
+    _event_filter_installed: bool = False
+    _event_filter_owner: Optional["DisplayWidget"] = None
+    
+    # PERF: Cache of DisplayWidget instances by screen to avoid iterating topLevelWidgets
+    _instances_by_screen: Dict[Any, "DisplayWidget"] = {}
 
     def __init__(
         self,
@@ -168,6 +176,7 @@ class DisplayWidget(QWidget):
         self.spotify_volume_widget: Optional[SpotifyVolumeWidget] = None
         self._spotify_bars_overlay: Optional[SpotifyBarsGLOverlay] = None
         self.reddit_widget: Optional[RedditWidget] = None
+        self._pixel_shift_manager: Optional[PixelShiftManager] = None
         self._current_transition: Optional[BaseTransition] = None
         self._current_transition_overlay_key: Optional[str] = None
         self._current_transition_started_at: float = 0.0
@@ -204,6 +213,7 @@ class DisplayWidget(QWidget):
         self._overlay_fade_started: bool = False
         self._overlay_fade_timeout: Optional[QTimer] = None
         self._reddit_exit_on_click: bool = True
+        self._pending_reddit_url: Optional[str] = None  # URL to open when exiting (hard-exit mode)
         
         # Context menu for right-click actions
         self._context_menu: Optional[ScreensaverContextMenu] = None
@@ -242,10 +252,14 @@ class DisplayWidget(QWidget):
         # Ensure we can keep the Ctrl halo moving even when the cursor is over
         # child widgets (clocks, weather, etc.) by observing global mouse
         # move events.
+        # PERF: Only install ONE eventFilter across all DisplayWidgets to avoid
+        # redundant processing of every mouse event by multiple filters.
         try:
             app = QGuiApplication.instance()
-            if app is not None:
+            if app is not None and not DisplayWidget._event_filter_installed:
                 app.installEventFilter(self)
+                DisplayWidget._event_filter_installed = True
+                DisplayWidget._event_filter_owner = self
         except Exception:
             pass
         
@@ -254,6 +268,10 @@ class DisplayWidget(QWidget):
         palette = self.palette()
         palette.setColor(self.backgroundRole(), Qt.GlobalColor.black)
         self.setPalette(palette)
+        
+        # PERF: Register in class-level cache for fast screen-based lookup
+        if self._screen is not None:
+            DisplayWidget._instances_by_screen[self._screen] = self
         
         logger.info(f"DisplayWidget created for screen {screen_index} ({display_mode})")
 
@@ -571,6 +589,31 @@ class DisplayWidget(QWidget):
         self._spotify_secondary_fade_starters = []
 
         widgets_map = widgets if isinstance(widgets, dict) else {}
+
+        # Background Dimming - now handled by GL compositor for proper compositing.
+        # The widget-based DimmingOverlay is kept for fallback but not used when
+        # the GL compositor is active.
+        # Settings are stored with dot notation (accessibility.dimming.enabled)
+        dimming_enabled = SettingsManager.to_bool(
+            self.settings_manager.get('accessibility.dimming.enabled', False), False
+        )
+        try:
+            dimming_opacity = int(self.settings_manager.get('accessibility.dimming.opacity', 30))
+            dimming_opacity = max(10, min(90, dimming_opacity))
+        except (ValueError, TypeError):
+            dimming_opacity = 30
+        
+        # Store dimming state for use by GL compositor
+        self._dimming_enabled = dimming_enabled
+        self._dimming_opacity = dimming_opacity / 100.0  # Convert to 0.0-1.0
+        
+        # Configure GL compositor dimming if available
+        comp = getattr(self, "_gl_compositor", None)
+        if comp is not None and hasattr(comp, "set_dimming"):
+            comp.set_dimming(dimming_enabled, self._dimming_opacity)
+            logger.debug("GL compositor dimming: enabled=%s, opacity=%d%%", dimming_enabled, dimming_opacity)
+        
+        # NOTE: Widget-based DimmingOverlay removed - GL compositor handles dimming now
 
         # Spotify visualizer configuration is used later when wiring the
         # widget. When enabled for this display, the visualiser card
@@ -1537,6 +1580,42 @@ class DisplayWidget(QWidget):
         except Exception as e:
             logger.error("Failed to create/configure media widget: %s", e, exc_info=True)
 
+        # Widget Pixel Shift for burn-in prevention - set up AFTER all widgets
+        # are created so we can register them all.
+        # Settings are stored with dot notation (accessibility.pixel_shift.enabled)
+        pixel_shift_enabled = SettingsManager.to_bool(
+            self.settings_manager.get('accessibility.pixel_shift.enabled', False), False
+        )
+        try:
+            pixel_shift_rate = int(self.settings_manager.get('accessibility.pixel_shift.rate', 1))
+            pixel_shift_rate = max(1, min(5, pixel_shift_rate))
+        except (ValueError, TypeError):
+            pixel_shift_rate = 1
+        
+        if self._pixel_shift_manager is None:
+            self._pixel_shift_manager = PixelShiftManager(resource_manager=self._resource_manager)
+            # Set defer check to avoid shifting during transitions
+            self._pixel_shift_manager.set_defer_check(lambda: self._current_transition is not None)
+        
+        self._pixel_shift_manager.set_shifts_per_minute(pixel_shift_rate)
+        
+        # Register all overlay widgets for pixel shifting (excluding dimming overlay)
+        for attr_name in (
+            "clock_widget", "clock2_widget", "clock3_widget",
+            "weather_widget", "media_widget", "spotify_visualizer_widget",
+            "spotify_volume_widget", "reddit_widget",
+        ):
+            widget = getattr(self, attr_name, None)
+            if widget is not None:
+                self._pixel_shift_manager.register_widget(widget)
+        
+        if pixel_shift_enabled:
+            self._pixel_shift_manager.set_enabled(True)
+            logger.debug("Pixel shift enabled (rate=%d/min)", pixel_shift_rate)
+        else:
+            self._pixel_shift_manager.set_enabled(False)
+            logger.debug("Pixel shift disabled")
+
     def _warm_up_gl_overlay(self, base_pixmap: QPixmap) -> None:
         """Legacy GL overlay warm-up disabled (compositor-only pipeline)."""
         logger.debug("[WARMUP] Skipping legacy GL overlay warm-up (compositor-only pipeline)")
@@ -2452,10 +2531,12 @@ class DisplayWidget(QWidget):
                         )
                     # Raise all overlay widgets above the compositor ONCE here.
                     # The rate-limited raise_overlay() handles ongoing raises.
+                    # Raise all widgets above the compositor
                     for attr_name in (
                         "clock_widget", "clock2_widget", "clock3_widget",
                         "weather_widget", "media_widget", "spotify_visualizer_widget",
                         "_spotify_bars_overlay", "spotify_volume_widget", "reddit_widget",
+                        "_ctrl_cursor_hint",
                     ):
                         w = getattr(self, attr_name, None)
                         if w is not None:
@@ -2541,6 +2622,7 @@ class DisplayWidget(QWidget):
                         # Previously this was deferred via QTimer.singleShot(0, ...) which
                         # allowed the compositor to render 1+ frames with widgets hidden.
                         try:
+                            # Raise all widgets above the compositor
                             for attr_name in ("clock_widget", "clock2_widget", "clock3_widget"):
                                 clock = getattr(self, attr_name, None)
                                 if clock is not None:
@@ -2585,6 +2667,13 @@ class DisplayWidget(QWidget):
                             if vw is not None:
                                 try:
                                     vw.raise_()
+                                except Exception:
+                                    pass
+                            # Ctrl cursor hint
+                            hint = getattr(self, "_ctrl_cursor_hint", None)
+                            if hint is not None:
+                                try:
+                                    hint.raise_()
                                 except Exception:
                                     pass
                         except Exception:
@@ -3215,6 +3304,18 @@ class DisplayWidget(QWidget):
 
     def _on_destroyed(self, *_args) -> None:
         """Ensure active transitions are stopped when the widget is destroyed."""
+        # Open any pending Reddit URL that was deferred in hard-exit mode
+        self._open_pending_reddit_url()
+        
+        # PERF: Remove from class-level cache
+        if self._screen is not None:
+            DisplayWidget._instances_by_screen.pop(self._screen, None)
+        
+        # Reset eventFilter flags if this was the owner
+        if DisplayWidget._event_filter_owner is self:
+            DisplayWidget._event_filter_installed = False
+            DisplayWidget._event_filter_owner = None
+        
         self._destroy_render_surface()
         # Ensure compositor is torn down cleanly
         try:
@@ -3296,6 +3397,17 @@ class DisplayWidget(QWidget):
                 self.reddit_widget = None
         except Exception as e:
             logger.debug("[REDDIT] Failed to stop Reddit widget in _on_destroyed: %s", e, exc_info=True)
+        # Cleanup pixel shift manager if present
+        try:
+            psm = getattr(self, "_pixel_shift_manager", None)
+            if psm is not None:
+                try:
+                    psm.cleanup()
+                except Exception:
+                    pass
+                self._pixel_shift_manager = None
+        except Exception as e:
+            logger.debug("[PIXEL_SHIFT] Failed to cleanup pixel shift manager in _on_destroyed: %s", e, exc_info=True)
         # Stop and clean up any active transition
         try:
             if self._current_transition:
@@ -3736,8 +3848,12 @@ class DisplayWidget(QWidget):
             def __init__(self, parent: _W) -> None:
                 super().__init__(parent)
                 self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-                self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+                # WA_TranslucentBackground is REQUIRED for true transparency.
+                # The halo must be raised ABOVE the dimming overlay via Z-order,
+                # not by using opaque widget attributes. The "punch-through" issue
+                # was caused by incorrect Z-order, not by WA_TranslucentBackground.
                 self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+                self.setAutoFillBackground(False)
                 self.resize(40, 40)
                 self._opacity = 1.0
 
@@ -3754,6 +3870,9 @@ class DisplayWidget(QWidget):
             def paintEvent(self, event: QPaintEvent) -> None:  # type: ignore[override]
                 painter = QPainter(self)
                 painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+                
+                # No background fill needed - WA_TranslucentBackground handles it
+                
                 base_alpha = 200
                 alpha = int(max(0.0, min(1.0, self._opacity)) * base_alpha)
                 color = QColor(255, 255, 255, alpha)
@@ -4031,6 +4150,7 @@ class DisplayWidget(QWidget):
         if key in (Qt.Key.Key_Escape, Qt.Key.Key_Q):
             logger.info("Exit key pressed (%s), requesting exit", key)
             self._exiting = True
+            self._open_pending_reddit_url()  # Open deferred URL before exit
             self.exit_requested.emit()
             event.accept()
             return
@@ -4045,6 +4165,7 @@ class DisplayWidget(QWidget):
         # Normal mode (no hard-exit, Ctrl not held): any other key exits.
         logger.info("Non-hotkey key pressed (%s) in normal mode - requesting exit", key)
         self._exiting = True
+        self._open_pending_reddit_url()  # Open deferred URL before exit
         self.exit_requested.emit()
         event.accept()
 
@@ -4202,62 +4323,83 @@ class DisplayWidget(QWidget):
                         # arrows and centre glyph match their actions
                         # even when there is a large artwork margin on
                         # the right.
+                        #
+                        # IMPORTANT: Only process clicks in the controls row
+                        # area (bottom ~60px of the widget). Clicks in the
+                        # upper portion of the widget should not trigger
+                        # transport controls.
                         try:
                             geom = mw.geometry()
                             local_x = event.pos().x() - geom.x()
+                            local_y = event.pos().y() - geom.y()
+                            height = max(1, mw.height())
                             width = max(1, mw.width())
-                            margins = mw.contentsMargins()
-                            content_left = margins.left()
-                            content_right = width - margins.right()
-                            content_width = max(1, content_right - content_left)
-                            x_in_content = local_x - content_left
-                            # Clamp so clicks slightly inside the card
-                            # margins map to the nearest control.
-                            if x_in_content < 0:
-                                x_in_content = 0
-                            elif x_in_content > content_width:
-                                x_in_content = content_width
-                            third = content_width / 3.0
-                            if x_in_content < third:
-                                logger.debug(
-                                    "[MEDIA] click mapped to PREVIOUS: pos=%s geom=%s local_x=%d x_in_content=%d width=%d content_left=%d content_right=%d third=%.2f",
-                                    event.pos(),
-                                    geom,
-                                    local_x,
-                                    x_in_content,
-                                    width,
-                                    content_left,
-                                    content_right,
-                                    third,
-                                )
-                                mw.previous_track()
-                            elif x_in_content < 2.0 * third:
-                                logger.debug(
-                                    "[MEDIA] click mapped to PLAY/PAUSE: pos=%s geom=%s local_x=%d x_in_content=%d width=%d content_left=%d content_right=%d third=%.2f",
-                                    event.pos(),
-                                    geom,
-                                    local_x,
-                                    x_in_content,
-                                    width,
-                                    content_left,
-                                    content_right,
-                                    third,
-                                )
-                                mw.play_pause()
-                            else:
-                                logger.debug(
-                                    "[MEDIA] click mapped to NEXT: pos=%s geom=%s local_x=%d x_in_content=%d width=%d content_left=%d content_right=%d third=%.2f",
-                                    event.pos(),
-                                    geom,
-                                    local_x,
-                                    x_in_content,
-                                    width,
-                                    content_left,
-                                    content_right,
-                                    third,
-                                )
-                                mw.next_track()
-                            handled = True
+                            
+                            # Controls row is in the bottom portion of the widget
+                            # Only process clicks in the bottom 60px (controls area)
+                            controls_row_height = 60
+                            controls_row_top = height - controls_row_height
+                            
+                            if local_y >= controls_row_top:
+                                # Click is in the controls row area
+                                margins = mw.contentsMargins()
+                                content_left = margins.left()
+                                content_right = width - margins.right()
+                                content_width = max(1, content_right - content_left)
+                                x_in_content = local_x - content_left
+                                # Clamp so clicks slightly inside the card
+                                # margins map to the nearest control.
+                                if x_in_content < 0:
+                                    x_in_content = 0
+                                elif x_in_content > content_width:
+                                    x_in_content = content_width
+                                third = content_width / 3.0
+                                if x_in_content < third:
+                                    logger.debug(
+                                        "[MEDIA] click mapped to PREVIOUS: pos=%s geom=%s local_x=%d local_y=%d x_in_content=%d width=%d content_left=%d content_right=%d third=%.2f",
+                                        event.pos(),
+                                        geom,
+                                        local_x,
+                                        local_y,
+                                        x_in_content,
+                                        width,
+                                        content_left,
+                                        content_right,
+                                        third,
+                                    )
+                                    mw.previous_track()
+                                    handled = True
+                                elif x_in_content < 2.0 * third:
+                                    logger.debug(
+                                        "[MEDIA] click mapped to PLAY/PAUSE: pos=%s geom=%s local_x=%d local_y=%d x_in_content=%d width=%d content_left=%d content_right=%d third=%.2f",
+                                        event.pos(),
+                                        geom,
+                                        local_x,
+                                        local_y,
+                                        x_in_content,
+                                        width,
+                                        content_left,
+                                        content_right,
+                                        third,
+                                    )
+                                    mw.play_pause()
+                                    handled = True
+                                else:
+                                    logger.debug(
+                                        "[MEDIA] click mapped to NEXT: pos=%s geom=%s local_x=%d local_y=%d x_in_content=%d width=%d content_left=%d content_right=%d third=%.2f",
+                                        event.pos(),
+                                        geom,
+                                        local_x,
+                                        local_y,
+                                        x_in_content,
+                                        width,
+                                        content_left,
+                                        content_right,
+                                        third,
+                                    )
+                                    mw.next_track()
+                                    handled = True
+                            # else: Click is above controls row - don't handle as transport control
                         except Exception:
                             logger.debug("[MEDIA] left-click media routing failed", exc_info=True)
                     elif button == _Qt.MouseButton.RightButton:
@@ -4277,9 +4419,10 @@ class DisplayWidget(QWidget):
 
             # Reddit widget: map clicks to open links in the browser when
             # interaction mode is active. When hard-exit is disabled,
-            # Reddit clicks can also trigger a clean exit (controlled by
-            # the per-widget "exit_on_click" setting). In hard-exit mode
-            # the screensaver always remains active after the click.
+            # Reddit clicks trigger a clean exit (controlled by the per-widget
+            # "exit_on_click" setting). In hard-exit mode, we DEFER the browser
+            # open until the user actually exits - this avoids the edge case
+            # where Firefox gets stuck behind the screensaver.
             rw = getattr(self, "reddit_widget", None)
             try:
                 if (not handled) and rw is not None and rw.isVisible() and rw.geometry().contains(event.pos()):
@@ -4292,24 +4435,37 @@ class DisplayWidget(QWidget):
                     if _QPoint is not None:
                         local_pos = _QPoint(event.pos().x() - geom.x(), event.pos().y() - geom.y())
                     else:
-                        # Fallback: QRect.contains also accepts global-ish coords,
-                        # but handle_click expects something QPoint-like; pass
-                        # the original pos and let the widget ignore on failure.
                         local_pos = event.pos()
 
                     try:
-                        if hasattr(rw, "handle_click") and rw.handle_click(local_pos):
-                            handled = True
-                            reddit_handled = True
+                        hard_exit_enabled = self._is_hard_exit_enabled()
+                    except Exception:
+                        hard_exit_enabled = False
+
+                    try:
+                        if hasattr(rw, "handle_click"):
+                            # In hard-exit mode, defer the browser open to exit time
+                            if hard_exit_enabled:
+                                result = rw.handle_click(local_pos, deferred=True)
+                                if isinstance(result, str):
+                                    # Store the URL to open when user exits
+                                    self._pending_reddit_url = result
+                                    handled = True
+                                    reddit_handled = True
+                                    logger.info("[REDDIT] URL deferred for exit: %s", result)
+                            else:
+                                # Normal mode: open immediately
+                                if rw.handle_click(local_pos):
+                                    handled = True
+                                    reddit_handled = True
                     except Exception:
                         logger.debug("[REDDIT] click routing failed", exc_info=True)
             except Exception:
                 logger.debug("[REDDIT] Error while routing click to reddit widget", exc_info=True)
 
             if handled:
-                # Optionally request a clean exit after Reddit clicks when
-                # hard-exit mode is disabled and the widget is configured
-                # to exit-on-click.
+                # Request a clean exit after Reddit clicks when hard-exit mode
+                # is disabled and the widget is configured to exit-on-click.
                 should_exit = False
                 if reddit_handled and getattr(self, "_reddit_exit_on_click", True):
                     try:
@@ -4349,6 +4505,7 @@ class DisplayWidget(QWidget):
 
         logger.info(f"Mouse clicked at ({event.pos().x()}, {event.pos().y()}), requesting exit")
         self._exiting = True
+        self._open_pending_reddit_url()  # Open deferred URL before exit
         self.exit_requested.emit()
         event.accept()
     
@@ -4399,6 +4556,7 @@ class DisplayWidget(QWidget):
         if distance > self._mouse_move_threshold:
             logger.info(f"Mouse moved {distance:.1f} pixels, requesting exit")
             self._exiting = True
+            self._open_pending_reddit_url()  # Open deferred URL before exit
             self.exit_requested.emit()
         
         event.accept()
@@ -4501,11 +4659,19 @@ class DisplayWidget(QWidget):
             
             hard_exit = self._is_hard_exit_enabled()
             
+            # Get dimming state - use dot notation for settings
+            dimming_enabled = False
+            if self.settings_manager:
+                dimming_enabled = SettingsManager.to_bool(
+                    self.settings_manager.get("accessibility.dimming.enabled", False), False
+                )
+            
             # Create menu if needed (lazy init for performance)
             if self._context_menu is None:
                 self._context_menu = ScreensaverContextMenu(
                     parent=self,
                     current_transition=current_transition,
+                    dimming_enabled=dimming_enabled,
                     hard_exit_enabled=hard_exit,
                 )
                 # Connect signals
@@ -4513,11 +4679,13 @@ class DisplayWidget(QWidget):
                 self._context_menu.next_requested.connect(self.next_requested.emit)
                 self._context_menu.transition_selected.connect(self._on_context_transition_selected)
                 self._context_menu.settings_requested.connect(self.settings_requested.emit)
+                self._context_menu.dimming_toggled.connect(self._on_context_dimming_toggled)
                 self._context_menu.hard_exit_toggled.connect(self._on_context_hard_exit_toggled)
                 self._context_menu.exit_requested.connect(self._on_context_exit_requested)
             else:
                 # Update state before showing
                 self._context_menu.update_current_transition(current_transition)
+                self._context_menu.update_dimming_state(dimming_enabled)
                 self._context_menu.update_hard_exit_state(hard_exit)
             
             self._context_menu_active = True
@@ -4543,6 +4711,22 @@ class DisplayWidget(QWidget):
         except Exception:
             logger.debug("Failed to set transition from context menu", exc_info=True)
     
+    def _on_context_dimming_toggled(self, enabled: bool) -> None:
+        """Handle dimming toggle from context menu."""
+        try:
+            if self.settings_manager:
+                self.settings_manager.set("accessibility.dimming.enabled", enabled)
+                self.settings_manager.save()
+                logger.info("Context menu: dimming set to %s", enabled)
+            
+            # Update GL compositor dimming
+            self._dimming_enabled = enabled
+            comp = getattr(self, "_gl_compositor", None)
+            if comp is not None and hasattr(comp, "set_dimming"):
+                comp.set_dimming(enabled, self._dimming_opacity)
+        except Exception:
+            logger.debug("Failed to toggle dimming from context menu", exc_info=True)
+    
     def _on_context_hard_exit_toggled(self, enabled: bool) -> None:
         """Handle hard exit toggle from context menu."""
         try:
@@ -4557,7 +4741,25 @@ class DisplayWidget(QWidget):
         """Handle exit request from context menu."""
         logger.info("Context menu: exit requested")
         self._exiting = True
+        # Open any pending Reddit URL before exiting
+        self._open_pending_reddit_url()
         self.exit_requested.emit()
+    
+    def _open_pending_reddit_url(self) -> None:
+        """Open any pending Reddit URL that was deferred in hard-exit mode."""
+        try:
+            pending_url = getattr(self, "_pending_reddit_url", None)
+            if pending_url:
+                from PySide6.QtCore import QUrl
+                from PySide6.QtGui import QDesktopServices
+                from widgets.reddit_widget import _try_bring_reddit_window_to_front
+                
+                QDesktopServices.openUrl(QUrl(pending_url))
+                logger.info("[REDDIT] Opened deferred URL on exit: %s", pending_url)
+                _try_bring_reddit_window_to_front()
+                self._pending_reddit_url = None
+        except Exception as e:
+            logger.debug("[REDDIT] Failed to open deferred URL on exit: %s", e, exc_info=True)
 
     def focusOutEvent(self, event: QFocusEvent) -> None:  # type: ignore[override]
         """Diagnostic: log once if we lose focus while still visible.
@@ -4616,21 +4818,27 @@ class DisplayWidget(QWidget):
                             or getattr(owner, "_screen", None) is not cursor_screen
                         )
                         if screen_changed:
-                            try:
-                                widgets = QApplication.topLevelWidgets()
-                            except Exception:
-                                widgets = []
-
-                            new_owner = None
-                            for w in widgets:
+                            # PERF: Use cached lookup instead of iterating topLevelWidgets
+                            new_owner = DisplayWidget._instances_by_screen.get(cursor_screen)
+                            
+                            # Fallback to iteration only if cache miss (shouldn't happen)
+                            if new_owner is None:
                                 try:
-                                    if not isinstance(w, DisplayWidget):
-                                        continue
-                                    if getattr(w, "_screen", None) is cursor_screen:
-                                        new_owner = w
-                                        break
+                                    widgets = QApplication.topLevelWidgets()
                                 except Exception:
-                                    continue
+                                    widgets = []
+
+                                for w in widgets:
+                                    try:
+                                        if not isinstance(w, DisplayWidget):
+                                            continue
+                                        if getattr(w, "_screen", None) is cursor_screen:
+                                            new_owner = w
+                                            # Update cache for future lookups
+                                            DisplayWidget._instances_by_screen[cursor_screen] = w
+                                            break
+                                    except Exception:
+                                        continue
 
                             if new_owner is None:
                                 new_owner = owner or self
@@ -4665,10 +4873,30 @@ class DisplayWidget(QWidget):
                             # DisplayWidget, without requiring Ctrl to be
                             # held. On the first move we trigger a fade-in;
                             # subsequent moves just reposition the halo.
-                            if hard_exit and DisplayWidget._halo_owner is None:
-                                DisplayWidget._halo_owner = owner
-                                owner._show_ctrl_cursor_hint(local_pos, mode="fade_in")
-                            else:
+                            #
+                            # IMPORTANT: Check hard_exit on the OWNER widget, not self,
+                            # because multiple DisplayWidgets install eventFilters and
+                            # self might not be the widget under the cursor.
+                            owner_hard_exit = False
+                            try:
+                                owner_hard_exit = owner._is_hard_exit_enabled()
+                            except Exception:
+                                owner_hard_exit = hard_exit  # fallback to self's value
+                            
+                            hint = getattr(owner, "_ctrl_cursor_hint", None)
+                            halo_hidden = hint is None or not hint.isVisible()
+                            
+                            # In hard exit mode, always show halo on mouse move
+                            if owner_hard_exit:
+                                if DisplayWidget._halo_owner is None or halo_hidden:
+                                    # Fade in if halo owner not set OR if halo is hidden
+                                    DisplayWidget._halo_owner = owner
+                                    owner._show_ctrl_cursor_hint(local_pos, mode="fade_in")
+                                else:
+                                    # Just reposition
+                                    owner._show_ctrl_cursor_hint(local_pos, mode="none")
+                            elif DisplayWidget._global_ctrl_held:
+                                # Ctrl mode - show/reposition halo
                                 owner._show_ctrl_cursor_hint(local_pos, mode="none")
 
                             # Forward halo hover position to the Reddit
