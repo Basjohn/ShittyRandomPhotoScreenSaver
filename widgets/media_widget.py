@@ -15,7 +15,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtWidgets import QLabel, QWidget
+from PySide6.QtWidgets import QWidget
 from PySide6.QtCore import QTimer, Qt, Signal, QVariantAnimation, QEasingCurve, QRect
 from PySide6.QtGui import QFont, QColor, QPixmap, QPainter, QPainterPath, QFontMetrics
 from shiboken6 import Shiboken
@@ -28,7 +28,8 @@ from core.media.media_controller import (
     create_media_controller,
 )
 from core.threading.manager import ThreadManager
-from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile, configure_overlay_widget_attributes
+from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
+from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 
 logger = get_logger(__name__)
@@ -43,8 +44,10 @@ class MediaPosition(Enum):
     BOTTOM_RIGHT = "bottom_right"
 
 
-class MediaWidget(QLabel):
+class MediaWidget(BaseOverlayWidget):
     """Media widget for displaying current playback information.
+
+    Extends BaseOverlayWidget for common styling/positioning functionality.
 
     Features:
     - Polls a centralized media controller for current track info
@@ -54,6 +57,9 @@ class MediaWidget(QLabel):
     """
 
     media_updated = Signal(dict)  # Emits dict(MediaTrackInfo) when refreshed
+    
+    # Override defaults for media widget
+    DEFAULT_FONT_SIZE = 20
 
     def __init__(
         self,
@@ -61,9 +67,11 @@ class MediaWidget(QLabel):
         position: MediaPosition = MediaPosition.BOTTOM_LEFT,
         controller: Optional[BaseMediaController] = None,
     ) -> None:
-        super().__init__(parent)
+        # Convert MediaPosition to OverlayPosition for base class
+        overlay_pos = OverlayPosition(position.value)
+        super().__init__(parent, position=overlay_pos, overlay_name="media")
 
-        self._position = position
+        self._media_position = position  # Keep original enum for compatibility
         self._controller: BaseMediaController = controller or create_media_controller()
         try:
             logger.info("[MEDIA_WIDGET] Using controller: %s", type(self._controller).__name__)
@@ -72,24 +80,12 @@ class MediaWidget(QLabel):
 
         self._update_timer: Optional[QTimer] = None
         self._update_timer_handle: Optional[OverlayTimerHandle] = None
-        self._enabled = False
-        self._thread_manager = None
         self._refresh_in_flight = False
         self._pending_state_override: Optional[MediaPlaybackState] = None
         self._pending_state_timer: Optional[QTimer] = None
 
-        # Styling defaults (mirrors general widget style)
-        self._font_family = "Segoe UI"
+        # Override base class font size default
         self._font_size = 20
-        self._text_color = QColor(255, 255, 255, 230)
-        self._margin = 20
-
-        # Background frame settings
-        self._show_background = False
-        self._bg_opacity = 0.9
-        self._bg_color = QColor(64, 64, 64, int(255 * self._bg_opacity))
-        self._bg_border_width = 2
-        self._bg_border_color = QColor(128, 128, 128, 200)
 
         # Album artwork state (optional)
         self._artwork_pixmap: Optional[QPixmap] = None
@@ -148,8 +144,8 @@ class MediaWidget(QLabel):
     # Lifecycle
     # ------------------------------------------------------------------
     def _setup_ui(self) -> None:
-        # Configure attributes to prevent flicker with GL compositor
-        configure_overlay_widget_attributes(self)
+        # Use base class styling setup
+        self._apply_base_styling()
         
         # Align content to the top-left so the header/logo sit close to the
         # top edge rather than vertically centered in the card.
@@ -173,10 +169,10 @@ class MediaWidget(QLabel):
         # Tie the default minimum height to the configured artwork size so
         # the widget does not "jump" in height once artwork is decoded.
         self.setMinimumHeight(max(220, self._artwork_size + 60))
-
-        self._update_stylesheet()
-
-        self.hide()
+    
+    def _update_content(self) -> None:
+        """Required by BaseOverlayWidget - refresh media display."""
+        self._refresh_media()
 
     def start(self) -> None:
         """Begin polling media controller and showing widget."""
@@ -268,17 +264,18 @@ class MediaWidget(QLabel):
             return
 
         edge_margin = max(0, int(self._margin))
+        pos = self._media_position
 
-        if self._position == MediaPosition.TOP_LEFT:
+        if pos == MediaPosition.TOP_LEFT:
             x = edge_margin
             y = edge_margin
-        elif self._position == MediaPosition.TOP_RIGHT:
+        elif pos == MediaPosition.TOP_RIGHT:
             x = parent_width - widget_width - edge_margin
             y = edge_margin
-        elif self._position == MediaPosition.BOTTOM_LEFT:
+        elif pos == MediaPosition.BOTTOM_LEFT:
             x = edge_margin
             y = parent_height - widget_height - edge_margin
-        elif self._position == MediaPosition.BOTTOM_RIGHT:
+        elif pos == MediaPosition.BOTTOM_RIGHT:
             x = parent_width - widget_width - edge_margin
             y = parent_height - widget_height - edge_margin
         else:
@@ -388,56 +385,12 @@ class MediaWidget(QLabel):
                 """
             )
 
-    def set_font_family(self, family: str) -> None:
-        self._font_family = family
-        font = QFont(self._font_family, self._font_size, QFont.Weight.Normal)
-        self.setFont(font)
-
-    def set_font_size(self, size: int) -> None:
-        if size <= 0:
-            logger.warning("[FALLBACK] Invalid media widget font size %s, using 20", size)
-            size = 20
-        self._font_size = size
-        font = QFont(self._font_family, self._font_size, QFont.Weight.Normal)
-        self.setFont(font)
-
-    def set_text_color(self, color: QColor) -> None:
-        self._text_color = color
-        self._update_stylesheet()
-
-    def set_show_background(self, show: bool) -> None:
-        self._show_background = bool(show)
-        self._update_stylesheet()
-
-    def set_background_color(self, color: QColor) -> None:
-        self._bg_color = color
-        if self._show_background:
-            self._update_stylesheet()
-
-    def set_background_opacity(self, opacity: float) -> None:
-        self._bg_opacity = max(0.0, min(1.0, opacity))
-        self._bg_color.setAlpha(int(255 * self._bg_opacity))
-        if self._show_background:
-            self._update_stylesheet()
-
-    def set_background_border(self, width: int, color: QColor) -> None:
-        self._bg_border_width = max(0, int(width))
-        self._bg_border_color = color
-        if self._show_background:
-            self._update_stylesheet()
-
-    def set_margin(self, margin: int) -> None:
-        if margin < 0:
-            logger.warning("[FALLBACK] Invalid media widget margin %s, using 20", margin)
-            margin = 20
-        self._margin = margin
-        if self._enabled:
-            self._update_position()
-
     def set_position(self, position: MediaPosition) -> None:
-        self._position = position
-        if self._enabled:
-            self._update_position()
+        """Set widget position using MediaPosition enum."""
+        self._media_position = position
+        # Update base class position
+        overlay_pos = OverlayPosition(position.value)
+        super().set_position(overlay_pos)
 
     def set_artwork_size(self, size: int) -> None:
         """Set preferred artwork size in pixels and refresh layout."""

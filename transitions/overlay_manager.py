@@ -312,10 +312,13 @@ def raise_overlay(widget: QWidget, overlay: QWidget) -> None:
         pass
 
     try:
-        # Reddit widget should stay above transition overlays.
+        # Reddit widgets should stay above transition overlays.
         reddit = getattr(widget, "reddit_widget", None)
         if reddit is not None:
             reddit.raise_()
+        reddit2 = getattr(widget, "reddit2_widget", None)
+        if reddit2 is not None:
+            reddit2.raise_()
     except Exception:
         pass
 

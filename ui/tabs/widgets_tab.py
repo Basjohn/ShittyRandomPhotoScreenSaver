@@ -8,7 +8,7 @@ Allows users to configure overlay widgets:
 from typing import Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QSpinBox, QGroupBox, QCheckBox, QLineEdit, QColorDialog, QPushButton,
+    QSpinBox, QGroupBox, QCheckBox, QLineEdit, QPushButton,
     QScrollArea, QSlider, QCompleter, QFontComboBox, QButtonGroup
 )
 from PySide6.QtCore import Signal, Qt
@@ -16,6 +16,8 @@ from PySide6.QtGui import QColor, QFont
 
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger
+from ui.styled_popup import StyledColorPicker
+from ui.widget_stack_predictor import WidgetType, get_position_status_for_widget
 from widgets.timezone_utils import get_local_timezone, get_common_timezones
 
 logger = get_logger(__name__)
@@ -163,6 +165,7 @@ class WidgetsTab(QWidget):
         # Enable clock
         self.clock_enabled = QCheckBox("Enable Clock")
         self.clock_enabled.stateChanged.connect(self._save_settings)
+        self.clock_enabled.stateChanged.connect(self._update_stack_status)
         clock_layout.addWidget(self.clock_enabled)
         
         # Time format
@@ -178,6 +181,7 @@ class WidgetsTab(QWidget):
         # Show seconds
         self.clock_seconds = QCheckBox("Show Seconds")
         self.clock_seconds.stateChanged.connect(self._save_settings)
+        self.clock_seconds.stateChanged.connect(self._update_stack_status)
         clock_layout.addWidget(self.clock_seconds)
         
         # Timezone
@@ -202,6 +206,7 @@ class WidgetsTab(QWidget):
         # Show timezone abbreviation
         self.clock_show_tz = QCheckBox("Show Timezone Abbreviation")
         self.clock_show_tz.stateChanged.connect(self._save_settings)
+        self.clock_show_tz.stateChanged.connect(self._update_stack_status)
         clock_layout.addWidget(self.clock_show_tz)
 
         # Analogue mode options
@@ -210,6 +215,7 @@ class WidgetsTab(QWidget):
             "Render the main clock as an analogue clock face with hour/minute/second hands."
         )
         self.clock_analog_mode.stateChanged.connect(self._save_settings)
+        self.clock_analog_mode.stateChanged.connect(self._update_stack_status)
         clock_layout.addWidget(self.clock_analog_mode)
 
         self.clock_analog_shadow = QCheckBox("Analogue Face Shadow")
@@ -233,7 +239,11 @@ class WidgetsTab(QWidget):
             "Bottom Left", "Bottom Center", "Bottom Right"
         ])
         self.clock_position.currentTextChanged.connect(self._save_settings)
+        self.clock_position.currentTextChanged.connect(self._update_stack_status)
         position_row.addWidget(self.clock_position)
+        self.clock_stack_status = QLabel("")
+        self.clock_stack_status.setMinimumWidth(100)
+        position_row.addWidget(self.clock_stack_status)
         position_row.addStretch()
         clock_layout.addLayout(position_row)
 
@@ -243,6 +253,7 @@ class WidgetsTab(QWidget):
         self.clock_monitor_combo = QComboBox()
         self.clock_monitor_combo.addItems(["ALL", "1", "2", "3"])  # monitor indices are 1-based
         self.clock_monitor_combo.currentTextChanged.connect(self._save_settings)
+        self.clock_monitor_combo.currentTextChanged.connect(self._update_stack_status)
         clock_disp_row.addWidget(self.clock_monitor_combo)
         clock_disp_row.addStretch()
         clock_layout.addLayout(clock_disp_row)
@@ -266,6 +277,7 @@ class WidgetsTab(QWidget):
         self.clock_font_size.setValue(48)
         self.clock_font_size.setAccelerated(True)
         self.clock_font_size.valueChanged.connect(self._save_settings)
+        self.clock_font_size.valueChanged.connect(self._update_stack_status)
         font_row.addWidget(self.clock_font_size)
         font_row.addWidget(QLabel("px"))
         font_row.addStretch()
@@ -357,6 +369,7 @@ class WidgetsTab(QWidget):
         clock2_row = QHBoxLayout()
         self.clock2_enabled = QCheckBox("Enable Clock 2")
         self.clock2_enabled.stateChanged.connect(self._save_settings)
+        self.clock2_enabled.stateChanged.connect(self._update_stack_status)
         clock2_row.addWidget(self.clock2_enabled)
         clock2_row.addWidget(QLabel("Display:"))
         self.clock2_monitor_combo = QComboBox()
@@ -375,6 +388,7 @@ class WidgetsTab(QWidget):
         clock3_row = QHBoxLayout()
         self.clock3_enabled = QCheckBox("Enable Clock 3")
         self.clock3_enabled.stateChanged.connect(self._save_settings)
+        self.clock3_enabled.stateChanged.connect(self._update_stack_status)
         clock3_row.addWidget(self.clock3_enabled)
         clock3_row.addWidget(QLabel("Display:"))
         self.clock3_monitor_combo = QComboBox()
@@ -401,8 +415,9 @@ class WidgetsTab(QWidget):
         weather_layout = QVBoxLayout(weather_group)
         
         # Enable weather
-        self.weather_enabled = QCheckBox("Enable Weather")
+        self.weather_enabled = QCheckBox("Enable Weather Widget")
         self.weather_enabled.stateChanged.connect(self._save_settings)
+        self.weather_enabled.stateChanged.connect(self._update_stack_status)
         weather_layout.addWidget(self.weather_enabled)
         
         # Info label - no API key needed!
@@ -457,7 +472,11 @@ class WidgetsTab(QWidget):
             "Bottom Left", "Bottom Right"
         ])
         self.weather_position.currentTextChanged.connect(self._save_settings)
+        self.weather_position.currentTextChanged.connect(self._update_stack_status)
         weather_pos_row.addWidget(self.weather_position)
+        self.weather_stack_status = QLabel("")
+        self.weather_stack_status.setMinimumWidth(100)
+        weather_pos_row.addWidget(self.weather_stack_status)
         weather_pos_row.addStretch()
         weather_layout.addLayout(weather_pos_row)
 
@@ -467,6 +486,7 @@ class WidgetsTab(QWidget):
         self.weather_monitor_combo = QComboBox()
         self.weather_monitor_combo.addItems(["ALL", "1", "2", "3"])  # monitor indices are 1-based
         self.weather_monitor_combo.currentTextChanged.connect(self._save_settings)
+        self.weather_monitor_combo.currentTextChanged.connect(self._update_stack_status)
         weather_disp_row.addWidget(self.weather_monitor_combo)
         weather_disp_row.addStretch()
         weather_layout.addLayout(weather_disp_row)
@@ -488,6 +508,7 @@ class WidgetsTab(QWidget):
         self.weather_font_size.setValue(24)
         self.weather_font_size.setAccelerated(True)
         self.weather_font_size.valueChanged.connect(self._save_settings)
+        self.weather_font_size.valueChanged.connect(self._update_stack_status)
         weather_font_row.addWidget(self.weather_font_size)
         weather_font_row.addWidget(QLabel("px"))
         weather_font_row.addStretch()
@@ -501,6 +522,13 @@ class WidgetsTab(QWidget):
         weather_color_row.addWidget(self.weather_color_btn)
         weather_color_row.addStretch()
         weather_layout.addLayout(weather_color_row)
+        
+        # Show forecast line
+        self.weather_show_forecast = QCheckBox("Show Forecast Line")
+        self.weather_show_forecast.setToolTip("Display tomorrow's forecast below current weather")
+        self.weather_show_forecast.stateChanged.connect(self._save_settings)
+        self.weather_show_forecast.stateChanged.connect(self._update_stack_status)
+        weather_layout.addWidget(self.weather_show_forecast)
         
         # Background frame
         self.weather_show_background = QCheckBox("Show Background Frame")
@@ -574,6 +602,7 @@ class WidgetsTab(QWidget):
             "Shows current Spotify playback using Windows media controls when available."
         )
         self.media_enabled.stateChanged.connect(self._save_settings)
+        self.media_enabled.stateChanged.connect(self._update_stack_status)
         media_layout.addWidget(self.media_enabled)
 
         media_info = QLabel(
@@ -592,7 +621,11 @@ class WidgetsTab(QWidget):
             "Bottom Left", "Bottom Right",
         ])
         self.media_position.currentTextChanged.connect(self._save_settings)
+        self.media_position.currentTextChanged.connect(self._update_stack_status)
         media_pos_row.addWidget(self.media_position)
+        self.media_stack_status = QLabel("")
+        self.media_stack_status.setMinimumWidth(100)
+        media_pos_row.addWidget(self.media_stack_status)
         media_pos_row.addStretch()
         media_layout.addLayout(media_pos_row)
 
@@ -601,6 +634,7 @@ class WidgetsTab(QWidget):
         self.media_monitor_combo = QComboBox()
         self.media_monitor_combo.addItems(["ALL", "1", "2", "3"])
         self.media_monitor_combo.currentTextChanged.connect(self._save_settings)
+        self.media_monitor_combo.currentTextChanged.connect(self._update_stack_status)
         media_disp_row.addWidget(self.media_monitor_combo)
         media_disp_row.addStretch()
         media_layout.addLayout(media_disp_row)
@@ -622,6 +656,7 @@ class WidgetsTab(QWidget):
         self.media_font_size.setValue(20)
         self.media_font_size.setAccelerated(True)
         self.media_font_size.valueChanged.connect(self._save_settings)
+        self.media_font_size.valueChanged.connect(self._update_stack_status)
         media_font_row.addWidget(self.media_font_size)
         media_font_row.addWidget(QLabel("px"))
         media_font_row.addStretch()
@@ -719,6 +754,7 @@ class WidgetsTab(QWidget):
         self.media_artwork_size.setValue(200)
         self.media_artwork_size.setAccelerated(True)
         self.media_artwork_size.valueChanged.connect(self._save_settings)
+        self.media_artwork_size.valueChanged.connect(self._update_stack_status)
         media_artwork_row.addWidget(self.media_artwork_size)
         media_artwork_row.addWidget(QLabel("px"))
         media_artwork_row.addStretch()
@@ -885,6 +921,7 @@ class WidgetsTab(QWidget):
             "Shows a small list of posts from a subreddit using Reddit's public JSON feed."
         )
         self.reddit_enabled.stateChanged.connect(self._save_settings)
+        self.reddit_enabled.stateChanged.connect(self._update_stack_status)
         reddit_layout.addWidget(self.reddit_enabled)
 
         reddit_info = QLabel(
@@ -915,6 +952,7 @@ class WidgetsTab(QWidget):
         # Expose a "4"-item mode (formerly labelled "5") plus a 10-item mode.
         self.reddit_items.addItems(["4", "10"])
         self.reddit_items.currentTextChanged.connect(self._save_settings)
+        self.reddit_items.currentTextChanged.connect(self._update_stack_status)
         reddit_items_row.addWidget(self.reddit_items)
         reddit_items_row.addStretch()
         reddit_layout.addLayout(reddit_items_row)
@@ -928,7 +966,11 @@ class WidgetsTab(QWidget):
             "Bottom Left", "Bottom Right",
         ])
         self.reddit_position.currentTextChanged.connect(self._save_settings)
+        self.reddit_position.currentTextChanged.connect(self._update_stack_status)
         reddit_pos_row.addWidget(self.reddit_position)
+        self.reddit_stack_status = QLabel("")
+        self.reddit_stack_status.setMinimumWidth(100)
+        reddit_pos_row.addWidget(self.reddit_stack_status)
         reddit_pos_row.addStretch()
         reddit_layout.addLayout(reddit_pos_row)
 
@@ -938,6 +980,7 @@ class WidgetsTab(QWidget):
         self.reddit_monitor_combo = QComboBox()
         self.reddit_monitor_combo.addItems(["ALL", "1", "2", "3"])
         self.reddit_monitor_combo.currentTextChanged.connect(self._save_settings)
+        self.reddit_monitor_combo.currentTextChanged.connect(self._update_stack_status)
         reddit_disp_row.addWidget(self.reddit_monitor_combo)
         reddit_disp_row.addStretch()
         reddit_layout.addLayout(reddit_disp_row)
@@ -961,6 +1004,7 @@ class WidgetsTab(QWidget):
         self.reddit_font_size.setValue(18)
         self.reddit_font_size.setAccelerated(True)
         self.reddit_font_size.valueChanged.connect(self._save_settings)
+        self.reddit_font_size.valueChanged.connect(self._update_stack_status)
         reddit_font_row.addWidget(self.reddit_font_size)
         reddit_font_row.addWidget(QLabel("px"))
         reddit_font_row.addStretch()
@@ -1053,6 +1097,46 @@ class WidgetsTab(QWidget):
         )
         reddit_border_opacity_row.addWidget(self.reddit_border_opacity_label)
         reddit_layout.addLayout(reddit_border_opacity_row)
+
+        # Reddit 2 - simplified second widget (subreddit + items only, inherits rest)
+        reddit2_label = QLabel("Reddit 2 (inherits styling from Reddit 1):")
+        reddit2_label.setStyleSheet("color: #aaaaaa; font-size: 11px; margin-top: 8px;")
+        reddit_layout.addWidget(reddit2_label)
+        
+        reddit2_row = QHBoxLayout()
+        self.reddit2_enabled = QCheckBox("Enable Reddit 2")
+        self.reddit2_enabled.stateChanged.connect(self._save_settings)
+        self.reddit2_enabled.stateChanged.connect(self._update_stack_status)
+        reddit2_row.addWidget(self.reddit2_enabled)
+        reddit2_row.addWidget(QLabel("Subreddit:"))
+        self.reddit2_subreddit = QLineEdit()
+        self.reddit2_subreddit.setPlaceholderText("e.g. earthporn")
+        self.reddit2_subreddit.textChanged.connect(self._save_settings)
+        self.reddit2_subreddit.setMaximumWidth(150)
+        reddit2_row.addWidget(self.reddit2_subreddit)
+        reddit2_row.addWidget(QLabel("Items:"))
+        self.reddit2_items = QComboBox()
+        self.reddit2_items.addItems(["4", "10"])
+        self.reddit2_items.currentTextChanged.connect(self._save_settings)
+        self.reddit2_items.currentTextChanged.connect(self._update_stack_status)
+        reddit2_row.addWidget(self.reddit2_items)
+        reddit2_row.addWidget(QLabel("Position:"))
+        self.reddit2_position = QComboBox()
+        self.reddit2_position.addItems(["Top Left", "Top Right", "Bottom Left", "Bottom Right"])
+        self.reddit2_position.currentTextChanged.connect(self._save_settings)
+        self.reddit2_position.currentTextChanged.connect(self._update_stack_status)
+        reddit2_row.addWidget(self.reddit2_position)
+        self.reddit2_stack_status = QLabel("")
+        self.reddit2_stack_status.setMinimumWidth(80)
+        reddit2_row.addWidget(self.reddit2_stack_status)
+        reddit2_row.addWidget(QLabel("Display:"))
+        self.reddit2_monitor_combo = QComboBox()
+        self.reddit2_monitor_combo.addItems(["ALL", "1", "2", "3"])
+        self.reddit2_monitor_combo.currentTextChanged.connect(self._save_settings)
+        self.reddit2_monitor_combo.currentTextChanged.connect(self._update_stack_status)
+        reddit2_row.addWidget(self.reddit2_monitor_combo)
+        reddit2_row.addStretch()
+        reddit_layout.addLayout(reddit2_row)
 
         self._reddit_container = QWidget()
         reddit_container_layout = QVBoxLayout(self._reddit_container)
@@ -1186,6 +1270,7 @@ class WidgetsTab(QWidget):
                 getattr(self, 'weather_position', None),
                 getattr(self, 'weather_font_combo', None),
                 getattr(self, 'weather_font_size', None),
+                getattr(self, 'weather_show_forecast', None),
                 getattr(self, 'weather_show_background', None),
                 getattr(self, 'weather_bg_opacity', None),
                 getattr(self, 'weather_bg_color_btn', None),
@@ -1228,6 +1313,11 @@ class WidgetsTab(QWidget):
                 getattr(self, 'reddit_color_btn', None),
                 getattr(self, 'reddit_border_color_btn', None),
                 getattr(self, 'reddit_border_opacity', None),
+                getattr(self, 'reddit2_enabled', None),
+                getattr(self, 'reddit2_subreddit', None),
+                getattr(self, 'reddit2_items', None),
+                getattr(self, 'reddit2_position', None),
+                getattr(self, 'reddit2_monitor_combo', None),
                 getattr(self, 'reddit_exit_on_click', None),
             ]:
                 if w is not None and hasattr(w, 'blockSignals'):
@@ -1374,6 +1464,7 @@ class WidgetsTab(QWidget):
             
             self.weather_font_combo.setCurrentFont(QFont(weather_config.get('font_family', 'Segoe UI')))
             self.weather_font_size.setValue(weather_config.get('font_size', 24))
+            self.weather_show_forecast.setChecked(weather_config.get('show_forecast', False))
             self.weather_show_background.setChecked(weather_config.get('show_background', False))
             weather_opacity_pct = int(weather_config.get('bg_opacity', 0.9) * 100)
             self.weather_bg_opacity.setValue(weather_opacity_pct)
@@ -1614,134 +1705,151 @@ class WidgetsTab(QWidget):
                 self._reddit_border_color = QColor(*reddit_border_color_data)
             except Exception:
                 self._reddit_border_color = QColor(255, 255, 255, 255)
+            
+            # Reddit 2 settings
+            reddit2_config = widgets.get('reddit2', {})
+            self.reddit2_enabled.setChecked(SettingsManager.to_bool(reddit2_config.get('enabled', False), False))
+            self.reddit2_subreddit.setText(reddit2_config.get('subreddit', ''))
+            reddit2_limit = reddit2_config.get('limit', 4)
+            reddit2_items_idx = self.reddit2_items.findText(str(reddit2_limit))
+            if reddit2_items_idx >= 0:
+                self.reddit2_items.setCurrentIndex(reddit2_items_idx)
+            reddit2_pos = reddit2_config.get('position', 'Top Left')
+            reddit2_pos_idx = self.reddit2_position.findText(reddit2_pos)
+            if reddit2_pos_idx >= 0:
+                self.reddit2_position.setCurrentIndex(reddit2_pos_idx)
+            reddit2_monitor = reddit2_config.get('monitor', 'ALL')
+            reddit2_mon_text = str(reddit2_monitor) if isinstance(reddit2_monitor, (int, str)) else 'ALL'
+            reddit2_mon_idx = self.reddit2_monitor_combo.findText(reddit2_mon_text)
+            if reddit2_mon_idx >= 0:
+                self.reddit2_monitor_combo.setCurrentIndex(reddit2_mon_idx)
         finally:
             for w in blockers:
                 try:
                     w.blockSignals(False)
                 except Exception:
                     pass
+        
+        # Update stack status labels after loading settings
+        try:
+            self._update_stack_status()
+        except Exception:
+            pass
 
     def _choose_clock_color(self) -> None:
         """Choose clock text color."""
-        color = QColorDialog.getColor(self._clock_color, self, "Choose Clock Color")
-        if color.isValid():
+        color = StyledColorPicker.get_color(self._clock_color, self, "Choose Clock Color")
+        if color is not None:
             self._clock_color = color
             self._save_settings()
     
     def _choose_clock_bg_color(self) -> None:
         """Choose clock background color."""
-        color = QColorDialog.getColor(self._clock_bg_color, self, "Choose Clock Background Color")
-        if color.isValid():
+        color = StyledColorPicker.get_color(self._clock_bg_color, self, "Choose Clock Background Color")
+        if color is not None:
             self._clock_bg_color = color
             self._save_settings()
     
     def _choose_clock_border_color(self) -> None:
         """Choose clock border color."""
-        color = QColorDialog.getColor(self._clock_border_color, self, "Choose Clock Border Color")
-        if color.isValid():
+        color = StyledColorPicker.get_color(self._clock_border_color, self, "Choose Clock Border Color")
+        if color is not None:
             self._clock_border_color = color
             self._save_settings()
     
     def _choose_weather_color(self) -> None:
         """Choose weather text color."""
-        color = QColorDialog.getColor(self._weather_color, self, "Choose Weather Color")
-        if color.isValid():
+        color = StyledColorPicker.get_color(self._weather_color, self, "Choose Weather Color")
+        if color is not None:
             self._weather_color = color
             self._save_settings()
     
     def _choose_weather_bg_color(self) -> None:
         """Choose weather background color."""
-        color = QColorDialog.getColor(self._weather_bg_color, self, "Choose Weather Background Color")
-        if color.isValid():
+        color = StyledColorPicker.get_color(self._weather_bg_color, self, "Choose Weather Background Color")
+        if color is not None:
             self._weather_bg_color = color
             self._save_settings()
 
     def _choose_weather_border_color(self) -> None:
         """Choose weather border color."""
-        color = QColorDialog.getColor(self._weather_border_color, self, "Choose Weather Border Color")
-        if color.isValid():
+        color = StyledColorPicker.get_color(self._weather_border_color, self, "Choose Weather Border Color")
+        if color is not None:
             self._weather_border_color = color
             self._save_settings()
     
     def _choose_media_color(self) -> None:
         """Choose media text color."""
-        color = QColorDialog.getColor(self._media_color, self, "Choose Spotify Color")
-        if color.isValid():
+        color = StyledColorPicker.get_color(self._media_color, self, "Choose Spotify Color")
+        if color is not None:
             self._media_color = color
             self._save_settings()
 
     def _choose_media_bg_color(self) -> None:
         """Choose media background color."""
-        color = QColorDialog.getColor(self._media_bg_color, self, "Choose Spotify Background Color")
-        if color.isValid():
+        color = StyledColorPicker.get_color(self._media_bg_color, self, "Choose Spotify Background Color")
+        if color is not None:
             self._media_bg_color = color
             self._save_settings()
 
     def _choose_media_border_color(self) -> None:
         """Choose media border color."""
-
-        color = QColorDialog.getColor(self._media_border_color, self, "Choose Spotify Border Color")
-        if color.isValid():
+        color = StyledColorPicker.get_color(self._media_border_color, self, "Choose Spotify Border Color")
+        if color is not None:
             self._media_border_color = color
             self._save_settings()
 
     def _choose_media_volume_fill_color(self) -> None:
         """Choose Spotify volume slider fill color."""
-
-        color = QColorDialog.getColor(
+        color = StyledColorPicker.get_color(
             getattr(self, "_media_volume_fill_color", self._media_color),
             self,
             "Choose Spotify Volume Fill Color",
         )
-        if color.isValid():
+        if color is not None:
             self._media_volume_fill_color = color
             self._save_settings()
 
     def _choose_spotify_vis_fill_color(self) -> None:
         """Choose Spotify Beat Visualizer bar fill color."""
-
-        color = QColorDialog.getColor(
+        color = StyledColorPicker.get_color(
             self._spotify_vis_fill_color,
             self,
             "Choose Beat Bar Fill Color",
         )
-        if color.isValid():
+        if color is not None:
             self._spotify_vis_fill_color = color
             self._save_settings()
 
     def _choose_spotify_vis_border_color(self) -> None:
         """Choose Spotify Beat Visualizer bar border color."""
-
-        color = QColorDialog.getColor(
+        color = StyledColorPicker.get_color(
             self._spotify_vis_border_color,
             self,
             "Choose Beat Bar Border Color",
         )
-        if color.isValid():
+        if color is not None:
             self._spotify_vis_border_color = color
             self._save_settings()
 
     def _choose_reddit_color(self) -> None:
         """Choose Reddit text color."""
-
-        color = QColorDialog.getColor(self._reddit_color, self, "Choose Reddit Color")
-        if color.isValid():
+        color = StyledColorPicker.get_color(self._reddit_color, self, "Choose Reddit Color")
+        if color is not None:
             self._reddit_color = color
             self._save_settings()
 
     def _choose_reddit_bg_color(self) -> None:
         """Choose Reddit background color."""
-
-        color = QColorDialog.getColor(self._reddit_bg_color, self, "Choose Reddit Background Color")
-        if color.isValid():
+        color = StyledColorPicker.get_color(self._reddit_bg_color, self, "Choose Reddit Background Color")
+        if color is not None:
             self._reddit_bg_color = color
             self._save_settings()
 
     def _choose_reddit_border_color(self) -> None:
         """Choose Reddit border color."""
-
-        color = QColorDialog.getColor(self._reddit_border_color, self, "Choose Reddit Border Color")
-        if color.isValid():
+        color = StyledColorPicker.get_color(self._reddit_border_color, self, "Choose Reddit Border Color")
+        if color is not None:
             self._reddit_border_color = color
             self._save_settings()
     
@@ -1787,6 +1895,7 @@ class WidgetsTab(QWidget):
             'position': self.weather_position.currentText(),
             'font_family': self.weather_font_combo.currentFont().family(),
             'font_size': self.weather_font_size.value(),
+            'show_forecast': self.weather_show_forecast.isChecked(),
             'show_background': self.weather_show_background.isChecked(),
             'bg_opacity': self.weather_bg_opacity.value() / 100.0,
             'color': [self._weather_color.red(), self._weather_color.green(), 
@@ -1913,6 +2022,20 @@ class WidgetsTab(QWidget):
         c3mon_text = self.clock3_monitor_combo.currentText()
         clock3_config['monitor'] = c3mon_text if c3mon_text == 'ALL' else int(c3mon_text)
 
+        # Reddit 2 config (inherits styling from Reddit 1)
+        try:
+            reddit2_limit = int(self.reddit2_items.currentText())
+        except Exception:
+            reddit2_limit = 4
+        reddit2_config = {
+            'enabled': self.reddit2_enabled.isChecked(),
+            'subreddit': self.reddit2_subreddit.text().strip(),
+            'limit': reddit2_limit,
+            'position': self.reddit2_position.currentText(),
+        }
+        r2mon_text = self.reddit2_monitor_combo.currentText()
+        reddit2_config['monitor'] = r2mon_text if r2mon_text == 'ALL' else int(r2mon_text)
+
         existing_widgets = self._settings.get('widgets', {})
         if not isinstance(existing_widgets, dict):
             existing_widgets = {}
@@ -1932,6 +2055,7 @@ class WidgetsTab(QWidget):
         existing_widgets['media'] = media_config
         existing_widgets['spotify_visualizer'] = spotify_vis_config
         existing_widgets['reddit'] = reddit_config
+        existing_widgets['reddit2'] = reddit2_config
 
         self._settings.set('widgets', existing_widgets)
         self._settings.save()
@@ -1966,3 +2090,134 @@ class WidgetsTab(QWidget):
         
         # Save settings with new timezone
         self._save_settings()
+    
+    def _update_stack_status(self) -> None:
+        """Update all widget stack status labels based on current settings.
+        
+        This is called when any position combo changes. It recalculates
+        stacking predictions for all widgets and updates their status labels.
+        """
+        try:
+            # Build current settings from UI state (not saved yet)
+            widgets_config = self._build_current_widgets_config()
+            
+            # Define widget status label mappings
+            status_mappings = [
+                (WidgetType.CLOCK, 'clock_stack_status', 'clock_position', 'clock_monitor_combo'),
+                (WidgetType.WEATHER, 'weather_stack_status', 'weather_position', 'weather_monitor_combo'),
+                (WidgetType.MEDIA, 'media_stack_status', 'media_position', 'media_monitor_combo'),
+                (WidgetType.REDDIT, 'reddit_stack_status', 'reddit_position', 'reddit_monitor_combo'),
+                (WidgetType.REDDIT2, 'reddit2_stack_status', 'reddit2_position', 'reddit2_monitor_combo'),
+            ]
+            
+            for widget_type, status_attr, pos_attr, mon_attr in status_mappings:
+                status_label = getattr(self, status_attr, None)
+                pos_combo = getattr(self, pos_attr, None)
+                mon_combo = getattr(self, mon_attr, None)
+                
+                if status_label is None or pos_combo is None or mon_combo is None:
+                    continue
+                
+                position = pos_combo.currentText()
+                monitor = mon_combo.currentText()
+                
+                can_stack, message = get_position_status_for_widget(
+                    widgets_config, widget_type, position, monitor
+                )
+                
+                if message:
+                    if can_stack:
+                        status_label.setText(message)
+                        status_label.setStyleSheet("color: #4CAF50; font-size: 11px; font-weight: bold;")
+                    else:
+                        status_label.setText(message)
+                        status_label.setStyleSheet("color: #FF9800; font-size: 11px; font-weight: bold;")
+                else:
+                    status_label.setText("")
+                    status_label.setStyleSheet("")
+        except Exception as e:
+            # Log errors instead of silently swallowing them
+            import logging
+            logging.getLogger(__name__).debug("Stack status update failed: %s", e, exc_info=True)
+    
+    def _build_current_widgets_config(self) -> dict:
+        """Build widgets config dict from current UI state.
+        
+        This creates a config dict that mirrors what would be saved,
+        but from current UI values (before save).
+        """
+        config = {}
+        
+        # Clock
+        config['clock'] = {
+            'enabled': getattr(self, 'clock_enabled', None) and self.clock_enabled.isChecked(),
+            'position': getattr(self, 'clock_position', None) and self.clock_position.currentText() or 'Top Right',
+            'monitor': getattr(self, 'clock_monitor_combo', None) and self.clock_monitor_combo.currentText() or 'ALL',
+            'font_size': getattr(self, 'clock_font_size', None) and self.clock_font_size.value() or 48,
+            'show_seconds': getattr(self, 'clock_show_seconds', None) and self.clock_show_seconds.isChecked(),
+            'show_timezone_label': getattr(self, 'clock_show_tz_label', None) and self.clock_show_tz_label.isChecked(),
+        }
+        
+        # Clock 2
+        config['clock2'] = {
+            'enabled': getattr(self, 'clock2_enabled', None) and self.clock2_enabled.isChecked(),
+            'monitor': getattr(self, 'clock2_monitor_combo', None) and self.clock2_monitor_combo.currentText() or 'ALL',
+        }
+        
+        # Clock 3
+        config['clock3'] = {
+            'enabled': getattr(self, 'clock3_enabled', None) and self.clock3_enabled.isChecked(),
+            'monitor': getattr(self, 'clock3_monitor_combo', None) and self.clock3_monitor_combo.currentText() or 'ALL',
+        }
+        
+        # Weather
+        config['weather'] = {
+            'enabled': getattr(self, 'weather_enabled', None) and self.weather_enabled.isChecked(),
+            'position': getattr(self, 'weather_position', None) and self.weather_position.currentText() or 'Top Left',
+            'monitor': getattr(self, 'weather_monitor_combo', None) and self.weather_monitor_combo.currentText() or 'ALL',
+            'font_size': getattr(self, 'weather_font_size', None) and self.weather_font_size.value() or 18,
+            'show_forecast': getattr(self, 'weather_show_forecast', None) and self.weather_show_forecast.isChecked(),
+        }
+        
+        # Media
+        config['media'] = {
+            'enabled': getattr(self, 'media_enabled', None) and self.media_enabled.isChecked(),
+            'position': getattr(self, 'media_position', None) and self.media_position.currentText() or 'Bottom Right',
+            'monitor': getattr(self, 'media_monitor_combo', None) and self.media_monitor_combo.currentText() or 'ALL',
+            'font_size': getattr(self, 'media_font_size', None) and self.media_font_size.value() or 14,
+            'artwork_size': getattr(self, 'media_artwork_size', None) and self.media_artwork_size.value() or 80,
+        }
+        
+        # Reddit
+        config['reddit'] = {
+            'enabled': getattr(self, 'reddit_enabled', None) and self.reddit_enabled.isChecked(),
+            'position': getattr(self, 'reddit_position', None) and self.reddit_position.currentText() or 'Bottom Right',
+            'monitor': getattr(self, 'reddit_monitor_combo', None) and self.reddit_monitor_combo.currentText() or 'ALL',
+            'font_size': getattr(self, 'reddit_font_size', None) and self.reddit_font_size.value() or 18,
+            'limit': 10,
+        }
+        try:
+            config['reddit']['limit'] = int(self.reddit_items.currentText())
+        except Exception:
+            pass
+        
+        # Reddit 2
+        config['reddit2'] = {
+            'enabled': getattr(self, 'reddit2_enabled', None) and self.reddit2_enabled.isChecked(),
+            'position': getattr(self, 'reddit2_position', None) and self.reddit2_position.currentText() or 'Top Left',
+            'monitor': getattr(self, 'reddit2_monitor_combo', None) and self.reddit2_monitor_combo.currentText() or 'ALL',
+            'limit': 4,
+        }
+        try:
+            config['reddit2']['limit'] = int(self.reddit2_items.currentText())
+        except Exception:
+            pass
+        
+        # Spotify Visualizer
+        config['spotify_visualizer'] = {
+            'enabled': getattr(self, 'spotify_vis_enabled', None) and self.spotify_vis_enabled.isChecked(),
+            'monitor': getattr(self, 'spotify_vis_monitor_combo', None) and self.spotify_vis_monitor_combo.currentText() or 'ALL',
+            'bar_count': getattr(self, 'spotify_vis_bar_count', None) and self.spotify_vis_bar_count.value() or 16,
+        }
+        
+        return config

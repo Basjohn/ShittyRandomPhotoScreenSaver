@@ -9,15 +9,16 @@ from enum import Enum
 from pathlib import Path
 import os
 import json
-from PySide6.QtWidgets import QLabel, QWidget
+from PySide6.QtWidgets import QWidget
 from PySide6.QtCore import QTimer, Qt, Signal, QThread, QObject
-from PySide6.QtGui import QFont, QColor
+from PySide6.QtGui import QFont
 from shiboken6 import Shiboken
 
 from core.logging.logger import get_logger
 from core.threading.manager import ThreadManager
 from weather.open_meteo_provider import OpenMeteoProvider
-from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile, configure_overlay_widget_attributes
+from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
+from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 
 logger = get_logger(__name__)
@@ -76,9 +77,11 @@ class WeatherFetcher(QObject):
             self.error_occurred.emit(error_msg)
 
 
-class WeatherWidget(QLabel):
+class WeatherWidget(BaseOverlayWidget):
     """
     Weather widget for displaying weather information.
+    
+    Extends BaseOverlayWidget for common styling/positioning functionality.
     
     Features:
     - Current temperature and condition
@@ -94,6 +97,9 @@ class WeatherWidget(QLabel):
     weather_updated = Signal(dict)  # Emits weather data
     error_occurred = Signal(str)
     
+    # Override defaults for weather widget
+    DEFAULT_FONT_SIZE = 24
+    
     def __init__(self, parent: Optional[QWidget] = None,
                  location: str = "London",
                  position: WeatherPosition = WeatherPosition.BOTTOM_LEFT):
@@ -105,14 +111,15 @@ class WeatherWidget(QLabel):
             location: City name
             position: Screen position
         """
-        super().__init__(parent)
+        # Convert WeatherPosition to OverlayPosition for base class
+        overlay_pos = OverlayPosition(position.value)
+        super().__init__(parent, position=overlay_pos, overlay_name="weather")
         
         self._location = location
-        self._position = position
+        self._weather_position = position  # Keep original enum for compatibility
         self._update_timer: Optional[QTimer] = None
         self._retry_timer: Optional[QTimer] = None
         self._update_timer_handle: Optional[OverlayTimerHandle] = None
-        self._enabled = False
         
         # Caching
         self._cached_data: Optional[Dict[str, Any]] = None
@@ -125,28 +132,19 @@ class WeatherWidget(QLabel):
         # Background thread
         self._fetch_thread: Optional[QThread] = None
         self._fetcher: Optional[WeatherFetcher] = None
-        self._thread_manager = None
         
-        # Styling defaults
-        self._font_family = "Segoe UI"
+        # Override base class font size default
         self._font_size = 24
-        self._text_color = QColor(255, 255, 255, 230)
-        self._margin = 20
+        
         # Padding: slightly more at top/bottom, 15% more on right
         self._padding_top = 8
         self._padding_bottom = 8
         self._padding_left = 16
         self._padding_right = 18  # ~15% more than left
+        
         # Optional forecast line
         self._show_forecast = False
         self._forecast_data: Optional[str] = None
-        # Background frame settings
-        self._show_background = False
-        self._bg_opacity = 0.9  # 90% opacity default
-        self._bg_color = QColor(64, 64, 64, int(255 * self._bg_opacity))  # Dark grey
-        self._bg_border_width = 2
-        self._bg_border_color = QColor(128, 128, 128, 200)  # Light grey border
-        self._shadow_config: Optional[Dict[str, Any]] = None
         
         # Setup UI
         self._setup_ui()
@@ -155,21 +153,23 @@ class WeatherWidget(QLabel):
     
     def _setup_ui(self) -> None:
         """Setup widget UI."""
-        # Configure attributes to prevent flicker with GL compositor
-        configure_overlay_widget_attributes(self)
+        # Use base class styling setup
+        self._apply_base_styling()
         
         self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         try:
             self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         except Exception:
             pass
-        self._update_stylesheet()
         
-        font = QFont(self._font_family, self._font_size, QFont.Weight.Normal)  # Lighter weight than clock
+        # Weather uses normal weight font
+        font = QFont(self._font_family, self._font_size, QFont.Weight.Normal)
         self.setFont(font)
-        
-        # Initially hidden
-        self.hide()
+    
+    def _update_content(self) -> None:
+        """Required by BaseOverlayWidget - update weather display."""
+        if self._cached_data:
+            self._update_display(self._cached_data)
     
     def start(self) -> None:
         """Start weather updates."""
@@ -579,18 +579,20 @@ class WeatherWidget(QLabel):
         widget_width = self.width()
         widget_height = self.height()
         
-        # Calculate position with 20px minimum margin from all edges
-        edge_margin = 20
-        if self._position == WeatherPosition.TOP_LEFT:
+        # Use base class margin
+        edge_margin = self._margin
+        pos = self._weather_position
+        
+        if pos == WeatherPosition.TOP_LEFT:
             x = edge_margin
             y = edge_margin
-        elif self._position == WeatherPosition.TOP_RIGHT:
+        elif pos == WeatherPosition.TOP_RIGHT:
             x = parent_width - widget_width - edge_margin
             y = edge_margin
-        elif self._position == WeatherPosition.BOTTOM_LEFT:
+        elif pos == WeatherPosition.BOTTOM_LEFT:
             x = edge_margin
             y = parent_height - widget_height - edge_margin
-        elif self._position == WeatherPosition.BOTTOM_RIGHT:
+        elif pos == WeatherPosition.BOTTOM_RIGHT:
             x = parent_width - widget_width - edge_margin
             y = parent_height - widget_height - edge_margin
         else:
@@ -623,7 +625,9 @@ class WeatherWidget(QLabel):
         Args:
             position: Screen position
         """
-        self._position = position
+        self._weather_position = position
+        # Also update base class position for consistency
+        self._position = OverlayPosition(position.value)
         
         # Update position immediately if running
         if self._enabled:
@@ -651,94 +655,6 @@ class WeatherWidget(QLabel):
         self._forecast_data = forecast
         if self._show_forecast and self._cached_data:
             self._update_display(self._cached_data)
-    
-    def set_shadow_config(self, config: Optional[Dict[str, Any]]) -> None:
-        """Store shared shadow configuration for post-fade drop shadows."""
-
-        self._shadow_config = config
-    
-    def set_font_family(self, family: str) -> None:
-        """
-        Set font family.
-        
-        Args:
-            family: Font family name
-        """
-        self._font_family = family
-        font = QFont(self._font_family, self._font_size, QFont.Weight.Normal)
-        self.setFont(font)
-    
-    def set_font_size(self, size: int) -> None:
-        """
-        Set font size.
-        
-        Args:
-            size: Font size in points
-        """
-        if size <= 0:
-            logger.warning(f"[FALLBACK] Invalid font size {size}, using 24")
-            size = 24
-        
-        self._font_size = size
-        font = QFont(self._font_family, self._font_size, QFont.Weight.Normal)
-        self.setFont(font)
-    
-    def set_text_color(self, color: QColor) -> None:
-        """
-        Set text color.
-        
-        Args:
-            color: Text color
-        """
-        self._text_color = color
-        self._update_stylesheet()
-    
-    def set_show_background(self, show: bool) -> None:
-        """
-        Set whether to show background frame.
-        
-        Args:
-            show: True to show background frame
-        """
-        self._show_background = show
-        self._update_stylesheet()
-    
-    def set_background_color(self, color: QColor) -> None:
-        """
-        Set background frame color.
-        
-        Args:
-            color: Background color (with alpha for opacity)
-        """
-        self._bg_color = color
-        if self._show_background:
-            self._update_stylesheet()
-    
-    def set_background_opacity(self, opacity: float) -> None:
-        """
-        Set background frame opacity (0.0 to 1.0).
-        
-        Args:
-            opacity: Opacity value from 0.0 (transparent) to 1.0 (opaque)
-        """
-        self._bg_opacity = max(0.0, min(1.0, opacity))
-        # Update background color with new opacity
-        self._bg_color.setAlpha(int(255 * self._bg_opacity))
-        if self._show_background:
-            self._update_stylesheet()
-    
-    def set_background_border(self, width: int, color: QColor) -> None:
-        """
-        Set background frame border.
-        
-        Args:
-            width: Border width in pixels
-            color: Border color
-        """
-        self._bg_border_width = width
-        self._bg_border_color = color
-        if self._show_background:
-            self._update_stylesheet()
     
     def _update_stylesheet(self) -> None:
         """Update widget stylesheet based on current settings."""

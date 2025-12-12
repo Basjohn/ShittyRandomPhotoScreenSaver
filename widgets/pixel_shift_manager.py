@@ -323,8 +323,18 @@ class PixelShiftManager:
     
     def _apply_offset(self) -> None:
         """Apply the current offset to all registered widgets."""
-        # Clean up any destroyed widgets first
-        self._widgets = [w for w in self._widgets if w is not None]
+        from shiboken6 import Shiboken
+        
+        # Clean up destroyed widgets - use in-place filtering to avoid list recreation
+        valid_widgets = []
+        for w in self._widgets:
+            if w is not None:
+                try:
+                    if Shiboken.isValid(w):
+                        valid_widgets.append(w)
+                except Exception:
+                    pass
+        self._widgets = valid_widgets
         
         for widget in self._widgets:
             widget_id = id(widget)
@@ -335,7 +345,14 @@ class PixelShiftManager:
                 orig = self._original_positions[widget_id]
                 new_x = orig.x() + self._offset_x
                 new_y = orig.y() + self._offset_y
-                widget.move(new_x, new_y)
+                
+                # Block signals during move to prevent flicker from layout updates
+                was_blocked = widget.signalsBlocked()
+                widget.blockSignals(True)
+                try:
+                    widget.move(new_x, new_y)
+                finally:
+                    widget.blockSignals(was_blocked)
             except Exception:
                 # Widget may have been destroyed
                 pass

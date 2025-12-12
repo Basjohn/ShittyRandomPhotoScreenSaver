@@ -9,17 +9,35 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - IO/Compute pools, lock-free stats and mutation queues
 - core/resources/manager.py
   - ResourceManager for Qt object lifecycle tracking (register_qt, cleanup_all)
+- core/resources/types.py
+  - Resource type definitions and enums
 - core/events/event_system.py
   - EventSystem pub/sub (thread-safe)
+- core/events/event_types.py
+  - Event type definitions (ImageChanged, TransitionStarted, etc.)
 - core/settings/settings_manager.py
   - SettingsManager (get/set, dot-notation, section helpers, JSON SST snapshot import/export)
   - Maps application name "Screensaver" to "Screensaver_MC" when running under the MC executable (e.g. `SRPSS MC`, `SRPSS_MC`, `main_mc.py`) so QSettings are isolated between the normal screensaver and MC profiles.
+- core/settings/defaults.py
+  - Default settings values for all configuration options
 - core/animation/animator.py
   - AnimationManager and easing types
   - Animation class with optional FrameState for decoupled rendering
 - core/animation/frame_interpolator.py
   - FrameState: timestamped progress samples for render-time interpolation
   - Decouples animation updates from rendering to eliminate timer jitter
+- core/animation/easing.py
+  - Easing function implementations (Linear, InOutCubic, InOutQuad, etc.)
+- core/animation/types.py
+  - Animation type definitions and enums
+- core/media/media_controller.py
+  - Centralized media playback state via Windows GSMTC (Global System Media Transport Controls)
+- core/media/spotify_volume.py
+  - Spotify volume control via pycaw/Core Audio
+- core/logging/logger.py
+  - Centralized logging with colorized output, suppression, and rotation
+- core/logging/overlay_telemetry.py
+  - Overlay telemetry logging for debugging widget behavior
 
 ## Engine
 - engine/screensaver_engine.py
@@ -92,15 +110,18 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - BaseTransition with centralized animation
 - transitions/overlay_manager.py
   - Persistent overlay helpers (`get_or_create_overlay`, `prepare_gl_overlay`, diagnostics/raise helpers) registering with shared ResourceManager; logs swap downgrades and readiness telemetry
-- transitions/crossfade_transition.py, transitions/gl_crossfade_transition.py, transitions/gl_compositor_crossfade_transition.py
-- transitions/slide_transition.py, transitions/gl_slide_transition.py, transitions/gl_compositor_slide_transition.py
-- transitions/wipe_transition.py, transitions/gl_wipe_transition.py, transitions/gl_compositor_wipe_transition.py
-  - Slide/Wipe directions stored independently in settings; Slide is cardinals only, Wipe includes diagonals
-- transitions/diffuse_transition.py, transitions/gl_diffuse_transition.py, transitions/gl_compositor_diffuse_transition.py
+- transitions/crossfade_transition.py, transitions/gl_compositor_crossfade_transition.py
+  - CPU and GL compositor crossfade transitions
+- transitions/slide_transition.py, transitions/gl_compositor_slide_transition.py
+  - Slide directions stored in settings; cardinals only (LEFT, RIGHT, UP, DOWN)
+- transitions/wipe_transition.py, transitions/gl_compositor_wipe_transition.py
+  - Wipe directions stored in settings; includes diagonals
+- transitions/diffuse_transition.py, transitions/gl_compositor_diffuse_transition.py
   - Diffuse shapes: Rectangle, Membrane. Block size is clamped (min 4px) and shared between CPU and GL paths; the CPU fallback uses a simple block-based dissolve, while the Membrane shape is implemented only in the GLSL compositor path.
-- transitions/block_puzzle_flip_transition.py, transitions/gl_block_puzzle_flip_transition.py, transitions/gl_compositor_blockflip_transition.py
-- transitions/gl_blinds.py, transitions/gl_compositor_blinds_transition.py
-  - GL-only Blinds transition using either a legacy overlay or the compositor; participates in GL prewarm and requires hardware acceleration.
+- transitions/block_puzzle_flip_transition.py, transitions/gl_compositor_blockflip_transition.py
+  - Block puzzle flip with CPU fallback and GL compositor variant
+- transitions/gl_compositor_blinds_transition.py
+  - GL-only Blinds transition using the compositor; requires hardware acceleration.
 - transitions/gl_compositor_peel_transition.py
   - Compositor-backed GL-only Peel transition (strip-based peel of the old image over the new image). Direction stored under `transitions.peel.direction`.
 - transitions/gl_compositor_blockspin_transition.py
@@ -119,22 +140,28 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - sources/rss_source.py
 
 ## Widgets
+- widgets/base_overlay_widget.py
+  - `BaseOverlayWidget`: Abstract base class for all overlay widgets. Provides common functionality for font/color/background/shadow/position management, pixel shift support, thread manager integration, and size calculation for stacking/collision detection.
+  - `OverlayPosition`: Enum for standard widget positions (TOP_LEFT, TOP_RIGHT, etc.)
+  - `calculate_widget_collision()`: Check if two widget rects overlap
+  - `calculate_stack_offset()`: Calculate offset for widget stacking
 - widgets/clock_widget.py
-  - Digital clock widget supporting three instances (Clock 1/2/3) with per-monitor selection, independent timezones, optional seconds and timezone labels
+  - Digital clock widget extending `BaseOverlayWidget`. Supports three instances (Clock 1/2/3) with per-monitor selection, independent timezones, optional seconds and timezone labels, analog/digital modes.
 - widgets/weather_widget.py
-  - Weather widget with per-monitor selection via settings (ALL or 1/2/3); planned QPainter-based iconography
- - widgets/media_widget.py
-   - Spotify/media overlay widget driven by `core/media/media_controller.py`; per-monitor selection via `widgets.media`, corner positioning, background frame, and monochrome transport controls (Prev/Play/Pause/Next) over track metadata. Artwork uses a square frame for album covers and adapts to non-square thumbnails (e.g. Spotify video stills) by widening/tallening the card frame while still using a cover-style crop (no letterboxing/pillarboxing) so video-shaped assets respect their aspect ratio without changing existing album-art styling.
- - widgets/spotify_visualizer_widget.py
+  - Weather widget extending `BaseOverlayWidget`. Per-monitor selection via settings (ALL or 1/2/3); planned QPainter-based iconography.
+- widgets/media_widget.py
+  - Spotify/media overlay widget extending `BaseOverlayWidget`. Driven by `core/media/media_controller.py`; per-monitor selection via `widgets.media`, corner positioning, background frame, and monochrome transport controls (Prev/Play/Pause/Next) over track metadata. Artwork uses a square frame for album covers and adapts to non-square thumbnails.
+- widgets/reddit_widget.py
+  - Reddit overlay widget extending `BaseOverlayWidget`. Shows top posts from a configured subreddit with 4- and 10-item layouts, per-monitor selection via `widgets.reddit`, shared overlay fade-in coordination, and click-through to the system browser.
+  - In hard-exit mode, `handle_click(deferred=True)` returns the URL instead of opening it immediately; DisplayWidget stores this and opens it when the user exits, avoiding the edge case where Firefox gets stuck behind the screensaver.
+  - Supports a second instance (`reddit2_widget`) via `widgets.reddit2.*` settings with independent subreddit/position/display but inheriting all styling from Reddit 1.
+- widgets/spotify_visualizer_widget.py
    - Spotify Beat Visualizer widget and background audio worker. Captures loopback audio via a shared `_SpotifyBeatEngine` (single process-wide engine), publishes raw mono frames into a lock-free `TripleBuffer`, performs FFT/band mapping and time-based smoothing on the COMPUTE pool (not UI thread), and exposes pre-smoothed bar magnitudes plus a derived GPU fade factor to the bar overlay. The QWidget owns the Spotify-style card, primary overlay fade, and drop shadow; bars are drawn by a dedicated `SpotifyBarsGLOverlay` QOpenGLWidget overlay created and managed by `DisplayWidget`, with a software (CPU) fallback path controlled by `widgets.spotify_visualizer.software_visualizer_enabled` when the renderer backend is set to Software. Bars only animate while the normalized media state is PLAYING; when Spotify is paused or stopped the beat engine decays targets to zero and the overlay’s 1-segment idle floor produces a flat single-row baseline. Card fade participates in the primary overlay wave, while the bar field uses a delayed secondary fade computed from the shared `ShadowFadeProfile` progress so the visualiser never pops in or shows stray green pixels.
  - widgets/spotify_bars_gl_overlay.py
    - GLSL/VAO Spotify bars overlay with DPI-aware geometry, per-bar peak envelope and 1-segment floor, rendering the main bar stack plus a configurable ghost trail driven by a decaying peak value. Uses the bar border colour for ghost segments with a vertical alpha falloff, respects `ghosting_enabled`, `ghost_alpha`, and `ghost_decay` from `widgets.spotify_visualizer.*` settings, and consumes the GPU fade factor from `SpotifyVisualizerWidget` so opacity ramps in after the card fade using the same `ShadowFadeProfile` timing.
- - widgets/spotify_volume_widget.py
-   - Spotify-only vertical volume slider paired with the media card; gated on a Spotify GSMTC session and participating in the secondary Spotify fade wave via a GPU fade factor derived from the visualiser card’s `ShadowFadeProfile` progress so it fades in slightly after the card while respecting the same hard-exit / Ctrl interaction gating as the media widget.
-  - widgets/reddit_widget.py
-   - Reddit overlay widget showing top posts from a configured subreddit with 4- and 10-item layouts, per-monitor selection via `widgets.reddit`, shared overlay fade-in coordination, and click-through to the system browser.
-   - In hard-exit mode, `handle_click(deferred=True)` returns the URL instead of opening it immediately; DisplayWidget stores this and opens it when the user exits, avoiding the edge case where Firefox gets stuck behind the screensaver.
- - widgets/dimming_overlay.py
+- widgets/spotify_volume_widget.py
+  - Spotify-only vertical volume slider paired with the media card; gated on a Spotify GSMTC session and participating in the secondary Spotify fade wave via a GPU fade factor derived from the visualiser card’s `ShadowFadeProfile` progress so it fades in slightly after the card while respecting the same hard-exit / Ctrl interaction gating as the media widget.
+- widgets/dimming_overlay.py
    - `DimmingOverlay`: Semi-transparent black overlay for background dimming. Sits above transitions but below all widgets to reduce brightness and improve widget readability.
  - widgets/pixel_shift_manager.py
    - `PixelShiftManager`: Manages periodic 1px shifts of overlay widgets for burn-in prevention. Maximum drift of 4px in any direction with automatic drift-back. Defers during transitions.
@@ -148,15 +175,34 @@ A living map of modules, purposes, and key classes. Keep this up to date.
    - `BeatEngine`: Extracted from SpotifyVisualizerWidget. Handles FFT processing, beat detection, and bar smoothing on the COMPUTE pool. Thread-safe state access for UI thread consumption.
    - `BeatEngineConfig`: Configuration dataclass for bar count, smoothing, decay, ghosting.
    - `BeatEngineState`: Current state dataclass with bars, peaks, and playing status.
+- widgets/shadow_utils.py
+  - Shadow rendering utilities for overlay widgets. Provides consistent drop shadow configuration and rendering.
+- widgets/timezone_utils.py
+  - Timezone handling and population for clock widgets. Provides timezone list and conversion utilities.
 
 ## UI
 - ui/settings_dialog.py
   - Main settings dialog with custom title bar, dark theme, and tabbed interface
+- ui/styled_popup.py
+  - `StyledPopup`: Dark glass themed popup notifications (info, warning, error, success)
+  - `StyledColorPicker`: Centralized dark-themed color picker dialog wrapping QColorDialog
 - ui/tabs/sources_tab.py - Image source configuration (folders, RSS feeds)
 - ui/tabs/display_tab.py - Display mode and hardware acceleration settings
 - ui/tabs/transitions_tab.py - Transition type, duration, and direction settings
-- ui/tabs/widgets_tab.py - Overlay widget configuration (clocks, weather, media, Reddit)
+- ui/tabs/widgets_tab.py - Overlay widget configuration (clocks, weather, media, Reddit). Includes stacking prediction labels next to position combos.
 - ui/tabs/accessibility_tab.py - Accessibility features (background dimming, pixel shift)
+- ui/widget_stack_predictor.py
+  - `WidgetType`: Enum of widget types for prediction
+  - `WidgetEstimate`: Dataclass for estimated widget dimensions
+  - `get_position_status_for_widget()`: Main entry point for settings UI stacking prediction
+  - Settings-only module - does NOT affect runtime, purely UI feedback
+- ui/system_tray.py
+  - System tray icon integration for background operation
+
+## Weather
+- weather/open_meteo_provider.py
+  - `OpenMeteoProvider`: Weather data provider using Open-Meteo API (free, no API key required)
+  - Geocoding, current conditions, and forecast fetching
 
 ## Utilities
 - utils/image_cache.py
@@ -171,14 +217,44 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - `PyAudioWPatchBackend`: WASAPI loopback capture (Windows)
   - `SounddeviceBackend`: Cross-platform fallback using sounddevice
   - `create_audio_capture()`: Factory function for best available backend
+- utils/lockfree/triple_buffer.py
+  - Lock-free triple buffer for audio/visualization data passing between threads
+
+## Rendering Backends
+- rendering/backends/__init__.py
+  - Backend registry/factory with settings-driven creation and telemetry
+- rendering/backends/base.py
+  - `RendererBackend`, `RenderSurface`, `TransitionPipeline` interfaces
+- rendering/backends/opengl/backend.py
+  - OpenGL renderer implementation (primary backend)
+- rendering/backends/software/backend.py
+  - CPU fallback renderer for troubleshooting scenarios
+- rendering/gl_format.py
+  - OpenGL format configuration helpers
+- rendering/image_processor_async.py
+  - Async image processing pipeline with worker thread support
+
+## Themes
+- themes/dark.qss
+  - Dark theme QSS stylesheet for settings dialog and UI components
+
+## Scripts
+- scripts/build.ps1, scripts/build_mc.ps1 - PyInstaller build scripts
+- scripts/build_nuitka.ps1, scripts/build_nuitka_mc.ps1 - Nuitka build scripts
+- scripts/run_tests.py - Test runner with logging
+- scripts/SRPSS_Installer.iss - Inno Setup installer script
+
+## Root
+- versioning.py
+  - Application version management and build info
 
 ## Docs
-- Docs/TestSuite.md – canonical tests
-- Docs/AUDIT_*.md – technical audits
-- Docs/FlashFlickerDiagnostic.md – flicker/banding symptom tracker and mitigation history
-- Docs/SAKURA_PETALS_TRANSITION_DESIGN.md – design document for future sakura petals transition (low priority)
- - Docs/10_WIDGET_GUIDELINES.md – canonical overlay widget design (card styling, fade/shadow via ShadowFadeProfile, Z-order/integration with DisplayWidget and overlay_manager, interaction gating)
- - audits/*.md – repository-level Cleaning/Architecture/Optimization audit documents with live checklists
+- Docs/00_PROJECT_OVERVIEW.md – High-level project overview and architecture summary
+- Docs/10_WIDGET_GUIDELINES.md – Canonical overlay widget design (card styling, fade/shadow via ShadowFadeProfile, Z-order/integration with DisplayWidget and overlay_manager, interaction gating)
+- Docs/TestSuite.md – Canonical test documentation
+- Docs/PERFORMANCE_BASELINE.md – Performance metrics and baselines
+- Docs/SAKURA_PETALS_TRANSITION_DESIGN.md – Design document for future sakura petals transition (low priority)
+- audits/*.md – Repository-level architecture/optimization audit documents with live checklists
 
 ## Settings (selected)
 - display.refresh_sync: bool

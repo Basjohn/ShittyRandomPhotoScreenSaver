@@ -9,7 +9,7 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     GL = None
 from PySide6.QtWidgets import QWidget, QApplication
-from PySide6.QtCore import Qt, Signal, QSize, QTimer, QEvent
+from PySide6.QtCore import Qt, Signal, QSize, QTimer, QEvent, QPoint
 from PySide6.QtGui import (
     QPixmap,
     QPainter,
@@ -168,6 +168,7 @@ class DisplayWidget(QWidget):
         self.spotify_volume_widget: Optional[SpotifyVolumeWidget] = None
         self._spotify_bars_overlay: Optional[SpotifyBarsGLOverlay] = None
         self.reddit_widget: Optional[RedditWidget] = None
+        self.reddit2_widget: Optional[RedditWidget] = None
         self._pixel_shift_manager: Optional[PixelShiftManager] = None
         self._current_transition: Optional[BaseTransition] = None
         self._current_transition_overlay_key: Optional[str] = None
@@ -1096,6 +1097,13 @@ class DisplayWidget(QWidget):
                 except Exception:
                     logger.debug("Failed to configure widget shadow for reddit widget", exc_info=True)
 
+                # Set overlay name for fade coordination
+                try:
+                    if hasattr(self.reddit_widget, 'set_overlay_name'):
+                        self.reddit_widget.set_overlay_name("reddit")
+                except Exception:
+                    pass
+
                 self.reddit_widget.raise_()
                 self.reddit_widget.start()
                 logger.info(
@@ -1107,6 +1115,128 @@ class DisplayWidget(QWidget):
                 )
             except Exception as e:
                 logger.error("Failed to create/configure reddit widget: %s", e, exc_info=True)
+
+        # Reddit 2 widget (inherits styling from Reddit 1)
+        reddit2_settings = widgets.get('reddit2', {})
+        reddit2_enabled = SettingsManager.to_bool(reddit2_settings.get('enabled', False), False)
+        reddit2_monitor_sel = reddit2_settings.get('monitor', 'ALL')
+        try:
+            reddit2_show_on_this = (reddit2_monitor_sel == 'ALL') or (
+                int(reddit2_monitor_sel) == (self.screen_index + 1)
+            )
+        except Exception:
+            reddit2_show_on_this = False
+        
+        existing_reddit2 = getattr(self, 'reddit2_widget', None)
+        if not (reddit2_enabled and reddit2_show_on_this):
+            if existing_reddit2 is not None:
+                try:
+                    existing_reddit2.stop()
+                    existing_reddit2.hide()
+                except Exception:
+                    pass
+            self.reddit2_widget = None
+        else:
+            try:
+                self._overlay_fade_expected.add("reddit2")
+            except Exception:
+                pass
+            
+            # Reddit 2 uses its own subreddit/position/limit but inherits styling from Reddit 1
+            r2_position_str = reddit2_settings.get('position', 'Top Left')
+            r2_subreddit = reddit2_settings.get('subreddit', '') or 'earthporn'
+            try:
+                r2_limit = int(reddit2_settings.get('limit', 4))
+            except Exception:
+                r2_limit = 4
+            if r2_limit <= 5:
+                r2_limit = 4
+            
+            r2_pos = reddit_position_map.get(r2_position_str, RedditPosition.TOP_LEFT)
+            
+            try:
+                self.reddit2_widget = RedditWidget(self, subreddit=r2_subreddit, position=r2_pos)
+                
+                if self._thread_manager is not None and hasattr(self.reddit2_widget, 'set_thread_manager'):
+                    try:
+                        self.reddit2_widget.set_thread_manager(self._thread_manager)
+                    except Exception:
+                        pass
+                
+                # Inherit styling from Reddit 1
+                font_family = reddit_settings.get('font_family', 'Segoe UI')
+                if hasattr(self.reddit2_widget, 'set_font_family'):
+                    self.reddit2_widget.set_font_family(font_family)
+                
+                try:
+                    self.reddit2_widget.set_font_size(int(reddit_settings.get('font_size', 18)))
+                except Exception:
+                    self.reddit2_widget.set_font_size(18)
+                
+                self.reddit2_widget.set_margin(int(reddit_settings.get('margin', 20)))
+                
+                qcolor = parse_color_to_qcolor(reddit_settings.get('color', [255, 255, 255, 230]))
+                if qcolor:
+                    self.reddit2_widget.set_text_color(qcolor)
+                
+                self.reddit2_widget.set_show_background(
+                    SettingsManager.to_bool(reddit_settings.get('show_background', True), True)
+                )
+                
+                try:
+                    self.reddit2_widget.set_show_separators(
+                        SettingsManager.to_bool(reddit_settings.get('show_separators', True), True)
+                    )
+                except Exception:
+                    pass
+                
+                bg_qcolor = parse_color_to_qcolor(reddit_settings.get('bg_color', [35, 35, 35, 255]))
+                if bg_qcolor:
+                    self.reddit2_widget.set_background_color(bg_qcolor)
+                
+                try:
+                    self.reddit2_widget.set_background_opacity(float(reddit_settings.get('bg_opacity', 0.9)))
+                except Exception:
+                    self.reddit2_widget.set_background_opacity(0.9)
+                
+                try:
+                    bo = float(reddit_settings.get('border_opacity', 1.0))
+                except Exception:
+                    bo = 1.0
+                border_qcolor = parse_color_to_qcolor(
+                    reddit_settings.get('border_color', [255, 255, 255, 255]), opacity_override=bo
+                )
+                if border_qcolor:
+                    self.reddit2_widget.set_background_border(2, border_qcolor)
+                
+                try:
+                    self.reddit2_widget.set_item_limit(r2_limit)
+                except Exception:
+                    pass
+                
+                try:
+                    if hasattr(self.reddit2_widget, 'set_shadow_config'):
+                        self.reddit2_widget.set_shadow_config(shadows_config)
+                    else:
+                        apply_widget_shadow(self.reddit2_widget, shadows_config, has_background_frame=True)
+                except Exception:
+                    pass
+                
+                # Set overlay name for fade coordination (distinct from reddit1)
+                try:
+                    if hasattr(self.reddit2_widget, 'set_overlay_name'):
+                        self.reddit2_widget.set_overlay_name("reddit2")
+                except Exception:
+                    pass
+                
+                self.reddit2_widget.raise_()
+                self.reddit2_widget.start()
+                logger.info(
+                    "✅ Reddit 2 widget started: r/%s, %s, limit=%s",
+                    r2_subreddit, r2_position_str, r2_limit,
+                )
+            except Exception as e:
+                logger.error("Failed to create/configure reddit2 widget: %s", e, exc_info=True)
 
         # Media widget (uses precomputed media_settings / media_enabled /
         # media_show_on_this from the fade coordination setup above).
@@ -1541,7 +1671,7 @@ class DisplayWidget(QWidget):
         for attr_name in (
             "clock_widget", "clock2_widget", "clock3_widget",
             "weather_widget", "media_widget", "spotify_visualizer_widget",
-            "spotify_volume_widget", "reddit_widget",
+            "spotify_volume_widget", "reddit_widget", "reddit2_widget",
         ):
             widget = getattr(self, attr_name, None)
             if widget is not None:
@@ -1553,6 +1683,143 @@ class DisplayWidget(QWidget):
         else:
             self._pixel_shift_manager.set_enabled(False)
             logger.debug("Pixel shift disabled")
+        
+        # Apply widget stacking for overlapping positions
+        self._apply_widget_stacking(widgets)
+
+    def _apply_widget_stacking(self, widgets_config: Dict[str, Any]) -> None:
+        """Apply vertical stacking offsets to widgets sharing the same position.
+        
+        This method collects all visible widgets on THIS screen, groups them by
+        position, and applies vertical offsets so they stack without overlapping.
+        Called at the end of _setup_widgets after all widgets are created.
+        
+        Stacking is automatic and has no performance impact on fades since
+        offsets are applied once during setup, not during animation.
+        
+        Note: Widget heights at setup time may be estimates. For widgets like
+        Reddit that resize after content loads, consider calling
+        recalculate_stacking() after content is ready.
+        """
+        # Map of position -> list of (widget, attr_name, creation_order)
+        # Creation order determines stacking priority (earlier = base, later = stacked)
+        position_groups: Dict[str, List[Tuple[Any, str, int]]] = {}
+        
+        # Widget attributes with creation order priority
+        # Order matters: widgets listed first are the "base" at each position
+        widget_attrs = [
+            ('clock_widget', 0),
+            ('clock2_widget', 1),
+            ('clock3_widget', 2),
+            ('weather_widget', 3),
+            ('media_widget', 4),
+            ('spotify_visualizer_widget', 5),
+            ('reddit_widget', 6),
+            ('reddit2_widget', 7),
+        ]
+        
+        for attr_name, order in widget_attrs:
+            widget = getattr(self, attr_name, None)
+            if widget is None:
+                continue
+            
+            # Query position directly from the widget (already set during creation)
+            pos_normalized = self._get_widget_position_key(widget)
+            if not pos_normalized:
+                continue
+            
+            if pos_normalized not in position_groups:
+                position_groups[pos_normalized] = []
+            position_groups[pos_normalized].append((widget, attr_name, order))
+        
+        # Apply stacking offsets for each position group
+        spacing = 10  # Gap between stacked widgets
+        
+        for pos_key, widgets_at_pos in position_groups.items():
+            if len(widgets_at_pos) <= 1:
+                # Single widget - ensure no stale offset
+                if widgets_at_pos and hasattr(widgets_at_pos[0][0], 'set_stack_offset'):
+                    widgets_at_pos[0][0].set_stack_offset(QPoint(0, 0))
+                continue
+            
+            # Determine stack direction based on position
+            stack_down = 'top' in pos_key  # Top positions stack downward
+            
+            # Sort by creation order - for bottom positions, reverse so first widget
+            # is visually on top (stacked above later widgets)
+            widgets_at_pos.sort(key=lambda x: x[2], reverse=not stack_down)
+            
+            # First widget is the base (no offset)
+            cumulative_offset = 0
+            
+            for i, (widget, attr_name, _) in enumerate(widgets_at_pos):
+                if i == 0:
+                    # Base widget - reset any previous offset
+                    if hasattr(widget, 'set_stack_offset'):
+                        widget.set_stack_offset(QPoint(0, 0))
+                    continue
+                
+                # Get height of previous widget
+                prev_widget = widgets_at_pos[i - 1][0]
+                prev_height = self._get_widget_stack_height(prev_widget)
+                
+                cumulative_offset += prev_height + spacing
+                
+                # Apply offset (positive for down, negative for up)
+                offset_y = cumulative_offset if stack_down else -cumulative_offset
+                
+                if hasattr(widget, 'set_stack_offset'):
+                    widget.set_stack_offset(QPoint(0, offset_y))
+                    logger.debug(
+                        "[STACKING] %s offset y=%d (position=%s, stack_down=%s)",
+                        attr_name, offset_y, pos_key, stack_down
+                    )
+    
+    def _get_widget_position_key(self, widget: Any) -> Optional[str]:
+        """Get normalized position key from a widget's current position setting."""
+        try:
+            # BaseOverlayWidget stores position as OverlayPosition enum
+            if hasattr(widget, '_position'):
+                pos = widget._position
+                if hasattr(pos, 'name'):
+                    return pos.name.lower()
+                return str(pos).lower().replace(' ', '_')
+            # Fallback: try get_position method
+            if hasattr(widget, 'get_position'):
+                pos = widget.get_position()
+                if hasattr(pos, 'name'):
+                    return pos.name.lower()
+                return str(pos).lower().replace(' ', '_')
+        except Exception:
+            pass
+        return None
+    
+    def _get_widget_stack_height(self, widget: Any) -> int:
+        """Get widget height for stacking calculations."""
+        try:
+            # Prefer bounding size if available (accounts for shadows, etc.)
+            if hasattr(widget, 'get_bounding_size'):
+                return widget.get_bounding_size().height()
+            # Use sizeHint for widgets that haven't been shown yet
+            hint = widget.sizeHint()
+            if hint.isValid() and hint.height() > 0:
+                return hint.height()
+            # Fallback to actual height
+            return widget.height() if widget.height() > 0 else 100
+        except Exception:
+            return 100  # Safe fallback
+    
+    def recalculate_stacking(self) -> None:
+        """Recalculate widget stacking offsets.
+        
+        Call this after widget heights change (e.g., after Reddit content loads)
+        to update stacking positions. Safe to call at any time.
+        """
+        try:
+            widgets = self.settings_manager.get('widgets', {}) if self.settings_manager else {}
+            self._apply_widget_stacking(widgets)
+        except Exception:
+            logger.debug("Failed to recalculate stacking", exc_info=True)
 
     def _on_animation_manager_ready(self, animation_manager) -> None:
         """Hook called by BaseTransition when an AnimationManager is available.
@@ -1859,7 +2126,7 @@ class DisplayWidget(QWidget):
                         "clock_widget", "clock2_widget", "clock3_widget",
                         "weather_widget", "media_widget", "spotify_visualizer_widget",
                         "_spotify_bars_overlay", "spotify_volume_widget", "reddit_widget",
-                        "_ctrl_cursor_hint",
+                        "reddit2_widget", "_ctrl_cursor_hint",
                     ):
                         w = getattr(self, attr_name, None)
                         if w is not None:
@@ -1970,6 +2237,13 @@ class DisplayWidget(QWidget):
                             if rw is not None:
                                 try:
                                     rw.raise_()
+                                except Exception:
+                                    pass
+                            # Reddit 2 widget
+                            rw2 = getattr(self, "reddit2_widget", None)
+                            if rw2 is not None:
+                                try:
+                                    rw2.raise_()
                                 except Exception:
                                     pass
                             sv = getattr(self, "spotify_visualizer_widget", None)
@@ -2293,6 +2567,9 @@ class DisplayWidget(QWidget):
         try:
             vis.setGeometry(x, y, width, height)
             vis.raise_()
+            # Update pixel shift manager with new position
+            if self._pixel_shift_manager is not None:
+                self._pixel_shift_manager.update_original_position(vis)
         except Exception:
             pass
 
@@ -2349,6 +2626,9 @@ class DisplayWidget(QWidget):
             vol.setGeometry(x, y, width, height)
             if vol.isVisible():
                 vol.raise_()
+            # Update pixel shift manager with new position
+            if self._pixel_shift_manager is not None:
+                self._pixel_shift_manager.update_original_position(vol)
         except Exception:
             pass
 
@@ -2693,6 +2973,7 @@ class DisplayWidget(QWidget):
         self._cleanup_widget("media_widget", "MEDIA", "cleanup")
         self._cleanup_widget("weather_widget", "WEATHER", "cleanup")
         self._cleanup_widget("reddit_widget", "REDDIT", "cleanup")
+        self._cleanup_widget("reddit2_widget", "REDDIT2", "cleanup")
         self._cleanup_widget("_pixel_shift_manager", "PIXEL_SHIFT", "cleanup")
         
         # Stop and clean up any active transition
@@ -4072,7 +4353,12 @@ class DisplayWidget(QWidget):
                                     owner._show_ctrl_cursor_hint(local_pos, mode="none")
                             elif DisplayWidget._global_ctrl_held:
                                 # Ctrl mode - show/reposition halo
-                                owner._show_ctrl_cursor_hint(local_pos, mode="none")
+                                # If halo is hidden (e.g., after settings dialog), fade it in
+                                if halo_hidden:
+                                    DisplayWidget._halo_owner = owner
+                                    owner._show_ctrl_cursor_hint(local_pos, mode="fade_in")
+                                else:
+                                    owner._show_ctrl_cursor_hint(local_pos, mode="none")
 
                             # Forward halo hover position to the Reddit
                             # widget (if present) so it can manage its own

@@ -6,10 +6,10 @@ Provides dark glass themed popup dialogs that match the application's visual sty
 from typing import Optional
 from PySide6.QtWidgets import (
     QDialog, QLabel, QVBoxLayout, QHBoxLayout, QPushButton, QWidget,
-    QGraphicsDropShadowEffect,
+    QGraphicsDropShadowEffect, QColorDialog,
 )
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QPalette
 
 from core.logging.logger import get_logger
 
@@ -184,3 +184,127 @@ class StyledPopup(QDialog):
         """Show an error popup."""
         popup = StyledPopup(parent, title, message, "error", auto_close_ms)
         popup.exec()
+
+
+class StyledColorPicker:
+    """Centralized styled color picker utility.
+    
+    Provides a consistent dark-themed color picker dialog that matches
+    the application's visual style. Wraps QColorDialog with custom styling.
+    """
+    
+    # Dark theme stylesheet for QColorDialog
+    _STYLESHEET = """
+        QColorDialog {
+            background-color: rgb(30, 30, 35);
+            color: rgb(220, 220, 225);
+        }
+        QColorDialog QWidget {
+            background-color: rgb(30, 30, 35);
+            color: rgb(220, 220, 225);
+        }
+        QColorDialog QLabel {
+            color: rgb(220, 220, 225);
+        }
+        QColorDialog QLineEdit {
+            background-color: rgb(45, 45, 50);
+            border: 1px solid rgb(70, 70, 80);
+            border-radius: 4px;
+            padding: 4px 8px;
+            color: rgb(220, 220, 225);
+        }
+        QColorDialog QSpinBox {
+            background-color: rgb(45, 45, 50);
+            border: 1px solid rgb(70, 70, 80);
+            border-radius: 4px;
+            padding: 2px 6px;
+            color: rgb(220, 220, 225);
+        }
+        QColorDialog QPushButton {
+            background-color: rgb(55, 55, 65);
+            border: 1px solid rgb(80, 80, 90);
+            border-radius: 4px;
+            padding: 6px 16px;
+            color: rgb(220, 220, 225);
+            min-width: 70px;
+        }
+        QColorDialog QPushButton:hover {
+            background-color: rgb(70, 70, 80);
+        }
+        QColorDialog QPushButton:pressed {
+            background-color: rgb(45, 45, 55);
+        }
+        QColorDialog QGroupBox {
+            border: 1px solid rgb(60, 60, 70);
+            border-radius: 6px;
+            margin-top: 8px;
+            padding-top: 8px;
+            color: rgb(200, 200, 210);
+        }
+        QColorDialog QGroupBox::title {
+            subcontrol-origin: margin;
+            left: 10px;
+            padding: 0 5px;
+        }
+    """
+    
+    @staticmethod
+    def get_color(
+        initial: QColor,
+        parent: Optional[QWidget] = None,
+        title: str = "Choose Color",
+        show_alpha: bool = True,
+    ) -> Optional[QColor]:
+        """Show a styled color picker dialog.
+        
+        Args:
+            initial: Initial color to display
+            parent: Parent widget
+            title: Dialog title
+            show_alpha: Whether to show alpha channel option
+            
+        Returns:
+            Selected QColor if user clicked OK, None if cancelled
+        """
+        dialog = QColorDialog(initial, parent)
+        dialog.setWindowTitle(title)
+        dialog.setStyleSheet(StyledColorPicker._STYLESHEET)
+        
+        # Set options
+        options = QColorDialog.ColorDialogOption(0)
+        if show_alpha:
+            options |= QColorDialog.ColorDialogOption.ShowAlphaChannel
+        dialog.setOptions(options)
+        
+        # Apply dark palette
+        palette = dialog.palette()
+        palette.setColor(QPalette.ColorRole.Window, QColor(30, 30, 35))
+        palette.setColor(QPalette.ColorRole.WindowText, QColor(220, 220, 225))
+        palette.setColor(QPalette.ColorRole.Base, QColor(45, 45, 50))
+        palette.setColor(QPalette.ColorRole.Text, QColor(220, 220, 225))
+        palette.setColor(QPalette.ColorRole.Button, QColor(55, 55, 65))
+        palette.setColor(QPalette.ColorRole.ButtonText, QColor(220, 220, 225))
+        dialog.setPalette(palette)
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            return dialog.currentColor()
+        return None
+    
+    @staticmethod
+    def choose_color(
+        current_color: QColor,
+        parent: Optional[QWidget] = None,
+        title: str = "Choose Color",
+    ) -> QColor:
+        """Convenience method that returns current color if cancelled.
+        
+        Args:
+            current_color: Current color (returned if cancelled)
+            parent: Parent widget
+            title: Dialog title
+            
+        Returns:
+            Selected QColor if user clicked OK, current_color if cancelled
+        """
+        result = StyledColorPicker.get_color(current_color, parent, title)
+        return result if result is not None else current_color

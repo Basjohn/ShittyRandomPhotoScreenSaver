@@ -3,7 +3,7 @@ Clock widget for screensaver overlay.
 
 Displays current time with configurable format, position, and styling.
 """
-from typing import Optional, Union, Dict, Any
+from typing import Optional, Union
 from datetime import datetime, timezone, timedelta
 from enum import Enum
 import math
@@ -19,7 +19,8 @@ from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtGui import QFont, QColor, QPainter, QPen, QPaintEvent
 from shiboken6 import Shiboken
 
-from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile, configure_overlay_widget_attributes
+from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
+from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 from core.logging.logger import get_logger
 
@@ -43,9 +44,11 @@ class ClockPosition(Enum):
     CENTER = "center"
 
 
-class ClockWidget(QLabel):
+class ClockWidget(BaseOverlayWidget):
     """
     Clock widget for displaying time on screensaver.
+    
+    Extends BaseOverlayWidget for common styling/positioning functionality.
     
     Features:
     - 12h/24h format
@@ -53,10 +56,14 @@ class ClockWidget(QLabel):
     - Auto-update every second
     - Customizable font and colors
     - Show/hide seconds
+    - Digital and analog display modes
     """
     
     # Signals
     time_updated = Signal(str)  # Emits formatted time string
+    
+    # Override defaults for clock
+    DEFAULT_FONT_SIZE = 48
     
     def __init__(self, parent: Optional[QWidget] = None,
                  time_format: TimeFormat = TimeFormat.TWELVE_HOUR,
@@ -75,15 +82,17 @@ class ClockWidget(QLabel):
             timezone_str: Timezone string ('local', pytz timezone, or 'UTC±HH:MM')
             show_timezone: Whether to display timezone abbreviation
         """
-        super().__init__(parent)
+        # Convert ClockPosition to OverlayPosition for base class
+        overlay_pos = OverlayPosition(position.value)
+        super().__init__(parent, position=overlay_pos, overlay_name="clock")
         
+        # Clock-specific settings
         self._time_format = time_format
-        self._position = position
+        self._clock_position = position  # Keep original enum for compatibility
         self._show_seconds = show_seconds
         self._show_timezone = show_timezone
         self._timer: Optional[QTimer] = None
         self._timer_handle: Optional[OverlayTimerHandle] = None
-        self._enabled = False
         
         # Separate label for timezone
         self._tz_label: Optional[QLabel] = None
@@ -93,18 +102,9 @@ class ClockWidget(QLabel):
         self._timezone = self._parse_timezone(timezone_str)
         self._timezone_abbrev = self._get_timezone_abbrev()
         
-        # Styling defaults
-        self._font_family = "Segoe UI"
+        # Override base class font size default
         self._font_size = 48
-        self._text_color = QColor(255, 255, 255, 230)  # White with slight transparency
-        self._margin = 20  # Margin from edge
         
-        # Background frame settings
-        self._show_background = False
-        self._bg_opacity = 0.9  # 90% opacity default
-        self._bg_color = QColor(64, 64, 64, int(255 * self._bg_opacity))  # Dark grey
-        self._bg_border_width = 2
-        self._bg_border_color = QColor(128, 128, 128, 200)  # Light grey border
         # Display mode: digital (default) or analogue clock-face rendering.
         self._display_mode: str = "digital"
         self._show_numerals: bool = True
@@ -113,9 +113,6 @@ class ClockWidget(QLabel):
 
         # Last timestamp used for analogue rendering.
         self._current_dt: Optional[datetime] = None
-        self._shadow_config: Optional[Dict[str, Any]] = None
-        self._has_faded_in: bool = False
-        self._overlay_name: str = "clock"
         
         # Setup widget
         self._setup_ui()
@@ -126,42 +123,40 @@ class ClockWidget(QLabel):
     
     def _setup_ui(self) -> None:
         """Setup widget UI."""
-        # Configure attributes to prevent flicker with GL compositor
-        configure_overlay_widget_attributes(self)
+        # Use base class styling setup
+        self._apply_base_styling()
         
         # Set label properties
         self.setObjectName("clock_main")
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._update_stylesheet()
         
-        # Set font
+        # Set font with bold weight for clock
         font = QFont(self._font_family, self._font_size, QFont.Weight.Bold)
         self.setFont(font)
         
         # Create timezone label if needed
         if self._show_timezone and self.parent():
-            self._tz_label = QLabel(self)
-            self._tz_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-            tz_font_size = max(int(self._font_size / 4), 8)
-            tz_font = QFont(self._font_family, tz_font_size)
-            self._tz_label.setFont(tz_font)
-            self._tz_label.setStyleSheet(f"""QLabel {{
-                color: rgba({self._text_color.red()}, {self._text_color.green()}, 
-                           {self._text_color.blue()}, {self._text_color.alpha()});
-                background-color: transparent;
-                padding: 0px;
-                border: none;
-            }}""")
-            self._tz_label.hide()
-        
-        # Initially hidden
-        self.hide()
+            self._create_tz_label()
     
-    def set_shadow_config(self, config: Optional[Dict[str, Any]]) -> None:
-        self._shadow_config = config
-
-    def set_overlay_name(self, name: str) -> None:
-        self._overlay_name = str(name) or "clock"
+    def _create_tz_label(self) -> None:
+        """Create the timezone label."""
+        self._tz_label = QLabel(self)
+        self._tz_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        tz_font_size = max(int(self._font_size / 4), 8)
+        tz_font = QFont(self._font_family, tz_font_size)
+        self._tz_label.setFont(tz_font)
+        self._tz_label.setStyleSheet(f"""QLabel {{
+            color: rgba({self._text_color.red()}, {self._text_color.green()}, 
+                       {self._text_color.blue()}, {self._text_color.alpha()});
+            background-color: transparent;
+            padding: 0px;
+            border: none;
+        }}""")
+        self._tz_label.hide()
+    
+    def _update_content(self) -> None:
+        """Required by BaseOverlayWidget - update clock display."""
+        self._update_time()
     
     def start(self) -> None:
         """Start clock updates."""
@@ -525,27 +520,29 @@ class ClockWidget(QLabel):
         widget_width = self.width()
         widget_height = self.height()
         
-        # Calculate position with 20px minimum margin from all edges
-        edge_margin = 20
-        if self._position == ClockPosition.TOP_LEFT:
+        # Use base class margin
+        edge_margin = self._margin
+        pos = self._clock_position
+        
+        if pos == ClockPosition.TOP_LEFT:
             x = edge_margin
             y = edge_margin
-        elif self._position == ClockPosition.TOP_RIGHT:
+        elif pos == ClockPosition.TOP_RIGHT:
             x = parent_width - widget_width - edge_margin
             y = edge_margin
-        elif self._position == ClockPosition.BOTTOM_LEFT:
+        elif pos == ClockPosition.BOTTOM_LEFT:
             x = edge_margin
             y = parent_height - widget_height - edge_margin
-        elif self._position == ClockPosition.BOTTOM_RIGHT:
+        elif pos == ClockPosition.BOTTOM_RIGHT:
             x = parent_width - widget_width - edge_margin
             y = parent_height - widget_height - edge_margin
-        elif self._position == ClockPosition.TOP_CENTER:
+        elif pos == ClockPosition.TOP_CENTER:
             x = (parent_width - widget_width) // 2
             y = edge_margin
-        elif self._position == ClockPosition.BOTTOM_CENTER:
+        elif pos == ClockPosition.BOTTOM_CENTER:
             x = (parent_width - widget_width) // 2
             y = parent_height - widget_height - edge_margin
-        elif self._position == ClockPosition.CENTER:
+        elif pos == ClockPosition.CENTER:
             x = (parent_width - widget_width) // 2
             y = (parent_height - widget_height) // 2
         else:
@@ -607,7 +604,9 @@ class ClockWidget(QLabel):
         Args:
             position: Screen position
         """
-        self._position = position
+        self._clock_position = position
+        # Also update base class position for consistency
+        self._position = OverlayPosition(position.value)
         
         # Update position immediately if running
         if self._enabled:
@@ -641,77 +640,33 @@ class ClockWidget(QLabel):
             self.update()
 
     def set_font_family(self, family: str) -> None:
-        """
-        Set font family.
-        
-        Args:
-            family: Font family name
-        """
-        self._font_family = family
+        """Set font family - override to use bold weight and update tz label."""
+        super().set_font_family(family)
+        # Use bold weight for clock
         font = QFont(self._font_family, self._font_size, QFont.Weight.Bold)
         self.setFont(font)
-        
-        # Update timezone label font if it exists
-        if self._tz_label:
-            tz_font_size = max(int(self._font_size / 4), 8)
-            tz_font = QFont(self._font_family, tz_font_size)
-            self._tz_label.setFont(tz_font)
-        
-        # Update display immediately if running
+        # Update timezone label font
+        self._update_tz_label_font()
         if self._enabled:
             self._update_time()
     
     def set_font_size(self, size: int) -> None:
-        """
-        Set font size.
-        
-        Args:
-            size: Font size in points
-        """
-        if size <= 0:
-            logger.warning(f"[FALLBACK] Invalid font size {size}, using 48")
-            size = 48
-        
-        self._font_size = size
+        """Set font size - override to use bold weight and update tz label."""
+        super().set_font_size(size)
+        # Use bold weight for clock
         font = QFont(self._font_family, self._font_size, QFont.Weight.Bold)
         self.setFont(font)
-        
-        # Update timezone label font if it exists
+        # Update timezone label font
+        self._update_tz_label_font()
+        if self._enabled:
+            self._update_time()
+    
+    def _update_tz_label_font(self) -> None:
+        """Update timezone label font to match main font."""
         if self._tz_label:
             tz_font_size = max(int(self._font_size / 4), 8)
             tz_font = QFont(self._font_family, tz_font_size)
             self._tz_label.setFont(tz_font)
-        
-        # Update display immediately if running
-        if self._enabled:
-            self._update_time()
-    
-    def set_text_color(self, color: QColor) -> None:
-        """
-        Set text color.
-        
-        Args:
-            color: Text color
-        """
-        self._text_color = color
-        self._update_stylesheet()
-    
-    def set_margin(self, margin: int) -> None:
-        """
-        Set margin from screen edges.
-        
-        Args:
-            margin: Margin in pixels
-        """
-        if margin < 0:
-            logger.warning(f"[FALLBACK] Invalid margin {margin}, using 20")
-            margin = 20
-        
-        self._margin = margin
-        
-        # Update position immediately if running
-        if self._enabled:
-            self._update_position()
     
     def set_timezone(self, timezone_str: str) -> None:
         """
@@ -762,53 +717,6 @@ class ClockWidget(QLabel):
         # Update display immediately if running
         if self._enabled:
             self._update_time()
-    
-    def set_show_background(self, show: bool) -> None:
-        """
-        Set whether to show background frame.
-        
-        Args:
-            show: True to show background frame
-        """
-        self._show_background = show
-        self._update_stylesheet()
-    
-    def set_background_color(self, color: QColor) -> None:
-        """
-        Set background frame color.
-        
-        Args:
-            color: Background color (with alpha for opacity)
-        """
-        self._bg_color = color
-        if self._show_background:
-            self._update_stylesheet()
-    
-    def set_background_opacity(self, opacity: float) -> None:
-        """
-        Set background frame opacity (0.0 to 1.0).
-        
-        Args:
-            opacity: Opacity value from 0.0 (transparent) to 1.0 (opaque)
-        """
-        self._bg_opacity = max(0.0, min(1.0, opacity))
-        # Update background color with new opacity
-        self._bg_color.setAlpha(int(255 * self._bg_opacity))
-        if self._show_background:
-            self._update_stylesheet()
-    
-    def set_background_border(self, width: int, color: QColor) -> None:
-        """
-        Set background frame border.
-        
-        Args:
-            width: Border width in pixels
-            color: Border color
-        """
-        self._bg_border_width = width
-        self._bg_border_color = color
-        if self._show_background:
-            self._update_stylesheet()
     
     def _update_stylesheet(self) -> None:
         """Update widget stylesheet based on current settings."""

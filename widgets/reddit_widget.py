@@ -24,12 +24,13 @@ import requests
 
 from PySide6.QtCore import Qt, QTimer, QRect, QPoint, QUrl
 from PySide6.QtGui import QFont, QColor, QPainter, QFontMetrics, QDesktopServices, QPixmap, QPainterPath
-from PySide6.QtWidgets import QLabel, QWidget, QToolTip
+from PySide6.QtWidgets import QWidget, QToolTip
 from shiboken6 import isValid as shiboken_isValid
 
 from core.logging.logger import get_logger, is_verbose_logging
 from core.threading.manager import ThreadManager
-from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile, configure_overlay_widget_attributes
+from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
+from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 
 logger = get_logger(__name__)
@@ -57,8 +58,10 @@ class RedditPost:
 _TITLE_FILTER_RE = re.compile(r"\b(daily|weekly|question thread)\b", re.IGNORECASE)
 
 
-class RedditWidget(QLabel):
+class RedditWidget(BaseOverlayWidget):
     """Reddit widget for displaying subreddit entries.
+
+    Extends BaseOverlayWidget for common styling/positioning functionality.
 
     Features:
     - Fetches top N posts from a configured subreddit via Reddit's
@@ -71,6 +74,9 @@ class RedditWidget(QLabel):
     - Non-interactive at the widget level; click handling is delegated
       to DisplayWidget during Ctrl-held / hard-exit interaction mode.
     """
+    
+    # Override defaults for reddit widget
+    DEFAULT_FONT_SIZE = 18
 
     def __init__(
         self,
@@ -78,19 +84,19 @@ class RedditWidget(QLabel):
         subreddit: str = "wallpapers",
         position: RedditPosition = RedditPosition.TOP_RIGHT,
     ) -> None:
-        super().__init__(parent)
+        # Convert RedditPosition to OverlayPosition for base class
+        overlay_pos = OverlayPosition(position.value)
+        super().__init__(parent, position=overlay_pos, overlay_name="reddit")
 
         # Logical placement and source configuration
-        self._position = position
+        self._reddit_position = position  # Keep original enum for compatibility
         self._subreddit: str = self._normalise_subreddit(subreddit)
         self._sort: str = "hot"
         self._limit: int = 10
         self._refresh_interval = timedelta(minutes=10)
 
-        self._thread_manager: Optional[ThreadManager] = None
         self._update_timer: Optional[QTimer] = None
         self._update_timer_handle: Optional[OverlayTimerHandle] = None
-        self._enabled: bool = False
 
         # Cached posts and click hit-rects
         self._posts: List[RedditPost] = []
@@ -98,21 +104,8 @@ class RedditWidget(QLabel):
         self._has_displayed_valid_data: bool = False
         self._has_seen_first_sample: bool = False
 
-        # Styling defaults (mirrors MediaWidget/WeatherWidget)
-        self._font_family = "Segoe UI"
+        # Override base class font size default
         self._font_size = 18
-        self._text_color = QColor(255, 255, 255, 230)
-        self._margin = 20
-
-        # Background frame settings (driven by settings via setters)
-        self._show_background = False
-        self._bg_opacity = 0.9
-        self._bg_color = QColor(64, 64, 64, int(255 * self._bg_opacity))
-        self._bg_border_width = 2
-        self._bg_border_color = QColor(128, 128, 128, 200)
-
-        # Shared shadow configuration (from DisplayWidget)
-        self._shadow_config: Optional[Dict[str, Any]] = None
 
         # Header/logo metrics, mirroring the Spotify card approach
         self._header_font_pt: int = self._font_size
@@ -140,8 +133,8 @@ class RedditWidget(QLabel):
 
     def _setup_ui(self) -> None:
         """Initialise widget appearance and layout."""
-        # Configure attributes to prevent flicker with GL compositor
-        configure_overlay_widget_attributes(self)
+        # Use base class styling setup
+        self._apply_base_styling()
 
         self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         try:
@@ -161,12 +154,14 @@ class RedditWidget(QLabel):
         base_min = int(220 * 1.2)
         self.setMinimumHeight(base_min)
 
-        self._update_stylesheet()
         try:
             self.move(10000, 10000)
         except Exception:
             pass
-        self.hide()
+    
+    def _update_content(self) -> None:
+        """Required by BaseOverlayWidget - refresh reddit display."""
+        self._fetch_feed()
 
     def start(self) -> None:
         """Begin periodic Reddit fetches and show widget on first data."""
@@ -240,58 +235,16 @@ class RedditWidget(QLabel):
             self._fetch_feed()
 
     def set_position(self, position: RedditPosition) -> None:
-        self._position = position
-        if self._enabled and self.parent():
-            self._update_position()
-
-    def set_font_family(self, family: str) -> None:
-        self._font_family = family or self._font_family
-        font = QFont(self._font_family, self._font_size, QFont.Weight.Normal)
-        self.setFont(font)
-
-    def set_font_size(self, size: int) -> None:
-        if size <= 0:
-            logger.warning("[FALLBACK] Invalid Reddit font size %s, using %s", size, self._font_size)
-            return
-        self._font_size = size
-        font = QFont(self._font_family, self._font_size, QFont.Weight.Normal)
-        self.setFont(font)
-
-    def set_text_color(self, color: QColor) -> None:
-        self._text_color = color
-        self._update_stylesheet()
-
-    def set_margin(self, margin: int) -> None:
-        if margin < 0:
-            margin = 20
-        self._margin = margin
-        if self._enabled and self.parent():
-            self._update_position()
-
-    def set_show_background(self, show: bool) -> None:
-        self._show_background = bool(show)
-        self._update_stylesheet()
+        """Set widget position using RedditPosition enum."""
+        self._reddit_position = position
+        # Update base class position
+        overlay_pos = OverlayPosition(position.value)
+        super().set_position(overlay_pos)
 
     def set_show_separators(self, show: bool) -> None:
+        """Enable or disable row separators."""
         self._show_separators = bool(show)
         self.update()
-
-    def set_background_color(self, color: QColor) -> None:
-        self._bg_color = color
-        if self._show_background:
-            self._update_stylesheet()
-
-    def set_background_opacity(self, opacity: float) -> None:
-        self._bg_opacity = max(0.0, min(1.0, float(opacity)))
-        self._bg_color.setAlpha(int(255 * self._bg_opacity))
-        if self._show_background:
-            self._update_stylesheet()
-
-    def set_background_border(self, width: int, color: QColor) -> None:
-        self._bg_border_width = max(0, int(width))
-        self._bg_border_color = color
-        if self._show_background:
-            self._update_stylesheet()
 
     def set_item_limit(self, limit: int) -> None:
         self._limit = max(1, min(int(limit), 25))
@@ -509,6 +462,12 @@ class RedditWidget(QLabel):
 
         if self.parent():
             self._update_position()
+            # Notify parent to recalculate stacking after height change
+            if hasattr(self.parent(), 'recalculate_stacking'):
+                try:
+                    self.parent().recalculate_stacking()
+                except Exception:
+                    pass
 
         first_sample = not self._has_seen_first_sample
         if first_sample:
@@ -523,7 +482,9 @@ class RedditWidget(QLabel):
 
             if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
                 try:
-                    parent.request_overlay_fade_sync("reddit", _starter)
+                    # Use configured overlay name (defaults to "reddit")
+                    overlay_name = getattr(self, '_overlay_name', None) or "reddit"
+                    parent.request_overlay_fade_sync(overlay_name, _starter)
                 except Exception:
                     _starter()
             else:
@@ -830,48 +791,13 @@ class RedditWidget(QLabel):
 
         line_height = max(age_metrics.height(), title_metrics.height()) + 4
 
-        # Base vertical padding inside the card, excluding contentsMargins.
-        card_padding = 6 + 6 + 10
-        base_min = int(220 * 1.2)
-        if self._limit <= 5:
-            base_min = int(base_min * 1.25)
+        # Base vertical padding inside the card
+        card_padding = 22  # 6 + 6 + 10
 
-        content_no_gaps = header_height + (rows * line_height) + card_padding
-        target = max(base_min, content_no_gaps)
-
-        if rows > 1:
-            slack = max(0, target - content_no_gaps)
-            max_gap = 6
-            base_gap = 0
-            try:
-                base_gap = int(min(max_gap, slack // (rows - 1))) if slack > 0 else 0
-            except Exception:
-                base_gap = 0
-
-            # Give low-item modes a little extra breathing room regardless
-            # of the exact slack so that 5-item ("4-mode") and 10-item
-            # layouts do not feel cramped.
-            extra_gap = 0
-            try:
-                limit_val = int(self._limit)
-            except Exception:
-                limit_val = rows
-            if limit_val <= 5:
-                extra_gap = 2
-            elif limit_val <= 10:
-                extra_gap = 1
-
-            gap = min(max_gap, base_gap + extra_gap)
-            self._row_vertical_spacing = max(0, gap)
-        else:
-            self._row_vertical_spacing = 0
-
-        # Ensure the final widget height is large enough for the header plus
-        # the requested number of rows inside the actual paint rect,
-        # including current row spacing and contents margins. This prevents
-        # low-item modes (e.g. 4-item) from losing the last row due to
-        # padding/margin discrepancies.
-
+        # Use consistent small spacing between rows
+        self._row_vertical_spacing = 4 if rows > 1 else 0
+        
+        # Get content margins
         try:
             margins = self.contentsMargins()
             margin_top = margins.top()
@@ -880,50 +806,16 @@ class RedditWidget(QLabel):
             margin_top = 0
             margin_bottom = 0
 
-        inner_required = (
+        # Calculate exact height needed for content
+        content_height = (
             header_height
             + (rows * line_height)
             + (max(0, rows - 1) * self._row_vertical_spacing)
-            + 8  # extra breathing room beneath the last row
+            + card_padding
         )
-        required_total = inner_required + margin_top + margin_bottom
-
-        target = max(target, required_total)
-
-        # For low-item layouts (the 4-item mode), redistribute any remaining
-        # vertical slack into the spacing between rows so that the extra
-        # height becomes comfortable padding instead of a large empty band
-        # beneath the last row.
-        try:
-            limit_for_spacing = int(self._limit)
-        except Exception:
-            limit_for_spacing = rows
-        if rows > 1 and limit_for_spacing <= 5:
-            used_inner = (
-                header_height
-                + (rows * line_height)
-                + (max(0, rows - 1) * self._row_vertical_spacing)
-                + 8
-            )
-            used_total = used_inner + margin_top + margin_bottom
-            slack_total = max(0, int(target) - int(used_total))
-            if slack_total > 0:
-                extra_per_gap = slack_total // max(1, rows - 1)
-                self._row_vertical_spacing += max(0, extra_per_gap)
         
-
-                used_inner = (
-                    header_height
-                    + (rows * line_height)
-                    + (max(0, rows - 1) * self._row_vertical_spacing)
-                    + 8
-                )
-                target = used_inner + margin_top + margin_bottom
-
-            # Add a tiny safety margin so the last row never clips due to
-            # rounding between the layout and paint paths. This keeps the
-            # current spacing but guarantees all 4 rows are fully visible.
-            target = int(target) + 4
+        # Add margins and a small safety buffer
+        target = content_height + margin_top + margin_bottom + 4
 
         try:
             self.setMinimumHeight(target)
@@ -1196,21 +1088,27 @@ class RedditWidget(QLabel):
         widget_height = self.height()
 
         edge = max(10, self._margin)
-        if self._position == RedditPosition.TOP_LEFT:
+        pos = self._reddit_position
+        
+        if pos == RedditPosition.TOP_LEFT:
             x = edge
             y = edge
-        elif self._position == RedditPosition.TOP_RIGHT:
+        elif pos == RedditPosition.TOP_RIGHT:
             x = parent_width - widget_width - edge
             y = edge
-        elif self._position == RedditPosition.BOTTOM_LEFT:
+        elif pos == RedditPosition.BOTTOM_LEFT:
             x = edge
             y = parent_height - widget_height - edge
-        elif self._position == RedditPosition.BOTTOM_RIGHT:
+        elif pos == RedditPosition.BOTTOM_RIGHT:
             x = parent_width - widget_width - edge
             y = parent_height - widget_height - edge
         else:
             x = edge
             y = edge
+
+        # Apply pixel shift and stack offset (inherited from BaseOverlayWidget)
+        x += self._pixel_shift_offset.x() + self._stack_offset.x()
+        y += self._pixel_shift_offset.y() + self._stack_offset.y()
 
         self.move(x, y)
         
