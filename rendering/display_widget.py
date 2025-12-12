@@ -2941,9 +2941,11 @@ class DisplayWidget(QWidget):
         # Open any pending Reddit URL that was deferred in hard-exit mode
         self._open_pending_reddit_url()
         
-        # PERF: Remove from class-level cache
+        # PERF: Remove from class-level cache, but only if we're still the registered instance
+        # (avoids race condition where new widget registers before old widget's __del__ runs)
         if self._screen is not None:
-            DisplayWidget._instances_by_screen.pop(self._screen, None)
+            if DisplayWidget._instances_by_screen.get(self._screen) is self:
+                DisplayWidget._instances_by_screen.pop(self._screen, None)
         
         # Reset eventFilter flags if this was the owner
         if DisplayWidget._event_filter_owner is self:

@@ -148,7 +148,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - widgets/clock_widget.py
   - Digital clock widget extending `BaseOverlayWidget`. Supports three instances (Clock 1/2/3) with per-monitor selection, independent timezones, optional seconds and timezone labels, analog/digital modes.
 - widgets/weather_widget.py
-  - Weather widget extending `BaseOverlayWidget`. Per-monitor selection via settings (ALL or 1/2/3); planned QPainter-based iconography.
+  - Weather widget extending `BaseOverlayWidget`. Per-monitor selection via settings (ALL or 1/2/3). Features optional forecast line (tomorrow's min/max temp and condition, 8pt smaller than base font). Planned QPainter-based iconography.
 - widgets/media_widget.py
   - Spotify/media overlay widget extending `BaseOverlayWidget`. Driven by `core/media/media_controller.py`; per-monitor selection via `widgets.media`, corner positioning, background frame, and monochrome transport controls (Prev/Play/Pause/Next) over track metadata. Artwork uses a square frame for album covers and adapts to non-square thumbnails.
 - widgets/reddit_widget.py
@@ -202,7 +202,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 ## Weather
 - weather/open_meteo_provider.py
   - `OpenMeteoProvider`: Weather data provider using Open-Meteo API (free, no API key required)
-  - Geocoding, current conditions, and forecast fetching
+  - Geocoding, current conditions, and tomorrow's forecast (min/max temp + condition)
 
 ## Utilities
 - utils/image_cache.py

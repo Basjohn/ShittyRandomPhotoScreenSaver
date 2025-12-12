@@ -51,6 +51,16 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._band_bins = None
         self._weight_bands = None
         self._weight_factors = None
+        # Pre-allocated buffers to reduce GC pressure (avoid per-frame allocation)
+        self._smooth_kernel = None
+        self._work_bars = None  # output bars buffer
+        self._zero_bars = None  # cached zero bars list
+        self._band_edges = None  # logarithmic band edges
+        self._freq_values = None  # temp buffer for frequency band values
+        # Per-bar history for attack/decay dynamics
+        self._bar_history = None
+        # Running peak tracker for normalization
+        self._running_peak = 1.0
 
     def is_running(self) -> bool:
         return self._running
@@ -138,145 +148,174 @@ class SpotifyVisualizerAudioWorker(QObject):
     # FFT Processing
     # ------------------------------------------------------------------
 
+    def _get_zero_bars(self) -> List[float]:
+        """Return cached zero bars list to avoid per-call allocation."""
+        if self._zero_bars is None or len(self._zero_bars) != self._bar_count:
+            self._zero_bars = [0.0] * self._bar_count
+        return self._zero_bars
+
     def _fft_to_bars(self, fft) -> List[float]:
         """Convert FFT magnitudes to visualizer bar heights.
         
-        Restored from 1.196v with proven amplitude/beat logic.
+        Optimized to minimize per-frame allocations for reduced GC pressure.
+        Uses pre-allocated buffers and in-place operations where possible.
         """
         np = self._np
         if fft is None:
-            return [0.0] * self._bar_count
-
-        try:
-            mag = fft[1:]
-            if mag.size == 0:
-                return [0.0] * self._bar_count
-            if np.iscomplexobj(mag):
-                mag = np.abs(mag)
-            mag = mag.astype("float32", copy=False)
-        except Exception:
-            return [0.0] * self._bar_count
-
-        n = int(mag.size)
-        if n <= 0:
-            return [0.0] * self._bar_count
+            return self._get_zero_bars()
 
         bands = int(self._bar_count)
         if bands <= 0:
             return []
 
         try:
-            mag = np.log1p(mag)
-            try:
-                mag = mag ** 1.2
-            except Exception:
-                pass
+            mag = fft[1:]
+            if mag.size == 0:
+                return self._get_zero_bars()
+            if np.iscomplexobj(mag):
+                mag = np.abs(mag)
+            mag = mag.astype("float32", copy=False)
+        except Exception:
+            return self._get_zero_bars()
+
+        n = int(mag.size)
+        if n <= 0:
+            return self._get_zero_bars()
+
+        try:
+            # In-place log1p and power operations where possible
+            np.log1p(mag, out=mag)
+            np.power(mag, 1.2, out=mag)
 
             if n > 4:
                 try:
-                    kernel = np.array([0.25, 0.5, 0.25], dtype="float32")
-                    mag = np.convolve(mag, kernel, mode="same")
+                    # Use cached kernel to avoid per-frame allocation
+                    if self._smooth_kernel is None:
+                        self._smooth_kernel = np.array([0.25, 0.5, 0.25], dtype="float32")
+                    # convolve always allocates, but kernel is cached
+                    mag = np.convolve(mag, self._smooth_kernel, mode="same")
                 except Exception:
                     pass
         except Exception:
-            return [0.0] * bands
+            return self._get_zero_bars()
 
-        # Logarithmic binning for perceptual frequency distribution
+        # Center-out frequency mapping with logarithmic binning
+        # Bass in center, treble at edges - reactive with attack/decay dynamics
         cache_key = (n, bands)
         try:
             if getattr(self, "_band_cache_key", None) != cache_key:
-                idx = np.arange(n, dtype="float32")
-                log_idx = np.log1p(idx + 1.0)
-                start = float(log_idx[0])
-                end = float(log_idx[-1])
-                edges = np.linspace(start, end, bands + 1, dtype="float32")
-                bins = edges[1:-1]
-                self._band_cache_key = cache_key
-                self._band_log_idx = log_idx
-                self._band_bins = bins
-            log_idx = self._band_log_idx
-            bins = self._band_bins
-            if log_idx is None or bins is None:
-                return [0.0] * bands
-            band_idx = np.digitize(log_idx, bins, right=False)
-            sums = np.bincount(band_idx, weights=mag, minlength=bands)
-            counts = np.bincount(band_idx, minlength=bands)
-            bars_arr = np.divide(
-                sums,
-                counts,
-                out=np.zeros_like(sums, dtype="float32"),
-                where=counts > 0,
-            )
-        except Exception:
-            return [0.0] * bands
-
-        arr = bars_arr.astype("float32", copy=False)
-        peak = float(arr.max()) if arr.size else 0.0
-        if peak <= 1e-6:
-            return [0.0] * bands
-        arr = arr / peak
-
-        # Spatial weighting for center-focused visual
-        try:
-            if getattr(self, "_weight_bands", None) != bands:
-                positions = np.linspace(-1.0, 1.0, bands, dtype="float32")
-                band_idx_f = np.arange(bands, dtype="float32")
-                t = band_idx_f / max(1.0, float(bands - 1))
-
-                # Tilt to help right side
-                tilt = 0.45 + 0.6 * t
+                min_freq_idx = 1
+                max_freq_idx = n
                 
-                # Center hill shifted slightly right
-                sigma = 0.60
-                center_shift = 0.18
-                center_profile = np.exp(-0.5 * ((positions - center_shift) / sigma) ** 2).astype(
-                    "float32"
-                )
-                peak_profile = float(center_profile.max()) if center_profile.size else 0.0
-                if peak_profile > 1e-6:
-                    center_profile = center_profile / peak_profile
-
-                center_weight = 0.40
-                base_weights = (1.0 - center_weight) + center_weight * center_profile
-
-                # Right bias
-                bias_strength = 0.75
-                right_bias = 1.0 + bias_strength * positions
-                right_bias = np.clip(right_bias, 1.0 - bias_strength, 1.0 + bias_strength)
-
-                # Bass attenuation
-                bass_atten = 1.0 - 0.16 * (1.0 - t) * (1.0 - t)
-                total_weights = base_weights * tilt * right_bias * bass_atten
-                self._weight_bands = bands
-                self._weight_factors = total_weights.astype("float32", copy=False)
-            weights = self._weight_factors
-            if weights is not None and weights.size == arr.size:
-                arr *= weights
+                log_edges = np.logspace(
+                    np.log10(min_freq_idx),
+                    np.log10(max_freq_idx),
+                    bands + 1,
+                    dtype="float32"
+                ).astype("int32")
+                
+                self._band_cache_key = cache_key
+                self._band_edges = log_edges
+                self._work_bars = np.zeros(bands, dtype="float32")
+                self._freq_values = np.zeros(bands, dtype="float32")
+                self._bar_history = np.zeros(bands, dtype="float32")
+            
+            edges = self._band_edges
+            if edges is None:
+                return self._get_zero_bars()
+            
+            arr = self._work_bars
+            arr.fill(0.0)
+            freq_values = self._freq_values
+            freq_values.fill(0.0)
+            
+            # Compute RMS for each frequency band (standard left-to-right)
+            for b in range(bands):
+                start = int(edges[b])
+                end = int(edges[b + 1])
+                if end <= start:
+                    end = start + 1
+                if start < n and end <= n:
+                    band_slice = mag[start:end]
+                    if band_slice.size > 0:
+                        freq_values[b] = np.sqrt(np.mean(band_slice ** 2))
+            
+            # CENTER-OUT mapping: bass in center, treble at edges
+            center = bands // 2
+            
+            # Get raw energy values
+            raw_bass = float(np.mean(freq_values[:4])) if bands >= 4 else float(freq_values[0])
+            raw_mid = float(np.mean(freq_values[4:10])) if bands >= 10 else raw_bass * 0.5
+            raw_treble = float(np.mean(freq_values[10:])) if bands > 10 else raw_bass * 0.2
+            
+            # Subtract noise floor and expand dynamic range
+            # raw_bass is typically 1.8-3.1, noise_floor controls drop threshold
+            # TUNED: noise_floor=2.1, expansion=2.8 hit 1.0, trying slightly less
+            noise_floor = 2.1  # Sweet spot for bigger drops while keeping peaks
+            expansion = 2.5    # Slightly less push to top
+            
+            bass_energy = max(0.0, (raw_bass - noise_floor) * expansion)
+            mid_energy = max(0.0, (raw_mid - noise_floor * 0.4) * expansion)
+            treble_energy = max(0.0, (raw_treble - noise_floor * 0.2) * expansion)
+            
+            for i in range(bands):
+                dist = abs(i - center) / float(center) if center > 0 else 0.0
+                gradient = (1.0 - dist) ** 2 * 0.85 + 0.15
+                base = bass_energy * gradient
+                mid_contrib = mid_energy * (1.0 - abs(dist - 0.5) * 2) * 0.3
+                treble_contrib = treble_energy * dist * 0.2
+                arr[i] = base + mid_contrib + treble_contrib
+            
         except Exception:
-            pass
+            return self._get_zero_bars()
 
-        # Edge smoothing
-        try:
-            if bands >= 3:
-                left0 = float(arr[0])
-                left1 = float(arr[1])
-                right1 = float(arr[-2])
-                edge_leak_left = 0.30
-                right_trail_factor = 0.80
-                arr[0] = left0 * (1.0 - edge_leak_left) + left1 * edge_leak_left
-                forced_right = right1 * right_trail_factor
-                if bands >= 2 and forced_right > float(arr[-1]):
-                    arr[-1] = forced_right
-        except Exception:
-            pass
-
-        peak2 = float(arr.max()) if arr.size else 0.0
-        if peak2 > 1e-6:
-            arr = arr / peak2
-        arr = np.clip(arr, 0.0, 1.0)
-        return [float(x) for x in arr.tolist()]
+        # V1.2 STYLE SMOOTHING with aggressive decay for 0.1-1.0 range
+        # decay_rate = 0.7 means bars drop 30% per frame - much faster drops
+        smoothing = 0.3
+        decay_rate = 0.7  # Aggressive decay for visible drops
+        
+        bar_history = self._bar_history
+        for i in range(bands):
+            target = arr[i]
+            current = bar_history[i]
+            
+            if target > current:
+                # Rise quickly
+                new_val = current + (target - current) * (1.0 - smoothing * 0.5)
+            else:
+                # Fall with aggressive decay
+                new_val = current * decay_rate
+                if new_val < target:
+                    new_val = target
+            
+            arr[i] = new_val
+            bar_history[i] = new_val
+        
+        # Scale to get peaks at 1.0 without clipping everything
+        arr *= 0.8
+        np.clip(arr, 0.0, 1.0, out=arr)
+        
+        # DEBUG: Log bar values and raw energy periodically
+        if not hasattr(self, '_debug_counter'):
+            self._debug_counter = 0
+        self._debug_counter += 1
+        if self._debug_counter % 30 == 1:
+            import logging
+            logger = logging.getLogger(__name__)
+            bar_str = " ".join(f"{v:.2f}" for v in arr)
+            # Log raw values to understand the range
+            raw_bass = float(np.mean(freq_values[:4])) if len(freq_values) >= 4 else 0.0
+            logger.info(f"[DEBUG] raw_bass={raw_bass:.3f} Bars: [{bar_str}]")
+        
+        # tolist() still allocates, but this is unavoidable for the return type
+        return arr.tolist()
 
     def compute_bars_from_samples(self, samples) -> Optional[List[float]]:
+        """Compute visualizer bars from audio samples.
+        
+        Optimized to minimize allocations - uses cached zero bars and
+        avoids unnecessary list comprehensions.
+        """
         np_mod = self._np
         if np_mod is None or samples is None:
             return None
@@ -300,16 +339,14 @@ class SpotifyVisualizerAudioWorker(QObject):
             # we don't amplify numerical noise into full-height bars when
             # audio stops.
             try:
-                peak_raw = float(np_mod.max(np_mod.abs(mono))) if getattr(mono, "size", 0) else 0.0
+                peak_raw = float(np_mod.abs(mono).max()) if size > 0 else 0.0
             except Exception:
                 peak_raw = 0.0
             if peak_raw < 1e-3:
-                target = int(self._bar_count)
-                if target <= 0:
-                    return None
-                return [0.0] * target
+                return self._get_zero_bars()
 
-            fft = np_mod.abs(np_mod.fft.rfft(mono))
+            fft = np_mod.fft.rfft(mono)
+            np_mod.abs(fft, out=fft)  # In-place abs
             bars = self._fft_to_bars(fft)
             if not isinstance(bars, list):
                 return None
@@ -321,7 +358,8 @@ class SpotifyVisualizerAudioWorker(QObject):
                     bars = bars + [0.0] * (target - len(bars))
                 else:
                     bars = bars[:target]
-            return [max(0.0, min(1.0, float(v))) for v in bars]
+            # bars already clamped in _fft_to_bars, no need for extra list comprehension
+            return bars
         except Exception:
             if is_verbose_logging():
                 logger.debug("[SPOTIFY_VIS] compute_bars_from_samples failed", exc_info=True)

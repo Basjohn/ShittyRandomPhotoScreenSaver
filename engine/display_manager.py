@@ -559,6 +559,31 @@ class DisplayManager(QObject):
         count = len(self.displays)
         logger.info("Cleaning up %d display widgets", count)
 
+        # Reset global DisplayWidget state to avoid stale references after cleanup
+        try:
+            from rendering.display_widget import DisplayWidget
+            from PySide6.QtGui import QGuiApplication
+            
+            # Remove event filter from app before destroying the owner widget
+            owner = DisplayWidget._event_filter_owner
+            if owner is not None:
+                try:
+                    app = QGuiApplication.instance()
+                    if app is not None:
+                        app.removeEventFilter(owner)
+                except Exception:
+                    pass
+            
+            DisplayWidget._global_ctrl_held = False
+            DisplayWidget._halo_owner = None
+            DisplayWidget._event_filter_installed = False
+            DisplayWidget._event_filter_owner = None
+            # Clear the screen-to-widget cache to avoid stale references
+            DisplayWidget._instances_by_screen.clear()
+            logger.debug("[CLEANUP] Reset all DisplayWidget global state")
+        except Exception:
+            pass
+
         for idx, display in enumerate(self.displays):
             try:
                 screen_index = getattr(display, "screen_index", idx)

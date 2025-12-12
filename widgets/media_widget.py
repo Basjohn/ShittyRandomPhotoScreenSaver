@@ -182,6 +182,10 @@ class MediaWidget(BaseOverlayWidget):
             return
 
         self._enabled = True
+        # Reset state flags to ensure fresh start
+        self._refresh_in_flight = False
+        self._artwork_pixmap = None  # Force artwork refresh
+        
         # Start the polling timer and trigger an immediate refresh. When a
         # ThreadManager is available we go straight to the async path so
         # WinRT/GSMTC calls never block the UI thread on startup.

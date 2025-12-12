@@ -143,9 +143,10 @@ def estimate_clock_size(
         # Fallback formula
         actual_font_height = int(font_size * 1.8)
     
-    if display_mode == "analogue":
+    if display_mode == "analogue" or display_mode == "analog":
         # Analogue clocks are square, sized based on font_size as a scaling factor
-        clock_diameter = max(120, font_size * 3)
+        # Matches clock_widget.py: base_side = max(160, int(self._font_size * 4.5))
+        clock_diameter = max(160, int(font_size * 4.5))
         width = clock_diameter + 20
         height = clock_diameter + 20
         
@@ -564,11 +565,34 @@ def get_position_status_for_widget(
     Returns:
         Tuple of (can_stack: bool, status_message: str)
     """
-    # Get actual screen height for the selected monitor
-    screen_height = get_screen_height_for_monitor(monitor)
-    
     estimates = build_widget_estimates(settings)
     
+    # Determine the effective screen height for prediction
+    # If this widget or any conflicting widget is on "ALL", use minimum height
+    # to be conservative about the worst-case scenario
+    target_pos_key = position.lower().replace(" ", "_")
+    
+    any_on_all = (monitor == "ALL")
+    if not any_on_all:
+        for est in estimates:
+            if est.widget_type == widget_type:
+                continue
+            if not est.enabled:
+                continue
+            if est.position_key() != target_pos_key:
+                continue
+            # Check if this conflicting widget overlaps with our monitor
+            if est.monitor == "ALL" or est.monitor == monitor:
+                if est.monitor == "ALL":
+                    any_on_all = True
+                    break
+    
+    if any_on_all:
+        # Use minimum screen height (conservative for ALL displays)
+        screen_height = get_screen_height_for_monitor("ALL")
+    else:
+        # Use specific monitor height
+        screen_height = get_screen_height_for_monitor(monitor)
     
     can_stack, message, _conflicting = predict_stacking_status(
         estimates, widget_type, position, monitor, screen_height

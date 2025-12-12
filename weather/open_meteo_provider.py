@@ -167,6 +167,8 @@ class OpenMeteoProvider:
                 'longitude': longitude,
                 'current_weather': 'true',
                 'current': 'relative_humidity_2m',  # Additional current data
+                'daily': 'temperature_2m_max,temperature_2m_min,weathercode',  # Tomorrow's forecast
+                'forecast_days': 2,  # Today + tomorrow
                 'timezone': 'auto'
             }
             
@@ -191,13 +193,31 @@ class OpenMeteoProvider:
             # Map weather code to condition
             condition = self.WEATHER_CODES.get(weather_code, "Unknown")
             
+            # Extract tomorrow's forecast (index 1 = tomorrow)
+            forecast_text = None
+            daily = data.get('daily', {})
+            if daily:
+                try:
+                    temps_max = daily.get('temperature_2m_max', [])
+                    temps_min = daily.get('temperature_2m_min', [])
+                    codes = daily.get('weathercode', [])
+                    if len(temps_max) > 1 and len(temps_min) > 1 and len(codes) > 1:
+                        tomorrow_max = temps_max[1]
+                        tomorrow_min = temps_min[1]
+                        tomorrow_code = codes[1]
+                        tomorrow_condition = self.WEATHER_CODES.get(tomorrow_code, "")
+                        forecast_text = f"Tomorrow: {tomorrow_min:.0f}°-{tomorrow_max:.0f}°C {tomorrow_condition}"
+                except Exception:
+                    pass
+            
             weather_data = {
                 'location': city,
                 'temperature': temperature,
                 'condition': condition,
                 'weather_code': weather_code,
                 'windspeed': windspeed,
-                'humidity': humidity
+                'humidity': humidity,
+                'forecast': forecast_text
             }
             
             logger.info(f"Weather fetched for {city}: {temperature}°C, {condition}")

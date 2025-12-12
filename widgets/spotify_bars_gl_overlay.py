@@ -94,6 +94,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._gl_initialized: bool = False  # True after initializeGL completes
         self._debug_bars_logged: bool = False
         self._debug_paint_logged: bool = False
+        
+        # Pre-allocated uniform buffers to reduce GC pressure (avoid per-frame allocation)
+        self._bars_buffer: np.ndarray = np.zeros(64, dtype="float32")
+        self._peaks_buffer: np.ndarray = np.zeros(64, dtype="float32")
 
     # ------------------------------------------------------------------
     # Public API
@@ -845,19 +849,22 @@ void main() {
                     pass
 
             if self._u_bars is not None:
-                buf = np.asarray(bars, dtype="float32")
+                # Use pre-allocated buffer to avoid per-frame allocation
+                buf = self._bars_buffer
+                buf.fill(0.0)
+                n_bars = min(len(bars), 64)
+                for i in range(n_bars):
+                    buf[i] = float(bars[i])
                 _gl.glUniform1fv(self._u_bars, 64, buf)
 
-            peaks = list(self._peaks)
-            if len(peaks) < len(bars):
-                peaks = peaks + [0.0] * (len(bars) - len(peaks))
-            if len(peaks) < 64:
-                peaks = peaks + [0.0] * (64 - len(peaks))
-            else:
-                peaks = peaks[:64]
-
             if self._u_peaks is not None:
-                buf_peaks = np.asarray(peaks, dtype="float32")
+                # Use pre-allocated buffer to avoid per-frame allocation
+                buf_peaks = self._peaks_buffer
+                buf_peaks.fill(0.0)
+                peaks = self._peaks
+                n_peaks = min(len(peaks), 64)
+                for i in range(n_peaks):
+                    buf_peaks[i] = float(peaks[i])
                 _gl.glUniform1fv(self._u_peaks, 64, buf_peaks)
 
             fill = QColor(self._fill_color)

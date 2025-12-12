@@ -533,14 +533,19 @@ class WeatherWidget(BaseOverlayWidget):
             if not location:
                 location = self._location
 
+            # Extract forecast data if present in the response
+            forecast = data.get('forecast')
+            if forecast:
+                self._forecast_data = forecast
+
             # Uppercase presentation for emphasis (city & condition)
             location_display = str(location).upper()
             condition_display = str(condition).upper()
             
-            # Relative sizing
+            # Relative sizing (forecast is 12pt smaller than base font)
             city_pt = max(6, self._font_size + 2)
             details_pt = max(6, self._font_size - 2)
-            forecast_pt = max(6, self._font_size - 4)
+            forecast_pt = max(6, self._font_size - 12)
             city_html = f"<div style='font-size:{city_pt}pt; font-weight:700;'>{location_display}</div>"
 
             # Temperature is bold (700), condition is semi-bold (600)
