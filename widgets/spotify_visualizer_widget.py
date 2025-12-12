@@ -61,6 +61,8 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._bar_history = None
         # Running peak tracker for normalization
         self._running_peak = 1.0
+        # Timestamp of last FFT processing - used to detect pause/resume gaps
+        self._last_fft_ts: float = 0.0
 
     def is_running(self) -> bool:
         return self._running
@@ -274,7 +276,18 @@ class SpotifyVisualizerAudioWorker(QObject):
         smoothing = 0.3
         decay_rate = 0.7  # Aggressive decay for visible drops
         
+        # CRITICAL: Detect pause/resume gaps (e.g., after settings dialog)
+        # If more than 2 seconds have passed, reset bar_history to avoid
+        # erratic smoothing behavior from stale state
+        now_ts = time.time()
+        dt = now_ts - self._last_fft_ts if self._last_fft_ts > 0 else 0.0
+        self._last_fft_ts = now_ts
+        
         bar_history = self._bar_history
+        if dt > 2.0:
+            # Reset bar history to current raw values after a long pause
+            bar_history.fill(0.0)
+        
         for i in range(bands):
             target = arr[i]
             current = bar_history[i]
@@ -407,8 +420,10 @@ class _SpotifyBeatEngine(QObject):
         dt = max(0.0, now_ts - last_ts) if last_ts >= 0.0 else 0.0
         self._last_smooth_ts = now_ts
         
-        if dt <= 0.0:
-            # First frame or no time elapsed - just copy
+        # CRITICAL: Reset smoothing state after a long pause (e.g., settings dialog)
+        # A gap > 2 seconds indicates a pause/resume scenario
+        if dt <= 0.0 or dt > 2.0:
+            # First frame, no time elapsed, or long pause - just copy raw values
             self._smoothed_bars = list(target_bars)
             return self._smoothed_bars
         
@@ -479,8 +494,11 @@ class _SpotifyBeatEngine(QObject):
             now_ts = time.time()
             dt = max(0.0, now_ts - last_smooth_ts) if last_smooth_ts >= 0.0 else 0.0
             
-            if dt <= 0.0:
-                return {'raw': raw_bars, 'smoothed': list(raw_bars), 'ts': now_ts}
+            # CRITICAL: If dt is too large (e.g., after settings dialog pause),
+            # reset smoothing state to avoid erratic behavior from huge alpha values.
+            # A gap > 2 seconds indicates a pause/resume scenario.
+            if dt > 2.0 or dt <= 0.0:
+                return {'raw': raw_bars, 'smoothed': list(raw_bars), 'ts': now_ts, 'reset': True}
             
             base_tau = smoothing_tau
             tau_rise = base_tau * 0.35

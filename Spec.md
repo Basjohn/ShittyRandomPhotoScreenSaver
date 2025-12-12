@@ -303,5 +303,30 @@ debug in this order:
  - Additional tuning of the **GL-only, compositor-backed transitions** (Peel, Ripple, Warp Dissolve, 3D Block Spins) based on visual QA and user feedback (e.g. strip counts, band amplitudes, droplet density). The legacy Shuffle transition has been fully retired for v1.2; any future Shuffle effect would be a fresh, tile-based GLSL design scheduled post-v1.2 rather than an evolution of the old compositor-based Shuffle.
 - Optional Slide edge spark FX (GL/compositor-backed) where slide edges emit short-lived sparks with direction-aware angles and Auto/Blue/Orange colour modes; Auto samples a dominant edge colour and offsets it for visibility. This effect is strictly opt-in and must respect per-display clipping so it never bleeds across monitors.
 
-**Version**: 1.2  
-**Last Updated**: Dec 5, 2025 00:59 - Spotify Beat Visualizer lifecycle/debugging checklist and primary/secondary fade waves documented; settings schema and widget integration refreshed for the current v1.2 Spotify stack.
+## Spotify Volume Control
+
+The volume slider widget (`widgets/spotify_volume_widget.py`) uses `core/media/spotify_volume.py` which controls the **Windows mixer session level** for Spotify via pycaw/Core Audio (`ISimpleAudioVolume`).
+
+### Current Implementation (Windows Mixer)
+- Controls the per-application volume in Windows Volume Mixer
+- Works without authentication or Premium subscription
+- **Limitation**: Does NOT sync with Spotify's internal volume slider - they are independent controls
+
+### Alternative: Spotify Web API
+Spotify's Web API provides `PUT /v1/me/player/volume` which controls the **internal Spotify volume** (the slider inside the app):
+- **Pros**: Syncs with Spotify's UI, works across devices via Spotify Connect
+- **Cons**: Requires OAuth authentication with `user-modify-playback-state` scope, requires Spotify Premium subscription
+- **Implementation complexity**: Would need OAuth flow, token refresh, and API calls
+
+### Recommendation
+The current Windows mixer approach is simpler and works for all users. Implementing Spotify Web API volume control would require:
+1. OAuth 2.0 PKCE flow for desktop apps
+2. Secure token storage
+3. Token refresh logic
+4. Premium-only feature gating
+5. Fallback to mixer control for non-Premium users
+
+This is a **low-priority enhancement** that could be added post-v1.2 if users request Spotify-synced volume.
+
+**Version**: 1.243  
+**Last Updated**: Dec 12, 2025 - Spotify visualizer tuning finalized (noise_floor=2.1, expansion=2.5, decay_rate=0.7); volume control architecture documented.

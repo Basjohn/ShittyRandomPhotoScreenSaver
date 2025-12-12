@@ -3872,51 +3872,55 @@ class DisplayWidget(QWidget):
             except Exception:
                 logger.debug("[MEDIA] Error while routing click to media widget", exc_info=True)
 
-            # Reddit widget: map clicks to open links in the browser when
+            # Reddit widgets: map clicks to open links in the browser when
             # interaction mode is active. When hard-exit is disabled,
             # Reddit clicks trigger a clean exit (controlled by the per-widget
             # "exit_on_click" setting). In hard-exit mode, we DEFER the browser
             # open until the user actually exits - this avoids the edge case
             # where Firefox gets stuck behind the screensaver.
-            rw = getattr(self, "reddit_widget", None)
-            try:
-                if (not handled) and rw is not None and rw.isVisible() and rw.geometry().contains(event.pos()):
-                    try:
-                        from PySide6.QtCore import QPoint as _QPoint
-                    except Exception:  # pragma: no cover - import guard
-                        _QPoint = None  # type: ignore[assignment]
+            # Check BOTH reddit_widget and reddit2_widget.
+            for reddit_attr in ("reddit_widget", "reddit2_widget"):
+                if handled:
+                    break
+                rw = getattr(self, reddit_attr, None)
+                try:
+                    if rw is not None and rw.isVisible() and rw.geometry().contains(event.pos()):
+                        try:
+                            from PySide6.QtCore import QPoint as _QPoint
+                        except Exception:  # pragma: no cover - import guard
+                            _QPoint = None  # type: ignore[assignment]
 
-                    geom = rw.geometry()
-                    if _QPoint is not None:
-                        local_pos = _QPoint(event.pos().x() - geom.x(), event.pos().y() - geom.y())
-                    else:
-                        local_pos = event.pos()
+                        geom = rw.geometry()
+                        if _QPoint is not None:
+                            local_pos = _QPoint(event.pos().x() - geom.x(), event.pos().y() - geom.y())
+                        else:
+                            local_pos = event.pos()
 
-                    try:
-                        hard_exit_enabled = self._is_hard_exit_enabled()
-                    except Exception:
-                        hard_exit_enabled = False
+                        try:
+                            hard_exit_enabled = self._is_hard_exit_enabled()
+                        except Exception:
+                            hard_exit_enabled = False
 
-                    try:
-                        if hasattr(rw, "handle_click"):
-                            # In hard-exit mode, defer the browser open to exit time
-                            if hard_exit_enabled:
-                                result = rw.handle_click(local_pos, deferred=True)
-                                if isinstance(result, str):
-                                    # Store the URL to open when user exits
-                                    self._pending_reddit_url = result
-                                    handled = True
-                                    reddit_handled = True
-                                    logger.info("[REDDIT] URL deferred for exit: %s", result)
-                            else:
-                                # Normal mode: open immediately
-                                if rw.handle_click(local_pos):
-                                    handled = True
-                                    reddit_handled = True
-                    except Exception:
-                        logger.debug("[REDDIT] click routing failed", exc_info=True)
-            except Exception:
-                logger.debug("[REDDIT] Error while routing click to reddit widget", exc_info=True)
+                        try:
+                            if hasattr(rw, "handle_click"):
+                                # In hard-exit mode, defer the browser open to exit time
+                                if hard_exit_enabled:
+                                    result = rw.handle_click(local_pos, deferred=True)
+                                    if isinstance(result, str):
+                                        # Store the URL to open when user exits
+                                        self._pending_reddit_url = result
+                                        handled = True
+                                        reddit_handled = True
+                                        logger.info("[REDDIT] URL deferred for exit: %s", result)
+                                else:
+                                    # Normal mode: open immediately
+                                    if rw.handle_click(local_pos):
+                                        handled = True
+                                        reddit_handled = True
+                        except Exception:
+                            logger.debug("[REDDIT] click routing failed for %s", reddit_attr, exc_info=True)
+                except Exception:
+                    logger.debug("[REDDIT] Error while routing click to %s", reddit_attr, exc_info=True)
 
             if handled:
                 # Request a clean exit after Reddit clicks when hard-exit mode
