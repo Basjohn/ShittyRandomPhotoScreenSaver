@@ -2938,8 +2938,8 @@ class DisplayWidget(QWidget):
 
     def _on_destroyed(self, *_args) -> None:
         """Ensure active transitions are stopped when the widget is destroyed."""
-        # Open any pending Reddit URL that was deferred in hard-exit mode
-        self._open_pending_reddit_url()
+        # NOTE: Deferred Reddit URL opening is now handled by DisplayManager.cleanup()
+        # to ensure it happens AFTER windows are hidden but BEFORE QApplication.quit()
         
         # PERF: Remove from class-level cache, but only if we're still the registered instance
         # (avoids race condition where new widget registers before old widget's __del__ runs)
@@ -3609,7 +3609,8 @@ class DisplayWidget(QWidget):
         if key in (Qt.Key.Key_Escape, Qt.Key.Key_Q):
             logger.info("Exit key pressed (%s), requesting exit", key)
             self._exiting = True
-            self._open_pending_reddit_url()  # Open deferred URL before exit
+            # NOTE: Deferred Reddit URL is opened in _on_destroyed AFTER windows are hidden
+            # to prevent Firefox from getting stuck behind still-visible screensaver windows
             self.exit_requested.emit()
             event.accept()
             return
@@ -3624,7 +3625,7 @@ class DisplayWidget(QWidget):
         # Normal mode (no hard-exit, Ctrl not held): any other key exits.
         logger.info("Non-hotkey key pressed (%s) in normal mode - requesting exit", key)
         self._exiting = True
-        self._open_pending_reddit_url()  # Open deferred URL before exit
+        # NOTE: Deferred Reddit URL is opened in _on_destroyed AFTER windows are hidden
         self.exit_requested.emit()
         event.accept()
 
@@ -3964,7 +3965,7 @@ class DisplayWidget(QWidget):
 
         logger.info(f"Mouse clicked at ({event.pos().x()}, {event.pos().y()}), requesting exit")
         self._exiting = True
-        self._open_pending_reddit_url()  # Open deferred URL before exit
+        # NOTE: Deferred Reddit URL is opened in _on_destroyed AFTER windows are hidden
         self.exit_requested.emit()
         event.accept()
     
@@ -4015,7 +4016,7 @@ class DisplayWidget(QWidget):
         if distance > self._mouse_move_threshold:
             logger.info(f"Mouse moved {distance:.1f} pixels, requesting exit")
             self._exiting = True
-            self._open_pending_reddit_url()  # Open deferred URL before exit
+            # NOTE: Deferred Reddit URL is opened in _on_destroyed AFTER windows are hidden
             self.exit_requested.emit()
         
         event.accept()
@@ -4203,25 +4204,21 @@ class DisplayWidget(QWidget):
         """Handle exit request from context menu."""
         logger.info("Context menu: exit requested")
         self._exiting = True
-        # Open any pending Reddit URL before exiting
-        self._open_pending_reddit_url()
+        # NOTE: Deferred Reddit URL is opened in _on_destroyed AFTER windows are hidden
         self.exit_requested.emit()
     
     def _open_pending_reddit_url(self) -> None:
-        """Open any pending Reddit URL that was deferred in hard-exit mode."""
-        try:
-            pending_url = getattr(self, "_pending_reddit_url", None)
-            if pending_url:
-                from PySide6.QtCore import QUrl
-                from PySide6.QtGui import QDesktopServices
-                from widgets.reddit_widget import _try_bring_reddit_window_to_front
-                
-                QDesktopServices.openUrl(QUrl(pending_url))
-                logger.info("[REDDIT] Opened deferred URL on exit: %s", pending_url)
-                _try_bring_reddit_window_to_front()
-                self._pending_reddit_url = None
-        except Exception as e:
-            logger.debug("[REDDIT] Failed to open deferred URL on exit: %s", e, exc_info=True)
+        """Open any pending Reddit URL that was deferred in hard-exit mode.
+        
+        NOTE: This is a legacy/backup method. The primary URL opening is now
+        handled by DisplayManager.cleanup() which opens URLs AFTER all windows
+        are hidden but BEFORE QApplication.quit(). This prevents Firefox from
+        getting stuck behind still-visible screensaver windows.
+        """
+        # URL opening is now handled by DisplayManager.cleanup()
+        # This method is kept for backwards compatibility but should not
+        # normally be called since DisplayManager clears _pending_reddit_url
+        pass
 
     def focusOutEvent(self, event: QFocusEvent) -> None:  # type: ignore[override]
         """Diagnostic: log once if we lose focus while still visible.

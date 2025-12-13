@@ -57,6 +57,72 @@ class RedditPost:
 
 _TITLE_FILTER_RE = re.compile(r"\b(daily|weekly|question thread)\b", re.IGNORECASE)
 
+# Words to keep lowercase in title case (unless first word)
+_TITLE_CASE_SMALL_WORDS = frozenset({
+    "a", "an", "the", "and", "or", "but", "nor", "for", "yet", "so",
+    "in", "on", "at", "to", "by", "of", "with", "as", "vs", "via",
+})
+
+
+def _smart_title_case(text: str) -> str:
+    """Convert text to title case while preserving acronyms and handling exceptions.
+    
+    - Preserves ALL CAPS words (likely acronyms: USA, NASA, AI, etc.)
+    - Keeps small words lowercase (a, the, of, etc.) unless first word
+    - Preserves standalone "I"
+    - Handles punctuation correctly
+    """
+    if not text:
+        return text
+    
+    words = text.split()
+    result = []
+    
+    for i, word in enumerate(words):
+        # Preserve ALL CAPS words (2+ chars) - likely acronyms
+        if len(word) >= 2 and word.isupper() and word.isalpha():
+            result.append(word)
+            continue
+        
+        # Handle words with leading punctuation (e.g., quotes, brackets)
+        leading = ""
+        trailing = ""
+        core = word
+        
+        # Strip leading punctuation
+        while core and not core[0].isalnum():
+            leading += core[0]
+            core = core[1:]
+        
+        # Strip trailing punctuation
+        while core and not core[-1].isalnum():
+            trailing = core[-1] + trailing
+            core = core[:-1]
+        
+        if not core:
+            result.append(word)
+            continue
+        
+        # Preserve ALL CAPS core (acronyms)
+        if len(core) >= 2 and core.isupper() and core.isalpha():
+            result.append(word)
+            continue
+        
+        # Preserve "I" as uppercase
+        if core.lower() == "i":
+            result.append(leading + "I" + trailing)
+            continue
+        
+        # Small words stay lowercase (unless first word)
+        if i > 0 and core.lower() in _TITLE_CASE_SMALL_WORDS:
+            result.append(leading + core.lower() + trailing)
+            continue
+        
+        # Title case the core word
+        result.append(leading + core.capitalize() + trailing)
+    
+    return " ".join(result)
+
 
 class RedditWidget(BaseOverlayWidget):
     """Reddit widget for displaying subreddit entries.
@@ -672,6 +738,9 @@ class RedditWidget(BaseOverlayWidget):
                     break
             if trim_index > 0:
                 display_title = display_title[:trim_index].rstrip()
+
+            # Apply smart title case (preserves acronyms, handles small words)
+            display_title = _smart_title_case(display_title)
 
             measured_width = title_metrics.horizontalAdvance(display_title)
             if measured_width > available_width:

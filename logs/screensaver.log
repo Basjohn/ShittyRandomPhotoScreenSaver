@@ -21761,3 +21761,559 @@
 2025-12-12 20:42:02 - __main__                       - INFO     - ============================================================
 2025-12-12 20:42:02 - comtypes._post_coinit.unknwn   - DEBUG    - Calling CoUninitialize()
 2025-12-12 20:42:02 - comtypes._post_coinit.unknwn   - DEBUG    - CoUninitialize() done.
+2025-12-13 00:57:05 - root                           - INFO     - ============================================================
+2025-12-13 00:57:05 - root                           - INFO     - Screensaver logging initialized (debug=True, verbose=False)
+2025-12-13 00:57:05 - root                           - INFO     - ============================================================
+2025-12-13 00:57:05 - __main__                       - INFO     - ============================================================
+2025-12-13 00:57:05 - __main__                       - INFO     - ShittyRandomPhotoScreenSaver Starting
+2025-12-13 00:57:05 - __main__                       - INFO     - ============================================================
+2025-12-13 00:57:05 - __main__                       - INFO     - Running in script mode - cleaning pycache on startup
+2025-12-13 00:57:05 - __main__                       - INFO     - Removed 23 __pycache__ directories
+2025-12-13 00:57:05 - __main__                       - DEBUG    - Command-line arguments: ['main.py', '--debug']
+2025-12-13 00:57:05 - __main__                       - DEBUG    - Filtered arguments: ['main.py']
+2025-12-13 00:57:05 - __main__                       - INFO     - No arguments provided in script mode, defaulting to RUN mode
+2025-12-13 00:57:05 - rendering.gl_format            - DEBUG    - [GL FORMAT] Requested swap=SwapBehavior.DoubleBuffer interval=1 depth=24 stencil=8 (refresh_sync=True, prefer_triple=True) reason=startup
+2025-12-13 00:57:05 - __main__                       - INFO     - Global QSurfaceFormat configured (swap=SwapBehavior.DoubleBuffer, interval=1, depth=24, stencil=8)
+2025-12-13 00:57:05 - __main__                       - INFO     - Qt image allocation limit: 1GB (supports 8K+ images, per-image on-demand)
+2025-12-13 00:57:05 - __main__                       - INFO     - Qt Application created: SRPSS
+2025-12-13 00:57:05 - __main__                       - DEBUG    - High DPI scaling enabled
+2025-12-13 00:57:05 - __main__                       - INFO     - Starting screensaver in RUN mode
+2025-12-13 00:57:05 - __main__                       - INFO     - Windows timer resolution set to 1ms for smooth animations
+2025-12-13 00:57:05 - __main__                       - INFO     - Initializing screensaver engine
+2025-12-13 00:57:05 - SettingsManager                - DEBUG    - Widgets snapshot on init: 9 sections
+2025-12-13 00:57:05 - SettingsManager                - INFO     - SettingsManager initialized
+2025-12-13 00:57:05 - engine.screensaver             - INFO     - ScreensaverEngine created
+2025-12-13 00:57:05 - engine.screensaver             - INFO     - ============================================================
+2025-12-13 00:57:05 - engine.screensaver             - INFO     - Initializing Screensaver Engine 🚦🚦🚦🚦🚦
+2025-12-13 00:57:05 - engine.screensaver             - INFO     - ============================================================
+2025-12-13 00:57:05 - engine.screensaver             - INFO     - Initializing core systems...
+2025-12-13 00:57:05 - EventSystem                    - INFO     - EventSystem initialized
+2025-12-13 00:57:05 - engine.screensaver             - DEBUG    - EventSystem initialized
+2025-12-13 00:57:05 - resources.manager              - INFO     - ResourceManager initialized
+2025-12-13 00:57:05 - engine.screensaver             - DEBUG    - ResourceManager initialized
+2025-12-13 00:57:05 - core.threading.manager         - INFO     - Initialized io pool with 4 workers
+2025-12-13 00:57:05 - core.threading.manager         - INFO     - Initialized compute pool with 23 workers
+2025-12-13 00:57:05 - core.threading.manager         - INFO     - ThreadManager initialized with IO=4, COMPUTE=23 workers
+2025-12-13 00:57:05 - engine.screensaver             - DEBUG    - ThreadManager initialized
+2025-12-13 00:57:05 - SettingsManager                - DEBUG    - Widgets snapshot on init: 9 sections
+2025-12-13 00:57:05 - SettingsManager                - INFO     - SettingsManager initialized
+2025-12-13 00:57:05 - engine.screensaver             - DEBUG    - SettingsManager initialized
+2025-12-13 00:57:05 - engine.screensaver             - DEBUG    - Transition cycle index synced to 10 (Crumble)
+2025-12-13 00:57:05 - engine.screensaver             - INFO     - Core systems initialized successfully
+2025-12-13 00:57:05 - engine.screensaver             - INFO     - Loading settings...
+2025-12-13 00:57:05 - engine.screensaver             - INFO     - Image rotation interval: 60s
+2025-12-13 00:57:05 - engine.screensaver             - INFO     - Display mode: fill
+2025-12-13 00:57:05 - engine.screensaver             - INFO     - Shuffle enabled: true
+2025-12-13 00:57:05 - engine.screensaver             - INFO     - Prefetch ahead: 5
+2025-12-13 00:57:05 - engine.screensaver             - INFO     - Initializing image sources...
+2025-12-13 00:57:05 - sources.base_provider.folder.PERSONALSET - INFO     - Created FolderSource for 'C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET' (recursive=True)
+2025-12-13 00:57:05 - engine.screensaver             - INFO     - Folder source added: C:/Users/Basjohn/Documents/[4] WALLPAPERS/PERSONALSET
+2025-12-13 00:57:05 - engine.screensaver             - INFO     - Initialized 1 image sources (1 folder, 0 RSS)
+2025-12-13 00:57:05 - engine.screensaver             - INFO     - Building image queue...
+2025-12-13 00:57:05 - engine.image_queue             - INFO     - ImageQueue initialized (shuffle=true, history_size=50)
+2025-12-13 00:57:05 - sources.base_provider.folder.PERSONALSET - INFO     - Scanning folder: C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET
+2025-12-13 00:57:05 - sources.base_provider.folder.PERSONALSET - INFO     - Scan complete: 558 images found (558 files scanned) in 0.09s
+2025-12-13 00:57:05 - engine.screensaver             - INFO     - Added 558 images from C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET
+2025-12-13 00:57:05 - engine.image_queue             - DEBUG    - Added 558 shuffled images to queue
+2025-12-13 00:57:05 - engine.image_queue             - INFO     - Queue now has 558 images (558 total)
+2025-12-13 00:57:05 - engine.screensaver             - INFO     - Image queue built with 558 images
+2025-12-13 00:57:05 - engine.screensaver             - DEBUG    - Queue stats: {'total_images': 558, 'remaining': 558, 'current_index': -1, 'wrap_count': 0, 'history_size': 0, 'shuffle_enabled': True, 'current_image': None}
+2025-12-13 00:57:05 - utils.image_cache              - INFO     - ImageCache initialized: max_items=24, max_memory=1024MB
+2025-12-13 00:57:05 - engine.screensaver             - INFO     - Image prefetcher initialized (ahead=5, max_concurrent=2)
+2025-12-13 00:57:05 - engine.screensaver             - INFO     - Initializing display...
+2025-12-13 00:57:05 - engine.display                 - INFO     - Monitor detection enabled (2 screens)
+2025-12-13 00:57:05 - engine.display                 - INFO     - DisplayManager initialized (mode=fill, same_image=false)
+2025-12-13 00:57:05 - engine.display                 - INFO     - Initializing displays for 2 screens
+2025-12-13 00:57:05 - engine.display                 - INFO     - Cleaning up 0 display widgets
+2025-12-13 00:57:05 - engine.display                 - DEBUG    - [CLEANUP] Reset all DisplayWidget global state
+2025-12-13 00:57:05 - engine.display                 - INFO     - Display manager cleanup complete
+2025-12-13 00:57:05 - rendering.display              - INFO     - DisplayWidget created for screen 0 (fill)
+2025-12-13 00:57:05 - rendering.backends.opengl.backend - INFO     - Using OpenGL renderer backend
+2025-12-13 00:57:05 - rendering.backends             - INFO     - Renderer backend 'opengl' initialized
+2025-12-13 00:57:05 - rendering.display              - INFO     - [RENDER] Backend active (screen=0, api=OpenGL 4.x, triple=False, vsync_toggle=False)
+2025-12-13 00:57:05 - rendering.display              - INFO     - Showing on screen 0: 1707x959 at (0, 0) DPR=1.5
+2025-12-13 00:57:06 - rendering.display              - INFO     - Detected refresh rate: 165 Hz, adaptive target FPS: 55
+2025-12-13 00:57:06 - rendering.display              - INFO     - [RENDER] Render surface established (screen=0, 1707x959, vsync=True, triple_preference=True)
+2025-12-13 00:57:06 - rendering.gl_format            - DEBUG    - [GL FORMAT] Requested swap=SwapBehavior.DoubleBuffer interval=1 depth=24 stencil=8 (refresh_sync=True, prefer_triple=True) reason=gl_compositor
+2025-12-13 00:57:06 - resources.manager              - DEBUG    - Registered resource: gui_component_4a8b3119 (Shared GL compositor for DisplayWidget)
+2025-12-13 00:57:06 - rendering.display              - INFO     - [GL COMPOSITOR] Created shared compositor for screen 0
+2025-12-13 00:57:06 - rendering.display              - DEBUG    - Setting up overlay widgets for screen 0
+2025-12-13 00:57:06 - rendering.gl_compositor        - INFO     - [DIMMING] GL dimming changed: enabled=False→False, opacity=0%→40%
+2025-12-13 00:57:06 - rendering.display              - DEBUG    - GL compositor dimming: enabled=False, opacity=40%
+2025-12-13 00:57:06 - widgets.clock_widget           - DEBUG    - ClockWidget created (format=24h, position=top_right, seconds=True, timezone=local, show_tz=True)
+2025-12-13 00:57:06 - widgets.overlay_timers         - DEBUG    - [OVERLAY_TIMER] Created ThreadManager timer <PySide6.QtCore.QTimer(0x17e0a234630) at 0x0000017E40EB74C0> (1000 ms) for <widgets.clock_widget.ClockWidget(0x17e0a307280, name="clock_main") at 0x0000017E40EB6F00>
+2025-12-13 00:57:06 - widgets.clock_widget           - INFO     - Clock widget started
+2025-12-13 00:57:06 - rendering.display              - INFO     - ✅ clock widget started: Top Right, 24h, font=48px, seconds=True
+2025-12-13 00:57:06 - rendering.display              - DEBUG    - clock2 widget disabled in settings
+2025-12-13 00:57:06 - rendering.display              - DEBUG    - clock3 widget disabled in settings
+2025-12-13 00:57:06 - widgets.weather_widget         - DEBUG    - WeatherWidget created (location=Johannesburg, position=top_left)
+2025-12-13 00:57:06 - widgets.weather_widget         - DEBUG    - Fetching fresh weather data
+2025-12-13 00:57:06 - widgets.weather_widget         - DEBUG    - [ThreadManager] Fetching weather for Johannesburg
+2025-12-13 00:57:06 - widgets.overlay_timers         - DEBUG    - [OVERLAY_TIMER] Created ThreadManager timer <PySide6.QtCore.QTimer(0x17e3f217b50) at 0x0000017E48002280> (1800000 ms) for <widgets.weather_widget.WeatherWidget(0x17e0a307ee0) at 0x0000017E40EB7800>
+2025-12-13 00:57:06 - weather.open_meteo_provider    - DEBUG    - OpenMeteoProvider initialized
+2025-12-13 00:57:06 - widgets.weather_widget         - INFO     - Weather widget started (using cached data)
+2025-12-13 00:57:06 - weather.open_meteo_provider    - DEBUG    - Geocoding city: Johannesburg
+2025-12-13 00:57:06 - rendering.display              - INFO     - ✅ Weather widget started: Johannesburg, Top Left, font=24px
+2025-12-13 00:57:06 - widgets.reddit_widget          - DEBUG    - [REDDIT] Loaded logo pixmap from F:\Programming\Apps\ShittyRandomPhotoScreenSaver\images\Reddit_Logo_C.png (exists=True, null=False)
+2025-12-13 00:57:06 - widgets.reddit_widget          - DEBUG    - RedditWidget created (subreddit=All, position=bottom_right)
+2025-12-13 00:57:06 - widgets.overlay_timers         - DEBUG    - [OVERLAY_TIMER] Created ThreadManager timer <PySide6.QtCore.QTimer(0x17e0a291f10) at 0x0000017E4800CF40> (600000 ms) for <widgets.reddit_widget.RedditWidget(0x17e3ef459d0) at 0x0000017E40EFBCC0>
+2025-12-13 00:57:06 - rendering.display              - INFO     - ✅ Reddit widget started: r/All, Bottom Right, font=14px, limit=4
+2025-12-13 00:57:06 - widgets.reddit_widget          - DEBUG    - [REDDIT] Fetching feed: subreddit=All sort=hot limit=25 (visible_limit=4)
+2025-12-13 00:57:06 - widgets.reddit_widget          - DEBUG    - [REDDIT] Loaded logo pixmap from F:\Programming\Apps\ShittyRandomPhotoScreenSaver\images\Reddit_Logo_C.png (exists=True, null=False)
+2025-12-13 00:57:06 - widgets.reddit_widget          - DEBUG    - RedditWidget created (subreddit=SubRedditDrama, position=bottom_right)
+2025-12-13 00:57:06 - widgets.overlay_timers         - DEBUG    - [OVERLAY_TIMER] Created ThreadManager timer <PySide6.QtCore.QTimer(0x17e0a2923f0) at 0x0000017E48021A80> (600000 ms) for <widgets.reddit_widget.RedditWidget(0x17e3ef45d90) at 0x0000017E48003E80>
+2025-12-13 00:57:06 - widgets.reddit_widget          - DEBUG    - [REDDIT] Fetching feed: subreddit=SubRedditDrama sort=hot limit=25 (visible_limit=4)
+2025-12-13 00:57:06 - rendering.display              - INFO     - ✅ Reddit 2 widget started: r/SubRedditDrama, Bottom Right, limit=4
+2025-12-13 00:57:06 - core.media.media_controller    - INFO     - [MEDIA] Windows GSMTC controller initialized
+2025-12-13 00:57:06 - widgets.media_widget           - INFO     - [MEDIA_WIDGET] Using controller: WindowsGlobalMediaController
+2025-12-13 00:57:06 - widgets.media_widget           - DEBUG    - MediaWidget created (position=bottom_left)
+2025-12-13 00:57:06 - widgets.media_widget           - DEBUG    - [MEDIA_WIDGET] Position changed: (0,0) → (20,679), size=600x260, parent=1707x959
+2025-12-13 00:57:06 - widgets.overlay_timers         - DEBUG    - [OVERLAY_TIMER] Created ThreadManager timer <PySide6.QtCore.QTimer(0x17e3f217d70) at 0x0000017E481C1640> (1000 ms) for <widgets.media_widget.MediaWidget(0x17e3ef45850) at 0x0000017E4800F200>
+2025-12-13 00:57:06 - widgets.media_widget           - INFO     - Media widget started
+2025-12-13 00:57:06 - rendering.display              - INFO     - ✅ Media widget started: Bottom Left, font=20px, margin=20
+2025-12-13 00:57:06 - utils.audio_capture            - DEBUG    - [AUDIO] PyAudioWPatch started: 48000Hz, 6 channels, 512 block
+2025-12-13 00:57:06 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-13 00:57:06 - widgets.pixel_shift_manager    - DEBUG    - PixelShiftManager created
+2025-12-13 00:57:06 - widgets.pixel_shift_manager    - DEBUG    - Registered widget for pixel shift: ClockWidget at (1471, 20)
+2025-12-13 00:57:06 - widgets.pixel_shift_manager    - DEBUG    - Registered widget for pixel shift: WeatherWidget at (20, 20)
+2025-12-13 00:57:06 - widgets.pixel_shift_manager    - DEBUG    - Registered widget for pixel shift: MediaWidget at (20, 679)
+2025-12-13 00:57:06 - widgets.pixel_shift_manager    - DEBUG    - Registered widget for pixel shift: SpotifyVisualizerWidget at (20, 581)
+2025-12-13 00:57:06 - widgets.pixel_shift_manager    - DEBUG    - Registered widget for pixel shift: SpotifyVolumeWidget at (635, 683)
+2025-12-13 00:57:06 - widgets.pixel_shift_manager    - DEBUG    - Registered widget for pixel shift: RedditWidget at (1087, 675)
+2025-12-13 00:57:06 - widgets.pixel_shift_manager    - DEBUG    - Registered widget for pixel shift: RedditWidget at (1087, 675)
+2025-12-13 00:57:06 - resources.manager              - DEBUG    - Registered resource: gui_component_0cd26dd6 (PixelShiftManager timer)
+2025-12-13 00:57:06 - widgets.pixel_shift_manager    - DEBUG    - PixelShiftManager timer started (interval=60000ms)
+2025-12-13 00:57:06 - widgets.pixel_shift_manager    - DEBUG    - PixelShiftManager enabled (rate=1/min)
+2025-12-13 00:57:06 - rendering.display              - DEBUG    - Pixel shift enabled (rate=1/min)
+2025-12-13 00:57:06 - rendering.display              - DEBUG    - [STACKING] reddit_widget offset y=-274 (position=bottom_right, stack_down=False)
+2025-12-13 00:57:06 - engine.display                 - INFO     - Display widget created for screen 0
+2025-12-13 00:57:06 - rendering.display              - INFO     - DisplayWidget created for screen 1 (fill)
+2025-12-13 00:57:06 - rendering.backends.opengl.backend - INFO     - Using OpenGL renderer backend
+2025-12-13 00:57:06 - rendering.backends             - INFO     - Renderer backend 'opengl' initialized
+2025-12-13 00:57:06 - rendering.display              - INFO     - [RENDER] Backend active (screen=1, api=OpenGL 4.x, triple=False, vsync_toggle=False)
+2025-12-13 00:57:06 - rendering.display              - INFO     - Showing on screen 1: 2560x1439 at (2560, 0) DPR=1.5
+2025-12-13 00:57:06 - rendering.display              - INFO     - Detected refresh rate: 60 Hz, adaptive target FPS: 60
+2025-12-13 00:57:06 - rendering.display              - INFO     - [RENDER] Render surface established (screen=1, 2560x1439, vsync=True, triple_preference=True)
+2025-12-13 00:57:06 - resources.manager              - DEBUG    - Registered resource: gui_component_3cb35456 (Shared GL compositor for DisplayWidget)
+2025-12-13 00:57:06 - rendering.display              - INFO     - [GL COMPOSITOR] Created shared compositor for screen 1
+2025-12-13 00:57:06 - rendering.display              - DEBUG    - Setting up overlay widgets for screen 1
+2025-12-13 00:57:06 - rendering.gl_compositor        - INFO     - [DIMMING] GL dimming changed: enabled=False→False, opacity=0%→40%
+2025-12-13 00:57:06 - rendering.display              - DEBUG    - GL compositor dimming: enabled=False, opacity=40%
+2025-12-13 00:57:06 - rendering.display              - DEBUG    - clock widget disabled in settings
+2025-12-13 00:57:06 - widgets.clock_widget           - DEBUG    - ClockWidget created (format=24h, position=top_right, seconds=True, timezone=US/Pacific, show_tz=True)
+2025-12-13 00:57:06 - widgets.overlay_timers         - DEBUG    - [OVERLAY_TIMER] Created ThreadManager timer <PySide6.QtCore.QTimer(0x17e3f88ec90) at 0x0000017E4D6E2680> (1000 ms) for <widgets.clock_widget.ClockWidget(0x17e09ae7920, name="clock_main") at 0x0000017E481C1100>
+2025-12-13 00:57:06 - widgets.clock_widget           - INFO     - Clock widget started
+2025-12-13 00:57:06 - rendering.display              - INFO     - ✅ clock2 widget started: Top Right, 24h, font=48px, seconds=True
+2025-12-13 00:57:06 - rendering.display              - DEBUG    - clock3 widget disabled in settings
+2025-12-13 00:57:06 - widgets.weather_widget         - DEBUG    - WeatherWidget created (location=Johannesburg, position=top_left)
+2025-12-13 00:57:06 - widgets.weather_widget         - DEBUG    - Fetching fresh weather data
+2025-12-13 00:57:06 - widgets.overlay_timers         - DEBUG    - [OVERLAY_TIMER] Created ThreadManager timer <PySide6.QtCore.QTimer(0x17e3f88f210) at 0x0000017E4D6E37C0> (1800000 ms) for <widgets.weather_widget.WeatherWidget(0x17e3fb74240) at 0x0000017E4D6E3240>
+2025-12-13 00:57:06 - widgets.weather_widget         - DEBUG    - [ThreadManager] Fetching weather for Johannesburg
+2025-12-13 00:57:06 - widgets.weather_widget         - INFO     - Weather widget started (using cached data)
+2025-12-13 00:57:06 - weather.open_meteo_provider    - DEBUG    - OpenMeteoProvider initialized
+2025-12-13 00:57:06 - rendering.display              - INFO     - ✅ Weather widget started: Johannesburg, Top Left, font=24px
+2025-12-13 00:57:06 - weather.open_meteo_provider    - DEBUG    - Geocoding city: Johannesburg
+2025-12-13 00:57:06 - rendering.display              - DEBUG    - Reddit widget disabled in settings (screen=1, enabled=True, show_on_this=False, monitor_sel=1)
+2025-12-13 00:57:06 - rendering.display              - DEBUG    - Media widget disabled in settings (screen=1, enabled=True, show_on_this=False, monitor_sel=1)
+2025-12-13 00:57:06 - engine.display                 - INFO     - Display widget created for screen 1
+2025-12-13 00:57:06 - engine.display                 - INFO     - Created 2 display widgets
+2025-12-13 00:57:06 - engine.screensaver             - INFO     - Display initialized with 2 screens
+2025-12-13 00:57:06 - resources.manager              - DEBUG    - Registered resource: gui_component_490dc2ea (Engine rotation timer)
+2025-12-13 00:57:06 - engine.screensaver             - INFO     - Rotation timer configured: 60s
+2025-12-13 00:57:06 - EventSystem                    - DEBUG    - New subscription: 5e6ebf44 for settings.changed (priority=50)
+2025-12-13 00:57:06 - engine.screensaver             - DEBUG    - Event subscriptions configured
+2025-12-13 00:57:06 - engine.screensaver             - INFO     - Engine initialization complete
+2025-12-13 00:57:06 - engine.screensaver             - INFO     - Starting screensaver engine...
+2025-12-13 00:57:06 - engine.image_queue             - DEBUG    - Next image: C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET\Minitokyo.Dogs.jpg (index 0)
+2025-12-13 00:57:06 - engine.image_queue             - DEBUG    - Next image: C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET\538118.png (index 1)
+2025-12-13 00:57:06 - engine.screensaver             - DEBUG    - [ASYNC] Loading 2 different images for 2 displays
+2025-12-13 00:57:06 - engine.screensaver             - INFO     - Rotation timer started (60000ms)
+2025-12-13 00:57:06 - rendering.image_processor_async - DEBUG    - Fill(QImage): Exact size match 2560x1600, no scaling
+2025-12-13 00:57:06 - engine.screensaver             - INFO     - Screensaver engine started
+2025-12-13 00:57:06 - rendering.image_processor_async - INFO     - FILL(QImage): Image 2560x1600 → scaled 2560x1600 → cropped to 2560x1438
+2025-12-13 00:57:06 - resources.manager              - INFO     - ResourceManager initialized
+2025-12-13 00:57:06 - rendering.image_processor_async - DEBUG    - Fill(QImage): Exact size match 3840x2361, no scaling
+2025-12-13 00:57:06 - resources.manager              - DEBUG    - Registered resource: gui_component_6c136905 (Screensaver system tray icon)
+2025-12-13 00:57:06 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3840x2361 → scaled 3840x2361 → cropped to 3840x2158
+2025-12-13 00:57:06 - __main__                       - INFO     - Screensaver engine started - entering event loop
+2025-12-13 00:57:06 - rendering.display              - DEBUG    - [OVERLAY_FADE] starting overlay fades (force=False, overlays=['clock2', 'weather'])
+2025-12-13 00:57:07 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] Context initialized: version=4.6, swap=SwapBehavior.DoubleBuffer, interval=1
+2025-12-13 00:57:07 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] OpenGL adapter: vendor=NVIDIA Corporation, renderer=NVIDIA GeForce RTX 4090/PCIe/SSE2, version=4.6.0 NVIDIA 591.44
+2025-12-13 00:57:07 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Raindrops shader program created: 12
+2025-12-13 00:57:07 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Warp shader program created: 13
+2025-12-13 00:57:07 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Diffuse shader program created: 14
+2025-12-13 00:57:07 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] BlockFlip shader program created: 15
+2025-12-13 00:57:07 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Peel shader program created: 16
+2025-12-13 00:57:07 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Crossfade shader program created: 17
+2025-12-13 00:57:07 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Slide shader program created: 18
+2025-12-13 00:57:07 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Wipe shader program created: 19
+2025-12-13 00:57:07 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Blinds shader program created: 20
+2025-12-13 00:57:07 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Crumble shader program created: 21
+2025-12-13 00:57:07 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] Shader pipeline initialized (45.5ms)
+2025-12-13 00:57:07 - weather.open_meteo_provider    - INFO     - Geocoded Johannesburg → Johannesburg, South Africa (-26.20, 28.04)
+2025-12-13 00:57:07 - weather.open_meteo_provider    - DEBUG    - Fetching weather for Johannesburg (-26.20, 28.04)
+2025-12-13 00:57:07 - rendering.display              - DEBUG    - [INIT] First frame - presenting without transition to avoid black flicker
+2025-12-13 00:57:07 - rendering.display              - DEBUG    - Image displayed: C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET\Minitokyo.Dogs.jpg (2560x1438)
+2025-12-13 00:57:07 - engine.display                 - DEBUG    - Image displayed on screen 0: C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET\Minitokyo.Dogs.jpg
+2025-12-13 00:57:07 - engine.screensaver             - INFO     - [ASYNC] Different images displayed on 2 displays
+2025-12-13 00:57:07 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] Context initialized: version=4.6, swap=SwapBehavior.DoubleBuffer, interval=1
+2025-12-13 00:57:07 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] OpenGL adapter: vendor=NVIDIA Corporation, renderer=NVIDIA GeForce RTX 4090/PCIe/SSE2, version=4.6.0 NVIDIA 591.44
+2025-12-13 00:57:07 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Raindrops shader program created: 28
+2025-12-13 00:57:07 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Warp shader program created: 29
+2025-12-13 00:57:07 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Diffuse shader program created: 30
+2025-12-13 00:57:07 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] BlockFlip shader program created: 31
+2025-12-13 00:57:07 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Peel shader program created: 32
+2025-12-13 00:57:07 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Crossfade shader program created: 33
+2025-12-13 00:57:07 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Slide shader program created: 34
+2025-12-13 00:57:07 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Wipe shader program created: 35
+2025-12-13 00:57:07 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Blinds shader program created: 36
+2025-12-13 00:57:07 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Crumble shader program created: 37
+2025-12-13 00:57:07 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] Shader pipeline initialized (8.8ms)
+2025-12-13 00:57:07 - rendering.display              - DEBUG    - [INIT] First frame - presenting without transition to avoid black flicker
+2025-12-13 00:57:07 - rendering.display              - DEBUG    - Image displayed: C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET\538118.png (3840x2158)
+2025-12-13 00:57:07 - engine.display                 - DEBUG    - Image displayed on screen 1: C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET\538118.png
+2025-12-13 00:57:07 - rendering.display              - DEBUG    - [STACKING] reddit_widget offset y=-274 (position=bottom_right, stack_down=False)
+2025-12-13 00:57:07 - weather.open_meteo_provider    - INFO     - Geocoded Johannesburg → Johannesburg, South Africa (-26.20, 28.04)
+2025-12-13 00:57:07 - weather.open_meteo_provider    - DEBUG    - Fetching weather for Johannesburg (-26.20, 28.04)
+2025-12-13 00:57:07 - weather.open_meteo_provider    - INFO     - Weather fetched for Johannesburg: 17.2°C, Overcast
+2025-12-13 00:57:08 - weather.open_meteo_provider    - INFO     - Weather fetched for Johannesburg: 17.2°C, Overcast
+2025-12-13 00:57:08 - rendering.display              - DEBUG    - [STACKING] reddit_widget offset y=-274 (position=bottom_right, stack_down=False)
+2025-12-13 00:57:08 - rendering.display              - DEBUG    - [OVERLAY_FADE] starting overlay fades (force=False, overlays=['clock', 'media', 'reddit', 'reddit2', 'spotify_visualizer', 'weather'])
+2025-12-13 00:57:08 - widgets.reddit_widget          - DEBUG    - [REDDIT] _start_widget_fade_in: duration_ms=1500
+2025-12-13 00:57:08 - widgets.reddit_widget          - DEBUG    - [REDDIT] _start_widget_fade_in: duration_ms=1500
+2025-12-13 00:57:08 - rendering.gl_format            - DEBUG    - [GL FORMAT] Requested swap=SwapBehavior.DoubleBuffer interval=1 depth=24 stencil=8 (refresh_sync=True, prefer_triple=True) reason=spotify_bars_overlay
+2025-12-13 00:57:08 - resources.manager              - DEBUG    - Registered resource: gui_component_88524b54 (Spotify bars GL overlay)
+2025-12-13 00:57:09 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IMMDeviceEnumerator) ptr=0x17e3f603200 at 17e48024cd0>
+2025-12-13 00:57:09 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IMMDevice) ptr=0x17e08ee87b0 at 17e480258d0>
+2025-12-13 00:57:09 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IUnknown) ptr=0x17e3f955db0 at 17e48270fd0>
+2025-12-13 00:57:09 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionControl) ptr=0x17e3f6a8e00 at 17e480258d0>
+2025-12-13 00:57:09 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionControl) ptr=0x17e3f6a9d20 at 17e4d71d0d0>
+2025-12-13 00:57:09 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionControl) ptr=0x17e3f6a90c0 at 17e4d71d150>
+2025-12-13 00:57:09 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionControl) ptr=0x17e3f6a9e80 at 17e4d71d450>
+2025-12-13 00:57:09 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionControl) ptr=0x17e3f6a97a0 at 17e4d71dad0>
+2025-12-13 00:57:09 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionControl) ptr=0x17e3f6a94e0 at 17e4d71e2d0>
+2025-12-13 00:57:09 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionControl) ptr=0x17e3f6a9fe0 at 17e4d71cf50>
+2025-12-13 00:57:09 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionManager2) ptr=0x17e3f955db0 at 17e4d769450>
+2025-12-13 00:57:09 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionEnumerator) ptr=0x17e08ee8710 at 17e48270fd0>
+2025-12-13 00:57:09 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionControl) ptr=0x17e3f6a9a60 at 17e4d71d650>
+2025-12-13 00:57:09 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-13 00:57:09 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionControl2) ptr=0x17e3f6a9a60 at 17e4d71cf50>
+2025-12-13 00:57:09 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionControl2) ptr=0x17e3f6a9fe0 at 17e4d71e2d0>
+2025-12-13 00:57:09 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionControl2) ptr=0x17e3f6a94e0 at 17e4d71dad0>
+2025-12-13 00:57:09 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionControl2) ptr=0x17e3f6a97a0 at 17e4d71d450>
+2025-12-13 00:57:09 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionControl2) ptr=0x17e3f6a9e80 at 17e4d71d150>
+2025-12-13 00:57:09 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionControl2) ptr=0x17e3f6a90c0 at 17e4d71d0d0>
+2025-12-13 00:57:09 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionControl2) ptr=0x17e3f6a9d20 at 17e480258d0>
+2025-12-13 00:57:09 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionControl2) ptr=0x17e3f6a8e00 at 17e4d71e0d0>
+2025-12-13 00:57:09 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(ISimpleAudioVolume) ptr=0x17e3f6a9e88 at 17e4d7c48d0>
+2025-12-13 00:57:09 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-13 00:57:09 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-13 00:57:15 - rendering.display              - DEBUG    - Media key pressed - ignoring for exit (key=16777350, native_vk=179)
+2025-12-13 00:57:16 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.198 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-13 00:57:16 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.883 Bars: [0.28 0.30 0.37 0.50 0.69 0.93 1.00 1.00 1.00 0.93 0.69 0.50 0.37 0.30 0.28]
+2025-12-13 00:57:17 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.113 Bars: [0.35 0.38 0.48 0.65 0.89 1.00 1.00 1.00 1.00 1.00 0.89 0.65 0.48 0.38 0.35]
+2025-12-13 00:57:17 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.431 Bars: [0.27 0.29 0.37 0.51 0.69 0.93 1.00 1.00 1.00 0.93 0.69 0.51 0.37 0.29 0.27]
+2025-12-13 00:57:17 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.692 Bars: [0.20 0.21 0.27 0.36 0.49 0.67 0.88 1.00 0.88 0.67 0.49 0.36 0.27 0.21 0.20]
+2025-12-13 00:57:18 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.225 Bars: [0.39 0.42 0.53 0.71 0.97 1.00 1.00 1.00 1.00 1.00 0.97 0.71 0.53 0.42 0.39]
+2025-12-13 00:57:18 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.122 Bars: [0.31 0.34 0.44 0.61 0.85 1.00 1.00 1.00 1.00 1.00 0.85 0.61 0.44 0.34 0.31]
+2025-12-13 00:57:19 - rendering.display              - DEBUG    - Media key pressed - ignoring for exit (key=16777350, native_vk=179)
+2025-12-13 00:57:20 - rendering.display              - INFO     - Exit key pressed (16777216), requesting exit
+2025-12-13 00:57:20 - engine.display                 - INFO     - Exit requested from display widget
+2025-12-13 00:57:20 - engine.screensaver             - INFO     - Exit requested from display
+2025-12-13 00:57:20 - engine.screensaver             - INFO     - Stopping screensaver engine...
+2025-12-13 00:57:20 - engine.screensaver             - DEBUG    - Engine stop requested (exit_app=True)
+2025-12-13 00:57:20 - engine.screensaver             - DEBUG    - Rotation timer stopped
+2025-12-13 00:57:20 - resources.manager              - DEBUG    - Cleaned up resource: gui_component_490dc2ea
+2025-12-13 00:57:20 - engine.screensaver             - INFO     - Stopping displays via DisplayManager (count=2, exit_app=True)
+2025-12-13 00:57:20 - engine.display                 - INFO     - All displays cleared
+2025-12-13 00:57:20 - engine.display                 - INFO     - Cleaning up 2 display widgets
+2025-12-13 00:57:20 - engine.display                 - DEBUG    - [CLEANUP] Reset all DisplayWidget global state
+2025-12-13 00:57:20 - engine.display                 - DEBUG    - Cleaning up display widget (index=0/2, screen_index=0)
+2025-12-13 00:57:20 - engine.display                 - DEBUG    - Cleaning up display widget (index=1/2, screen_index=1)
+2025-12-13 00:57:20 - engine.display                 - INFO     - Display manager cleanup complete
+2025-12-13 00:57:20 - engine.screensaver             - DEBUG    - Displays cleared and cleaned up
+2025-12-13 00:57:20 - engine.screensaver             - INFO     - Screensaver engine stopped
+2025-12-13 00:57:20 - __main__                       - DEBUG    - Windows timer resolution restored to default
+2025-12-13 00:57:20 - __main__                       - INFO     - Cleaning pycache on exit
+2025-12-13 00:57:20 - __main__                       - INFO     - Removed 1 __pycache__ directories
+2025-12-13 00:57:20 - __main__                       - INFO     - ============================================================
+2025-12-13 00:57:20 - __main__                       - INFO     - ShittyRandomPhotoScreenSaver Exiting (code=0)
+2025-12-13 00:57:20 - __main__                       - INFO     - ============================================================
+2025-12-13 00:57:20 - comtypes._post_coinit.unknwn   - DEBUG    - Calling CoUninitialize()
+2025-12-13 00:57:20 - comtypes._post_coinit.unknwn   - DEBUG    - CoUninitialize() done.
+2025-12-13 17:52:12 - root                           - INFO     - ============================================================
+2025-12-13 17:52:12 - root                           - INFO     - Screensaver logging initialized (debug=True, verbose=False)
+2025-12-13 17:52:12 - root                           - INFO     - ============================================================
+2025-12-13 17:52:12 - __main__                       - INFO     - ============================================================
+2025-12-13 17:52:12 - __main__                       - INFO     - ShittyRandomPhotoScreenSaver Starting
+2025-12-13 17:52:12 - __main__                       - INFO     - ============================================================
+2025-12-13 17:52:12 - __main__                       - INFO     - Running in script mode - cleaning pycache on startup
+2025-12-13 17:52:12 - __main__                       - INFO     - Removed 23 __pycache__ directories
+2025-12-13 17:52:12 - __main__                       - DEBUG    - Command-line arguments: ['main.py', '--debug']
+2025-12-13 17:52:12 - __main__                       - DEBUG    - Filtered arguments: ['main.py']
+2025-12-13 17:52:12 - __main__                       - INFO     - No arguments provided in script mode, defaulting to RUN mode
+2025-12-13 17:52:12 - rendering.gl_format            - DEBUG    - [GL FORMAT] Requested swap=SwapBehavior.DoubleBuffer interval=1 depth=24 stencil=8 (refresh_sync=True, prefer_triple=True) reason=startup
+2025-12-13 17:52:12 - __main__                       - INFO     - Global QSurfaceFormat configured (swap=SwapBehavior.DoubleBuffer, interval=1, depth=24, stencil=8)
+2025-12-13 17:52:12 - __main__                       - INFO     - Qt image allocation limit: 1GB (supports 8K+ images, per-image on-demand)
+2025-12-13 17:52:12 - __main__                       - INFO     - Qt Application created: SRPSS
+2025-12-13 17:52:12 - __main__                       - DEBUG    - High DPI scaling enabled
+2025-12-13 17:52:12 - __main__                       - INFO     - Starting screensaver in RUN mode
+2025-12-13 17:52:12 - __main__                       - INFO     - Windows timer resolution set to 1ms for smooth animations
+2025-12-13 17:52:12 - __main__                       - INFO     - Initializing screensaver engine
+2025-12-13 17:52:12 - SettingsManager                - DEBUG    - Widgets snapshot on init: 9 sections
+2025-12-13 17:52:12 - SettingsManager                - INFO     - SettingsManager initialized
+2025-12-13 17:52:12 - engine.screensaver             - INFO     - ScreensaverEngine created
+2025-12-13 17:52:12 - engine.screensaver             - INFO     - ============================================================
+2025-12-13 17:52:12 - engine.screensaver             - INFO     - Initializing Screensaver Engine 🚦🚦🚦🚦🚦
+2025-12-13 17:52:12 - engine.screensaver             - INFO     - ============================================================
+2025-12-13 17:52:12 - engine.screensaver             - INFO     - Initializing core systems...
+2025-12-13 17:52:12 - EventSystem                    - INFO     - EventSystem initialized
+2025-12-13 17:52:12 - engine.screensaver             - DEBUG    - EventSystem initialized
+2025-12-13 17:52:12 - resources.manager              - INFO     - ResourceManager initialized
+2025-12-13 17:52:12 - engine.screensaver             - DEBUG    - ResourceManager initialized
+2025-12-13 17:52:12 - core.threading.manager         - INFO     - Initialized io pool with 4 workers
+2025-12-13 17:52:12 - core.threading.manager         - INFO     - Initialized compute pool with 23 workers
+2025-12-13 17:52:12 - core.threading.manager         - INFO     - ThreadManager initialized with IO=4, COMPUTE=23 workers
+2025-12-13 17:52:12 - engine.screensaver             - DEBUG    - ThreadManager initialized
+2025-12-13 17:52:12 - SettingsManager                - DEBUG    - Widgets snapshot on init: 9 sections
+2025-12-13 17:52:12 - SettingsManager                - INFO     - SettingsManager initialized
+2025-12-13 17:52:12 - engine.screensaver             - DEBUG    - SettingsManager initialized
+2025-12-13 17:52:12 - engine.screensaver             - DEBUG    - Transition cycle index synced to 10 (Crumble)
+2025-12-13 17:52:12 - engine.screensaver             - INFO     - Core systems initialized successfully
+2025-12-13 17:52:12 - engine.screensaver             - INFO     - Loading settings...
+2025-12-13 17:52:12 - engine.screensaver             - INFO     - Image rotation interval: 60s
+2025-12-13 17:52:12 - engine.screensaver             - INFO     - Display mode: fill
+2025-12-13 17:52:12 - engine.screensaver             - INFO     - Shuffle enabled: true
+2025-12-13 17:52:12 - engine.screensaver             - INFO     - Prefetch ahead: 5
+2025-12-13 17:52:12 - engine.screensaver             - INFO     - Initializing image sources...
+2025-12-13 17:52:12 - sources.base_provider.folder.PERSONALSET - INFO     - Created FolderSource for 'C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET' (recursive=True)
+2025-12-13 17:52:12 - engine.screensaver             - INFO     - Folder source added: C:/Users/Basjohn/Documents/[4] WALLPAPERS/PERSONALSET
+2025-12-13 17:52:12 - engine.screensaver             - INFO     - Initialized 1 image sources (1 folder, 0 RSS)
+2025-12-13 17:52:12 - engine.screensaver             - INFO     - Building image queue...
+2025-12-13 17:52:12 - engine.image_queue             - INFO     - ImageQueue initialized (shuffle=true, history_size=50)
+2025-12-13 17:52:12 - sources.base_provider.folder.PERSONALSET - INFO     - Scanning folder: C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET
+2025-12-13 17:52:12 - sources.base_provider.folder.PERSONALSET - INFO     - Scan complete: 558 images found (558 files scanned) in 0.06s
+2025-12-13 17:52:12 - engine.screensaver             - INFO     - Added 558 images from C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET
+2025-12-13 17:52:12 - engine.image_queue             - DEBUG    - Added 558 shuffled images to queue
+2025-12-13 17:52:12 - engine.image_queue             - INFO     - Queue now has 558 images (558 total)
+2025-12-13 17:52:12 - engine.screensaver             - INFO     - Image queue built with 558 images
+2025-12-13 17:52:12 - engine.screensaver             - DEBUG    - Queue stats: {'total_images': 558, 'remaining': 558, 'current_index': -1, 'wrap_count': 0, 'history_size': 0, 'shuffle_enabled': True, 'current_image': None}
+2025-12-13 17:52:12 - utils.image_cache              - INFO     - ImageCache initialized: max_items=24, max_memory=1024MB
+2025-12-13 17:52:12 - engine.screensaver             - INFO     - Image prefetcher initialized (ahead=5, max_concurrent=2)
+2025-12-13 17:52:12 - engine.screensaver             - INFO     - Initializing display...
+2025-12-13 17:52:12 - engine.display                 - INFO     - Monitor detection enabled (2 screens)
+2025-12-13 17:52:12 - engine.display                 - INFO     - DisplayManager initialized (mode=fill, same_image=false)
+2025-12-13 17:52:12 - engine.display                 - INFO     - Initializing displays for 2 screens
+2025-12-13 17:52:12 - engine.display                 - INFO     - Cleaning up 0 display widgets
+2025-12-13 17:52:12 - engine.display                 - DEBUG    - [CLEANUP] Reset all DisplayWidget global state
+2025-12-13 17:52:12 - engine.display                 - INFO     - Display manager cleanup complete
+2025-12-13 17:52:12 - rendering.display              - INFO     - DisplayWidget created for screen 0 (fill)
+2025-12-13 17:52:12 - rendering.backends.opengl.backend - INFO     - Using OpenGL renderer backend
+2025-12-13 17:52:12 - rendering.backends             - INFO     - Renderer backend 'opengl' initialized
+2025-12-13 17:52:12 - rendering.display              - INFO     - [RENDER] Backend active (screen=0, api=OpenGL 4.x, triple=False, vsync_toggle=False)
+2025-12-13 17:52:12 - rendering.display              - INFO     - Showing on screen 0: 1707x959 at (0, 0) DPR=1.5
+2025-12-13 17:52:12 - rendering.display              - INFO     - Detected refresh rate: 165 Hz, adaptive target FPS: 55
+2025-12-13 17:52:12 - rendering.display              - INFO     - [RENDER] Render surface established (screen=0, 1707x959, vsync=True, triple_preference=True)
+2025-12-13 17:52:12 - rendering.gl_format            - DEBUG    - [GL FORMAT] Requested swap=SwapBehavior.DoubleBuffer interval=1 depth=24 stencil=8 (refresh_sync=True, prefer_triple=True) reason=gl_compositor
+2025-12-13 17:52:12 - resources.manager              - DEBUG    - Registered resource: gui_component_dfbd3eb8 (Shared GL compositor for DisplayWidget)
+2025-12-13 17:52:12 - rendering.display              - INFO     - [GL COMPOSITOR] Created shared compositor for screen 0
+2025-12-13 17:52:12 - rendering.display              - DEBUG    - Setting up overlay widgets for screen 0
+2025-12-13 17:52:12 - rendering.gl_compositor        - INFO     - [DIMMING] GL dimming changed: enabled=False→False, opacity=0%→40%
+2025-12-13 17:52:12 - rendering.display              - DEBUG    - GL compositor dimming: enabled=False, opacity=40%
+2025-12-13 17:52:12 - widgets.clock_widget           - DEBUG    - ClockWidget created (format=24h, position=top_right, seconds=True, timezone=local, show_tz=True)
+2025-12-13 17:52:12 - widgets.overlay_timers         - DEBUG    - [OVERLAY_TIMER] Created ThreadManager timer <PySide6.QtCore.QTimer(0x246b71fcef0) at 0x00000246EBE93C80> (1000 ms) for <widgets.clock_widget.ClockWidget(0x246b719feb0, name="clock_main") at 0x00000246EBE93700>
+2025-12-13 17:52:12 - widgets.clock_widget           - INFO     - Clock widget started
+2025-12-13 17:52:12 - rendering.display              - INFO     - ✅ clock widget started: Top Right, 24h, font=48px, seconds=True
+2025-12-13 17:52:12 - rendering.display              - DEBUG    - clock2 widget disabled in settings
+2025-12-13 17:52:12 - rendering.display              - DEBUG    - clock3 widget disabled in settings
+2025-12-13 17:52:12 - widgets.weather_widget         - DEBUG    - WeatherWidget created (location=Johannesburg, position=top_left)
+2025-12-13 17:52:12 - widgets.weather_widget         - DEBUG    - Fetching fresh weather data
+2025-12-13 17:52:12 - widgets.weather_widget         - DEBUG    - [ThreadManager] Fetching weather for Johannesburg
+2025-12-13 17:52:12 - widgets.overlay_timers         - DEBUG    - [OVERLAY_TIMER] Created ThreadManager timer <PySide6.QtCore.QTimer(0x246ec098b00) at 0x00000246F8C728C0> (1800000 ms) for <widgets.weather_widget.WeatherWidget(0x246b71a2190) at 0x00000246EBE93DC0>
+2025-12-13 17:52:12 - weather.open_meteo_provider    - DEBUG    - OpenMeteoProvider initialized
+2025-12-13 17:52:12 - widgets.weather_widget         - INFO     - Weather widget started (using cached data)
+2025-12-13 17:52:12 - weather.open_meteo_provider    - DEBUG    - Geocoding city: Johannesburg
+2025-12-13 17:52:12 - rendering.display              - INFO     - ✅ Weather widget started: Johannesburg, Top Left, font=24px
+2025-12-13 17:52:12 - widgets.reddit_widget          - DEBUG    - [REDDIT] Loaded logo pixmap from F:\Programming\Apps\ShittyRandomPhotoScreenSaver\images\Reddit_Logo_C.png (exists=True, null=False)
+2025-12-13 17:52:12 - widgets.reddit_widget          - DEBUG    - RedditWidget created (subreddit=All, position=bottom_right)
+2025-12-13 17:52:12 - widgets.overlay_timers         - DEBUG    - [OVERLAY_TIMER] Created ThreadManager timer <PySide6.QtCore.QTimer(0x246ec099940) at 0x00000246F8C85240> (600000 ms) for <widgets.reddit_widget.RedditWidget(0x246b7181b80) at 0x00000246F8BE8B40>
+2025-12-13 17:52:12 - rendering.display              - INFO     - ✅ Reddit widget started: r/All, Bottom Right, font=14px, limit=4
+2025-12-13 17:52:12 - widgets.reddit_widget          - DEBUG    - [REDDIT] Fetching feed: subreddit=All sort=hot limit=25 (visible_limit=4)
+2025-12-13 17:52:12 - widgets.reddit_widget          - DEBUG    - [REDDIT] Loaded logo pixmap from F:\Programming\Apps\ShittyRandomPhotoScreenSaver\images\Reddit_Logo_C.png (exists=True, null=False)
+2025-12-13 17:52:12 - widgets.reddit_widget          - DEBUG    - RedditWidget created (subreddit=SubRedditDrama, position=bottom_right)
+2025-12-13 17:52:12 - widgets.overlay_timers         - DEBUG    - [OVERLAY_TIMER] Created ThreadManager timer <PySide6.QtCore.QTimer(0x246ec09a120) at 0x00000246F8C91DC0> (600000 ms) for <widgets.reddit_widget.RedditWidget(0x246b7181700) at 0x00000246B4B8BE80>
+2025-12-13 17:52:12 - widgets.reddit_widget          - DEBUG    - [REDDIT] Fetching feed: subreddit=SubRedditDrama sort=hot limit=25 (visible_limit=4)
+2025-12-13 17:52:12 - rendering.display              - INFO     - ✅ Reddit 2 widget started: r/SubRedditDrama, Bottom Right, limit=4
+2025-12-13 17:52:13 - core.media.media_controller    - INFO     - [MEDIA] Windows GSMTC controller initialized
+2025-12-13 17:52:13 - widgets.media_widget           - INFO     - [MEDIA_WIDGET] Using controller: WindowsGlobalMediaController
+2025-12-13 17:52:13 - widgets.media_widget           - DEBUG    - MediaWidget created (position=bottom_left)
+2025-12-13 17:52:13 - widgets.media_widget           - DEBUG    - [MEDIA_WIDGET] Position changed: (0,0) → (20,679), size=600x260, parent=1707x959
+2025-12-13 17:52:13 - widgets.overlay_timers         - DEBUG    - [OVERLAY_TIMER] Created ThreadManager timer <PySide6.QtCore.QTimer(0x246ec597dd0) at 0x00000246F8C92700> (1000 ms) for <widgets.media_widget.MediaWidget(0x246b7181280) at 0x00000246F8C85D80>
+2025-12-13 17:52:13 - widgets.media_widget           - INFO     - Media widget started
+2025-12-13 17:52:13 - rendering.display              - INFO     - ✅ Media widget started: Bottom Left, font=20px, margin=20
+2025-12-13 17:52:13 - utils.audio_capture            - DEBUG    - [AUDIO] PyAudioWPatch started: 48000Hz, 6 channels, 512 block
+2025-12-13 17:52:13 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-13 17:52:13 - widgets.pixel_shift_manager    - DEBUG    - PixelShiftManager created
+2025-12-13 17:52:13 - widgets.pixel_shift_manager    - DEBUG    - Registered widget for pixel shift: ClockWidget at (1471, 20)
+2025-12-13 17:52:13 - widgets.pixel_shift_manager    - DEBUG    - Registered widget for pixel shift: WeatherWidget at (20, 20)
+2025-12-13 17:52:13 - widgets.pixel_shift_manager    - DEBUG    - Registered widget for pixel shift: MediaWidget at (20, 679)
+2025-12-13 17:52:13 - widgets.pixel_shift_manager    - DEBUG    - Registered widget for pixel shift: SpotifyVisualizerWidget at (20, 581)
+2025-12-13 17:52:13 - widgets.pixel_shift_manager    - DEBUG    - Registered widget for pixel shift: SpotifyVolumeWidget at (635, 683)
+2025-12-13 17:52:13 - widgets.pixel_shift_manager    - DEBUG    - Registered widget for pixel shift: RedditWidget at (1087, 675)
+2025-12-13 17:52:13 - widgets.pixel_shift_manager    - DEBUG    - Registered widget for pixel shift: RedditWidget at (1087, 675)
+2025-12-13 17:52:13 - resources.manager              - DEBUG    - Registered resource: gui_component_828d602c (PixelShiftManager timer)
+2025-12-13 17:52:13 - widgets.pixel_shift_manager    - DEBUG    - PixelShiftManager timer started (interval=60000ms)
+2025-12-13 17:52:13 - widgets.pixel_shift_manager    - DEBUG    - PixelShiftManager enabled (rate=1/min)
+2025-12-13 17:52:13 - rendering.display              - DEBUG    - Pixel shift enabled (rate=1/min)
+2025-12-13 17:52:13 - rendering.display              - DEBUG    - [STACKING] reddit_widget offset y=-274 (position=bottom_right, stack_down=False)
+2025-12-13 17:52:13 - engine.display                 - INFO     - Display widget created for screen 0
+2025-12-13 17:52:13 - rendering.display              - INFO     - DisplayWidget created for screen 1 (fill)
+2025-12-13 17:52:13 - rendering.backends.opengl.backend - INFO     - Using OpenGL renderer backend
+2025-12-13 17:52:13 - rendering.backends             - INFO     - Renderer backend 'opengl' initialized
+2025-12-13 17:52:13 - rendering.display              - INFO     - [RENDER] Backend active (screen=1, api=OpenGL 4.x, triple=False, vsync_toggle=False)
+2025-12-13 17:52:13 - rendering.display              - INFO     - Showing on screen 1: 2560x1439 at (2560, 0) DPR=1.5
+2025-12-13 17:52:13 - rendering.display              - INFO     - Detected refresh rate: 60 Hz, adaptive target FPS: 60
+2025-12-13 17:52:13 - rendering.display              - INFO     - [RENDER] Render surface established (screen=1, 2560x1439, vsync=True, triple_preference=True)
+2025-12-13 17:52:13 - resources.manager              - DEBUG    - Registered resource: gui_component_e902b4ce (Shared GL compositor for DisplayWidget)
+2025-12-13 17:52:13 - rendering.display              - INFO     - [GL COMPOSITOR] Created shared compositor for screen 1
+2025-12-13 17:52:13 - rendering.display              - DEBUG    - Setting up overlay widgets for screen 1
+2025-12-13 17:52:13 - rendering.gl_compositor        - INFO     - [DIMMING] GL dimming changed: enabled=False→False, opacity=0%→40%
+2025-12-13 17:52:13 - rendering.display              - DEBUG    - GL compositor dimming: enabled=False, opacity=40%
+2025-12-13 17:52:13 - rendering.display              - DEBUG    - clock widget disabled in settings
+2025-12-13 17:52:13 - weather.open_meteo_provider    - INFO     - Geocoded Johannesburg → Johannesburg, South Africa (-26.20, 28.04)
+2025-12-13 17:52:13 - weather.open_meteo_provider    - DEBUG    - Fetching weather for Johannesburg (-26.20, 28.04)
+2025-12-13 17:52:14 - weather.open_meteo_provider    - INFO     - Weather fetched for Johannesburg: 17.5°C, Overcast
+2025-12-13 17:52:14 - widgets.clock_widget           - DEBUG    - ClockWidget created (format=24h, position=top_right, seconds=True, timezone=US/Pacific, show_tz=True)
+2025-12-13 17:52:14 - widgets.overlay_timers         - DEBUG    - [OVERLAY_TIMER] Created ThreadManager timer <PySide6.QtCore.QTimer(0x246eca9ae30) at 0x00000246F8C73240> (1000 ms) for <widgets.clock_widget.ClockWidget(0x246ecb30510, name="clock_main") at 0x00000246FB68F440>
+2025-12-13 17:52:14 - widgets.clock_widget           - INFO     - Clock widget started
+2025-12-13 17:52:14 - rendering.display              - INFO     - ✅ clock2 widget started: Top Right, 24h, font=48px, seconds=True
+2025-12-13 17:52:14 - rendering.display              - DEBUG    - clock3 widget disabled in settings
+2025-12-13 17:52:14 - widgets.weather_widget         - DEBUG    - WeatherWidget created (location=Johannesburg, position=top_left)
+2025-12-13 17:52:14 - widgets.weather_widget         - DEBUG    - Fetching fresh weather data
+2025-12-13 17:52:14 - widgets.weather_widget         - DEBUG    - [ThreadManager] Fetching weather for Johannesburg
+2025-12-13 17:52:14 - widgets.overlay_timers         - DEBUG    - [OVERLAY_TIMER] Created ThreadManager timer <PySide6.QtCore.QTimer(0x246ec74d300) at 0x00000246F8CA0440> (1800000 ms) for <widgets.weather_widget.WeatherWidget(0x246ec6ffe40) at 0x00000246EBE93400>
+2025-12-13 17:52:14 - weather.open_meteo_provider    - DEBUG    - OpenMeteoProvider initialized
+2025-12-13 17:52:14 - widgets.weather_widget         - INFO     - Weather widget started (using cached data)
+2025-12-13 17:52:14 - weather.open_meteo_provider    - DEBUG    - Geocoding city: Johannesburg
+2025-12-13 17:52:14 - rendering.display              - INFO     - ✅ Weather widget started: Johannesburg, Top Left, font=24px
+2025-12-13 17:52:14 - rendering.display              - DEBUG    - Reddit widget disabled in settings (screen=1, enabled=True, show_on_this=False, monitor_sel=1)
+2025-12-13 17:52:14 - rendering.display              - DEBUG    - Media widget disabled in settings (screen=1, enabled=True, show_on_this=False, monitor_sel=1)
+2025-12-13 17:52:14 - engine.display                 - INFO     - Display widget created for screen 1
+2025-12-13 17:52:14 - engine.display                 - INFO     - Created 2 display widgets
+2025-12-13 17:52:14 - engine.screensaver             - INFO     - Display initialized with 2 screens
+2025-12-13 17:52:14 - resources.manager              - DEBUG    - Registered resource: gui_component_b42ea1c2 (Engine rotation timer)
+2025-12-13 17:52:14 - engine.screensaver             - INFO     - Rotation timer configured: 60s
+2025-12-13 17:52:14 - EventSystem                    - DEBUG    - New subscription: 6ee4c9d3 for settings.changed (priority=50)
+2025-12-13 17:52:14 - engine.screensaver             - DEBUG    - Event subscriptions configured
+2025-12-13 17:52:14 - engine.screensaver             - INFO     - Engine initialization complete
+2025-12-13 17:52:14 - engine.screensaver             - INFO     - Starting screensaver engine...
+2025-12-13 17:52:14 - engine.image_queue             - DEBUG    - Next image: C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET\605599.jpg (index 0)
+2025-12-13 17:52:14 - engine.image_queue             - DEBUG    - Next image: C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET\1057968.jpg (index 1)
+2025-12-13 17:52:14 - engine.screensaver             - DEBUG    - [ASYNC] Loading 2 different images for 2 displays
+2025-12-13 17:52:14 - engine.screensaver             - INFO     - Rotation timer started (60000ms)
+2025-12-13 17:52:14 - rendering.image_processor_async - DEBUG    - Fill(QImage): Exact size match 2560x1440, no scaling
+2025-12-13 17:52:14 - engine.screensaver             - INFO     - Screensaver engine started
+2025-12-13 17:52:15 - rendering.image_processor_async - INFO     - FILL(QImage): Image 2560x1440 → scaled 2560x1440 → cropped to 2560x1438
+2025-12-13 17:52:15 - rendering.image_processor_async - DEBUG    - Fill(QImage): Scaled 6194x3508 → 3840x2174 (Lanczos=False)
+2025-12-13 17:52:15 - rendering.image_processor_async - INFO     - FILL(QImage): Image 6194x3508 → scaled 3838x2174 → cropped to 3840x2158
+2025-12-13 17:52:15 - resources.manager              - INFO     - ResourceManager initialized
+2025-12-13 17:52:15 - resources.manager              - DEBUG    - Registered resource: gui_component_9168dc9d (Screensaver system tray icon)
+2025-12-13 17:52:15 - __main__                       - INFO     - Screensaver engine started - entering event loop
+2025-12-13 17:52:15 - rendering.display              - DEBUG    - [STACKING] reddit_widget offset y=-274 (position=bottom_right, stack_down=False)
+2025-12-13 17:52:15 - rendering.display              - DEBUG    - [OVERLAY_FADE] starting overlay fades (force=False, overlays=['clock2', 'weather'])
+2025-12-13 17:52:15 - rendering.display              - DEBUG    - [STACKING] reddit_widget offset y=-274 (position=bottom_right, stack_down=False)
+2025-12-13 17:52:15 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] Context initialized: version=4.6, swap=SwapBehavior.DoubleBuffer, interval=1
+2025-12-13 17:52:15 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] OpenGL adapter: vendor=NVIDIA Corporation, renderer=NVIDIA GeForce RTX 4090/PCIe/SSE2, version=4.6.0 NVIDIA 591.44
+2025-12-13 17:52:15 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Raindrops shader program created: 12
+2025-12-13 17:52:15 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Warp shader program created: 13
+2025-12-13 17:52:15 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Diffuse shader program created: 14
+2025-12-13 17:52:15 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] BlockFlip shader program created: 15
+2025-12-13 17:52:15 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Peel shader program created: 16
+2025-12-13 17:52:15 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Crossfade shader program created: 17
+2025-12-13 17:52:15 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Slide shader program created: 18
+2025-12-13 17:52:15 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Wipe shader program created: 19
+2025-12-13 17:52:15 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Blinds shader program created: 20
+2025-12-13 17:52:15 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Crumble shader program created: 21
+2025-12-13 17:52:15 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] Shader pipeline initialized (77.5ms)
+2025-12-13 17:52:15 - rendering.display              - DEBUG    - [INIT] First frame - presenting without transition to avoid black flicker
+2025-12-13 17:52:15 - rendering.display              - DEBUG    - Image displayed: C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET\605599.jpg (2560x1438)
+2025-12-13 17:52:15 - engine.display                 - DEBUG    - Image displayed on screen 0: C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET\605599.jpg
+2025-12-13 17:52:15 - engine.screensaver             - INFO     - [ASYNC] Different images displayed on 2 displays
+2025-12-13 17:52:15 - rendering.display              - DEBUG    - [OVERLAY_FADE] starting overlay fades (force=True, overlays=['clock', 'media', 'reddit', 'reddit2', 'spotify_visualizer', 'weather'])
+2025-12-13 17:52:15 - widgets.reddit_widget          - DEBUG    - [REDDIT] _start_widget_fade_in: duration_ms=1500
+2025-12-13 17:52:15 - widgets.reddit_widget          - DEBUG    - [REDDIT] _start_widget_fade_in: duration_ms=1500
+2025-12-13 17:52:15 - rendering.gl_format            - DEBUG    - [GL FORMAT] Requested swap=SwapBehavior.DoubleBuffer interval=1 depth=24 stencil=8 (refresh_sync=True, prefer_triple=True) reason=spotify_bars_overlay
+2025-12-13 17:52:15 - resources.manager              - DEBUG    - Registered resource: gui_component_65f93afb (Spotify bars GL overlay)
+2025-12-13 17:52:15 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] Context initialized: version=4.6, swap=SwapBehavior.DoubleBuffer, interval=1
+2025-12-13 17:52:15 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] OpenGL adapter: vendor=NVIDIA Corporation, renderer=NVIDIA GeForce RTX 4090/PCIe/SSE2, version=4.6.0 NVIDIA 591.44
+2025-12-13 17:52:15 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Raindrops shader program created: 31
+2025-12-13 17:52:15 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Warp shader program created: 32
+2025-12-13 17:52:15 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Diffuse shader program created: 33
+2025-12-13 17:52:15 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] BlockFlip shader program created: 34
+2025-12-13 17:52:15 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Peel shader program created: 35
+2025-12-13 17:52:15 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Crossfade shader program created: 36
+2025-12-13 17:52:15 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Slide shader program created: 37
+2025-12-13 17:52:15 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Wipe shader program created: 38
+2025-12-13 17:52:15 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Blinds shader program created: 39
+2025-12-13 17:52:15 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Crumble shader program created: 40
+2025-12-13 17:52:15 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] Shader pipeline initialized (7.5ms)
+2025-12-13 17:52:15 - rendering.display              - DEBUG    - [INIT] First frame - presenting without transition to avoid black flicker
+2025-12-13 17:52:15 - rendering.display              - DEBUG    - Image displayed: C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET\1057968.jpg (3840x2158)
+2025-12-13 17:52:15 - engine.display                 - DEBUG    - Image displayed on screen 1: C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET\1057968.jpg
+2025-12-13 17:52:15 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IMMDeviceEnumerator) ptr=0x246ec730ea0 at 246fe92aad0>
+2025-12-13 17:52:15 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IMMDevice) ptr=0x246b59fceb0 at 246fe928850>
+2025-12-13 17:52:15 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IUnknown) ptr=0x246ec9c80c0 at 246fe981e50>
+2025-12-13 17:52:15 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionControl) ptr=0x246b71c5c50 at 246fe981e50>
+2025-12-13 17:52:15 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionControl) ptr=0x246b71c5af0 at 246fe981f50>
+2025-12-13 17:52:15 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionControl) ptr=0x246b5e17d40 at 246fe9820d0>
+2025-12-13 17:52:15 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionControl) ptr=0x246b5e18000 at 246fe982150>
+2025-12-13 17:52:15 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionManager2) ptr=0x246ec9c80c0 at 246fe981dd0>
+2025-12-13 17:52:15 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionEnumerator) ptr=0x246b59fd090 at 246fe928850>
+2025-12-13 17:52:15 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionControl) ptr=0x246b5e18160 at 246fe9821d0>
+2025-12-13 17:52:15 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] No Spotify session found. Active sessions: ['steam.exe', 'mpvnet.exe', 'firefox.exe', 'python.exe']
+2025-12-13 17:52:15 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionControl2) ptr=0x246b5e18000 at 246fe9820d0>
+2025-12-13 17:52:15 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionControl2) ptr=0x246b5e17d40 at 246fe981f50>
+2025-12-13 17:52:15 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionControl2) ptr=0x246b71c5af0 at 246fe981e50>
+2025-12-13 17:52:15 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionControl2) ptr=0x246b71c5c50 at 246fe981fd0>
+2025-12-13 17:52:15 - comtypes._post_coinit.unknwn   - DEBUG    - Release <POINTER(IAudioSessionControl2) ptr=0x246b5e18160 at 246fe982150>
+2025-12-13 17:52:15 - weather.open_meteo_provider    - INFO     - Geocoded Johannesburg → Johannesburg, South Africa (-26.20, 28.04)
+2025-12-13 17:52:15 - weather.open_meteo_provider    - DEBUG    - Fetching weather for Johannesburg (-26.20, 28.04)
+2025-12-13 17:52:16 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-13 17:52:16 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-13 17:52:16 - weather.open_meteo_provider    - INFO     - Weather fetched for Johannesburg: 17.5°C, Overcast
+2025-12-13 17:52:55 - resources.manager              - INFO     - ResourceManager initialized
+2025-12-13 17:52:55 - resources.manager              - DEBUG    - Registered resource: gui_component_cf8afdef (AnimationManager timer)
+2025-12-13 17:52:55 - core.animation.animator        - INFO     - AnimationManager initialized (fps=60)
+2025-12-13 17:52:55 - core.animation.animator        - DEBUG    - AnimationManager started
+2025-12-13 17:52:55 - core.animation.animator        - DEBUG    - Animation started: 0f9669b4-4bb0-4fd7-a29b-ef7eb23fe326 (duration=0.6s)
+2025-12-13 17:52:56 - core.animation.animator        - DEBUG    - AnimationManager stopped
+2025-12-13 17:52:56 - core.animation.animator        - DEBUG    - Animation completed: 0f9669b4-4bb0-4fd7-a29b-ef7eb23fe326
+2025-12-13 17:52:57 - widgets.reddit_widget          - INFO     - [REDDIT] Deferred URL for exit: https://www.reddit.com/r/politics/comments/1plmtxt/supreme_court_justices_to_be_termlimited_new_bill/
+2025-12-13 17:52:57 - rendering.display              - INFO     - [REDDIT] URL deferred for exit: https://www.reddit.com/r/politics/comments/1plmtxt/supreme_court_justices_to_be_termlimited_new_bill/
+2025-12-13 17:52:59 - widgets.reddit_widget          - INFO     - [REDDIT] Deferred URL for exit: https://www.reddit.com/r/politics/comments/1plmtxt/supreme_court_justices_to_be_termlimited_new_bill/
+2025-12-13 17:52:59 - rendering.display              - INFO     - [REDDIT] URL deferred for exit: https://www.reddit.com/r/politics/comments/1plmtxt/supreme_court_justices_to_be_termlimited_new_bill/
+2025-12-13 17:53:02 - rendering.display              - INFO     - Exit key pressed (16777216), requesting exit
+2025-12-13 17:53:02 - engine.display                 - INFO     - Exit requested from display widget
+2025-12-13 17:53:02 - engine.screensaver             - INFO     - Exit requested from display
+2025-12-13 17:53:02 - engine.screensaver             - INFO     - Stopping screensaver engine...
+2025-12-13 17:53:02 - engine.screensaver             - DEBUG    - Engine stop requested (exit_app=True)
+2025-12-13 17:53:02 - engine.screensaver             - DEBUG    - Rotation timer stopped
+2025-12-13 17:53:02 - resources.manager              - DEBUG    - Cleaned up resource: gui_component_b42ea1c2
+2025-12-13 17:53:02 - engine.screensaver             - INFO     - Stopping displays via DisplayManager (count=2, exit_app=True)
+2025-12-13 17:53:02 - engine.display                 - INFO     - All displays cleared
+2025-12-13 17:53:02 - engine.display                 - INFO     - Cleaning up 2 display widgets
+2025-12-13 17:53:02 - engine.display                 - DEBUG    - [CLEANUP] Reset all DisplayWidget global state
+2025-12-13 17:53:02 - engine.display                 - DEBUG    - Cleaning up display widget (index=0/2, screen_index=0)
+2025-12-13 17:53:02 - engine.display                 - DEBUG    - Cleaning up display widget (index=1/2, screen_index=1)
+2025-12-13 17:53:02 - engine.display                 - INFO     - [REDDIT] Opened deferred URL on cleanup: https://www.reddit.com/r/politics/comments/1plmtxt/supreme_court_justices_to_be_termlimited_new_bill/
+2025-12-13 17:53:02 - engine.display                 - INFO     - Display manager cleanup complete
+2025-12-13 17:53:02 - engine.screensaver             - DEBUG    - Displays cleared and cleaned up
+2025-12-13 17:53:02 - engine.screensaver             - INFO     - Screensaver engine stopped
+2025-12-13 17:53:02 - __main__                       - DEBUG    - Windows timer resolution restored to default
+2025-12-13 17:53:02 - __main__                       - INFO     - Cleaning pycache on exit
+2025-12-13 17:53:02 - __main__                       - INFO     - Removed 1 __pycache__ directories
+2025-12-13 17:53:02 - __main__                       - INFO     - ============================================================
+2025-12-13 17:53:02 - __main__                       - INFO     - ShittyRandomPhotoScreenSaver Exiting (code=0)
+2025-12-13 17:53:02 - __main__                       - INFO     - ============================================================
+2025-12-13 17:53:02 - comtypes._post_coinit.unknwn   - DEBUG    - Calling CoUninitialize()
+2025-12-13 17:53:02 - comtypes._post_coinit.unknwn   - DEBUG    - CoUninitialize() done.

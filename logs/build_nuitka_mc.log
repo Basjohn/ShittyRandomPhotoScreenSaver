@@ -9,11 +9,8 @@ Nuitka: Running C compilation via Scons.
 Nuitka-Scons: Non downloaded winlibs-gcc 'C:\ProgramData\mingw64\mingw64\bin\gcc.exe' is being ignored, Nuitka is very dependent on the precise one.
 Nuitka-Scons: Backend C compiler: gcc (gcc 14.2.0).
 Nuitka-Scons: Backend C linking with 717 files (no progress information available for this stage).
-Nuitka-Scons: Compiled 708 C files using ccache.
-Nuitka-Scons: Cached C files (using ccache) with result 'cache hit': 705
-Nuitka-Scons: Cached C files (using ccache) with result 'cache miss': 1
-Nuitka-Scons: Cached C files (using ccache) with result 'direct_c[2025-12-12T21:21:23.554903 40384] Result: local_storage_hit': 1
-Nuitka-Scons: Cached C files (using ccache) with result 'local_storage_read_hit[2025-12-12T21:21:27.621740 972  ] Result key: 57e9v75343f4mljmr4i3mo55frfbb7r9q': 1
+Nuitka-Scons: Compiled 713 C files using ccache.
+Nuitka-Scons: Cached C files (using ccache) with result 'cache hit': 713
 Nuitka-Postprocessing: Adding 9 icon(s) from icon file 'F:\Programming\Apps\ShittyRandomPhotoScreenSaver\SRPSS.ico'.
 Nuitka-Plugins:pyside6: Including Qt plugins 'iconengines,imageformats,platforms,styles,tls' below 'PySide6\qt-plugins'.
 Nuitka-Plugins:dll-files: Found 4 files DLLs from shiboken6 installation.
@@ -38,7 +35,7 @@ Nuitka-Scons: Compiled 1 C files using ccache.
 Nuitka-Scons: Cached C files (using ccache) with result 'cache hit': 1
 Nuitka-Postprocessing: Adding 9 icon(s) from icon file 'F:\Programming\Apps\ShittyRandomPhotoScreenSaver\SRPSS.ico'.
 Nuitka-Onefile: Using compression for onefile payload.
-Nuitka-Onefile: Onefile payload compression ratio (25.39%) size 175488005 to 44562538.
+Nuitka-Onefile: Onefile payload compression ratio (25.41%) size 175505413 to 44599448.
 Nuitka-Onefile: Removing onefile build directory 'F:\Programming\Apps\ShittyRandomPhotoScreenSaver\release\main_mc.onefile-build'.
 Nuitka: Removing dist folder 'F:\Programming\Apps\ShittyRandomPhotoScreenSaver\release\main_mc.dist'.
 Nuitka: Removing build directory 'F:\Programming\Apps\ShittyRandomPhotoScreenSaver\release\main_mc.build'.
