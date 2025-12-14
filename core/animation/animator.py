@@ -329,7 +329,7 @@ class AnimationManager(QObject):
         except Exception:
             self._resources = None
         
-        logger.info(f"AnimationManager initialized (fps={fps})")
+        logger.debug(f"AnimationManager initialized (fps={fps})")
 
     def set_target_fps(self, fps: int) -> None:
         """Update target FPS and reconfigure the timer interval safely."""

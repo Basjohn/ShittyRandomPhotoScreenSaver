@@ -663,7 +663,7 @@ class SpotifyVisualizerWidget(QWidget):
         # Bar styling
         self._bar_fill_color = QColor(200, 200, 200, 230)
         self._bar_border_color = QColor(255, 255, 255, 255)
-        self._bar_segments: int = 16
+        self._bar_segments: int = 18
         self._ghosting_enabled: bool = True
         self._ghost_alpha: float = 0.4
         self._ghost_decay_rate: float = 0.4
@@ -1093,7 +1093,7 @@ class SpotifyVisualizerWidget(QWidget):
             pass
         # Slightly taller default so bars and card border have breathing
         # room and match the visual weight of other widgets.
-        self.setMinimumHeight(78)
+        self.setMinimumHeight(88)
         self._update_card_style()
 
     def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:

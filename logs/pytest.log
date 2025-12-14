@@ -2315,3 +2315,17 @@
 2025-12-11 18:22:07,961 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_ctrl_interaction_mode.py', '-v']
 2025-12-11 21:32:05,370 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_ctrl_interaction_mode.py', '-v', '--tb=short']
 2025-12-11 21:32:13,890 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_ctrl_interaction_mode.py', '-v', '--tb=short']
+2025-12-13 22:58:02,913 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_rss_behavior.py', '-v', '-s']
+2025-12-13 22:58:05,171 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-13 22:59:18,102 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_rss_behavior.py', '-v', '-s']
+2025-12-13 22:59:19,456 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-13 23:00:08,803 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_rss_behavior.py', '-v', '-s']
+2025-12-13 23:00:09,824 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-13 23:02:53,743 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_rss_behavior.py', '-v', '-s']
+2025-12-13 23:02:54,782 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-13 23:14:06,958 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_rss_behavior.py', '-v', '-s', '--timeout=30']
+2025-12-13 23:14:07,289 - pytest_runner - INFO - pytest finished with exit code 4
+2025-12-13 23:14:13,063 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_rss_behavior.py', '-v', '-s']
+2025-12-13 23:18:22,278 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-14 00:14:48,190 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_rss_behavior.py', '-v', '-x']
+2025-12-14 00:19:13,281 - pytest_runner - INFO - pytest finished with exit code 0

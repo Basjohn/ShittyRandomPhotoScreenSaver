@@ -58,8 +58,19 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
   - `RSSSource` consumes `sources.rss_feeds` URLs and produces `ImageMetadata` with `source_type=ImageSourceType.RSS`.
   - Supports standard RSS/Atom feeds (via feedparser) and Reddit JSON listings with a light high‑resolution filter (prefers posts with preview width ≥ 2560px when available).
   - Uses an on-disk cache under the temp directory and optional save‑to‑disk mirroring when `sources.rss_save_to_disk` and `sources.rss_save_directory` are configured.
-  - Startup: the engine assigns a global cap of 8 RSS images across all feeds (divided per‑feed) to avoid long startup stalls.
+  - **Rotating cache**: Cache cleanup always retains at least 20 images (`min_keep=20`) regardless of size limits, ensuring faster startup for RSS users.
+  - **Async loading**: `_load_rss_images_async()` processes sources in priority order (Bing=95, Unsplash=90, Wikimedia=85, NASA=75, Reddit=10) with 8 images per source per cycle to prevent any single source from blocking.
+  - **Shutdown vs reinitialization**: Uses `_shutting_down` flag (not `_running`) so RSS loading continues during settings changes but aborts immediately on actual exit. Both `start()` and `_on_sources_changed()` reset `_shutting_down = False` to ensure clean state after previous stop().
+  - **Shutdown callback**: Each RSSSource receives a `set_shutdown_check(callback)` so downloads abort mid-stream when the engine shuts down.
+  - **Cache pre-loading**: Cached RSS images are added to the queue before async download starts, providing immediate variety.
   - Background: the engine enforces a global RSS background cap (`sources.rss_background_cap`, default 30) and a time‑to‑live (`sources.rss_stale_minutes`, default 30 minutes) so older, unseen RSS images are gradually replaced when new ones arrive, but only when a background refresh successfully adds replacements.
+- **Usage Ratio (Local vs RSS)**:
+  - `ImageQueue` maintains separate pools for local (folder) and RSS images.
+  - `sources.local_ratio` (default 60) controls the percentage of images drawn from local sources; the remainder comes from RSS.
+  - Ratio-based selection uses probabilistic sampling: each `next()` call randomly decides which pool to draw from based on the configured ratio.
+  - **Fallback**: If the selected pool is empty, the queue automatically falls back to the other pool, ensuring continuous image availability.
+  - The ratio control is only active when **both** local folders and RSS feeds are configured; otherwise, images come exclusively from the available source type.
+  - UI: The Sources tab displays a slider and spinboxes ("X% Local / Y% RSS") between the folder and RSS groups. The control is grayed out when only one source type is configured.
 
 ## Transitions
 - GL and CPU variants for Crossfade, Slide, Wipe, Block Puzzle Flip; GL-only variant for Blinds (`GLBlindsTransition`) when hardware acceleration is enabled. Diffuse retains a CPU-based effect (`DiffuseTransition`) as the authoritative fallback, while a compositor-backed GLSL Diffuse shader now exists for the `Rectangle` and `Membrane` shapes when routed via `GLCompositorDiffuseTransition`.

@@ -46,11 +46,23 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - Orchestrator: sources → ImageQueue → display → transitions
   - Caching/prefetch integration via ImageCache + ImagePrefetcher
   - Random transition/type selection with non-repeating logic (persisted)
+  - **RSS async loading**: `_load_rss_images_async()` loads RSS images in background without blocking startup
+    - Uses `_shutting_down` flag (not `_running`) to distinguish actual shutdown from settings reinitialization
+    - Pre-loads cached RSS images to queue before starting async download for immediate variety
+    - Limits to 8 images per source per refresh cycle to prevent any single source from blocking
+    - Sets shutdown callback on RSSSource objects so downloads abort immediately on exit
+  - **Settings reinitialization**: `_on_sources_changed()` rebuilds sources and queue when settings change
+    - Explicitly resets `_shutting_down = False` at start to allow RSS async loading after previous stop()
+    - `start()` also resets `_shutting_down = False` to ensure clean state on engine restart
 - engine/display_manager.py
   - Multi-monitor DisplayWidget management, sync scaffolding
 - engine/image_queue.py
   - ImageQueue with RLock, shuffle/history, wraparound
+  - **Ratio-based source selection**: Separate pools for local and RSS images with configurable usage ratio (default 60% local / 40% RSS)
+  - Automatic fallback: if selected pool empty, falls back to other pool
   - peek() and peek_many(n) for prefetch look-ahead
+  - `set_local_ratio(ratio)` / `get_local_ratio()` for runtime ratio adjustment
+  - `has_both_source_types()` to check if ratio control is applicable
 
 ## Entry Points & Variants
 - main.py
@@ -137,9 +149,17 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 
 ## Sources
 - sources/base_provider.py
-  - ImageMetadata
+  - ImageMetadata, ImageProvider ABC, ImageSourceType enum
 - sources/folder_source.py
+  - FolderSource: Local folder image provider with recursive scanning
 - sources/rss_source.py
+  - RSSSource: RSS/Atom feed image provider with caching and rate limiting
+  - **Shutdown callback**: `set_shutdown_check(callback)` allows async tasks to abort during downloads
+  - **Per-source limits**: `refresh(max_images_per_source=N)` limits downloads per source to prevent blocking
+  - **Interruptible delays**: Rate limit delays are split into 0.5s chunks with shutdown checks
+  - **Cache pre-loading**: `_load_cached_images()` loads existing cache on init for immediate availability
+  - **Priority system**: `_get_source_priority(url)` returns priority (Bing=95, Unsplash=90, Wikimedia=85, NASA=75, Reddit=10)
+  - **Cache cleanup**: Removes oldest files when exceeding max size, keeps minimum 20 images
 
 ## Widgets
 - widgets/base_overlay_widget.py
@@ -261,35 +281,57 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - audits/*.md – Repository-level architecture/optimization audit documents with live checklists
 
 ## Settings (selected)
+
+### Sources
+- sources.folders: list of folder paths to scan for images
+- sources.rss_feeds: list of RSS/JSON feed URLs
+- sources.local_ratio: int (0-100, default 60) - percentage of images from local sources vs RSS
+- sources.rss_save_to_disk: bool (default false) - permanently save RSS images
+- sources.rss_save_directory: str - directory for permanent RSS image storage
+- sources.rss_background_cap: int (default 30) - max RSS images in queue
+- sources.rss_stale_minutes: int (default 30) - TTL for stale RSS images
+- sources.rss_rotating_cache_size: int (default 10) - minimum cached RSS images to keep
+
+### Display
 - display.refresh_sync: bool
 - display.hw_accel: bool
 - display.mode: fill|fit|shrink
- - transitions.type (includes all CPU and GL/compositor-backed transition types such as Crossfade, Slide, Wipe, Diffuse, Block Puzzle Flip, Blinds, Peel, 3D Block Spins, Rain Drops, Warp Dissolve, Crumble; legacy `Shuffle` values are mapped to `Crossfade` for back-compat)
+- display.same_image_all_monitors: bool (default true) - same or different images per display
+
+### Transitions
+- transitions.type: str (Crossfade, Slide, Wipe, Diffuse, Block Puzzle Flip, Blinds, Peel, 3D Block Spins, Rain Drops, Warp Dissolve, Crumble)
 - transitions.random_always: bool
 - transitions.random_choice: str
-- transitions.duration_ms: int (global default duration in milliseconds for transitions)
- - transitions.durations: map of transition type name → duration_ms used for per-transition duration independence (e.g. Crossfade/Slide/Wipe/Diffuse/Block Puzzle Flip/Blinds/Peel/3D Block Spins/Rain Drops/Warp Dissolve)
-- transitions.slide.direction, transitions.slide.last_direction (legacy flat keys maintained for back-compat; nested `transitions['slide']['direction']` is the canonical form)
-- transitions.wipe.direction, transitions.wipe.last_direction (legacy flat keys maintained for back-compat; nested `transitions['wipe']['direction']` is the canonical form)
-- transitions.pool: map of transition type name → bool controlling whether a type participates in random rotation and C-key cycling (explicit selection remains allowed regardless of this flag; GL-only types still respect `display.hw_accel`).
-- transitions.crumble.piece_count: int (4-16, default 8) - number of pieces in crumble transition
-- transitions.crumble.crack_complexity: float (0.5-2.0, default 1.0) - crack detail level
-- transitions.crumble.mosaic_mode: bool (default false) - glass shatter mode with 3D depth effect
-- timing.interval: int seconds
-- display.same_image_all_monitors: bool
+- transitions.duration_ms: int (global default duration in milliseconds)
+- transitions.durations: map of transition type → duration_ms for per-type overrides
+- transitions.slide.direction, transitions.slide.last_direction
+- transitions.wipe.direction, transitions.wipe.last_direction
+- transitions.pool: map of transition type → bool (participation in random rotation)
+- transitions.crumble.piece_count: int (4-16, default 8)
+- transitions.crumble.crack_complexity: float (0.5-2.0, default 1.0)
+- transitions.crumble.mosaic_mode: bool (default false)
+
+### Timing
+- timing.interval: int seconds between image rotations
+
+### Cache
 - cache.prefetch_ahead: int (default 5)
 - cache.max_items: int (default 24)
 - cache.max_memory_mb: int (default 1024)
 - cache.max_concurrent: int (default 2)
+
+### Widgets
 - widgets.clock.monitor: 'ALL'|1|2|3
 - widgets.weather.monitor: 'ALL'|1|2|3
- - widgets.media.monitor: 'ALL'|1|2|3
- - widgets.reddit.monitor: 'ALL'|1|2|3
- - widgets.shadows.*: global widget shadow configuration shared by all overlay widgets
-- accessibility.dimming.enabled: bool (default false) - enable background dimming overlay
-- accessibility.dimming.opacity: int (10-90, default 30) - dimming overlay opacity percentage
-- accessibility.pixel_shift.enabled: bool (default false) - enable widget pixel shift for burn-in prevention
-- accessibility.pixel_shift.rate: int (1-5, default 1) - shifts per minute
+- widgets.media.monitor: 'ALL'|1|2|3
+- widgets.reddit.monitor: 'ALL'|1|2|3
+- widgets.shadows.*: global widget shadow configuration
+
+### Accessibility
+- accessibility.dimming.enabled: bool (default false)
+- accessibility.dimming.opacity: int (10-90, default 30)
+- accessibility.pixel_shift.enabled: bool (default false)
+- accessibility.pixel_shift.rate: int (1-5, default 1)
 
 ## Audits
 - audits/v1_2 ROADMAP.md: Living roadmap for v1.2 features and performance goals

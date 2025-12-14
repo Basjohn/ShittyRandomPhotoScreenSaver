@@ -61,7 +61,7 @@ class ResourceManager:
             atexit.register(self.cleanup_all)
         
         self._initialized = True
-        self._logger.info("ResourceManager initialized")
+        self._logger.debug("ResourceManager initialized")
     
     def register(
         self, 

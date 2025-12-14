@@ -415,6 +415,42 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
     for name in ("urllib3", "urllib3.connectionpool", "asyncio"):
         logging.getLogger(name).setLevel(noisy_level)
     
+    # NOISE REDUCTION: Silence high-frequency internal modules at DEBUG level
+    # These modules produce excessive logs during normal operation that make
+    # debugging other issues nearly impossible. They only log at INFO+ unless
+    # --verbose is explicitly requested.
+    NOISY_INTERNAL_MODULES = (
+        # Animation system - logs every frame tick
+        "core.animation.animator",
+        "core.animation",
+        # Rendering system - logs every paint/update
+        "rendering.display",
+        "rendering.display_widget", 
+        "rendering.gl_format",
+        # Transitions - logs every frame during transitions
+        "transitions.base_transition",
+        "transitions.gl_crossfade_transition",
+        "transitions.gl_slide_transition",
+        "transitions.gl_wipe_transition",
+        "transitions.gl_diffuse_transition",
+        "transitions.gl_xfade",
+        "transitions.gl_slide",
+        "transitions.gl_wipe",
+        "transitions.gl_diffuse",
+        "transitions.gl_blockflip",
+        "transitions.gl_blinds",
+        # Settings manager - logs on every widget interaction
+        "SettingsManager",
+        # Image queue - logs every image selection
+        "engine.image_queue",
+        # Widget spam
+        "widgets.reddit_widget",
+        "widgets.media_widget",
+    )
+    internal_noisy_level = logging.DEBUG if verbose else logging.INFO
+    for name in NOISY_INTERNAL_MODULES:
+        logging.getLogger(name).setLevel(internal_noisy_level)
+    
     # Log startup
     _VERBOSE = bool(verbose)
 

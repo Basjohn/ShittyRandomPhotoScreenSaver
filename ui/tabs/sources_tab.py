@@ -11,7 +11,7 @@ from urllib.parse import urlparse, urlunparse
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget,
     QPushButton, QLineEdit, QFileDialog, QGroupBox, QMessageBox, QCheckBox,
-    QScrollArea, QDialog, QFrame,
+    QScrollArea, QDialog, QFrame, QSlider,
 )
 from PySide6.QtCore import Signal, Qt
 
@@ -91,6 +91,50 @@ class SourcesTab(QWidget):
         folder_layout.addLayout(folder_buttons)
         
         layout.addWidget(folder_group)
+        
+        # Usage Ratio control (between folder and RSS groups)
+        # Only interactable when both source types are configured
+        self.ratio_frame = QFrame()
+        self.ratio_frame.setObjectName("ratioFrame")
+        self.ratio_frame.setStyleSheet("""
+            #ratioFrame {
+                background-color: #2a2a2a;
+                border: 1px solid #3a3a3a;
+                border-radius: 6px;
+                padding: 8px;
+            }
+        """)
+        ratio_layout = QHBoxLayout(self.ratio_frame)
+        ratio_layout.setContentsMargins(12, 8, 12, 8)
+        ratio_layout.setSpacing(10)
+        
+        self.ratio_label = QLabel("Usage Ratio:")
+        self.ratio_label.setStyleSheet("color: #cccccc; font-weight: bold;")
+        ratio_layout.addWidget(self.ratio_label)
+        
+        # Local percentage display label (read-only)
+        self.local_ratio_label = QLabel("60% Local")
+        self.local_ratio_label.setStyleSheet("color: #aaaaaa; min-width: 70px;")
+        self.local_ratio_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        ratio_layout.addWidget(self.local_ratio_label)
+        
+        # Slider is the ONLY control for adjusting ratio
+        self.ratio_slider = QSlider(Qt.Orientation.Horizontal)
+        self.ratio_slider.setRange(0, 100)
+        self.ratio_slider.setMinimumWidth(200)
+        self.ratio_slider.setToolTip("Drag to adjust the balance between local and RSS sources")
+        self.ratio_slider.valueChanged.connect(self._on_ratio_slider_changed)
+        ratio_layout.addWidget(self.ratio_slider)
+        
+        # RSS percentage display label (read-only)
+        self.rss_ratio_label = QLabel("40% RSS")
+        self.rss_ratio_label.setStyleSheet("color: #aaaaaa; min-width: 70px;")
+        self.rss_ratio_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        ratio_layout.addWidget(self.rss_ratio_label)
+        
+        ratio_layout.addStretch()
+        
+        layout.addWidget(self.ratio_frame)
         
         # RSS sources group
         rss_group = QGroupBox("RSS / JSON Feed Sources")
@@ -181,6 +225,26 @@ class SourcesTab(QWidget):
         for feed in rss_feeds:
             self.rss_list.addItem(feed)
         
+        # Load and display usage ratio
+        local_ratio = self._settings.get('sources.local_ratio', 60)
+        try:
+            local_ratio = int(local_ratio)
+        except (ValueError, TypeError):
+            local_ratio = 60
+        local_ratio = max(0, min(100, local_ratio))
+        
+        # Block signals to prevent save loops during load
+        self.ratio_slider.blockSignals(True)
+        self.ratio_slider.setValue(local_ratio)
+        self.ratio_slider.blockSignals(False)
+        
+        # Update display labels
+        self.local_ratio_label.setText(f"{local_ratio}% Local")
+        self.rss_ratio_label.setText(f"{100 - local_ratio}% RSS")
+        
+        # Update ratio control visibility/enabled state
+        self._update_ratio_control_state()
+        
         # Load RSS save-to-disk settings with boolean normalization
         rss_save_enabled = self._settings.get_bool('sources.rss_save_to_disk', False)
 
@@ -219,6 +283,7 @@ class SourcesTab(QWidget):
                 self._settings.set('sources.folders', folders)
                 self._settings.save()
                 self.folder_list.addItem(folder)
+                self._update_ratio_control_state()
                 self.sources_changed.emit()
                 logger.info(f"Added folder source: {folder}")
             else:
@@ -238,6 +303,7 @@ class SourcesTab(QWidget):
                 self._settings.set('sources.folders', folders)
                 self._settings.save()
                 self.folder_list.takeItem(self.folder_list.currentRow())
+                self._update_ratio_control_state()
                 self.sources_changed.emit()
                 logger.info(f"Removed folder source: {folder}")
     
@@ -273,6 +339,7 @@ class SourcesTab(QWidget):
             self._settings.save()
             self.rss_list.addItem(url)
             self.rss_input.clear()
+            self._update_ratio_control_state()
             self.sources_changed.emit()
             logger.info(f"Added RSS feed: {url}")
         else:
@@ -292,6 +359,7 @@ class SourcesTab(QWidget):
                 self._settings.set('sources.rss_feeds', rss_feeds)
                 self._settings.save()
                 self.rss_list.takeItem(self.rss_list.currentRow())
+                self._update_ratio_control_state()
                 self.sources_changed.emit()
                 logger.info(f"Removed RSS feed: {url}")
     
@@ -381,23 +449,32 @@ class SourcesTab(QWidget):
         logger.info(f"RSS cache cleared via SourcesTab button: {removed} files removed")
 
     def _on_just_make_it_work_clicked(self) -> None:
-        """Reset RSS feeds to a curated, known-good JSON set.
+        """Reset RSS feeds to a curated, known-good set.
 
         This clears the on-disk RSS cache, wipes the current RSS feed
-        list, and replaces it with a curated set of Reddit JSON feeds
-        suitable for high-quality wallpapers.
+        list, and replaces it with a curated set of image feeds.
+        
+        Feed order is important:
+        1. Non-Reddit sources first (NASA, Bing) - no rate limits
+        2. Reddit sources last - aggressive rate limiting requires delays
         """
         self._clear_rss_cache()
 
+        # Non-Reddit sources first (no rate limiting, faster cache building)
+        # Then Reddit sources (rate limited, processed with delays)
         curated_feeds = [
-            "https://www.reddit.com/r/CityPorn/top/.json?t=day&limit=100",
-            "https://www.reddit.com/r/WaterPorn/top/.json?t=day&limit=100",
-            "https://www.reddit.com/r/ArchitecturePorn/top/.json?t=day&limit=100",
-            "https://www.reddit.com/r/EarthPorn/top/.json?t=day&limit=100",
-            "https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limit=100",
-            "https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=100",
-            "https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=100",
-            "https://www.reddit.com/r/AbandonedPorn/top/.json?t=day&limit=100",
+            # === NON-REDDIT SOURCES (processed first, no rate limits) ===
+            "https://www.bing.com/HPImageArchive.aspx?format=rss&idx=0&n=8&mkt=en-US",  # Bing daily (high quality)
+            "https://www.nasa.gov/feeds/iotd-feed",  # NASA Image of the Day
+            # === REDDIT SOURCES (processed last with staggered delays) ===
+            "https://www.reddit.com/r/EarthPorn/top/.json?t=day&limit=25",
+            "https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25",
+            "https://www.reddit.com/r/CityPorn/top/.json?t=day&limit=25",
+            "https://www.reddit.com/r/ArchitecturePorn/top/.json?t=day&limit=25",
+            "https://www.reddit.com/r/WaterPorn/top/.json?t=day&limit=25",
+            "https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limit=25",
+            "https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=25",
+            "https://www.reddit.com/r/AbandonedPorn/top/.json?t=day&limit=25",
         ]
 
         self._settings.set('sources.rss_feeds', curated_feeds)
@@ -408,6 +485,7 @@ class SourcesTab(QWidget):
             self.rss_list.addItem(feed)
 
         self.rss_input.clear()
+        self._update_ratio_control_state()
         self.sources_changed.emit()
 
         # Update suggestion label for this session to reduce confusion.
@@ -435,6 +513,60 @@ class SourcesTab(QWidget):
         except Exception as e:
             logger.error(f"RSS cache clear failed: {e}")
         return removed
+    
+    def _update_ratio_control_state(self) -> None:
+        """Update ratio control enabled state based on source availability."""
+        folders = self._settings.get('sources.folders', [])
+        rss_feeds = self._settings.get('sources.rss_feeds', [])
+        
+        has_folders = len(folders) > 0
+        has_rss = len(rss_feeds) > 0
+        both_available = has_folders and has_rss
+        
+        # Only enable slider when both source types are configured
+        self.ratio_slider.setEnabled(both_available)
+        
+        # Update styling to indicate disabled state
+        if both_available:
+            self.ratio_frame.setStyleSheet("""
+                #ratioFrame {
+                    background-color: #2a2a2a;
+                    border: 1px solid #3a3a3a;
+                    border-radius: 6px;
+                    padding: 8px;
+                }
+            """)
+            self.ratio_label.setStyleSheet("color: #cccccc; font-weight: bold;")
+            self.local_ratio_label.setStyleSheet("color: #aaaaaa; min-width: 70px;")
+            self.rss_ratio_label.setStyleSheet("color: #aaaaaa; min-width: 70px;")
+        else:
+            self.ratio_frame.setStyleSheet("""
+                #ratioFrame {
+                    background-color: #1a1a1a;
+                    border: 1px solid #2a2a2a;
+                    border-radius: 6px;
+                    padding: 8px;
+                }
+            """)
+            self.ratio_label.setStyleSheet("color: #666666; font-weight: bold;")
+            self.local_ratio_label.setStyleSheet("color: #555555; min-width: 70px;")
+            self.rss_ratio_label.setStyleSheet("color: #555555; min-width: 70px;")
+    
+    def _on_ratio_slider_changed(self, value: int) -> None:
+        """Handle ratio slider change - the only control for adjusting ratio."""
+        # Update display labels
+        self.local_ratio_label.setText(f"{value}% Local")
+        self.rss_ratio_label.setText(f"{100 - value}% RSS")
+        
+        # Save immediately
+        self._save_ratio(value)
+    
+    def _save_ratio(self, local_ratio: int) -> None:
+        """Save the local ratio setting."""
+        self._settings.set('sources.local_ratio', local_ratio)
+        self._settings.save()
+        logger.info(f"Usage ratio saved: {local_ratio}% local, {100 - local_ratio}% RSS")
+        self.sources_changed.emit()
 
 
 class RssAutocorrectDialog(QDialog):

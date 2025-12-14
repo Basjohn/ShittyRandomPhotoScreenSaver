@@ -185,8 +185,8 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
                 pass
             return (None, pyaudio.paContinue)
         
-        # Try different block sizes
-        for block_size in [512, 1024]:
+        # Try different block sizes (smaller = lower latency, higher CPU)
+        for block_size in [256, 512, 1024]:
             try:
                 self._stream = self._pa.open(
                     format=pyaudio.paFloat32,
