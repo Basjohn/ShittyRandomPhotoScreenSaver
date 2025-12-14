@@ -6,10 +6,18 @@ Free weather API with no API key required.
 - Weather: Current weather data
 """
 from typing import Optional, Dict, Any, Tuple
+import time
+import json
+import tempfile
+from pathlib import Path
 import requests
 from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
+
+# Weather cache file location
+_WEATHER_CACHE_FILE = Path(tempfile.gettempdir()) / "screensaver_weather_cache.json"
+_WEATHER_CACHE_TTL_SECONDS = 1800  # 30 minutes
 
 
 class OpenMeteoProvider:
@@ -69,8 +77,93 @@ class OpenMeteoProvider:
         """
         self._timeout = timeout
         self._cached_coords: Dict[str, Tuple[float, float]] = {}  # City → (lat, lon)
+        self._weather_cache: Dict[str, Dict[str, Any]] = {}  # City → weather data with timestamp
+        
+        # Load persisted weather cache from disk
+        self._load_weather_cache()
         
         logger.debug("OpenMeteoProvider initialized")
+    
+    def _load_weather_cache(self) -> None:
+        """Load weather cache from disk for offline resilience."""
+        try:
+            if _WEATHER_CACHE_FILE.exists():
+                with open(_WEATHER_CACHE_FILE, 'r', encoding='utf-8') as f:
+                    self._weather_cache = json.load(f)
+                logger.debug(f"Loaded weather cache with {len(self._weather_cache)} entries")
+        except Exception as e:
+            logger.debug(f"Failed to load weather cache: {e}")
+            self._weather_cache = {}
+    
+    def _save_weather_cache(self) -> None:
+        """Save weather cache to disk for offline resilience."""
+        try:
+            with open(_WEATHER_CACHE_FILE, 'w', encoding='utf-8') as f:
+                json.dump(self._weather_cache, f, indent=2)
+            logger.debug(f"Saved weather cache with {len(self._weather_cache)} entries")
+        except Exception as e:
+            logger.debug(f"Failed to save weather cache: {e}")
+    
+    def _get_cached_weather(self, city: str) -> Optional[Dict[str, Any]]:
+        """Get cached weather data if still valid.
+        
+        Args:
+            city: City name
+            
+        Returns:
+            Cached weather data if valid, None otherwise
+        """
+        if city not in self._weather_cache:
+            return None
+        
+        cached = self._weather_cache[city]
+        cached_time = cached.get('_cached_at', 0)
+        
+        # Check if cache is still valid
+        if time.time() - cached_time < _WEATHER_CACHE_TTL_SECONDS:
+            logger.debug(f"Using cached weather for {city} (age: {int(time.time() - cached_time)}s)")
+            # Return copy without internal timestamp
+            result = {k: v for k, v in cached.items() if not k.startswith('_')}
+            return result
+        
+        return None
+    
+    def _cache_weather(self, city: str, weather_data: Dict[str, Any]) -> None:
+        """Cache weather data with timestamp.
+        
+        Args:
+            city: City name
+            weather_data: Weather data to cache
+        """
+        cached = weather_data.copy()
+        cached['_cached_at'] = time.time()
+        self._weather_cache[city] = cached
+        self._save_weather_cache()
+    
+    def _get_stale_cache(self, city: str) -> Optional[Dict[str, Any]]:
+        """Get stale cached weather data as fallback when network fails.
+        
+        This provides offline resilience by returning old data rather than nothing.
+        
+        Args:
+            city: City name
+            
+        Returns:
+            Stale cached weather data (without timestamp), or None if no cache exists
+        """
+        if city not in self._weather_cache:
+            return None
+        
+        cached = self._weather_cache[city]
+        cached_time = cached.get('_cached_at', 0)
+        age_minutes = int((time.time() - cached_time) / 60)
+        
+        logger.warning(f"Using stale weather cache for {city} (age: {age_minutes} minutes)")
+        
+        # Return copy without internal timestamp
+        result = {k: v for k, v in cached.items() if not k.startswith('_')}
+        result['_stale'] = True  # Mark as stale so UI can indicate
+        return result
     
     def geocode(self, city: str) -> Optional[Tuple[float, float]]:
         """
@@ -136,6 +229,9 @@ class OpenMeteoProvider:
         """
         Get current weather for a city.
         
+        Uses cached data if available and still valid (within TTL).
+        Falls back to cached data if network request fails (offline resilience).
+        
         Args:
             city: City name
         
@@ -149,13 +245,19 @@ class OpenMeteoProvider:
                 'windspeed': float,     # Wind speed in km/h
                 'humidity': float       # Relative humidity %
             }
-            or None if request fails
+            or None if request fails and no cache available
         """
+        # Check cache first
+        cached = self._get_cached_weather(city)
+        if cached:
+            return cached
+        
         # Geocode city to coordinates
         coords = self.geocode(city)
         if not coords:
             logger.error(f"Cannot fetch weather - failed to geocode: {city}")
-            return None
+            # Try to return stale cache as fallback
+            return self._get_stale_cache(city)
         
         latitude, longitude = coords
         
@@ -220,19 +322,23 @@ class OpenMeteoProvider:
                 'forecast': forecast_text
             }
             
+            # Cache successful result
+            self._cache_weather(city, weather_data)
+            
             logger.info(f"Weather fetched for {city}: {temperature}°C, {condition}")
             
             return weather_data
             
         except requests.exceptions.RequestException as e:
             logger.error(f"Weather request failed for {city}: {e}")
-            return None
+            # Return stale cache as fallback
+            return self._get_stale_cache(city)
         except (KeyError, ValueError) as e:
             logger.error(f"Failed to parse weather response for {city}: {e}")
-            return None
+            return self._get_stale_cache(city)
         except Exception as e:
             logger.exception(f"Unexpected error fetching weather for {city}: {e}")
-            return None
+            return self._get_stale_cache(city)
     
     def get_weather_by_coords(self, latitude: float, longitude: float) -> Optional[Dict[str, Any]]:
         """

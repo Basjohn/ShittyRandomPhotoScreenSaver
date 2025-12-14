@@ -3,7 +3,7 @@ Settings manager implementation for screensaver.
 
 Uses QSettings for persistent storage. Simplified from SPQDocker reusable modules.
 """
-from typing import Any, Callable, Dict, List, Mapping
+from typing import Any, Callable, Dict, List, Mapping, Optional
 import threading
 import sys
 import json
@@ -82,13 +82,41 @@ class SettingsManager(QObject):
 
         logger.info("SettingsManager initialized")
     
+    def _get_default_image_folders(self) -> List[str]:
+        """Get default image folders based on system.
+        
+        Returns user's Pictures folder if available, otherwise empty list.
+        This replaces the previous hardcoded path.
+        """
+        folders = []
+        try:
+            # Try to get user's Pictures folder
+            from PySide6.QtCore import QStandardPaths
+            pictures = QStandardPaths.writableLocation(QStandardPaths.PicturesLocation)
+            if pictures and Path(pictures).exists():
+                folders.append(pictures)
+        except Exception:
+            pass
+        
+        # Fallback: try common Windows paths
+        if not folders:
+            try:
+                import os
+                user_profile = os.environ.get('USERPROFILE', '')
+                if user_profile:
+                    pictures_path = Path(user_profile) / 'Pictures'
+                    if pictures_path.exists():
+                        folders.append(str(pictures_path))
+            except Exception:
+                pass
+        
+        return folders
+    
     def _set_defaults(self) -> None:
         """Set default values if not already present."""
         defaults = {
-            # Sources
-            'sources.folders': [
-                'C:/Users/Basjohn/Documents/[4] WALLPAPERS/PERSONALSET',
-            ],
+            # Sources - default to user's Pictures folder if available
+            'sources.folders': self._get_default_image_folders(),
             'sources.rss_feeds': [],
             'sources.mode': 'folders',  # 'folders' | 'rss' | 'both'
             # RSS/JSON background controls and save-to-disk behaviour.
@@ -563,6 +591,122 @@ class SettingsManager(QObject):
         with self._lock:
             self._settings.sync()
         logger.debug("Settings loaded")
+    
+    def validate_and_repair(self) -> Dict[str, str]:
+        """Validate settings and repair corrupted values.
+        
+        Checks for:
+        - Invalid types (e.g., string where list expected)
+        - Out-of-range values
+        - Missing required keys
+        
+        Returns:
+            Dict of repaired keys and their issues
+        """
+        repairs = {}
+        
+        with self._lock:
+            # Validate sources.folders - must be list
+            folders = self._settings.value('sources.folders')
+            if folders is not None and not isinstance(folders, list):
+                logger.warning(f"Repairing sources.folders: was {type(folders).__name__}, expected list")
+                if isinstance(folders, str):
+                    self._settings.setValue('sources.folders', [folders] if folders else [])
+                else:
+                    self._settings.setValue('sources.folders', [])
+                repairs['sources.folders'] = f"Invalid type: {type(folders).__name__}"
+            
+            # Validate sources.rss_feeds - must be list
+            rss_feeds = self._settings.value('sources.rss_feeds')
+            if rss_feeds is not None and not isinstance(rss_feeds, list):
+                logger.warning(f"Repairing sources.rss_feeds: was {type(rss_feeds).__name__}, expected list")
+                if isinstance(rss_feeds, str):
+                    self._settings.setValue('sources.rss_feeds', [rss_feeds] if rss_feeds else [])
+                else:
+                    self._settings.setValue('sources.rss_feeds', [])
+                repairs['sources.rss_feeds'] = f"Invalid type: {type(rss_feeds).__name__}"
+            
+            # Validate timing.interval - must be positive number
+            interval = self._settings.value('timing.interval')
+            if interval is not None:
+                try:
+                    interval_val = int(interval)
+                    if interval_val < 1:
+                        logger.warning(f"Repairing timing.interval: {interval_val} < 1")
+                        self._settings.setValue('timing.interval', 10)
+                        repairs['timing.interval'] = f"Out of range: {interval_val}"
+                    elif interval_val > 3600:
+                        logger.warning(f"Repairing timing.interval: {interval_val} > 3600")
+                        self._settings.setValue('timing.interval', 60)
+                        repairs['timing.interval'] = f"Out of range: {interval_val}"
+                except (ValueError, TypeError):
+                    logger.warning(f"Repairing timing.interval: invalid value {interval!r}")
+                    self._settings.setValue('timing.interval', 10)
+                    repairs['timing.interval'] = f"Invalid value: {interval!r}"
+            
+            # Validate display.mode - must be valid enum
+            display_mode = self._settings.value('display.mode')
+            valid_modes = {'fill', 'fit', 'shrink', 'stretch', 'center'}
+            if display_mode is not None and display_mode not in valid_modes:
+                logger.warning(f"Repairing display.mode: {display_mode!r} not in {valid_modes}")
+                self._settings.setValue('display.mode', 'fill')
+                repairs['display.mode'] = f"Invalid value: {display_mode!r}"
+            
+            # Validate widgets - must be dict
+            widgets = self._settings.value('widgets')
+            if widgets is not None and not isinstance(widgets, dict):
+                logger.warning(f"Repairing widgets: was {type(widgets).__name__}, expected dict")
+                self._settings.setValue('widgets', {})
+                repairs['widgets'] = f"Invalid type: {type(widgets).__name__}"
+            
+            # Validate transitions - must be dict
+            transitions = self._settings.value('transitions')
+            if transitions is not None and not isinstance(transitions, dict):
+                logger.warning(f"Repairing transitions: was {type(transitions).__name__}, expected dict")
+                self._settings.setValue('transitions', {})
+                repairs['transitions'] = f"Invalid type: {type(transitions).__name__}"
+            
+            if repairs:
+                self._settings.sync()
+                logger.info(f"Settings validation repaired {len(repairs)} issues: {list(repairs.keys())}")
+            else:
+                logger.debug("Settings validation passed - no repairs needed")
+        
+        return repairs
+    
+    def backup_settings(self, backup_path: Optional[Path] = None) -> Optional[Path]:
+        """Create a backup of current settings.
+        
+        Args:
+            backup_path: Optional path for backup file. If None, uses default location.
+            
+        Returns:
+            Path to backup file, or None if backup failed
+        """
+        try:
+            if backup_path is None:
+                # Default to settings directory with timestamp
+                import datetime
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                settings_dir = Path(self._settings.fileName()).parent
+                backup_path = settings_dir / f"settings_backup_{timestamp}.json"
+            
+            # Export all settings to JSON
+            settings_dict = {}
+            with self._lock:
+                for key in self._settings.allKeys():
+                    settings_dict[key] = self._settings.value(key)
+            
+            backup_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(backup_path, 'w', encoding='utf-8') as f:
+                json.dump(settings_dict, f, indent=2, default=str)
+            
+            logger.info(f"Settings backed up to: {backup_path}")
+            return backup_path
+            
+        except Exception as e:
+            logger.error(f"Failed to backup settings: {e}")
+            return None
     
     def on_changed(self, key: str, handler: Callable[[Any, Any], None]) -> None:
         """

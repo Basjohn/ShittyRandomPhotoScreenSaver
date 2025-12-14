@@ -2,6 +2,18 @@
 
 A living map of modules, purposes, and key classes. Keep this up to date.
 
+## Refactor Plans (P0)
+- audits/REFACTOR_DISPLAY_WIDGET.md
+  - Comprehensive plan to decompose display_widget.py (5800+ lines → ~800 lines)
+  - Extracts: WidgetManager (enhance), InputHandler, TransitionController, ImagePresenter
+  - 5 phases, ~10 hours estimated
+  - Cross-references 8 audit items (P0-P3)
+- audits/REFACTOR_GL_COMPOSITOR.md
+  - Comprehensive plan to decompose gl_compositor.py (6100+ lines → ~1500 lines)
+  - Extracts: GLProgramCache, GLGeometryManager, GLTextureManager, GLTransitionRenderer, GLErrorHandler
+  - 6 phases, ~15 hours estimated
+  - Cross-references 9 audit items (P0-P3)
+
 ## Core Managers
 - core/threading/manager.py
   - ThreadManager, ThreadPoolType, TaskPriority
@@ -18,6 +30,9 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - core/settings/settings_manager.py
   - SettingsManager (get/set, dot-notation, section helpers, JSON SST snapshot import/export)
   - Maps application name "Screensaver" to "Screensaver_MC" when running under the MC executable (e.g. `SRPSS MC`, `SRPSS_MC`, `main_mc.py`) so QSettings are isolated between the normal screensaver and MC profiles.
+  - `validate_and_repair()`: Validates settings types and repairs corrupted values (lists, ranges, enums)
+  - `backup_settings(path)`: Creates timestamped JSON backup of all settings
+  - `_get_default_image_folders()`: Dynamic default folders (user's Pictures) instead of hardcoded paths
 - core/settings/defaults.py
   - Default settings values for all configuration options
 - core/animation/animator.py
@@ -38,6 +53,11 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - **Limitation**: This controls the Windows mixer level, not Spotify's in-app volume slider. Spotify Web API (`PUT /v1/me/player/volume`) can control internal volume but requires OAuth + Premium subscription.
 - core/logging/logger.py
   - Centralized logging with colorized output, suppression, and rotation
+  - **3-tier logging system:**
+    1. `screensaver.log` - Main log (INFO+, no PERF, console mirrors)
+    2. `screensaver_verbose.log` - Full DEBUG/INFO without suppression (debug mode only)
+    3. `screensaver_perf.log` - PERF metrics only
+  - `VerboseLogFilter` - Captures all DEBUG/INFO for deep debugging
 - core/logging/overlay_telemetry.py
   - Overlay telemetry logging for debugging widget behavior
 
@@ -46,14 +66,19 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - Orchestrator: sources → ImageQueue → display → transitions
   - Caching/prefetch integration via ImageCache + ImagePrefetcher
   - Random transition/type selection with non-repeating logic (persisted)
+  - **State Management (2025-12-14 refactor)**: Uses `EngineState` enum instead of boolean flags
+    - States: UNINITIALIZED, INITIALIZING, STOPPED, STARTING, RUNNING, STOPPING, REINITIALIZING, SHUTTING_DOWN
+    - `_running`, `_initialized`, `_shutting_down` are now derived properties from `_state`
+    - Thread-safe `_transition_state()` method with validation and logging
+    - CRITICAL: `_shutting_down` returns False for REINITIALIZING state (fixes RSS reload bug)
   - **RSS async loading**: `_load_rss_images_async()` loads RSS images in background without blocking startup
-    - Uses `_shutting_down` flag (not `_running`) to distinguish actual shutdown from settings reinitialization
+    - Uses `_shutting_down` property (derived from state) to distinguish actual shutdown from settings reinitialization
     - Pre-loads cached RSS images to queue before starting async download for immediate variety
     - Limits to 8 images per source per refresh cycle to prevent any single source from blocking
     - Sets shutdown callback on RSSSource objects so downloads abort immediately on exit
   - **Settings reinitialization**: `_on_sources_changed()` rebuilds sources and queue when settings change
-    - Explicitly resets `_shutting_down = False` at start to allow RSS async loading after previous stop()
-    - `start()` also resets `_shutting_down = False` to ensure clean state on engine restart
+    - Transitions to REINITIALIZING state (not STOPPING) so _shutting_down returns False
+    - Restores to RUNNING state after reinitialization completes
 - engine/display_manager.py
   - Multi-monitor DisplayWidget management, sync scaffolding
 - engine/image_queue.py
@@ -334,6 +359,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - accessibility.pixel_shift.rate: int (1-5, default 1)
 
 ## Audits
+- audits/COMPREHENSIVE_AUDIT_2025_12_14.md: **ACTIVE** Full codebase audit triggered by RSS reload bug - 67 items across testing, architecture, reliability, performance, UX, documentation
 - audits/v1_2 ROADMAP.md: Living roadmap for v1.2 features and performance goals
 - audits/GLSL_Performance_Optimizations.md: GLSL shader optimization analysis and implementation notes
 - audits/Performance_Audit_2025-12-05.md: Comprehensive performance audit identifying frame timing issues

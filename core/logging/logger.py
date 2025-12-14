@@ -266,6 +266,25 @@ class NonPerfFilter(logging.Filter):
         return "[PERF]" not in msg
 
 
+class VerboseLogFilter(logging.Filter):
+    """Filter for verbose debug log - accepts DEBUG and INFO, excludes PERF.
+    
+    This log captures everything that would be suppressed in console output,
+    providing a complete debug trail without the noise of PERF metrics.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        # Only DEBUG and INFO levels (not WARNING+)
+        if record.levelno > logging.INFO:
+            return False
+        try:
+            msg = record.getMessage()
+        except Exception:
+            msg = str(record.msg)
+        # Exclude PERF records (they have their own log)
+        return "[PERF]" not in msg
+
+
 class PerfLogFilter(logging.Filter):
     """Filter that accepts only PERF metric records.
 
@@ -407,6 +426,26 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
     perf_handler.setLevel(logging.INFO)
     perf_handler.addFilter(PerfLogFilter())
     root_logger.addHandler(perf_handler)
+    
+    # Verbose debug log - captures ALL DEBUG/INFO without suppression.
+    # This is the "messy" log for deep debugging when console suppression
+    # hides important details. Double size limit to accommodate volume.
+    # Log types summary:
+    #   1. screensaver.log - Main log (INFO+, no PERF, console mirrors this)
+    #   2. screensaver_verbose.log - Full DEBUG/INFO without suppression
+    #   3. screensaver_perf.log - PERF metrics only
+    if debug_enabled:
+        verbose_log_file = log_dir / "screensaver_verbose.log"
+        verbose_handler = RotatingFileHandler(
+            verbose_log_file,
+            maxBytes=10 * 1024 * 1024,  # 10MB - double size for verbose
+            backupCount=3,
+            encoding='utf-8',
+        )
+        verbose_handler.setFormatter(formatter)
+        verbose_handler.setLevel(logging.DEBUG)
+        verbose_handler.addFilter(VerboseLogFilter())
+        root_logger.addHandler(verbose_handler)
 
     # Tame particularly noisy third-party libraries so their DEBUG-level
     # chatter (HTTP connection pools, asyncio internals, etc.) only shows

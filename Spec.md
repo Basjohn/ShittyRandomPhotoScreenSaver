@@ -60,7 +60,11 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
   - Uses an on-disk cache under the temp directory and optional save‑to‑disk mirroring when `sources.rss_save_to_disk` and `sources.rss_save_directory` are configured.
   - **Rotating cache**: Cache cleanup always retains at least 20 images (`min_keep=20`) regardless of size limits, ensuring faster startup for RSS users.
   - **Async loading**: `_load_rss_images_async()` processes sources in priority order (Bing=95, Unsplash=90, Wikimedia=85, NASA=75, Reddit=10) with 8 images per source per cycle to prevent any single source from blocking.
-  - **Shutdown vs reinitialization**: Uses `_shutting_down` flag (not `_running`) so RSS loading continues during settings changes but aborts immediately on actual exit. Both `start()` and `_on_sources_changed()` reset `_shutting_down = False` to ensure clean state after previous stop().
+  - **State Management (2025-12-14)**: Engine uses `EngineState` enum instead of boolean flags for lifecycle management:
+    - States: UNINITIALIZED → INITIALIZING → STOPPED → STARTING → RUNNING → STOPPING/SHUTTING_DOWN
+    - REINITIALIZING state used during settings changes (not STOPPING)
+    - `_shutting_down` property returns False for REINITIALIZING, True for STOPPING/SHUTTING_DOWN
+    - This fixes the RSS reload bug where async loading would abort after settings changes.
   - **Shutdown callback**: Each RSSSource receives a `set_shutdown_check(callback)` so downloads abort mid-stream when the engine shuts down.
   - **Cache pre-loading**: Cached RSS images are added to the queue before async download starts, providing immediate variety.
   - Background: the engine enforces a global RSS background cap (`sources.rss_background_cap`, default 30) and a time‑to‑live (`sources.rss_stale_minutes`, default 30 minutes) so older, unseen RSS images are gradually replaced when new ones arrive, but only when a background refresh successfully adds replacements.

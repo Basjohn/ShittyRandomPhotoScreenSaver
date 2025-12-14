@@ -444,9 +444,48 @@ class SourcesTab(QWidget):
             return text
 
     def _on_clear_rss_cache_clicked(self) -> None:
-        """Clear downloaded RSS/JSON images from the shared cache."""
+        """Clear downloaded RSS/JSON images from the shared cache.
+        
+        Shows a confirmation dialog before deleting to prevent accidental data loss.
+        """
+        from PySide6.QtWidgets import QMessageBox
+        
+        # Count files before asking
+        cache_dir = Path(tempfile.gettempdir()) / "screensaver_rss_cache"
+        file_count = 0
+        try:
+            if cache_dir.exists() and cache_dir.is_dir():
+                file_count = sum(1 for f in cache_dir.glob('*') if f.is_file())
+        except Exception:
+            pass
+        
+        if file_count == 0:
+            QMessageBox.information(
+                self, "Cache Empty",
+                "The RSS image cache is already empty."
+            )
+            return
+        
+        # Confirm before deleting
+        reply = QMessageBox.question(
+            self, "Clear RSS Cache",
+            f"This will delete {file_count} cached RSS images.\n\n"
+            "The images will be re-downloaded on the next refresh.\n\n"
+            "Continue?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply != QMessageBox.Yes:
+            return
+        
         removed = self._clear_rss_cache()
         logger.info(f"RSS cache cleared via SourcesTab button: {removed} files removed")
+        
+        QMessageBox.information(
+            self, "Cache Cleared",
+            f"Successfully removed {removed} cached images."
+        )
 
     def _on_just_make_it_work_clicked(self) -> None:
         """Reset RSS feeds to a curated, known-good set.

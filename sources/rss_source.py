@@ -24,6 +24,11 @@ RATE_LIMIT_DELAY_SECONDS = 3.0  # Delay between feed requests (increased from 2)
 RATE_LIMIT_RETRY_DELAY_SECONDS = 120  # Delay when rate limited (2 minutes)
 MIN_CACHE_SIZE_BEFORE_CLEANUP = 20  # Don't cleanup until we have at least 20 images
 
+# Feed health tracking constants
+MAX_CONSECUTIVE_FAILURES = 3  # Skip feed after this many consecutive failures
+FAILURE_BACKOFF_BASE_SECONDS = 60  # Base backoff time (exponential: 60, 120, 240...)
+FEED_HEALTH_RESET_HOURS = 24  # Reset failure count after this many hours
+
 # Source priority weights - higher = process earlier
 # Non-Reddit sources don't rate limit, so we fetch them first
 SOURCE_PRIORITY = {
@@ -116,12 +121,93 @@ class RSSSource(ImageProvider):
         self._cached_urls: set = set()  # Track URLs we've already downloaded
         self._shutdown_check: Optional[Callable[[], bool]] = None  # Callback to check if we should abort
         
+        # Feed health tracking for exponential backoff
+        self._feed_health: dict = {}  # url -> {'failures': int, 'last_failure': float, 'skip_until': float}
+        
         # Load existing cached images on startup for faster availability
         self._load_cached_images()
         
         logger.info(f"RSSSource initialized with {len(self.feed_urls)} feeds")
         logger.info(f"Cache directory: {self.cache_dir}")
         logger.info(f"Pre-loaded {len(self._images)} cached RSS images")
+    
+    def _should_skip_feed(self, feed_url: str) -> bool:
+        """Check if feed should be skipped due to repeated failures.
+        
+        Returns True if feed has failed too many times and backoff hasn't expired.
+        """
+        if feed_url not in self._feed_health:
+            return False
+        
+        health = self._feed_health[feed_url]
+        now = time.time()
+        
+        # Reset health after FEED_HEALTH_RESET_HOURS
+        hours_since_failure = (now - health.get('last_failure', 0)) / 3600
+        if hours_since_failure > FEED_HEALTH_RESET_HOURS:
+            del self._feed_health[feed_url]
+            logger.info(f"[FEED_HEALTH] Reset health for {feed_url} (no failures in {FEED_HEALTH_RESET_HOURS}h)")
+            return False
+        
+        # Check if still in backoff period
+        skip_until = health.get('skip_until', 0)
+        if now < skip_until:
+            remaining = int(skip_until - now)
+            logger.debug(f"[FEED_HEALTH] Skipping {feed_url} for {remaining}s more (failures: {health['failures']})")
+            return True
+        
+        return False
+    
+    def _record_feed_failure(self, feed_url: str) -> None:
+        """Record a feed failure and calculate backoff.
+        
+        Uses exponential backoff: 60s, 120s, 240s, etc.
+        """
+        now = time.time()
+        
+        if feed_url not in self._feed_health:
+            self._feed_health[feed_url] = {'failures': 0, 'last_failure': 0, 'skip_until': 0}
+        
+        health = self._feed_health[feed_url]
+        health['failures'] += 1
+        health['last_failure'] = now
+        
+        # Exponential backoff
+        backoff = FAILURE_BACKOFF_BASE_SECONDS * (2 ** (health['failures'] - 1))
+        health['skip_until'] = now + backoff
+        
+        logger.warning(f"[FEED_HEALTH] Feed {feed_url} failed {health['failures']} times, backoff {backoff}s")
+        
+        if health['failures'] >= MAX_CONSECUTIVE_FAILURES:
+            logger.error(f"[FEED_HEALTH] Feed {feed_url} marked unhealthy after {MAX_CONSECUTIVE_FAILURES} failures")
+    
+    def _record_feed_success(self, feed_url: str) -> None:
+        """Record a successful feed fetch, resetting failure count."""
+        if feed_url in self._feed_health:
+            old_failures = self._feed_health[feed_url].get('failures', 0)
+            if old_failures > 0:
+                logger.info(f"[FEED_HEALTH] Feed {feed_url} recovered after {old_failures} failures")
+            del self._feed_health[feed_url]
+    
+    def get_feed_health_status(self) -> dict:
+        """Get health status for all feeds.
+        
+        Returns dict of feed_url -> {'healthy': bool, 'failures': int, 'skip_until': float}
+        """
+        now = time.time()
+        status = {}
+        for url in self.feed_urls:
+            if url in self._feed_health:
+                health = self._feed_health[url]
+                status[url] = {
+                    'healthy': health['failures'] < MAX_CONSECUTIVE_FAILURES,
+                    'failures': health['failures'],
+                    'skip_until': health.get('skip_until', 0),
+                    'skipped': now < health.get('skip_until', 0)
+                }
+            else:
+                status[url] = {'healthy': True, 'failures': 0, 'skip_until': 0, 'skipped': False}
+        return status
     
     def _load_cached_images(self) -> None:
         """Load existing cached images for immediate availability.
@@ -269,6 +355,10 @@ class RSSSource(ImageProvider):
             if not self._should_continue():
                 logger.info("[RSS] Shutdown requested, aborting refresh")
                 break
+            
+            # Skip unhealthy feeds (exponential backoff)
+            if self._should_skip_feed(feed_url):
+                continue
                 
             is_reddit = 'reddit.com' in feed_url.lower()
             
@@ -276,11 +366,16 @@ class RSSSource(ImageProvider):
                 images_before = len(self._images)
                 self._parse_feed(feed_url, existing_paths, max_images=max_images_per_source)
                 images_after = len(self._images)
+                new_images = images_after - images_before
                 
                 # If we got 0 images from a Reddit feed, it might be rate limited
-                if images_after == images_before and is_reddit:
+                if new_images == 0 and is_reddit:
                     rate_limited_feeds.append(feed_url)
+                    self._record_feed_failure(feed_url)
                     logger.warning(f"[RATE_LIMIT] Reddit feed returned 0 images: {feed_url}")
+                elif new_images > 0:
+                    # Success - reset failure count
+                    self._record_feed_success(feed_url)
                 
                 # Add delay between feeds - longer for Reddit
                 # Use interruptible delay
@@ -296,6 +391,7 @@ class RSSSource(ImageProvider):
                     
             except Exception as e:
                 logger.error(f"[FALLBACK] Failed to parse feed {feed_url}: {e}")
+                self._record_feed_failure(feed_url)
                 # Continue with other feeds (fallback behavior)
         
         # DO NOT RETRY rate-limited feeds with blocking wait

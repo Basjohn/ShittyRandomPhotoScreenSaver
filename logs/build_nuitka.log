@@ -35,7 +35,7 @@ Nuitka-Scons: Compiled 1 C files using ccache.
 Nuitka-Scons: Cached C files (using ccache) with result 'cache hit': 1
 Nuitka-Postprocessing: Adding 9 icon(s) from icon file 'F:\Programming\Apps\ShittyRandomPhotoScreenSaver\SRPSS.ico'.
 Nuitka-Onefile: Using compression for onefile payload.
-Nuitka-Onefile: Onefile payload compression ratio (25.39%) size 175580159 to 44585298.
+Nuitka-Onefile: Onefile payload compression ratio (25.39%) size 175966719 to 44678438.
 Nuitka-Onefile: Removing onefile build directory 'F:\Programming\Apps\ShittyRandomPhotoScreenSaver\release\main.onefile-build'.
 Nuitka: Removing dist folder 'F:\Programming\Apps\ShittyRandomPhotoScreenSaver\release\main.dist'.
 Nuitka: Removing build directory 'F:\Programming\Apps\ShittyRandomPhotoScreenSaver\release\main.build'.

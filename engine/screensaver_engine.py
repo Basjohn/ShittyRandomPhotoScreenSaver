@@ -7,10 +7,23 @@ The ScreensaverEngine is the central controller that:
 - Handles display across monitors
 - Controls image rotation timing
 - Processes events and user input
+
+State Management:
+    The engine uses an EngineState enum to track lifecycle state.
+    This replaces the previous ad-hoc boolean flags (_running, _shutting_down, etc.)
+    that caused bugs when state transitions were inconsistent.
+    
+    Valid state transitions:
+        UNINITIALIZED -> INITIALIZING -> STOPPED
+        STOPPED -> STARTING -> RUNNING
+        RUNNING -> STOPPING -> STOPPED
+        RUNNING -> REINITIALIZING -> RUNNING (for settings changes)
+        Any state -> SHUTTING_DOWN (terminal)
 """
 import threading
 import random
 from datetime import datetime, timedelta
+from enum import Enum, auto
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple
 from PySide6.QtCore import QObject, Signal, QTimer, QSize
@@ -36,6 +49,37 @@ from utils.image_cache import ImageCache
 from utils.image_prefetcher import ImagePrefetcher
 
 logger = get_logger(__name__)
+
+
+class EngineState(Enum):
+    """Engine lifecycle states.
+    
+    This enum replaces the previous boolean flags (_running, _shutting_down, 
+    _initialized, _display_initialized) which had complex interdependencies
+    and caused bugs when state transitions were inconsistent.
+    
+    State Transition Diagram:
+        UNINITIALIZED ──► INITIALIZING ──► STOPPED
+                                              │
+                                              ▼
+                                          STARTING ──► RUNNING
+                                              ▲            │
+                                              │            ▼
+                                          STOPPED ◄── STOPPING
+                                              │
+                                              ▼
+                                       SHUTTING_DOWN (terminal)
+        
+        RUNNING ──► REINITIALIZING ──► RUNNING (for settings changes)
+    """
+    UNINITIALIZED = auto()    # Initial state before initialize()
+    INITIALIZING = auto()     # During initialize()
+    STOPPED = auto()          # Initialized but not running
+    STARTING = auto()         # During start()
+    RUNNING = auto()          # Active and displaying images
+    STOPPING = auto()         # During stop() with exit_app=False
+    REINITIALIZING = auto()   # During _on_sources_changed()
+    SHUTTING_DOWN = auto()    # During stop() with exit_app=True (terminal)
 
 
 class ScreensaverEngine(QObject):
@@ -82,11 +126,15 @@ class ScreensaverEngine(QObject):
         self.folder_sources: List[FolderSource] = []
         self.rss_sources: List[RSSSource] = []
         
-        # State
-        self._running: bool = False
-        self._initialized: bool = False
-        self._display_initialized: bool = False
-        self._shutting_down: bool = False  # True only during actual shutdown, not reinitialization
+        # State - using EngineState enum for coherent lifecycle management
+        # This replaces the previous boolean flags that caused the RSS reload bug
+        self._state: EngineState = EngineState.UNINITIALIZED
+        self._state_lock = threading.Lock()  # Protect state transitions
+        
+        # Legacy compatibility properties (read-only, derived from _state)
+        # These are kept for backwards compatibility but should not be set directly
+        
+        self._display_initialized: bool = False  # Still needed for display-specific init
         self._rotation_timer: Optional[QTimer] = None
         self._rotation_timer_resource_id: Optional[str] = None
         self._current_image: Optional[ImageMetadata] = None
@@ -121,13 +169,88 @@ class ScreensaverEngine(QObject):
         
         logger.info("ScreensaverEngine created")
     
+    # -------------------------------------------------------------------------
+    # State Management - EngineState enum with thread-safe transitions
+    # -------------------------------------------------------------------------
+    
+    @property
+    def _running(self) -> bool:
+        """Legacy compatibility: True if engine is in RUNNING state."""
+        return self._state == EngineState.RUNNING
+    
+    @property
+    def _initialized(self) -> bool:
+        """Legacy compatibility: True if engine has been initialized."""
+        return self._state not in (EngineState.UNINITIALIZED, EngineState.INITIALIZING)
+    
+    @property
+    def _shutting_down(self) -> bool:
+        """Legacy compatibility: True if engine is shutting down or stopping.
+        
+        This is the critical property that async tasks check to abort.
+        Returns True for STOPPING and SHUTTING_DOWN states.
+        Returns False for REINITIALIZING (settings changes should NOT abort RSS).
+        """
+        return self._state in (EngineState.STOPPING, EngineState.SHUTTING_DOWN)
+    
+    def _transition_state(self, new_state: EngineState, expected_from: Optional[List[EngineState]] = None) -> bool:
+        """Thread-safe state transition with validation.
+        
+        Args:
+            new_state: The state to transition to
+            expected_from: Optional list of valid source states. If provided,
+                          transition only succeeds if current state is in this list.
+        
+        Returns:
+            True if transition succeeded, False if invalid transition
+        """
+        with self._state_lock:
+            old_state = self._state
+            
+            # Validate transition if expected_from is specified
+            if expected_from is not None and old_state not in expected_from:
+                logger.warning(
+                    f"Invalid state transition: {old_state.name} -> {new_state.name} "
+                    f"(expected from: {[s.name for s in expected_from]})"
+                )
+                return False
+            
+            # Prevent transitions from terminal state
+            if old_state == EngineState.SHUTTING_DOWN and new_state != EngineState.SHUTTING_DOWN:
+                logger.warning(f"Cannot transition from SHUTTING_DOWN to {new_state.name}")
+                return False
+            
+            self._state = new_state
+            logger.info(f"Engine state: {old_state.name} -> {new_state.name}")
+            return True
+    
+    def _get_state(self) -> EngineState:
+        """Thread-safe state getter."""
+        with self._state_lock:
+            return self._state
+    
+    def _is_state(self, *states: EngineState) -> bool:
+        """Thread-safe check if current state is one of the given states."""
+        with self._state_lock:
+            return self._state in states
+    
     def initialize(self) -> bool:
         """
         Initialize all engine components.
         
+        State transition: UNINITIALIZED -> INITIALIZING -> STOPPED
+        
         Returns:
             True if initialization successful, False otherwise
         """
+        # Validate and transition state
+        if not self._transition_state(
+            EngineState.INITIALIZING, 
+            expected_from=[EngineState.UNINITIALIZED]
+        ):
+            logger.error("Cannot initialize: invalid state")
+            return False
+        
         try:
             logger.info("=" * 60)
             logger.info("Initializing Screensaver Engine 🚦🚦🚦🚦🚦")
@@ -169,12 +292,17 @@ class ScreensaverEngine(QObject):
             # Enable background RSS refresh if applicable
             self._start_rss_background_refresh_if_needed()
             
+            # Transition to STOPPED state (ready to start)
+            self._transition_state(EngineState.STOPPED)
+            
             logger.info("Engine initialization complete")
             return True
         
         except Exception as e:
             logger.exception(f"Engine initialization failed: {e}")
             self.error_occurred.emit(f"Initialization failed: {e}")
+            # Revert to UNINITIALIZED on failure
+            self._transition_state(EngineState.UNINITIALIZED)
             return False
     
     def _initialize_core_systems(self) -> bool:
@@ -1023,18 +1151,26 @@ class ScreensaverEngine(QObject):
         """
         Start the screensaver engine.
         
+        State transition: STOPPED -> STARTING -> RUNNING
+        
         Returns:
             True if started successfully, False otherwise
         """
+        # Check if already running (using property)
         if self._running:
             logger.warning("Engine already running")
             return True
         
+        # Validate and transition state
+        if not self._transition_state(
+            EngineState.STARTING,
+            expected_from=[EngineState.STOPPED]
+        ):
+            logger.error("Cannot start: invalid state")
+            return False
+        
         try:
             logger.info("Starting screensaver engine...")
-            
-            # Reset shutdown flag - we're starting fresh
-            self._shutting_down = False
             
             # Choose random transition for this cycle if enabled
             self._prepare_random_transition_if_needed()
@@ -1048,7 +1184,8 @@ class ScreensaverEngine(QObject):
                 self._rotation_timer.start()
                 logger.info(f"Rotation timer started ({self._rotation_timer.interval()}ms)")
             
-            self._running = True
+            # Transition to RUNNING state
+            self._transition_state(EngineState.RUNNING)
             self.started.emit()
             logger.info("Screensaver engine started")
             
@@ -1057,25 +1194,42 @@ class ScreensaverEngine(QObject):
         except Exception as e:
             logger.exception(f"Engine start failed: {e}")
             self.error_occurred.emit(f"Start failed: {e}")
+            # Revert to STOPPED on failure
+            self._transition_state(EngineState.STOPPED)
             return False
     
     def stop(self, exit_app: bool = True) -> None:
         """
         Stop the screensaver engine.
         
+        State transition: 
+            RUNNING -> STOPPING -> STOPPED (if exit_app=False)
+            RUNNING -> SHUTTING_DOWN (if exit_app=True, terminal)
+        
         Args:
             exit_app: If True, quit the application. If False, just stop the engine.
         """
+        # Check if running (using property)
         if not self._running:
             logger.debug("Engine not running")
             return
         
+        # Determine target state based on exit_app
+        target_state = EngineState.SHUTTING_DOWN if exit_app else EngineState.STOPPING
+        
+        # Transition to stopping/shutting_down state
+        # This makes _shutting_down property return True, signaling async tasks to abort
+        if not self._transition_state(
+            target_state,
+            expected_from=[EngineState.RUNNING, EngineState.STARTING, EngineState.REINITIALIZING]
+        ):
+            logger.warning(f"Stop called in unexpected state: {self._get_state().name}")
+            # Force transition anyway for safety
+            with self._state_lock:
+                self._state = target_state
+        
         try:
             logger.info("Stopping screensaver engine...")
-            
-            # Mark as not running immediately to prevent re-entry
-            self._running = False
-            self._shutting_down = True  # Signal async tasks to abort
             logger.debug("Engine stop requested (exit_app=%s)", exit_app)
 
             # Stop background RSS refresh timer if present so no further
@@ -1181,6 +1335,15 @@ class ScreensaverEngine(QObject):
                         )
                 except Exception as e:
                     logger.debug("[PERF] ImageCache summary logging failed: %s", e, exc_info=True)
+            
+            # Transition to final state
+            if not exit_app:
+                # If not exiting, transition to STOPPED (can restart)
+                self._transition_state(EngineState.STOPPED)
+            # If exit_app=True, stay in SHUTTING_DOWN (terminal state)
+            
+            self.stopped.emit()
+            logger.info("Screensaver engine stopped")
             
             # Only exit the Qt event loop if requested
             if exit_app:
@@ -1997,8 +2160,8 @@ class ScreensaverEngine(QObject):
                 # Recreate rotation timer with any updated timing settings
                 self._setup_rotation_timer()
 
-                # Ensure start() does not early-out on a stale running flag
-                self._running = False
+                # Note: stop(exit_app=False) already transitioned state to STOPPED,
+                # so start() will not early-out. No need to manually set _running.
 
                 if not self.start():
                     logger.error("Failed to restart screensaver after settings; quitting")
@@ -2086,15 +2249,27 @@ class ScreensaverEngine(QObject):
     def _on_sources_changed(self) -> None:
         """Handle source configuration changes.
         
+        State transition: RUNNING -> REINITIALIZING -> RUNNING
+        
         Reinitializes sources and rebuilds the image queue when the user
         adds/removes folders or RSS feeds in settings. This ensures new
         sources are available immediately without restarting the screensaver.
+        
+        CRITICAL: Uses REINITIALIZING state (not STOPPING) so that:
+        - _shutting_down property returns False
+        - Async RSS loading continues (does NOT abort)
+        This was the root cause of the RSS reload bug.
         """
         logger.info("Sources changed, reinitializing...")
         
-        # Reset shutdown flag - this is a reinitialization, not a shutdown
-        # This allows async RSS loading to proceed during source changes
-        self._shutting_down = False
+        # Save current state to restore after reinitialization
+        was_running = self._running
+        
+        # Transition to REINITIALIZING state
+        # This is NOT a shutdown - _shutting_down will return False
+        # allowing async RSS loading to proceed
+        if was_running:
+            self._transition_state(EngineState.REINITIALIZING)
         
         # Clear image cache - old cached images may no longer be valid
         if self._image_cache:
@@ -2144,6 +2319,11 @@ class ScreensaverEngine(QObject):
                 logger.warning("Failed to rebuild image queue after source change")
         else:
             logger.warning("No valid sources after source change")
+        
+        # Restore to RUNNING state if we were running before
+        if was_running:
+            self._transition_state(EngineState.RUNNING)
+            logger.info("Sources reinitialization complete, engine back to RUNNING")
     
     def get_stats(self) -> Dict:
         """
@@ -2153,7 +2333,9 @@ class ScreensaverEngine(QObject):
             Dict with engine stats
         """
         stats = {
+            'state': self._get_state().name,
             'running': self._running,
+            'shutting_down': self._shutting_down,
             'current_image': str(self._current_image.local_path) if self._current_image and self._current_image.local_path else None,
             'loading': self._loading_in_progress,
             'folder_sources': len(self.folder_sources),
