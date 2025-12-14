@@ -1,7 +1,7 @@
 # ShittyRandomPhotoScreenSaver (SRPSS)
 <img width="625" height="202" alt="How dare you hover your cursor here!" src="https://github.com/user-attachments/assets/cbc989a9-a057-49ae-a23a-750d92f6f37c" />
 
-ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows (W10/W11) screensaver that is suprisingly less shit than the majority of ancient decrepid screensavers around today.
+ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows (W10/W11) screensaver that is suprisingly less shit than the majority of ancient decrepid screensavers around today. Born from my sheer exhaustion of still using a screensaver from 2005 to do less than what this does.
 ![ShittyRandomPhotoScreenSaverS](https://github.com/user-attachments/assets/41e1e70f-1bfa-4934-b470-3753aaebfc96)
 
 ---
@@ -16,13 +16,16 @@ Shitty Showcase where I cut off the Spotify controls in recording.
   - Mixed mode (folders + RSS) support
   - High‑quality scaling with optional sharpening
   - Transitions:
+    - Ripple
+    - 3D Block Spin (Actual 3D like 1998!)
+    - Crumble (More work than it was worth!)
     - Crossfade
     - Slide
     - Wipe
     - Diffuse
     - Block Puzzle Flip
-    - Blinds (GL‑only)
-  - Pan & scan (Ken Burns effect) coordinated with the image interval, but don't use it, please, it fucks everything up.
+    - Blinds
+
   - Multi‑monitor aware: same image on all screens or independent images per screen
 
 - **Overlay widgets**
@@ -40,6 +43,7 @@ Shitty Showcase where I cut off the Spotify controls in recording.
     - **Display** – mode, interval, sharpen, pan & scan, monitor selection
     - **Transitions** – transition type, duration, directions, per‑type tuning
     - **Widgets** – clock(s), weather, media, Spotify visualizer, Reddit (You'll need to configure these to your liking! Geolocation is kinda shit.)
+    - **Accessability** - Join my crippled ass with these features! Background brightness dimming and pixel shifting because maybe you're feeling kinda weird or something.
     - **About** – version, credits, SST-based settings Import/Export (human‑readable JSON snapshot per profile) and emergency defaults button
     
 - **Hard‑exit mode & interaction gating**
@@ -87,6 +91,7 @@ Shitty Showcase where I cut off the Spotify controls in recording.
   - Hold `Ctrl` to show a halo/cursor proxy over the active display.
   - While Ctrl/halo is active, mouse clicks can interact with overlay widgets
     (e.g. media controls, Reddit links) without immediately exiting.
+  - Right Click while holding Ctrl and a glorious context menu is born.
 
 ---
 
