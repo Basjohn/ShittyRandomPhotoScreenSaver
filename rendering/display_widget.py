@@ -3717,6 +3717,30 @@ class DisplayWidget(QWidget):
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """Handle mouse press - exit on any click unless hard exit is enabled."""
         ctrl_mode_active = self._ctrl_held or DisplayWidget._global_ctrl_held
+
+        if is_verbose_logging():
+            try:
+                comp = getattr(self, "_gl_compositor", None)
+                comp_dim_enabled = getattr(comp, "_dimming_enabled", None) if comp is not None else None
+                comp_dim_opacity = getattr(comp, "_dimming_opacity", None) if comp is not None else None
+            except Exception:
+                comp_dim_enabled = None
+                comp_dim_opacity = None
+            try:
+                logger.debug(
+                    "[CLICK_DIAG] screen=%s pos=%s button=%s hard_exit=%s ctrl=%s dim=%s(%.3f) comp_dim=%s(%s)",
+                    getattr(self, "screen_index", "?"),
+                    event.pos(),
+                    event.button(),
+                    self._is_hard_exit_enabled(),
+                    ctrl_mode_active,
+                    getattr(self, "_dimming_enabled", None),
+                    float(getattr(self, "_dimming_opacity", 0.0) or 0.0),
+                    comp_dim_enabled,
+                    comp_dim_opacity,
+                )
+            except Exception:
+                pass
         
         # Right-click context menu handling:
         # - In hard exit mode: right-click shows menu
@@ -3904,15 +3928,43 @@ class DisplayWidget(QWidget):
 
                         try:
                             if hasattr(rw, "handle_click"):
-                                # In hard-exit mode, defer the browser open to exit time
-                                if hard_exit_enabled:
+                                # In hard-exit mode, defer browser open to exit time UNLESS
+                                # this is NOT the primary display AND there's a free display available
+                                try:
+                                    from PySide6.QtGui import QGuiApplication
+                                    is_primary_display = (self._screen == QGuiApplication.primaryScreen())
+                                    
+                                    # Check if all displays are occupied by the screensaver
+                                    all_displays_taken = False
+                                    total_screens = len(QGuiApplication.screens())
+                                    # Simple heuristic: if we have multiple screens and hard-exit is enabled,
+                                    # assume all displays might be taken for safety
+                                    all_displays_taken = total_screens > 1
+                                    logger.debug(f"[REDDIT] Display detection: total_screens={total_screens}, all_taken={all_displays_taken}")
+                                except Exception:
+                                    # If we can't determine, assume all displays taken for safety
+                                    is_primary_display = True  # Conservative fallback
+                                    all_displays_taken = True
+                                
+                                if hard_exit_enabled and not is_primary_display and not all_displays_taken:
+                                    # Secondary display in hard-exit mode with free display: open immediately on primary display
+                                    result = rw.handle_click(local_pos, deferred=False)
+                                    if isinstance(result, bool) and result:
+                                        handled = True
+                                        reddit_handled = True
+                                        logger.info("[REDDIT] Opened URL immediately on primary display")
+                                elif hard_exit_enabled:
+                                    # Primary display in hard-exit mode OR all displays taken: defer URL
                                     result = rw.handle_click(local_pos, deferred=True)
                                     if isinstance(result, str):
-                                        # Store the URL to open when user exits
+                                        # Store URL to open when user exits
                                         self._pending_reddit_url = result
                                         handled = True
                                         reddit_handled = True
-                                        logger.info("[REDDIT] URL deferred for exit: %s", result)
+                                        if all_displays_taken:
+                                            logger.info("[REDDIT] URL deferred for exit (all displays taken): %s", result)
+                                        else:
+                                            logger.info("[REDDIT] URL deferred for exit (primary display): %s", result)
                                 else:
                                     # Normal mode: open immediately
                                     if rw.handle_click(local_pos):

@@ -330,9 +330,18 @@ class TransitionFactory:
         piece_count = self._safe_int(crumble_settings.get('piece_count', 8), 8)
         crack_complexity = self._safe_float(crumble_settings.get('crack_complexity', 1.0), 1.0)
         mosaic_mode = bool(crumble_settings.get('mosaic_mode', False))
+        weight_str = crumble_settings.get('weighting', 'Top Weighted')
+        weight_map = {
+            'Top Weighted': 0.0,
+            'Bottom Weighted': 1.0,
+            'Random Weighted': 2.0,
+            'Random Choice': 3.0,
+            'Age Weighted': 4.0,
+        }
+        weight_mode = weight_map.get(weight_str, 0.0)
         
         if use_compositor:
-            return GLCompositorCrumbleTransition(duration_ms, piece_count, crack_complexity, mosaic_mode)
+            return GLCompositorCrumbleTransition(duration_ms, piece_count, crack_complexity, mosaic_mode, weight_mode)
         return CrossfadeTransition(duration_ms)
     
     # Direction helpers

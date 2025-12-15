@@ -137,6 +137,7 @@ class CrumbleState(TransitionStateBase):
     piece_count: float = 8.0
     crack_complexity: float = 1.0
     mosaic_mode: bool = False
+    weight_mode: float = 0.0  # 0=Top,1=Bottom,2=Random,3=Random Choice,4=Age Weighted
 
 
 class TransitionStateManager:

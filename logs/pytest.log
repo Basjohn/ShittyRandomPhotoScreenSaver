@@ -2329,3 +2329,21 @@
 2025-12-13 23:18:22,278 - pytest_runner - INFO - pytest finished with exit code 0
 2025-12-14 00:14:48,190 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_rss_behavior.py', '-v', '-x']
 2025-12-14 00:19:13,281 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-14 12:55:54,126 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_reddit_click_regression.py', '-v']
+2025-12-14 12:55:55,811 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-14 12:56:12,594 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_reddit_click_regression.py', '-v']
+2025-12-14 12:56:13,809 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-14 12:56:25,252 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_reddit_click_regression.py', '-v']
+2025-12-14 12:56:26,204 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-14 13:00:10,258 - pytest_runner - INFO - pytest.py starting with args: ['tests/', '-k', 'reddit', '-v']
+2025-12-14 13:00:12,538 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-14 13:00:34,200 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_reddit_widget.py', '-v', '--tb=short']
+2025-12-14 13:00:34,971 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-14 13:08:35,994 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_reddit_click_regression.py', '-v']
+2025-12-14 13:08:37,121 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-15 12:47:36,909 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_reddit_click_regression.py', '-v']
+2025-12-15 12:47:38,529 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-15 12:48:08,043 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_reddit_click_regression.py', '-v']
+2025-12-15 12:48:09,119 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-15 12:48:35,430 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_reddit_click_regression.py', '-v']
+2025-12-15 12:48:36,514 - pytest_runner - INFO - pytest finished with exit code 1

@@ -62,6 +62,7 @@ uniform float u_seed;           // Random seed for crack pattern variation
 uniform float u_piece_count;    // Approximate number of pieces (grid density)
 uniform float u_crack_complexity; // Crack detail level (0.5-2.0)
 uniform float u_mosaic_mode;    // 0=crumble, 1=glass shatter
+uniform float u_weight_mode;    // 0=Top,1=Bottom,2=Random Weighted,3=Random Choice,4=Age Weighted
 
 // Hash functions for procedural randomness with better distribution
 float hash1(vec2 p) {
@@ -160,13 +161,37 @@ void getPieceTransform(vec2 cellId, float scale, float t, float seed,
     float pieceRand = hash1(cellId + seed);
     float pieceRand2 = hash1(cellId * 1.7 + seed + 100.0);
     
-    // Stagger: top pieces (low Y) fall first, bottom pieces (high Y) fall last
-    // REDUCED delay so bottom pieces have more time to fall off-screen
-    float normalizedY = cellId.y / scale;
-    float fallDelay = normalizedY * 0.15 + pieceRand * 0.03;  // Max delay ~0.18 instead of ~0.30
+    int mode = int(floor(u_weight_mode + 0.5));
+    // Random Choice picks one of the other modes once based on seed
+    if (mode == 3) {
+        float choice = hash1(vec2(seed * 0.73, seed * 1.31));
+        if (choice < 0.33) mode = 0;
+        else if (choice < 0.66) mode = 1;
+        else mode = 2;
+    }
+    float ageRand = hash1(cellId * 3.11 + seed * 2.7);
+    
+    float baseY = cellId.y / scale;
+    float weightedY;
+    if (mode == 0) {            // Top weighted
+        weightedY = baseY;
+    } else if (mode == 1) {     // Bottom weighted
+        weightedY = 1.0 - baseY;
+    } else if (mode == 2) {     // Random Weighted per piece
+        float coin = pieceRand > 0.5 ? 1.0 : 0.0;
+        weightedY = mix(baseY, 1.0 - baseY, coin);
+    } else {                    // Age Weighted (based on per-piece crack age hash)
+        weightedY = ageRand;
+    }
+    
+    // Slight jitter so pieces don't move as a monolith
+    weightedY += (pieceRand - 0.5) * 0.08;
+    weightedY = clamp(weightedY, 0.0, 1.0);
+    
+    // Stagger with randomness; bias from weighting but everyone can fall
+    float fallDelay = weightedY * 0.20 + pieceRand * 0.10;  // Max delay ~0.30
     
     // Fall phase: starts at t=0.05 (cracks form first), ends at t=0.95
-    // This gives 5% buffer at the end for all pieces to clear
     float fallPhase = (t - 0.05) / 0.90;
     fallPhase = clamp(fallPhase, 0.0, 1.0);
     
@@ -174,13 +199,16 @@ void getPieceTransform(vec2 cellId, float scale, float t, float seed,
     pieceFall = fallPhase > fallDelay ? (fallPhase - fallDelay) / (1.0 - fallDelay) : 0.0;
     pieceFall = clamp(pieceFall, 0.0, 1.0);
     
-    // Accelerating fall with cubic easing for more dramatic acceleration
-    // All pieces fall 4.0 units - bottom pieces need extra distance
+    // Per-piece fall speed variation
+    float fallSpeed = 0.90 + pieceRand2 * 0.30;  // 0.9x - 1.2x speed
+    
+    // Accelerating fall with cubic easing; ensure enough distance to leave screen on high DPI
     float accel = pieceFall * pieceFall * pieceFall;  // Cubic for faster acceleration
-    fallDist = accel * 4.0;
+    fallDist = accel * (7.5 * fallSpeed);  // More breathing room to exit screen
     
     driftX = pieceFall * (pieceRand - 0.5) * 0.3;
-    rotAngle = pieceFall * (pieceRand2 - 0.5) * 0.8;
+    // Increased rotation amplitude for more visible spin
+    rotAngle = pieceFall * (pieceRand2 - 0.5) * 3.75;
 }
 
 void main() {
@@ -224,9 +252,9 @@ void main() {
     // In cell space with scale=8, that's ~11 cells. But we use aggressive early-exit
     // to skip most iterations. The bounds check eliminates ~90% of candidates.
     //
-    // Search range: dy from -10 to +1 (pieces above that fell down to here)
-    // With early exits, actual work per pixel is typically 2-4 voronoi calls.
-    for (int dy = -10; dy <= 1; dy++) {
+    // Search range: dy from -16 to +2 (wider for larger fall distance and DPI)
+    // With early exits, actual work per pixel is typically limited.
+    for (int dy = -16; dy <= 2; dy++) {
         for (int dx = -1; dx <= 1; dx++) {
             vec2 candidateCell = vorHere.xy + vec2(float(dx), float(dy));
             
@@ -277,6 +305,7 @@ void main() {
                         // Sample texture at original position
                         vec4 oldColor = texture(uOldTex, originalPos);
                         finalColor = oldColor.rgb;
+                        float fadePiece = 1.0 - smoothstep(0.93, 1.0, pieceFall);
                         
                         // Crack lines with dark border
                         float crackPhase = t / 0.25;  // Cracks appear early
@@ -311,6 +340,8 @@ void main() {
                         // Piece gets slightly darker as it falls
                         float pieceShadow = pieceFall * 0.12;
                         finalColor *= (1.0 - pieceShadow);
+                        // Fade piece into underlying new image near end of its fall
+                        finalColor = mix(newColor.rgb, finalColor, fadePiece);
                     }
                 }
             }
@@ -349,6 +380,7 @@ void main() {
             "u_piece_count": gl.glGetUniformLocation(program, "u_piece_count"),
             "u_crack_complexity": gl.glGetUniformLocation(program, "u_crack_complexity"),
             "u_mosaic_mode": gl.glGetUniformLocation(program, "u_mosaic_mode"),
+            "u_weight_mode": gl.glGetUniformLocation(program, "u_weight_mode"),
         }
 
     def render(
@@ -382,6 +414,7 @@ void main() {
         piece_count = float(getattr(state, "piece_count", 8.0))
         crack_complexity = float(getattr(state, "crack_complexity", 1.0))
         mosaic_mode = 1.0 if getattr(state, "mosaic_mode", False) else 0.0
+        weight_mode = float(getattr(state, "weight_mode", 0.0))
 
         gl.glViewport(0, 0, vp_w, vp_h)
         gl.glDisable(gl.GL_DEPTH_TEST)
@@ -406,6 +439,9 @@ void main() {
 
             if uniforms.get("u_mosaic_mode", -1) != -1:
                 gl.glUniform1f(uniforms["u_mosaic_mode"], float(mosaic_mode))
+
+            if uniforms.get("u_weight_mode", -1) != -1:
+                gl.glUniform1f(uniforms["u_weight_mode"], float(weight_mode))
 
             # Bind old texture to unit 0
             if uniforms.get("uOldTex", -1) != -1:

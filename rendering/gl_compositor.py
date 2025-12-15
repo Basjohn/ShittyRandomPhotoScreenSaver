@@ -1640,6 +1640,7 @@ class GLCompositorWidget(QOpenGLWidget):
         piece_count: int = 8,
         crack_complexity: float = 1.0,
         mosaic_mode: bool = False,
+        weight_mode: float = 0.0,
         seed: Optional[float] = None,
     ) -> Optional[str]:
         """Begin a crumble transition using the compositor.
@@ -1696,6 +1697,7 @@ class GLCompositorWidget(QOpenGLWidget):
             piece_count=float(max(4, piece_count)),
             crack_complexity=max(0.5, min(2.0, crack_complexity)),
             mosaic_mode=mosaic_mode,
+            weight_mode=max(0.0, min(2.0, float(weight_mode))),
         )
         self._animation_manager = animation_manager
         self._current_easing = easing
@@ -4326,6 +4328,17 @@ void main() {
     def _paintGL_impl(self) -> None:
         """Internal paintGL implementation."""
         target = self.rect()
+
+        if gl is not None:
+            try:
+                gl.glDisable(gl.GL_SCISSOR_TEST)
+            except Exception:
+                pass
+            try:
+                gl.glClearColor(0.0, 0.0, 0.0, 1.0)
+                gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
+            except Exception:
+                pass
 
         # Prefer the shader path for Block Spins when available. On any failure
         # we log and fall back to the existing QPainter implementation.

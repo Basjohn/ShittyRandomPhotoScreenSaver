@@ -292,6 +292,22 @@ class TransitionsTab(QWidget):
         mosaic_row.addWidget(self.crumble_mosaic_check)
         mosaic_row.addStretch()
         crumble_layout.addLayout(mosaic_row)
+
+        weight_row = QHBoxLayout()
+        weight_row.addWidget(QLabel("Fall Weighting:"))
+        self.crumble_weight_combo = QComboBox()
+        self.crumble_weight_combo.addItems([
+            "Top Weighted",
+            "Bottom Weighted",
+            "Random Weighted",
+            "Random Choice",
+            "Age Weighted",
+        ])
+        self.crumble_weight_combo.setCurrentIndex(0)
+        self.crumble_weight_combo.currentIndexChanged.connect(self._save_settings)
+        weight_row.addWidget(self.crumble_weight_combo)
+        weight_row.addStretch()
+        crumble_layout.addLayout(weight_row)
         
         layout.addWidget(self.crumble_group)
         
@@ -531,6 +547,14 @@ class TransitionsTab(QWidget):
             self.crumble_piece_count_spin.setValue(crumble.get('piece_count', 8))
             self.crumble_complexity_spin.setValue(crumble.get('crack_complexity', 1.0))
             self.crumble_mosaic_check.setChecked(crumble.get('mosaic_mode', False))
+            weight = crumble.get('weighting', 'Top Weighted')
+            try:
+                idx = self.crumble_weight_combo.findText(weight)
+                if idx < 0:
+                    idx = 0
+                self.crumble_weight_combo.setCurrentIndex(idx)
+            except Exception:
+                pass
 
             # Now that in-memory per-type directions are loaded, update the direction combo
             self._update_specific_settings()
@@ -739,7 +763,8 @@ class TransitionsTab(QWidget):
             'crumble': {
                 'piece_count': self.crumble_piece_count_spin.value(),
                 'crack_complexity': self.crumble_complexity_spin.value(),
-                'mosaic_mode': self.crumble_mosaic_check.isChecked()
+                'mosaic_mode': self.crumble_mosaic_check.isChecked(),
+                'weighting': self.crumble_weight_combo.currentText(),
             },
             'durations': dict(self._duration_by_type),
             'pool': dict(self._pool_by_type),
