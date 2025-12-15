@@ -3717,30 +3717,6 @@ class DisplayWidget(QWidget):
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """Handle mouse press - exit on any click unless hard exit is enabled."""
         ctrl_mode_active = self._ctrl_held or DisplayWidget._global_ctrl_held
-
-        if is_verbose_logging():
-            try:
-                comp = getattr(self, "_gl_compositor", None)
-                comp_dim_enabled = getattr(comp, "_dimming_enabled", None) if comp is not None else None
-                comp_dim_opacity = getattr(comp, "_dimming_opacity", None) if comp is not None else None
-            except Exception:
-                comp_dim_enabled = None
-                comp_dim_opacity = None
-            try:
-                logger.debug(
-                    "[CLICK_DIAG] screen=%s pos=%s button=%s hard_exit=%s ctrl=%s dim=%s(%.3f) comp_dim=%s(%s)",
-                    getattr(self, "screen_index", "?"),
-                    event.pos(),
-                    event.button(),
-                    self._is_hard_exit_enabled(),
-                    ctrl_mode_active,
-                    getattr(self, "_dimming_enabled", None),
-                    float(getattr(self, "_dimming_opacity", 0.0) or 0.0),
-                    comp_dim_enabled,
-                    comp_dim_opacity,
-                )
-            except Exception:
-                pass
         
         # Right-click context menu handling:
         # - In hard exit mode: right-click shows menu

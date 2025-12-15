@@ -53,14 +53,9 @@ class CursorHaloWidget(QWidget):
         """Paint the halo ring and center dot."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-
-        try:
-            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
-            painter.fillRect(self.rect(), QColor(0, 0, 0, 0))
-            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
-        except Exception:
-            pass
-
+        
+        # No background fill needed - WA_TranslucentBackground handles it
+        
         base_alpha = 200
         alpha = int(max(0.0, min(1.0, self._opacity)) * base_alpha)
         color = QColor(255, 255, 255, alpha)

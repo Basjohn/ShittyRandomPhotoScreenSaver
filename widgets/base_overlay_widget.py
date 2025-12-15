@@ -16,8 +16,8 @@ from abc import abstractmethod
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
-from PySide6.QtCore import QPoint, QSize, Signal, Qt
-from PySide6.QtGui import QColor, QFont, QPainter, QPaintEvent
+from PySide6.QtCore import QPoint, QSize, Signal
+from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import QLabel, QWidget
 
 from core.logging.logger import get_logger

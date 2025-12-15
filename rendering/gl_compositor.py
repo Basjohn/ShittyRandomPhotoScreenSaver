@@ -4329,17 +4329,6 @@ void main() {
         """Internal paintGL implementation."""
         target = self.rect()
 
-        if gl is not None:
-            try:
-                gl.glDisable(gl.GL_SCISSOR_TEST)
-            except Exception:
-                pass
-            try:
-                gl.glClearColor(0.0, 0.0, 0.0, 1.0)
-                gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
-            except Exception:
-                pass
-
         # Prefer the shader path for Block Spins when available. On any failure
         # we log and fall back to the existing QPainter implementation.
         if self._blockspin is not None and self._can_use_blockspin_shader():
