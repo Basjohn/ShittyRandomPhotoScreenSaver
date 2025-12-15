@@ -1,0 +1,16 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+cachedir: .pytest_cache
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+configfile: pytest.ini
+plugins: qt-4.5.0
+collecting ... collected 3 items
+
+tests/test_activation_transparency_regression.py::test_displaywidget_single_focus_owner PASSED [ 33%]
+tests/test_activation_transparency_regression.py::test_context_menu_overlay_works_on_non_focusable_display PASSED [ 66%]
+tests/test_activation_transparency_regression.py::test_context_menu_overlay_shows_and_hides_without_sticky_flags PASSED [100%]QSettings: Failed to delete key "Software\Test\ScreensaverTest" (Illegal operation attempted on a registry key that has been marked for deletion.)
+QSettings: Failed to delete key "Software\Test\ScreensaverTest" (Illegal operation attempted on a registry key that has been marked for deletion.)
+
+
+============================== 3 passed in 1.33s ==============================

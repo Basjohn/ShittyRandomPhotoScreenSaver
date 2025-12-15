@@ -591,6 +591,7 @@ class DisplayManager(QObject):
             DisplayWidget._halo_owner = None
             DisplayWidget._event_filter_installed = False
             DisplayWidget._event_filter_owner = None
+            DisplayWidget._focus_owner = None
             # Clear the screen-to-widget cache to avoid stale references
             DisplayWidget._instances_by_screen.clear()
             logger.debug("[CLEANUP] Reset all DisplayWidget global state")

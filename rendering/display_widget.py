@@ -123,6 +123,13 @@ class DisplayWidget(QWidget):
     
     # PERF: Cache of DisplayWidget instances by screen to avoid iterating topLevelWidgets
     _instances_by_screen: Dict[Any, "DisplayWidget"] = {}
+
+    # On Windows, switching activation between multiple full-screen top-level
+    # windows can change the compositor/backing-store path for the *inactive*
+    # window. That can make semi-transparent overlay backgrounds appear much
+    # more opaque because they end up blending against a stale/darker buffer.
+    # To avoid this, only one DisplayWidget is permitted to accept focus.
+    _focus_owner: Optional["DisplayWidget"] = None
     
     @classmethod
     def get_all_instances(cls) -> List["DisplayWidget"]:
@@ -237,7 +244,21 @@ class DisplayWidget(QWidget):
         self.setCursor(Qt.CursorShape.BlankCursor)
         self.setMouseTracking(True)
         try:
-            self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+            if DisplayWidget._focus_owner is None:
+                DisplayWidget._focus_owner = self
+
+            if DisplayWidget._focus_owner is self:
+                self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+            else:
+                self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+                try:
+                    self.setWindowFlag(Qt.WindowType.WindowDoesNotAcceptFocus, True)
+                except Exception:
+                    pass
+                try:
+                    self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+                except Exception:
+                    pass
         except Exception:
             pass
         # Ensure we can keep the Ctrl halo moving even when the cursor is over
@@ -4268,6 +4289,54 @@ class DisplayWidget(QWidget):
             pass
 
         super().focusOutEvent(event)
+
+    def changeEvent(self, event: QEvent) -> None:  # type: ignore[override]
+        try:
+            et = event.type() if event is not None else None
+            if et in (QEvent.Type.ActivationChange, QEvent.Type.WindowActivate):
+                try:
+                    active = self.isActiveWindow()
+                except Exception:
+                    active = True
+
+                if active and self.isVisible() and not getattr(self, "_exiting", False):
+                    for attr_name in (
+                        "clock_widget",
+                        "clock2_widget",
+                        "clock3_widget",
+                        "weather_widget",
+                        "media_widget",
+                        "spotify_visualizer_widget",
+                        "spotify_volume_widget",
+                        "reddit_widget",
+                        "reddit2_widget",
+                    ):
+                        w = getattr(self, attr_name, None)
+                        if w is None:
+                            continue
+                        try:
+                            w.setAutoFillBackground(False)
+                        except Exception:
+                            pass
+                        try:
+                            w.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+                        except Exception:
+                            pass
+                        try:
+                            st = w.style()
+                            if st is not None:
+                                st.unpolish(w)
+                                st.polish(w)
+                        except Exception:
+                            pass
+                        try:
+                            w.update()
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+
+        super().changeEvent(event)
 
     def eventFilter(self, watched, event):  # type: ignore[override]
         """Global event filter to keep the Ctrl halo responsive over children."""
