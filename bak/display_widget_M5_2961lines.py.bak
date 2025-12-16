@@ -34,7 +34,7 @@ from transitions.base_transition import BaseTransition
 from rendering.transition_factory import TransitionFactory
 from widgets.clock_widget import ClockWidget, TimeFormat, ClockPosition
 from widgets.weather_widget import WeatherWidget, WeatherPosition
-from widgets.media_widget import MediaWidget
+from widgets.media_widget import MediaWidget, MediaPosition
 from widgets.reddit_widget import RedditWidget, RedditPosition
 from widgets.pixel_shift_manager import PixelShiftManager
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
@@ -807,23 +807,133 @@ class DisplayWidget(QWidget):
         self._apply_widget_stacking(widgets if isinstance(widgets, dict) else {})
 
     def _apply_widget_stacking(self, widgets_config: Dict[str, Any]) -> None:
-        """Apply vertical stacking offsets - delegates to WidgetManager."""
-        if self._widget_manager is None:
-            return
-        widget_list = [
-            (getattr(self, 'clock_widget', None), 'clock_widget'),
-            (getattr(self, 'clock2_widget', None), 'clock2_widget'),
-            (getattr(self, 'clock3_widget', None), 'clock3_widget'),
-            (getattr(self, 'weather_widget', None), 'weather_widget'),
-            (getattr(self, 'media_widget', None), 'media_widget'),
-            (getattr(self, 'spotify_visualizer_widget', None), 'spotify_visualizer_widget'),
-            (getattr(self, 'reddit_widget', None), 'reddit_widget'),
-            (getattr(self, 'reddit2_widget', None), 'reddit2_widget'),
+        """Apply vertical stacking offsets to widgets sharing the same position.
+        
+        This method collects all visible widgets on THIS screen, groups them by
+        position, and applies vertical offsets so they stack without overlapping.
+        Called at the end of _setup_widgets after all widgets are created.
+        
+        Stacking is automatic and has no performance impact on fades since
+        offsets are applied once during setup, not during animation.
+        
+        Note: Widget heights at setup time may be estimates. For widgets like
+        Reddit that resize after content loads, consider calling
+        recalculate_stacking() after content is ready.
+        """
+        # Map of position -> list of (widget, attr_name, creation_order)
+        # Creation order determines stacking priority (earlier = base, later = stacked)
+        position_groups: Dict[str, List[Tuple[Any, str, int]]] = {}
+        
+        # Widget attributes with creation order priority
+        # Order matters: widgets listed first are the "base" at each position
+        widget_attrs = [
+            ('clock_widget', 0),
+            ('clock2_widget', 1),
+            ('clock3_widget', 2),
+            ('weather_widget', 3),
+            ('media_widget', 4),
+            ('spotify_visualizer_widget', 5),
+            ('reddit_widget', 6),
+            ('reddit2_widget', 7),
         ]
-        self._widget_manager.apply_widget_stacking(widget_list)
+        
+        for attr_name, order in widget_attrs:
+            widget = getattr(self, attr_name, None)
+            if widget is None:
+                continue
+            
+            # Query position directly from the widget (already set during creation)
+            pos_normalized = self._get_widget_position_key(widget)
+            if not pos_normalized:
+                continue
+            
+            if pos_normalized not in position_groups:
+                position_groups[pos_normalized] = []
+            position_groups[pos_normalized].append((widget, attr_name, order))
+        
+        # Apply stacking offsets for each position group
+        spacing = 10  # Gap between stacked widgets
+        
+        for pos_key, widgets_at_pos in position_groups.items():
+            if len(widgets_at_pos) <= 1:
+                # Single widget - ensure no stale offset
+                if widgets_at_pos and hasattr(widgets_at_pos[0][0], 'set_stack_offset'):
+                    widgets_at_pos[0][0].set_stack_offset(QPoint(0, 0))
+                continue
+            
+            # Determine stack direction based on position
+            stack_down = 'top' in pos_key  # Top positions stack downward
+            
+            # Sort by creation order - for bottom positions, reverse so first widget
+            # is visually on top (stacked above later widgets)
+            widgets_at_pos.sort(key=lambda x: x[2], reverse=not stack_down)
+            
+            # First widget is the base (no offset)
+            cumulative_offset = 0
+            
+            for i, (widget, attr_name, _) in enumerate(widgets_at_pos):
+                if i == 0:
+                    # Base widget - reset any previous offset
+                    if hasattr(widget, 'set_stack_offset'):
+                        widget.set_stack_offset(QPoint(0, 0))
+                    continue
+                
+                # Get height of previous widget
+                prev_widget = widgets_at_pos[i - 1][0]
+                prev_height = self._get_widget_stack_height(prev_widget)
+                
+                cumulative_offset += prev_height + spacing
+                
+                # Apply offset (positive for down, negative for up)
+                offset_y = cumulative_offset if stack_down else -cumulative_offset
+                
+                if hasattr(widget, 'set_stack_offset'):
+                    widget.set_stack_offset(QPoint(0, offset_y))
+                    logger.debug(
+                        "[STACKING] %s offset y=%d (position=%s, stack_down=%s)",
+                        attr_name, offset_y, pos_key, stack_down
+                    )
+    
+    def _get_widget_position_key(self, widget: Any) -> Optional[str]:
+        """Get normalized position key from a widget's current position setting."""
+        try:
+            # BaseOverlayWidget stores position as OverlayPosition enum
+            if hasattr(widget, '_position'):
+                pos = widget._position
+                if hasattr(pos, 'name'):
+                    return pos.name.lower()
+                return str(pos).lower().replace(' ', '_')
+            # Fallback: try get_position method
+            if hasattr(widget, 'get_position'):
+                pos = widget.get_position()
+                if hasattr(pos, 'name'):
+                    return pos.name.lower()
+                return str(pos).lower().replace(' ', '_')
+        except Exception:
+            pass
+        return None
+    
+    def _get_widget_stack_height(self, widget: Any) -> int:
+        """Get widget height for stacking calculations."""
+        try:
+            # Prefer bounding size if available (accounts for shadows, etc.)
+            if hasattr(widget, 'get_bounding_size'):
+                return widget.get_bounding_size().height()
+            # Use sizeHint for widgets that haven't been shown yet
+            hint = widget.sizeHint()
+            if hint.isValid() and hint.height() > 0:
+                return hint.height()
+            # Fallback to actual height
+            return widget.height() if widget.height() > 0 else 100
+        except Exception:
+            return 100  # Safe fallback
     
     def recalculate_stacking(self) -> None:
-        """Recalculate widget stacking offsets."""
+        """Recalculate widget stacking offsets.
+        
+        Call this after widget heights change (e.g., after Reddit content loads)
+        to update stacking positions. Safe to call at any time.
+        """
         try:
             widgets = self.settings_manager.get('widgets', {}) if self.settings_manager else {}
             self._apply_widget_stacking(widgets)
@@ -1329,22 +1439,114 @@ class DisplayWidget(QWidget):
         return mapping.get(transition.__class__.__name__)
 
     def _position_spotify_visualizer(self) -> None:
-        """Position Spotify Beat Visualizer - delegates to WidgetManager."""
-        if self._widget_manager is not None:
-            self._widget_manager.position_spotify_visualizer(
-                getattr(self, "spotify_visualizer_widget", None),
-                getattr(self, "media_widget", None),
-                self.width(), self.height()
-            )
+        """Position Spotify Beat Visualizer just above the media widget."""
+
+        vis = getattr(self, "spotify_visualizer_widget", None)
+        media = getattr(self, "media_widget", None)
+        if vis is None or media is None:
+            return
+        try:
+            media_geom = media.geometry()
+        except Exception:
+            return
+        if media_geom.width() <= 0 or media_geom.height() <= 0:
+            return
+
+        gap = 20
+        height = max(vis.height(), vis.minimumHeight())
+        width = media_geom.width()
+        x = media_geom.left()
+        try:
+            position = getattr(media, "_position", None)
+        except Exception:
+            position = None
+
+        place_above = True
+        try:
+            if position in (MediaPosition.TOP_LEFT, MediaPosition.TOP_RIGHT):
+                place_above = False
+        except Exception:
+            place_above = True
+
+        if place_above:
+            y = media_geom.top() - gap - height
+        else:
+            y = media_geom.bottom() + gap
+
+        if y < 0:
+            y = 0
+        if x < 0:
+            x = 0
+        max_width = max(10, self.width() - x)
+        width = min(width, max_width)
+
+        try:
+            vis.setGeometry(x, y, width, height)
+            vis.raise_()
+            # Update pixel shift manager with new position
+            if self._pixel_shift_manager is not None:
+                self._pixel_shift_manager.update_original_position(vis)
+        except Exception:
+            pass
 
     def _position_spotify_volume(self) -> None:
-        """Position Spotify volume slider - delegates to WidgetManager."""
-        if self._widget_manager is not None:
-            self._widget_manager.position_spotify_volume(
-                getattr(self, "spotify_volume_widget", None),
-                getattr(self, "media_widget", None),
-                self.width(), self.height()
-            )
+        """Position Spotify volume slider beside the media widget.
+
+        The slider is placed on the side of the media card that has more
+        horizontal space available (left vs right).
+        """
+
+        vol = getattr(self, "spotify_volume_widget", None)
+        media = getattr(self, "media_widget", None)
+        if vol is None or media is None:
+            return
+        try:
+            media_geom = media.geometry()
+        except Exception:
+            return
+        if media_geom.width() <= 0 or media_geom.height() <= 0:
+            return
+
+        parent_width = max(1, self.width())
+        space_left = max(0, media_geom.left())
+        space_right = max(0, parent_width - media_geom.right())
+        gap = 16
+
+        width = max(vol.minimumWidth(), 32)
+
+        # Make the slider roughly match the media card height but with a small
+        # inset so the rounded ends are visible and do not collide with the
+        # card frame.
+        card_height = media_geom.height()
+        height = max(vol.minimumHeight(), card_height - 8)
+        height = min(height, card_height)
+
+        if space_right >= space_left:
+            x = media_geom.right() + gap
+            if x + width > parent_width:
+                x = max(0, parent_width - width)
+        else:
+            x = media_geom.left() - gap - width
+            if x < 0:
+                x = 0
+
+        # Vertically centre the slider relative to the media card.
+        y = media_geom.top() + max(0, (card_height - height) // 2)
+        max_y = max(0, self.height() - height)
+        if y > max_y:
+            y = max_y
+        if y < 0:
+            y = 0
+
+        try:
+            vol.setGeometry(x, y, width, height)
+            if vol.isVisible():
+                vol.raise_()
+            # Update pixel shift manager with new position
+            if self._pixel_shift_manager is not None:
+                self._pixel_shift_manager.update_original_position(vol)
+        except Exception:
+            pass
 
     def push_spotify_visualizer_frame(
         self,

@@ -34,7 +34,7 @@ from transitions.base_transition import BaseTransition
 from rendering.transition_factory import TransitionFactory
 from widgets.clock_widget import ClockWidget, TimeFormat, ClockPosition
 from widgets.weather_widget import WeatherWidget, WeatherPosition
-from widgets.media_widget import MediaWidget
+from widgets.media_widget import MediaWidget, MediaPosition
 from widgets.reddit_widget import RedditWidget, RedditPosition
 from widgets.pixel_shift_manager import PixelShiftManager
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
@@ -48,7 +48,7 @@ from rendering.input_handler import InputHandler
 from rendering.transition_controller import TransitionController
 from rendering.image_presenter import ImagePresenter
 from rendering.multi_monitor_coordinator import get_coordinator, MultiMonitorCoordinator
-from core.logging.logger import get_logger, is_verbose_logging
+from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.logging.overlay_telemetry import record_overlay_ready
 from core.resources.manager import ResourceManager
 from core.settings.settings_manager import SettingsManager
@@ -807,23 +807,133 @@ class DisplayWidget(QWidget):
         self._apply_widget_stacking(widgets if isinstance(widgets, dict) else {})
 
     def _apply_widget_stacking(self, widgets_config: Dict[str, Any]) -> None:
-        """Apply vertical stacking offsets - delegates to WidgetManager."""
-        if self._widget_manager is None:
-            return
-        widget_list = [
-            (getattr(self, 'clock_widget', None), 'clock_widget'),
-            (getattr(self, 'clock2_widget', None), 'clock2_widget'),
-            (getattr(self, 'clock3_widget', None), 'clock3_widget'),
-            (getattr(self, 'weather_widget', None), 'weather_widget'),
-            (getattr(self, 'media_widget', None), 'media_widget'),
-            (getattr(self, 'spotify_visualizer_widget', None), 'spotify_visualizer_widget'),
-            (getattr(self, 'reddit_widget', None), 'reddit_widget'),
-            (getattr(self, 'reddit2_widget', None), 'reddit2_widget'),
+        """Apply vertical stacking offsets to widgets sharing the same position.
+        
+        This method collects all visible widgets on THIS screen, groups them by
+        position, and applies vertical offsets so they stack without overlapping.
+        Called at the end of _setup_widgets after all widgets are created.
+        
+        Stacking is automatic and has no performance impact on fades since
+        offsets are applied once during setup, not during animation.
+        
+        Note: Widget heights at setup time may be estimates. For widgets like
+        Reddit that resize after content loads, consider calling
+        recalculate_stacking() after content is ready.
+        """
+        # Map of position -> list of (widget, attr_name, creation_order)
+        # Creation order determines stacking priority (earlier = base, later = stacked)
+        position_groups: Dict[str, List[Tuple[Any, str, int]]] = {}
+        
+        # Widget attributes with creation order priority
+        # Order matters: widgets listed first are the "base" at each position
+        widget_attrs = [
+            ('clock_widget', 0),
+            ('clock2_widget', 1),
+            ('clock3_widget', 2),
+            ('weather_widget', 3),
+            ('media_widget', 4),
+            ('spotify_visualizer_widget', 5),
+            ('reddit_widget', 6),
+            ('reddit2_widget', 7),
         ]
-        self._widget_manager.apply_widget_stacking(widget_list)
+        
+        for attr_name, order in widget_attrs:
+            widget = getattr(self, attr_name, None)
+            if widget is None:
+                continue
+            
+            # Query position directly from the widget (already set during creation)
+            pos_normalized = self._get_widget_position_key(widget)
+            if not pos_normalized:
+                continue
+            
+            if pos_normalized not in position_groups:
+                position_groups[pos_normalized] = []
+            position_groups[pos_normalized].append((widget, attr_name, order))
+        
+        # Apply stacking offsets for each position group
+        spacing = 10  # Gap between stacked widgets
+        
+        for pos_key, widgets_at_pos in position_groups.items():
+            if len(widgets_at_pos) <= 1:
+                # Single widget - ensure no stale offset
+                if widgets_at_pos and hasattr(widgets_at_pos[0][0], 'set_stack_offset'):
+                    widgets_at_pos[0][0].set_stack_offset(QPoint(0, 0))
+                continue
+            
+            # Determine stack direction based on position
+            stack_down = 'top' in pos_key  # Top positions stack downward
+            
+            # Sort by creation order - for bottom positions, reverse so first widget
+            # is visually on top (stacked above later widgets)
+            widgets_at_pos.sort(key=lambda x: x[2], reverse=not stack_down)
+            
+            # First widget is the base (no offset)
+            cumulative_offset = 0
+            
+            for i, (widget, attr_name, _) in enumerate(widgets_at_pos):
+                if i == 0:
+                    # Base widget - reset any previous offset
+                    if hasattr(widget, 'set_stack_offset'):
+                        widget.set_stack_offset(QPoint(0, 0))
+                    continue
+                
+                # Get height of previous widget
+                prev_widget = widgets_at_pos[i - 1][0]
+                prev_height = self._get_widget_stack_height(prev_widget)
+                
+                cumulative_offset += prev_height + spacing
+                
+                # Apply offset (positive for down, negative for up)
+                offset_y = cumulative_offset if stack_down else -cumulative_offset
+                
+                if hasattr(widget, 'set_stack_offset'):
+                    widget.set_stack_offset(QPoint(0, offset_y))
+                    logger.debug(
+                        "[STACKING] %s offset y=%d (position=%s, stack_down=%s)",
+                        attr_name, offset_y, pos_key, stack_down
+                    )
+    
+    def _get_widget_position_key(self, widget: Any) -> Optional[str]:
+        """Get normalized position key from a widget's current position setting."""
+        try:
+            # BaseOverlayWidget stores position as OverlayPosition enum
+            if hasattr(widget, '_position'):
+                pos = widget._position
+                if hasattr(pos, 'name'):
+                    return pos.name.lower()
+                return str(pos).lower().replace(' ', '_')
+            # Fallback: try get_position method
+            if hasattr(widget, 'get_position'):
+                pos = widget.get_position()
+                if hasattr(pos, 'name'):
+                    return pos.name.lower()
+                return str(pos).lower().replace(' ', '_')
+        except Exception:
+            pass
+        return None
+    
+    def _get_widget_stack_height(self, widget: Any) -> int:
+        """Get widget height for stacking calculations."""
+        try:
+            # Prefer bounding size if available (accounts for shadows, etc.)
+            if hasattr(widget, 'get_bounding_size'):
+                return widget.get_bounding_size().height()
+            # Use sizeHint for widgets that haven't been shown yet
+            hint = widget.sizeHint()
+            if hint.isValid() and hint.height() > 0:
+                return hint.height()
+            # Fallback to actual height
+            return widget.height() if widget.height() > 0 else 100
+        except Exception:
+            return 100  # Safe fallback
     
     def recalculate_stacking(self) -> None:
-        """Recalculate widget stacking offsets."""
+        """Recalculate widget stacking offsets.
+        
+        Call this after widget heights change (e.g., after Reddit content loads)
+        to update stacking positions. Safe to call at any time.
+        """
         try:
             widgets = self.settings_manager.get('widgets', {}) if self.settings_manager else {}
             self._apply_widget_stacking(widgets)
@@ -982,7 +1092,16 @@ class DisplayWidget(QWidget):
         )
 
     def set_image(self, pixmap: QPixmap, image_path: str = "") -> None:
-        """Display a new image with transition (backward-compatible sync version)."""
+        """Display a new image with transition (backward-compatible sync version).
+        
+        NOTE: This method processes the image synchronously on the UI thread.
+        For better performance, use set_processed_image() with pre-processed
+        pixmaps from a background thread.
+        
+        Args:
+            pixmap: Image to display (will be processed for screen fit)
+            image_path: Path to image (for logging/events)
+        """
         if pixmap.isNull():
             logger.warning("[FALLBACK] Received null pixmap in set_image")
             self.error_message = "Failed to load image"
@@ -990,20 +1109,28 @@ class DisplayWidget(QWidget):
             self.update()
             return
 
-        # Delegate processing to ImagePresenter if available
+        # Process image for display at physical resolution
         screen_size = self.get_target_size()
-        if self._image_presenter is not None:
-            processed = self._image_presenter.process_image(
-                pixmap, (screen_size.width(), screen_size.height()), image_path
-            )
-            if processed is not None:
-                self.set_processed_image(processed, pixmap, image_path)
-                return
+        logger.debug(f"[IMAGE QUALITY] Processing image for {screen_size.width()}x{screen_size.height()} (DPR={self._device_pixel_ratio})")
         
-        # Fallback: direct processing
+        # Get quality settings
+        use_lanczos = False
+        sharpen = False
+        if self.settings_manager:
+            sharpen = self.settings_manager.get('display.sharpen_downscale', False)
+            if isinstance(sharpen, str):
+                sharpen = sharpen.lower() == 'true'
+        
+        # Process image (this blocks the UI thread - use set_processed_image for async)
         processed_pixmap = ImageProcessor.process_image(
-            pixmap, screen_size, self.display_mode, False, False
+            pixmap,
+            screen_size,
+            self.display_mode,
+            use_lanczos,
+            sharpen
         )
+        
+        # Delegate to the async-friendly method
         self.set_processed_image(processed_pixmap, pixmap, image_path)
 
     def set_processed_image(self, processed_pixmap: QPixmap, original_pixmap: QPixmap, 
@@ -1146,26 +1273,56 @@ class DisplayWidget(QWidget):
             if use_transition:
                 transition = self._create_transition()
                 if transition:
-                    # Set previous pixmap for transition
-                    self.previous_pixmap = previous_pixmap_ref or processed_pixmap
+                    self._current_transition = transition
                     
-                    # For compositor-backed 3D Block Spins, seed with old image
-                    comp = getattr(self, "_gl_compositor", None)
-                    if (transition.__class__.__name__ == "GLCompositorBlockSpinTransition"
-                        and isinstance(comp, GLCompositorWidget)
-                        and previous_pixmap_ref is not None
-                        and not previous_pixmap_ref.isNull()):
+                    # Phase 3b: Notify TransitionController of transition start
+                    if self._transition_controller is not None:
                         try:
-                            comp.set_base_pixmap(previous_pixmap_ref)
+                            self._transition_controller._current_transition = transition
+                            self._transition_controller._transition_started_at = time.monotonic()
                         except Exception:
                             pass
 
-                    # Store pending finish args
-                    self._pending_transition_finish_args = (processed_pixmap, original_pixmap, image_path, False, None)
-                    
-                    # Create finish handler with weakref
+                    # For compositor-backed 3D Block Spins, keep the compositor
+                    # base pixmap on the old image while the GLSL spin runs so
+                    # we do not briefly jump to the new image before the
+                    # transition actually starts.
+
+                    comp = getattr(self, "_gl_compositor", None)
+                    if (
+                        transition.__class__.__name__ == "GLCompositorBlockSpinTransition"
+                        and isinstance(comp, GLCompositorWidget)
+                        and previous_pixmap_ref is not None
+                        and not previous_pixmap_ref.isNull()
+                    ):
+                        try:
+                            comp.set_base_pixmap(previous_pixmap_ref)
+                        except Exception:
+                            logger.debug(
+                                "[GL COMPOSITOR] Failed to seed base pixmap for block spins",
+                                exc_info=True,
+                            )
+
+                    if previous_pixmap_ref:
+                        self.previous_pixmap = previous_pixmap_ref
+                    else:
+                        # Safety fallback: reuse the new frame to avoid synthetic black flashes.
+                        self.previous_pixmap = processed_pixmap
+
+                    # Connect transition finished signal using weakref to avoid callbacks
+                    # after this widget is destroyed.
                     self_ref = weakref.ref(self)
-                    def _finish_handler(np=processed_pixmap, op=original_pixmap, ip=image_path, ref=self_ref):
+
+                    self._pending_transition_finish_args = (
+                        processed_pixmap,
+                        original_pixmap,
+                        image_path,
+                        False,
+                        None,
+                    )
+
+                    def _finish_handler(np=processed_pixmap, op=original_pixmap,
+                                        ip=image_path, ref=self_ref):
                         widget = ref()
                         if widget is None or not Shiboken.isValid(widget):
                             return
@@ -1175,30 +1332,22 @@ class DisplayWidget(QWidget):
                         finally:
                             widget._pending_transition_finish_args = None
 
-                    # Delegate transition start to TransitionController
+                    transition.finished.connect(_finish_handler)
                     overlay_key = self._resolve_overlay_key_for_transition(transition)
-                    if self._transition_controller is not None:
-                        success = self._transition_controller.start_transition(
-                            transition, self.previous_pixmap, new_pixmap,
-                            overlay_key=overlay_key, on_finished=_finish_handler
-                        )
-                    else:
-                        # Fallback: direct start
-                        transition.finished.connect(_finish_handler)
-                        success = transition.start(self.previous_pixmap, new_pixmap, self)
-                    
+                    self._current_transition_overlay_key = overlay_key
+                    self._current_transition_started_at = time.monotonic()
+                    if overlay_key:
+                        self._overlay_timeouts[overlay_key] = self._current_transition_started_at
+                    success = transition.start(self.previous_pixmap, new_pixmap, self)
                     if success:
-                        self._current_transition = transition
-                        self._current_transition_overlay_key = overlay_key
-                        self._current_transition_started_at = time.monotonic()
-                        if overlay_key:
-                            self._overlay_timeouts[overlay_key] = self._current_transition_started_at
-                        # Raise widgets SYNCHRONOUSLY
+                        self._start_transition_watchdog(overlay_key, transition)
+                        # Raise widgets SYNCHRONOUSLY - delegate to WidgetManager
                         if self._widget_manager is not None:
                             try:
                                 self._widget_manager.raise_all_widgets()
                             except Exception:
                                 pass
+                        # Also raise non-managed widgets
                         for attr in ("_spotify_bars_overlay", "_ctrl_cursor_hint"):
                             w = getattr(self, attr, None)
                             if w is not None:
@@ -1213,6 +1362,7 @@ class DisplayWidget(QWidget):
                         transition.cleanup()
                         self._current_transition = None
                         self._pending_transition_finish_args = None
+                        self._cancel_transition_watchdog()
                         use_transition = False
                 else:
                     use_transition = False
@@ -1247,19 +1397,31 @@ class DisplayWidget(QWidget):
         pan_preview: Optional[QPixmap] = None,
     ) -> None:
         """Handle transition completion."""
-        # Delegate cleanup to TransitionController
-        if self._transition_controller is not None:
-            try:
-                self._transition_controller.on_transition_finished()
-            except Exception:
-                pass
-        
-        # Clear local state
+        _finish_start = time.time()
+
+        overlay_key = self._current_transition_overlay_key
+        if overlay_key:
+            self._overlay_timeouts.pop(overlay_key, None)
         self._current_transition_overlay_key = None
         self._current_transition_started_at = 0.0
-        self._current_transition = None
 
-        # Update pixmap state
+        self._cancel_transition_watchdog()
+
+        transition_to_clean = self._current_transition
+        self._current_transition = None
+        
+        # Phase 3b: Notify TransitionController of transition finish
+        if self._transition_controller is not None:
+            try:
+                self._transition_controller._current_transition = None
+                self._transition_controller._current_overlay_key = None
+                self._transition_controller._transition_started_at = 0.0
+                self._transition_controller.transition_finished.emit()
+            except Exception:
+                pass
+
+        # Use the pan preview frame if provided so the base widget matches
+        # the first pan frame until the pan label takes over.
         self.current_pixmap = pan_preview or new_pixmap
         if self.current_pixmap:
             try:
@@ -1269,13 +1431,17 @@ class DisplayWidget(QWidget):
         self._seed_pixmap = self.current_pixmap
         self._last_pixmap_seed_ts = time.monotonic()
         
-        # Notify ImagePresenter
+        # Phase 4b: Notify ImagePresenter of pixmap change
         if self._image_presenter is not None:
             try:
                 self._image_presenter.complete_transition(new_pixmap, pan_preview)
             except Exception:
                 pass
-        
+        if is_verbose_logging():
+            logger.debug(
+                "[DIAG] Seed pixmap set (phase=post-transition, pixmap=%s)",
+                _describe_pixmap(self.current_pixmap),
+            )
         if self._updates_blocked_until_seed:
             try:
                 self.setUpdatesEnabled(True)
@@ -1284,16 +1450,34 @@ class DisplayWidget(QWidget):
             self._updates_blocked_until_seed = False
         self.previous_pixmap = None
 
-        # Ensure overlays and repaint
+        # Pan & Scan has been removed; simply ensure overlays are correct and
+        # the new image is displayed.
+
+        # After the display reflects the new pixmap (and optional pan), clean up
+        # PERF: Use update() instead of repaint() - repaint() is synchronous and blocks
+        # the UI thread for 50+ms. update() schedules an async repaint.
         try:
             self._ensure_overlay_stack(stage="transition_finish")
         except Exception:
             pass
-        self.update()
+        try:
+            self.update()  # Async repaint - doesn't block
+        except Exception:
+            pass
+        if transition_to_clean:
+            try:
+                transition_to_clean.cleanup()
+            except Exception as exc:
+                logger.warning("Error cleaning up transition: %s", exc)
 
         logger.debug("Transition completed, image displayed: %s", image_path)
         self.image_displayed.emit(image_path)
         self._pending_transition_finish_args = None
+        
+        # PERF: Log slow transition completions
+        _finish_elapsed = (time.time() - _finish_start) * 1000.0
+        if _finish_elapsed > 30.0 and is_perf_metrics_enabled():
+            logger.warning("[PERF] Slow _on_transition_finished: %.2fms", _finish_elapsed)
 
     def _start_transition_watchdog(self, overlay_key: Optional[str], transition: BaseTransition) -> None:
         """Start transition watchdog - delegates to TransitionController if available."""
@@ -1329,22 +1513,114 @@ class DisplayWidget(QWidget):
         return mapping.get(transition.__class__.__name__)
 
     def _position_spotify_visualizer(self) -> None:
-        """Position Spotify Beat Visualizer - delegates to WidgetManager."""
-        if self._widget_manager is not None:
-            self._widget_manager.position_spotify_visualizer(
-                getattr(self, "spotify_visualizer_widget", None),
-                getattr(self, "media_widget", None),
-                self.width(), self.height()
-            )
+        """Position Spotify Beat Visualizer just above the media widget."""
+
+        vis = getattr(self, "spotify_visualizer_widget", None)
+        media = getattr(self, "media_widget", None)
+        if vis is None or media is None:
+            return
+        try:
+            media_geom = media.geometry()
+        except Exception:
+            return
+        if media_geom.width() <= 0 or media_geom.height() <= 0:
+            return
+
+        gap = 20
+        height = max(vis.height(), vis.minimumHeight())
+        width = media_geom.width()
+        x = media_geom.left()
+        try:
+            position = getattr(media, "_position", None)
+        except Exception:
+            position = None
+
+        place_above = True
+        try:
+            if position in (MediaPosition.TOP_LEFT, MediaPosition.TOP_RIGHT):
+                place_above = False
+        except Exception:
+            place_above = True
+
+        if place_above:
+            y = media_geom.top() - gap - height
+        else:
+            y = media_geom.bottom() + gap
+
+        if y < 0:
+            y = 0
+        if x < 0:
+            x = 0
+        max_width = max(10, self.width() - x)
+        width = min(width, max_width)
+
+        try:
+            vis.setGeometry(x, y, width, height)
+            vis.raise_()
+            # Update pixel shift manager with new position
+            if self._pixel_shift_manager is not None:
+                self._pixel_shift_manager.update_original_position(vis)
+        except Exception:
+            pass
 
     def _position_spotify_volume(self) -> None:
-        """Position Spotify volume slider - delegates to WidgetManager."""
-        if self._widget_manager is not None:
-            self._widget_manager.position_spotify_volume(
-                getattr(self, "spotify_volume_widget", None),
-                getattr(self, "media_widget", None),
-                self.width(), self.height()
-            )
+        """Position Spotify volume slider beside the media widget.
+
+        The slider is placed on the side of the media card that has more
+        horizontal space available (left vs right).
+        """
+
+        vol = getattr(self, "spotify_volume_widget", None)
+        media = getattr(self, "media_widget", None)
+        if vol is None or media is None:
+            return
+        try:
+            media_geom = media.geometry()
+        except Exception:
+            return
+        if media_geom.width() <= 0 or media_geom.height() <= 0:
+            return
+
+        parent_width = max(1, self.width())
+        space_left = max(0, media_geom.left())
+        space_right = max(0, parent_width - media_geom.right())
+        gap = 16
+
+        width = max(vol.minimumWidth(), 32)
+
+        # Make the slider roughly match the media card height but with a small
+        # inset so the rounded ends are visible and do not collide with the
+        # card frame.
+        card_height = media_geom.height()
+        height = max(vol.minimumHeight(), card_height - 8)
+        height = min(height, card_height)
+
+        if space_right >= space_left:
+            x = media_geom.right() + gap
+            if x + width > parent_width:
+                x = max(0, parent_width - width)
+        else:
+            x = media_geom.left() - gap - width
+            if x < 0:
+                x = 0
+
+        # Vertically centre the slider relative to the media card.
+        y = media_geom.top() + max(0, (card_height - height) // 2)
+        max_y = max(0, self.height() - height)
+        if y > max_y:
+            y = max_y
+        if y < 0:
+            y = 0
+
+        try:
+            vol.setGeometry(x, y, width, height)
+            if vol.isVisible():
+                vol.raise_()
+            # Update pixel shift manager with new position
+            if self._pixel_shift_manager is not None:
+                self._pixel_shift_manager.update_original_position(vol)
+        except Exception:
+            pass
 
     def push_spotify_visualizer_frame(
         self,
@@ -2282,14 +2558,26 @@ class DisplayWidget(QWidget):
         # Phase 5: Use coordinator for global Ctrl state
         ctrl_mode_active = self._coordinator.ctrl_held
         if self._is_hard_exit_enabled() or ctrl_mode_active:
-            # Delegate volume drag to InputHandler
-            if self._input_handler is not None:
+            # Hard exit or Ctrl-held mode disables mouse-move exit entirely.
+            # Halo movement is handled centrally via the global event filter.
+            # While in this mode we also allow dragging over the Spotify
+            # volume widget so users can scrub volume without exiting.
+            vw = getattr(self, "spotify_volume_widget", None)
+            if vw is not None and vw.isVisible():
                 try:
-                    self._input_handler.route_volume_drag(
-                        event.pos(), getattr(self, "spotify_volume_widget", None)
-                    )
+                    from PySide6.QtCore import QPoint as _QPoint
+                except Exception:  # pragma: no cover - import guard
+                    _QPoint = None  # type: ignore[assignment]
+
+                try:
+                    if _QPoint is not None:
+                        geom = vw.geometry()
+                        local_pos = _QPoint(event.pos().x() - geom.x(), event.pos().y() - geom.y())
+                    else:
+                        local_pos = event.pos()
+                    vw.handle_drag(local_pos)
                 except Exception:
-                    pass
+                    logger.debug("[SPOTIFY_VOL] drag routing failed", exc_info=True)
             event.accept()
             return
 
@@ -2315,12 +2603,18 @@ class DisplayWidget(QWidget):
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         """Handle mouse release; end Spotify volume drags in interaction mode."""
+        # Phase 5: Use coordinator for global Ctrl state
         ctrl_mode_active = self._ctrl_held or self._coordinator.ctrl_held
         if self._is_hard_exit_enabled() or ctrl_mode_active:
-            if self._input_handler is not None:
-                self._input_handler.route_volume_release(getattr(self, "spotify_volume_widget", None))
+            vw = getattr(self, "spotify_volume_widget", None)
+            if vw is not None:
+                try:
+                    vw.handle_release()
+                except Exception:
+                    logger.debug("[SPOTIFY_VOL] release routing failed", exc_info=True)
             event.accept()
             return
+
         super().mouseReleaseEvent(event)
 
     def wheelEvent(self, event: QWheelEvent) -> None:
@@ -2556,6 +2850,19 @@ class DisplayWidget(QWidget):
         except Exception:
             logger.debug("[INPUT_HANDLER] Failed to show context menu", exc_info=True)
     
+    def _open_pending_reddit_url(self) -> None:
+        """Open any pending Reddit URL that was deferred in hard-exit mode.
+        
+        NOTE: This is a legacy/backup method. The primary URL opening is now
+        handled by DisplayManager.cleanup() which opens URLs AFTER all windows
+        are hidden but BEFORE QApplication.quit(). This prevents Firefox from
+        getting stuck behind still-visible screensaver windows.
+        """
+        # URL opening is now handled by DisplayManager.cleanup()
+        # This method is kept for backwards compatibility but should not
+        # normally be called since DisplayManager clears _pending_reddit_url
+        pass
+
     def focusOutEvent(self, event: QFocusEvent) -> None:  # type: ignore[override]
         """Diagnostic: log once if we lose focus while still visible.
 

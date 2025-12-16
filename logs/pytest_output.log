@@ -2573,3 +2573,340 @@ tests\test_media_widget.py
 .
 .
 .
+
+===== pytest run 2025-12-16 22:53:56 args=[] =====
+
+============================= test session starts =============================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collected 488 items / 4 skipped
+
+
+
+tests\test_animation.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                                      [  2%]
+
+
+tests\test_animation_set_target_fps.py 
+.
+                                 [  2%]
+
+
+tests\test_block_puzzle_flip.py 
+.
+.
+.
+.
+.
+.
+.
+                                  [  3%]
+
+
+tests\test_clock_integration_regression.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                  [  6%]
+
+
+tests\test_clock_widget.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                           [ 10%]
+
+
+tests\test_context_menu_effect_invalidation.py 
+F
+                         [ 10%]
+
+
+tests\test_ctrl_interaction_mode.py 
+F
+.
+.
+.
+.
+.
+.
+.
+.
+F
+F
+                          [ 12%]
+
+
+tests\test_diffuse_transition.py 
+.
+.
+.
+.
+.
+.
+.
+F
+.
+.
+.
+.
+.
+                           [ 15%]
+
+
+tests\test_dimming_and_interaction_fixes.py 
+.
+.
+.
+.
+F
+.
+F
+F
+.
+F
+F
+.
+.
+.
+F
+F
+F
+            [ 18%]
+
+
+tests\test_display_tab.py 
+.
+.
+F
+.
+.
+.
+.
+.
+.
+.
+F
+.
+.
+.
+                                 [ 21%]
+
+
+tests\test_engine_lifecycle.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                      [ 25%]
+
+
+tests\test_events.py 
+.
+.
+.
+.
+.
+F
+                                              [ 27%]
+
+
+tests\test_flicker_fix_integration.py 
+.
+.
+.
+.
+.
+.
+.
+                            [ 28%]
+
+
+tests\test_frame_timing_workload.py 
+.
+.
+                                   [ 28%]
+
+
+tests\test_gl_compositor_blinds.py 
+.
+                                     [ 29%]
+
+
+tests\test_gl_compositor_blockflip.py 
+.
+                                  [ 29%]
+
+
+tests\test_gl_compositor_blockspin.py 
+F
+                                  [ 29%]
+
+
+tests\test_gl_compositor_cleanup.py 
+.
+.
+                                   [ 29%]
+
+
+tests\test_gl_compositor_crossfade.py 
+.
+                                  [ 30%]
+
+
+tests\test_gl_compositor_diffuse.py 
+.
+                                    [ 30%]
+
+
+tests\test_gl_compositor_peel.py 
+.
+                                       [ 30%]
+
+
+tests\test_gl_compositor_raindrops.py 
+.
+                                  [ 30%]
+
+
+tests\test_gl_compositor_slide.py 
+.
+                                      [ 30%]
+
+
+tests\test_gl_compositor_wipe.py 
+.
+.
+.
+.
+.
+.
+                                  [ 32%]
+
+
+tests\test_gl_prewarm.py 
+.
+                                               [ 32%]
+
+
+tests\test_image_processor.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                   [ 37%]
+
+
+tests\test_image_queue.py 
+.
+.
+.
+F
+F
+F
+F
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+F
+.
+F
+.
+.
+.
+F
+                       [ 42%]
+
+
+tests\test_integration.py 
+.
+.
+.

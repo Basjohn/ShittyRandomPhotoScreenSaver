@@ -37,6 +37,20 @@ These are not guaranteed, but have the highest observed hit rate:
 3. Open the context menu on the same display.
 4. Rapidly open/close the context menu multiple times.
 
+### Critical Cross-Display Pattern (2025-12-16)
+**Key finding**: The corruption has a specific cross-display directionality:
+
+| Trigger Location | Corruption Location | Notes |
+|------------------|---------------------|-------|
+| Context menu on Display 1 | Display 0 ONLY | Display 1 never corrupts itself |
+| Context menu on Display 0 | NEITHER display | Display 0 menu is "safe" |
+
+This strongly suggests:
+- Display 0's compositor/effect cache is vulnerable to cross-display state changes
+- Display 1's menu operations trigger WM_WINDOWPOSCHANGING on Display 0
+- The invalidation/repair ordering may be wrong specifically for the "remote" display
+- Display 0 may be the primary display, and Qt's effect caching may have primary-display-specific behavior
+
 ---
 
 ## Log Evidence (screensaver_verbose.log)

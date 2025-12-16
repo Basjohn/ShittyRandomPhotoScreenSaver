@@ -270,6 +270,158 @@ class WidgetManager:
                 if is_verbose_logging():
                     logger.debug(f"[WIDGET_MANAGER] Fade callback failed for {name}", exc_info=True)
     
+    def raise_all_widgets(self) -> None:
+        """Raise all registered widgets above the compositor.
+        
+        CRITICAL: Must be called SYNCHRONOUSLY after transition.start() returns,
+        NOT via QTimer.singleShot(0, ...). Deferred raises allow the compositor
+        to render frames before widgets are raised above it.
+        """
+        for name, widget in self._widgets.items():
+            if widget is not None:
+                try:
+                    widget.raise_()
+                    # Handle clock timezone labels
+                    if hasattr(widget, '_tz_label') and widget._tz_label:
+                        widget._tz_label.raise_()
+                except Exception:
+                    pass
+
+    def position_spotify_visualizer(self, vis_widget, media_widget, parent_width: int, parent_height: int) -> None:
+        """Position Spotify visualizer relative to media widget."""
+        if vis_widget is None or media_widget is None:
+            return
+        try:
+            media_geom = media_widget.geometry()
+            if media_geom.width() <= 0 or media_geom.height() <= 0:
+                return
+            
+            gap = 20
+            height = max(vis_widget.height(), vis_widget.minimumHeight())
+            width = media_geom.width()
+            x = media_geom.left()
+            
+            position = getattr(media_widget, "_position", None)
+            place_above = position not in ("TOP_LEFT", "TOP_RIGHT") if position else True
+            
+            if place_above:
+                y = media_geom.top() - gap - height
+            else:
+                y = media_geom.bottom() + gap
+            
+            y = max(0, y)
+            x = max(0, x)
+            width = min(width, max(10, parent_width - x))
+            
+            vis_widget.setGeometry(x, y, width, height)
+            vis_widget.raise_()
+        except Exception:
+            pass
+
+    def position_spotify_volume(self, vol_widget, media_widget, parent_width: int, parent_height: int) -> None:
+        """Position Spotify volume slider beside media widget."""
+        if vol_widget is None or media_widget is None:
+            return
+        try:
+            media_geom = media_widget.geometry()
+            if media_geom.width() <= 0 or media_geom.height() <= 0:
+                return
+            
+            gap = 16
+            width = max(vol_widget.minimumWidth(), 32)
+            card_height = media_geom.height()
+            height = max(vol_widget.minimumHeight(), card_height - 8)
+            height = min(height, card_height)
+            
+            space_left = max(0, media_geom.left())
+            space_right = max(0, parent_width - media_geom.right())
+            
+            if space_right >= space_left:
+                x = media_geom.right() + gap
+                if x + width > parent_width:
+                    x = max(0, parent_width - width)
+            else:
+                x = media_geom.left() - gap - width
+                x = max(0, x)
+            
+            y = media_geom.top() + max(0, (card_height - height) // 2)
+            y = max(0, min(y, max(0, parent_height - height)))
+            
+            vol_widget.setGeometry(x, y, width, height)
+            if vol_widget.isVisible():
+                vol_widget.raise_()
+        except Exception:
+            pass
+
+    def apply_widget_stacking(self, widget_list: list) -> None:
+        """Apply vertical stacking offsets to widgets sharing the same position."""
+        from PySide6.QtCore import QPoint
+        
+        position_groups: dict = {}
+        for i, (widget, attr_name) in enumerate(widget_list):
+            if widget is None:
+                continue
+            pos_key = self._get_widget_position_key(widget)
+            if not pos_key:
+                continue
+            if pos_key not in position_groups:
+                position_groups[pos_key] = []
+            position_groups[pos_key].append((widget, attr_name, i))
+        
+        spacing = 10
+        for pos_key, widgets_at_pos in position_groups.items():
+            if len(widgets_at_pos) <= 1:
+                if widgets_at_pos and hasattr(widgets_at_pos[0][0], 'set_stack_offset'):
+                    widgets_at_pos[0][0].set_stack_offset(QPoint(0, 0))
+                continue
+            
+            stack_down = 'top' in pos_key
+            widgets_at_pos.sort(key=lambda x: x[2], reverse=not stack_down)
+            
+            cumulative_offset = 0
+            for i, (widget, attr_name, _) in enumerate(widgets_at_pos):
+                if i == 0:
+                    if hasattr(widget, 'set_stack_offset'):
+                        widget.set_stack_offset(QPoint(0, 0))
+                    continue
+                
+                prev_widget = widgets_at_pos[i - 1][0]
+                prev_height = self._get_widget_stack_height(prev_widget)
+                cumulative_offset += prev_height + spacing
+                offset_y = cumulative_offset if stack_down else -cumulative_offset
+                
+                if hasattr(widget, 'set_stack_offset'):
+                    widget.set_stack_offset(QPoint(0, offset_y))
+
+    def _get_widget_position_key(self, widget) -> str:
+        """Get normalized position key from widget."""
+        try:
+            if hasattr(widget, '_position'):
+                pos = widget._position
+                if hasattr(pos, 'name'):
+                    return pos.name.lower()
+                return str(pos).lower().replace(' ', '_')
+            if hasattr(widget, 'get_position'):
+                pos = widget.get_position()
+                if hasattr(pos, 'name'):
+                    return pos.name.lower()
+                return str(pos).lower().replace(' ', '_')
+        except Exception:
+            pass
+        return ""
+
+    def _get_widget_stack_height(self, widget) -> int:
+        """Get widget height for stacking calculations."""
+        try:
+            if hasattr(widget, 'get_bounding_size'):
+                return widget.get_bounding_size().height()
+            hint = widget.sizeHint()
+            if hint.isValid() and hint.height() > 0:
+                return hint.height()
+            return widget.height() if widget.height() > 0 else 100
+        except Exception:
+            return 100
+    
     def cleanup(self) -> None:
         """Clean up all managed widgets."""
         if self._raise_timer is not None:
@@ -300,15 +452,32 @@ class WidgetManager:
                     "menu_before_popup", "focus_in"). Menu-related reasons
                     trigger stronger invalidation with effect recreation.
         """
+        screen_idx = "?"
+        try:
+            screen_idx = getattr(self._parent, "screen_index", "?")
+        except Exception:
+            pass
+        
         if win_diag_logger.isEnabledFor(logging.DEBUG):
-            try:
-                screen_idx = getattr(self._parent, "screen_index", "?")
-                win_diag_logger.debug(
-                    "[EFFECT_INVALIDATE] screen=%s reason=%s widget_count=%d",
-                    screen_idx, reason, len(self._widgets),
-                )
-            except Exception:
-                pass
+            # Phase E instrumentation: log effect state before invalidation
+            effect_states = []
+            for name, widget in self._widgets.items():
+                if widget is None:
+                    continue
+                try:
+                    eff = widget.graphicsEffect()
+                    if eff is not None:
+                        eff_type = type(eff).__name__
+                        eff_id = id(eff)
+                        enabled = eff.isEnabled() if hasattr(eff, 'isEnabled') else '?'
+                        effect_states.append(f"{name}:{eff_type}@{eff_id:#x}(en={enabled})")
+                except Exception:
+                    pass
+            
+            win_diag_logger.debug(
+                "[EFFECT_INVALIDATE] screen=%s reason=%s widgets=%d effects=[%s]",
+                screen_idx, reason, len(self._widgets), ", ".join(effect_states) if effect_states else "none",
+            )
 
         # Menu-related triggers warrant stronger invalidation (effect recreation)
         try:

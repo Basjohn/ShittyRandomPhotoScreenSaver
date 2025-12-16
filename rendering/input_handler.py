@@ -657,3 +657,81 @@ class InputHandler(QObject):
         except Exception:
             pass
         return False
+
+    def route_volume_drag(self, pos: QPoint, spotify_volume_widget) -> bool:
+        """Route drag events to Spotify volume widget."""
+        if spotify_volume_widget is None or not spotify_volume_widget.isVisible():
+            return False
+        try:
+            geom = spotify_volume_widget.geometry()
+            local_pos = QPoint(pos.x() - geom.x(), pos.y() - geom.y())
+            if hasattr(spotify_volume_widget, 'handle_drag'):
+                spotify_volume_widget.handle_drag(local_pos)
+                return True
+        except Exception:
+            pass
+        return False
+
+    def route_volume_release(self, spotify_volume_widget) -> bool:
+        """Route release events to Spotify volume widget."""
+        if spotify_volume_widget is None:
+            return False
+        try:
+            if hasattr(spotify_volume_widget, 'handle_release'):
+                spotify_volume_widget.handle_release()
+                return True
+        except Exception:
+            pass
+        return False
+
+    def route_wheel_event(
+        self,
+        pos: QPoint,
+        delta_y: int,
+        spotify_volume_widget,
+        media_widget,
+        spotify_visualizer_widget,
+    ) -> bool:
+        """
+        Route wheel events to Spotify volume widget in interaction mode.
+        
+        Returns:
+            True if wheel was handled
+        """
+        vw = spotify_volume_widget
+        if vw is None or not vw.isVisible():
+            return False
+        
+        try:
+            geom_vol = vw.geometry()
+            over_volume = geom_vol.contains(pos)
+            
+            over_media = False
+            if media_widget is not None and media_widget.isVisible():
+                try:
+                    over_media = media_widget.geometry().contains(pos)
+                except Exception:
+                    pass
+            
+            over_vis = False
+            if spotify_visualizer_widget is not None and spotify_visualizer_widget.isVisible():
+                try:
+                    over_vis = spotify_visualizer_widget.geometry().contains(pos)
+                except Exception:
+                    pass
+            
+            local_pos = None
+            if over_volume:
+                local_pos = QPoint(pos.x() - geom_vol.x(), pos.y() - geom_vol.y())
+            elif over_media or over_vis:
+                # Map wheel to volume slider's centre X
+                center_x = vw.rect().center().x()
+                local_pos = QPoint(center_x, pos.y() - geom_vol.y())
+            
+            if local_pos is not None:
+                if hasattr(vw, 'handle_wheel') and vw.handle_wheel(local_pos, delta_y):
+                    return True
+        except Exception:
+            pass
+        
+        return False
