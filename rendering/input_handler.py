@@ -550,3 +550,110 @@ class InputHandler(QObject):
                         pass
             except Exception:
                 continue
+
+    # =========================================================================
+    # Widget Click Routing
+    # =========================================================================
+
+    def route_widget_click(
+        self,
+        event: QMouseEvent,
+        spotify_volume_widget,
+        media_widget,
+        reddit_widget,
+        reddit2_widget,
+    ) -> tuple:
+        """
+        Route clicks to interactive widgets in interaction mode.
+        
+        Returns:
+            Tuple of (handled, reddit_handled)
+        """
+        handled = False
+        reddit_handled = False
+        pos = event.pos()
+        button = event.button()
+        
+        # Spotify volume widget
+        if spotify_volume_widget is not None:
+            try:
+                vw = spotify_volume_widget
+                if vw.isVisible() and vw.geometry().contains(pos):
+                    geom = vw.geometry()
+                    local_pos = QPoint(pos.x() - geom.x(), pos.y() - geom.y())
+                    if hasattr(vw, 'handle_press') and vw.handle_press(local_pos, button):
+                        handled = True
+            except Exception:
+                pass
+        
+        # Media widget transport controls
+        if not handled and media_widget is not None:
+            try:
+                mw = media_widget
+                if mw.isVisible() and mw.geometry().contains(pos):
+                    from PySide6.QtCore import Qt as _Qt
+                    if button == _Qt.MouseButton.LeftButton:
+                        handled = self._route_media_left_click(mw, pos)
+                    elif button == _Qt.MouseButton.RightButton:
+                        try:
+                            mw.next_track()
+                            handled = True
+                        except Exception:
+                            pass
+                    elif button == _Qt.MouseButton.MiddleButton:
+                        try:
+                            mw.previous_track()
+                            handled = True
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+        
+        # Reddit widgets
+        for rw in [reddit_widget, reddit2_widget]:
+            if not handled and rw is not None:
+                try:
+                    if rw.isVisible() and rw.geometry().contains(pos):
+                        geom = rw.geometry()
+                        local_pos = QPoint(pos.x() - geom.x(), pos.y() - geom.y())
+                        if hasattr(rw, 'handle_click') and rw.handle_click(local_pos):
+                            handled = True
+                            reddit_handled = True
+                except Exception:
+                    pass
+        
+        return handled, reddit_handled
+
+    def _route_media_left_click(self, mw, pos: QPoint) -> bool:
+        """Route left click to media widget transport controls."""
+        try:
+            geom = mw.geometry()
+            local_x = pos.x() - geom.x()
+            local_y = pos.y() - geom.y()
+            height = max(1, mw.height())
+            width = max(1, mw.width())
+            
+            # Controls row is in the bottom 60px
+            controls_row_height = 60
+            controls_row_top = height - controls_row_height
+            
+            if local_y >= controls_row_top:
+                margins = mw.contentsMargins()
+                content_left = margins.left()
+                content_right = width - margins.right()
+                content_width = max(1, content_right - content_left)
+                x_in_content = max(0, min(content_width, local_x - content_left))
+                third = content_width / 3.0
+                
+                if x_in_content < third:
+                    mw.previous_track()
+                    return True
+                elif x_in_content < 2.0 * third:
+                    mw.play_pause()
+                    return True
+                else:
+                    mw.next_track()
+                    return True
+        except Exception:
+            pass
+        return False

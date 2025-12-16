@@ -1,0 +1,30 @@
+21:50:44 - root                           - INFO     - ============================================================
+21:50:44 - root                           - INFO     - [2 Suppressed: CHECK LOG]
+21:50:44 - __main__                       - INFO     - [PERF] GC tracking enabled
+21:50:44 - __main__                       - INFO     - [5 Suppressed: CHECK LOG]
+21:50:44 - __main__                       - DEBUG    - Command-line arguments: ['main.py', '--debug']
+21:50:44 - __main__                       - DEBUG    - [1 Suppressed: CHECK LOG]
+21:50:44 - __main__                       - INFO     - No arguments provided in script mode, defaulting to RUN mode
+21:50:44 - __main__                       - INFO     - [3 Suppressed: CHECK LOG]
+21:50:45 - __main__                       - DEBUG    - High DPI scaling enabled
+21:50:45 - __main__                       - INFO     - Starting screensaver in RUN mode
+21:50:45 - __main__                       - INFO     - [2 Suppressed: CHECK LOG]
+21:50:45 - SettingsManager                - INFO     - SettingsManager initialized
+21:50:45 - engine.screensaver             - INFO     - ScreensaverEngine created
+21:50:45 - engine.screensaver             - INFO     - [2 Suppressed: CHECK LOG]
+21:50:45 - engine.screensaver             - INFO     - Initializing Screensaver Engine ?????
+21:50:45 - engine.screensaver             - INFO     - [2 Suppressed: CHECK LOG]
+21:50:45 - EventSystem                    - INFO     - EventSystem initialized
+21:50:45 - engine.screensaver             - DEBUG    - EventSystem initialized
+21:50:45 - resources.manager              - DEBUG    - ResourceManager initialized
+21:50:45 - engine.screensaver             - DEBUG    - ResourceManager initialized
+21:50:45 - core.threading.manager         - INFO     - Initialized io pool with 4 workers
+21:50:45 - core.threading.manager         - INFO     - [2 Suppressed: CHECK LOG]
+21:50:45 - engine.screensaver             - DEBUG    - ThreadManager initialized
+21:50:45 - SettingsManager                - INFO     - SettingsManager initialized
+21:50:45 - engine.screensaver             - DEBUG    - SettingsManager initialized
+21:50:45 - engine.screensaver             - DEBUG    - [2 Suppressed: CHECK LOG]
+21:50:45 - engine.screensaver             - INFO     - Core systems initialized successfully
+21:50:45 - engine.screensaver             - INFO     - [6 Suppressed: CHECK LOG]
+21:50:45 - sources.base_provider.folder.PERSONALSET - INFO     - Created FolderSource for 'C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET' (recursive=True)
+21:50:45 - engine.screensaver             - INFO     - Folder source added: C:/Users/Basjohn/Documents/[4] WALLPAPERS/PERSONALSET

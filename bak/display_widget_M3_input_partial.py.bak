@@ -40,6 +40,7 @@ from widgets.pixel_shift_manager import PixelShiftManager
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
 from widgets.spotify_volume_widget import SpotifyVolumeWidget
+from widgets.shadow_utils import apply_widget_shadow
 from widgets.context_menu import ScreensaverContextMenu
 from widgets.cursor_halo import CursorHaloWidget
 from rendering.widget_setup import parse_color_to_qcolor
@@ -2748,40 +2749,264 @@ class DisplayWidget(QWidget):
             # Normal mode without Ctrl - fall through to exit
         
         if self._is_hard_exit_enabled() or ctrl_mode_active:
-            # Delegate widget click routing to InputHandler
+            # In hard-exit or Ctrl-held interaction mode, route clicks over
+            # interactive widgets (e.g. media / Spotify volume / reddit widget). Media
+            # controls keep the screensaver active; Reddit links open the
+            # browser and may optionally request a clean exit depending on
+            # settings and hard-exit mode.
             handled = False
             reddit_handled = False
-            
-            if self._input_handler is not None:
+
+            # Spotify volume widget (vertical slider beside media card)
+            vw = getattr(self, "spotify_volume_widget", None)
+            try:
+                if vw is not None and vw.isVisible() and vw.geometry().contains(event.pos()):
+                    try:
+                        from PySide6.QtCore import QPoint as _QPoint
+                    except Exception:  # pragma: no cover - import guard
+                        _QPoint = None  # type: ignore[assignment]
+
+                    if _QPoint is not None:
+                        geom = vw.geometry()
+                        local_pos = _QPoint(event.pos().x() - geom.x(), event.pos().y() - geom.y())
+                    else:
+                        local_pos = event.pos()
+
+                    try:
+                        if vw.handle_press(local_pos, event.button()):
+                            handled = True
+                    except Exception:
+                        logger.debug("[SPOTIFY_VOL] click routing failed", exc_info=True)
+            except Exception:
+                logger.debug("[SPOTIFY_VOL] Error while routing click to volume widget", exc_info=True)
+
+            # Media widget (Spotify-style transport controls)
+            mw = getattr(self, "media_widget", None)
+            try:
+                if mw is not None and mw.isVisible() and mw.geometry().contains(event.pos()):
+                    button = event.button()
+                    try:
+                        from PySide6.QtCore import Qt as _Qt
+                    except Exception:  # pragma: no cover - import guard
+                        _Qt = Qt  # type: ignore[assignment]
+
+                    if button == _Qt.MouseButton.LeftButton:
+                        # Map left-clicks to previous / play-pause /
+                        # next based on horizontal thirds of the Spotify
+                        # widget's *text content* area (between
+                        # contentsMargins.left/right), so the visual
+                        # arrows and centre glyph match their actions
+                        # even when there is a large artwork margin on
+                        # the right.
+                        #
+                        # IMPORTANT: Only process clicks in the controls row
+                        # area (bottom ~60px of the widget). Clicks in the
+                        # upper portion of the widget should not trigger
+                        # transport controls.
+                        try:
+                            geom = mw.geometry()
+                            local_x = event.pos().x() - geom.x()
+                            local_y = event.pos().y() - geom.y()
+                            height = max(1, mw.height())
+                            width = max(1, mw.width())
+                            
+                            # Controls row is in the bottom portion of the widget
+                            # Only process clicks in the bottom 60px (controls area)
+                            controls_row_height = 60
+                            controls_row_top = height - controls_row_height
+                            
+                            if local_y >= controls_row_top:
+                                # Click is in the controls row area
+                                margins = mw.contentsMargins()
+                                content_left = margins.left()
+                                content_right = width - margins.right()
+                                content_width = max(1, content_right - content_left)
+                                x_in_content = local_x - content_left
+                                # Clamp so clicks slightly inside the card
+                                # margins map to the nearest control.
+                                if x_in_content < 0:
+                                    x_in_content = 0
+                                elif x_in_content > content_width:
+                                    x_in_content = content_width
+                                third = content_width / 3.0
+                                if x_in_content < third:
+                                    logger.debug(
+                                        "[MEDIA] click mapped to PREVIOUS: pos=%s geom=%s local_x=%d local_y=%d x_in_content=%d width=%d content_left=%d content_right=%d third=%.2f",
+                                        event.pos(),
+                                        geom,
+                                        local_x,
+                                        local_y,
+                                        x_in_content,
+                                        width,
+                                        content_left,
+                                        content_right,
+                                        third,
+                                    )
+                                    mw.previous_track()
+                                    handled = True
+                                elif x_in_content < 2.0 * third:
+                                    logger.debug(
+                                        "[MEDIA] click mapped to PLAY/PAUSE: pos=%s geom=%s local_x=%d local_y=%d x_in_content=%d width=%d content_left=%d content_right=%d third=%.2f",
+                                        event.pos(),
+                                        geom,
+                                        local_x,
+                                        local_y,
+                                        x_in_content,
+                                        width,
+                                        content_left,
+                                        content_right,
+                                        third,
+                                    )
+                                    mw.play_pause()
+                                    handled = True
+                                else:
+                                    logger.debug(
+                                        "[MEDIA] click mapped to NEXT: pos=%s geom=%s local_x=%d local_y=%d x_in_content=%d width=%d content_left=%d content_right=%d third=%.2f",
+                                        event.pos(),
+                                        geom,
+                                        local_x,
+                                        local_y,
+                                        x_in_content,
+                                        width,
+                                        content_left,
+                                        content_right,
+                                        third,
+                                    )
+                                    mw.next_track()
+                                    handled = True
+                            # else: Click is above controls row - don't handle as transport control
+                        except Exception:
+                            logger.debug("[MEDIA] left-click media routing failed", exc_info=True)
+                    elif button == _Qt.MouseButton.RightButton:
+                        try:
+                            mw.next_track()
+                            handled = True
+                        except Exception:
+                            logger.debug("[MEDIA] next_track handling failed from mousePressEvent", exc_info=True)
+                    elif button == _Qt.MouseButton.MiddleButton:
+                        try:
+                            mw.previous_track()
+                            handled = True
+                        except Exception:
+                            logger.debug("[MEDIA] previous_track handling failed from mousePressEvent", exc_info=True)
+            except Exception:
+                logger.debug("[MEDIA] Error while routing click to media widget", exc_info=True)
+
+            # Reddit widgets: map clicks to open links in the browser when
+            # interaction mode is active. When hard-exit is disabled,
+            # Reddit clicks trigger a clean exit (controlled by the per-widget
+            # "exit_on_click" setting). In hard-exit mode, we DEFER the browser
+            # open until the user actually exits - this avoids the edge case
+            # where Firefox gets stuck behind the screensaver.
+            # Check BOTH reddit_widget and reddit2_widget.
+            for reddit_attr in ("reddit_widget", "reddit2_widget"):
+                if handled:
+                    break
+                rw = getattr(self, reddit_attr, None)
                 try:
-                    handled, reddit_handled = self._input_handler.route_widget_click(
-                        event,
-                        getattr(self, "spotify_volume_widget", None),
-                        getattr(self, "media_widget", None),
-                        getattr(self, "reddit_widget", None),
-                        getattr(self, "reddit2_widget", None),
-                    )
+                    if rw is not None and rw.isVisible() and rw.geometry().contains(event.pos()):
+                        try:
+                            from PySide6.QtCore import QPoint as _QPoint
+                        except Exception:  # pragma: no cover - import guard
+                            _QPoint = None  # type: ignore[assignment]
+
+                        geom = rw.geometry()
+                        if _QPoint is not None:
+                            local_pos = _QPoint(event.pos().x() - geom.x(), event.pos().y() - geom.y())
+                        else:
+                            local_pos = event.pos()
+
+                        try:
+                            hard_exit_enabled = self._is_hard_exit_enabled()
+                        except Exception:
+                            hard_exit_enabled = False
+
+                        try:
+                            if hasattr(rw, "handle_click"):
+                                # In hard-exit mode, defer browser open to exit time UNLESS
+                                # this is NOT the primary display AND there's a free display available
+                                try:
+                                    from PySide6.QtGui import QGuiApplication
+                                    is_primary_display = (self._screen == QGuiApplication.primaryScreen())
+                                    
+                                    # Check if all displays are occupied by the screensaver
+                                    all_displays_taken = False
+                                    total_screens = len(QGuiApplication.screens())
+                                    # Simple heuristic: if we have multiple screens and hard-exit is enabled,
+                                    # assume all displays might be taken for safety
+                                    all_displays_taken = total_screens > 1
+                                    logger.debug(f"[REDDIT] Display detection: total_screens={total_screens}, all_taken={all_displays_taken}")
+                                except Exception:
+                                    # If we can't determine, assume all displays taken for safety
+                                    is_primary_display = True  # Conservative fallback
+                                    all_displays_taken = True
+                                
+                                if hard_exit_enabled and not is_primary_display and not all_displays_taken:
+                                    # Secondary display in hard-exit mode with free display: open immediately on primary display
+                                    result = rw.handle_click(local_pos, deferred=False)
+                                    if isinstance(result, bool) and result:
+                                        handled = True
+                                        reddit_handled = True
+                                        logger.info("[REDDIT] Opened URL immediately on primary display")
+                                elif hard_exit_enabled:
+                                    # Primary display in hard-exit mode OR all displays taken: defer URL
+                                    result = rw.handle_click(local_pos, deferred=True)
+                                    if isinstance(result, str):
+                                        # Store URL to open when user exits
+                                        self._pending_reddit_url = result
+                                        handled = True
+                                        reddit_handled = True
+                                        if all_displays_taken:
+                                            logger.info("[REDDIT] URL deferred for exit (all displays taken): %s", result)
+                                        else:
+                                            logger.info("[REDDIT] URL deferred for exit (primary display): %s", result)
+                                else:
+                                    # Normal mode: open immediately
+                                    if rw.handle_click(local_pos):
+                                        handled = True
+                                        reddit_handled = True
+                        except Exception:
+                            logger.debug("[REDDIT] click routing failed for %s", reddit_attr, exc_info=True)
                 except Exception:
-                    logger.debug("[INPUT] Widget click routing failed", exc_info=True)
+                    logger.debug("[REDDIT] Error while routing click to %s", reddit_attr, exc_info=True)
 
             if handled:
-                # Request exit after Reddit clicks when not in hard-exit mode
+                # Request a clean exit after Reddit clicks when hard-exit mode
+                # is disabled and the widget is configured to exit-on-click.
+                should_exit = False
                 if reddit_handled and getattr(self, "_reddit_exit_on_click", True):
-                    if not self._is_hard_exit_enabled():
-                        logger.info("[REDDIT] Click handled; requesting screensaver exit")
-                        def _do_exit_after_reddit() -> None:
-                            if not self._exiting:
-                                self._exiting = True
-                                try:
-                                    self.hide()
-                                except Exception:
-                                    pass
-                                self.exit_requested.emit()
-                        QTimer.singleShot(400, _do_exit_after_reddit)
+                    try:
+                        hard_exit_enabled = self._is_hard_exit_enabled()
+                    except Exception:
+                        hard_exit_enabled = False
+                    if not hard_exit_enabled:
+                        should_exit = True
+
+                if should_exit:
+                    logger.info("[REDDIT] Click handled; requesting screensaver exit")
+                    try:
+                        from PySide6.QtCore import QTimer as _QTimer
+                    except Exception:  # pragma: no cover - import guard
+                        _QTimer = None  # type: ignore[assignment]
+
+                    def _do_exit_after_reddit() -> None:
+                        if not self._exiting:
+                            self._exiting = True
+                            try:
+                                self.hide()
+                            except Exception:
+                                pass
+                            self.exit_requested.emit()
+
+                    if _QTimer is not None:
+                        _QTimer.singleShot(400, _do_exit_after_reddit)
+                    else:
+                        _do_exit_after_reddit()
                 event.accept()
                 return
 
-            # In interaction mode, don't exit on unhandled clicks
+            # Even when no widget handled the click, do not exit while in
+            # hard-exit / Ctrl-held interaction mode.
             event.accept()
             return
 
