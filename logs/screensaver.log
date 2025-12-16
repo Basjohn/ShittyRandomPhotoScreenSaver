@@ -19067,3 +19067,654 @@
 2025-12-16 22:53:35 - win_diag                       - DEBUG    - [WIN_STATE] nativeEvent screen=1 hwnd=0x140ec2 visible=True active=False windowState=-1 updatesEnabled=True msg=WM_WINDOWPOSCHANGING wParam=0 lParam=332752765024 hwnd=?
 2025-12-16 22:53:35 - win_diag                       - DEBUG    - [WIN_STATE] nativeEvent screen=0 hwnd=0xd50ada visible=False active=False windowState=-1 updatesEnabled=True msg=WM_WINDOWPOSCHANGED wParam=0 lParam=332752765024 hwnd=?
 2025-12-16 22:53:35 - win_diag                       - DEBUG    - [WIN_STATE] nativeEvent screen=1 hwnd=0x140ec2 visible=True active=False windowState=-1 updatesEnabled=True msg=WM_WINDOWPOSCHANGED wParam=0 lParam=332752765024 hwnd=?
+2025-12-17 01:02:22 - root                           - INFO     - ============================================================
+2025-12-17 01:02:22 - root                           - INFO     - Screensaver logging initialized (debug=True, verbose=False)
+2025-12-17 01:02:22 - root                           - INFO     - ============================================================
+2025-12-17 01:02:22 - __main__                       - INFO     - ============================================================
+2025-12-17 01:02:22 - __main__                       - INFO     - ShittyRandomPhotoScreenSaver Starting
+2025-12-17 01:02:22 - __main__                       - INFO     - ============================================================
+2025-12-17 01:02:22 - __main__                       - INFO     - Running in script mode - cleaning pycache on startup
+2025-12-17 01:02:22 - __main__                       - INFO     - Removed 24 __pycache__ directories
+2025-12-17 01:02:22 - __main__                       - DEBUG    - Command-line arguments: ['main.py', '--debug']
+2025-12-17 01:02:22 - __main__                       - DEBUG    - Filtered arguments: ['main.py']
+2025-12-17 01:02:22 - __main__                       - INFO     - No arguments provided in script mode, defaulting to RUN mode
+2025-12-17 01:02:22 - __main__                       - INFO     - Global QSurfaceFormat configured (swap=SwapBehavior.DoubleBuffer, interval=1, depth=24, stencil=8)
+2025-12-17 01:02:23 - __main__                       - INFO     - Qt image allocation limit: 1GB (supports 8K+ images, per-image on-demand)
+2025-12-17 01:02:23 - __main__                       - INFO     - Qt Application created: SRPSS
+2025-12-17 01:02:23 - __main__                       - DEBUG    - High DPI scaling enabled
+2025-12-17 01:02:23 - __main__                       - INFO     - Starting screensaver in RUN mode
+2025-12-17 01:02:23 - __main__                       - INFO     - Windows timer resolution set to 1ms for smooth animations
+2025-12-17 01:02:23 - __main__                       - INFO     - Initializing screensaver engine
+2025-12-17 01:02:23 - SettingsManager                - INFO     - SettingsManager initialized
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - ScreensaverEngine created
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - Engine state: UNINITIALIZED -> INITIALIZING
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - ============================================================
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - Initializing Screensaver Engine 🚦🚦🚦🚦🚦
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - ============================================================
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - Initializing core systems...
+2025-12-17 01:02:23 - EventSystem                    - INFO     - EventSystem initialized
+2025-12-17 01:02:23 - engine.screensaver             - DEBUG    - EventSystem initialized
+2025-12-17 01:02:23 - resources.manager              - DEBUG    - ResourceManager initialized
+2025-12-17 01:02:23 - engine.screensaver             - DEBUG    - ResourceManager initialized
+2025-12-17 01:02:23 - core.threading.manager         - INFO     - Initialized io pool with 4 workers
+2025-12-17 01:02:23 - core.threading.manager         - INFO     - Initialized compute pool with 23 workers
+2025-12-17 01:02:23 - core.threading.manager         - INFO     - ThreadManager initialized with IO=4, COMPUTE=23 workers
+2025-12-17 01:02:23 - engine.screensaver             - DEBUG    - ThreadManager initialized
+2025-12-17 01:02:23 - SettingsManager                - INFO     - SettingsManager initialized
+2025-12-17 01:02:23 - engine.screensaver             - DEBUG    - SettingsManager initialized
+2025-12-17 01:02:23 - engine.screensaver             - DEBUG    - SettingsManager signal bridged to EventSystem
+2025-12-17 01:02:23 - engine.screensaver             - DEBUG    - Transition cycle index synced to 10 (Crumble)
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - Core systems initialized successfully
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - Loading settings...
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - Image rotation interval: 60s
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - Display mode: fill
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - Shuffle enabled: true
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - Prefetch ahead: 5
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - Initializing image sources...
+2025-12-17 01:02:23 - sources.base_provider.folder.PERSONALSET - INFO     - Created FolderSource for 'C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET' (recursive=True)
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - Folder source added: C:/Users/Basjohn/Documents/[4] WALLPAPERS/PERSONALSET
+2025-12-17 01:02:23 - sources.rss_source             - DEBUG    - Loaded 97 valid images from cache
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - Pre-loaded 97 cached RSS images
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - RSS source added: https://www.bing.com/HPImageArchive.aspx?format=rss&idx=0&n=8&mkt=en-US
+2025-12-17 01:02:23 - sources.rss_source             - DEBUG    - Loaded 97 valid images from cache
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - Pre-loaded 97 cached RSS images
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - RSS source added: https://www.nasa.gov/feeds/iotd-feed
+2025-12-17 01:02:23 - sources.rss_source             - DEBUG    - Loaded 97 valid images from cache
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - Pre-loaded 97 cached RSS images
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/EarthPorn/top/.json?t=day&limit=25
+2025-12-17 01:02:23 - sources.rss_source             - DEBUG    - Loaded 97 valid images from cache
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - Pre-loaded 97 cached RSS images
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25
+2025-12-17 01:02:23 - sources.rss_source             - DEBUG    - Loaded 97 valid images from cache
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - Pre-loaded 97 cached RSS images
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/CityPorn/top/.json?t=day&limit=25
+2025-12-17 01:02:23 - sources.rss_source             - DEBUG    - Loaded 97 valid images from cache
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - Pre-loaded 97 cached RSS images
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/ArchitecturePorn/top/.json?t=day&limit=25
+2025-12-17 01:02:23 - sources.rss_source             - DEBUG    - Loaded 97 valid images from cache
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - Pre-loaded 97 cached RSS images
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/WaterPorn/top/.json?t=day&limit=25
+2025-12-17 01:02:23 - sources.rss_source             - DEBUG    - Loaded 97 valid images from cache
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - Pre-loaded 97 cached RSS images
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limit=25
+2025-12-17 01:02:23 - sources.rss_source             - DEBUG    - Loaded 97 valid images from cache
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - Pre-loaded 97 cached RSS images
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=25
+2025-12-17 01:02:23 - sources.rss_source             - DEBUG    - Loaded 97 valid images from cache
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - Pre-loaded 97 cached RSS images
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/AbandonedPorn/top/.json?t=day&limit=25
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - Initialized 11 image sources (1 folder, 10 RSS)
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - Building image queue...
+2025-12-17 01:02:23 - engine.image_queue             - INFO     - ImageQueue initialized (shuffle=true, history_size=50, local_ratio=85%)
+2025-12-17 01:02:23 - sources.base_provider.folder.PERSONALSET - INFO     - Scanning folder: C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET
+2025-12-17 01:02:23 - sources.base_provider.folder.PERSONALSET - INFO     - Scan complete: 558 images found (558 files scanned) in 0.09s
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - Added 558 images from C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET
+2025-12-17 01:02:23 - engine.image_queue             - INFO     - Added 558 images (local=558, rss=0). Pools: local=558, rss=0
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - Queue initialized with 558 local images
+2025-12-17 01:02:23 - engine.image_queue             - INFO     - Added 970 images (local=0, rss=970). Pools: local=558, rss=970
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - Pre-loaded 970 cached RSS images for immediate use
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - Starting async RSS load for 10 sources...
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - Image queue ready with 1528 images
+2025-12-17 01:02:23 - engine.screensaver             - DEBUG    - Queue stats: {'total_images': 1528, 'remaining': 1528, 'current_index': -1, 'wrap_count': 0, 'history_size': 0, 'shuffle_enabled': True, 'current_image': None, 'local_pool_total': 558, 'local_pool_remaining': 558, 'rss_pool_total': 970, 'rss_pool_remaining': 970, 'local_ratio_setting': 85, 'local_shown': 0, 'rss_shown': 0, 'actual_local_pct': 0, 'actual_rss_pct': 0}
+2025-12-17 01:02:23 - utils.image_cache              - INFO     - ImageCache initialized: max_items=24, max_memory=1024MB
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - Image prefetcher initialized (ahead=5, max_concurrent=2)
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - Initializing display...
+2025-12-17 01:02:23 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 1/10: https://www.bing.com/HPImageArchive.aspx?format=rss&idx=0&n=...
+2025-12-17 01:02:23 - engine.display                 - INFO     - Monitor detection enabled (2 screens)
+2025-12-17 01:02:23 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2025-12-17 01:02:23 - engine.display                 - INFO     - DisplayManager initialized (mode=fill, same_image=false)
+2025-12-17 01:02:23 - sources.rss_source             - DEBUG    - Parsing feed: https://www.bing.com/HPImageArchive.aspx?format=rss&idx=0&n=8&mkt=en-US
+2025-12-17 01:02:23 - engine.display                 - INFO     - Initializing displays for 2 screens
+2025-12-17 01:02:23 - engine.display                 - INFO     - Cleaning up 0 display widgets
+2025-12-17 01:02:23 - engine.display                 - DEBUG    - [CLEANUP] Reset all DisplayWidget global state
+2025-12-17 01:02:23 - engine.display                 - INFO     - Display manager cleanup complete
+2025-12-17 01:02:23 - rendering.widget_manager       - DEBUG    - [WIDGET_MANAGER] Initialized
+2025-12-17 01:02:23 - rendering.input_handler        - DEBUG    - [INPUT_HANDLER] Initialized
+2025-12-17 01:02:23 - rendering.transition_controller - DEBUG    - [TRANSITION_CONTROLLER] Initialized
+2025-12-17 01:02:23 - rendering.image_presenter      - DEBUG    - [IMAGE_PRESENTER] Initialized with mode=fill, dpr=1.00
+2025-12-17 01:02:23 - rendering.multi_monitor_coordinator - DEBUG    - [MULTI_MONITOR] Coordinator initialized
+2025-12-17 01:02:23 - win_diag                       - DEBUG    - [WIN_STATE] changeEvent:21 screen=0 hwnd=0x4040dd8 visible=False active=False windowState=-1 updatesEnabled=True 
+2025-12-17 01:02:23 - win_diag                       - DEBUG    - [WIN_STATE] changeEvent:109 screen=0 hwnd=0x4040dd8 visible=False active=False windowState=-1 updatesEnabled=True 
+2025-12-17 01:02:23 - rendering.multi_monitor_coordinator - DEBUG    - [MULTI_MONITOR] Focus claimed by screen 0
+2025-12-17 01:02:23 - rendering.multi_monitor_coordinator - DEBUG    - [MULTI_MONITOR] Event filter installed on screen 0
+2025-12-17 01:02:23 - win_diag                       - DEBUG    - [WIN_STATE] changeEvent:39 screen=0 hwnd=0x4040dd8 visible=False active=False windowState=-1 updatesEnabled=True 
+2025-12-17 01:02:23 - rendering.display              - INFO     - DisplayWidget created for screen 0 (fill)
+2025-12-17 01:02:23 - rendering.backends.opengl.backend - INFO     - Using OpenGL renderer backend
+2025-12-17 01:02:23 - rendering.backends             - INFO     - Renderer backend 'opengl' initialized
+2025-12-17 01:02:23 - rendering.display              - INFO     - [RENDER] Backend active (screen=0, api=OpenGL 4.x, triple=False, vsync_toggle=False)
+2025-12-17 01:02:23 - rendering.display              - INFO     - Showing on screen 0: 1707x959 at (0, 0) DPR=1.5
+2025-12-17 01:02:24 - win_diag                       - DEBUG    - [WIN_STATE] focusInEvent screen=0 hwnd=0x4040dd8 visible=True active=True windowState=-1 updatesEnabled=True 
+2025-12-17 01:02:24 - win_diag                       - DEBUG    - [EFFECT_INVALIDATE] screen=0 reason=focus_in widgets=0 effects=[none]
+2025-12-17 01:02:24 - rendering.display              - INFO     - Detected refresh rate: 165 Hz, adaptive target FPS: 55
+2025-12-17 01:02:24 - rendering.display              - INFO     - [RENDER] Render surface established (screen=0, 1707x959, vsync=True, triple_preference=True)
+2025-12-17 01:02:24 - resources.manager              - DEBUG    - Registered resource: gui_component_9168bed9 (Shared GL compositor for DisplayWidget)
+2025-12-17 01:02:24 - rendering.display              - INFO     - [GL COMPOSITOR] Created shared compositor for screen 0
+2025-12-17 01:02:24 - rendering.gl_compositor        - INFO     - [DIMMING] GL dimming changed: enabled=False→False, opacity=0%→40%
+2025-12-17 01:02:24 - rendering.widget_manager       - DEBUG    - Setting up overlay widgets for screen 0
+2025-12-17 01:02:24 - widgets.clock_widget           - DEBUG    - ClockWidget created (format=24h, position=top_right, seconds=True, timezone=local, show_tz=True)
+2025-12-17 01:02:24 - resources.manager              - DEBUG    - Registered resource: gui_component_695a725d (Widget: clock)
+2025-12-17 01:02:24 - rendering.widget_manager       - DEBUG    - [WIDGET_MANAGER] Registered widget: clock
+2025-12-17 01:02:24 - widgets.overlay_timers         - DEBUG    - [OVERLAY_TIMER] Created ThreadManager timer <PySide6.QtCore.QTimer(0x1df36044fe0) at 0x000001DF340AF7C0> (1000 ms) for <widgets.clock_widget.ClockWidget(0x1df7d502420, name="clock_main") at 0x000001DF340F3F80>
+2025-12-17 01:02:24 - widgets.clock_widget           - INFO     - Clock widget started
+2025-12-17 01:02:24 - rendering.widget_manager       - INFO     - ✅ clock widget started: Top Right, 24h, font=48px, seconds=True
+2025-12-17 01:02:24 - rendering.widget_manager       - DEBUG    - clock2 widget disabled in settings
+2025-12-17 01:02:24 - rendering.widget_manager       - DEBUG    - clock3 widget disabled in settings
+2025-12-17 01:02:24 - widgets.weather_widget         - DEBUG    - WeatherWidget created (location=Johannesburg, position=top_left)
+2025-12-17 01:02:24 - resources.manager              - DEBUG    - Registered resource: gui_component_a852f9b8 (Widget: weather)
+2025-12-17 01:02:24 - rendering.widget_manager       - DEBUG    - [WIDGET_MANAGER] Registered widget: weather
+2025-12-17 01:02:24 - widgets.weather_widget         - DEBUG    - Fetching fresh weather data
+2025-12-17 01:02:24 - widgets.weather_widget         - DEBUG    - [ThreadManager] Fetching weather for Johannesburg
+2025-12-17 01:02:24 - widgets.overlay_timers         - DEBUG    - [OVERLAY_TIMER] Created ThreadManager timer <PySide6.QtCore.QTimer(0x1df7bad4f50) at 0x000001DF3909F400> (1800000 ms) for <widgets.weather_widget.WeatherWidget(0x1df7d502360) at 0x000001DF38FA0A80>
+2025-12-17 01:02:24 - weather.open_meteo_provider    - DEBUG    - Loaded weather cache with 1 entries
+2025-12-17 01:02:24 - widgets.weather_widget         - INFO     - Weather widget started (using cached data)
+2025-12-17 01:02:24 - weather.open_meteo_provider    - DEBUG    - OpenMeteoProvider initialized
+2025-12-17 01:02:24 - rendering.widget_manager       - INFO     - ✅ Weather widget started: Johannesburg, Top Left, font=24px
+2025-12-17 01:02:24 - weather.open_meteo_provider    - DEBUG    - Using cached weather for Johannesburg (age: 630s)
+2025-12-17 01:02:24 - core.media.media_controller    - INFO     - [MEDIA] Windows GSMTC controller initialized
+2025-12-17 01:02:24 - widgets.media_widget           - INFO     - [MEDIA_WIDGET] Using controller: WindowsGlobalMediaController
+2025-12-17 01:02:24 - resources.manager              - DEBUG    - Registered resource: gui_component_ece81ae2 (Widget: media)
+2025-12-17 01:02:24 - rendering.widget_manager       - DEBUG    - [WIDGET_MANAGER] Registered widget: media
+2025-12-17 01:02:24 - widgets.overlay_timers         - DEBUG    - [OVERLAY_TIMER] Created ThreadManager timer <PySide6.QtCore.QTimer(0x1df7c6e4820) at 0x000001DF3909FD80> (1000 ms) for <widgets.media_widget.MediaWidget(0x1df7d33b490) at 0x000001DF3909F980>
+2025-12-17 01:02:24 - widgets.media_widget           - INFO     - Media widget started
+2025-12-17 01:02:24 - rendering.widget_manager       - INFO     - ✅ Media widget started: Bottom Left, font=20px, margin=20
+2025-12-17 01:02:24 - resources.manager              - DEBUG    - Registered resource: gui_component_1777c616 (Widget: reddit)
+2025-12-17 01:02:24 - rendering.widget_manager       - DEBUG    - [WIDGET_MANAGER] Registered widget: reddit
+2025-12-17 01:02:24 - widgets.overlay_timers         - DEBUG    - [OVERLAY_TIMER] Created ThreadManager timer <PySide6.QtCore.QTimer(0x1df7c6e4b60) at 0x000001DF3CC86E00> (600000 ms) for <widgets.reddit_widget.RedditWidget(0x1df7d33a170) at 0x000001DF3CC7F980>
+2025-12-17 01:02:24 - rendering.widget_manager       - INFO     - ✅ reddit widget started: r/All, Bottom Right, font=14px, limit=4
+2025-12-17 01:02:24 - resources.manager              - DEBUG    - Registered resource: gui_component_07909e3c (Widget: reddit2)
+2025-12-17 01:02:24 - rendering.widget_manager       - DEBUG    - [WIDGET_MANAGER] Registered widget: reddit2
+2025-12-17 01:02:24 - widgets.overlay_timers         - DEBUG    - [OVERLAY_TIMER] Created ThreadManager timer <PySide6.QtCore.QTimer(0x1df364a1af0) at 0x000001DF3CC8D040> (600000 ms) for <widgets.reddit_widget.RedditWidget(0x1df7d33c870) at 0x000001DF3CC86E40>
+2025-12-17 01:02:24 - rendering.widget_manager       - INFO     - ✅ reddit2 widget started: r/SubRedditDrama, Bottom Right, font=14px, limit=4
+2025-12-17 01:02:24 - resources.manager              - DEBUG    - Registered resource: gui_component_92dccd4f (Widget: spotify_volume)
+2025-12-17 01:02:24 - rendering.widget_manager       - DEBUG    - [WIDGET_MANAGER] Registered widget: spotify_volume
+2025-12-17 01:02:24 - rendering.widget_manager       - INFO     - ✅ Spotify volume widget started
+2025-12-17 01:02:24 - resources.manager              - DEBUG    - Registered resource: gui_component_e0cef418 (Widget: spotify_visualizer)
+2025-12-17 01:02:24 - rendering.widget_manager       - DEBUG    - [WIDGET_MANAGER] Registered widget: spotify_visualizer
+2025-12-17 01:02:24 - sources.rss_source             - INFO     - Feed 'Bing Images': 8 entries
+2025-12-17 01:02:24 - sources.rss_source             - DEBUG    - Using cached image: b4d4607614002f73e2b7739cc927b600.jpg
+2025-12-17 01:02:24 - sources.rss_source             - DEBUG    - Added image: Handmade gnomes at a Christmas market (© Veronika Seppanen/Shutterstock)
+2025-12-17 01:02:24 - sources.rss_source             - DEBUG    - Using cached image: 1195bd34b990228a30871b083c550512.jpg
+2025-12-17 01:02:24 - sources.rss_source             - DEBUG    - Added image: Lights on Spiegelgracht canal, Amsterdam, Netherlands (© Amith Nag Photography/Getty Images)
+2025-12-17 01:02:24 - sources.rss_source             - DEBUG    - Using cached image: 379affbe68feea09b9eac8ff46471f27.jpg
+2025-12-17 01:02:24 - sources.rss_source             - DEBUG    - Added image: Tufted titmouse perched on pine boughs, Massachusetts (© Tim Laman/NPL/Minden Pictures)
+2025-12-17 01:02:24 - sources.rss_source             - DEBUG    - Using cached image: 0dc2f8eb9ab0ea77b579229b4124e85c.jpg
+2025-12-17 01:02:24 - sources.rss_source             - DEBUG    - Added image: Merced River, Yosemite National Park, California (© Ron and Patty Thomas/Getty Images)
+2025-12-17 01:02:24 - sources.rss_source             - DEBUG    - Using cached image: f9c68ad17dfc824f34cef493b866b5a2.jpg
+2025-12-17 01:02:24 - sources.rss_source             - DEBUG    - Added image: Spotted poinsettia (© DigiPub/Getty Images)
+2025-12-17 01:02:24 - sources.rss_source             - DEBUG    - Using cached image: 769cc373e15ee6f3d3f9877e820b81a9.jpg
+2025-12-17 01:02:24 - sources.rss_source             - DEBUG    - Added image: Summit of Mount Everest at sunset, seen from Renjo La, Nepal (© shoults/Alamy)
+2025-12-17 01:02:24 - sources.rss_source             - DEBUG    - Using cached image: e4895f6154270e519414d6bf07f3bb67.jpg
+2025-12-17 01:02:24 - sources.rss_source             - DEBUG    - Added image: Interior of the Mosque-Cathedral of Córdoba, Andalusia, Spain (© Elena Zolotova/Getty Images)
+2025-12-17 01:02:24 - sources.rss_source             - DEBUG    - Using cached image: 566cd3a7d101b67caa7d039b1b839d24.jpg
+2025-12-17 01:02:24 - sources.rss_source             - DEBUG    - Added image: Guanaco in Punta Norte, Argentina (© Sylvain Cordier/naturepl.com)
+2025-12-17 01:02:24 - sources.rss_source             - INFO     - RSS refresh complete: 105 total images (8 new)
+2025-12-17 01:02:24 - sources.rss_source             - DEBUG    - Cache size OK: 451.8MB, 97 files
+2025-12-17 01:02:24 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 105 images from source
+2025-12-17 01:02:24 - engine.image_queue             - INFO     - Added 105 images (local=0, rss=105). Pools: local=558, rss=1075
+2025-12-17 01:02:24 - utils.audio_capture            - DEBUG    - [AUDIO] PyAudioWPatch started: 48000Hz, 6 channels, 256 block
+2025-12-17 01:02:24 - rendering.widget_manager       - INFO     - ✅ Spotify visualizer widget started: 15 bars
+2025-12-17 01:02:24 - rendering.widget_manager       - INFO     - Widget setup complete: 7 widgets created
+2025-12-17 01:02:24 - rendering.display              - INFO     - WidgetManager created 7 widgets
+2025-12-17 01:02:24 - widgets.pixel_shift_manager    - DEBUG    - PixelShiftManager created
+2025-12-17 01:02:24 - widgets.pixel_shift_manager    - DEBUG    - Registered widget for pixel shift: ClockWidget at (1471, 20)
+2025-12-17 01:02:24 - widgets.pixel_shift_manager    - DEBUG    - Registered widget for pixel shift: WeatherWidget at (20, 20)
+2025-12-17 01:02:24 - widgets.pixel_shift_manager    - DEBUG    - Registered widget for pixel shift: MediaWidget at (20, 679)
+2025-12-17 01:02:24 - widgets.pixel_shift_manager    - DEBUG    - Registered widget for pixel shift: SpotifyVisualizerWidget at (20, 571)
+2025-12-17 01:02:24 - widgets.pixel_shift_manager    - DEBUG    - Registered widget for pixel shift: SpotifyVolumeWidget at (635, 683)
+2025-12-17 01:02:24 - widgets.pixel_shift_manager    - DEBUG    - Registered widget for pixel shift: RedditWidget at (1087, 675)
+2025-12-17 01:02:24 - widgets.pixel_shift_manager    - DEBUG    - Registered widget for pixel shift: RedditWidget at (1087, 675)
+2025-12-17 01:02:24 - resources.manager              - DEBUG    - Registered resource: gui_component_2916dbaf (PixelShiftManager timer)
+2025-12-17 01:02:24 - widgets.pixel_shift_manager    - DEBUG    - PixelShiftManager timer started (interval=60000ms)
+2025-12-17 01:02:24 - widgets.pixel_shift_manager    - DEBUG    - PixelShiftManager enabled (rate=1/min)
+2025-12-17 01:02:24 - engine.display                 - INFO     - Display widget created for screen 0
+2025-12-17 01:02:24 - win_diag                       - DEBUG    - [WIN_STATE] changeEvent:99 screen=0 hwnd=0x2eb0bcc visible=True active=True windowState=-1 updatesEnabled=True 
+2025-12-17 01:02:24 - rendering.widget_manager       - DEBUG    - [WIDGET_MANAGER] Initialized
+2025-12-17 01:02:24 - rendering.input_handler        - DEBUG    - [INPUT_HANDLER] Initialized
+2025-12-17 01:02:24 - rendering.transition_controller - DEBUG    - [TRANSITION_CONTROLLER] Initialized
+2025-12-17 01:02:24 - rendering.image_presenter      - DEBUG    - [IMAGE_PRESENTER] Initialized with mode=fill, dpr=1.00
+2025-12-17 01:02:24 - win_diag                       - DEBUG    - [WIN_STATE] changeEvent:21 screen=1 hwnd=0x5d409c4 visible=False active=False windowState=-1 updatesEnabled=True 
+2025-12-17 01:02:24 - win_diag                       - DEBUG    - [WIN_STATE] changeEvent:109 screen=1 hwnd=0x5d409c4 visible=False active=False windowState=-1 updatesEnabled=True 
+2025-12-17 01:02:24 - win_diag                       - DEBUG    - [WIN_STATE] changeEvent:39 screen=1 hwnd=0x5d409c4 visible=False active=False windowState=-1 updatesEnabled=True 
+2025-12-17 01:02:24 - rendering.display              - INFO     - DisplayWidget created for screen 1 (fill)
+2025-12-17 01:02:24 - rendering.backends.opengl.backend - INFO     - Using OpenGL renderer backend
+2025-12-17 01:02:24 - rendering.backends             - INFO     - Renderer backend 'opengl' initialized
+2025-12-17 01:02:24 - rendering.display              - INFO     - [RENDER] Backend active (screen=1, api=OpenGL 4.x, triple=False, vsync_toggle=False)
+2025-12-17 01:02:24 - rendering.display              - INFO     - Showing on screen 1: 2560x1439 at (2560, 0) DPR=1.5
+2025-12-17 01:02:24 - rendering.display              - INFO     - Detected refresh rate: 60 Hz, adaptive target FPS: 60
+2025-12-17 01:02:24 - rendering.display              - INFO     - [RENDER] Render surface established (screen=1, 2560x1439, vsync=True, triple_preference=True)
+2025-12-17 01:02:24 - resources.manager              - DEBUG    - Registered resource: gui_component_1927b87c (Shared GL compositor for DisplayWidget)
+2025-12-17 01:02:24 - rendering.display              - INFO     - [GL COMPOSITOR] Created shared compositor for screen 1
+2025-12-17 01:02:24 - rendering.gl_compositor        - INFO     - [DIMMING] GL dimming changed: enabled=False→False, opacity=0%→40%
+2025-12-17 01:02:24 - rendering.widget_manager       - DEBUG    - Setting up overlay widgets for screen 1
+2025-12-17 01:02:24 - rendering.widget_manager       - DEBUG    - clock widget disabled in settings
+2025-12-17 01:02:24 - widgets.clock_widget           - DEBUG    - ClockWidget created (format=24h, position=top_right, seconds=True, timezone=US/Pacific, show_tz=True)
+2025-12-17 01:02:24 - resources.manager              - DEBUG    - Registered resource: gui_component_515bbec5 (Widget: clock2)
+2025-12-17 01:02:24 - rendering.widget_manager       - DEBUG    - [WIDGET_MANAGER] Registered widget: clock2
+2025-12-17 01:02:24 - widgets.overlay_timers         - DEBUG    - [OVERLAY_TIMER] Created ThreadManager timer <PySide6.QtCore.QTimer(0x1df7c6df9b0) at 0x000001DF3D0119C0> (1000 ms) for <widgets.clock_widget.ClockWidget(0x1df7d4fd0e0, name="clock_main") at 0x000001DF3CC98BC0>
+2025-12-17 01:02:24 - widgets.clock_widget           - INFO     - Clock widget started
+2025-12-17 01:02:24 - rendering.widget_manager       - INFO     - ✅ clock2 widget started: Top Right, 24h, font=48px, seconds=True
+2025-12-17 01:02:24 - rendering.widget_manager       - DEBUG    - clock3 widget disabled in settings
+2025-12-17 01:02:24 - widgets.weather_widget         - DEBUG    - WeatherWidget created (location=Johannesburg, position=top_left)
+2025-12-17 01:02:24 - resources.manager              - DEBUG    - Registered resource: gui_component_a93d0b78 (Widget: weather)
+2025-12-17 01:02:24 - rendering.widget_manager       - DEBUG    - [WIDGET_MANAGER] Registered widget: weather
+2025-12-17 01:02:24 - widgets.weather_widget         - DEBUG    - Fetching fresh weather data
+2025-12-17 01:02:24 - widgets.overlay_timers         - DEBUG    - [OVERLAY_TIMER] Created ThreadManager timer <PySide6.QtCore.QTimer(0x1df7c6e0710) at 0x000001DF3D012700> (1800000 ms) for <widgets.weather_widget.WeatherWidget(0x1df7d4ff540) at 0x000001DF3CC7F5C0>
+2025-12-17 01:02:24 - widgets.weather_widget         - DEBUG    - [ThreadManager] Fetching weather for Johannesburg
+2025-12-17 01:02:24 - widgets.weather_widget         - INFO     - Weather widget started (using cached data)
+2025-12-17 01:02:24 - weather.open_meteo_provider    - DEBUG    - Loaded weather cache with 1 entries
+2025-12-17 01:02:24 - rendering.widget_manager       - INFO     - ✅ Weather widget started: Johannesburg, Top Left, font=24px
+2025-12-17 01:02:24 - weather.open_meteo_provider    - DEBUG    - OpenMeteoProvider initialized
+2025-12-17 01:02:24 - weather.open_meteo_provider    - DEBUG    - Using cached weather for Johannesburg (age: 631s)
+2025-12-17 01:02:24 - resources.manager              - DEBUG    - Registered resource: gui_component_51fb52ef (Widget: reddit)
+2025-12-17 01:02:24 - rendering.widget_manager       - DEBUG    - [WIDGET_MANAGER] Registered widget: reddit
+2025-12-17 01:02:24 - widgets.overlay_timers         - DEBUG    - [OVERLAY_TIMER] Created ThreadManager timer <PySide6.QtCore.QTimer(0x1df7c6e0a90) at 0x000001DF3D0297C0> (600000 ms) for <widgets.reddit_widget.RedditWidget(0x1df7af67db0) at 0x000001DF3D012980>
+2025-12-17 01:02:24 - rendering.widget_manager       - INFO     - ✅ reddit widget started: r/All, Bottom Right, font=14px, limit=4
+2025-12-17 01:02:24 - resources.manager              - DEBUG    - Registered resource: gui_component_79ce6524 (Widget: reddit2)
+2025-12-17 01:02:24 - rendering.widget_manager       - DEBUG    - [WIDGET_MANAGER] Registered widget: reddit2
+2025-12-17 01:02:24 - widgets.overlay_timers         - DEBUG    - [OVERLAY_TIMER] Created ThreadManager timer <PySide6.QtCore.QTimer(0x1df7c6e0e10) at 0x000001DF3D02AEC0> (600000 ms) for <widgets.reddit_widget.RedditWidget(0x1df7af68bf0) at 0x000001DF3D013100>
+2025-12-17 01:02:24 - rendering.widget_manager       - INFO     - ✅ reddit2 widget started: r/SubRedditDrama, Bottom Right, font=14px, limit=4
+2025-12-17 01:02:24 - rendering.widget_manager       - INFO     - Widget setup complete: 4 widgets created
+2025-12-17 01:02:24 - rendering.display              - INFO     - WidgetManager created 4 widgets
+2025-12-17 01:02:24 - widgets.pixel_shift_manager    - DEBUG    - PixelShiftManager created
+2025-12-17 01:02:24 - widgets.pixel_shift_manager    - DEBUG    - Registered widget for pixel shift: ClockWidget at (2324, 20)
+2025-12-17 01:02:24 - widgets.pixel_shift_manager    - DEBUG    - Registered widget for pixel shift: WeatherWidget at (20, 20)
+2025-12-17 01:02:24 - widgets.pixel_shift_manager    - DEBUG    - Registered widget for pixel shift: RedditWidget at (1940, 1155)
+2025-12-17 01:02:24 - widgets.pixel_shift_manager    - DEBUG    - Registered widget for pixel shift: RedditWidget at (1940, 1155)
+2025-12-17 01:02:24 - resources.manager              - DEBUG    - Registered resource: gui_component_550f5cf6 (PixelShiftManager timer)
+2025-12-17 01:02:24 - widgets.pixel_shift_manager    - DEBUG    - PixelShiftManager timer started (interval=60000ms)
+2025-12-17 01:02:24 - widgets.pixel_shift_manager    - DEBUG    - PixelShiftManager enabled (rate=1/min)
+2025-12-17 01:02:24 - engine.display                 - INFO     - Display widget created for screen 1
+2025-12-17 01:02:24 - engine.display                 - INFO     - Created 2 display widgets
+2025-12-17 01:02:24 - engine.screensaver             - INFO     - Display initialized with 2 screens
+2025-12-17 01:02:24 - resources.manager              - DEBUG    - Registered resource: gui_component_3518c997 (Engine rotation timer)
+2025-12-17 01:02:24 - engine.screensaver             - INFO     - Rotation timer configured: 60s
+2025-12-17 01:02:24 - EventSystem                    - DEBUG    - New subscription: 8454fb43 for settings.changed (priority=50)
+2025-12-17 01:02:24 - engine.screensaver             - DEBUG    - Event subscriptions configured
+2025-12-17 01:02:24 - engine.screensaver             - INFO     - Background RSS refresh enabled (interval=600000ms, cap=30)
+2025-12-17 01:02:24 - engine.screensaver             - INFO     - Engine state: INITIALIZING -> STOPPED
+2025-12-17 01:02:24 - engine.screensaver             - INFO     - Engine initialization complete
+2025-12-17 01:02:24 - engine.screensaver             - INFO     - Engine state: STOPPED -> STARTING
+2025-12-17 01:02:24 - engine.screensaver             - INFO     - Starting screensaver engine...
+2025-12-17 01:02:24 - engine.screensaver             - DEBUG    - [ASYNC] Loading 2 different images for 2 displays
+2025-12-17 01:02:24 - engine.screensaver             - INFO     - Rotation timer started (60000ms)
+2025-12-17 01:02:24 - engine.screensaver             - INFO     - Engine state: STARTING -> RUNNING
+2025-12-17 01:02:24 - engine.screensaver             - INFO     - Screensaver engine started
+2025-12-17 01:02:24 - resources.manager              - DEBUG    - ResourceManager initialized
+2025-12-17 01:02:24 - resources.manager              - DEBUG    - Registered resource: gui_component_94862cca (Screensaver system tray icon)
+2025-12-17 01:02:24 - __main__                       - INFO     - Screensaver engine started - entering event loop
+2025-12-17 01:02:25 - widgets.context_menu           - DEBUG    - ScreensaverContextMenu created
+2025-12-17 01:02:25 - rendering.image_processor_async - DEBUG    - Fill(QImage): Scaled 3840x2160 → 2560x1440 (Lanczos=False)
+2025-12-17 01:02:25 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3840x2160 → scaled 2560x1440 → cropped to 2560x1438
+2025-12-17 01:02:25 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] Context initialized: version=4.6, swap=SwapBehavior.DoubleBuffer, interval=1
+2025-12-17 01:02:25 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] OpenGL adapter: vendor=NVIDIA Corporation, renderer=NVIDIA GeForce RTX 4090/PCIe/SSE2, version=4.6.0 NVIDIA 591.44
+2025-12-17 01:02:25 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Raindrops shader program created: 12
+2025-12-17 01:02:25 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled raindrops program: 12
+2025-12-17 01:02:25 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Warp shader program created: 13
+2025-12-17 01:02:25 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled warp program: 13
+2025-12-17 01:02:25 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Diffuse shader program created: 14
+2025-12-17 01:02:25 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled diffuse program: 14
+2025-12-17 01:02:25 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] BlockFlip shader program created: 15
+2025-12-17 01:02:25 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled blockflip program: 15
+2025-12-17 01:02:25 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Peel shader program created: 16
+2025-12-17 01:02:25 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled peel program: 16
+2025-12-17 01:02:25 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Crossfade shader program created: 17
+2025-12-17 01:02:25 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled crossfade program: 17
+2025-12-17 01:02:25 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Slide shader program created: 18
+2025-12-17 01:02:25 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled slide program: 18
+2025-12-17 01:02:25 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Wipe shader program created: 19
+2025-12-17 01:02:25 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled wipe program: 19
+2025-12-17 01:02:25 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Blinds shader program created: 20
+2025-12-17 01:02:25 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled blinds program: 20
+2025-12-17 01:02:25 - rendering.gl_programs.base_program - DEBUG    - [GL PROGRAM] Crumble shader program created: 21
+2025-12-17 01:02:25 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled crumble program: 21
+2025-12-17 01:02:25 - rendering.gl_programs.geometry_manager - DEBUG    - [GL GEOMETRY] Quad geometry created: VAO=1, VBO=3
+2025-12-17 01:02:25 - rendering.gl_programs.geometry_manager - DEBUG    - [GL GEOMETRY] Box geometry created: VAO=2, VBO=4, vertices=36
+2025-12-17 01:02:25 - rendering.gl_programs.geometry_manager - DEBUG    - [GL GEOMETRY] Geometry initialized
+2025-12-17 01:02:25 - rendering.image_processor_async - DEBUG    - Fill(QImage): Exact size match 3840x2160, no scaling
+2025-12-17 01:02:25 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3840x2160 → scaled 3840x2160 → cropped to 3840x2158
+2025-12-17 01:02:25 - widgets.context_menu           - DEBUG    - ScreensaverContextMenu created
+2025-12-17 01:02:25 - engine.display                 - DEBUG    - Image displayed on screen 0: C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET\910131.jpg
+2025-12-17 01:02:25 - engine.screensaver             - INFO     - [ASYNC] Different images displayed on 2 displays
+2025-12-17 01:02:25 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] Context initialized: version=4.6, swap=SwapBehavior.DoubleBuffer, interval=1
+2025-12-17 01:02:25 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] OpenGL adapter: vendor=NVIDIA Corporation, renderer=NVIDIA GeForce RTX 4090/PCIe/SSE2, version=4.6.0 NVIDIA 591.44
+2025-12-17 01:02:25 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] Shader pipeline initialized (0.0ms)
+2025-12-17 01:02:26 - engine.display                 - DEBUG    - Image displayed on screen 1: C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET\591846.jpg
+2025-12-17 01:02:26 - resources.manager              - DEBUG    - Registered resource: gui_component_52cf0c2e (Spotify bars GL overlay)
+2025-12-17 01:02:26 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 2/10: https://www.nasa.gov/feeds/iotd-feed...
+2025-12-17 01:02:26 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2025-12-17 01:02:26 - sources.rss_source             - DEBUG    - Parsing feed: https://www.nasa.gov/feeds/iotd-feed
+2025-12-17 01:02:26 - sources.rss_source             - INFO     - Feed 'NASA Image of the Day': 60 entries
+2025-12-17 01:02:26 - sources.rss_source             - DEBUG    - Using cached image: 083be1a69af5c6b2bf39db552b7a213d.jpg
+2025-12-17 01:02:26 - sources.rss_source             - DEBUG    - Added image: Peekaboo!
+2025-12-17 01:02:26 - sources.rss_source             - DEBUG    - Using cached image: a6d4473aa7e577e1b4fc20c019345e02.jpg
+2025-12-17 01:02:26 - sources.rss_source             - DEBUG    - Added image: Bassac River, Southern Vietnam
+2025-12-17 01:02:26 - sources.rss_source             - DEBUG    - Using cached image: f1288b4e6e653e86c028d54d9f07cb62.jpg
+2025-12-17 01:02:26 - sources.rss_source             - DEBUG    - Added image: The Calabash clash
+2025-12-17 01:02:26 - sources.rss_source             - DEBUG    - Using cached image: 60fc01d277e3cb5ec10c31b58281c48c.jpg
+2025-12-17 01:02:26 - sources.rss_source             - DEBUG    - Added image: Stellar Jet
+2025-12-17 01:02:26 - sources.rss_source             - DEBUG    - Using cached image: 4f2acfff2177f2246934905d3d3d39e7.jpg
+2025-12-17 01:02:26 - sources.rss_source             - DEBUG    - Added image: NASA Astronaut Jonny Kim Returns to Earth
+2025-12-17 01:02:26 - sources.rss_source             - DEBUG    - Using cached image: 2367cbb8ce66d65816a89cf3b269df02.jpg
+2025-12-17 01:02:26 - sources.rss_source             - DEBUG    - Added image: Sprites Over Château de Beynac
+2025-12-17 01:02:26 - sources.rss_source             - DEBUG    - Using cached image: 72cab31ad08a9f15bff972e38d8d6f22.jpg
+2025-12-17 01:02:26 - sources.rss_source             - DEBUG    - Added image: XRISM Finds Chlorine, Potassium in Cas A
+2025-12-17 01:02:26 - sources.rss_source             - DEBUG    - Using cached image: a3d8617343c5e9608ba700041bdec1dc.jpg
+2025-12-17 01:02:26 - sources.rss_source             - DEBUG    - Added image: Testing Drones for Mars in the Mojave Desert
+2025-12-17 01:02:26 - sources.rss_source             - INFO     - RSS refresh complete: 105 total images (8 new)
+2025-12-17 01:02:26 - sources.rss_source             - DEBUG    - Cache size OK: 451.8MB, 97 files
+2025-12-17 01:02:26 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 105 images from source
+2025-12-17 01:02:26 - engine.image_queue             - INFO     - Added 105 images (local=0, rss=105). Pools: local=556, rss=1180
+2025-12-17 01:02:28 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 3/10: https://www.reddit.com/r/EarthPorn/top/.json?t=day&limit=25...
+2025-12-17 01:02:28 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2025-12-17 01:02:28 - sources.rss_source             - DEBUG    - Parsing feed: https://www.reddit.com/r/EarthPorn/top/.json?t=day&limit=25
+2025-12-17 01:02:28 - sources.rss_source             - DEBUG    - Parsing JSON feed: https://www.reddit.com/r/EarthPorn/top/.json?t=day&limit=25
+2025-12-17 01:02:29 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/EarthPorn/top/.json?t=day&limit=25)': 15 entries
+2025-12-17 01:02:29 - sources.rss_source             - DEBUG    - Skipping duplicate in current batch: 8fda860a8bb441409b8ee4ad4453420f
+2025-12-17 01:02:29 - sources.rss_source             - DEBUG    - Skipping duplicate in current batch: e7716b04a406297a11ea931c39b07ad4
+2025-12-17 01:02:29 - sources.rss_source             - DEBUG    - Skipping duplicate in current batch: 79f791dc8bdf040b010d6ad6546a5300
+2025-12-17 01:02:29 - sources.rss_source             - DEBUG    - Skipping duplicate in current batch: e605b23301534a3936b10b0f094fbc83
+2025-12-17 01:02:29 - sources.rss_source             - DEBUG    - Skipping duplicate in current batch: e527f1e077058e2afaec8960ee6c73f6
+2025-12-17 01:02:29 - sources.rss_source             - DEBUG    - Skipping duplicate in current batch: ba6111ee01c4acb404cb81e2c9413e70
+2025-12-17 01:02:29 - sources.rss_source             - DEBUG    - Skipping duplicate in current batch: d25449a1caeea6877de28ed6f2b4e841
+2025-12-17 01:02:29 - sources.rss_source             - WARNING  - [FEED_HEALTH] Feed https://www.reddit.com/r/EarthPorn/top/.json?t=day&limit=25 failed 1 times, backoff 60s
+2025-12-17 01:02:29 - sources.rss_source             - WARNING  - [RATE_LIMIT] Reddit feed returned 0 images: https://www.reddit.com/r/EarthPorn/top/.json?t=day&limit=25
+2025-12-17 01:02:29 - sources.rss_source             - INFO     - [RATE_LIMIT] Skipping 1 rate-limited Reddit feeds (will retry on next refresh)
+2025-12-17 01:02:29 - sources.rss_source             - INFO     - RSS refresh complete: 97 total images (0 new)
+2025-12-17 01:02:29 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 97 images from source
+2025-12-17 01:02:29 - engine.image_queue             - INFO     - Added 97 images (local=0, rss=97). Pools: local=556, rss=1277
+2025-12-17 01:02:29 - rendering.input_handler        - DEBUG    - Media key pressed - ignoring for exit (key=16777350)
+2025-12-17 01:02:29 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.025 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-17 01:02:30 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.651 Bars: [0.00 0.06 0.12 0.18 0.18 0.12 0.06 0.00 0.06 0.12 0.18 0.18 0.12 0.06 0.00]
+2025-12-17 01:02:31 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.771 Bars: [0.01 0.03 0.06 0.09 0.09 0.06 0.04 0.04 0.04 0.06 0.09 0.09 0.06 0.03 0.01]
+2025-12-17 01:02:31 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 4/10: https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25...
+2025-12-17 01:02:31 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2025-12-17 01:02:31 - sources.rss_source             - DEBUG    - Parsing feed: https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25
+2025-12-17 01:02:31 - sources.rss_source             - DEBUG    - Parsing JSON feed: https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25
+2025-12-17 01:02:32 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.057 Bars: [0.00 0.07 0.14 0.21 0.21 0.14 0.07 0.00 0.07 0.14 0.21 0.21 0.14 0.07 0.00]
+2025-12-17 01:02:32 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25)': 9 entries
+2025-12-17 01:02:32 - sources.rss_source             - DEBUG    - Skipping duplicate in current batch: e5643e6b411a386a354344ac720097a3
+2025-12-17 01:02:32 - sources.rss_source             - WARNING  - [FEED_HEALTH] Feed https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25 failed 1 times, backoff 60s
+2025-12-17 01:02:32 - sources.rss_source             - WARNING  - [RATE_LIMIT] Reddit feed returned 0 images: https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25
+2025-12-17 01:02:32 - sources.rss_source             - INFO     - [RATE_LIMIT] Skipping 1 rate-limited Reddit feeds (will retry on next refresh)
+2025-12-17 01:02:32 - sources.rss_source             - INFO     - RSS refresh complete: 97 total images (0 new)
+2025-12-17 01:02:32 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 97 images from source
+2025-12-17 01:02:32 - engine.image_queue             - INFO     - Added 97 images (local=0, rss=97). Pools: local=556, rss=1374
+2025-12-17 01:02:32 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.856 Bars: [0.04 0.09 0.14 0.20 0.24 0.24 0.25 0.28 0.25 0.24 0.24 0.20 0.14 0.09 0.04]
+2025-12-17 01:02:33 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.180 Bars: [0.01 0.08 0.16 0.24 0.24 0.16 0.08 0.05 0.08 0.16 0.24 0.24 0.16 0.08 0.01]
+2025-12-17 01:02:34 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.177 Bars: [0.02 0.06 0.11 0.16 0.18 0.16 0.16 0.15 0.16 0.16 0.18 0.16 0.11 0.06 0.02]
+2025-12-17 01:02:34 - rendering.input_handler        - DEBUG    - Media key pressed - ignoring for exit (key=16777350)
+2025-12-17 01:02:34 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.050 Bars: [0.00 0.01 0.01 0.02 0.02 0.01 0.01 0.01 0.01 0.01 0.02 0.02 0.01 0.01 0.00]
+2025-12-17 01:02:34 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 5/10: https://www.reddit.com/r/CityPorn/top/.json?t=day&limit=25...
+2025-12-17 01:02:34 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2025-12-17 01:02:34 - sources.rss_source             - DEBUG    - Parsing feed: https://www.reddit.com/r/CityPorn/top/.json?t=day&limit=25
+2025-12-17 01:02:34 - sources.rss_source             - DEBUG    - Parsing JSON feed: https://www.reddit.com/r/CityPorn/top/.json?t=day&limit=25
+2025-12-17 01:02:35 - rendering.multi_monitor_coordinator - DEBUG    - [MULTI_MONITOR] Registered screen 0 (hash=2058161408000)
+2025-12-17 01:02:35 - rendering.multi_monitor_coordinator - DEBUG    - [MULTI_MONITOR] Halo owner: 0
+2025-12-17 01:02:35 - rendering.multi_monitor_coordinator - DEBUG    - [MULTI_MONITOR] Halo owner: 0
+2025-12-17 01:02:35 - resources.manager              - DEBUG    - ResourceManager initialized
+2025-12-17 01:02:35 - resources.manager              - DEBUG    - Registered resource: gui_component_37042208 (AnimationManager timer)
+2025-12-17 01:02:35 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/CityPorn/top/.json?t=day&limit=25)': 20 entries
+2025-12-17 01:02:35 - sources.rss_source             - DEBUG    - Skipping duplicate in current batch: 54538e29a642df355ec3dc351f3bd82f
+2025-12-17 01:02:35 - sources.rss_source             - DEBUG    - Skipping duplicate in current batch: 3aa51b7909f509129c8a26a77432381c
+2025-12-17 01:02:35 - sources.rss_source             - DEBUG    - Skipping duplicate in current batch: 2bfd352dbb79bd14b700fd8352a7efec
+2025-12-17 01:02:35 - sources.rss_source             - DEBUG    - Skipping duplicate in current batch: 828d9e08060f24619491889c4396a339
+2025-12-17 01:02:35 - sources.rss_source             - DEBUG    - Skipping duplicate in current batch: cf18ff16df420292512b99f3622e938f
+2025-12-17 01:02:35 - sources.rss_source             - DEBUG    - Skipping duplicate in current batch: 08cdfb488893cf1bde5f42a29b6040a1
+2025-12-17 01:02:35 - sources.rss_source             - DEBUG    - Skipping duplicate in current batch: 9609c37a92e023475618aca4402a17be
+2025-12-17 01:02:35 - sources.rss_source             - DEBUG    - Downloading image: https://i.redd.it/kbic9878vm7g1.jpeg
+2025-12-17 01:02:35 - win_diag                       - DEBUG    - [EFFECT_INVALIDATE] screen=0 reason=menu_before_popup widgets=7 effects=[clock:QGraphicsDropShadowEffect@0x1df3ccb4d80(en=True), weather:QGraphicsDropShadowEffect@0x1df3fd8cf80(en=True), media:QGraphicsDropShadowEffect@0x1df3cc46a00(en=True), reddit:QGraphicsDropShadowEffect@0x1df340f2780(en=True), reddit2:QGraphicsDropShadowEffect@0x1df3cc8fdc0(en=True), spotify_volume:QGraphicsDropShadowEffect@0x1df3fd92f00(en=True), spotify_visualizer:QGraphicsDropShadowEffect@0x1df3d052080(en=True)]
+2025-12-17 01:02:35 - win_diag                       - DEBUG    - [MENU_OPEN] begin t=93330.859000 screen=0 pos=PySide6.QtCore.QPoint(1029, 93)
+2025-12-17 01:02:35 - win_diag                       - DEBUG    - [EFFECT_INVALIDATE] screen=0 reason=menu_before_popup widgets=7 effects=[clock:QGraphicsDropShadowEffect@0x1df3fdb06c0(en=True), weather:QGraphicsDropShadowEffect@0x1df3fe3bb00(en=True), media:QGraphicsDropShadowEffect@0x1df3fdb0400(en=True), reddit:QGraphicsDropShadowEffect@0x1df3fe219c0(en=True), reddit2:QGraphicsDropShadowEffect@0x1df3fd8f080(en=True), spotify_volume:QGraphicsDropShadowEffect@0x1df3cc7da40(en=True), spotify_visualizer:QGraphicsDropShadowEffect@0x1df3fe13e80(en=True)]
+2025-12-17 01:02:35 - win_diag                       - DEBUG    - [EFFECT_INVALIDATE] screen=0 reason=menu_about_to_show widgets=7 effects=[clock:QGraphicsDropShadowEffect@0x1df3fdb06c0(en=True), weather:QGraphicsDropShadowEffect@0x1df3fe3bb00(en=True), media:QGraphicsDropShadowEffect@0x1df3fdb0400(en=True), reddit:QGraphicsDropShadowEffect@0x1df3fe219c0(en=True), reddit2:QGraphicsDropShadowEffect@0x1df3fd8f080(en=True), spotify_volume:QGraphicsDropShadowEffect@0x1df3cc7da40(en=True), spotify_visualizer:QGraphicsDropShadowEffect@0x1df3fe13e80(en=True)]
+2025-12-17 01:02:36 - win_diag                       - DEBUG    - [WIN_STATE] focusInEvent screen=0 hwnd=0x2eb0bcc visible=True active=True windowState=-1 updatesEnabled=True 
+2025-12-17 01:02:36 - win_diag                       - DEBUG    - [EFFECT_INVALIDATE] screen=0 reason=focus_in widgets=7 effects=[clock:QGraphicsDropShadowEffect@0x1df3fe41300(en=True), weather:QGraphicsDropShadowEffect@0x1df3fe41340(en=True), media:QGraphicsDropShadowEffect@0x1df3fdb06c0(en=True), reddit:QGraphicsDropShadowEffect@0x1df3fe3bb00(en=True), reddit2:QGraphicsDropShadowEffect@0x1df3fdb0400(en=True), spotify_volume:QGraphicsDropShadowEffect@0x1df3fe219c0(en=True), spotify_visualizer:QGraphicsDropShadowEffect@0x1df3fd8f080(en=True)]
+2025-12-17 01:02:36 - win_diag                       - DEBUG    - [MENU_OPEN] end t=93331.593000 dt=734.000ms screen=0
+2025-12-17 01:02:36 - win_diag                       - DEBUG    - [EFFECT_INVALIDATE] screen=0 reason=menu_after_hide widgets=7 effects=[clock:QGraphicsDropShadowEffect@0x1df3fe41300(en=True), weather:QGraphicsDropShadowEffect@0x1df3fe41340(en=True), media:QGraphicsDropShadowEffect@0x1df3fdb06c0(en=True), reddit:QGraphicsDropShadowEffect@0x1df3fe3bb00(en=True), reddit2:QGraphicsDropShadowEffect@0x1df3fdb0400(en=True), spotify_volume:QGraphicsDropShadowEffect@0x1df3fe219c0(en=True), spotify_visualizer:QGraphicsDropShadowEffect@0x1df3fd8f080(en=True)]
+2025-12-17 01:02:36 - win_diag                       - DEBUG    - [EFFECT_INVALIDATE] screen=0 reason=menu_close widgets=7 effects=[clock:QGraphicsDropShadowEffect@0x1df3fe41300(en=True), weather:QGraphicsDropShadowEffect@0x1df3fe41340(en=True), media:QGraphicsDropShadowEffect@0x1df3fdb06c0(en=True), reddit:QGraphicsDropShadowEffect@0x1df3fe3bb00(en=True), reddit2:QGraphicsDropShadowEffect@0x1df3fdb0400(en=True), spotify_volume:QGraphicsDropShadowEffect@0x1df3fe219c0(en=True), spotify_visualizer:QGraphicsDropShadowEffect@0x1df3fd8f080(en=True)]
+2025-12-17 01:02:37 - win_diag                       - DEBUG    - [EFFECT_INVALIDATE] screen=0 reason=menu_before_popup widgets=7 effects=[clock:QGraphicsDropShadowEffect@0x1df3cc7e2c0(en=True), weather:QGraphicsDropShadowEffect@0x1df3fe40e00(en=True), media:QGraphicsDropShadowEffect@0x1df3fe41300(en=True), reddit:QGraphicsDropShadowEffect@0x1df3fe41340(en=True), reddit2:QGraphicsDropShadowEffect@0x1df3cceae40(en=True), spotify_volume:QGraphicsDropShadowEffect@0x1df3fe42ec0(en=True), spotify_visualizer:QGraphicsDropShadowEffect@0x1df3fdb0400(en=True)]
+2025-12-17 01:02:37 - win_diag                       - DEBUG    - [MENU_OPEN] begin t=93331.968000 screen=0 pos=PySide6.QtCore.QPoint(739, 325)
+2025-12-17 01:02:37 - win_diag                       - DEBUG    - [EFFECT_INVALIDATE] screen=0 reason=menu_before_popup widgets=7 effects=[clock:QGraphicsDropShadowEffect@0x1df3cc7e2c0(en=True), weather:QGraphicsDropShadowEffect@0x1df3fe40e00(en=True), media:QGraphicsDropShadowEffect@0x1df3fe41300(en=True), reddit:QGraphicsDropShadowEffect@0x1df3fe41340(en=True), reddit2:QGraphicsDropShadowEffect@0x1df3cceae40(en=True), spotify_volume:QGraphicsDropShadowEffect@0x1df3fe42ec0(en=True), spotify_visualizer:QGraphicsDropShadowEffect@0x1df3fdb0400(en=True)]
+2025-12-17 01:02:37 - win_diag                       - DEBUG    - [EFFECT_INVALIDATE] screen=0 reason=menu_about_to_show widgets=7 effects=[clock:QGraphicsDropShadowEffect@0x1df3fe49f80(en=True), weather:QGraphicsDropShadowEffect@0x1df3fe49ec0(en=True), media:QGraphicsDropShadowEffect@0x1df3fe49f40(en=True), reddit:QGraphicsDropShadowEffect@0x1df3fe40e00(en=True), reddit2:QGraphicsDropShadowEffect@0x1df3cc7e2c0(en=True), spotify_volume:QGraphicsDropShadowEffect@0x1df3fe41340(en=True), spotify_visualizer:QGraphicsDropShadowEffect@0x1df3cceae40(en=True)]
+2025-12-17 01:02:37 - win_diag                       - DEBUG    - [WIN_STATE] focusInEvent screen=0 hwnd=0x2eb0bcc visible=True active=True windowState=-1 updatesEnabled=True 
+2025-12-17 01:02:37 - win_diag                       - DEBUG    - [EFFECT_INVALIDATE] screen=0 reason=focus_in widgets=7 effects=[clock:QGraphicsDropShadowEffect@0x1df3fe49f80(en=True), weather:QGraphicsDropShadowEffect@0x1df3fe49ec0(en=True), media:QGraphicsDropShadowEffect@0x1df3fe49f40(en=True), reddit:QGraphicsDropShadowEffect@0x1df3fe40e00(en=True), reddit2:QGraphicsDropShadowEffect@0x1df3cc7e2c0(en=True), spotify_volume:QGraphicsDropShadowEffect@0x1df3fe41340(en=True), spotify_visualizer:QGraphicsDropShadowEffect@0x1df3cceae40(en=True)]
+2025-12-17 01:02:37 - win_diag                       - DEBUG    - [MENU_OPEN] end t=93332.343000 dt=375.000ms screen=0
+2025-12-17 01:02:37 - win_diag                       - DEBUG    - [EFFECT_INVALIDATE] screen=0 reason=menu_after_hide widgets=7 effects=[clock:QGraphicsDropShadowEffect@0x1df3fe49f80(en=True), weather:QGraphicsDropShadowEffect@0x1df3fe49ec0(en=True), media:QGraphicsDropShadowEffect@0x1df3fe49f40(en=True), reddit:QGraphicsDropShadowEffect@0x1df3fe40e00(en=True), reddit2:QGraphicsDropShadowEffect@0x1df3cc7e2c0(en=True), spotify_volume:QGraphicsDropShadowEffect@0x1df3fe41340(en=True), spotify_visualizer:QGraphicsDropShadowEffect@0x1df3cceae40(en=True)]
+2025-12-17 01:02:37 - win_diag                       - DEBUG    - [EFFECT_INVALIDATE] screen=0 reason=menu_close widgets=7 effects=[clock:QGraphicsDropShadowEffect@0x1df3fe1ac00(en=True), weather:QGraphicsDropShadowEffect@0x1df3fe1acc0(en=True), media:QGraphicsDropShadowEffect@0x1df3fe1a3c0(en=True), reddit:QGraphicsDropShadowEffect@0x1df3fe39b40(en=True), reddit2:QGraphicsDropShadowEffect@0x1df3fe19b80(en=True), spotify_volume:QGraphicsDropShadowEffect@0x1df3fe40e00(en=True), spotify_visualizer:QGraphicsDropShadowEffect@0x1df3cc7e2c0(en=True)]
+2025-12-17 01:02:37 - sources.rss_source             - INFO     - Downloaded image: 4db9d22c1274ee8e5dd65ace8e18ee9d.jpeg (1392687 bytes)
+2025-12-17 01:02:37 - sources.rss_source             - DEBUG    - Added JSON image: Hyderabad fish
+2025-12-17 01:02:37 - sources.rss_source             - INFO     - RSS refresh complete: 98 total images (1 new)
+2025-12-17 01:02:37 - sources.rss_source             - DEBUG    - Cache size OK: 453.2MB, 98 files
+2025-12-17 01:02:37 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 98 images from source
+2025-12-17 01:02:37 - engine.image_queue             - INFO     - Added 98 images (local=0, rss=98). Pools: local=556, rss=1472
+2025-12-17 01:02:37 - rendering.input_handler        - INFO     - X key pressed - next image requested
+2025-12-17 01:02:37 - engine.screensaver             - INFO     - Next image requested
+2025-12-17 01:02:37 - engine.screensaver             - DEBUG    - [ASYNC] Loading 2 different images for 2 displays
+2025-12-17 01:02:37 - rendering.image_processor_async - DEBUG    - Fill(QImage): Scaled 3840x2336 → 2560x1557 (Lanczos=False)
+2025-12-17 01:02:38 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3840x2336 → scaled 2559x1557 → cropped to 2560x1438
+2025-12-17 01:02:38 - rendering.image_processor_async - DEBUG    - Fill(QImage): Scaled 2560x1600 → 3840x2400 (Lanczos=False)
+2025-12-17 01:02:38 - rendering.image_processor_async - INFO     - FILL(QImage): Image 2560x1600 → scaled 3840x2400 → cropped to 3840x2158
+2025-12-17 01:02:38 - rendering.transition_factory   - DEBUG    - [TRANSITIONS] Instantiating 'Crumble' (requested=Crumble, random_mode=False, random_choice=None)
+2025-12-17 01:02:38 - resources.manager              - DEBUG    - Registered resource: gui_component_3049f155 (AnimationManager timer)
+2025-12-17 01:02:38 - rendering.gl_compositor        - DEBUG    - [GL COMPOSITOR] Render timer started: display=164Hz, target=54Hz (interval=18ms)
+2025-12-17 01:02:38 - transitions.gl_compositor_crumble_transition - INFO     - GLCompositorCrumbleTransition started (10862ms, pieces=14, complexity=1.0, mode=rock)
+2025-12-17 01:02:38 - resources.manager              - DEBUG    - Registered resource: gui_component_410ce01f (TransitionWatchdog)
+2025-12-17 01:02:38 - engine.screensaver             - INFO     - [ASYNC] Different images displayed on 2 displays
+2025-12-17 01:02:38 - rendering.transition_factory   - DEBUG    - [TRANSITIONS] Instantiating 'Crumble' (requested=Crumble, random_mode=False, random_choice=None)
+2025-12-17 01:02:38 - resources.manager              - DEBUG    - Registered resource: gui_component_a842e629 (AnimationManager timer)
+2025-12-17 01:02:38 - rendering.gl_compositor        - DEBUG    - [GL COMPOSITOR] Render timer started: display=60Hz, target=60Hz (interval=16ms)
+2025-12-17 01:02:38 - transitions.gl_compositor_crumble_transition - INFO     - GLCompositorCrumbleTransition started (10862ms, pieces=14, complexity=1.0, mode=rock)
+2025-12-17 01:02:38 - resources.manager              - DEBUG    - Registered resource: gui_component_0897b917 (TransitionWatchdog)
+2025-12-17 01:02:38 - rendering.gl_compositor        - DEBUG    - [GL SHADER] Shader crumble path failed; disabling shader pipeline
+Traceback (most recent call last):
+  File "F:\Programming\Apps\ShittyRandomPhotoScreenSaver\rendering\gl_compositor.py", line 2802, in _try_shader_path
+    paint_fn(target)
+  File "F:\Programming\Apps\ShittyRandomPhotoScreenSaver\rendering\gl_compositor.py", line 2466, in _paint_crumble_shader
+    crumble_helper.render(
+  File "F:\Programming\Apps\ShittyRandomPhotoScreenSaver\rendering\gl_programs\crumble_program.py", line 459, in render
+    self._draw_fullscreen_quad(quad_vao)
+  File "F:\Programming\Apps\ShittyRandomPhotoScreenSaver\rendering\gl_programs\base_program.py", line 152, in _draw_fullscreen_quad
+    gl.glBindVertexArray(quad_vao)
+  File "C:\Python311\Lib\site-packages\OpenGL\error.py", line 230, in glCheckError
+    raise self._errorClass(
+OpenGL.error.GLError: GLError(
+	err = 1282,
+	description = b'invalid operation',
+	baseOperation = glBindVertexArray,
+	cArguments = (1,)
+)
+2025-12-17 01:02:39 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 6/10: https://www.reddit.com/r/ArchitecturePorn/top/.json?t=day&li...
+2025-12-17 01:02:39 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2025-12-17 01:02:39 - sources.rss_source             - DEBUG    - Parsing feed: https://www.reddit.com/r/ArchitecturePorn/top/.json?t=day&limit=25
+2025-12-17 01:02:39 - sources.rss_source             - DEBUG    - Parsing JSON feed: https://www.reddit.com/r/ArchitecturePorn/top/.json?t=day&limit=25
+2025-12-17 01:02:40 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/ArchitecturePorn/top/.json?t=day&limit=25)': 7 entries
+2025-12-17 01:02:40 - sources.rss_source             - DEBUG    - Skipping duplicate in current batch: 1f58dc5947f8ba321dcc162d26a8a8df
+2025-12-17 01:02:40 - sources.rss_source             - WARNING  - [FEED_HEALTH] Feed https://www.reddit.com/r/ArchitecturePorn/top/.json?t=day&limit=25 failed 1 times, backoff 60s
+2025-12-17 01:02:40 - sources.rss_source             - WARNING  - [RATE_LIMIT] Reddit feed returned 0 images: https://www.reddit.com/r/ArchitecturePorn/top/.json?t=day&limit=25
+2025-12-17 01:02:40 - sources.rss_source             - INFO     - [RATE_LIMIT] Skipping 1 rate-limited Reddit feeds (will retry on next refresh)
+2025-12-17 01:02:40 - sources.rss_source             - INFO     - RSS refresh complete: 97 total images (0 new)
+2025-12-17 01:02:40 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 97 images from source
+2025-12-17 01:02:40 - engine.image_queue             - INFO     - Added 97 images (local=0, rss=97). Pools: local=554, rss=1569
+2025-12-17 01:02:42 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 7/10: https://www.reddit.com/r/WaterPorn/top/.json?t=day&limit=25...
+2025-12-17 01:02:42 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2025-12-17 01:02:42 - sources.rss_source             - DEBUG    - Parsing feed: https://www.reddit.com/r/WaterPorn/top/.json?t=day&limit=25
+2025-12-17 01:02:42 - sources.rss_source             - DEBUG    - Parsing JSON feed: https://www.reddit.com/r/WaterPorn/top/.json?t=day&limit=25
+2025-12-17 01:02:43 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/WaterPorn/top/.json?t=day&limit=25)': 3 entries
+2025-12-17 01:02:43 - sources.rss_source             - DEBUG    - Downloading image: https://i.redd.it/wh16beb67n7g1.jpeg
+2025-12-17 01:02:44 - rendering.transition_controller - WARNING  - [WATCHDOG] Transition timeout: GLCompositorCrumbleTransition elapsed=6.00s overlay=None
+2025-12-17 01:02:44 - resources.manager              - DEBUG    - Cleaned up resource: gui_component_410ce01f
+2025-12-17 01:02:44 - transitions.gl_compositor_crumble_transition - DEBUG    - Stopping GLCompositorCrumbleTransition
+2025-12-17 01:02:44 - transitions.gl_compositor_crumble_transition - DEBUG    - Cleaning up GLCompositorCrumbleTransition
+2025-12-17 01:02:44 - engine.display                 - DEBUG    - Image displayed on screen 0: C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET\537989.png
+2025-12-17 01:02:44 - transitions.gl_compositor_crumble_transition - DEBUG    - Cleaning up GLCompositorCrumbleTransition
+2025-12-17 01:02:44 - rendering.transition_controller - WARNING  - [WATCHDOG] Transition timeout: GLCompositorCrumbleTransition elapsed=6.00s overlay=None
+2025-12-17 01:02:44 - resources.manager              - DEBUG    - Cleaned up resource: gui_component_0897b917
+2025-12-17 01:02:44 - transitions.gl_compositor_crumble_transition - DEBUG    - Stopping GLCompositorCrumbleTransition
+2025-12-17 01:02:44 - transitions.gl_compositor_crumble_transition - DEBUG    - Cleaning up GLCompositorCrumbleTransition
+2025-12-17 01:02:44 - engine.display                 - DEBUG    - Image displayed on screen 1: C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET\117378.jpg
+2025-12-17 01:02:44 - transitions.gl_compositor_crumble_transition - DEBUG    - Cleaning up GLCompositorCrumbleTransition
+2025-12-17 01:02:45 - sources.rss_source             - INFO     - Downloaded image: e84746e8db9755955e2fb62ff2eb8549.jpeg (2924767 bytes)
+2025-12-17 01:02:45 - sources.rss_source             - DEBUG    - Added JSON image: Jost Van Dyke, BVI [OC][3567X1868]
+2025-12-17 01:02:45 - sources.rss_source             - INFO     - RSS refresh complete: 98 total images (1 new)
+2025-12-17 01:02:45 - sources.rss_source             - DEBUG    - Cache size OK: 456.0MB, 99 files
+2025-12-17 01:02:45 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 98 images from source
+2025-12-17 01:02:45 - engine.image_queue             - INFO     - Added 98 images (local=0, rss=98). Pools: local=554, rss=1667
+2025-12-17 01:02:46 - rendering.input_handler        - INFO     - X key pressed - next image requested
+2025-12-17 01:02:46 - engine.screensaver             - INFO     - Next image requested
+2025-12-17 01:02:46 - engine.screensaver             - DEBUG    - [ASYNC] Loading 2 different images for 2 displays
+2025-12-17 01:02:46 - rendering.image_processor_async - DEBUG    - Fill(QImage): Scaled 3858x2584 → 2560x1714 (Lanczos=False)
+2025-12-17 01:02:46 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3858x2584 → scaled 2559x1714 → cropped to 2560x1438
+2025-12-17 01:02:46 - rendering.image_processor_async - DEBUG    - Fill(QImage): Exact size match 3840x2434, no scaling
+2025-12-17 01:02:46 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3840x2434 → scaled 3840x2434 → cropped to 3840x2158
+2025-12-17 01:02:46 - rendering.transition_factory   - DEBUG    - [TRANSITIONS] Instantiating 'Crumble' (requested=Crumble, random_mode=False, random_choice=None)
+2025-12-17 01:02:46 - resources.manager              - DEBUG    - Registered resource: gui_component_9e699aa7 (AnimationManager timer)
+2025-12-17 01:02:46 - transitions.gl_compositor_crumble_transition - INFO     - GLCompositorCrumbleTransition started (10862ms, pieces=14, complexity=1.0, mode=rock)
+2025-12-17 01:02:46 - resources.manager              - DEBUG    - Registered resource: gui_component_8b50d7ea (TransitionWatchdog)
+2025-12-17 01:02:46 - engine.screensaver             - INFO     - [ASYNC] Different images displayed on 2 displays
+2025-12-17 01:02:47 - rendering.transition_factory   - DEBUG    - [TRANSITIONS] Instantiating 'Crumble' (requested=Crumble, random_mode=False, random_choice=None)
+2025-12-17 01:02:47 - resources.manager              - DEBUG    - Registered resource: gui_component_2b847514 (AnimationManager timer)
+2025-12-17 01:02:47 - transitions.gl_compositor_crumble_transition - INFO     - GLCompositorCrumbleTransition started (10862ms, pieces=14, complexity=1.0, mode=rock)
+2025-12-17 01:02:47 - resources.manager              - DEBUG    - Registered resource: gui_component_da862323 (TransitionWatchdog)
+2025-12-17 01:02:47 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 8/10: https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limi...
+2025-12-17 01:02:47 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2025-12-17 01:02:47 - sources.rss_source             - DEBUG    - Parsing feed: https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limit=25
+2025-12-17 01:02:47 - sources.rss_source             - DEBUG    - Parsing JSON feed: https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limit=25
+2025-12-17 01:02:48 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limit=25)': 0 entries
+2025-12-17 01:02:48 - sources.rss_source             - WARNING  - [FEED_HEALTH] Feed https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limit=25 failed 1 times, backoff 60s
+2025-12-17 01:02:48 - sources.rss_source             - WARNING  - [RATE_LIMIT] Reddit feed returned 0 images: https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limit=25
+2025-12-17 01:02:48 - sources.rss_source             - INFO     - [RATE_LIMIT] Skipping 1 rate-limited Reddit feeds (will retry on next refresh)
+2025-12-17 01:02:48 - sources.rss_source             - INFO     - RSS refresh complete: 97 total images (0 new)
+2025-12-17 01:02:48 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 97 images from source
+2025-12-17 01:02:48 - engine.image_queue             - INFO     - Added 97 images (local=0, rss=97). Pools: local=552, rss=1764
+2025-12-17 01:02:50 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 9/10: https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=2...
+2025-12-17 01:02:50 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2025-12-17 01:02:50 - sources.rss_source             - DEBUG    - Parsing feed: https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=25
+2025-12-17 01:02:50 - sources.rss_source             - DEBUG    - Parsing JSON feed: https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=25
+2025-12-17 01:02:51 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=25)': 0 entries
+2025-12-17 01:02:51 - sources.rss_source             - WARNING  - [FEED_HEALTH] Feed https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=25 failed 1 times, backoff 60s
+2025-12-17 01:02:51 - sources.rss_source             - WARNING  - [RATE_LIMIT] Reddit feed returned 0 images: https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=25
+2025-12-17 01:02:51 - sources.rss_source             - INFO     - [RATE_LIMIT] Skipping 1 rate-limited Reddit feeds (will retry on next refresh)
+2025-12-17 01:02:51 - sources.rss_source             - INFO     - RSS refresh complete: 97 total images (0 new)
+2025-12-17 01:02:51 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 97 images from source
+2025-12-17 01:02:51 - engine.image_queue             - INFO     - Added 97 images (local=0, rss=97). Pools: local=552, rss=1861
+2025-12-17 01:02:52 - rendering.transition_controller - WARNING  - [WATCHDOG] Transition timeout: GLCompositorCrumbleTransition elapsed=6.00s overlay=None
+2025-12-17 01:02:52 - resources.manager              - DEBUG    - Cleaned up resource: gui_component_8b50d7ea
+2025-12-17 01:02:52 - transitions.gl_compositor_crumble_transition - DEBUG    - Stopping GLCompositorCrumbleTransition
+2025-12-17 01:02:52 - transitions.gl_compositor_crumble_transition - DEBUG    - Cleaning up GLCompositorCrumbleTransition
+2025-12-17 01:02:52 - engine.display                 - DEBUG    - Image displayed on screen 0: C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET\55325876_p0.jpg
+2025-12-17 01:02:52 - transitions.gl_compositor_crumble_transition - DEBUG    - Cleaning up GLCompositorCrumbleTransition
+2025-12-17 01:02:53 - rendering.transition_controller - WARNING  - [WATCHDOG] Transition timeout: GLCompositorCrumbleTransition elapsed=6.00s overlay=None
+2025-12-17 01:02:53 - resources.manager              - DEBUG    - Cleaned up resource: gui_component_da862323
+2025-12-17 01:02:53 - transitions.gl_compositor_crumble_transition - DEBUG    - Stopping GLCompositorCrumbleTransition
+2025-12-17 01:02:53 - transitions.gl_compositor_crumble_transition - DEBUG    - Cleaning up GLCompositorCrumbleTransition
+2025-12-17 01:02:53 - engine.display                 - DEBUG    - Image displayed on screen 1: C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET\535260.png
+2025-12-17 01:02:53 - transitions.gl_compositor_crumble_transition - DEBUG    - Cleaning up GLCompositorCrumbleTransition
+2025-12-17 01:02:53 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 10/10: https://www.reddit.com/r/AbandonedPorn/top/.json?t=day&limit...
+2025-12-17 01:02:53 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2025-12-17 01:02:53 - sources.rss_source             - DEBUG    - Parsing feed: https://www.reddit.com/r/AbandonedPorn/top/.json?t=day&limit=25
+2025-12-17 01:02:53 - sources.rss_source             - DEBUG    - Parsing JSON feed: https://www.reddit.com/r/AbandonedPorn/top/.json?t=day&limit=25
+2025-12-17 01:02:54 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/AbandonedPorn/top/.json?t=day&limit=25)': 6 entries
+2025-12-17 01:02:54 - sources.rss_source             - DEBUG    - Skipping duplicate in current batch: ec22364d1215127396222524c66e203e
+2025-12-17 01:02:54 - sources.rss_source             - DEBUG    - Skipping duplicate in current batch: 8151ac91b9c0f87cdf7a5a70364b3e97
+2025-12-17 01:02:54 - sources.rss_source             - WARNING  - [FEED_HEALTH] Feed https://www.reddit.com/r/AbandonedPorn/top/.json?t=day&limit=25 failed 1 times, backoff 60s
+2025-12-17 01:02:54 - sources.rss_source             - WARNING  - [RATE_LIMIT] Reddit feed returned 0 images: https://www.reddit.com/r/AbandonedPorn/top/.json?t=day&limit=25
+2025-12-17 01:02:54 - sources.rss_source             - INFO     - [RATE_LIMIT] Skipping 1 rate-limited Reddit feeds (will retry on next refresh)
+2025-12-17 01:02:54 - sources.rss_source             - INFO     - RSS refresh complete: 97 total images (0 new)
+2025-12-17 01:02:54 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 97 images from source
+2025-12-17 01:02:54 - engine.image_queue             - INFO     - Added 97 images (local=0, rss=97). Pools: local=552, rss=1958
+2025-12-17 01:02:54 - engine.screensaver             - INFO     - [ASYNC RSS] Completed: 988 total images loaded from 10 sources
+2025-12-17 01:03:02 - widgets.reddit_widget          - INFO     - [REDDIT] Opened https://www.reddit.com/r/pics/comments/1poegp1/don_jr_proposes_while_trump_stares_at_her_chest/
+2025-12-17 01:03:02 - win_diag                       - DEBUG    - [WIN_STATE] nativeEvent screen=0 hwnd=0x2eb0bcc visible=True active=True windowState=-1 updatesEnabled=True msg=WM_NCACTIVATE wParam=0 lParam=0 hwnd=?
+2025-12-17 01:03:02 - win_diag                       - DEBUG    - [WIN_STATE] nativeEvent screen=0 hwnd=0x2eb0bcc visible=True active=True windowState=-1 updatesEnabled=True msg=WM_ACTIVATE wParam=0 lParam=0 hwnd=?
+2025-12-17 01:03:02 - win_diag                       - DEBUG    - [WIN_STATE] changeEvent:99 screen=0 hwnd=0x2eb0bcc visible=True active=False windowState=-1 updatesEnabled=True 
+2025-12-17 01:03:05 - win_diag                       - DEBUG    - [WIN_STATE] nativeEvent screen=0 hwnd=0x2eb0bcc visible=True active=True windowState=-1 updatesEnabled=True msg=WM_WINDOWPOSCHANGING wParam=0 lParam=78437597440 hwnd=?
+2025-12-17 01:03:05 - win_diag                       - DEBUG    - [WIN_STATE] nativeEvent screen=0 hwnd=0x2eb0bcc visible=True active=True windowState=-1 updatesEnabled=True msg=WM_WINDOWPOSCHANGED wParam=0 lParam=78437597440 hwnd=?
+2025-12-17 01:03:05 - win_diag                       - DEBUG    - [WIN_STATE] nativeEvent screen=0 hwnd=0x2eb0bcc visible=True active=True windowState=-1 updatesEnabled=True msg=WM_NCACTIVATE wParam=1 lParam=0 hwnd=?
+2025-12-17 01:03:05 - win_diag                       - DEBUG    - [WIN_STATE] nativeEvent screen=0 hwnd=0x2eb0bcc visible=True active=True windowState=-1 updatesEnabled=True msg=WM_ACTIVATE wParam=2 lParam=0 hwnd=?
+2025-12-17 01:03:05 - win_diag                       - DEBUG    - [WIN_STATE] changeEvent:99 screen=0 hwnd=0x2eb0bcc visible=True active=True windowState=-1 updatesEnabled=True 
+2025-12-17 01:03:05 - win_diag                       - DEBUG    - [WIN_STATE] focusInEvent screen=0 hwnd=0x2eb0bcc visible=True active=True windowState=-1 updatesEnabled=True 
+2025-12-17 01:03:05 - win_diag                       - DEBUG    - [EFFECT_INVALIDATE] screen=0 reason=focus_in widgets=7 effects=[clock:QGraphicsDropShadowEffect@0x1df3fe1ac00(en=True), weather:QGraphicsDropShadowEffect@0x1df3fe1acc0(en=True), media:QGraphicsDropShadowEffect@0x1df3fe1a3c0(en=True), reddit:QGraphicsDropShadowEffect@0x1df3fe39b40(en=True), reddit2:QGraphicsDropShadowEffect@0x1df3fe19b80(en=True), spotify_volume:QGraphicsDropShadowEffect@0x1df3fe40e00(en=True), spotify_visualizer:QGraphicsDropShadowEffect@0x1df3cc7e2c0(en=True)]
+2025-12-17 01:03:05 - win_diag                       - DEBUG    - [EFFECT_INVALIDATE] screen=0 reason=menu_before_popup widgets=7 effects=[clock:QGraphicsDropShadowEffect@0x1df3fe1ac00(en=True), weather:QGraphicsDropShadowEffect@0x1df3fe1acc0(en=True), media:QGraphicsDropShadowEffect@0x1df3fe1a3c0(en=True), reddit:QGraphicsDropShadowEffect@0x1df3fe39b40(en=True), reddit2:QGraphicsDropShadowEffect@0x1df3fe19b80(en=True), spotify_volume:QGraphicsDropShadowEffect@0x1df3fe40e00(en=True), spotify_visualizer:QGraphicsDropShadowEffect@0x1df3cc7e2c0(en=True)]
+2025-12-17 01:03:05 - win_diag                       - DEBUG    - [MENU_OPEN] begin t=93360.031000 screen=0 pos=PySide6.QtCore.QPoint(785, 489)
+2025-12-17 01:03:05 - win_diag                       - DEBUG    - [EFFECT_INVALIDATE] screen=0 reason=menu_before_popup widgets=7 effects=[clock:QGraphicsDropShadowEffect@0x1df3fe15900(en=True), weather:QGraphicsDropShadowEffect@0x1df3bb68b80(en=True), media:QGraphicsDropShadowEffect@0x1df3fdce280(en=True), reddit:QGraphicsDropShadowEffect@0x1df3fe1acc0(en=True), reddit2:QGraphicsDropShadowEffect@0x1df3bb6b5c0(en=True), spotify_volume:QGraphicsDropShadowEffect@0x1df3fe1ac00(en=True), spotify_visualizer:QGraphicsDropShadowEffect@0x1df3fe19b80(en=True)]
+2025-12-17 01:03:05 - win_diag                       - DEBUG    - [EFFECT_INVALIDATE] screen=0 reason=menu_about_to_show widgets=7 effects=[clock:QGraphicsDropShadowEffect@0x1df3fe15900(en=True), weather:QGraphicsDropShadowEffect@0x1df3bb68b80(en=True), media:QGraphicsDropShadowEffect@0x1df3fdce280(en=True), reddit:QGraphicsDropShadowEffect@0x1df3fe1acc0(en=True), reddit2:QGraphicsDropShadowEffect@0x1df3bb6b5c0(en=True), spotify_volume:QGraphicsDropShadowEffect@0x1df3fe1ac00(en=True), spotify_visualizer:QGraphicsDropShadowEffect@0x1df3fe19b80(en=True)]
+2025-12-17 01:03:07 - win_diag                       - DEBUG    - [WIN_STATE] focusInEvent screen=0 hwnd=0x2eb0bcc visible=True active=True windowState=-1 updatesEnabled=True 
+2025-12-17 01:03:07 - win_diag                       - DEBUG    - [EFFECT_INVALIDATE] screen=0 reason=focus_in widgets=7 effects=[clock:QGraphicsDropShadowEffect@0x1df3fdb2680(en=True), weather:QGraphicsDropShadowEffect@0x1df3bb3eb40(en=True), media:QGraphicsDropShadowEffect@0x1df3fe15900(en=True), reddit:QGraphicsDropShadowEffect@0x1df3bb68b80(en=True), reddit2:QGraphicsDropShadowEffect@0x1df3fdce280(en=True), spotify_volume:QGraphicsDropShadowEffect@0x1df3fe1acc0(en=True), spotify_visualizer:QGraphicsDropShadowEffect@0x1df3bb6b5c0(en=True)]
+2025-12-17 01:03:07 - win_diag                       - DEBUG    - [MENU_OPEN] end t=93362.062000 dt=2031.000ms screen=0
+2025-12-17 01:03:07 - EventSystem                    - DEBUG    - Publishing event: settings.changed, subscribers=1
+2025-12-17 01:03:07 - engine.screensaver             - DEBUG    - Setting changed event: transitions
+2025-12-17 01:03:07 - rendering.display              - INFO     - Context menu: transition changed to Ripple
+2025-12-17 01:03:07 - widgets.context_menu           - DEBUG    - Context menu: transition selected: Ripple
+2025-12-17 01:03:07 - win_diag                       - DEBUG    - [EFFECT_INVALIDATE] screen=0 reason=menu_after_hide widgets=7 effects=[clock:QGraphicsDropShadowEffect@0x1df3fdb2680(en=True), weather:QGraphicsDropShadowEffect@0x1df3bb3eb40(en=True), media:QGraphicsDropShadowEffect@0x1df3fe15900(en=True), reddit:QGraphicsDropShadowEffect@0x1df3bb68b80(en=True), reddit2:QGraphicsDropShadowEffect@0x1df3fdce280(en=True), spotify_volume:QGraphicsDropShadowEffect@0x1df3fe1acc0(en=True), spotify_visualizer:QGraphicsDropShadowEffect@0x1df3bb6b5c0(en=True)]
+2025-12-17 01:03:07 - win_diag                       - DEBUG    - [EFFECT_INVALIDATE] screen=0 reason=menu_close widgets=7 effects=[clock:QGraphicsDropShadowEffect@0x1df3fdb2680(en=True), weather:QGraphicsDropShadowEffect@0x1df3bb3eb40(en=True), media:QGraphicsDropShadowEffect@0x1df3fe15900(en=True), reddit:QGraphicsDropShadowEffect@0x1df3bb68b80(en=True), reddit2:QGraphicsDropShadowEffect@0x1df3fdce280(en=True), spotify_volume:QGraphicsDropShadowEffect@0x1df3fe1acc0(en=True), spotify_visualizer:QGraphicsDropShadowEffect@0x1df3bb6b5c0(en=True)]
+2025-12-17 01:03:07 - rendering.input_handler        - INFO     - X key pressed - next image requested
+2025-12-17 01:03:07 - engine.screensaver             - INFO     - Next image requested
+2025-12-17 01:03:07 - engine.screensaver             - DEBUG    - [ASYNC] Loading 2 different images for 2 displays
+2025-12-17 01:03:07 - rendering.image_processor_async - DEBUG    - Fill(QImage): Scaled 4320x1956 → 3175x1438 (Lanczos=False)
+2025-12-17 01:03:07 - rendering.image_processor_async - INFO     - FILL(QImage): Image 4320x1956 → scaled 3175x1438 → cropped to 2560x1438
+2025-12-17 01:03:07 - rendering.image_processor_async - DEBUG    - Fill(QImage): Scaled 4960x3507 → 3840x2715 (Lanczos=False)
+2025-12-17 01:03:07 - rendering.image_processor_async - INFO     - FILL(QImage): Image 4960x3507 → scaled 3839x2715 → cropped to 3840x2158
+2025-12-17 01:03:08 - rendering.transition_factory   - DEBUG    - [TRANSITIONS] Instantiating 'Ripple' (requested=Ripple, random_mode=False, random_choice=None)
+2025-12-17 01:03:08 - resources.manager              - DEBUG    - Registered resource: gui_component_dcca8e38 (AnimationManager timer)
+2025-12-17 01:03:08 - transitions.gl_compositor_raindrops_transition - INFO     - GLCompositorRainDropsTransition started (shader, 8100ms)
+2025-12-17 01:03:08 - resources.manager              - DEBUG    - Registered resource: gui_component_df6119ae (TransitionWatchdog)
+2025-12-17 01:03:08 - engine.screensaver             - INFO     - [ASYNC] Different images displayed on 2 displays
+2025-12-17 01:03:08 - rendering.transition_factory   - DEBUG    - [TRANSITIONS] Instantiating 'Ripple' (requested=Ripple, random_mode=False, random_choice=None)
+2025-12-17 01:03:08 - resources.manager              - DEBUG    - Registered resource: gui_component_f3231fc0 (AnimationManager timer)
+2025-12-17 01:03:08 - transitions.gl_compositor_raindrops_transition - INFO     - GLCompositorRainDropsTransition started (diffuse, 8100ms, drops=30)
+2025-12-17 01:03:08 - resources.manager              - DEBUG    - Registered resource: gui_component_b33280cd (TransitionWatchdog)
+2025-12-17 01:03:14 - rendering.transition_controller - WARNING  - [WATCHDOG] Transition timeout: GLCompositorRainDropsTransition elapsed=6.00s overlay=None
+2025-12-17 01:03:14 - resources.manager              - DEBUG    - Cleaned up resource: gui_component_df6119ae
+2025-12-17 01:03:14 - transitions.gl_compositor_raindrops_transition - DEBUG    - Stopping GLCompositorRainDropsTransition
+2025-12-17 01:03:14 - transitions.gl_compositor_raindrops_transition - DEBUG    - Cleaning up GLCompositorRainDropsTransition
+2025-12-17 01:03:14 - engine.display                 - DEBUG    - Image displayed on screen 0: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache\066f1d54777a792f009d9a42c7b6c0c4.jpeg
+2025-12-17 01:03:14 - transitions.gl_compositor_raindrops_transition - DEBUG    - Cleaning up GLCompositorRainDropsTransition
+2025-12-17 01:03:14 - rendering.transition_controller - WARNING  - [WATCHDOG] Transition timeout: GLCompositorRainDropsTransition elapsed=6.00s overlay=None
+2025-12-17 01:03:14 - resources.manager              - DEBUG    - Cleaned up resource: gui_component_b33280cd
+2025-12-17 01:03:14 - transitions.gl_compositor_raindrops_transition - DEBUG    - Stopping GLCompositorRainDropsTransition
+2025-12-17 01:03:14 - transitions.gl_compositor_raindrops_transition - DEBUG    - Cleaning up GLCompositorRainDropsTransition
+2025-12-17 01:03:14 - engine.display                 - DEBUG    - Image displayed on screen 1: C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET\568389.jpg
+2025-12-17 01:03:14 - transitions.gl_compositor_raindrops_transition - DEBUG    - Cleaning up GLCompositorRainDropsTransition
+2025-12-17 01:03:15 - rendering.input_handler        - INFO     - Exit key pressed (16777216), requesting exit
+2025-12-17 01:03:15 - engine.display                 - INFO     - Exit requested from display widget
+2025-12-17 01:03:15 - engine.screensaver             - INFO     - Exit requested from display
+2025-12-17 01:03:15 - engine.screensaver             - INFO     - Engine state: RUNNING -> SHUTTING_DOWN
+2025-12-17 01:03:15 - engine.screensaver             - INFO     - Stopping screensaver engine...
+2025-12-17 01:03:15 - engine.screensaver             - DEBUG    - Engine stop requested (exit_app=True)
+2025-12-17 01:03:15 - engine.screensaver             - DEBUG    - RSS refresh timer stopped
+2025-12-17 01:03:15 - engine.screensaver             - DEBUG    - Rotation timer stopped
+2025-12-17 01:03:15 - resources.manager              - DEBUG    - Cleaned up resource: gui_component_3518c997
+2025-12-17 01:03:15 - engine.screensaver             - INFO     - Stopping displays via DisplayManager (count=2, exit_app=True)
+2025-12-17 01:03:15 - engine.display                 - INFO     - All displays cleared
+2025-12-17 01:03:15 - engine.display                 - INFO     - Cleaning up 2 display widgets
+2025-12-17 01:03:15 - engine.display                 - DEBUG    - [CLEANUP] Reset all DisplayWidget global state
+2025-12-17 01:03:15 - engine.display                 - DEBUG    - Cleaning up display widget (index=0/2, screen_index=0)
+2025-12-17 01:03:15 - win_diag                       - DEBUG    - [WIN_STATE] changeEvent:99 screen=0 hwnd=0x2eb0bcc visible=True active=True windowState=-1 updatesEnabled=True 
+2025-12-17 01:03:15 - win_diag                       - DEBUG    - [WIN_STATE] nativeEvent screen=0 hwnd=0x2eb0bcc visible=True active=True windowState=-1 updatesEnabled=True msg=WM_WINDOWPOSCHANGING wParam=0 lParam=78437579392 hwnd=?
+2025-12-17 01:03:15 - win_diag                       - DEBUG    - [WIN_STATE] nativeEvent screen=0 hwnd=0x2eb0bcc visible=True active=True windowState=-1 updatesEnabled=True msg=WM_WINDOWPOSCHANGED wParam=0 lParam=78437579392 hwnd=?
+2025-12-17 01:03:15 - win_diag                       - DEBUG    - [WIN_STATE] nativeEvent screen=0 hwnd=0x2eb0bcc visible=True active=False windowState=-1 updatesEnabled=True msg=WM_NCACTIVATE wParam=0 lParam=0 hwnd=?
+2025-12-17 01:03:15 - win_diag                       - DEBUG    - [WIN_STATE] nativeEvent screen=0 hwnd=0x2eb0bcc visible=True active=False windowState=-1 updatesEnabled=True msg=WM_ACTIVATE wParam=0 lParam=0 hwnd=?
+2025-12-17 01:03:15 - engine.display                 - DEBUG    - Cleaning up display widget (index=1/2, screen_index=1)
+2025-12-17 01:03:15 - win_diag                       - DEBUG    - [WIN_STATE] nativeEvent screen=0 hwnd=? visible=False active=False windowState=-1 updatesEnabled=True msg=WM_WINDOWPOSCHANGING wParam=0 lParam=78437428112 hwnd=?
+2025-12-17 01:03:15 - win_diag                       - DEBUG    - [WIN_STATE] nativeEvent screen=0 hwnd=? visible=False active=False windowState=-1 updatesEnabled=True msg=WM_WINDOWPOSCHANGED wParam=0 lParam=78437428112 hwnd=?
+2025-12-17 01:03:15 - win_diag                       - DEBUG    - [WIN_STATE] nativeEvent screen=0 hwnd=0x3600eda visible=False active=False windowState=-1 updatesEnabled=True msg=WM_WINDOWPOSCHANGING wParam=0 lParam=78437433136 hwnd=?
+2025-12-17 01:03:15 - win_diag                       - DEBUG    - [WIN_STATE] nativeEvent screen=0 hwnd=0x3600eda visible=False active=False windowState=-1 updatesEnabled=True msg=WM_WINDOWPOSCHANGED wParam=0 lParam=78437433136 hwnd=?

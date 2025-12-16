@@ -59,124 +59,59 @@ try:  # Optional dependency; shaders are disabled if unavailable.
 except Exception:  # pragma: no cover - PyOpenGL not required for CPU paths
     gl = None
 
-# Import shader program helpers (lazy to avoid circular imports at module level)
-_peel_program_instance = None
-_blockflip_program_instance = None
-_crossfade_program_instance = None
-_blinds_program_instance = None
-_diffuse_program_instance = None
+# Centralized shader program cache - replaces scattered module-level globals
+from rendering.gl_programs.program_cache import get_program_cache, cleanup_program_cache, GLProgramCache
+from rendering.gl_programs.geometry_manager import get_geometry_manager
+
 
 def _get_peel_program():
-    """Lazy-load the PeelProgram singleton."""
-    global _peel_program_instance
-    if _peel_program_instance is None:
-        from rendering.gl_programs.peel_program import peel_program
-        _peel_program_instance = peel_program
-    return _peel_program_instance
+    """Get the PeelProgram instance via cache."""
+    return get_program_cache().get_program_instance(GLProgramCache.PEEL)
 
 def _get_blockflip_program():
-    """Lazy-load the BlockFlipProgram singleton."""
-    global _blockflip_program_instance
-    if _blockflip_program_instance is None:
-        from rendering.gl_programs.blockflip_program import blockflip_program
-        _blockflip_program_instance = blockflip_program
-    return _blockflip_program_instance
+    """Get the BlockFlipProgram instance via cache."""
+    return get_program_cache().get_program_instance(GLProgramCache.BLOCK_FLIP)
 
 def _get_crossfade_program():
-    """Lazy-load the CrossfadeProgram singleton."""
-    global _crossfade_program_instance
-    if _crossfade_program_instance is None:
-        from rendering.gl_programs.crossfade_program import crossfade_program
-        _crossfade_program_instance = crossfade_program
-    return _crossfade_program_instance
+    """Get the CrossfadeProgram instance via cache."""
+    return get_program_cache().get_program_instance(GLProgramCache.CROSSFADE)
 
 def _get_blinds_program():
-    """Lazy-load the BlindsProgram singleton."""
-    global _blinds_program_instance
-    if _blinds_program_instance is None:
-        from rendering.gl_programs.blinds_program import blinds_program
-        _blinds_program_instance = blinds_program
-    return _blinds_program_instance
+    """Get the BlindsProgram instance via cache."""
+    return get_program_cache().get_program_instance(GLProgramCache.BLINDS)
 
 def _get_diffuse_program():
-    """Lazy-load the DiffuseProgram singleton."""
-    global _diffuse_program_instance
-    if _diffuse_program_instance is None:
-        from rendering.gl_programs.diffuse_program import diffuse_program
-        _diffuse_program_instance = diffuse_program
-    return _diffuse_program_instance
-
-_slide_program_instance = None
-_wipe_program_instance = None
+    """Get the DiffuseProgram instance via cache."""
+    return get_program_cache().get_program_instance(GLProgramCache.DIFFUSE)
 
 def _get_slide_program():
-    """Lazy-load the SlideProgram singleton."""
-    global _slide_program_instance
-    if _slide_program_instance is None:
-        from rendering.gl_programs.slide_program import slide_program
-        _slide_program_instance = slide_program
-    return _slide_program_instance
+    """Get the SlideProgram instance via cache."""
+    return get_program_cache().get_program_instance(GLProgramCache.SLIDE)
 
 def _get_wipe_program():
-    """Lazy-load the WipeProgram singleton."""
-    global _wipe_program_instance
-    if _wipe_program_instance is None:
-        from rendering.gl_programs.wipe_program import wipe_program
-        _wipe_program_instance = wipe_program
-    return _wipe_program_instance
-
-_warp_program_instance = None
-_raindrops_program_instance = None
-_crumble_program_instance = None
+    """Get the WipeProgram instance via cache."""
+    return get_program_cache().get_program_instance(GLProgramCache.WIPE)
 
 def _get_crumble_program():
-    """Lazy-load the CrumbleProgram singleton."""
-    global _crumble_program_instance
-    if _crumble_program_instance is None:
-        from rendering.gl_programs.crumble_program import crumble_program
-        _crumble_program_instance = crumble_program
-    return _crumble_program_instance
+    """Get the CrumbleProgram instance via cache."""
+    return get_program_cache().get_program_instance(GLProgramCache.CRUMBLE)
 
 def _get_warp_program():
-    """Lazy-load the WarpProgram singleton."""
-    global _warp_program_instance
-    if _warp_program_instance is None:
-        from rendering.gl_programs.warp_program import warp_program
-        _warp_program_instance = warp_program
-    return _warp_program_instance
+    """Get the WarpProgram instance via cache."""
+    return get_program_cache().get_program_instance(GLProgramCache.WARP)
 
 def _get_raindrops_program():
-    """Lazy-load the RaindropsProgram singleton."""
-    global _raindrops_program_instance
-    if _raindrops_program_instance is None:
-        from rendering.gl_programs.raindrops_program import raindrops_program
-        _raindrops_program_instance = raindrops_program
-    return _raindrops_program_instance
+    """Get the RaindropsProgram instance via cache."""
+    return get_program_cache().get_program_instance(GLProgramCache.RAINDROPS)
 
 
 def cleanup_global_shader_programs() -> None:
-    """Clear all global shader program singleton instances.
+    """Clear all shader program instances via the centralized cache.
     
     Call this on application shutdown to ensure GL resources are released.
     This is safe to call even if programs were never loaded.
     """
-    global _peel_program_instance, _blockflip_program_instance, _crossfade_program_instance
-    global _blinds_program_instance, _diffuse_program_instance, _slide_program_instance
-    global _wipe_program_instance, _warp_program_instance, _raindrops_program_instance
-    global _crumble_program_instance
-    
-    # Clear all program instances - they will be garbage collected
-    # and their GL resources released when the context is destroyed
-    _peel_program_instance = None
-    _blockflip_program_instance = None
-    _crossfade_program_instance = None
-    _blinds_program_instance = None
-    _diffuse_program_instance = None
-    _slide_program_instance = None
-    _wipe_program_instance = None
-    _warp_program_instance = None
-    _raindrops_program_instance = None
-    _crumble_program_instance = None
+    cleanup_program_cache()
 
 
 logger = get_logger(__name__)
@@ -206,173 +141,62 @@ def _blockspin_spin_from_progress(p: float) -> float:
 
 @dataclass
 class _GLPipelineState:
-    """Minimal shader pipeline state for GL-backed transitions.
-
-    Phase 1 scaffolding only – this holds the objects needed to render
-    textured quads via GLSL. Later phases will populate these with real
-    OpenGL ids and use them from paintGL; for now they are created and
-    cleaned up but not yet wired into the rendering path.
+    """GL pipeline state for shader-backed transitions.
+    
+    Holds OpenGL object IDs, texture cache, and uniform location dicts.
     """
-
-    # Raw OpenGL object ids. These remain ``int`` so we do not depend on
-    # PyOpenGL types in the public API surface of this module.
+    # Geometry IDs
     quad_vao: int = 0
     quad_vbo: int = 0
-    # Geometry for the BlockSpin 3D slab (box mesh rendered with triangles).
     box_vao: int = 0
     box_vbo: int = 0
     box_vertex_count: int = 0
+    
+    # Shader program IDs
     basic_program: int = 0
     raindrops_program: int = 0
     warp_program: int = 0
     diffuse_program: int = 0
     blockflip_program: int = 0
     peel_program: int = 0
-    claws_program: int = 0
-    shuffle_program: int = 0
     crossfade_program: int = 0
     slide_program: int = 0
     wipe_program: int = 0
     blinds_program: int = 0
     crumble_program: int = 0
 
-    # Textures for the current pair of images being blended/transitioned.
+    # Texture IDs for current transition
     old_tex_id: int = 0
     new_tex_id: int = 0
-    # Small per-pixmap texture cache keyed by QPixmap.cacheKey() so
-    # shader-backed transitions can reuse GPU textures across frames and
-    # transitions instead of re-uploading from CPU memory each time.
     texture_cache: dict[int, int] = field(default_factory=dict)
     texture_lru: list[int] = field(default_factory=list)
 
-    # Double-buffered PBO pool for async texture uploads.
-    # Each PBO pair allows one buffer to be filled while the other is used for upload.
-    # Format: list of (pbo_id, size, in_use) tuples
+    # PBO pool for async texture uploads
     pbo_pool: list = field(default_factory=list)
-    # Pending uploads: list of (pbo_id, tex_id, width, height) waiting for next frame
     pbo_pending_uploads: list = field(default_factory=list)
 
-    # Cached uniform locations for the basic card-flip program.
+    # Uniform locations for basic card-flip program
     u_angle_loc: int = -1
     u_aspect_loc: int = -1
     u_old_tex_loc: int = -1
     u_new_tex_loc: int = -1
     u_spec_dir_loc: int = -1
     u_axis_mode_loc: int = -1
-    # Per-tile placement for the 3D Block Spins slab when rendering a grid of
-    # cards. These are optional and default to a single full-frame slab when
-    # unset.
     u_block_rect_loc: int = -1
     u_block_uv_rect_loc: int = -1
 
-    # Cached uniform locations for the Ripple (raindrops) shader program.
-    # Legacy fields kept for compatibility; new code uses raindrops_uniforms dict.
-    raindrops_u_progress: int = -1
-    raindrops_u_resolution: int = -1
-    raindrops_u_old_tex: int = -1
-    raindrops_u_new_tex: int = -1
-    # New: dict of uniform locations from RaindropsProgram.cache_uniforms()
+    # Uniform location dicts (populated by program helpers)
     raindrops_uniforms: dict = field(default_factory=dict)
-
-    # Cached uniform locations for the Warp Dissolve shader program.
-    # Legacy fields kept for compatibility; new code uses warp_uniforms dict.
-    warp_u_progress: int = -1
-    warp_u_resolution: int = -1
-    warp_u_old_tex: int = -1
-    warp_u_new_tex: int = -1
-    # New: dict of uniform locations from WarpProgram.cache_uniforms()
     warp_uniforms: dict = field(default_factory=dict)
-
-    # Cached uniform locations for the Diffuse shader program.
-    # Legacy fields kept for compatibility; new code uses diffuse_uniforms dict.
-    diffuse_u_progress: int = -1
-    diffuse_u_resolution: int = -1
-    diffuse_u_old_tex: int = -1
-    diffuse_u_new_tex: int = -1
-    diffuse_u_grid: int = -1
-    diffuse_u_shape_mode: int = -1
-    # New: dict of uniform locations from DiffuseProgram.cache_uniforms()
     diffuse_uniforms: dict = field(default_factory=dict)
-
-    # Cached uniform locations for the BlockFlip shader program.
-    # Legacy fields kept for compatibility; new code uses blockflip_uniforms dict.
-    blockflip_u_progress: int = -1
-    blockflip_u_resolution: int = -1
-    blockflip_u_old_tex: int = -1
-    blockflip_u_new_tex: int = -1
-    blockflip_u_grid: int = -1
-    blockflip_u_direction: int = -1
-    # New: dict of uniform locations from BlockFlipProgram.cache_uniforms()
     blockflip_uniforms: dict = field(default_factory=dict)
-
-    # Cached uniform locations for the Peel shader program.
-    # Legacy fields kept for compatibility; new code uses peel_uniforms dict.
-    peel_u_progress: int = -1
-    peel_u_resolution: int = -1
-    peel_u_old_tex: int = -1
-    peel_u_new_tex: int = -1
-    peel_u_direction: int = -1
-    peel_u_strips: int = -1
-    # New: dict of uniform locations from PeelProgram.cache_uniforms()
     peel_uniforms: dict = field(default_factory=dict)
-
-    # Cached uniform locations for the Blinds shader program.
-    # Legacy fields kept for compatibility; new code uses blinds_uniforms dict.
-    blinds_u_progress: int = -1
-    blinds_u_resolution: int = -1
-    blinds_u_old_tex: int = -1
-    blinds_u_new_tex: int = -1
-    blinds_u_grid: int = -1
-    # New: dict of uniform locations from BlindsProgram.cache_uniforms()
     blinds_uniforms: dict = field(default_factory=dict)
-
-    # Cached uniform locations for the Crumble shader program.
     crumble_uniforms: dict = field(default_factory=dict)
-
-    # Cached uniform locations for the Shuffle shader program.
-    shuffle_u_progress: int = -1
-    shuffle_u_resolution: int = -1
-    shuffle_u_old_tex: int = -1
-    shuffle_u_new_tex: int = -1
-    shuffle_u_grid: int = -1
-    shuffle_u_direction: int = -1
-    # Legacy fields kept for compatibility; new code uses crossfade_uniforms dict.
-    crossfade_u_progress: int = -1
-    crossfade_u_resolution: int = -1
-    crossfade_u_old_tex: int = -1
-    crossfade_u_new_tex: int = -1
-    # New: dict of uniform locations from CrossfadeProgram.cache_uniforms()
     crossfade_uniforms: dict = field(default_factory=dict)
-    # Legacy fields kept for compatibility; new code uses slide_uniforms dict.
-    slide_u_progress: int = -1
-    slide_u_resolution: int = -1
-    slide_u_old_tex: int = -1
-    slide_u_new_tex: int = -1
-    slide_u_old_rect: int = -1
-    slide_u_new_rect: int = -1
-    # New: dict of uniform locations from SlideProgram.cache_uniforms()
     slide_uniforms: dict = field(default_factory=dict)
-    # Legacy fields kept for compatibility; new code uses wipe_uniforms dict.
-    wipe_u_progress: int = -1
-    wipe_u_resolution: int = -1
-    wipe_u_old_tex: int = -1
-    wipe_u_new_tex: int = -1
-    wipe_u_mode: int = -1
-    # New: dict of uniform locations from WipeProgram.cache_uniforms()
     wipe_uniforms: dict = field(default_factory=dict)
 
-    # Cached uniform locations for the Shooting Stars (claws) shader program.
-    claws_u_progress: int = -1
-    claws_u_resolution: int = -1
-    claws_u_old_tex: int = -1
-    claws_u_new_tex: int = -1
-    claws_u_density: int = -1
-    claws_u_direction: int = -1
-    claws_u_length: int = -1
-    claws_u_width: int = -1
-
-    # Simple flags to indicate whether the pipeline was initialized
-    # successfully inside the current GL context.
     initialized: bool = False
 
 
@@ -693,6 +517,114 @@ class GLCompositorWidget(QOpenGLWidget):
         except Exception:
             self._spotify_vis_fade = 1.0
 
+    def _clear_all_transitions(self) -> None:
+        """Clear all transition states."""
+        self._crossfade = None
+        self._slide = None
+        self._wipe = None
+        self._warp = None
+        self._blockflip = None
+        self._blockspin = None
+        self._blinds = None
+        self._diffuse = None
+        self._peel = None
+        self._raindrops = None
+        self._crumble = None
+
+    def _handle_no_old_image(self, new_pixmap: QPixmap, on_finished: Optional[Callable[[], None]], name: str) -> bool:
+        """Handle case where there's no old image - show new image immediately. Returns True if handled."""
+        if new_pixmap is None or new_pixmap.isNull():
+            return False
+        logger.debug("[GL COMPOSITOR] No old image; showing new image immediately (%s)", name)
+        self._clear_all_transitions()
+        self._base_pixmap = new_pixmap
+        self.update()
+        if on_finished:
+            try:
+                on_finished()
+            except Exception:
+                logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
+        return True
+
+    def _pre_upload_textures(self, prep_fn: Callable[[], bool]) -> None:
+        """Pre-upload textures before animation starts."""
+        if self._gl_pipeline is not None and self._use_shaders:
+            try:
+                self.makeCurrent()
+                prep_fn()
+                self.doneCurrent()
+            except Exception:
+                logger.debug("[GL COMPOSITOR] Pre-upload textures failed", exc_info=True)
+
+    def _cancel_current_animation(self) -> None:
+        """Cancel any previous animation on this compositor."""
+        if self._current_anim_id and self._animation_manager:
+            try:
+                self._animation_manager.cancel_animation(self._current_anim_id)
+            except Exception:
+                pass
+            self._current_anim_id = None
+
+    def _start_transition_animation(
+        self,
+        duration_ms: int,
+        easing: EasingCurve,
+        animation_manager: AnimationManager,
+        update_callback: Callable[[float], None],
+        on_complete: Callable[[], None],
+    ) -> str:
+        """Start a transition animation and return the animation ID."""
+        self._animation_manager = animation_manager
+        self._current_easing = easing
+        self._cancel_current_animation()
+        duration_sec = max(0.001, duration_ms / 1000.0)
+        frame_state = self._start_frame_pacing(duration_sec)
+        anim_id = animation_manager.animate_custom(
+            duration=duration_sec,
+            easing=easing,
+            update_callback=update_callback,
+            on_complete=on_complete,
+            frame_state=frame_state,
+        )
+        self._current_anim_id = anim_id
+        return anim_id
+
+    def _complete_transition(
+        self,
+        name: str,
+        state_attr: str,
+        on_finished: Optional[Callable[[], None]],
+        release_textures: bool = False,
+    ) -> None:
+        """Generic transition completion handler."""
+        try:
+            self._profiler.complete(name, viewport_size=(self.width(), self.height()))
+            self._stop_frame_pacing()
+            if release_textures:
+                try:
+                    self._release_transition_textures()
+                except Exception as e:
+                    logger.debug("[GL COMPOSITOR] Failed to release %s textures: %s", name, e, exc_info=True)
+            state = getattr(self, state_attr, None)
+            if state is not None:
+                try:
+                    self._base_pixmap = state.new_pixmap
+                except Exception:
+                    pass
+            setattr(self, state_attr, None)
+            self._current_anim_id = None
+            try:
+                self.update()
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] %s complete update failed: %s", name.capitalize(), e, exc_info=True)
+            if on_finished:
+                try:
+                    on_finished()
+                except Exception:
+                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] %s complete handler failed: %s", name.capitalize(), e, exc_info=True)
+
     def start_crossfade(
         self,
         old_pixmap: Optional[QPixmap],
@@ -703,63 +635,23 @@ class GLCompositorWidget(QOpenGLWidget):
         animation_manager: AnimationManager,
         on_finished: Optional[Callable[[], None]] = None,
     ) -> Optional[str]:
-        """Begin a crossfade between two pixmaps using the compositor.
-
-        This replaces the old per-transition `_GLFadeWidget`. The caller is
-        responsible for ensuring that `animation_manager` lives at least as
-        long as the transition.
-        """
+        """Begin a crossfade between two pixmaps using the compositor."""
         if not new_pixmap or new_pixmap.isNull():
             logger.error("[GL COMPOSITOR] Invalid new pixmap for crossfade")
             return None
 
-        # If there is no old image, simply set the base pixmap and repaint.
         if old_pixmap is None or old_pixmap.isNull():
-            logger.debug("[GL COMPOSITOR] No old image; showing new image immediately")
-            self._crossfade = None
-            self._base_pixmap = new_pixmap
-            self.update()
-            if on_finished:
-                try:
-                    on_finished()
-                except Exception:
-                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
-            return None
+            if self._handle_no_old_image(new_pixmap, on_finished, "crossfade"):
+                return None
 
-        # Crossfade and slide are mutually exclusive; clear any active slide.
-        self._slide = None
+        self._clear_all_transitions()
         self._crossfade = CrossfadeState(old_pixmap=old_pixmap, new_pixmap=new_pixmap, progress=0.0)
-        self._animation_manager = animation_manager
-        self._current_easing = easing
-
-        # PERFORMANCE: Pre-upload textures BEFORE animation starts
-        if self._gl_pipeline is not None and self._use_shaders:
-            try:
-                self.makeCurrent()
-                self._prepare_crossfade_textures()
-                self.doneCurrent()
-            except Exception:
-                logger.debug("[GL COMPOSITOR] Pre-upload textures failed", exc_info=True)
-
-        # Cancel any previous animation on this compositor.
-        if self._current_anim_id and self._animation_manager:
-            try:
-                self._animation_manager.cancel_animation(self._current_anim_id)
-            except Exception:
-                pass
-            self._current_anim_id = None
-
-        duration_sec = max(0.001, duration_ms / 1000.0)
-        frame_state = self._start_frame_pacing(duration_sec)
-        anim_id = animation_manager.animate_custom(
-            duration=duration_sec,
-            easing=easing,
-            update_callback=self._on_crossfade_update,
-            on_complete=lambda: self._on_crossfade_complete(on_finished),
-            frame_state=frame_state,
+        self._pre_upload_textures(self._prepare_crossfade_textures)
+        return self._start_transition_animation(
+            duration_ms, easing, animation_manager,
+            self._on_crossfade_update,
+            lambda: self._on_crossfade_complete(on_finished),
         )
-        self._current_anim_id = anim_id
-        return anim_id
 
     def start_warp(
         self,
@@ -771,85 +663,24 @@ class GLCompositorWidget(QOpenGLWidget):
         animation_manager: AnimationManager,
         on_finished: Optional[Callable[[], None]] = None,
     ) -> Optional[str]:
-        """Begin a warp dissolve between two pixmaps using the compositor.
-
-        Warp dissolve is a photo-friendly effect that keeps the new image
-        stable while the old image appears as gently jittering horizontal bands
-        that drift and fade away over time.
-        """
-
+        """Begin a warp dissolve between two pixmaps using the compositor."""
         if not new_pixmap or new_pixmap.isNull():
             logger.error("[GL COMPOSITOR] Invalid new pixmap for warp dissolve")
             return None
 
-        # If there is no old image, simply set the base pixmap and repaint.
         if old_pixmap is None or old_pixmap.isNull():
-            logger.debug("[GL COMPOSITOR] No old image; showing new image immediately (warp)")
-            self._crossfade = None
-            self._slide = None
-            self._wipe = None
-            self._warp = None
-            self._blockflip = None
-            self._blockspin = None
-            self._blinds = None
-            self._diffuse = None
-            self._peel = None
-            self._base_pixmap = new_pixmap
-            self.update()
-            if on_finished:
-                try:
-                    on_finished()
-                except Exception:
-                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
-            return None
+            if self._handle_no_old_image(new_pixmap, on_finished, "warp"):
+                return None
 
-        # Warp dissolve is mutually exclusive with other transitions.
-        self._crossfade = None
-        self._slide = None
-        self._wipe = None
-        self._blockflip = None
-        self._blockspin = None
-        self._blinds = None
-        self._diffuse = None
-        self._peel = None
-        self._warp = WarpState(
-            old_pixmap=old_pixmap,
-            new_pixmap=new_pixmap,
-            progress=0.0,
-        )
-        self._animation_manager = animation_manager
-        self._current_easing = easing
-
-        # PERFORMANCE: Pre-upload textures BEFORE animation starts
-        if self._gl_pipeline is not None and self._use_shaders:
-            try:
-                self.makeCurrent()
-                self._prepare_warp_textures()
-                self.doneCurrent()
-            except Exception:
-                logger.debug("[GL COMPOSITOR] Pre-upload textures failed", exc_info=True)
-
+        self._clear_all_transitions()
+        self._warp = WarpState(old_pixmap=old_pixmap, new_pixmap=new_pixmap, progress=0.0)
+        self._pre_upload_textures(self._prepare_warp_textures)
         self._profiler.start("warp")
-
-        # Cancel any previous animation on this compositor.
-        if self._current_anim_id and self._animation_manager:
-            try:
-                self._animation_manager.cancel_animation(self._current_anim_id)
-            except Exception:
-                pass
-            self._current_anim_id = None
-
-        duration_sec = max(0.001, duration_ms / 1000.0)
-        frame_state = self._start_frame_pacing(duration_sec)
-        anim_id = animation_manager.animate_custom(
-            duration=duration_sec,
-            easing=easing,
-            update_callback=self._on_warp_update,
-            on_complete=lambda: self._on_warp_complete(on_finished),
-            frame_state=frame_state,
+        return self._start_transition_animation(
+            duration_ms, easing, animation_manager,
+            self._on_warp_update,
+            lambda: self._on_warp_complete(on_finished),
         )
-        self._current_anim_id = anim_id
-        return anim_id
 
     def start_raindrops(
         self,
@@ -861,99 +692,29 @@ class GLCompositorWidget(QOpenGLWidget):
         animation_manager: AnimationManager,
         on_finished: Optional[Callable[[], None]] = None,
     ) -> Optional[str]:
-        """Begin a shader-driven raindrops transition between two pixmaps.
-
-        This path is only used when the GLSL pipeline and raindrops shader are
-        available; callers are expected to fall back to the existing diffuse
-        implementation when this method returns ``None``.
-        """
-
+        """Begin a shader-driven raindrops transition. Returns None if shader unavailable."""
         if not new_pixmap or new_pixmap.isNull():
             logger.error("[GL COMPOSITOR] Invalid new pixmap for raindrops")
             return None
 
-        # Only use this path when the GLSL pipeline and raindrops shader are
-        # actually available. Callers are expected to fall back to the
-        # compositor's diffuse implementation when this returns ``None``.
-        if (
-            self._gl_disabled_for_session
-            or gl is None
-            or self._gl_pipeline is None
-            or not self._gl_pipeline.initialized
-            or not self._gl_pipeline.raindrops_program
-        ):
+        # Only use this path when the GLSL pipeline and raindrops shader are available
+        if (self._gl_disabled_for_session or gl is None or self._gl_pipeline is None
+                or not self._gl_pipeline.initialized or not self._gl_pipeline.raindrops_program):
             return None
 
-        # If there is no old image, simply set the base pixmap and repaint.
         if old_pixmap is None or old_pixmap.isNull():
-            logger.debug("[GL COMPOSITOR] No old image; showing new image immediately (raindrops)")
-            self._crossfade = None
-            self._slide = None
-            self._wipe = None
-            self._warp = None
-            self._blockflip = None
-            self._blockspin = None
-            self._blinds = None
-            self._diffuse = None
-            self._raindrops = None
-            self._peel = None
-            self._base_pixmap = new_pixmap
-            self.update()
-            if on_finished:
-                try:
-                    on_finished()
-                except Exception:
-                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
-            return None
+            if self._handle_no_old_image(new_pixmap, on_finished, "raindrops"):
+                return None
 
-        # Raindrops are mutually exclusive with other transitions.
-        self._crossfade = None
-        self._slide = None
-        self._wipe = None
-        self._warp = None
-        self._blockflip = None
-        self._blockspin = None
-        self._blinds = None
-        self._diffuse = None
-        self._peel = None
-        self._raindrops = RaindropsState(
-            old_pixmap=old_pixmap,
-            new_pixmap=new_pixmap,
-            progress=0.0,
-        )
-        self._animation_manager = animation_manager
-        self._current_easing = easing
-
-        # PERFORMANCE: Pre-upload textures BEFORE animation starts
-        if self._gl_pipeline is not None and self._use_shaders:
-            try:
-                self.makeCurrent()
-                self._prepare_raindrops_textures()
-                self.doneCurrent()
-            except Exception:
-                logger.debug("[GL COMPOSITOR] Pre-upload textures failed", exc_info=True)
-
+        self._clear_all_transitions()
+        self._raindrops = RaindropsState(old_pixmap=old_pixmap, new_pixmap=new_pixmap, progress=0.0)
+        self._pre_upload_textures(self._prepare_raindrops_textures)
         self._profiler.start("raindrops")
-
-        # Cancel any previous animation on this compositor.
-        if self._current_anim_id and self._animation_manager:
-            try:
-                self._animation_manager.cancel_animation(self._current_anim_id)
-            except Exception:
-                pass
-            self._current_anim_id = None
-
-        duration_sec = max(0.001, duration_ms / 1000.0)
-        frame_state = self._start_frame_pacing(duration_sec)
-        anim_id = animation_manager.animate_custom(
-            duration=duration_sec,
-            easing=easing,
-            update_callback=self._on_raindrops_update,
-            on_complete=lambda: self._on_raindrops_complete(on_finished),
-            frame_state=frame_state,
+        return self._start_transition_animation(
+            duration_ms, easing, animation_manager,
+            self._on_raindrops_update,
+            lambda: self._on_raindrops_complete(on_finished),
         )
-        self._current_anim_id = anim_id
-        return anim_id
 
     # NOTE: start_shuffle_shader() and start_shooting_stars() removed - these transitions are retired.
 
@@ -968,74 +729,24 @@ class GLCompositorWidget(QOpenGLWidget):
         animation_manager: AnimationManager,
         on_finished: Optional[Callable[[], None]] = None,
     ) -> Optional[str]:
-        """Begin a wipe between two pixmaps using the compositor.
-
-        The caller is responsible for providing the wipe direction; geometry is
-        derived from the widget rect and kept in sync with the CPU Wipe
-        transition via the shared `_compute_wipe_region` helper.
-        """
-
+        """Begin a wipe between two pixmaps using the compositor."""
         if not new_pixmap or new_pixmap.isNull():
             logger.error("[GL COMPOSITOR] Invalid new pixmap for wipe")
             return None
 
-        # If there is no old image, simply set the base pixmap and repaint.
         if old_pixmap is None or old_pixmap.isNull():
-            logger.debug("[GL COMPOSITOR] No old image; showing new image immediately (wipe)")
-            self._crossfade = None
-            self._slide = None
-            self._wipe = None
-            self._base_pixmap = new_pixmap
-            self.update()
-            if on_finished:
-                try:
-                    on_finished()
-                except Exception:
-                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
-            return None
+            if self._handle_no_old_image(new_pixmap, on_finished, "wipe"):
+                return None
 
-        # Wipe is mutually exclusive with crossfade and slide.
-        self._crossfade = None
-        self._slide = None
-        self._wipe = WipeState(
-            old_pixmap=old_pixmap,
-            new_pixmap=new_pixmap,
-            direction=direction,
-            progress=0.0,
-        )
-        self._animation_manager = animation_manager
-        self._current_easing = easing
-
-        # PERFORMANCE: Pre-upload textures BEFORE animation starts
-        if self._gl_pipeline is not None and self._use_shaders:
-            try:
-                self.makeCurrent()
-                self._prepare_wipe_textures()
-                self.doneCurrent()
-            except Exception:
-                logger.debug("[GL COMPOSITOR] Pre-upload textures failed", exc_info=True)
-
+        self._clear_all_transitions()
+        self._wipe = WipeState(old_pixmap=old_pixmap, new_pixmap=new_pixmap, direction=direction, progress=0.0)
+        self._pre_upload_textures(self._prepare_wipe_textures)
         self._profiler.start("wipe")
-
-        # Cancel any previous animation on this compositor.
-        if self._current_anim_id and self._animation_manager:
-            try:
-                self._animation_manager.cancel_animation(self._current_anim_id)
-            except Exception:
-                pass
-            self._current_anim_id = None
-
-        duration_sec = max(0.001, duration_ms / 1000.0)
-        frame_state = self._start_frame_pacing(duration_sec)
-        anim_id = animation_manager.animate_custom(
-            duration=duration_sec,
-            easing=easing,
-            update_callback=self._on_wipe_update,
-            on_complete=lambda: self._on_wipe_complete(on_finished),
-            frame_state=frame_state,
+        return self._start_transition_animation(
+            duration_ms, easing, animation_manager,
+            self._on_wipe_update,
+            lambda: self._on_wipe_complete(on_finished),
         )
-        self._current_anim_id = anim_id
-        return anim_id
 
     def start_slide(
         self,
@@ -1051,79 +762,28 @@ class GLCompositorWidget(QOpenGLWidget):
         animation_manager: AnimationManager,
         on_finished: Optional[Callable[[], None]] = None,
     ) -> Optional[str]:
-        """Begin a slide between two pixmaps using the compositor.
-
-        The caller is responsible for providing start/end positions that
-        correspond to the desired slide direction and widget geometry.
-        """
-
+        """Begin a slide between two pixmaps using the compositor."""
         if not new_pixmap or new_pixmap.isNull():
             logger.error("[GL COMPOSITOR] Invalid new pixmap for slide")
             return None
 
-        # If there is no old image, simply set the base pixmap and repaint.
         if old_pixmap is None or old_pixmap.isNull():
-            logger.debug("[GL COMPOSITOR] No old image; showing new image immediately (slide)")
-            self._crossfade = None
-            self._slide = None
-            self._base_pixmap = new_pixmap
-            self.update()
-            if on_finished:
-                try:
-                    on_finished()
-                except Exception:
-                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
-            return None
+            if self._handle_no_old_image(new_pixmap, on_finished, "slide"):
+                return None
 
-        # Slide and crossfade/wipe are mutually exclusive; clear any active crossfade/wipe.
-        self._crossfade = None
-        self._wipe = None
-        
-        duration_sec = max(0.001, duration_ms / 1000.0)
-        
+        self._clear_all_transitions()
         self._slide = SlideState(
-            old_pixmap=old_pixmap,
-            new_pixmap=new_pixmap,
-            old_start=old_start,
-            old_end=old_end,
-            new_start=new_start,
-            new_end=new_end,
-            progress=0.0,
+            old_pixmap=old_pixmap, new_pixmap=new_pixmap,
+            old_start=old_start, old_end=old_end,
+            new_start=new_start, new_end=new_end, progress=0.0,
         )
-        self._animation_manager = animation_manager
-        self._current_easing = easing
-
-        # TRANSITION READINESS: Pre-upload textures BEFORE animation starts.
-        if self._gl_pipeline is not None and self._use_shaders:
-            try:
-                self.makeCurrent()
-                self._prepare_slide_textures()
-                self.doneCurrent()
-            except Exception:
-                logger.debug("[GL COMPOSITOR] Pre-upload textures failed", exc_info=True)
-
-        # Start profiling for this transition.
+        self._pre_upload_textures(self._prepare_slide_textures)
         self._profiler.start("slide")
-
-        # Cancel any previous animation on this compositor.
-        if self._current_anim_id and self._animation_manager:
-            try:
-                self._animation_manager.cancel_animation(self._current_anim_id)
-            except Exception:
-                pass
-            self._current_anim_id = None
-
-        # FRAME PACING: Create FrameState and pass to animation
-        frame_state = self._start_frame_pacing(duration_sec)
-        anim_id = animation_manager.animate_custom(
-            duration=duration_sec,
-            easing=easing,
-            update_callback=self._on_slide_update,
-            on_complete=lambda: self._on_slide_complete(on_finished),
-            frame_state=frame_state,
+        return self._start_transition_animation(
+            duration_ms, easing, animation_manager,
+            self._on_slide_update,
+            lambda: self._on_slide_complete(on_finished),
         )
-        self._current_anim_id = anim_id
-        return anim_id
 
     def start_peel(
         self,
@@ -1137,85 +797,27 @@ class GLCompositorWidget(QOpenGLWidget):
         animation_manager: AnimationManager,
         on_finished: Optional[Callable[[], None]] = None,
     ) -> Optional[str]:
-        """Begin a strip-based peel between two pixmaps using the compositor.
-
-        Peel is implemented as a directional, strip-driven effect that always
-        draws the new image as the base frame and overlays shrinking, drifting
-        bands of the old image which "peel" away over time. Geometry is kept
-        simple and driven entirely by the compositor; controllers provide only
-        direction, strip count and timing.
-        """
-
+        """Begin a strip-based peel between two pixmaps using the compositor."""
         if not new_pixmap or new_pixmap.isNull():
             logger.error("[GL COMPOSITOR] Invalid new pixmap for peel")
             return None
 
-        # If there is no old image, simply set the base pixmap and repaint.
         if old_pixmap is None or old_pixmap.isNull():
-            logger.debug("[GL COMPOSITOR] No old image; showing new image immediately (peel)")
-            self._crossfade = None
-            self._slide = None
-            self._wipe = None
-            self._blockflip = None
-            self._blinds = None
-            self._diffuse = None
-            self._peel = None
-            self._base_pixmap = new_pixmap
-            self.update()
-            if on_finished:
-                try:
-                    on_finished()
-                except Exception:
-                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
-            return None
+            if self._handle_no_old_image(new_pixmap, on_finished, "peel"):
+                return None
 
-        # Peel is mutually exclusive with other transitions.
-        self._crossfade = None
-        self._slide = None
-        self._wipe = None
-        self._blockflip = None
-        self._blinds = None
-        self._diffuse = None
+        self._clear_all_transitions()
         self._peel = PeelState(
-            old_pixmap=old_pixmap,
-            new_pixmap=new_pixmap,
-            direction=direction,
-            strips=max(1, int(strips)),
-            progress=0.0,
+            old_pixmap=old_pixmap, new_pixmap=new_pixmap,
+            direction=direction, strips=max(1, int(strips)), progress=0.0,
         )
-        self._animation_manager = animation_manager
-        self._current_easing = easing
-
-        # PERFORMANCE: Pre-upload textures BEFORE animation starts
-        if self._gl_pipeline is not None and self._use_shaders:
-            try:
-                self.makeCurrent()
-                self._prepare_peel_textures()
-                self.doneCurrent()
-            except Exception:
-                logger.debug("[GL COMPOSITOR] Pre-upload textures failed", exc_info=True)
-
+        self._pre_upload_textures(self._prepare_peel_textures)
         self._profiler.start("peel")
-
-        # Cancel any previous animation on this compositor.
-        if self._current_anim_id and self._animation_manager:
-            try:
-                self._animation_manager.cancel_animation(self._current_anim_id)
-            except Exception:
-                pass
-            self._current_anim_id = None
-
-        duration_sec = max(0.001, duration_ms / 1000.0)
-        frame_state = self._start_frame_pacing(duration_sec)
-        anim_id = animation_manager.animate_custom(
-            duration=duration_sec,
-            easing=easing,
-            update_callback=self._on_peel_update,
-            on_complete=lambda: self._on_peel_complete(on_finished),
-            frame_state=frame_state,
+        return self._start_transition_animation(
+            duration_ms, easing, animation_manager,
+            self._on_peel_update,
+            lambda: self._on_peel_complete(on_finished),
         )
-        self._current_anim_id = anim_id
-        return anim_id
 
     def start_block_flip(
         self,
@@ -1231,91 +833,39 @@ class GLCompositorWidget(QOpenGLWidget):
         grid_rows: Optional[int] = None,
         direction: Optional[SlideDirection] = None,
     ) -> Optional[str]:
-        """Begin a block puzzle flip using the compositor.
-
-        The caller owns per-block timing and progression and must update the
-        reveal region via :meth:`set_blockflip_region` from the provided
-        ``update_callback``.
-        """
-
+        """Begin a block puzzle flip using the compositor."""
         if not new_pixmap or new_pixmap.isNull():
             logger.error("[GL COMPOSITOR] Invalid new pixmap for block flip")
             return None
 
-        # If there is no old image, simply set the base pixmap and repaint.
         if old_pixmap is None or old_pixmap.isNull():
-            logger.debug("[GL COMPOSITOR] No old image; showing new image immediately (block flip)")
-            self._crossfade = None
-            self._slide = None
-            self._wipe = None
-            self._blockflip = None
-            self._base_pixmap = new_pixmap
-            self.update()
-            if on_finished:
-                try:
-                    on_finished()
-                except Exception:
-                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
-            return None
+            if self._handle_no_old_image(new_pixmap, on_finished, "block flip"):
+                return None
 
-        # Block flip is mutually exclusive with other transitions.
-        self._crossfade = None
-        self._slide = None
-        self._wipe = None
+        self._clear_all_transitions()
         self._blockflip = BlockFlipState(
-            old_pixmap=old_pixmap,
-            new_pixmap=new_pixmap,
-            region=None,
+            old_pixmap=old_pixmap, new_pixmap=new_pixmap, region=None,
             cols=int(grid_cols) if grid_cols is not None and grid_cols > 0 else 0,
             rows=int(grid_rows) if grid_rows is not None and grid_rows > 0 else 0,
             direction=direction,
         )
-        self._animation_manager = animation_manager
-        self._current_easing = easing
-
-        # PERFORMANCE: Pre-upload textures BEFORE animation starts
-        if self._gl_pipeline is not None and self._use_shaders:
-            try:
-                self.makeCurrent()
-                self._prepare_blockflip_textures()
-                self.doneCurrent()
-            except Exception:
-                logger.debug("[GL COMPOSITOR] Pre-upload textures failed", exc_info=True)
-
-        # Cancel any previous animation on this compositor.
-        if self._current_anim_id and self._animation_manager:
-            try:
-                self._animation_manager.cancel_animation(self._current_anim_id)
-            except Exception:
-                pass
-            self._current_anim_id = None
-
+        self._pre_upload_textures(self._prepare_blockflip_textures)
         self._profiler.start("blockflip")
 
         def _blockflip_profiled_update(progress: float, *, _inner=update_callback) -> None:
             self._profiler.tick("blockflip")
-            # Keep BlockFlipState.progress in sync with the animation
-            # timeline so both the QPainter and any future GLSL paths see a
-            # consistent value.
             try:
                 if self._blockflip is not None:
-                    p = max(0.0, min(1.0, float(progress)))
-                    self._blockflip.progress = p
+                    self._blockflip.progress = max(0.0, min(1.0, float(progress)))
             except Exception:
                 pass
             _inner(progress)
 
-        duration_sec = max(0.001, duration_ms / 1000.0)
-        frame_state = self._start_frame_pacing(duration_sec)
-        anim_id = animation_manager.animate_custom(
-            duration=duration_sec,
-            easing=easing,
-            update_callback=_blockflip_profiled_update,
-            on_complete=lambda: self._on_blockflip_complete(on_finished),
-            frame_state=frame_state,
+        return self._start_transition_animation(
+            duration_ms, easing, animation_manager,
+            _blockflip_profiled_update,
+            lambda: self._on_blockflip_complete(on_finished),
         )
-        self._current_anim_id = anim_id
-        return anim_id
 
     def start_block_spin(
         self,
@@ -1328,84 +878,26 @@ class GLCompositorWidget(QOpenGLWidget):
         direction: SlideDirection = SlideDirection.LEFT,
         on_finished: Optional[Callable[[], None]] = None,
     ) -> Optional[str]:
-        """Begin a 3D block spin using the compositor.
-
-        The GLSL path renders a single thin 3D slab that flips from the old
-        image to the new one over a black void. Legacy grid parameters have
-        been removed; direction and progress fully define the animation.
-        """
-
+        """Begin a 3D block spin using the compositor."""
         if not new_pixmap or new_pixmap.isNull():
             logger.error("[GL COMPOSITOR] Invalid new pixmap for block spin")
             return None
 
-        # If there is no old image, simply set the base pixmap and repaint.
         if old_pixmap is None or old_pixmap.isNull():
-            logger.debug("[GL COMPOSITOR] No old image; showing new image immediately (block spin)")
-            self._crossfade = None
-            self._slide = None
-            self._wipe = None
-            self._blockflip = None
-            self._blockspin = None
-            self._blinds = None
-            self._diffuse = None
-            self._peel = None
-            self._base_pixmap = new_pixmap
-            self.update()
-            if on_finished:
-                try:
-                    on_finished()
-                except Exception:
-                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
-            return None
+            if self._handle_no_old_image(new_pixmap, on_finished, "block spin"):
+                return None
 
-        # Block spin is mutually exclusive with other transitions.
-        self._crossfade = None
-        self._slide = None
-        self._wipe = None
-        self._blockflip = None
-        self._blinds = None
-        self._diffuse = None
-        self._peel = None
+        self._clear_all_transitions()
         self._blockspin = BlockSpinState(
-            old_pixmap=old_pixmap,
-            new_pixmap=new_pixmap,
-            direction=direction,
-            progress=0.0,
+            old_pixmap=old_pixmap, new_pixmap=new_pixmap, direction=direction, progress=0.0,
         )
-        self._animation_manager = animation_manager
-        self._current_easing = easing
-
-        # PERFORMANCE: Pre-upload textures BEFORE animation starts
-        if self._gl_pipeline is not None and self._use_shaders:
-            try:
-                self.makeCurrent()
-                self._prepare_blockspin_textures()
-                self.doneCurrent()
-            except Exception:
-                logger.debug("[GL COMPOSITOR] Pre-upload textures failed", exc_info=True)
-
+        self._pre_upload_textures(self._prepare_blockspin_textures)
         self._profiler.start("blockspin")
-
-        # Cancel any previous animation on this compositor.
-        if self._current_anim_id and self._animation_manager:
-            try:
-                self._animation_manager.cancel_animation(self._current_anim_id)
-            except Exception:
-                pass
-            self._current_anim_id = None
-
-        duration_sec = max(0.001, duration_ms / 1000.0)
-        frame_state = self._start_frame_pacing(duration_sec)
-        anim_id = animation_manager.animate_custom(
-            duration=duration_sec,
-            easing=easing,
-            update_callback=self._on_blockspin_update,
-            on_complete=lambda: self._on_blockspin_complete(on_finished),
-            frame_state=frame_state,
+        return self._start_transition_animation(
+            duration_ms, easing, animation_manager,
+            self._on_blockspin_update,
+            lambda: self._on_blockspin_complete(on_finished),
         )
-        self._current_anim_id = anim_id
-        return anim_id
 
     def start_diffuse(
         self,
@@ -1421,112 +913,44 @@ class GLCompositorWidget(QOpenGLWidget):
         grid_rows: Optional[int] = None,
         shape: Optional[str] = None,
     ) -> Optional[str]:
-        """Begin a diffuse reveal using the compositor.
-
-        The caller owns per-cell timing/geometry and must update the reveal
-        region via :meth:`set_diffuse_region` from the provided
-        ``update_callback``.
-        """
-
+        """Begin a diffuse reveal using the compositor."""
         if not new_pixmap or new_pixmap.isNull():
             logger.error("[GL COMPOSITOR] Invalid new pixmap for diffuse")
             return None
 
-        # If there is no old image, simply set the base pixmap and repaint.
         if old_pixmap is None or old_pixmap.isNull():
-            logger.debug("[GL COMPOSITOR] No old image; showing new image immediately (diffuse)")
-            self._crossfade = None
-            self._slide = None
-            self._wipe = None
-            self._blockflip = None
-            self._blinds = None
-            self._diffuse = None
-            self._base_pixmap = new_pixmap
-            self.update()
-            if on_finished:
-                try:
-                    on_finished()
-                except Exception:
-                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
-            return None
+            if self._handle_no_old_image(new_pixmap, on_finished, "diffuse"):
+                return None
 
-        # Map the provided shape name (if any) to a small integer used by the
-        # GLSL diffuse shader. Rectangle remains the default; additional
-        # shapes are reserved for future GLSL work.
-        shape_mode = 0
-        if shape:
-            try:
-                key = shape.strip().lower()
-            except Exception:
-                key = "rectangle"
-            if key == "membrane":
-                shape_mode = 1
-            elif key == "circle":
-                shape_mode = 2
-            elif key == "diamond":
-                shape_mode = 3
-            elif key == "plus":
-                shape_mode = 4
+        # Map shape name to integer for GLSL shader
+        shape_mode = {"membrane": 1, "circle": 2, "diamond": 3, "plus": 4}.get(
+            (shape or "").strip().lower(), 0
+        )
 
-        # Diffuse is mutually exclusive with other transitions.
-        self._crossfade = None
-        self._slide = None
-        self._wipe = None
-        self._blockflip = None
-        self._blinds = None
+        self._clear_all_transitions()
         self._diffuse = DiffuseState(
-            old_pixmap=old_pixmap,
-            new_pixmap=new_pixmap,
-            region=None,
+            old_pixmap=old_pixmap, new_pixmap=new_pixmap, region=None,
             cols=int(grid_cols) if grid_cols is not None and grid_cols > 0 else 0,
             rows=int(grid_rows) if grid_rows is not None and grid_rows > 0 else 0,
             shape_mode=int(shape_mode),
         )
-        self._animation_manager = animation_manager
-        self._current_easing = easing
-
-        # PERFORMANCE: Pre-upload textures BEFORE animation starts
-        if self._gl_pipeline is not None and self._use_shaders:
-            try:
-                self.makeCurrent()
-                self._prepare_diffuse_textures()
-                self.doneCurrent()
-            except Exception:
-                logger.debug("[GL COMPOSITOR] Pre-upload textures failed", exc_info=True)
-
-        # Cancel any previous animation on this compositor.
-        if self._current_anim_id and self._animation_manager:
-            try:
-                self._animation_manager.cancel_animation(self._current_anim_id)
-            except Exception:
-                pass
-            self._current_anim_id = None
-
+        self._pre_upload_textures(self._prepare_diffuse_textures)
         self._profiler.start("diffuse")
 
         def _diffuse_profiled_update(progress: float, *, _inner=update_callback) -> None:
             self._profiler.tick("diffuse")
-            # Keep DiffuseState.progress in sync with the animation timeline so
-            # both the QPainter and GLSL paths see a consistent progress value.
             try:
                 if self._diffuse is not None:
-                    p = max(0.0, min(1.0, float(progress)))
-                    self._diffuse.progress = p
+                    self._diffuse.progress = max(0.0, min(1.0, float(progress)))
             except Exception:
                 pass
             _inner(progress)
 
-        duration_sec = max(0.001, duration_ms / 1000.0)
-        frame_state = self._start_frame_pacing(duration_sec)
-        anim_id = animation_manager.animate_custom(
-            duration=duration_sec,
-            easing=easing,
-            update_callback=_diffuse_profiled_update,
-            on_complete=lambda: self._on_diffuse_complete(on_finished),
-            frame_state=frame_state,
+        return self._start_transition_animation(
+            duration_ms, easing, animation_manager,
+            _diffuse_profiled_update,
+            lambda: self._on_diffuse_complete(on_finished),
         )
-        self._current_anim_id = anim_id
-        return anim_id
 
     def start_blinds(
         self,
@@ -1541,92 +965,38 @@ class GLCompositorWidget(QOpenGLWidget):
         grid_cols: Optional[int] = None,
         grid_rows: Optional[int] = None,
     ) -> Optional[str]:
-        """Begin a blinds reveal using the compositor.
-
-        The caller owns per-slat timing/geometry and must update the reveal
-        region via :meth:`set_blinds_region` from the provided
-        ``update_callback``.
-        """
-
+        """Begin a blinds reveal using the compositor."""
         if not new_pixmap or new_pixmap.isNull():
             logger.error("[GL COMPOSITOR] Invalid new pixmap for blinds")
             return None
 
-        # If there is no old image, simply set the base pixmap and repaint.
         if old_pixmap is None or old_pixmap.isNull():
-            logger.debug("[GL COMPOSITOR] No old image; showing new image immediately (blinds)")
-            self._crossfade = None
-            self._slide = None
-            self._wipe = None
-            self._blockflip = None
-            self._blinds = None
-            self._base_pixmap = new_pixmap
-            self.update()
-            if on_finished:
-                try:
-                    on_finished()
-                except Exception:
-                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
-            return None
+            if self._handle_no_old_image(new_pixmap, on_finished, "blinds"):
+                return None
 
-        # Blinds is mutually exclusive with other transitions.
-        self._crossfade = None
-        self._slide = None
-        self._wipe = None
-        self._blockflip = None
+        self._clear_all_transitions()
         self._blinds = BlindsState(
-            old_pixmap=old_pixmap,
-            new_pixmap=new_pixmap,
-            region=None,
+            old_pixmap=old_pixmap, new_pixmap=new_pixmap, region=None,
             cols=int(grid_cols) if grid_cols is not None and grid_cols > 0 else 0,
             rows=int(grid_rows) if grid_rows is not None and grid_rows > 0 else 0,
         )
-        self._animation_manager = animation_manager
-        self._current_easing = easing
-
-        # PERFORMANCE: Pre-upload textures BEFORE animation starts
-        if self._gl_pipeline is not None and self._use_shaders:
-            try:
-                self.makeCurrent()
-                self._prepare_blinds_textures()
-                self.doneCurrent()
-            except Exception:
-                logger.debug("[GL COMPOSITOR] Pre-upload textures failed", exc_info=True)
-
-        # Cancel any previous animation on this compositor.
-        if self._current_anim_id and self._animation_manager:
-            try:
-                self._animation_manager.cancel_animation(self._current_anim_id)
-            except Exception:
-                pass
-            self._current_anim_id = None
-
+        self._pre_upload_textures(self._prepare_blinds_textures)
         self._profiler.start("blinds")
 
         def _blinds_profiled_update(progress: float, *, _inner=update_callback) -> None:
             self._profiler.tick("blinds")
-            # Keep BlindsState.progress in sync with the animation timeline so
-            # both the QPainter and any future GLSL paths see a consistent
-            # progress value.
             try:
                 if self._blinds is not None:
-                    p = max(0.0, min(1.0, float(progress)))
-                    self._blinds.progress = p
+                    self._blinds.progress = max(0.0, min(1.0, float(progress)))
             except Exception:
                 pass
             _inner(progress)
 
-        duration_sec = max(0.001, duration_ms / 1000.0)
-        frame_state = self._start_frame_pacing(duration_sec)
-        anim_id = animation_manager.animate_custom(
-            duration=duration_sec,
-            easing=easing,
-            update_callback=_blinds_profiled_update,
-            on_complete=lambda: self._on_blinds_complete(on_finished),
-            frame_state=frame_state,
+        return self._start_transition_animation(
+            duration_ms, easing, animation_manager,
+            _blinds_profiled_update,
+            lambda: self._on_blinds_complete(on_finished),
         )
-        self._current_anim_id = anim_id
-        return anim_id
 
     def start_crumble(
         self,
@@ -1643,498 +1013,122 @@ class GLCompositorWidget(QOpenGLWidget):
         weight_mode: float = 0.0,
         seed: Optional[float] = None,
     ) -> Optional[str]:
-        """Begin a crumble transition using the compositor.
-
-        The crumble effect creates a rock-like crack pattern across the old
-        image, then the pieces fall away to reveal the new image.
-        
-        Args:
-            piece_count: Number of pieces (4-16)
-            crack_complexity: Crack detail level (0.5-2.0)
-            mosaic_mode: If True, uses glass shatter effect with 3D depth
-        """
+        """Begin a crumble transition using the compositor."""
         import random as _random
 
         if not new_pixmap or new_pixmap.isNull():
             logger.error("[GL COMPOSITOR] Invalid new pixmap for crumble")
             return None
 
-        # If there is no old image, simply set the base pixmap and repaint.
         if old_pixmap is None or old_pixmap.isNull():
-            logger.debug("[GL COMPOSITOR] No old image; showing new image immediately (crumble)")
-            self._crossfade = None
-            self._slide = None
-            self._wipe = None
-            self._crumble = None
-            self._base_pixmap = new_pixmap
-            self.update()
-            if on_finished:
-                try:
-                    on_finished()
-                except Exception:
-                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
-            return None
+            if self._handle_no_old_image(new_pixmap, on_finished, "crumble"):
+                return None
 
-        # Crumble is mutually exclusive with other transitions.
-        self._crossfade = None
-        self._slide = None
-        self._wipe = None
-        self._blockflip = None
-        self._blockspin = None
-        self._blinds = None
-        self._diffuse = None
-        self._raindrops = None
-        self._peel = None
-
-        # Generate random seed if not provided
+        self._clear_all_transitions()
         actual_seed = seed if seed is not None else _random.random() * 1000.0
-
         self._crumble = CrumbleState(
-            old_pixmap=old_pixmap,
-            new_pixmap=new_pixmap,
-            progress=0.0,
-            seed=actual_seed,
-            piece_count=float(max(4, piece_count)),
+            old_pixmap=old_pixmap, new_pixmap=new_pixmap, progress=0.0,
+            seed=actual_seed, piece_count=float(max(4, piece_count)),
             crack_complexity=max(0.5, min(2.0, crack_complexity)),
-            mosaic_mode=mosaic_mode,
-            weight_mode=max(0.0, min(2.0, float(weight_mode))),
+            mosaic_mode=mosaic_mode, weight_mode=max(0.0, min(2.0, float(weight_mode))),
         )
-        self._animation_manager = animation_manager
-        self._current_easing = easing
-
-        # PERFORMANCE: Pre-upload textures BEFORE animation starts
-        if self._gl_pipeline is not None and self._use_shaders:
-            try:
-                self.makeCurrent()
-                self._prepare_crumble_textures()
-                self.doneCurrent()
-            except Exception:
-                logger.debug("[GL COMPOSITOR] Pre-upload textures failed", exc_info=True)
-
-        # Cancel any previous animation on this compositor.
-        if self._current_anim_id and self._animation_manager:
-            try:
-                self._animation_manager.cancel_animation(self._current_anim_id)
-            except Exception:
-                pass
-            self._current_anim_id = None
-
+        self._pre_upload_textures(self._prepare_crumble_textures)
         self._profiler.start("crumble")
 
         def _crumble_update(progress: float) -> None:
             self._profiler.tick("crumble")
             if self._crumble is not None:
-                p = max(0.0, min(1.0, float(progress)))
-                self._crumble.progress = p
+                self._crumble.progress = max(0.0, min(1.0, float(progress)))
 
-        duration_sec = max(0.001, duration_ms / 1000.0)
-        frame_state = self._start_frame_pacing(duration_sec)
-        anim_id = animation_manager.animate_custom(
-            duration=duration_sec,
-            easing=easing,
-            update_callback=_crumble_update,
-            on_complete=lambda: self._on_crumble_complete(on_finished),
-            frame_state=frame_state,
+        return self._start_transition_animation(
+            duration_ms, easing, animation_manager,
+            _crumble_update,
+            lambda: self._on_crumble_complete(on_finished),
         )
-        self._current_anim_id = anim_id
-        return anim_id
 
     # ------------------------------------------------------------------
     # Animation callbacks
     # ------------------------------------------------------------------
 
-    def _on_crossfade_update(self, progress: float) -> None:
-        if self._crossfade is None:
+    def _update_transition_progress(self, state_attr: str, profiler_name: str, progress: float) -> None:
+        """Generic progress update for transitions."""
+        state = getattr(self, state_attr, None)
+        if state is None:
             return
-        # Clamp and store progress
-        p = max(0.0, min(1.0, float(progress)))
-        self._crossfade.progress = p
-        # NOTE: Do NOT call self.update() here - the render timer drives repaints
-        # at the display refresh rate. Calling update() here would double the FPS.
+        state.progress = max(0.0, min(1.0, float(progress)))
+        if profiler_name:
+            self._profiler.tick(profiler_name)
+
+    def _on_crossfade_update(self, progress: float) -> None:
+        self._update_transition_progress("_crossfade", "", progress)
 
     def _on_crossfade_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
-        # Stop frame pacing
-        self._stop_frame_pacing()
-        # Snap to final state: base pixmap becomes the new image, transition ends.
-        if self._crossfade is not None:
-            try:
-                self._base_pixmap = self._crossfade.new_pixmap
-            except Exception:
-                pass
-        self._crossfade = None
-        self._current_anim_id = None
-        self.update()
-        if on_finished:
-            try:
-                on_finished()
-            except Exception:
-                logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
+        self._complete_transition("crossfade", "_crossfade", on_finished)
 
     def _on_slide_update(self, progress: float) -> None:
-        if self._slide is None:
-            return
-        p = max(0.0, min(1.0, float(progress)))
-        self._slide.progress = p
-        self._profiler.tick("slide")
-        # NOTE: Do NOT call self.update() here - the render timer drives repaints
-        # at the display refresh rate. Calling update() here would double the FPS.
+        self._update_transition_progress("_slide", "slide", progress)
 
     def _on_slide_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
-        """Handle completion of compositor-driven slide transitions."""
-        try:
-            # Complete profiling and emit metrics.
-            self._profiler.complete("slide", viewport_size=(self.width(), self.height()))
-            
-            # Stop frame pacing
-            self._stop_frame_pacing()
-
-            # Snap to final state: base pixmap becomes the new image, transition ends.
-            if self._slide is not None:
-                try:
-                    self._base_pixmap = self._slide.new_pixmap
-                except Exception:
-                    pass
-            self._slide = None
-            self._current_anim_id = None
-
-            try:
-                self.update()
-            except Exception as e:
-                logger.debug("[GL COMPOSITOR] Slide complete update failed (likely after deletion): %s", e, exc_info=True)
-
-            if on_finished:
-                try:
-                    on_finished()
-                except Exception:
-                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
-        except Exception as e:
-            # Final safeguard so no exception escapes the Qt event loop.
-            logger.debug("[GL COMPOSITOR] Slide complete handler failed: %s", e, exc_info=True)
+        self._complete_transition("slide", "_slide", on_finished)
 
     def _on_wipe_update(self, progress: float) -> None:
-        if self._wipe is None:
-            return
-        p = max(0.0, min(1.0, float(progress)))
-        self._wipe.progress = p
-        self._profiler.tick("wipe")
-        # NOTE: Do NOT call self.update() here - the render timer drives repaints
+        self._update_transition_progress("_wipe", "wipe", progress)
 
     def _on_wipe_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
-        """Handle completion of compositor-driven wipe transitions."""
-        try:
-            self._profiler.complete("wipe", viewport_size=(self.width(), self.height()))
-            self._stop_frame_pacing()
-
-            if self._wipe is not None:
-                try:
-                    self._base_pixmap = self._wipe.new_pixmap
-                except Exception:
-                    pass
-            self._wipe = None
-            self._current_anim_id = None
-
-            try:
-                self.update()
-            except Exception as e:
-                logger.debug("[GL COMPOSITOR] Wipe complete update failed: %s", e, exc_info=True)
-
-            if on_finished:
-                try:
-                    on_finished()
-                except Exception:
-                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Wipe complete handler failed: %s", e, exc_info=True)
+        self._complete_transition("wipe", "_wipe", on_finished)
 
     def _on_blockspin_update(self, progress: float) -> None:
-        if self._blockspin is None:
-            return
-        p = max(0.0, min(1.0, float(progress)))
-        self._blockspin.progress = p
-        self._profiler.tick("blockspin")
-        # NOTE: Do NOT call self.update() here - the render timer drives repaints
+        self._update_transition_progress("_blockspin", "blockspin", progress)
 
     def _on_warp_update(self, progress: float) -> None:
-        """Update handler for compositor-driven warp dissolve transitions."""
-        if self._warp is None:
-            return
-        p = max(0.0, min(1.0, float(progress)))
-        self._warp.progress = p
-        self._profiler.tick("warp")
-        # NOTE: Do NOT call self.update() here - the render timer drives repaints
+        self._update_transition_progress("_warp", "warp", progress)
 
     def _on_raindrops_update(self, progress: float) -> None:
-        """Update handler for shader-driven raindrops transitions."""
-        if self._raindrops is None:
-            return
-        p = max(0.0, min(1.0, float(progress)))
-        self._raindrops.progress = p
-        self._profiler.tick("raindrops")
-        # NOTE: Do NOT call self.update() here - the render timer drives repaints
-
-    # NOTE: _on_shooting_stars_update() and _on_shuffle_update() removed - these transitions are retired.
+        self._update_transition_progress("_raindrops", "raindrops", progress)
 
     def _on_blockspin_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
-        """Completion handler for compositor-driven block spin transitions."""
-        try:
-            self._profiler.complete("blockspin", viewport_size=(self.width(), self.height()))
-            self._stop_frame_pacing()
-
-            if self._blockspin is not None:
-                try:
-                    self._base_pixmap = self._blockspin.new_pixmap
-                except Exception:
-                    pass
-            self._blockspin = None
-            self._current_anim_id = None
-
-            try:
-                self.update()
-            except Exception as e:
-                logger.debug("[GL COMPOSITOR] BlockSpin complete update failed: %s", e, exc_info=True)
-
-            if on_finished:
-                try:
-                    on_finished()
-                except Exception:
-                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] BlockSpin complete handler failed: %s", e, exc_info=True)
+        self._complete_transition("blockspin", "_blockspin", on_finished)
 
     def _on_warp_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
-        """Completion handler for compositor-driven warp dissolve transitions."""
-        try:
-            self._profiler.complete("warp", viewport_size=(self.width(), self.height()))
-            self._stop_frame_pacing()
-
-            try:
-                self._release_transition_textures()
-            except Exception as e:
-                logger.debug("[GL COMPOSITOR] Failed to release warp textures: %s", e, exc_info=True)
-
-            if self._warp is not None:
-                try:
-                    self._base_pixmap = self._warp.new_pixmap
-                except Exception:
-                    pass
-            self._warp = None
-            self._current_anim_id = None
-
-            try:
-                self.update()
-            except Exception as e:
-                logger.debug("[GL COMPOSITOR] Warp complete update failed: %s", e, exc_info=True)
-
-            if on_finished:
-                try:
-                    on_finished()
-                except Exception:
-                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Warp complete handler failed: %s", e, exc_info=True)
+        self._complete_transition("warp", "_warp", on_finished, release_textures=True)
 
     def _on_raindrops_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
-        """Completion handler for shader-driven raindrops transitions."""
-        try:
-            self._profiler.complete("raindrops", viewport_size=(self.width(), self.height()))
-            self._stop_frame_pacing()
-
-            try:
-                self._release_transition_textures()
-            except Exception as e:
-                logger.debug("[GL COMPOSITOR] Failed to release raindrops textures: %s", e, exc_info=True)
-
-            if self._raindrops is not None:
-                try:
-                    self._base_pixmap = self._raindrops.new_pixmap
-                except Exception:
-                    pass
-            self._raindrops = None
-            self._current_anim_id = None
-
-            try:
-                self.update()
-            except Exception as e:
-                logger.debug("[GL COMPOSITOR] Raindrops complete update failed: %s", e, exc_info=True)
-
-            if on_finished:
-                try:
-                    on_finished()
-                except Exception:
-                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Raindrops complete handler failed: %s", e, exc_info=True)
-
-    # NOTE: _on_shuffle_complete() and _on_shooting_stars_complete() removed - these transitions are retired.
+        self._complete_transition("raindrops", "_raindrops", on_finished, release_textures=True)
 
     def _on_peel_update(self, progress: float) -> None:
-        """Update handler for compositor-driven peel transitions."""
-        if self._peel is None:
-            return
-        p = max(0.0, min(1.0, float(progress)))
-        self._peel.progress = p
-        self._profiler.tick("peel")
-        # NOTE: Do NOT call self.update() here - the render timer drives repaints
+        self._update_transition_progress("_peel", "peel", progress)
 
     def _on_peel_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
-        """Completion handler for compositor-driven peel transitions."""
-        try:
-            self._profiler.complete("peel", viewport_size=(self.width(), self.height()))
-            self._stop_frame_pacing()
-
-            if self._peel is not None:
-                try:
-                    self._base_pixmap = self._peel.new_pixmap
-                except Exception:
-                    pass
-            self._peel = None
-            self._current_anim_id = None
-
-            try:
-                self.update()
-            except Exception as e:
-                logger.debug("[GL COMPOSITOR] Peel complete update failed: %s", e, exc_info=True)
-
-            if on_finished:
-                try:
-                    on_finished()
-                except Exception:
-                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Peel complete handler failed: %s", e, exc_info=True)
+        self._complete_transition("peel", "_peel", on_finished)
 
     def _on_blockflip_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
-        """Completion handler for compositor-driven block flip transitions."""
-        try:
-            self._profiler.complete("blockflip", viewport_size=(self.width(), self.height()))
-            self._stop_frame_pacing()
-
-            if self._blockflip is not None:
-                try:
-                    self._base_pixmap = self._blockflip.new_pixmap
-                except Exception:
-                    pass
-            self._blockflip = None
-            self._current_anim_id = None
-
-            try:
-                self.update()
-            except Exception as e:
-                logger.debug("[GL COMPOSITOR] BlockFlip complete update failed: %s", e, exc_info=True)
-
-            if on_finished:
-                try:
-                    on_finished()
-                except Exception:
-                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] BlockFlip complete handler failed: %s", e, exc_info=True)
+        self._complete_transition("blockflip", "_blockflip", on_finished)
 
     def _on_diffuse_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
-        """Completion handler for compositor-driven diffuse transitions."""
-        try:
-            self._profiler.complete("diffuse", viewport_size=(self.width(), self.height()))
-            self._stop_frame_pacing()
-
-            if self._diffuse is not None:
-                try:
-                    self._base_pixmap = self._diffuse.new_pixmap
-                except Exception:
-                    pass
-            self._diffuse = None
-            self._current_anim_id = None
-
-            try:
-                self.update()
-            except Exception as e:
-                logger.debug("[GL COMPOSITOR] Diffuse complete update failed: %s", e, exc_info=True)
-
-            if on_finished:
-                try:
-                    on_finished()
-                except Exception:
-                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Diffuse complete handler failed: %s", e, exc_info=True)
+        self._complete_transition("diffuse", "_diffuse", on_finished)
 
     def _on_blinds_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
-        """Completion handler for compositor-driven blinds transitions."""
-        try:
-            self._profiler.complete("blinds", viewport_size=(self.width(), self.height()))
-            self._stop_frame_pacing()
-
-            if self._blinds is not None:
-                try:
-                    self._base_pixmap = self._blinds.new_pixmap
-                except Exception:
-                    pass
-            self._blinds = None
-            self._current_anim_id = None
-
-            try:
-                self.update()
-            except Exception as e:
-                logger.debug("[GL COMPOSITOR] Blinds complete update failed: %s", e, exc_info=True)
-
-            if on_finished:
-                try:
-                    on_finished()
-                except Exception:
-                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Blinds complete handler failed: %s", e, exc_info=True)
+        self._complete_transition("blinds", "_blinds", on_finished)
 
     def _on_crumble_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
-        """Completion handler for compositor-driven crumble transitions."""
-        try:
-            self._profiler.complete("crumble", viewport_size=(self.width(), self.height()))
-            self._stop_frame_pacing()
+        self._complete_transition("crumble", "_crumble", on_finished)
 
-            if self._crumble is not None:
-                try:
-                    self._base_pixmap = self._crumble.new_pixmap
-                    logger.debug("[CRUMBLE] Transition complete, base pixmap set to new image")
-                except Exception:
-                    pass
-            self._crumble = None
-            self._current_anim_id = None
-
-            try:
-                self.update()
-            except Exception as e:
-                logger.debug("[GL COMPOSITOR] Crumble complete update failed: %s", e, exc_info=True)
-
-            if on_finished:
-                try:
-                    on_finished()
-                except Exception:
-                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Crumble complete handler failed: %s", e, exc_info=True)
+    def _set_transition_region(self, state_attr: str, region: Optional[QRegion]) -> None:
+        """Generic region setter for region-based transitions."""
+        state = getattr(self, state_attr, None)
+        if state is None:
+            return
+        state.region = region
+        self.update()
 
     def set_blockflip_region(self, region: Optional[QRegion]) -> None:
-        """Update the reveal region for an in-flight block flip transition."""
-
-        if self._blockflip is None:
-            return
-        self._blockflip.region = region
-        self.update()
+        self._set_transition_region("_blockflip", region)
 
     def set_blinds_region(self, region: Optional[QRegion]) -> None:
-        """Update the reveal region for an in-flight blinds transition."""
-
-        if self._blinds is None:
-            return
-        self._blinds.region = region
-        self.update()
+        self._set_transition_region("_blinds", region)
 
     def set_diffuse_region(self, region: Optional[QRegion]) -> None:
-        """Update the reveal region for an in-flight diffuse transition."""
-
-        if self._diffuse is None:
-            return
-        self._diffuse.region = region
-        self.update()
+        self._set_transition_region("_diffuse", region)
 
     def cancel_current_transition(self, snap_to_new: bool = True) -> None:
         """Cancel any active compositor-driven transition.
@@ -2352,336 +1346,47 @@ class GLCompositorWidget(QOpenGLWidget):
             self._gl_pipeline.u_spec_dir_loc = gl.glGetUniformLocation(program, "u_specDir")
             self._gl_pipeline.u_axis_mode_loc = gl.glGetUniformLocation(program, "u_axisMode")
 
-            # Compile the Ripple (raindrops) shader program using the helper module.
-            # On failure we disable shader usage for this session so that all
-            # shader-backed transitions fall back to QPainter-based paths.
-            try:
-                raindrops_helper = _get_raindrops_program()
-                rp = raindrops_helper.create_program()
-                self._gl_pipeline.raindrops_program = rp
-                self._gl_pipeline.raindrops_uniforms = raindrops_helper.cache_uniforms(rp)
-                # Also populate legacy fields for any code still using them
-                self._gl_pipeline.raindrops_u_progress = self._gl_pipeline.raindrops_uniforms.get("u_progress", -1)
-                self._gl_pipeline.raindrops_u_resolution = self._gl_pipeline.raindrops_uniforms.get("u_resolution", -1)
-                self._gl_pipeline.raindrops_u_old_tex = self._gl_pipeline.raindrops_uniforms.get("uOldTex", -1)
-                self._gl_pipeline.raindrops_u_new_tex = self._gl_pipeline.raindrops_uniforms.get("uNewTex", -1)
-            except Exception:
-                logger.debug("[GL SHADER] Failed to initialize raindrops shader program", exc_info=True)
-                self._gl_pipeline.raindrops_program = 0
-                self._gl_disabled_for_session = True
-                self._use_shaders = False
-                return
-
-            # Compile the Warp shader program using the helper module.
-            try:
-                warp_helper = _get_warp_program()
-                wp = warp_helper.create_program()
-                self._gl_pipeline.warp_program = wp
-                self._gl_pipeline.warp_uniforms = warp_helper.cache_uniforms(wp)
-                # Also populate legacy fields for any code still using them
-                self._gl_pipeline.warp_u_progress = self._gl_pipeline.warp_uniforms.get("u_progress", -1)
-                self._gl_pipeline.warp_u_resolution = self._gl_pipeline.warp_uniforms.get("u_resolution", -1)
-                self._gl_pipeline.warp_u_old_tex = self._gl_pipeline.warp_uniforms.get("uOldTex", -1)
-                self._gl_pipeline.warp_u_new_tex = self._gl_pipeline.warp_uniforms.get("uNewTex", -1)
-            except Exception:
-                logger.debug("[GL SHADER] Failed to initialize warp shader program", exc_info=True)
-                self._gl_pipeline.warp_program = 0
-                self._gl_disabled_for_session = True
-                self._use_shaders = False
-                return
-
-            # Compile the Diffuse shader program using the helper module.
-            # On failure we disable shader usage for this session so that all
-            # shader-backed transitions fall back to QPainter-based paths.
-            try:
-                diffuse_helper = _get_diffuse_program()
-                dp = diffuse_helper.create_program()
-                self._gl_pipeline.diffuse_program = dp
-                self._gl_pipeline.diffuse_uniforms = diffuse_helper.cache_uniforms(dp)
-                # Also populate legacy fields for any code still using them
-                self._gl_pipeline.diffuse_u_progress = self._gl_pipeline.diffuse_uniforms.get("u_progress", -1)
-                self._gl_pipeline.diffuse_u_resolution = self._gl_pipeline.diffuse_uniforms.get("u_resolution", -1)
-                self._gl_pipeline.diffuse_u_old_tex = self._gl_pipeline.diffuse_uniforms.get("uOldTex", -1)
-                self._gl_pipeline.diffuse_u_new_tex = self._gl_pipeline.diffuse_uniforms.get("uNewTex", -1)
-                self._gl_pipeline.diffuse_u_grid = self._gl_pipeline.diffuse_uniforms.get("u_grid", -1)
-                self._gl_pipeline.diffuse_u_shape_mode = self._gl_pipeline.diffuse_uniforms.get("u_shapeMode", -1)
-            except Exception:
-                logger.debug("[GL SHADER] Failed to initialize diffuse shader program", exc_info=True)
-                self._gl_pipeline.diffuse_program = 0
-                self._gl_disabled_for_session = True
-                self._use_shaders = False
-                return
-
-            # Compile the BlockFlip shader program using the helper module.
-            # On failure we disable shader usage for this session so that all
-            # shader-backed transitions fall back to QPainter-based paths.
-            try:
-                blockflip_helper = _get_blockflip_program()
-                bfp = blockflip_helper.create_program()
-                self._gl_pipeline.blockflip_program = bfp
-                self._gl_pipeline.blockflip_uniforms = blockflip_helper.cache_uniforms(bfp)
-                # Also populate legacy fields for any code still using them
-                self._gl_pipeline.blockflip_u_progress = self._gl_pipeline.blockflip_uniforms.get("u_progress", -1)
-                self._gl_pipeline.blockflip_u_resolution = self._gl_pipeline.blockflip_uniforms.get("u_resolution", -1)
-                self._gl_pipeline.blockflip_u_old_tex = self._gl_pipeline.blockflip_uniforms.get("uOldTex", -1)
-                self._gl_pipeline.blockflip_u_new_tex = self._gl_pipeline.blockflip_uniforms.get("uNewTex", -1)
-                self._gl_pipeline.blockflip_u_grid = self._gl_pipeline.blockflip_uniforms.get("u_grid", -1)
-                self._gl_pipeline.blockflip_u_direction = self._gl_pipeline.blockflip_uniforms.get("u_direction", -1)
-            except Exception:
-                logger.debug("[GL SHADER] Failed to initialize blockflip shader program", exc_info=True)
-                self._gl_pipeline.blockflip_program = 0
-                self._gl_disabled_for_session = True
-                self._use_shaders = False
-                return
-
-            # Compile the Peel shader program using the helper module.
-            # On failure we disable shader usage for this session so that all
-            # shader-backed transitions fall back to QPainter-based paths.
-            try:
-                peel_helper = _get_peel_program()
-                pp = peel_helper.create_program()
-                self._gl_pipeline.peel_program = pp
-                self._gl_pipeline.peel_uniforms = peel_helper.cache_uniforms(pp)
-                # Also populate legacy fields for any code still using them
-                self._gl_pipeline.peel_u_progress = self._gl_pipeline.peel_uniforms.get("u_progress", -1)
-                self._gl_pipeline.peel_u_resolution = self._gl_pipeline.peel_uniforms.get("u_resolution", -1)
-                self._gl_pipeline.peel_u_old_tex = self._gl_pipeline.peel_uniforms.get("uOldTex", -1)
-                self._gl_pipeline.peel_u_new_tex = self._gl_pipeline.peel_uniforms.get("uNewTex", -1)
-                self._gl_pipeline.peel_u_direction = self._gl_pipeline.peel_uniforms.get("u_direction", -1)
-                self._gl_pipeline.peel_u_strips = self._gl_pipeline.peel_uniforms.get("u_strips", -1)
-            except Exception:
-                logger.debug("[GL SHADER] Failed to initialize peel shader program", exc_info=True)
-                self._gl_pipeline.peel_program = 0
-                self._gl_disabled_for_session = True
-                self._use_shaders = False
-                return
-
-            # Compile the Crossfade shader program using the helper module.
-            try:
-                crossfade_helper = _get_crossfade_program()
-                xp = crossfade_helper.create_program()
-                self._gl_pipeline.crossfade_program = xp
-                self._gl_pipeline.crossfade_uniforms = crossfade_helper.cache_uniforms(xp)
-                # Also populate legacy fields for any code still using them
-                self._gl_pipeline.crossfade_u_progress = self._gl_pipeline.crossfade_uniforms.get("u_progress", -1)
-                self._gl_pipeline.crossfade_u_resolution = self._gl_pipeline.crossfade_uniforms.get("u_resolution", -1)
-                self._gl_pipeline.crossfade_u_old_tex = self._gl_pipeline.crossfade_uniforms.get("uOldTex", -1)
-                self._gl_pipeline.crossfade_u_new_tex = self._gl_pipeline.crossfade_uniforms.get("uNewTex", -1)
-            except Exception:
-                logger.debug("[GL SHADER] Failed to initialize crossfade shader program", exc_info=True)
-                self._gl_pipeline.crossfade_program = 0
-                self._gl_disabled_for_session = True
-                self._use_shaders = False
-                return
-
-            # Compile the Slide shader program using the helper module.
-            try:
-                slide_helper = _get_slide_program()
-                slp = slide_helper.create_program()
-                self._gl_pipeline.slide_program = slp
-                self._gl_pipeline.slide_uniforms = slide_helper.cache_uniforms(slp)
-                # Also populate legacy fields for any code still using them
-                self._gl_pipeline.slide_u_progress = self._gl_pipeline.slide_uniforms.get("u_progress", -1)
-                self._gl_pipeline.slide_u_resolution = self._gl_pipeline.slide_uniforms.get("u_resolution", -1)
-                self._gl_pipeline.slide_u_old_tex = self._gl_pipeline.slide_uniforms.get("uOldTex", -1)
-                self._gl_pipeline.slide_u_new_tex = self._gl_pipeline.slide_uniforms.get("uNewTex", -1)
-                self._gl_pipeline.slide_u_old_rect = self._gl_pipeline.slide_uniforms.get("u_oldRect", -1)
-                self._gl_pipeline.slide_u_new_rect = self._gl_pipeline.slide_uniforms.get("u_newRect", -1)
-            except Exception:
-                logger.debug("[GL SHADER] Failed to initialize slide shader program", exc_info=True)
-                self._gl_pipeline.slide_program = 0
-                self._gl_disabled_for_session = True
-                self._use_shaders = False
-                return
-
-            # Compile the Wipe shader program using the helper module.
-            try:
-                wipe_helper = _get_wipe_program()
-                wp2 = wipe_helper.create_program()
-                self._gl_pipeline.wipe_program = wp2
-                self._gl_pipeline.wipe_uniforms = wipe_helper.cache_uniforms(wp2)
-                # Also populate legacy fields for any code still using them
-                self._gl_pipeline.wipe_u_progress = self._gl_pipeline.wipe_uniforms.get("u_progress", -1)
-                self._gl_pipeline.wipe_u_resolution = self._gl_pipeline.wipe_uniforms.get("u_resolution", -1)
-                self._gl_pipeline.wipe_u_old_tex = self._gl_pipeline.wipe_uniforms.get("uOldTex", -1)
-                self._gl_pipeline.wipe_u_new_tex = self._gl_pipeline.wipe_uniforms.get("uNewTex", -1)
-                self._gl_pipeline.wipe_u_mode = self._gl_pipeline.wipe_uniforms.get("u_mode", -1)
-            except Exception:
-                logger.debug("[GL SHADER] Failed to initialize wipe shader program", exc_info=True)
-                self._gl_pipeline.wipe_program = 0
-                self._gl_disabled_for_session = True
-                self._use_shaders = False
-                return
-
-            # Compile the Blinds shader program using the helper module.
-            # On failure we disable shader usage for this session so that all
-            # shader-backed transitions fall back to QPainter-based paths.
-            try:
-                blinds_helper = _get_blinds_program()
-                bp = blinds_helper.create_program()
-                self._gl_pipeline.blinds_program = bp
-                self._gl_pipeline.blinds_uniforms = blinds_helper.cache_uniforms(bp)
-                # Also populate legacy fields for any code still using them
-                self._gl_pipeline.blinds_u_progress = self._gl_pipeline.blinds_uniforms.get("u_progress", -1)
-                self._gl_pipeline.blinds_u_resolution = self._gl_pipeline.blinds_uniforms.get("u_resolution", -1)
-                self._gl_pipeline.blinds_u_old_tex = self._gl_pipeline.blinds_uniforms.get("uOldTex", -1)
-                self._gl_pipeline.blinds_u_new_tex = self._gl_pipeline.blinds_uniforms.get("uNewTex", -1)
-                self._gl_pipeline.blinds_u_grid = self._gl_pipeline.blinds_uniforms.get("u_grid", -1)
-            except Exception:
-                logger.debug("[GL SHADER] Failed to initialize blinds shader program", exc_info=True)
-                self._gl_pipeline.blinds_program = 0
-                self._gl_disabled_for_session = True
-                self._use_shaders = False
-                return
-
-            # Initialize Crumble shader program
-            try:
-                crumble_helper = _get_crumble_program()
-                cp = crumble_helper.create_program()
-                self._gl_pipeline.crumble_program = cp
-                self._gl_pipeline.crumble_uniforms = crumble_helper.cache_uniforms(cp)
-            except Exception:
-                logger.debug("[GL SHADER] Failed to initialize crumble shader program", exc_info=True)
-                self._gl_pipeline.crumble_program = 0
-                self._gl_disabled_for_session = True
-                self._use_shaders = False
-                return
+            # Compile all shader programs via centralized cache
+            cache = get_program_cache()
+            programs_to_compile = [
+                (GLProgramCache.RAINDROPS, "raindrops_program", "raindrops_uniforms"),
+                (GLProgramCache.WARP, "warp_program", "warp_uniforms"),
+                (GLProgramCache.DIFFUSE, "diffuse_program", "diffuse_uniforms"),
+                (GLProgramCache.BLOCK_FLIP, "blockflip_program", "blockflip_uniforms"),
+                (GLProgramCache.PEEL, "peel_program", "peel_uniforms"),
+                (GLProgramCache.CROSSFADE, "crossfade_program", "crossfade_uniforms"),
+                (GLProgramCache.SLIDE, "slide_program", "slide_uniforms"),
+                (GLProgramCache.WIPE, "wipe_program", "wipe_uniforms"),
+                (GLProgramCache.BLINDS, "blinds_program", "blinds_uniforms"),
+                (GLProgramCache.CRUMBLE, "crumble_program", "crumble_uniforms"),
+            ]
+            
+            for program_name, program_attr, uniforms_attr in programs_to_compile:
+                program_id = cache.get_program(program_name)
+                if program_id is None:
+                    logger.debug("[GL SHADER] Failed to compile %s shader", program_name)
+                    self._gl_disabled_for_session = True
+                    self._use_shaders = False
+                    return
+                setattr(self._gl_pipeline, program_attr, program_id)
+                setattr(self._gl_pipeline, uniforms_attr, cache.get_uniforms(program_name))
 
             # NOTE: Shuffle and Claws shader initialization removed - these transitions are retired.
 
-            # Fullscreen quad with interleaved position (x, y) and UV (u, v).
-            vertices = [
-                -1.0,
-                -1.0,
-                0.0,
-                0.0,
-                1.0,
-                -1.0,
-                1.0,
-                0.0,
-                -1.0,
-                1.0,
-                0.0,
-                1.0,
-                1.0,
-                1.0,
-                1.0,
-                1.0,
-            ]
-
-            # PyOpenGL_accelerate does not handle array.array directly; use a
-            # ctypes float buffer so glBufferData sees a concrete pointer.
-            vertex_data = (ctypes.c_float * len(vertices))(*vertices)
-
-            vao = gl.glGenVertexArrays(1)
-            vbo = gl.glGenBuffers(1)
-            self._gl_pipeline.quad_vao = int(vao)
-            self._gl_pipeline.quad_vbo = int(vbo)
-
-            gl.glBindVertexArray(self._gl_pipeline.quad_vao)
-            gl.glBindBuffer(gl.GL_ARRAY_BUFFER, self._gl_pipeline.quad_vbo)
-            gl.glBufferData(
-                gl.GL_ARRAY_BUFFER,
-                ctypes.sizeof(vertex_data),
-                vertex_data,
-                gl.GL_STATIC_DRAW,
-            )
-
-            stride = 4 * 4  # 4 floats per vertex (x, y, u, v)
-            gl.glEnableVertexAttribArray(0)
-            gl.glVertexAttribPointer(0, 2, gl.GL_FLOAT, gl.GL_FALSE, stride, ctypes.c_void_p(0))
-            gl.glEnableVertexAttribArray(1)
-            gl.glVertexAttribPointer(1, 2, gl.GL_FLOAT, gl.GL_FALSE, stride, ctypes.c_void_p(8))
-
-            gl.glBindVertexArray(0)
-            gl.glBindBuffer(gl.GL_ARRAY_BUFFER, 0)
-
-            # Box mesh for 3D Block Spins: a thin rectangular prism with front,
-            # back, and side faces. Each vertex stores position (x, y, z),
-            # normal (nx, ny, nz) and UV (u, v).
-            thickness = 0.05
-            box_vertices = [
-                # Front face (z = 0, normal +Z)
-                -1.0, -1.0,  0.0,   0.0, 0.0, 1.0,   0.0, 0.0,
-                 1.0, -1.0,  0.0,   0.0, 0.0, 1.0,   1.0, 0.0,
-                 1.0,  1.0,  0.0,   0.0, 0.0, 1.0,   1.0, 1.0,
-
-                -1.0, -1.0,  0.0,   0.0, 0.0, 1.0,   0.0, 0.0,
-                 1.0,  1.0,  0.0,   0.0, 0.0, 1.0,   1.0, 1.0,
-                -1.0,  1.0,  0.0,   0.0, 0.0, 1.0,   0.0, 1.0,
-
-                # Back face (z = -thickness, normal -Z)
-                -1.0, -1.0, -thickness,   0.0, 0.0, -1.0,   0.0, 0.0,
-                 1.0, -1.0, -thickness,   0.0, 0.0, -1.0,   1.0, 0.0,
-                 1.0,  1.0, -thickness,   0.0, 0.0, -1.0,   1.0, 1.0,
-
-                -1.0, -1.0, -thickness,   0.0, 0.0, -1.0,   0.0, 0.0,
-                 1.0,  1.0, -thickness,   0.0, 0.0, -1.0,   1.0, 1.0,
-                -1.0,  1.0, -thickness,   0.0, 0.0, -1.0,   0.0, 1.0,
-
-                # Left side (x = -1, normal -X)
-                -1.0, -1.0,  0.0,       -1.0, 0.0, 0.0,   0.0, 0.0,
-                -1.0, -1.0, -thickness, -1.0, 0.0, 0.0,   1.0, 0.0,
-                -1.0,  1.0, -thickness, -1.0, 0.0, 0.0,   1.0, 1.0,
-
-                -1.0, -1.0,  0.0,       -1.0, 0.0, 0.0,   0.0, 0.0,
-                -1.0,  1.0, -thickness, -1.0, 0.0, 0.0,   1.0, 1.0,
-                -1.0,  1.0,  0.0,       -1.0, 0.0, 0.0,   0.0, 1.0,
-
-                # Right side (x = 1, normal +X)
-                 1.0, -1.0,  0.0,        1.0, 0.0, 0.0,   1.0, 0.0,
-                 1.0, -1.0, -thickness,  1.0, 0.0, 0.0,   0.0, 0.0,
-                 1.0,  1.0, -thickness,  1.0, 0.0, 0.0,   0.0, 1.0,
-
-                 1.0, -1.0,  0.0,        1.0, 0.0, 0.0,   1.0, 0.0,
-                 1.0,  1.0, -thickness,  1.0, 0.0, 0.0,   0.0, 1.0,
-                 1.0,  1.0,  0.0,        1.0, 0.0, 0.0,   1.0, 1.0,
-
-                # Top face (y = 1, normal +Y)
-                -1.0,  1.0,  0.0,       0.0, 1.0, 0.0,   0.0, 0.0,
-                 1.0,  1.0,  0.0,       0.0, 1.0, 0.0,   1.0, 0.0,
-                 1.0,  1.0, -thickness, 0.0, 1.0, 0.0,   1.0, 1.0,
-
-                -1.0,  1.0,  0.0,       0.0, 1.0, 0.0,   0.0, 0.0,
-                 1.0,  1.0, -thickness, 0.0, 1.0, 0.0,   1.0, 1.0,
-                -1.0,  1.0, -thickness, 0.0, 1.0, 0.0,   0.0, 1.0,
-
-                # Bottom face (y = -1, normal -Y)
-                -1.0, -1.0,  0.0,       0.0, -1.0, 0.0,  0.0, 0.0,
-                 1.0, -1.0,  0.0,       0.0, -1.0, 0.0,  1.0, 0.0,
-                 1.0, -1.0, -thickness, 0.0, -1.0, 0.0,  1.0, 1.0,
-
-                -1.0, -1.0,  0.0,       0.0, -1.0, 0.0,  0.0, 0.0,
-                 1.0, -1.0, -thickness, 0.0, -1.0, 0.0,  1.0, 1.0,
-                -1.0, -1.0, -thickness, 0.0, -1.0, 0.0,  0.0, 1.0,
-            ]
-
-            box_vertex_data = (ctypes.c_float * len(box_vertices))(*box_vertices)
-            box_vao = gl.glGenVertexArrays(1)
-            box_vbo = gl.glGenBuffers(1)
-            self._gl_pipeline.box_vao = int(box_vao)
-            self._gl_pipeline.box_vbo = int(box_vbo)
-            self._gl_pipeline.box_vertex_count = len(box_vertices) // 8
-
-            gl.glBindVertexArray(self._gl_pipeline.box_vao)
-            gl.glBindBuffer(gl.GL_ARRAY_BUFFER, self._gl_pipeline.box_vbo)
-            gl.glBufferData(
-                gl.GL_ARRAY_BUFFER,
-                ctypes.sizeof(box_vertex_data),
-                box_vertex_data,
-                gl.GL_STATIC_DRAW,
-            )
-
-            stride_box = 8 * 4  # 8 floats per vertex (x, y, z, nx, ny, nz, u, v)
-            gl.glEnableVertexAttribArray(0)
-            gl.glVertexAttribPointer(0, 3, gl.GL_FLOAT, gl.GL_FALSE, stride_box, ctypes.c_void_p(0))
-            gl.glEnableVertexAttribArray(1)
-            gl.glVertexAttribPointer(1, 3, gl.GL_FLOAT, gl.GL_FALSE, stride_box, ctypes.c_void_p(12))
-            gl.glEnableVertexAttribArray(2)
-            gl.glVertexAttribPointer(2, 2, gl.GL_FLOAT, gl.GL_FALSE, stride_box, ctypes.c_void_p(24))
-
-            gl.glBindVertexArray(0)
-            gl.glBindBuffer(gl.GL_ARRAY_BUFFER, 0)
+            # Initialize geometry via centralized manager
+            geometry = get_geometry_manager()
+            if not geometry.initialize():
+                logger.warning("[GL COMPOSITOR] Failed to initialize geometry manager")
+                self._gl_disabled_for_session = True
+                self._use_shaders = False
+                return
+            
+            # Copy geometry IDs to pipeline state for backward compatibility
+            self._gl_pipeline.quad_vao = geometry.quad_vao
+            self._gl_pipeline.quad_vbo = geometry.quad_vbo
+            self._gl_pipeline.box_vao = geometry.box_vao
+            self._gl_pipeline.box_vbo = geometry.box_vbo
+            self._gl_pipeline.box_vertex_count = geometry.box_vertex_count
 
             self._gl_pipeline.initialized = True
             _pipeline_elapsed = (time.time() - _pipeline_start) * 1000.0
@@ -2694,6 +1399,25 @@ class GLCompositorWidget(QOpenGLWidget):
             self._gl_disabled_for_session = True
             self._use_shaders = False
 
+    def _reset_pipeline_state(self) -> None:
+        """Reset all pipeline state to zero/uninitialized."""
+        if self._gl_pipeline is None:
+            return
+        self._release_transition_textures()
+        program_attrs = [
+            "basic_program", "raindrops_program", "warp_program", "diffuse_program",
+            "blockflip_program", "peel_program", "crossfade_program", "slide_program",
+            "wipe_program", "blinds_program", "crumble_program",
+        ]
+        for attr in program_attrs:
+            setattr(self._gl_pipeline, attr, 0)
+        self._gl_pipeline.quad_vao = 0
+        self._gl_pipeline.quad_vbo = 0
+        self._gl_pipeline.box_vao = 0
+        self._gl_pipeline.box_vbo = 0
+        self._gl_pipeline.box_vertex_count = 0
+        self._gl_pipeline.initialized = False
+
     def _cleanup_gl_pipeline(self) -> None:
         if gl is None or self._gl_pipeline is None:
             return
@@ -2701,25 +1425,7 @@ class GLCompositorWidget(QOpenGLWidget):
         try:
             is_valid = getattr(self, "isValid", None)
             if callable(is_valid) and not is_valid():
-                self._release_transition_textures()
-                self._gl_pipeline.basic_program = 0
-                self._gl_pipeline.raindrops_program = 0
-                self._gl_pipeline.warp_program = 0
-                self._gl_pipeline.diffuse_program = 0
-                self._gl_pipeline.blockflip_program = 0
-                self._gl_pipeline.peel_program = 0
-                self._gl_pipeline.shuffle_program = 0
-                self._gl_pipeline.claws_program = 0
-                self._gl_pipeline.crossfade_program = 0
-                self._gl_pipeline.slide_program = 0
-                self._gl_pipeline.wipe_program = 0
-                self._gl_pipeline.blinds_program = 0
-                self._gl_pipeline.quad_vao = 0
-                self._gl_pipeline.quad_vbo = 0
-                self._gl_pipeline.box_vao = 0
-                self._gl_pipeline.box_vbo = 0
-                self._gl_pipeline.box_vertex_count = 0
-                self._gl_pipeline.initialized = False
+                self._reset_pipeline_state()
                 return
         except Exception:
             pass
@@ -2727,25 +1433,7 @@ class GLCompositorWidget(QOpenGLWidget):
         try:
             self.makeCurrent()
         except Exception:
-            self._release_transition_textures()
-            self._gl_pipeline.basic_program = 0
-            self._gl_pipeline.raindrops_program = 0
-            self._gl_pipeline.warp_program = 0
-            self._gl_pipeline.diffuse_program = 0
-            self._gl_pipeline.blockflip_program = 0
-            self._gl_pipeline.peel_program = 0
-            self._gl_pipeline.shuffle_program = 0
-            self._gl_pipeline.claws_program = 0
-            self._gl_pipeline.crossfade_program = 0
-            self._gl_pipeline.slide_program = 0
-            self._gl_pipeline.wipe_program = 0
-            self._gl_pipeline.blinds_program = 0
-            self._gl_pipeline.quad_vao = 0
-            self._gl_pipeline.quad_vbo = 0
-            self._gl_pipeline.box_vao = 0
-            self._gl_pipeline.box_vbo = 0
-            self._gl_pipeline.box_vertex_count = 0
-            self._gl_pipeline.initialized = False
+            self._reset_pipeline_state()
             return
 
         try:
@@ -2772,75 +1460,36 @@ class GLCompositorWidget(QOpenGLWidget):
             except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to cleanup PBO pool", exc_info=True)
 
+            # Delete shader programs
+            program_attrs = [
+                "basic_program", "raindrops_program", "warp_program", "diffuse_program",
+                "blockflip_program", "peel_program", "crossfade_program", "slide_program",
+                "wipe_program", "blinds_program", "crumble_program",
+            ]
             try:
-                if self._gl_pipeline.basic_program:
-                    gl.glDeleteProgram(int(self._gl_pipeline.basic_program))
-                if getattr(self._gl_pipeline, "raindrops_program", 0):
-                    gl.glDeleteProgram(int(self._gl_pipeline.raindrops_program))
-                if getattr(self._gl_pipeline, "warp_program", 0):
-                    gl.glDeleteProgram(int(self._gl_pipeline.warp_program))
-                if getattr(self._gl_pipeline, "diffuse_program", 0):
-                    gl.glDeleteProgram(int(self._gl_pipeline.diffuse_program))
-                if getattr(self._gl_pipeline, "blockflip_program", 0):
-                    gl.glDeleteProgram(int(self._gl_pipeline.blockflip_program))
-                if getattr(self._gl_pipeline, "shuffle_program", 0):
-                    gl.glDeleteProgram(int(self._gl_pipeline.shuffle_program))
-                if getattr(self._gl_pipeline, "claws_program", 0):
-                    gl.glDeleteProgram(int(self._gl_pipeline.claws_program))
-                if getattr(self._gl_pipeline, "crossfade_program", 0):
-                    gl.glDeleteProgram(int(self._gl_pipeline.crossfade_program))
-                if getattr(self._gl_pipeline, "slide_program", 0):
-                    gl.glDeleteProgram(int(self._gl_pipeline.slide_program))
-                if getattr(self._gl_pipeline, "wipe_program", 0):
-                    gl.glDeleteProgram(int(self._gl_pipeline.wipe_program))
-                if getattr(self._gl_pipeline, "blinds_program", 0):
-                    gl.glDeleteProgram(int(self._gl_pipeline.blinds_program))
+                for attr in program_attrs:
+                    prog_id = getattr(self._gl_pipeline, attr, 0)
+                    if prog_id:
+                        gl.glDeleteProgram(int(prog_id))
             except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to delete shader program", exc_info=True)
 
+            # Delete geometry buffers
             try:
-                if self._gl_pipeline.quad_vbo:
-                    buf = (ctypes.c_uint * 1)(int(self._gl_pipeline.quad_vbo))
-                    gl.glDeleteBuffers(1, buf)
+                for vbo_attr in ["quad_vbo", "box_vbo"]:
+                    vbo_id = getattr(self._gl_pipeline, vbo_attr, 0)
+                    if vbo_id:
+                        buf = (ctypes.c_uint * 1)(int(vbo_id))
+                        gl.glDeleteBuffers(1, buf)
+                for vao_attr in ["quad_vao", "box_vao"]:
+                    vao_id = getattr(self._gl_pipeline, vao_attr, 0)
+                    if vao_id:
+                        arr = (ctypes.c_uint * 1)(int(vao_id))
+                        gl.glDeleteVertexArrays(1, arr)
             except Exception:
-                logger.debug("[GL COMPOSITOR] Failed to delete VBO %s", self._gl_pipeline.quad_vbo, exc_info=True)
+                logger.debug("[GL COMPOSITOR] Failed to delete geometry buffers", exc_info=True)
 
-            try:
-                if self._gl_pipeline.quad_vao:
-                    arr = (ctypes.c_uint * 1)(int(self._gl_pipeline.quad_vao))
-                    gl.glDeleteVertexArrays(1, arr)
-            except Exception:
-                logger.debug("[GL COMPOSITOR] Failed to delete VAO %s", self._gl_pipeline.quad_vao, exc_info=True)
-
-            try:
-                if self._gl_pipeline.box_vbo:
-                    buf = (ctypes.c_uint * 1)(int(self._gl_pipeline.box_vbo))
-                    gl.glDeleteBuffers(1, buf)
-            except Exception:
-                logger.debug("[GL COMPOSITOR] Failed to delete VBO %s", self._gl_pipeline.box_vbo, exc_info=True)
-
-            try:
-                if self._gl_pipeline.box_vao:
-                    arr = (ctypes.c_uint * 1)(int(self._gl_pipeline.box_vao))
-                    gl.glDeleteVertexArrays(1, arr)
-            except Exception:
-                logger.debug("[GL COMPOSITOR] Failed to delete VAO %s", self._gl_pipeline.box_vao, exc_info=True)
-
-            self._gl_pipeline.basic_program = 0
-            self._gl_pipeline.raindrops_program = 0
-            self._gl_pipeline.warp_program = 0
-            self._gl_pipeline.diffuse_program = 0
-            self._gl_pipeline.shuffle_program = 0
-            self._gl_pipeline.claws_program = 0
-            self._gl_pipeline.crossfade_program = 0
-            self._gl_pipeline.slide_program = 0
-            self._gl_pipeline.wipe_program = 0
-            self._gl_pipeline.quad_vbo = 0
-            self._gl_pipeline.quad_vao = 0
-            self._gl_pipeline.box_vbo = 0
-            self._gl_pipeline.box_vao = 0
-            self._gl_pipeline.box_vertex_count = 0
-            self._gl_pipeline.initialized = False
+            self._reset_pipeline_state()
         finally:
             try:
                 self.doneCurrent()
@@ -3180,43 +1829,28 @@ void main() {
     def _can_use_raindrops_shader(self) -> bool:
         return self._can_use_simple_shader(self._raindrops, self._gl_pipeline.raindrops_program)
 
+    def _can_use_grid_shader(self, state, program_attr: str) -> bool:
+        """Check if a grid-based shader (diffuse, blockflip, blinds) can be used."""
+        if state is None:
+            return False
+        if getattr(state, "cols", 0) <= 0 or getattr(state, "rows", 0) <= 0:
+            return False
+        return self._can_use_simple_shader(state, getattr(self._gl_pipeline, program_attr, 0))
+
     def _can_use_diffuse_shader(self) -> bool:
-        st = self._diffuse
-        if st is None:
-            return False
-        if st.cols <= 0 or st.rows <= 0:
-            return False
-        return self._can_use_simple_shader(st, getattr(self._gl_pipeline, "diffuse_program", 0))
+        return self._can_use_grid_shader(self._diffuse, "diffuse_program")
 
     def _can_use_blockflip_shader(self) -> bool:
-        st = self._blockflip
-        if st is None:
-            return False
-        # BlockFlip GLSL path only activates when grid hints are available; when
-        # cols/rows are zero we stay on the QPainter compositor path.
-        if getattr(st, "cols", 0) <= 0 or getattr(st, "rows", 0) <= 0:
-            return False
-        return self._can_use_simple_shader(st, getattr(self._gl_pipeline, "blockflip_program", 0))
+        return self._can_use_grid_shader(self._blockflip, "blockflip_program")
 
     def _can_use_peel_shader(self) -> bool:
         st = self._peel
-        if st is None:
-            return False
-        # Require at least one logical strip; start_peel already clamps this
-        # but we keep the guard for safety.
-        if getattr(st, "strips", 0) <= 0:
+        if st is None or getattr(st, "strips", 0) <= 0:
             return False
         return self._can_use_simple_shader(st, getattr(self._gl_pipeline, "peel_program", 0))
 
     def _can_use_blinds_shader(self) -> bool:
-        st = self._blinds
-        if st is None:
-            return False
-        # Blinds GLSL path only activates when grid hints are available; when
-        # cols/rows are zero we stay on the QPainter compositor path.
-        if getattr(st, "cols", 0) <= 0 or getattr(st, "rows", 0) <= 0:
-            return False
-        return self._can_use_simple_shader(st, getattr(self._gl_pipeline, "blinds_program", 0))
+        return self._can_use_grid_shader(self._blinds, "blinds_program")
 
     def _can_use_crumble_shader(self) -> bool:
         return self._can_use_simple_shader(self._crumble, getattr(self._gl_pipeline, "crumble_program", 0))
@@ -3588,144 +2222,50 @@ void main() {
             return False
         return True
 
-    def _prepare_blockspin_textures(self) -> bool:
-        if not self._can_use_blockspin_shader():
+    def _prepare_transition_textures(self, can_use_fn, state) -> bool:
+        """Generic texture preparation for any transition type."""
+        if not can_use_fn():
             return False
         if self._gl_pipeline is None:
             return False
         if self._gl_pipeline.old_tex_id and self._gl_pipeline.new_tex_id:
             return True
-        if self._blockspin is None:
+        if state is None:
             return False
-        st = self._blockspin
-        return self._prepare_pair_textures(st.old_pixmap, st.new_pixmap)
+        return self._prepare_pair_textures(state.old_pixmap, state.new_pixmap)
+
+    def _prepare_blockspin_textures(self) -> bool:
+        return self._prepare_transition_textures(self._can_use_blockspin_shader, self._blockspin)
 
     def _prepare_warp_textures(self) -> bool:
-        if not self._can_use_warp_shader():
-            return False
-        if self._gl_pipeline is None:
-            return False
-        if self._gl_pipeline.old_tex_id and self._gl_pipeline.new_tex_id:
-            return True
-        if self._warp is None:
-            return False
-        st = self._warp
-        return self._prepare_pair_textures(st.old_pixmap, st.new_pixmap)
+        return self._prepare_transition_textures(self._can_use_warp_shader, self._warp)
 
     def _prepare_raindrops_textures(self) -> bool:
-        if not self._can_use_raindrops_shader():
-            return False
-        if self._gl_pipeline is None:
-            return False
-        if self._gl_pipeline.old_tex_id and self._gl_pipeline.new_tex_id:
-            return True
-        if self._raindrops is None:
-            return False
-        st = self._raindrops
-        return self._prepare_pair_textures(st.old_pixmap, st.new_pixmap)
+        return self._prepare_transition_textures(self._can_use_raindrops_shader, self._raindrops)
 
     def _prepare_diffuse_textures(self) -> bool:
-        if not self._can_use_diffuse_shader():
-            return False
-        if self._gl_pipeline is None:
-            return False
-        # PERFORMANCE: Early exit if textures already prepared (same pattern as slide/wipe)
-        if self._gl_pipeline.old_tex_id and self._gl_pipeline.new_tex_id:
-            return True
-        if self._diffuse is None:
-            return False
-        st = self._diffuse
-        return self._prepare_pair_textures(st.old_pixmap, st.new_pixmap)
+        return self._prepare_transition_textures(self._can_use_diffuse_shader, self._diffuse)
 
     def _prepare_blockflip_textures(self) -> bool:
-        if not self._can_use_blockflip_shader():
-            return False
-        if self._gl_pipeline is None:
-            return False
-        # Reuse any textures already prepared for this pixmap pair.
-        if self._gl_pipeline.old_tex_id and self._gl_pipeline.new_tex_id:
-            return True
-        if self._blockflip is None:
-            return False
-        st = self._blockflip
-        return self._prepare_pair_textures(st.old_pixmap, st.new_pixmap)
+        return self._prepare_transition_textures(self._can_use_blockflip_shader, self._blockflip)
 
     def _prepare_peel_textures(self) -> bool:
-        if not self._can_use_peel_shader():
-            return False
-        if self._gl_pipeline is None:
-            return False
-        # PERFORMANCE: Early exit if textures already prepared
-        if self._gl_pipeline.old_tex_id and self._gl_pipeline.new_tex_id:
-            return True
-        if self._peel is None:
-            return False
-        st = self._peel
-        return self._prepare_pair_textures(st.old_pixmap, st.new_pixmap)
+        return self._prepare_transition_textures(self._can_use_peel_shader, self._peel)
 
     def _prepare_blinds_textures(self) -> bool:
-        if not self._can_use_blinds_shader():
-            return False
-        if self._gl_pipeline is None:
-            return False
-        # PERFORMANCE: Early exit if textures already prepared
-        if self._gl_pipeline.old_tex_id and self._gl_pipeline.new_tex_id:
-            return True
-        if self._blinds is None:
-            return False
-        st = self._blinds
-        return self._prepare_pair_textures(st.old_pixmap, st.new_pixmap)
+        return self._prepare_transition_textures(self._can_use_blinds_shader, self._blinds)
 
     def _prepare_crumble_textures(self) -> bool:
-        if not self._can_use_crumble_shader():
-            return False
-        if self._gl_pipeline is None:
-            return False
-        # PERFORMANCE: Early exit if textures already prepared
-        if self._gl_pipeline.old_tex_id and self._gl_pipeline.new_tex_id:
-            return True
-        if self._crumble is None:
-            return False
-        st = self._crumble
-        return self._prepare_pair_textures(st.old_pixmap, st.new_pixmap)
+        return self._prepare_transition_textures(self._can_use_crumble_shader, self._crumble)
 
     def _prepare_crossfade_textures(self) -> bool:
-        if not self._can_use_crossfade_shader():
-            return False
-        if self._gl_pipeline is None:
-            return False
-        if self._gl_pipeline.old_tex_id and self._gl_pipeline.new_tex_id:
-            return True
-        if self._crossfade is None:
-            return False
-        st = self._crossfade
-        return self._prepare_pair_textures(st.old_pixmap, st.new_pixmap)
+        return self._prepare_transition_textures(self._can_use_crossfade_shader, self._crossfade)
 
     def _prepare_slide_textures(self) -> bool:
-        if not self._can_use_slide_shader():
-            return False
-        if self._gl_pipeline is None:
-            return False
-        if self._gl_pipeline.old_tex_id and self._gl_pipeline.new_tex_id:
-            return True
-        if self._slide is None:
-            return False
-        st = self._slide
-        return self._prepare_pair_textures(st.old_pixmap, st.new_pixmap)
+        return self._prepare_transition_textures(self._can_use_slide_shader, self._slide)
 
     def _prepare_wipe_textures(self) -> bool:
-        if not self._can_use_wipe_shader():
-            return False
-        if self._gl_pipeline is None:
-            return False
-        if self._gl_pipeline.old_tex_id and self._gl_pipeline.new_tex_id:
-            return True
-        if self._wipe is None:
-            return False
-        st = self._wipe
-        return self._prepare_pair_textures(st.old_pixmap, st.new_pixmap)
-
-    # NOTE: _prepare_shuffle_textures() removed - Shuffle transition is retired.
+        return self._prepare_transition_textures(self._can_use_wipe_shader, self._wipe)
 
     def _get_viewport_size(self) -> tuple[int, int]:
         """Return the framebuffer viewport size in physical pixels.
@@ -3859,106 +2399,48 @@ void main() {
             gl.glDepthMask(gl.GL_FALSE)
 
     def _paint_peel_shader(self, target: QRect) -> None:
-        """Render Peel transition using the PeelProgram helper."""
-        if not self._can_use_peel_shader() or self._gl_pipeline is None or self._peel is None:
-            return
-        st = self._peel
-        if not st.old_pixmap or st.old_pixmap.isNull() or not st.new_pixmap or st.new_pixmap.isNull():
-            return
-        if not self._prepare_peel_textures():
-            return
-
-        vp_w, vp_h = self._get_viewport_size()
-
-        # Delegate rendering to the PeelProgram helper
-        peel_helper = _get_peel_program()
-        peel_helper.render(
-            program=self._gl_pipeline.peel_program,
-            uniforms=self._gl_pipeline.peel_uniforms,
-            viewport=(vp_w, vp_h),
-            old_tex=self._gl_pipeline.old_tex_id,
-            new_tex=self._gl_pipeline.new_tex_id,
-            state=st,
-            quad_vao=self._gl_pipeline.quad_vao,
+        self._render_simple_shader(
+            self._can_use_peel_shader, self._peel, self._prepare_peel_textures,
+            "peel_program", "peel_uniforms", _get_peel_program
         )
-
-    # NOTE: _paint_claws_shader() REMOVED - Claws/Shooting Stars transition was retired (dead code)
 
     def _paint_crumble_shader(self, target: QRect) -> None:
-        """Render Crumble transition using the CrumbleProgram helper."""
-        if not self._can_use_crumble_shader() or self._gl_pipeline is None or self._crumble is None:
-            return
-        st = self._crumble
-        if not st.old_pixmap or st.old_pixmap.isNull() or not st.new_pixmap or st.new_pixmap.isNull():
-            return
-        if not self._prepare_crumble_textures():
-            return
-        # Track paint timing and approximate GPU duration around the shader
-        # draw call. This is only used when PERF metrics are enabled and
-        # adds negligible overhead compared to the actual GL work.
-        self._profiler.tick_paint("crumble")
+        self._render_simple_shader(
+            self._can_use_crumble_shader, self._crumble, self._prepare_crumble_textures,
+            "crumble_program", "crumble_uniforms", _get_crumble_program
+        )
 
-        start_gpu = time.perf_counter()
+    def _render_simple_shader(
+        self, can_use_fn, state, prep_fn, program_attr: str, uniforms_attr: str, helper_fn
+    ) -> None:
+        """Generic shader render for simple fullscreen quad transitions."""
+        if not can_use_fn() or self._gl_pipeline is None or state is None:
+            return
+        if not state.old_pixmap or state.old_pixmap.isNull() or not state.new_pixmap or state.new_pixmap.isNull():
+            return
+        if not prep_fn():
+            return
         vp_w, vp_h = self._get_viewport_size()
-        crumble_helper = _get_crumble_program()
-        crumble_helper.render(
-            program=self._gl_pipeline.crumble_program,
-            uniforms=self._gl_pipeline.crumble_uniforms,
+        helper_fn().render(
+            program=getattr(self._gl_pipeline, program_attr),
+            uniforms=getattr(self._gl_pipeline, uniforms_attr),
             viewport=(vp_w, vp_h),
             old_tex=self._gl_pipeline.old_tex_id,
             new_tex=self._gl_pipeline.new_tex_id,
-            state=st,
+            state=state,
             quad_vao=self._gl_pipeline.quad_vao,
         )
-        try:
-            gpu_ms = max(0.0, float((time.perf_counter() - start_gpu) * 1000.0))
-            self._profiler.tick_gpu("crumble", gpu_ms)
-        except Exception:
-            # GPU timing is best-effort only; never affect rendering.
-            pass
 
     def _paint_blinds_shader(self, target: QRect) -> None:
-        """Render Blinds transition using the BlindsProgram helper."""
-        if not self._can_use_blinds_shader() or self._gl_pipeline is None or self._blinds is None:
-            return
-        st = self._blinds
-        if not st.old_pixmap or st.old_pixmap.isNull() or not st.new_pixmap or st.new_pixmap.isNull():
-            return
-        if not self._prepare_blinds_textures():
-            return
-
-        vp_w, vp_h = self._get_viewport_size()
-        blinds_helper = _get_blinds_program()
-        blinds_helper.render(
-            program=self._gl_pipeline.blinds_program,
-            uniforms=self._gl_pipeline.blinds_uniforms,
-            viewport=(vp_w, vp_h),
-            old_tex=self._gl_pipeline.old_tex_id,
-            new_tex=self._gl_pipeline.new_tex_id,
-            state=st,
-            quad_vao=self._gl_pipeline.quad_vao,
+        self._render_simple_shader(
+            self._can_use_blinds_shader, self._blinds, self._prepare_blinds_textures,
+            "blinds_program", "blinds_uniforms", _get_blinds_program
         )
 
     def _paint_wipe_shader(self, target: QRect) -> None:
-        """Render Wipe transition using the WipeProgram helper."""
-        if not self._can_use_wipe_shader() or self._gl_pipeline is None or self._wipe is None:
-            return
-        st = self._wipe
-        if not st.old_pixmap or st.old_pixmap.isNull() or not st.new_pixmap or st.new_pixmap.isNull():
-            return
-        if not self._prepare_wipe_textures():
-            return
-
-        vp_w, vp_h = self._get_viewport_size()
-        wipe_helper = _get_wipe_program()
-        wipe_helper.render(
-            program=self._gl_pipeline.wipe_program,
-            uniforms=self._gl_pipeline.wipe_uniforms,
-            viewport=(vp_w, vp_h),
-            old_tex=self._gl_pipeline.old_tex_id,
-            new_tex=self._gl_pipeline.new_tex_id,
-            state=st,
-            quad_vao=self._gl_pipeline.quad_vao,
+        self._render_simple_shader(
+            self._can_use_wipe_shader, self._wipe, self._prepare_wipe_textures,
+            "wipe_program", "wipe_uniforms", _get_wipe_program
         )
 
     def _paint_slide_shader(self, target: QRect) -> None:
@@ -4015,117 +2497,33 @@ void main() {
             pass
 
     def _paint_crossfade_shader(self, target: QRect) -> None:
-        """Render Crossfade transition using the CrossfadeProgram helper."""
-        if not self._can_use_crossfade_shader() or self._gl_pipeline is None or self._crossfade is None:
-            return
-        st = self._crossfade
-        if not st.old_pixmap or st.old_pixmap.isNull() or not st.new_pixmap or st.new_pixmap.isNull():
-            return
-        if not self._prepare_crossfade_textures():
-            return
-
-        vp_w, vp_h = self._get_viewport_size()
-        crossfade_helper = _get_crossfade_program()
-        crossfade_helper.render(
-            program=self._gl_pipeline.crossfade_program,
-            uniforms=self._gl_pipeline.crossfade_uniforms,
-            viewport=(vp_w, vp_h),
-            old_tex=self._gl_pipeline.old_tex_id,
-            new_tex=self._gl_pipeline.new_tex_id,
-            state=st,
-            quad_vao=self._gl_pipeline.quad_vao,
+        self._render_simple_shader(
+            self._can_use_crossfade_shader, self._crossfade, self._prepare_crossfade_textures,
+            "crossfade_program", "crossfade_uniforms", _get_crossfade_program
         )
 
     def _paint_diffuse_shader(self, target: QRect) -> None:
-        """Render Diffuse transition using the DiffuseProgram helper."""
-        if not self._can_use_diffuse_shader() or self._gl_pipeline is None or self._diffuse is None:
-            return
-        st = self._diffuse
-        if not st.old_pixmap or st.old_pixmap.isNull() or not st.new_pixmap or st.new_pixmap.isNull():
-            return
-        if not self._prepare_diffuse_textures():
-            return
-
-        vp_w, vp_h = self._get_viewport_size()
-        diffuse_helper = _get_diffuse_program()
-        diffuse_helper.render(
-            program=self._gl_pipeline.diffuse_program,
-            uniforms=self._gl_pipeline.diffuse_uniforms,
-            viewport=(vp_w, vp_h),
-            old_tex=self._gl_pipeline.old_tex_id,
-            new_tex=self._gl_pipeline.new_tex_id,
-            state=st,
-            quad_vao=self._gl_pipeline.quad_vao,
+        self._render_simple_shader(
+            self._can_use_diffuse_shader, self._diffuse, self._prepare_diffuse_textures,
+            "diffuse_program", "diffuse_uniforms", _get_diffuse_program
         )
 
     def _paint_blockflip_shader(self, target: QRect) -> None:
-        """Render BlockFlip transition using the BlockFlipProgram helper."""
-        if not self._can_use_blockflip_shader() or self._gl_pipeline is None or self._blockflip is None:
-            return
-        st = self._blockflip
-        if not st.old_pixmap or st.old_pixmap.isNull() or not st.new_pixmap or st.new_pixmap.isNull():
-            return
-        if not self._prepare_blockflip_textures():
-            return
-
-        vp_w, vp_h = self._get_viewport_size()
-
-        # Delegate rendering to the BlockFlipProgram helper
-        blockflip_helper = _get_blockflip_program()
-        blockflip_helper.render(
-            program=self._gl_pipeline.blockflip_program,
-            uniforms=self._gl_pipeline.blockflip_uniforms,
-            viewport=(vp_w, vp_h),
-            old_tex=self._gl_pipeline.old_tex_id,
-            new_tex=self._gl_pipeline.new_tex_id,
-            state=st,
-            quad_vao=self._gl_pipeline.quad_vao,
+        self._render_simple_shader(
+            self._can_use_blockflip_shader, self._blockflip, self._prepare_blockflip_textures,
+            "blockflip_program", "blockflip_uniforms", _get_blockflip_program
         )
 
-    # NOTE: _paint_shuffle_shader() removed - Shuffle transition is retired.
-
     def _paint_warp_shader(self, target: QRect) -> None:
-        """Render Warp Dissolve transition using the WarpProgram helper."""
-        if not self._can_use_warp_shader() or self._gl_pipeline is None or self._warp is None:
-            return
-        st = self._warp
-        if not st.old_pixmap or st.old_pixmap.isNull() or not st.new_pixmap or st.new_pixmap.isNull():
-            return
-        if not self._prepare_warp_textures():
-            return
-
-        vp_w, vp_h = self._get_viewport_size()
-        warp_helper = _get_warp_program()
-        warp_helper.render(
-            program=self._gl_pipeline.warp_program,
-            uniforms=self._gl_pipeline.warp_uniforms,
-            viewport=(vp_w, vp_h),
-            old_tex=self._gl_pipeline.old_tex_id,
-            new_tex=self._gl_pipeline.new_tex_id,
-            state=st,
-            quad_vao=self._gl_pipeline.quad_vao,
+        self._render_simple_shader(
+            self._can_use_warp_shader, self._warp, self._prepare_warp_textures,
+            "warp_program", "warp_uniforms", _get_warp_program
         )
 
     def _paint_raindrops_shader(self, target: QRect) -> None:
-        """Render Raindrops transition using the RaindropsProgram helper."""
-        if not self._can_use_raindrops_shader() or self._gl_pipeline is None or self._raindrops is None:
-            return
-        st = self._raindrops
-        if not st.old_pixmap or st.old_pixmap.isNull() or not st.new_pixmap or st.new_pixmap.isNull():
-            return
-        if not self._prepare_raindrops_textures():
-            return
-
-        vp_w, vp_h = self._get_viewport_size()
-        raindrops_helper = _get_raindrops_program()
-        raindrops_helper.render(
-            program=self._gl_pipeline.raindrops_program,
-            uniforms=self._gl_pipeline.raindrops_uniforms,
-            viewport=(vp_w, vp_h),
-            old_tex=self._gl_pipeline.old_tex_id,
-            new_tex=self._gl_pipeline.new_tex_id,
-            state=st,
-            quad_vao=self._gl_pipeline.quad_vao,
+        self._render_simple_shader(
+            self._can_use_raindrops_shader, self._raindrops, self._prepare_raindrops_textures,
+            "raindrops_program", "raindrops_uniforms", _get_raindrops_program
         )
 
     def _paint_debug_overlay(self, painter: QPainter) -> None:
@@ -4325,249 +2723,58 @@ void main() {
             if _paint_elapsed > 50.0 and is_perf_metrics_enabled():
                 logger.warning("[PERF] [GL COMPOSITOR] Slow paintGL: %.2fms", _paint_elapsed)
 
+    def _try_shader_path(self, name: str, state, can_use_fn, paint_fn, target, prep_fn=None) -> bool:
+        """Try to render a transition via shader path. Returns True if successful."""
+        if state is None or not can_use_fn():
+            return False
+        try:
+            if prep_fn is not None and not prep_fn():
+                return False
+            paint_fn(target)
+            self._paint_dimming_gl()
+            self._paint_spotify_visualizer_gl()
+            if is_perf_metrics_enabled():
+                self._paint_debug_overlay_gl()
+            return True
+        except Exception:
+            logger.debug("[GL SHADER] Shader %s path failed; disabling shader pipeline", name, exc_info=True)
+            self._gl_disabled_for_session = True
+            self._use_shaders = False
+            return False
+
     def _paintGL_impl(self) -> None:
         """Internal paintGL implementation."""
         target = self.rect()
 
-        # Prefer the shader path for Block Spins when available. On any failure
-        # we log and fall back to the existing QPainter implementation.
-        if self._blockspin is not None and self._can_use_blockspin_shader():
-            try:
-                if self._prepare_blockspin_textures():
-                    self._paint_blockspin_shader(target)
-                    self._paint_dimming_gl()
-                    self._paint_spotify_visualizer_gl()
-                    if is_perf_metrics_enabled():
-                        self._paint_debug_overlay_gl()
-                    return
-            except Exception:
-                logger.debug(
-                    "[GL SHADER] Shader blockspin path failed; disabling shader pipeline",
-                    exc_info=True,
-                )
-                logger.debug("[GL COMPOSITOR] Shader blockspin path failed; disabling shader pipeline", exc_info=True)
-                self._gl_disabled_for_session = True
-                self._use_shaders = False
+        # Try shader paths in priority order. On failure, fall back to QPainter.
+        shader_paths = [
+            ("blockspin", self._blockspin, self._can_use_blockspin_shader,
+             self._paint_blockspin_shader, self._prepare_blockspin_textures),
+            ("blockflip", self._blockflip, self._can_use_blockflip_shader,
+             self._paint_blockflip_shader, None),
+            ("raindrops", self._raindrops, self._can_use_raindrops_shader,
+             self._paint_raindrops_shader, None),
+            ("warp", self._warp, self._can_use_warp_shader,
+             self._paint_warp_shader, None),
+            ("diffuse", self._diffuse, self._can_use_diffuse_shader,
+             self._paint_diffuse_shader, None),
+            ("peel", self._peel, self._can_use_peel_shader,
+             self._paint_peel_shader, None),
+            ("blinds", self._blinds, self._can_use_blinds_shader,
+             self._paint_blinds_shader, None),
+            ("crumble", self._crumble, self._can_use_crumble_shader,
+             self._paint_crumble_shader, None),
+            ("crossfade", self._crossfade, self._can_use_crossfade_shader,
+             self._paint_crossfade_shader, None),
+            ("slide", self._slide, self._can_use_slide_shader,
+             self._paint_slide_shader, None),
+            ("wipe", self._wipe, self._can_use_wipe_shader,
+             self._paint_wipe_shader, None),
+        ]
 
-        # BlockFlip shader path: when enabled and the GLSL pipeline is
-        # available, draw the flip field in GLSL using the grid and direction
-        # hints provided by the controller. On failure we disable shader usage
-        # for the session and fall back to the existing QPainter path.
-        if self._blockflip is not None and self._can_use_blockflip_shader():
-            try:
-                self._paint_blockflip_shader(target)
-                self._paint_dimming_gl()
-                self._paint_spotify_visualizer_gl()
-                if is_perf_metrics_enabled():
-                    self._paint_debug_overlay_gl()
+        for name, state, can_use_fn, paint_fn, prep_fn in shader_paths:
+            if self._try_shader_path(name, state, can_use_fn, paint_fn, target, prep_fn):
                 return
-            except Exception:
-                logger.debug(
-                    "[GL SHADER] Shader blockflip path failed; disabling shader pipeline",
-                    exc_info=True,
-                )
-                logger.debug(
-                    "[GL COMPOSITOR] Shader blockflip path failed; disabling shader pipeline",
-                    exc_info=True,
-                )
-                self._gl_disabled_for_session = True
-                self._use_shaders = False
-
-        # Raindrops shader path: when enabled and the GLSL pipeline is
-        # available, draw the droplet field entirely in GLSL. On failure we
-        # disable shader usage for the session and fall back to the
-        # compositor's existing QPainter-based transitions.
-        if self._raindrops is not None and self._can_use_raindrops_shader():
-            try:
-                self._paint_raindrops_shader(target)
-                self._paint_dimming_gl()
-                self._paint_spotify_visualizer_gl()
-                if is_perf_metrics_enabled():
-                    self._paint_debug_overlay_gl()
-                return
-            except Exception:
-                logger.debug(
-                    "[GL SHADER] Shader raindrops path failed; disabling shader pipeline",
-                    exc_info=True,
-                )
-                logger.debug(
-                    "[GL COMPOSITOR] Shader raindrops path failed; disabling shader pipeline",
-                    exc_info=True,
-                )
-                self._gl_disabled_for_session = True
-                self._use_shaders = False
-
-        # NOTE: Shuffle and Shooting Stars shader paths removed - these transitions are retired.
-
-        if self._warp is not None and self._can_use_warp_shader():
-            try:
-                self._paint_warp_shader(target)
-                self._paint_dimming_gl()
-                self._paint_spotify_visualizer_gl()
-                if is_perf_metrics_enabled():
-                    self._paint_debug_overlay_gl()
-                return
-            except Exception:
-                logger.debug(
-                    "[GL SHADER] Shader warp path failed; disabling shader pipeline",
-                    exc_info=True,
-                )
-                logger.debug(
-                    "[GL COMPOSITOR] Shader warp path failed; disabling shader pipeline",
-                    exc_info=True,
-                )
-                self._gl_disabled_for_session = True
-                self._use_shaders = False
-
-        # Diffuse shader path: when enabled and the GLSL pipeline is
-        # available, draw the block-based reveal entirely in GLSL. This path
-        # is only active when DiffuseState provides a non-zero grid; legacy
-        # region-based Diffuse continues to use the QPainter path below.
-        if self._diffuse is not None and self._can_use_diffuse_shader():
-            try:
-                self._paint_diffuse_shader(target)
-                self._paint_dimming_gl()
-                self._paint_spotify_visualizer_gl()
-                if is_perf_metrics_enabled():
-                    self._paint_debug_overlay_gl()
-                return
-            except Exception:
-                logger.debug(
-                    "[GL SHADER] Shader diffuse path failed; disabling shader pipeline",
-                    exc_info=True,
-                )
-                logger.debug(
-                    "[GL COMPOSITOR] Shader diffuse path failed; disabling shader pipeline",
-                    exc_info=True,
-                )
-                self._gl_disabled_for_session = True
-                self._use_shaders = False
-
-        # Peel shader path: when enabled and the GLSL pipeline is available,
-        # draw the strip-based peel entirely in GLSL using the direction and
-        # strip count provided by the controller. On failure we disable shader
-        # usage for the session and fall back to the existing QPainter
-        # compositor implementation below.
-        if self._peel is not None and self._can_use_peel_shader():
-            try:
-                self._paint_peel_shader(target)
-                self._paint_dimming_gl()
-                self._paint_spotify_visualizer_gl()
-                if is_perf_metrics_enabled():
-                    self._paint_debug_overlay_gl()
-                return
-            except Exception:
-                logger.debug(
-                    "[GL SHADER] Shader peel path failed; disabling shader pipeline",
-                    exc_info=True,
-                )
-                logger.debug(
-                    "[GL COMPOSITOR] Shader peel path failed; disabling shader pipeline",
-                    exc_info=True,
-                )
-                self._gl_disabled_for_session = True
-                self._use_shaders = False
-
-        # Blinds shader path: when enabled and the GLSL pipeline is
-        # available, draw the blinds reveal entirely in GLSL using the grid
-        # hints provided by the controller. On failure we disable shader
-        # usage for the session and fall back to the QPainter compositor
-        # implementation below.
-        if self._blinds is not None and self._can_use_blinds_shader():
-            try:
-                self._paint_blinds_shader(target)
-                self._paint_dimming_gl()
-                self._paint_spotify_visualizer_gl()
-                if is_perf_metrics_enabled():
-                    self._paint_debug_overlay_gl()
-                return
-            except Exception:
-                logger.debug(
-                    "[GL SHADER] Shader blinds path failed; disabling shader pipeline",
-                    exc_info=True,
-                )
-                logger.debug(
-                    "[GL COMPOSITOR] Shader blinds path failed; disabling shader pipeline",
-                    exc_info=True,
-                )
-                self._gl_disabled_for_session = True
-                self._use_shaders = False
-
-        if self._crumble is not None and self._can_use_crumble_shader():
-            try:
-                self._paint_crumble_shader(target)
-                self._paint_dimming_gl()
-                self._paint_spotify_visualizer_gl()
-                if is_perf_metrics_enabled():
-                    self._paint_debug_overlay_gl()
-                return
-            except Exception:
-                logger.debug(
-                    "[GL SHADER] Shader crumble path failed; disabling shader pipeline",
-                    exc_info=True,
-                )
-                self._gl_disabled_for_session = True
-                self._use_shaders = False
-
-        if self._crossfade is not None and self._can_use_crossfade_shader():
-            try:
-                self._paint_crossfade_shader(target)
-                self._paint_dimming_gl()
-                self._paint_spotify_visualizer_gl()
-                if is_perf_metrics_enabled():
-                    self._paint_debug_overlay_gl()
-                return
-            except Exception:
-                logger.debug(
-                    "[GL SHADER] Shader crossfade path failed; disabling shader pipeline",
-                    exc_info=True,
-                )
-                logger.debug(
-                    "[GL COMPOSITOR] Shader crossfade path failed; disabling shader pipeline",
-                    exc_info=True,
-                )
-                self._gl_disabled_for_session = True
-                self._use_shaders = False
-
-        if self._slide is not None and self._can_use_slide_shader():
-            try:
-                self._paint_slide_shader(target)
-                self._paint_dimming_gl()
-                self._paint_spotify_visualizer_gl()
-                if is_perf_metrics_enabled():
-                    self._paint_debug_overlay_gl()
-                return
-            except Exception:
-                logger.debug(
-                    "[GL SHADER] Shader slide path failed; disabling shader pipeline",
-                    exc_info=True,
-                )
-                logger.debug(
-                    "[GL COMPOSITOR] Shader slide path failed; disabling shader pipeline",
-                    exc_info=True,
-                )
-                self._gl_disabled_for_session = True
-                self._use_shaders = False
-
-        if self._wipe is not None and self._can_use_wipe_shader():
-            try:
-                self._paint_wipe_shader(target)
-                self._paint_dimming_gl()
-                self._paint_spotify_visualizer_gl()
-                if is_perf_metrics_enabled():
-                    self._paint_debug_overlay_gl()
-                return
-            except Exception:
-                logger.debug(
-                    "[GL SHADER] Shader wipe path failed; disabling shader pipeline",
-                    exc_info=True,
-                )
-                logger.debug(
-                    "[GL COMPOSITOR] Shader wipe path failed; disabling shader pipeline",
-                    exc_info=True,
-                )
-                self._gl_disabled_for_session = True
-                self._use_shaders = False
 
         painter = QPainter(self)
         try:
@@ -4759,57 +2966,22 @@ void main() {
                 self._paint_spotify_visualizer(painter)
                 return
 
-            # If a block flip is active, draw old fully and new clipped to the
-            # aggregated reveal region.
-            if self._blockflip is not None:
-                st = self._blockflip
-                # Draw old image fully.
-                if st.old_pixmap and not st.old_pixmap.isNull():
-                    painter.setOpacity(1.0)
-                    painter.drawPixmap(target, st.old_pixmap)
-
-                # Clip and draw new image inside the reveal region.
-                if st.new_pixmap and not st.new_pixmap.isNull() and st.region is not None and not st.region.isEmpty():
-                    painter.save()
-                    painter.setClipRegion(st.region)
-                    painter.setOpacity(1.0)
-                    painter.drawPixmap(target, st.new_pixmap)
-                    painter.restore()
-                self._paint_spotify_visualizer(painter)
-                self._paint_debug_overlay(painter)
-                return
-
-            # If a blinds transition is active, draw old fully and new clipped
-            # to the blinds reveal region.
-            if self._blinds is not None:
-                st = self._blinds
-                if st.old_pixmap and not st.old_pixmap.isNull():
-                    painter.setOpacity(1.0)
-                    painter.drawPixmap(target, st.old_pixmap)
-
-                if st.new_pixmap and not st.new_pixmap.isNull() and st.region is not None and not st.region.isEmpty():
-                    painter.save()
-                    painter.setClipRegion(st.region)
-                    painter.setOpacity(1.0)
-                    painter.drawPixmap(target, st.new_pixmap)
-                    painter.restore()
-                self._paint_debug_overlay(painter)
-                return
-
-            if self._diffuse is not None:
-                st = self._diffuse
-                if st.old_pixmap and not st.old_pixmap.isNull():
-                    painter.setOpacity(1.0)
-                    painter.drawPixmap(target, st.old_pixmap)
-
-                if st.new_pixmap and not st.new_pixmap.isNull() and st.region is not None and not st.region.isEmpty():
-                    painter.save()
-                    painter.setClipRegion(st.region)
-                    painter.setOpacity(1.0)
-                    painter.drawPixmap(target, st.new_pixmap)
-                    painter.restore()
-                self._paint_debug_overlay(painter)
-                return
+            # Region-based transitions (blockflip, blinds, diffuse) share the same pattern
+            for st, paint_vis in [(self._blockflip, True), (self._blinds, False), (self._diffuse, False)]:
+                if st is not None:
+                    if st.old_pixmap and not st.old_pixmap.isNull():
+                        painter.setOpacity(1.0)
+                        painter.drawPixmap(target, st.old_pixmap)
+                    if st.new_pixmap and not st.new_pixmap.isNull() and st.region is not None and not st.region.isEmpty():
+                        painter.save()
+                        painter.setClipRegion(st.region)
+                        painter.setOpacity(1.0)
+                        painter.drawPixmap(target, st.new_pixmap)
+                        painter.restore()
+                    if paint_vis:
+                        self._paint_spotify_visualizer(painter)
+                    self._paint_debug_overlay(painter)
+                    return
 
             # If a wipe is active, draw old fully and new clipped to the wipe region.
             if self._wipe is not None:
