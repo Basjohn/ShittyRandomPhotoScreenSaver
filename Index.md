@@ -4,10 +4,10 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 
 ## Refactor Plans (P0)
 - audits/REFACTOR_DISPLAY_WIDGET.md
-  - Comprehensive plan to decompose display_widget.py (5800+ lines → ~800 lines)
-  - Extracts: WidgetManager (enhance), InputHandler, TransitionController, ImagePresenter
-  - 5 phases, ~10 hours estimated
-  - Cross-references 8 audit items (P0-P3)
+  - **IN PROGRESS**: display_widget.py reduced from 4780 → 3351 lines (~30% reduction)
+  - Completed: Widget creation → WidgetManager (7 widgets), Input handling → InputHandler
+  - Remaining: TransitionController integration, ImagePresenter integration, final cleanup
+  - Target: ~1000 lines
 - audits/REFACTOR_GL_COMPOSITOR.md
   - Comprehensive plan to decompose gl_compositor.py (6100+ lines → ~1500 lines)
   - Extracts: GLProgramCache, GLGeometryManager, GLTextureManager, GLTransitionRenderer, GLErrorHandler

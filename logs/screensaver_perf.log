@@ -11343,3 +11343,8 @@
 2025-12-16 21:51:09 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=608.1ms, frames=31, avg_fps=51.0, dt_min=6.06ms, dt_max=46.23ms, active_count=0, fps_target=60
 2025-12-16 21:51:11 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=24665.7ms, frames=1298, avg_fps=52.6, dt_min=11.12ms, dt_max=82.28ms, bar_count=15
 2025-12-16 21:51:11 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=608.0ms, frames=35, avg_fps=57.6, dt_min=8.59ms, dt_max=40.80ms, active_count=0, fps_target=60
+2025-12-16 21:53:34 - __main__                       - INFO     - [PERF] GC tracking enabled
+2025-12-16 21:53:36 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap between recurring timer invocations: 403.33ms (interval=16ms)
+2025-12-16 21:53:36 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=613.7ms, frames=7, avg_fps=11.4, dt_min=15.66ms, dt_max=401.31ms, active_count=0, fps_target=60
+2025-12-16 21:53:41 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=4585.3ms, frames=203, avg_fps=44.3, dt_min=11.21ms, dt_max=85.82ms, bar_count=15
+2025-12-16 21:53:46 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=9592.9ms, frames=504, avg_fps=52.5, dt_min=11.12ms, dt_max=85.82ms, bar_count=15
