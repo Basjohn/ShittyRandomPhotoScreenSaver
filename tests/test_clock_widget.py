@@ -1,7 +1,6 @@
 """Tests for clock widget."""
 import pytest
 from PySide6.QtWidgets import QWidget, QApplication
-from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from widgets.clock_widget import ClockWidget, TimeFormat, ClockPosition
 
@@ -51,7 +50,7 @@ def test_clock_creation(qapp, parent_widget):
     
     assert clock is not None
     assert clock._time_format == TimeFormat.TWELVE_HOUR
-    assert clock._position == ClockPosition.TOP_RIGHT
+    assert clock._clock_position == ClockPosition.TOP_RIGHT
     assert clock._show_seconds is True
     assert clock.is_running() is False
 
@@ -213,7 +212,7 @@ def test_clock_all_positions(qapp, parent_widget):
         clock.start()
         
         # Check position is set
-        assert clock._position == position
+        assert clock._clock_position == position
         
         # Check widget is visible
         assert clock.isVisible() is True

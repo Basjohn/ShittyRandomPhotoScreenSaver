@@ -324,8 +324,9 @@ class SettingsManager(QObject):
                     # Number of vertical bars to render.
                     'bar_count': 16,
                     # Sensitivity controls the FFT mapping threshold. When
-                    # adaptive_sensitivity is enabled, the runtime will
-                    # auto-tune for low-amplitude loopback devices.
+                    # Recommended is enabled (stored under 'adaptive_sensitivity'
+                    # for backward compatibility), the runtime uses the v1.4
+                    # baseline parameters.
                     'adaptive_sensitivity': True,
                     'sensitivity': 1.0,
                     # Base fill colour for bars (RGBA).

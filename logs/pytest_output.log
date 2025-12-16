@@ -1141,3 +1141,1435 @@ PASSED                               [100%]
 
 ============================================================= 1 passed in 0.78s ==============================================================
 
+
+===== pytest run 2025-12-16 17:36:04 args=['tests/test_spotify_visualizer_widget.py', '-vv', '--tb=long'] =====
+
+============================================================ test session starts =============================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 6 items
+
+
+
+tests/test_spotify_visualizer_widget.py::test_spotify_visualizer_tick_consumes_engine_smoothed_bars 
+PASSED                              [ 16%]
+
+
+tests/test_spotify_visualizer_widget.py::test_spotify_visualizer_compute_bars_reasonable_runtime 
+PASSED                                 [ 33%]
+
+
+tests/test_spotify_visualizer_widget.py::test_spotify_visualizer_widgets_share_audio_engine 
+PASSED                                      [ 50%]
+
+
+tests/test_spotify_visualizer_widget.py::test_spotify_visualizer_emits_perf_metrics 
+PASSED                                              [ 66%]
+
+
+tests/test_spotify_visualizer_widget.py::test_spotify_visualizer_bars_not_stuck_at_top 
+PASSED                                           [ 83%]
+
+
+tests/test_spotify_visualizer_widget.py::test_spotify_visualizer_kick_emphasizes_center_more_than_vocals 
+PASSED                         [100%]
+
+
+
+
+============================================================= 6 passed in 0.44s ==============================================================
+
+
+===== pytest run 2025-12-16 17:46:13 args=[] =====
+
+============================================================ test session starts =============================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collected 488 items / 4 skipped
+
+
+
+tests\test_animation.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                                                                                                     [  2%]
+
+
+tests\test_animation_set_target_fps.py 
+.
+                                                                                                [  2%]
+
+
+tests\test_block_puzzle_flip.py 
+.
+.
+.
+.
+.
+.
+.
+                                                                                                 [  3%]
+
+
+tests\test_clock_integration_regression.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                                                                                 [  6%]
+
+
+tests\test_clock_widget.py 
+.
+.
+F
+.
+.
+.
+.
+.
+.
+.
+.
+F
+.
+F
+.
+F
+.
+.
+.
+                                                                                          [ 10%]
+
+
+tests\test_context_menu_effect_invalidation.py 
+.
+                                                                                        [ 10%]
+
+
+tests\test_ctrl_interaction_mode.py 
+.
+.
+.
+
+===== pytest run 2025-12-16 17:50:39 args=['tests/test_clock_widget.py', '-vv', '--tb=long'] =====
+
+============================================================ test session starts =============================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 19 items
+
+
+
+tests/test_clock_widget.py::test_time_format_enum 
+PASSED                                                                                [  5%]
+
+
+tests/test_clock_widget.py::test_clock_position_enum 
+PASSED                                                                             [ 10%]
+
+
+tests/test_clock_widget.py::test_clock_creation 
+FAILED                                                                                  [ 15%]
+
+
+tests/test_clock_widget.py::test_clock_start_stop 
+PASSED                                                                                [ 21%]
+
+
+tests/test_clock_widget.py::test_clock_signals 
+PASSED                                                                                   [ 26%]
+
+
+tests/test_clock_widget.py::test_clock_12h_format 
+PASSED                                                                                [ 31%]
+
+
+tests/test_clock_widget.py::test_clock_24h_format 
+PASSED                                                                                [ 36%]
+
+
+tests/test_clock_widget.py::test_clock_without_seconds 
+PASSED                                                                           [ 42%]
+
+
+tests/test_clock_widget.py::test_clock_with_seconds 
+PASSED                                                                              [ 47%]
+
+
+tests/test_clock_widget.py::test_clock_set_time_format 
+PASSED                                                                           [ 52%]
+
+
+tests/test_clock_widget.py::test_clock_set_show_seconds 
+PASSED                                                                          [ 57%]
+
+
+tests/test_clock_widget.py::test_clock_all_positions 
+FAILED                                                                             [ 63%]
+
+
+tests/test_clock_widget.py::test_clock_set_position 
+PASSED                                                                              [ 68%]
+
+
+tests/test_clock_widget.py::test_clock_set_font_size 
+FAILED                                                                             [ 73%]
+
+
+tests/test_clock_widget.py::test_clock_set_text_color 
+PASSED                                                                            [ 78%]
+
+
+tests/test_clock_widget.py::test_clock_set_margin 
+FAILED                                                                                [ 84%]
+
+
+tests/test_clock_widget.py::test_clock_cleanup 
+PASSED                                                                                   [ 89%]
+
+
+tests/test_clock_widget.py::test_clock_concurrent_start_prevention 
+PASSED                                                               [ 94%]
+
+
+tests/test_clock_widget.py::test_clock_updates_over_time 
+PASSED                                                                         [100%]
+
+
+
+
+================================================================== FAILURES ==================================================================
+
+____________________________________________________________ test_clock_creation _____________________________________________________________
+
+
+
+qapp = <PySide6.QtWidgets.QApplication(0x22eb40c2db0) at 0x0000022EB4D3F940>
+
+parent_widget = <PySide6.QtWidgets.QWidget(0x22eb32951e0) at 0x0000022EB4D3FA40>
+
+
+
+    def test_clock_creation(qapp, parent_widget):
+
+        """Test clock widget creation."""
+
+        clock = ClockWidget(
+
+            parent=parent_widget,
+
+            time_format=TimeFormat.TWELVE_HOUR,
+
+            position=ClockPosition.TOP_RIGHT,
+
+            show_seconds=True
+
+        )
+
+    
+
+        assert clock is not None
+
+        assert clock._time_format == TimeFormat.TWELVE_HOUR
+
+>       assert clock._position == ClockPosition.TOP_RIGHT
+
+E       assert <OverlayPosition.TOP_RIGHT: 'top_right'> == <ClockPosition.TOP_RIGHT: 'top_right'>
+
+E        +  where <OverlayPosition.TOP_RIGHT: 'top_right'> = <widgets.clock_widget.ClockWidget(0x22eb3293260, name="clock_main") at 0x0000022EB4D3FB80>._position
+
+E        +  and   <ClockPosition.TOP_RIGHT: 'top_right'> = ClockPosition.TOP_RIGHT
+
+
+
+tests\test_clock_widget.py:54: AssertionError
+
+__________________________________________________________ test_clock_all_positions __________________________________________________________
+
+
+
+qapp = <PySide6.QtWidgets.QApplication(0x22eb40c2db0) at 0x0000022EB4D3F940>
+
+parent_widget = <PySide6.QtWidgets.QWidget(0x22eb429f280) at 0x0000022EB4860500>
+
+
+
+    def test_clock_all_positions(qapp, parent_widget):
+
+        """Test all clock positions."""
+
+        parent_widget.show()  # Show parent so child visibility works
+
+    
+
+        positions = [
+
+            ClockPosition.TOP_LEFT,
+
+            ClockPosition.TOP_RIGHT,
+
+            ClockPosition.BOTTOM_LEFT,
+
+            ClockPosition.BOTTOM_RIGHT,
+
+            ClockPosition.TOP_CENTER,
+
+            ClockPosition.BOTTOM_CENTER
+
+        ]
+
+    
+
+        for position in positions:
+
+            clock = ClockWidget(parent=parent_widget, position=position)
+
+            clock.start()
+
+    
+
+            # Check position is set
+
+>           assert clock._position == position
+
+E           assert <OverlayPosition.TOP_LEFT: 'top_left'> == <ClockPosition.TOP_LEFT: 'top_left'>
+
+E            +  where <OverlayPosition.TOP_LEFT: 'top_left'> = <widgets.clock_widget.ClockWidget(0x22eb429fbe0, name="clock_main") at 0x0000022EB48636C0>._position
+
+
+
+tests\test_clock_widget.py:216: AssertionError
+
+__________________________________________________________ test_clock_set_font_size __________________________________________________________
+
+
+
+qapp = <PySide6.QtWidgets.QApplication(0x22eb40c2db0) at 0x0000022EB4D3F940>
+
+parent_widget = <PySide6.QtWidgets.QWidget(0x22eb429df00) at 0x0000022EB4D35700>
+
+
+
+    def test_clock_set_font_size(qapp, parent_widget):
+
+        """Test setting font size."""
+
+        clock = ClockWidget(parent=parent_widget)
+
+    
+
+        clock.set_font_size(72)
+
+        assert clock._font_size == 72
+
+    
+
+        # Invalid size should fall back
+
+        clock.set_font_size(-10)
+
+>       assert clock._font_size == 48
+
+E       assert 8 == 48
+
+E        +  where 8 = <widgets.clock_widget.ClockWidget(0x22eb429dc60, name="clock_main") at 0x0000022EB4D35E40>._font_size
+
+
+
+tests\test_clock_widget.py:249: AssertionError
+
+___________________________________________________________ test_clock_set_margin ____________________________________________________________
+
+
+
+qapp = <PySide6.QtWidgets.QApplication(0x22eb40c2db0) at 0x0000022EB4D3F940>
+
+parent_widget = <PySide6.QtWidgets.QWidget(0x22eb35919f0) at 0x0000022EB4D7DF00>
+
+
+
+    def test_clock_set_margin(qapp, parent_widget):
+
+        """Test setting margin."""
+
+        clock = ClockWidget(parent=parent_widget)
+
+    
+
+        clock.set_margin(50)
+
+        assert clock._margin == 50
+
+    
+
+        # Invalid margin should fall back
+
+        clock.set_margin(-10)
+
+>       assert clock._margin == 20
+
+E       assert 0 == 20
+
+E        +  where 0 = <widgets.clock_widget.ClockWidget(0x22eb3592470, name="clock_main") at 0x0000022EB4D7F3C0>._margin
+
+
+
+tests\test_clock_widget.py:271: AssertionError
+
+========================================================== short test summary info ===========================================================
+
+FAILED tests/test_clock_widget.py::test_clock_creation - assert <OverlayPosition.TOP_RIGHT: 'top_right'> == <ClockPosition.TOP_RIGHT: 'top_right'>
+ +  where <OverlayPosition.TOP_RIGHT: 'top_right'> = <widgets.clock_widget.ClockWidget(0x22eb3293260, name="clock_main") at 0x0000022EB4D3FB80>._position
+ +  and   <ClockPosition.TOP_RIGHT: 'top_right'> = ClockPosition.TOP_RIGHT
+
+
+FAILED tests/test_clock_widget.py::test_clock_all_positions - assert <OverlayPosition.TOP_LEFT: 'top_left'> == <ClockPosition.TOP_LEFT: 'top_left'>
+ +  where <OverlayPosition.TOP_LEFT: 'top_left'> = <widgets.clock_widget.ClockWidget(0x22eb429fbe0, name="clock_main") at 0x0000022EB48636C0>._position
+
+
+FAILED tests/test_clock_widget.py::test_clock_set_font_size - assert 8 == 48
+ +  where 8 = <widgets.clock_widget.ClockWidget(0x22eb429dc60, name="clock_main") at 0x0000022EB4D35E40>._font_size
+
+
+FAILED tests/test_clock_widget.py::test_clock_set_margin - assert 0 == 20
+ +  where 0 = <widgets.clock_widget.ClockWidget(0x22eb3592470, name="clock_main") at 0x0000022EB4D7F3C0>._margin
+
+
+======================================================== 4 failed, 15 passed in 4.47s ========================================================
+
+
+===== pytest run 2025-12-16 17:57:17 args=['tests/test_clock_widget.py', '-vv', '--tb=long'] =====
+
+============================================================ test session starts =============================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 19 items
+
+
+
+tests/test_clock_widget.py::test_time_format_enum 
+PASSED                                                                                [  5%]
+
+
+tests/test_clock_widget.py::test_clock_position_enum 
+PASSED                                                                             [ 10%]
+
+
+tests/test_clock_widget.py::test_clock_creation 
+PASSED                                                                                  [ 15%]
+
+
+tests/test_clock_widget.py::test_clock_start_stop 
+PASSED                                                                                [ 21%]
+
+
+tests/test_clock_widget.py::test_clock_signals 
+PASSED                                                                                   [ 26%]
+
+
+tests/test_clock_widget.py::test_clock_12h_format 
+PASSED                                                                                [ 31%]
+
+
+tests/test_clock_widget.py::test_clock_24h_format 
+PASSED                                                                                [ 36%]
+
+
+tests/test_clock_widget.py::test_clock_without_seconds 
+PASSED                                                                           [ 42%]
+
+
+tests/test_clock_widget.py::test_clock_with_seconds 
+PASSED                                                                              [ 47%]
+
+
+tests/test_clock_widget.py::test_clock_set_time_format 
+PASSED                                                                           [ 52%]
+
+
+tests/test_clock_widget.py::test_clock_set_show_seconds 
+PASSED                                                                          [ 57%]
+
+
+tests/test_clock_widget.py::test_clock_all_positions 
+PASSED                                                                             [ 63%]
+
+
+tests/test_clock_widget.py::test_clock_set_position 
+PASSED                                                                              [ 68%]
+
+
+tests/test_clock_widget.py::test_clock_set_font_size 
+PASSED                                                                             [ 73%]
+
+
+tests/test_clock_widget.py::test_clock_set_text_color 
+PASSED                                                                            [ 78%]
+
+
+tests/test_clock_widget.py::test_clock_set_margin 
+PASSED                                                                                [ 84%]
+
+
+tests/test_clock_widget.py::test_clock_cleanup 
+PASSED                                                                                   [ 89%]
+
+
+tests/test_clock_widget.py::test_clock_concurrent_start_prevention 
+PASSED                                                               [ 94%]
+
+
+tests/test_clock_widget.py::test_clock_updates_over_time 
+PASSED                                                                         [100%]
+
+
+
+
+============================================================= 19 passed in 4.42s =============================================================
+
+
+===== pytest run 2025-12-16 17:57:30 args=[] =====
+
+============================================================ test session starts =============================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collected 488 items / 4 skipped
+
+
+
+tests\test_animation.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                                                                                                     [  2%]
+
+
+tests\test_animation_set_target_fps.py 
+.
+                                                                                                [  2%]
+
+
+tests\test_block_puzzle_flip.py 
+.
+.
+.
+.
+.
+.
+.
+                                                                                                 [  3%]
+
+
+tests\test_clock_integration_regression.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                                                                                 [  6%]
+
+
+tests\test_clock_widget.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                                                                                          [ 10%]
+
+
+tests\test_context_menu_effect_invalidation.py 
+.
+                                                                                        [ 10%]
+
+
+tests\test_ctrl_interaction_mode.py 
+.
+.
+.
+
+===== pytest run 2025-12-16 18:01:40 args=['-x', '-vv', '--tb=long'] =====
+
+============================================================ test session starts =============================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 488 items / 4 skipped
+
+
+
+tests/test_animation.py::test_animation_manager_initialization 
+PASSED                                                                   [  0%]
+
+
+tests/test_animation.py::test_property_animation 
+PASSED                                                                                 [  0%]
+
+
+tests/test_animation.py::test_custom_animation 
+PASSED                                                                                   [  0%]
+
+
+tests/test_animation.py::test_animation_pause_resume 
+PASSED                                                                             [  0%]
+
+
+tests/test_animation.py::test_animation_cancel 
+PASSED                                                                                   [  1%]
+
+
+tests/test_animation.py::test_easing_curves 
+PASSED                                                                                      [  1%]
+
+
+tests/test_animation.py::test_animation_with_delay 
+PASSED                                                                               [  1%]
+
+
+tests/test_animation.py::test_multiple_animations 
+PASSED                                                                                [  1%]
+
+
+tests/test_animation.py::test_cancel_all_animations 
+PASSED                                                                              [  1%]
+
+
+tests/test_animation.py::test_animation_manager_auto_stop 
+PASSED                                                                        [  2%]
+
+
+tests/test_animation.py::test_animation_manager_emits_perf_metrics 
+PASSED                                                               [  2%]
+
+
+tests/test_animation_set_target_fps.py::test_set_target_fps_updates_timer_interval 
+PASSED                                               [  2%]
+
+
+tests/test_block_puzzle_flip.py::test_block_puzzle_creation 
+PASSED                                                                      [  2%]
+
+
+tests/test_block_puzzle_flip.py::test_block_puzzle_runs_and_labels 
+PASSED                                                               [  2%]
+
+
+tests/test_block_puzzle_flip.py::test_block_puzzle_cleanup 
+PASSED                                                                       [  3%]
+
+
+tests/test_block_puzzle_flip.py::test_block_puzzle_invalid_pixmap 
+PASSED                                                                [  3%]
+
+
+tests/test_block_puzzle_flip.py::test_block_puzzle_set_flip_duration 
+PASSED                                                             [  3%]
+
+
+tests/test_block_puzzle_flip.py::test_block_puzzle_randomization 
+PASSED                                                                 [  3%]
+
+
+tests/test_block_puzzle_flip.py::test_block_puzzle_small_widget 
+PASSED                                                                  [  3%]
+
+
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug1_clock_widget_created 
+PASSED                       [  4%]
+
+
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug2_set_text_color_method_exists 
+PASSED               [  4%]
+
+
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug3_color_array_to_qcolor_conversion 
+PASSED           [  4%]
+
+
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug4_z_order_clock_on_top 
+PASSED                       [  4%]
+
+
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug5_settings_retrieval_no_crash 
+PASSED                [  4%]
+
+
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug6_boolean_type_conversion 
+PASSED                    [  5%]
+
+
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug7_position_string_to_enum 
+PASSED                    [  5%]
+
+
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug8_format_string_to_enum 
+PASSED                      [  5%]
+
+
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug9_missing_raise_call 
+PASSED                         [  5%]
+
+
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_clock_widget_visibility_after_setup 
+PASSED             [  5%]
+
+
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_clock_widget_size_and_position 
+PASSED                  [  6%]
+
+
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_clock_settings_complete_integration 
+PASSED             [  6%]
+
+
+tests/test_clock_widget.py::test_time_format_enum 
+PASSED                                                                                [  6%]
+
+
+tests/test_clock_widget.py::test_clock_position_enum 
+PASSED                                                                             [  6%]
+
+
+tests/test_clock_widget.py::test_clock_creation 
+PASSED                                                                                  [  6%]
+
+
+tests/test_clock_widget.py::test_clock_start_stop 
+PASSED                                                                                [  7%]
+
+
+tests/test_clock_widget.py::test_clock_signals 
+PASSED                                                                                   [  7%]
+
+
+tests/test_clock_widget.py::test_clock_12h_format 
+PASSED                                                                                [  7%]
+
+
+tests/test_clock_widget.py::test_clock_24h_format 
+PASSED                                                                                [  7%]
+
+
+tests/test_clock_widget.py::test_clock_without_seconds 
+PASSED                                                                           [  7%]
+
+
+tests/test_clock_widget.py::test_clock_with_seconds 
+PASSED                                                                              [  8%]
+
+
+tests/test_clock_widget.py::test_clock_set_time_format 
+PASSED                                                                           [  8%]
+
+
+tests/test_clock_widget.py::test_clock_set_show_seconds 
+PASSED                                                                          [  8%]
+
+
+tests/test_clock_widget.py::test_clock_all_positions 
+PASSED                                                                             [  8%]
+
+
+tests/test_clock_widget.py::test_clock_set_position 
+PASSED                                                                              [  9%]
+
+
+tests/test_clock_widget.py::test_clock_set_font_size 
+PASSED                                                                             [  9%]
+
+
+tests/test_clock_widget.py::test_clock_set_text_color 
+PASSED                                                                            [  9%]
+
+
+tests/test_clock_widget.py::test_clock_set_margin 
+PASSED                                                                                [  9%]
+
+
+tests/test_clock_widget.py::test_clock_cleanup 
+PASSED                                                                                   [  9%]
+
+
+tests/test_clock_widget.py::test_clock_concurrent_start_prevention 
+PASSED                                                               [ 10%]
+
+
+tests/test_clock_widget.py::test_clock_updates_over_time 
+PASSED                                                                         [ 10%]
+
+
+tests/test_context_menu_effect_invalidation.py::test_context_menu_invalidates_effects_before_popup 
+PASSED                               [ 10%]
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_held_suppresses_mouse_exit_single_widget 
+PASSED                                          [ 10%]
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_held_global_across_multiple_widgets 
+PASSED                                               [ 10%]
+
+
+tests/test_ctrl_interaction_mode.py::test_media_keys_do_not_exit_screensaver[16777344] 
+PASSED                                           [ 11%]
+
+
+tests/test_ctrl_interaction_mode.py::test_media_keys_do_not_exit_screensaver[16777349] 
+
+===== pytest run 2025-12-16 18:04:25 args=['-x', '--tb=long'] =====
+
+============================================================ test session starts =============================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collected 488 items / 4 skipped
+
+
+
+tests\test_animation.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                                                                                                     [  2%]
+
+
+tests\test_animation_set_target_fps.py 
+.
+                                                                                                [  2%]
+
+
+tests\test_block_puzzle_flip.py 
+.
+.
+.
+.
+.
+.
+.
+                                                                                                 [  3%]
+
+
+tests\test_clock_integration_regression.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                                                                                 [  6%]
+
+
+tests\test_clock_widget.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                                                                                          [ 10%]
+
+
+tests\test_context_menu_effect_invalidation.py 
+.
+                                                                                        [ 10%]
+
+
+tests\test_ctrl_interaction_mode.py 
+.
+.
+.
+
+===== pytest run 2025-12-16 18:08:14 args=['tests/test_ctrl_interaction_mode.py::test_media_keys_do_not_exit_screensaver[16777349]', '-vv', '--tb=long'] =====
+
+============================================================ test session starts =============================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 1 item
+
+
+
+tests/test_ctrl_interaction_mode.py::test_media_keys_do_not_exit_screensaver[16777349] 
+
+===== pytest run 2025-12-16 18:11:41 args=['tests/test_ctrl_interaction_mode.py::test_media_keys_do_not_exit_screensaver[16777349]', '-vv', '--tb=long'] =====
+
+============================================================ test session starts =============================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 1 item
+
+
+
+tests/test_ctrl_interaction_mode.py::test_media_keys_do_not_exit_screensaver[16777349] 
+PASSED                                           [100%]
+
+
+
+
+============================================================= 1 passed in 0.73s ==============================================================
+
+
+===== pytest run 2025-12-16 18:12:20 args=[] =====
+
+============================================================ test session starts =============================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collected 488 items / 4 skipped
+
+
+
+tests\test_animation.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                                                                                                     [  2%]
+
+
+tests\test_animation_set_target_fps.py 
+.
+                                                                                                [  2%]
+
+
+tests\test_block_puzzle_flip.py 
+.
+.
+.
+.
+.
+.
+.
+                                                                                                 [  3%]
+
+
+tests\test_clock_integration_regression.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                                                                                 [  6%]
+
+
+tests\test_clock_widget.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                                                                                          [ 10%]
+
+
+tests\test_context_menu_effect_invalidation.py 
+.
+                                                                                        [ 10%]
+
+
+tests\test_ctrl_interaction_mode.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+F
+.
+                                                                                         [ 12%]
+
+
+tests\test_diffuse_transition.py 
+.
+.
+.
+.
+.
+.
+.
+F
+.
+.
+.
+.
+.
+                                                                                          [ 15%]
+
+
+tests\test_dimming_and_interaction_fixes.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+F
+F
+F
+                                                                           [ 18%]
+
+
+tests\test_display_tab.py 
+.
+.
+F
+.
+.
+.
+.
+.
+.
+.
+F
+.
+.
+.
+                                                                                                [ 21%]
+
+
+tests\test_engine_lifecycle.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                                                                                     [ 25%]
+
+
+tests\test_events.py 
+.
+.
+.
+.
+.
+F
+                                                                                                             [ 27%]
+
+
+tests\test_flicker_fix_integration.py 
+.
+.
+F
+.
+.
+.
+.
+                                                                                           [ 28%]
+
+
+tests\test_frame_timing_workload.py 
+.
+.
+                                                                                                  [ 28%]
+
+
+tests\test_gl_compositor_blinds.py 
+.
+                                                                                                    [ 29%]
+
+
+tests\test_gl_compositor_blockflip.py 
+.
+                                                                                                 [ 29%]
+
+
+tests\test_gl_compositor_blockspin.py 
+F
+                                                                                                 [ 29%]
+
+
+tests\test_gl_compositor_cleanup.py 
+.
+.
+                                                                                                  [ 29%]
+
+
+tests\test_gl_compositor_crossfade.py 
+.
+                                                                                                 [ 30%]
+
+
+tests\test_gl_compositor_diffuse.py 
+.
+                                                                                                   [ 30%]
+
+
+tests\test_gl_compositor_peel.py 
+.
+                                                                                                      [ 30%]
+
+
+tests\test_gl_compositor_raindrops.py 
+.
+                                                                                                 [ 30%]
+
+
+tests\test_gl_compositor_slide.py 
+.
+                                                                                                     [ 30%]
+
+
+tests\test_gl_compositor_wipe.py 
+.
+.
+.
+.
+.
+.
+                                                                                                 [ 32%]
+
+
+tests\test_gl_prewarm.py 
+.
+                                                                                                              [ 32%]
+
+
+tests\test_image_processor.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                                                                                  [ 37%]
+
+
+tests\test_image_queue.py 
+.
+.
+.
+F
+F
+F
+F
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+F
+.
+F
+.
+.
+.
+F
+                                                                                      [ 42%]
+
+
+tests\test_integration.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                                                                                               [ 45%]
+
+
+tests\test_integration_settings.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                                                                                           [ 47%]
+
+
+tests\test_lanczos_scaling.py 
+.
+.
+.
+.
+.
+s
+.
+.
+.
+.
+.
+.
+.
+                                                                                             [ 50%]
+
+
+tests\test_logging_console_encoding.py 
+.
+.
+.
+                                                                                              [ 50%]
+
+
+tests\test_media_widget.py 
+.
+.
+.
+.

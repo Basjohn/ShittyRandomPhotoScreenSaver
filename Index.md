@@ -142,7 +142,27 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - rendering/widget_setup.py
   - Widget setup helpers extracted from DisplayWidget: `parse_color_to_qcolor`, `resolve_monitor_visibility`, `setup_dimming`, `get_widget_shadow_config`, `compute_expected_overlays`. Reduces nested try/except and prepares for further _setup_widgets decomposition.
 - rendering/widget_manager.py
-  - `WidgetManager`: Extracted from DisplayWidget. Manages overlay widget lifecycle, positioning, visibility, Z-order, and rate-limited raise operations.
+  - `WidgetManager`: Extracted from DisplayWidget. Manages overlay widget lifecycle, positioning, visibility, Z-order, rate-limited raise operations, and effect invalidation.
+  - **Phase E Enhancement (2025-12-16)**: Added `invalidate_overlay_effects()`, `_recreate_effect()`, `schedule_effect_invalidation()` for centralized QGraphicsEffect cache-busting
+  - **Fade coordination**: `request_overlay_fade_sync()`, `register_spotify_secondary_fade()`, `reset_fade_coordination()`
+- rendering/input_handler.py
+  - `InputHandler`: Extracted from DisplayWidget. Handles all user input including mouse/keyboard events, context menu triggers, and exit gestures.
+  - **Phase E Enhancement (2025-12-16)**: Provides single choke point for context menu open/close triggers for deterministic effect invalidation ordering.
+  - **Signals**: `exit_requested`, `settings_requested`, `next_image_requested`, `previous_image_requested`, `cycle_transition_requested`, `context_menu_requested`
+- rendering/transition_controller.py
+  - `TransitionController`: Extracted from DisplayWidget. Manages transition lifecycle including start, progress, completion, cancellation, and watchdog timeout handling.
+  - **Phase 3 (2025-12-16)**: Centralizes transition state management for deterministic overlay visibility changes.
+  - **Signals**: `transition_started`, `transition_finished`, `transition_cancelled`
+- rendering/image_presenter.py
+  - `ImagePresenter`: Extracted from DisplayWidget. Manages image loading, processing, and pixmap lifecycle.
+  - **Phase 4 (2025-12-16)**: Centralizes pixmap management to ensure consistent state during transitions.
+  - **Signals**: `image_ready`, `image_error`
+- rendering/multi_monitor_coordinator.py
+  - `MultiMonitorCoordinator`: Singleton coordinator for multi-display screensaver synchronization.
+  - **Phase 5 (2025-12-16)**: Replaces scattered class-level variables with proper coordination layer.
+  - **Responsibilities**: Ctrl-held state, halo ownership, focus ownership, event filter management, instance registry
+  - **Signals**: `ctrl_held_changed`, `halo_owner_changed`
+  - **Thread Safety**: All state access protected by lock for safe cross-thread queries
 
 ## Transitions
 - transitions/base_transition.py
@@ -304,6 +324,12 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - Docs/PERFORMANCE_BASELINE.md – Performance metrics and baselines
 - Docs/SAKURA_PETALS_TRANSITION_DESIGN.md – Design document for future sakura petals transition (low priority)
 - audits/*.md – Repository-level architecture/optimization audit documents with live checklists
+
+## Active Investigations
+- CONTEXT_CACHE_CORRUPTION.md
+  - Phase E: context menu / QGraphicsEffect cache corruption affecting overlay shadows/opacity
+  - Correlates WM_WINDOWPOSCHANGING/activation cascades with menu open/close across displays
+  - Links to refactor leverage points in audits/REFACTOR_DISPLAY_WIDGET.md and audits/REFACTOR_GL_COMPOSITOR.md
 
 ## Settings (selected)
 

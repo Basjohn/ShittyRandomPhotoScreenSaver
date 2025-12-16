@@ -652,7 +652,13 @@ class ClockWidget(BaseOverlayWidget):
     
     def set_font_size(self, size: int) -> None:
         """Set font size - override to use bold weight and update tz label."""
-        super().set_font_size(size)
+        try:
+            size_i = int(size)
+        except Exception:
+            size_i = self.DEFAULT_FONT_SIZE
+        if size_i <= 0:
+            size_i = self.DEFAULT_FONT_SIZE
+        super().set_font_size(size_i)
         # Use bold weight for clock
         font = QFont(self._font_family, self._font_size, QFont.Weight.Bold)
         self.setFont(font)
@@ -660,6 +666,15 @@ class ClockWidget(BaseOverlayWidget):
         self._update_tz_label_font()
         if self._enabled:
             self._update_time()
+
+    def set_margin(self, margin: int) -> None:
+        try:
+            margin_i = int(margin)
+        except Exception:
+            margin_i = self.DEFAULT_MARGIN
+        if margin_i < 0:
+            margin_i = self.DEFAULT_MARGIN
+        super().set_margin(margin_i)
     
     def _update_tz_label_font(self) -> None:
         """Update timezone label font to match main font."""

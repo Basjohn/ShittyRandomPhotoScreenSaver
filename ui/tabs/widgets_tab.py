@@ -860,13 +860,13 @@ class WidgetsTab(QWidget):
         spotify_vis_layout.addLayout(spotify_vis_border_opacity_row)
 
         spotify_vis_sensitivity_row = QHBoxLayout()
-        self.spotify_vis_adaptive_sensitivity = QCheckBox("Recommended")
-        self.spotify_vis_adaptive_sensitivity.setToolTip(
+        self.spotify_vis_recommended = QCheckBox("Recommended")
+        self.spotify_vis_recommended.setToolTip(
             "When enabled, the visualizer uses the recommended (v1.4) sensitivity baseline. Disable to adjust manually."
         )
-        self.spotify_vis_adaptive_sensitivity.stateChanged.connect(self._save_settings)
-        self.spotify_vis_adaptive_sensitivity.stateChanged.connect(lambda _: self._update_spotify_vis_sensitivity_enabled_state())
-        spotify_vis_sensitivity_row.addWidget(self.spotify_vis_adaptive_sensitivity)
+        self.spotify_vis_recommended.stateChanged.connect(self._save_settings)
+        self.spotify_vis_recommended.stateChanged.connect(lambda _: self._update_spotify_vis_sensitivity_enabled_state())
+        spotify_vis_sensitivity_row.addWidget(self.spotify_vis_recommended)
         spotify_vis_sensitivity_row.addStretch()
         spotify_vis_layout.addLayout(spotify_vis_sensitivity_row)
 
@@ -1600,9 +1600,9 @@ class WidgetsTab(QWidget):
             bar_count = int(spotify_vis_config.get('bar_count', 32))
             self.spotify_vis_bar_count.setValue(bar_count)
 
-            adaptive_sens_raw = spotify_vis_config.get('adaptive_sensitivity', True)
-            adaptive_sens = SettingsManager.to_bool(adaptive_sens_raw, True)
-            self.spotify_vis_adaptive_sensitivity.setChecked(adaptive_sens)
+            recommended_raw = spotify_vis_config.get('adaptive_sensitivity', True)
+            recommended = SettingsManager.to_bool(recommended_raw, True)
+            self.spotify_vis_recommended.setChecked(recommended)
 
             sens_val = spotify_vis_config.get('sensitivity', 1.0)
             try:
@@ -1985,7 +1985,7 @@ class WidgetsTab(QWidget):
             'enabled': self.spotify_vis_enabled.isChecked(),
             'bar_count': self.spotify_vis_bar_count.value(),
             'software_visualizer_enabled': self.spotify_vis_software_enabled.isChecked(),
-            'adaptive_sensitivity': self.spotify_vis_adaptive_sensitivity.isChecked(),
+            'adaptive_sensitivity': self.spotify_vis_recommended.isChecked(),
             'sensitivity': max(0.25, min(2.5, self.spotify_vis_sensitivity.value() / 100.0)),
             'bar_fill_color': [
                 self._spotify_vis_fill_color.red(),
@@ -2108,7 +2108,7 @@ class WidgetsTab(QWidget):
 
     def _update_spotify_vis_sensitivity_enabled_state(self) -> None:
         try:
-            recommended = self.spotify_vis_adaptive_sensitivity.isChecked()
+            recommended = self.spotify_vis_recommended.isChecked()
         except Exception:
             recommended = True
         try:

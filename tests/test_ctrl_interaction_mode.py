@@ -7,7 +7,7 @@ consistently across multiple DisplayWidget instances.
 
 import pytest
 from PySide6.QtCore import Qt, QPoint, QEvent
-from PySide6.QtGui import QMouseEvent
+from PySide6.QtGui import QMouseEvent, QKeyEvent
 from PySide6.QtTest import QTest
 
 from rendering.display_widget import DisplayWidget
@@ -134,8 +134,10 @@ def test_media_keys_do_not_exit_screensaver(qt_app, settings_manager, qtbot, med
     widget.exit_requested.connect(lambda: exits.append("exit"))
 
     # Simulate media key press/release.
-    QTest.keyPress(widget, media_key)
-    QTest.keyRelease(widget, media_key)
+    press = QKeyEvent(QEvent.Type.KeyPress, int(media_key), Qt.KeyboardModifier.NoModifier)
+    release = QKeyEvent(QEvent.Type.KeyRelease, int(media_key), Qt.KeyboardModifier.NoModifier)
+    qt_app.sendEvent(widget, press)
+    qt_app.sendEvent(widget, release)
     qt_app.processEvents()
 
     assert exits == []

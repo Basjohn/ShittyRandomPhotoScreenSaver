@@ -11,7 +11,7 @@ try:
     from OpenGL import GL  # type: ignore[import]
 except ImportError:  # pragma: no cover - optional dependency
     GL = None
-from PySide6.QtWidgets import QWidget, QApplication, QGraphicsDropShadowEffect, QGraphicsOpacityEffect
+from PySide6.QtWidgets import QWidget, QApplication
 from PySide6.QtCore import Qt, Signal, QSize, QTimer, QEvent, QPoint
 from PySide6.QtGui import (
     QPixmap,
@@ -44,6 +44,11 @@ from widgets.shadow_utils import apply_widget_shadow
 from widgets.context_menu import ScreensaverContextMenu
 from widgets.cursor_halo import CursorHaloWidget
 from rendering.widget_setup import parse_color_to_qcolor
+from rendering.widget_manager import WidgetManager
+from rendering.input_handler import InputHandler
+from rendering.transition_controller import TransitionController
+from rendering.image_presenter import ImagePresenter
+from rendering.multi_monitor_coordinator import get_coordinator, MultiMonitorCoordinator
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.logging.overlay_telemetry import record_overlay_ready
 from core.resources.manager import ResourceManager
@@ -116,34 +121,25 @@ class DisplayWidget(QWidget):
     settings_requested = Signal()  # S key - open settings
     dimming_changed = Signal(bool, float)  # enabled, opacity - sync dimming across displays
     
-    # Global Ctrl-held interaction mode flag shared across all display instances.
-    # This ensures that holding Ctrl on any screen suppresses mouse-based exit
-    # (movement/click) on all displays simultaneously.
-    _global_ctrl_held: bool = False
-    _halo_owner: Optional["DisplayWidget"] = None
-    
-    # PERF: Single eventFilter for all DisplayWidgets to avoid redundant processing
-    _event_filter_installed: bool = False
-    _event_filter_owner: Optional["DisplayWidget"] = None
-    
-    # PERF: Cache of DisplayWidget instances by screen to avoid iterating topLevelWidgets
-    _instances_by_screen: Dict[Any, "DisplayWidget"] = {}
-
-    # On Windows, switching activation between multiple full-screen top-level
-    # windows can change the compositor/backing-store path for the *inactive*
-    # window. That can make semi-transparent overlay backgrounds appear much
-    # more opaque because they end up blending against a stale/darker buffer.
-    # To avoid this, only one DisplayWidget is permitted to accept focus.
-    _focus_owner: Optional["DisplayWidget"] = None
+    # Phase 5: Class-level state has been migrated to MultiMonitorCoordinator.
+    # The following are kept as deprecated fallbacks for any external code that
+    # may still reference them. New code should use get_coordinator() instead.
+    # These will be removed in a future version.
+    _global_ctrl_held: bool = False  # DEPRECATED: Use get_coordinator().ctrl_held
+    _halo_owner: Optional["DisplayWidget"] = None  # DEPRECATED: Use get_coordinator().halo_owner
+    _event_filter_installed: bool = False  # DEPRECATED: Use get_coordinator().event_filter_installed
+    _event_filter_owner: Optional["DisplayWidget"] = None  # DEPRECATED
+    _instances_by_screen: Dict[Any, "DisplayWidget"] = {}  # DEPRECATED: Use get_coordinator().get_all_instances()
+    _focus_owner: Optional["DisplayWidget"] = None  # DEPRECATED: Use get_coordinator().focus_owner
     
     @classmethod
     def get_all_instances(cls) -> List["DisplayWidget"]:
-        """Get all DisplayWidget instances from the cache.
+        """Get all DisplayWidget instances.
         
-        PERF: Uses cached instances instead of iterating QApplication.topLevelWidgets().
+        Phase 5: Delegates to MultiMonitorCoordinator for centralized instance tracking.
         Returns a copy of the values to avoid modification during iteration.
         """
-        return list(cls._instances_by_screen.values())
+        return get_coordinator().get_all_instances()
 
     def __init__(
         self,
@@ -235,6 +231,48 @@ class DisplayWidget(QWidget):
                 self._resource_manager = None
         # Central ThreadManager wiring (optional, provided by engine)
         self._thread_manager = thread_manager
+        
+        # WidgetManager for centralized overlay widget lifecycle (Phase E refactor)
+        self._widget_manager: Optional[WidgetManager] = None
+        try:
+            self._widget_manager = WidgetManager(self, self._resource_manager)
+        except Exception:
+            logger.debug("[DISPLAY_WIDGET] Failed to create WidgetManager", exc_info=True)
+        
+        # InputHandler for centralized input event handling (Phase E refactor)
+        self._input_handler: Optional[InputHandler] = None
+        try:
+            self._input_handler = InputHandler(
+                self, self.settings_manager, self._widget_manager
+            )
+            # Connect InputHandler signals to DisplayWidget signals/handlers
+            self._input_handler.exit_requested.connect(self._on_input_exit_requested)
+            self._input_handler.settings_requested.connect(self.settings_requested)
+            self._input_handler.next_image_requested.connect(self.next_requested)
+            self._input_handler.previous_image_requested.connect(self.previous_requested)
+            self._input_handler.cycle_transition_requested.connect(self.cycle_transition_requested)
+            self._input_handler.context_menu_requested.connect(self._on_context_menu_requested)
+        except Exception:
+            logger.debug("[DISPLAY_WIDGET] Failed to create InputHandler", exc_info=True)
+        
+        # TransitionController for centralized transition lifecycle (Phase 3 refactor)
+        self._transition_controller: Optional[TransitionController] = None
+        try:
+            self._transition_controller = TransitionController(
+                self, self._resource_manager, self._widget_manager
+            )
+        except Exception:
+            logger.debug("[DISPLAY_WIDGET] Failed to create TransitionController", exc_info=True)
+        
+        # ImagePresenter for centralized pixmap lifecycle (Phase 4 refactor)
+        self._image_presenter: Optional[ImagePresenter] = None
+        try:
+            self._image_presenter = ImagePresenter(self, display_mode, 1.0)
+        except Exception:
+            logger.debug("[DISPLAY_WIDGET] Failed to create ImagePresenter", exc_info=True)
+        
+        # MultiMonitorCoordinator for centralized cross-display state (Phase 5 refactor)
+        self._coordinator: MultiMonitorCoordinator = get_coordinator()
 
         # Setup widget: frameless, always-on-top display window. For the MC
         # build (SRPSS_MC), also mark the window as a tool window so it does
@@ -253,11 +291,9 @@ class DisplayWidget(QWidget):
         self.setWindowFlags(flags)
         self.setCursor(Qt.CursorShape.BlankCursor)
         self.setMouseTracking(True)
+        # Phase 5: Use MultiMonitorCoordinator for focus ownership
         try:
-            if DisplayWidget._focus_owner is None:
-                DisplayWidget._focus_owner = self
-
-            if DisplayWidget._focus_owner is self:
+            if self._coordinator.claim_focus(self):
                 self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
             else:
                 self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -276,12 +312,11 @@ class DisplayWidget(QWidget):
         # move events.
         # PERF: Only install ONE eventFilter across all DisplayWidgets to avoid
         # redundant processing of every mouse event by multiple filters.
+        # Phase 5: Use MultiMonitorCoordinator for event filter management
         try:
             app = QGuiApplication.instance()
-            if app is not None and not DisplayWidget._event_filter_installed:
+            if app is not None and self._coordinator.install_event_filter(self):
                 app.installEventFilter(self)
-                DisplayWidget._event_filter_installed = True
-                DisplayWidget._event_filter_owner = self
         except Exception:
             pass
         
@@ -291,9 +326,9 @@ class DisplayWidget(QWidget):
         palette.setColor(self.backgroundRole(), Qt.GlobalColor.black)
         self.setPalette(palette)
         
-        # PERF: Register in class-level cache for fast screen-based lookup
+        # Phase 5: Register with MultiMonitorCoordinator instead of class-level cache
         if self._screen is not None:
-            DisplayWidget._instances_by_screen[self._screen] = self
+            self._coordinator.register_instance(self, self._screen)
         
         logger.info(f"DisplayWidget created for screen {screen_index} ({display_mode})")
 
@@ -625,6 +660,89 @@ class DisplayWidget(QWidget):
         except Exception:
             pass
 
+    def _setup_dimming(self) -> None:
+        """Setup background dimming via GL compositor.
+        
+        Phase 1b: Extracted from _setup_widgets for cleaner delegation.
+        """
+        if not self.settings_manager:
+            return
+        
+        dimming_enabled = SettingsManager.to_bool(
+            self.settings_manager.get('accessibility.dimming.enabled', False), False
+        )
+        try:
+            dimming_opacity = int(self.settings_manager.get('accessibility.dimming.opacity', 30))
+            dimming_opacity = max(10, min(90, dimming_opacity))
+        except (ValueError, TypeError):
+            dimming_opacity = 30
+        
+        self._dimming_enabled = dimming_enabled
+        self._dimming_opacity = dimming_opacity / 100.0
+        
+        comp = getattr(self, "_gl_compositor", None)
+        if comp is not None and hasattr(comp, "set_dimming"):
+            comp.set_dimming(dimming_enabled, self._dimming_opacity)
+            logger.debug("GL compositor dimming: enabled=%s, opacity=%d%%", dimming_enabled, dimming_opacity)
+
+    def _setup_spotify_widgets(self) -> None:
+        """Position Spotify widgets after WidgetManager creates them.
+        
+        WidgetManager handles creation; this just handles positioning.
+        """
+        # Position Spotify visualizer if created
+        if self.spotify_visualizer_widget is not None:
+            try:
+                self._position_spotify_visualizer()
+            except Exception:
+                pass
+        
+        # Position Spotify volume if created
+        if self.spotify_volume_widget is not None:
+            try:
+                self._position_spotify_volume()
+            except Exception:
+                pass
+
+    def _setup_pixel_shift(self) -> None:
+        """Setup pixel shift manager for burn-in prevention.
+        
+        Phase 1b: Extracted from _setup_widgets for cleaner delegation.
+        """
+        if not self.settings_manager:
+            return
+        
+        pixel_shift_enabled = SettingsManager.to_bool(
+            self.settings_manager.get('accessibility.pixel_shift.enabled', False), False
+        )
+        try:
+            pixel_shift_rate = int(self.settings_manager.get('accessibility.pixel_shift.rate', 1))
+            pixel_shift_rate = max(1, min(5, pixel_shift_rate))
+        except (ValueError, TypeError):
+            pixel_shift_rate = 1
+        
+        if self._pixel_shift_manager is None:
+            self._pixel_shift_manager = PixelShiftManager(resource_manager=self._resource_manager)
+            self._pixel_shift_manager.set_defer_check(lambda: self._current_transition is not None)
+        
+        self._pixel_shift_manager.set_shifts_per_minute(pixel_shift_rate)
+        
+        # Register all overlay widgets
+        for attr_name in (
+            "clock_widget", "clock2_widget", "clock3_widget",
+            "weather_widget", "media_widget", "spotify_visualizer_widget",
+            "spotify_volume_widget", "reddit_widget", "reddit2_widget",
+        ):
+            widget = getattr(self, attr_name, None)
+            if widget is not None:
+                self._pixel_shift_manager.register_widget(widget)
+        
+        if pixel_shift_enabled:
+            self._pixel_shift_manager.set_enabled(True)
+            logger.debug("Pixel shift enabled (rate=%d/min)", pixel_shift_rate)
+        else:
+            self._pixel_shift_manager.set_enabled(False)
+
     def _is_hard_exit_enabled(self) -> bool:
         """Return True if hard-exit mode is enabled via settings.
 
@@ -650,1156 +768,44 @@ class DisplayWidget(QWidget):
             return False
     
     def _setup_widgets(self) -> None:
-        """Setup overlay widgets (clock, weather) based on settings."""
+        """Setup overlay widgets via WidgetManager delegation.
+        
+        Milestone 2: Refactored to delegate widget creation to WidgetManager.
+        This reduces DisplayWidget from ~1166 lines of widget setup to ~50 lines.
+        """
         if not self.settings_manager:
             logger.warning("No settings_manager provided - widgets will not be created")
             return
         
-        logger.debug(f"Setting up overlay widgets for screen {self.screen_index}")
+        logger.debug("Setting up overlay widgets for screen %d", self.screen_index)
         
-        widgets = self.settings_manager.get('widgets', {})
-        base_clock_settings = widgets.get('clock', {}) if isinstance(widgets, dict) else {}
-
-        # Global widget shadow configuration shared by all overlay widgets.
-        shadows_config = widgets.get('shadows', {}) if isinstance(widgets, dict) else {}
-
-        # Reset per-display overlay fade coordination. This is only used for
-        # the initial widget fade-ins so that overlays like weather, media
-        # and Reddit can appear together. We also precompute which overlays
-        # are expected on this display *before* any of them start so that the
-        # coordinator never starts early with only the first widget.
-        self._overlay_fade_expected = set()
-        self._overlay_fade_pending = {}
-        self._overlay_fade_started = False
-        if self._overlay_fade_timeout is not None:
-            try:
-                self._overlay_fade_timeout.stop()
-                self._overlay_fade_timeout.deleteLater()
-            except Exception:
-                pass
-            self._overlay_fade_timeout = None
-
-        # Secondary fade starters for Spotify widgets (volume slider and
-        # visualiser card). These are kicked off shortly after the primary
-        # overlay fades begin so they never block the main group but still
-        # feel temporally connected.
-        self._spotify_secondary_fade_starters = []
-
-        widgets_map = widgets if isinstance(widgets, dict) else {}
-
-        # Background Dimming - now handled by GL compositor for proper compositing.
-        # The widget-based DimmingOverlay is kept for fallback but not used when
-        # the GL compositor is active.
-        # Settings are stored with dot notation (accessibility.dimming.enabled)
-        dimming_enabled = SettingsManager.to_bool(
-            self.settings_manager.get('accessibility.dimming.enabled', False), False
-        )
-        try:
-            dimming_opacity = int(self.settings_manager.get('accessibility.dimming.opacity', 30))
-            dimming_opacity = max(10, min(90, dimming_opacity))
-        except (ValueError, TypeError):
-            dimming_opacity = 30
+        # Setup dimming first (GL compositor)
+        self._setup_dimming()
         
-        # Store dimming state for use by GL compositor
-        self._dimming_enabled = dimming_enabled
-        self._dimming_opacity = dimming_opacity / 100.0  # Convert to 0.0-1.0
-        
-        # Configure GL compositor dimming if available
-        comp = getattr(self, "_gl_compositor", None)
-        if comp is not None and hasattr(comp, "set_dimming"):
-            comp.set_dimming(dimming_enabled, self._dimming_opacity)
-            logger.debug("GL compositor dimming: enabled=%s, opacity=%d%%", dimming_enabled, dimming_opacity)
-        
-        # NOTE: Widget-based DimmingOverlay removed - GL compositor handles dimming now
-
-        # Spotify visualizer configuration is used later when wiring the
-        # widget. When enabled for this display, the visualiser card
-        # participates in the primary overlay fade under the
-        # "spotify_visualizer" overlay name so its card/shadow enter with
-        # the main group.
-        spotify_vis_settings = widgets_map.get('spotify_visualizer', {}) if isinstance(widgets_map, dict) else {}
-        spotify_vis_enabled = SettingsManager.to_bool(spotify_vis_settings.get('enabled', False), False)
-
-        weather_settings = widgets_map.get('weather', {}) if isinstance(widgets_map, dict) else {}
-        weather_enabled = SettingsManager.to_bool(weather_settings.get('enabled', False), False)
-        weather_monitor_sel = weather_settings.get('monitor', 'ALL')
-        try:
-            weather_show_on_this = (weather_monitor_sel == 'ALL') or (
-                int(weather_monitor_sel) == (self.screen_index + 1)
-            )
-        except Exception:
-            weather_show_on_this = False
-            logger.debug(
-                "Weather widget monitor setting invalid for screen %s: %r (gated off for fade sync)",
+        # Delegate widget creation to WidgetManager
+        if self._widget_manager is not None:
+            created = self._widget_manager.setup_all_widgets(
+                self.settings_manager,
                 self.screen_index,
-                weather_monitor_sel,
+                self._thread_manager,
             )
-
-        reddit_settings = widgets_map.get('reddit', {}) if isinstance(widgets_map, dict) else {}
-        reddit_enabled = SettingsManager.to_bool(reddit_settings.get('enabled', False), False)
-        reddit_monitor_sel = reddit_settings.get('monitor', 'ALL')
-        try:
-            reddit_show_on_this = (reddit_monitor_sel == 'ALL') or (
-                int(reddit_monitor_sel) == (self.screen_index + 1)
-            )
-        except Exception:
-            reddit_show_on_this = False
-            logger.debug(
-                "Reddit widget monitor setting invalid for screen %s: %r (gated off for fade sync)",
-                self.screen_index,
-                reddit_monitor_sel,
-            )
-
-        media_settings = widgets_map.get('media', {}) if isinstance(widgets_map, dict) else {}
-        media_enabled = SettingsManager.to_bool(media_settings.get('enabled', False), False)
-        media_monitor_sel = media_settings.get('monitor', 'ALL')
-        try:
-            media_show_on_this = (media_monitor_sel == 'ALL') or (
-                int(media_monitor_sel) == (self.screen_index + 1)
-            )
-        except Exception:
-            media_show_on_this = False
-            logger.debug(
-                "Media widget monitor setting invalid for screen %s: %r (gated off for fade sync)",
-                self.screen_index,
-                media_monitor_sel,
-            )
-
-        self._overlay_fade_expected = set()
-        if weather_enabled and weather_show_on_this:
-            self._overlay_fade_expected.add("weather")
-        if reddit_enabled and reddit_show_on_this:
-            self._overlay_fade_expected.add("reddit")
-        if media_enabled and media_show_on_this:
-            self._overlay_fade_expected.add("media")
-        # Spotify visualiser card is anchored to the media widget; only
-        # participate in the primary fade when both the media widget and
-        # Spotify visualiser are enabled on this display.
-        if spotify_vis_enabled and media_enabled and media_show_on_this:
-            self._overlay_fade_expected.add("spotify_visualizer")
-
-        position_map = {
-            'Top Left': ClockPosition.TOP_LEFT,
-            'Top Right': ClockPosition.TOP_RIGHT,
-            'Top Center': ClockPosition.TOP_CENTER,
-            'Center': ClockPosition.CENTER,
-            'Bottom Left': ClockPosition.BOTTOM_LEFT,
-            'Bottom Right': ClockPosition.BOTTOM_RIGHT,
-            'Bottom Center': ClockPosition.BOTTOM_CENTER,
-        }
-
-        def _resolve_clock_style(key: str, default, clock_settings: dict, settings_key: str):
-            """Resolve a style value for a clock, with forced inheritance for Clock 2/3.
-
-            For the primary clock, values come from its own settings or the provided default.
-            For Clock 2/3, style and position always come from the main clock's settings so they
-            visually match Clock 1, regardless of any stray per-clock style keys.
-            """
-            # Primary clock: use its own style value when present.
-            if settings_key == 'clock':
-                if isinstance(clock_settings, dict) and key in clock_settings:
-                    return clock_settings[key]
-                return default
-
-            # Secondary clocks (clock2/clock3): force inheritance from main clock style.
-            if isinstance(base_clock_settings, dict) and key in base_clock_settings:
-                return base_clock_settings[key]
-            return default
-
-        def _create_clock_widget(settings_key: str, attr_name: str, default_position: str, default_font_size: int) -> None:
-            clock_settings = widgets.get(settings_key, {}) if isinstance(widgets, dict) else {}
-            clock_enabled = SettingsManager.to_bool(clock_settings.get('enabled', False), False)
-            clock_monitor_sel = clock_settings.get('monitor', 'ALL')
-            try:
-                show_on_this = (clock_monitor_sel == 'ALL') or (int(clock_monitor_sel) == (self.screen_index + 1))
-            except Exception:
-                show_on_this = True
-
-            existing = getattr(self, attr_name, None)
-            if not (clock_enabled and show_on_this):
-                if existing is not None:
-                    try:
-                        existing.stop()
-                        existing.hide()
-                    except Exception:
-                        pass
-                setattr(self, attr_name, None)
-                logger.debug("%s widget disabled in settings", settings_key)
-                return
-
-            # Clock overlays participate in per-display fade coordination so
-            # that even a single clock on a secondary display fades in using
-            # the shared overlay mechanism.
-            try:
-                self._overlay_fade_expected.add(settings_key)
-            except Exception:
-                self._overlay_fade_expected = {settings_key}
-
-            raw_format = _resolve_clock_style('format', '12h', clock_settings, settings_key)
-            time_format = TimeFormat.TWELVE_HOUR if raw_format == '12h' else TimeFormat.TWENTY_FOUR_HOUR
-
-            base_position_default = default_position
-            position_str = _resolve_clock_style('position', base_position_default, clock_settings, settings_key)
-
-            show_seconds_val = _resolve_clock_style('show_seconds', False, clock_settings, settings_key)
-            show_seconds = SettingsManager.to_bool(show_seconds_val, False)
-
-            # Timezone is independent per clock; do not inherit.
-            timezone_str = clock_settings.get('timezone', 'local')
-
-            show_tz_val = _resolve_clock_style('show_timezone', False, clock_settings, settings_key)
-            show_timezone = SettingsManager.to_bool(show_tz_val, False)
-
-            font_size = _resolve_clock_style('font_size', default_font_size, clock_settings, settings_key)
-            margin = _resolve_clock_style('margin', 20, clock_settings, settings_key)
-            color = _resolve_clock_style('color', [255, 255, 255, 230], clock_settings, settings_key)
-            bg_color_data = _resolve_clock_style('bg_color', [64, 64, 64, 255], clock_settings, settings_key)
-            border_color_data = _resolve_clock_style(
-                'border_color', [128, 128, 128, 255], clock_settings, settings_key
-            )
-            border_opacity_val = _resolve_clock_style(
-                'border_opacity', 0.8, clock_settings, settings_key
-            )
-
-            position = position_map.get(position_str, position_map.get(default_position, ClockPosition.TOP_RIGHT))
-
-            try:
-                clock = ClockWidget(self, time_format, position, show_seconds, timezone_str, show_timezone)
-
-                font_family = _resolve_clock_style('font_family', 'Segoe UI', clock_settings, settings_key)
-                if hasattr(clock, 'set_font_family'):
-                    clock.set_font_family(font_family)
-
-                clock.set_font_size(font_size)
-                clock.set_margin(margin)
-
-                qcolor = parse_color_to_qcolor(color)
-                if qcolor:
-                    clock.set_text_color(qcolor)
-
-                # Background color (inherits from main clock for clock2/clock3)
-                bg_qcolor = parse_color_to_qcolor(bg_color_data)
-                if bg_qcolor and hasattr(clock, "set_background_color"):
-                    clock.set_background_color(bg_qcolor)
-
-                # Background border customization (inherits from main clock for clock2/clock3)
-                try:
-                    bo = float(border_opacity_val)
-                except Exception:
-                    bo = 0.8
-                border_qcolor = parse_color_to_qcolor(border_color_data, opacity_override=bo)
-                if border_qcolor and hasattr(clock, "set_background_border"):
-                    clock.set_background_border(2, border_qcolor)
-
-                show_bg_val = _resolve_clock_style('show_background', False, clock_settings, settings_key)
-                show_background = SettingsManager.to_bool(show_bg_val, False)
-                clock.set_show_background(show_background)
-
-                bg_opacity = _resolve_clock_style('bg_opacity', 0.9, clock_settings, settings_key)
-                clock.set_background_opacity(bg_opacity)
-
-                # Analogue/digital display style and numerals configuration.
-                try:
-                    display_mode_val = _resolve_clock_style('display_mode', 'digital', clock_settings, settings_key)
-                    if hasattr(clock, 'set_display_mode'):
-                        clock.set_display_mode(display_mode_val)
-                except Exception:
-                    logger.debug("Failed to apply display_mode for %s", settings_key, exc_info=True)
-
-                try:
-                    show_numerals_val = _resolve_clock_style('show_numerals', True, clock_settings, settings_key)
-                    show_numerals = SettingsManager.to_bool(show_numerals_val, True)
-                    if hasattr(clock, 'set_show_numerals'):
-                        clock.set_show_numerals(show_numerals)
-                except Exception:
-                    logger.debug("Failed to apply show_numerals for %s", settings_key, exc_info=True)
-
-                # Analogue face/hand shadow toggle (main clock style only).
-                try:
-                    analog_shadow_val = _resolve_clock_style('analog_face_shadow', True, clock_settings, settings_key)
-                    analog_shadow = SettingsManager.to_bool(analog_shadow_val, True)
-                    if hasattr(clock, 'set_analog_face_shadow'):
-                        clock.set_analog_face_shadow(analog_shadow)
-                except Exception:
-                    logger.debug("Failed to apply analog_face_shadow for %s", settings_key, exc_info=True)
-
-                # Global widget drop shadow (shared config for all clocks). Where
-                # the clock supports coordinated fade-in, we hand off the
-                # configuration and let the widget attach the shadow once its
-                # opacity fade has completed.
-                try:
-                    if hasattr(clock, "set_shadow_config"):
-                        clock.set_shadow_config(shadows_config)
-                    else:
-                        apply_widget_shadow(clock, shadows_config, has_background_frame=show_background)
-                except Exception:
-                    logger.debug("Failed to apply widget shadow to %s", settings_key, exc_info=True)
-
-                # Provide a stable overlay name so ClockWidget can register
-                # with DisplayWidget.request_overlay_fade_sync using a
-                # descriptive identifier ("clock", "clock2", "clock3").
-                try:
-                    if hasattr(clock, "set_overlay_name"):
-                        clock.set_overlay_name(settings_key)
-                except Exception:
-                    logger.debug("Failed to set overlay name for %s", settings_key, exc_info=True)
-
-                setattr(self, attr_name, clock)
-
-                clock.raise_()
-                clock.start()
-                logger.info(
-                    "✅ %s widget started: %s, %s, font=%spx, seconds=%s",
-                    settings_key,
-                    position_str,
-                    time_format.value,
-                    font_size,
-                    show_seconds,
-                )
-            except Exception as e:
-                logger.error("Failed to create/configure %s widget: %s", settings_key, e, exc_info=True)
-
-        _create_clock_widget('clock', 'clock_widget', 'Top Right', 48)
-        _create_clock_widget('clock2', 'clock2_widget', 'Bottom Right', 32)
-        _create_clock_widget('clock3', 'clock3_widget', 'Bottom Left', 32)
-
-        # Weather widget (uses precomputed weather_settings / weather_enabled /
-        # weather_show_on_this from the fade coordination setup above).
-        if weather_enabled and weather_show_on_this:
-            try:
-                self._overlay_fade_expected.add("weather")
-            except Exception:
-                self._overlay_fade_expected = {"weather"}
-            # Canonical defaults for missing keys mirror
-            # SettingsManager._set_defaults() / get_widget_defaults('weather').
-            position_str = weather_settings.get('position', 'Top Left')
-            # Placeholder location is "New York"; WidgetsTab will perform a
-            # one-shot timezone-based override when appropriate.
-            location = weather_settings.get('location', 'New York')
-            font_size = weather_settings.get('font_size', 24)
-            color = weather_settings.get('color', [255, 255, 255, 230])
-            
-            # Map position string to enum
-            weather_position_map = {
-                'Top Left': WeatherPosition.TOP_LEFT,
-                'Top Right': WeatherPosition.TOP_RIGHT,
-                'Bottom Left': WeatherPosition.BOTTOM_LEFT,
-                'Bottom Right': WeatherPosition.BOTTOM_RIGHT,
-            }
-            position = weather_position_map.get(position_str, WeatherPosition.TOP_LEFT)
-            
-            try:
-                self.weather_widget = WeatherWidget(self, location, position)
-                # Inject ThreadManager if available so weather fetches use central IO pool
-                if self._thread_manager is not None and hasattr(self.weather_widget, "set_thread_manager"):
-                    try:
-                        self.weather_widget.set_thread_manager(self._thread_manager)
-                    except Exception:
-                        pass
-
-                # Set font family if specified
-                font_family = weather_settings.get('font_family', 'Segoe UI')
-                if hasattr(self.weather_widget, 'set_font_family'):
-                    self.weather_widget.set_font_family(font_family)
-                
-                self.weather_widget.set_font_size(font_size)
-                
-                # Convert color arrays to QColor
-                qcolor = parse_color_to_qcolor(color)
-                if qcolor:
-                    self.weather_widget.set_text_color(qcolor)
-
-                # Background/frame customization
-                show_background = SettingsManager.to_bool(
-                    weather_settings.get('show_background', True), True
-                )
-                self.weather_widget.set_show_background(show_background)
-
-                # Background color (RGB+alpha), default matches WeatherWidget internal default
-                bg_color_data = weather_settings.get('bg_color', [35, 35, 35, 255])
-                bg_qcolor = parse_color_to_qcolor(bg_color_data)
-                if bg_qcolor:
-                    self.weather_widget.set_background_color(bg_qcolor)
-
-                # Background opacity (scales alpha regardless of bg_color alpha)
-                bg_opacity = weather_settings.get('bg_opacity', 0.7)
-                self.weather_widget.set_background_opacity(bg_opacity)
-
-                # Border color and opacity (independent from background opacity)
-                border_color_data = weather_settings.get('border_color', [255, 255, 255, 255])
-                border_opacity = weather_settings.get('border_opacity', 1.0)
-                try:
-                    bo = float(border_opacity)
-                except Exception:
-                    bo = 1.0
-                border_qcolor = parse_color_to_qcolor(border_color_data, opacity_override=bo)
-                if border_qcolor:
-                    self.weather_widget.set_background_border(2, border_qcolor)
-
-                # Optional forecast line
-                show_forecast = SettingsManager.to_bool(
-                    weather_settings.get('show_forecast', False), False
-                )
-                self.weather_widget.set_show_forecast(show_forecast)
-
-                # Global widget drop shadow (shared config for all widgets).
-                #
-                # WeatherWidget performs a fade-in using a temporary
-                # QGraphicsOpacityEffect, then attaches the drop shadow
-                # afterwards using the shared configuration passed in here.
-                try:
-                    if hasattr(self.weather_widget, "set_shadow_config"):
-                        self.weather_widget.set_shadow_config(shadows_config)
-                    else:
-                        apply_widget_shadow(self.weather_widget, shadows_config, has_background_frame=show_background)
-                except Exception:
-                    logger.debug("Failed to configure widget shadow for weather widget", exc_info=True)
-
-                self.weather_widget.raise_()
-                self.weather_widget.start()
-                logger.info(f"✅ Weather widget started: {location}, {position_str}, font={font_size}px")
-            except Exception as e:
-                logger.error(f"Failed to create/configure weather widget: {e}", exc_info=True)
+            # Assign created widgets to DisplayWidget attributes
+            for attr_name, widget in created.items():
+                setattr(self, attr_name, widget)
+            logger.info("WidgetManager created %d widgets", len(created))
         else:
-            logger.debug("Weather widget disabled in settings")
-
-        # Reddit widget (uses precomputed reddit_settings / reddit_enabled /
-        # reddit_show_on_this from the fade coordination setup above).
-        try:
-            exit_on_click_val = reddit_settings.get('exit_on_click', True)
-            self._reddit_exit_on_click = SettingsManager.to_bool(exit_on_click_val, True)
-        except Exception:
-            self._reddit_exit_on_click = True
-        # reddit_monitor_sel/reddit_show_on_this are already computed above
-
-        existing_reddit = getattr(self, 'reddit_widget', None)
-        if not (reddit_enabled and reddit_show_on_this):
-            if existing_reddit is not None:
-                try:
-                    existing_reddit.stop()
-                    existing_reddit.hide()
-                except Exception:
-                    pass
-            self.reddit_widget = None
-            logger.debug(
-                "Reddit widget disabled in settings (screen=%s, enabled=%s, show_on_this=%s, monitor_sel=%r)",
-                self.screen_index,
-                reddit_enabled,
-                reddit_show_on_this,
-                reddit_monitor_sel,
-            )
-        else:
-            try:
-                self._overlay_fade_expected.add("reddit")
-            except Exception:
-                self._overlay_fade_expected = {"reddit"}
-            position_str = reddit_settings.get('position', 'Bottom Right')
-            subreddit = reddit_settings.get('subreddit', 'wallpapers') or 'wallpapers'
-            font_size = reddit_settings.get('font_size', 14)
-            margin = reddit_settings.get('margin', 20)
-            color = reddit_settings.get('color', [255, 255, 255, 230])
-            bg_color_data = reddit_settings.get('bg_color', [35, 35, 35, 255])
-            border_color_data = reddit_settings.get('border_color', [255, 255, 255, 255])
-            border_opacity = reddit_settings.get('border_opacity', 1.0)
-            show_background = SettingsManager.to_bool(reddit_settings.get('show_background', True), True)
-            show_separators_val = reddit_settings.get('show_separators', True)
-            show_separators = SettingsManager.to_bool(show_separators_val, True)
-            bg_opacity = reddit_settings.get('bg_opacity', 1.0)
-            try:
-                limit_val = int(reddit_settings.get('limit', 10))
-            except Exception:
-                limit_val = 10
-            # Historical configs used 5 items for the low-count mode; this is
-            # now treated as a 4-item layout so that spacing and card height
-            # match the visual design.
-            if limit_val <= 5:
-                limit_val = 4
-
-            reddit_position_map = {
-                'Top Left': RedditPosition.TOP_LEFT,
-                'Top Right': RedditPosition.TOP_RIGHT,
-                'Bottom Left': RedditPosition.BOTTOM_LEFT,
-                'Bottom Right': RedditPosition.BOTTOM_RIGHT,
-            }
-            rpos = reddit_position_map.get(position_str, RedditPosition.TOP_RIGHT)
-
-            try:
-                self.reddit_widget = RedditWidget(self, subreddit=subreddit, position=rpos)
-
-                if self._thread_manager is not None and hasattr(self.reddit_widget, 'set_thread_manager'):
-                    try:
-                        self.reddit_widget.set_thread_manager(self._thread_manager)
-                    except Exception:
-                        pass
-
-                font_family = reddit_settings.get('font_family', 'Segoe UI')
-                if hasattr(self.reddit_widget, 'set_font_family'):
-                    self.reddit_widget.set_font_family(font_family)
-
-                try:
-                    self.reddit_widget.set_font_size(int(font_size))
-                except Exception:
-                    self.reddit_widget.set_font_size(18)
-
-                try:
-                    margin_val = int(margin)
-                except Exception:
-                    margin_val = 20
-                self.reddit_widget.set_margin(margin_val)
-
-                qcolor = parse_color_to_qcolor(color)
-                if qcolor:
-                    self.reddit_widget.set_text_color(qcolor)
-
-                self.reddit_widget.set_show_background(show_background)
-
-                try:
-                    self.reddit_widget.set_show_separators(show_separators)
-                except Exception:
-                    pass
-
-                # Background color
-                bg_qcolor = parse_color_to_qcolor(bg_color_data)
-                if bg_qcolor:
-                    self.reddit_widget.set_background_color(bg_qcolor)
-
-                # Background opacity
-                try:
-                    bg_opacity_f = float(bg_opacity)
-                except Exception:
-                    bg_opacity_f = 0.9
-                self.reddit_widget.set_background_opacity(bg_opacity_f)
-
-                # Border color and opacity
-                try:
-                    bo = float(border_opacity)
-                except Exception:
-                    bo = 0.8
-                border_qcolor = parse_color_to_qcolor(border_color_data, opacity_override=bo)
-                if border_qcolor:
-                    self.reddit_widget.set_background_border(2, border_qcolor)
-
-                # Item limit and shadow config
-                try:
-                    self.reddit_widget.set_item_limit(limit_val)
-                except Exception:
-                    pass
-
-                try:
-                    if hasattr(self.reddit_widget, 'set_shadow_config'):
-                        self.reddit_widget.set_shadow_config(shadows_config)
-                    else:
-                        apply_widget_shadow(self.reddit_widget, shadows_config, has_background_frame=show_background)
-                except Exception:
-                    logger.debug("Failed to configure widget shadow for reddit widget", exc_info=True)
-
-                # Set overlay name for fade coordination
-                try:
-                    if hasattr(self.reddit_widget, 'set_overlay_name'):
-                        self.reddit_widget.set_overlay_name("reddit")
-                except Exception:
-                    pass
-
-                self.reddit_widget.raise_()
-                self.reddit_widget.start()
-                logger.info(
-                    "✅ Reddit widget started: r/%s, %s, font=%spx, limit=%s",
-                    subreddit,
-                    position_str,
-                    font_size,
-                    limit_val,
-                )
-            except Exception as e:
-                logger.error("Failed to create/configure reddit widget: %s", e, exc_info=True)
-
-        # Reddit 2 widget (inherits styling from Reddit 1)
-        reddit2_settings = widgets.get('reddit2', {})
-        reddit2_enabled = SettingsManager.to_bool(reddit2_settings.get('enabled', False), False)
-        reddit2_monitor_sel = reddit2_settings.get('monitor', 'ALL')
-        try:
-            reddit2_show_on_this = (reddit2_monitor_sel == 'ALL') or (
-                int(reddit2_monitor_sel) == (self.screen_index + 1)
-            )
-        except Exception:
-            reddit2_show_on_this = False
-        
-        existing_reddit2 = getattr(self, 'reddit2_widget', None)
-        if not (reddit2_enabled and reddit2_show_on_this):
-            if existing_reddit2 is not None:
-                try:
-                    existing_reddit2.stop()
-                    existing_reddit2.hide()
-                except Exception:
-                    pass
-            self.reddit2_widget = None
-        else:
-            try:
-                self._overlay_fade_expected.add("reddit2")
-            except Exception:
-                pass
-            
-            # Reddit 2 uses its own subreddit/position/limit but inherits styling from Reddit 1
-            r2_position_str = reddit2_settings.get('position', 'Top Left')
-            r2_subreddit = reddit2_settings.get('subreddit', '') or 'earthporn'
-            try:
-                r2_limit = int(reddit2_settings.get('limit', 4))
-            except Exception:
-                r2_limit = 4
-            if r2_limit <= 5:
-                r2_limit = 4
-            
-            r2_pos = reddit_position_map.get(r2_position_str, RedditPosition.TOP_LEFT)
-            
-            try:
-                self.reddit2_widget = RedditWidget(self, subreddit=r2_subreddit, position=r2_pos)
-                
-                if self._thread_manager is not None and hasattr(self.reddit2_widget, 'set_thread_manager'):
-                    try:
-                        self.reddit2_widget.set_thread_manager(self._thread_manager)
-                    except Exception:
-                        pass
-                
-                # Inherit styling from Reddit 1
-                font_family = reddit_settings.get('font_family', 'Segoe UI')
-                if hasattr(self.reddit2_widget, 'set_font_family'):
-                    self.reddit2_widget.set_font_family(font_family)
-                
-                try:
-                    self.reddit2_widget.set_font_size(int(reddit_settings.get('font_size', 18)))
-                except Exception:
-                    self.reddit2_widget.set_font_size(18)
-                
-                self.reddit2_widget.set_margin(int(reddit_settings.get('margin', 20)))
-                
-                qcolor = parse_color_to_qcolor(reddit_settings.get('color', [255, 255, 255, 230]))
-                if qcolor:
-                    self.reddit2_widget.set_text_color(qcolor)
-                
-                self.reddit2_widget.set_show_background(
-                    SettingsManager.to_bool(reddit_settings.get('show_background', True), True)
-                )
-                
-                try:
-                    self.reddit2_widget.set_show_separators(
-                        SettingsManager.to_bool(reddit_settings.get('show_separators', True), True)
-                    )
-                except Exception:
-                    pass
-                
-                bg_qcolor = parse_color_to_qcolor(reddit_settings.get('bg_color', [35, 35, 35, 255]))
-                if bg_qcolor:
-                    self.reddit2_widget.set_background_color(bg_qcolor)
-                
-                try:
-                    self.reddit2_widget.set_background_opacity(float(reddit_settings.get('bg_opacity', 0.9)))
-                except Exception:
-                    self.reddit2_widget.set_background_opacity(0.9)
-                
-                try:
-                    bo = float(reddit_settings.get('border_opacity', 1.0))
-                except Exception:
-                    bo = 1.0
-                border_qcolor = parse_color_to_qcolor(
-                    reddit_settings.get('border_color', [255, 255, 255, 255]), opacity_override=bo
-                )
-                if border_qcolor:
-                    self.reddit2_widget.set_background_border(2, border_qcolor)
-                
-                try:
-                    self.reddit2_widget.set_item_limit(r2_limit)
-                except Exception:
-                    pass
-                
-                try:
-                    if hasattr(self.reddit2_widget, 'set_shadow_config'):
-                        self.reddit2_widget.set_shadow_config(shadows_config)
-                    else:
-                        apply_widget_shadow(self.reddit2_widget, shadows_config, has_background_frame=True)
-                except Exception:
-                    pass
-                
-                # Set overlay name for fade coordination (distinct from reddit1)
-                try:
-                    if hasattr(self.reddit2_widget, 'set_overlay_name'):
-                        self.reddit2_widget.set_overlay_name("reddit2")
-                except Exception:
-                    pass
-                
-                self.reddit2_widget.raise_()
-                self.reddit2_widget.start()
-                logger.info(
-                    "✅ Reddit 2 widget started: r/%s, %s, limit=%s",
-                    r2_subreddit, r2_position_str, r2_limit,
-                )
-            except Exception as e:
-                logger.error("Failed to create/configure reddit2 widget: %s", e, exc_info=True)
-
-        # Media widget (uses precomputed media_settings / media_enabled /
-        # media_show_on_this from the fade coordination setup above).
-
-        # Detailed diagnostics so we can see exactly what the runtime settings
-        # look like for the media widget on each screen, including the raw
-        # enabled value and monitor selection. The full settings map can be
-        # large, so only dump it in verbose mode.
-        if is_verbose_logging():
-            try:
-                logger.debug(
-                    "[MEDIA_WIDGET] _setup_widgets: screen=%s, raw_settings=%r, "
-                    "enabled_raw=%r, enabled_bool=%s, monitor_sel=%r, show_on_this=%s",
-                    self.screen_index,
-                    media_settings,
-                    media_settings.get('enabled', None),
-                    media_enabled,
-                    media_monitor_sel,
-                    media_show_on_this,
-                )
-            except Exception:
-                logger.debug("[MEDIA_WIDGET] Failed to log media widget settings snapshot", exc_info=True)
-
-        existing_media = getattr(self, 'media_widget', None)
-        if not (media_enabled and media_show_on_this):
-            if existing_media is not None:
-                try:
-                    existing_media.stop()
-                    existing_media.hide()
-                except Exception:
-                    pass
-            self.media_widget = None
-            logger.debug(
-                "Media widget disabled in settings (screen=%s, enabled=%s, show_on_this=%s, monitor_sel=%r)",
-                self.screen_index,
-                media_enabled,
-                media_show_on_this,
-                media_monitor_sel,
-            )
+            logger.warning("No WidgetManager available - widgets will not be created")
             return
-
-        try:
-            self._overlay_fade_expected.add("media")
-        except Exception:
-            self._overlay_fade_expected = {"media"}
-
-        position_str = media_settings.get('position', 'Bottom Left')
-        media_position_map = {
-            'Top Left': MediaPosition.TOP_LEFT,
-            'Top Right': MediaPosition.TOP_RIGHT,
-            'Bottom Left': MediaPosition.BOTTOM_LEFT,
-            'Bottom Right': MediaPosition.BOTTOM_RIGHT,
-        }
-        mpos = media_position_map.get(position_str, MediaPosition.BOTTOM_LEFT)
-
-        font_size = media_settings.get('font_size', 20)
-        color = media_settings.get('color', [255, 255, 255, 230])
-        artwork_size = media_settings.get('artwork_size', 100)
-        rounded_artwork = SettingsManager.to_bool(
-            media_settings.get('rounded_artwork_border', True), True
-        )
-        show_controls = SettingsManager.to_bool(media_settings.get('show_controls', True), True)
-        show_header_frame = SettingsManager.to_bool(
-            media_settings.get('show_header_frame', True), True
-        )
-        spotify_volume_enabled = SettingsManager.to_bool(
-            media_settings.get('spotify_volume_enabled', True), True
-        )
-
-        try:
-            self.media_widget = MediaWidget(self, position=mpos)
-
-            # Inject ThreadManager so media polling runs on the IO pool
-            if self._thread_manager is not None and hasattr(self.media_widget, "set_thread_manager"):
-                try:
-                    self.media_widget.set_thread_manager(self._thread_manager)
-                except Exception:
-                    pass
-
-            # Font family
-            font_family = media_settings.get('font_family', 'Segoe UI')
-            if hasattr(self.media_widget, 'set_font_family'):
-                self.media_widget.set_font_family(font_family)
-
-            # Font size and margin
-            try:
-                self.media_widget.set_font_size(int(font_size))
-            except Exception:
-                self.media_widget.set_font_size(20)
-            try:
-                margin_val = int(media_settings.get('margin', 20))
-            except Exception:
-                margin_val = 20
-            self.media_widget.set_margin(margin_val)
-
-            # Artwork size, border shape, and controls visibility
-            try:
-                if hasattr(self.media_widget, 'set_artwork_size'):
-                    self.media_widget.set_artwork_size(int(artwork_size))
-            except Exception:
-                pass
-            try:
-                if hasattr(self.media_widget, 'set_rounded_artwork_border'):
-                    self.media_widget.set_rounded_artwork_border(rounded_artwork)
-            except Exception:
-                pass
-            try:
-                if hasattr(self.media_widget, 'set_show_controls'):
-                    self.media_widget.set_show_controls(show_controls)
-            except Exception:
-                pass
-            try:
-                if hasattr(self.media_widget, 'set_show_header_frame'):
-                    self.media_widget.set_show_header_frame(show_header_frame)
-            except Exception:
-                pass
-
-            # Colors
-            qcolor = parse_color_to_qcolor(color)
-            if qcolor:
-                self.media_widget.set_text_color(qcolor)
-
-            # Default to a visible background frame for media so the
-            # Spotify block stands out even on bright images. Users can
-            # still override this via widgets.media.show_background.
-            show_background = SettingsManager.to_bool(
-                media_settings.get('show_background', True), True
-            )
-            self.media_widget.set_show_background(show_background)
-
-            # Background color
-            bg_color_data = media_settings.get('bg_color', [64, 64, 64, 255])
-            bg_qcolor = parse_color_to_qcolor(bg_color_data)
-            if bg_qcolor:
-                self.media_widget.set_background_color(bg_qcolor)
-
-            # Background opacity
-            try:
-                bg_opacity = float(media_settings.get('bg_opacity', 0.9))
-            except Exception:
-                bg_opacity = 0.9
-            self.media_widget.set_background_opacity(bg_opacity)
-
-            # Border color and opacity
-            border_color_data = media_settings.get('border_color', [128, 128, 128, 255])
-            border_opacity = media_settings.get('border_opacity', 0.8)
-            try:
-                bo = float(border_opacity)
-            except Exception:
-                bo = 0.8
-            border_qcolor = parse_color_to_qcolor(border_color_data, opacity_override=bo)
-            if border_qcolor:
-                self.media_widget.set_background_border(2, border_qcolor)
-
-            # Global widget drop shadow (shared config for all widgets).
-            #
-            # MediaWidget uses a temporary opacity effect for its own
-            # fade-in; once the fade completes it re-attaches the shared
-            # drop shadow using this configuration.
-            try:
-                if hasattr(self.media_widget, "set_shadow_config"):
-                    self.media_widget.set_shadow_config(shadows_config)
-                else:
-                    apply_widget_shadow(self.media_widget, shadows_config, has_background_frame=show_background)
-            except Exception:
-                logger.debug("Failed to configure widget shadow for media widget", exc_info=True)
-
-            self.media_widget.raise_()
-            self.media_widget.start()
-            logger.info(
-                "✅ Media widget started: %s, font=%spx, margin=%s", position_str, font_size, margin_val
-            )
-
-            # Optional Spotify vertical volume widget, paired with the media
-            # card. This is Spotify-only and uses Core Audio/pycaw when
-            # available; when unavailable the widget remains hidden.
-            existing_vol = getattr(self, "spotify_volume_widget", None)
-            media_active_on_this = media_enabled and media_show_on_this
-            if not (spotify_volume_enabled and media_active_on_this):
-                if existing_vol is not None:
-                    try:
-                        existing_vol.stop()
-                        existing_vol.hide()
-                    except Exception:
-                        pass
-                self.spotify_volume_widget = None
-            else:
-                try:
-                    if existing_vol is None:
-                        vol = SpotifyVolumeWidget(self)
-                        self.spotify_volume_widget = vol
-                    else:
-                        vol = existing_vol
-
-                    if self._thread_manager is not None and hasattr(vol, "set_thread_manager"):
-                        try:
-                            vol.set_thread_manager(self._thread_manager)
-                        except Exception:
-                            pass
-
-                    try:
-                        vol.set_shadow_config(shadows_config)
-                    except Exception:
-                        pass
-                    
-                    # Set anchor to media widget for visibility gating
-                    try:
-                        if hasattr(vol, "set_anchor_media_widget"):
-                            vol.set_anchor_media_widget(self.media_widget)
-                    except Exception:
-                        pass
-
-                    # Inherit media card background and border colours for the
-                    # track, while using a dedicated (configurable) fill colour
-                    # for the volume bar itself.
-                    try:
-                        from PySide6.QtGui import QColor as _QColor
-
-                        fill_color_data = media_settings.get('spotify_volume_fill_color', [255, 255, 255, 230])
-                        try:
-                            fr, fg, fb = (
-                                fill_color_data[0],
-                                fill_color_data[1],
-                                fill_color_data[2],
-                            )
-                            fa = fill_color_data[3] if len(fill_color_data) > 3 else 230
-                            fill_color = _QColor(fr, fg, fb, fa)
-                        except Exception:
-                            fill_color = _QColor(255, 255, 255, 230)
-
-                        if hasattr(vol, "set_colors"):
-                            vol.set_colors(track_bg=bg_qcolor, track_border=border_qcolor, fill=fill_color)
-                    except Exception:
-                        pass
-
-                    try:
-                        self._position_spotify_volume()
-                    except Exception:
-                        pass
-                    # Defer startup to the Spotify secondary fade coordinator
-                    # so the slider never appears before the main overlay
-                    # group but still fades in smoothly as a second wave.
-                    try:
-                        if hasattr(self, "register_spotify_secondary_fade"):
-                            self.register_spotify_secondary_fade(vol.start)
-                        else:
-                            vol.start()
-                    except Exception:
-                        logger.debug("[SPOTIFY_VOL] Failed to register/start volume widget", exc_info=True)
-                except Exception:
-                    logger.debug("[SPOTIFY_VOL] Failed to create/configure Spotify volume widget", exc_info=True)
-
-            # Spotify Beat Visualizer (paired with media widget).
-            existing_vis = getattr(self, 'spotify_visualizer_widget', None)
-            media_active_on_this = media_enabled and media_show_on_this
-            if not (spotify_vis_enabled and media_active_on_this):
-                if existing_vis is not None:
-                    try:
-                        existing_vis.stop()
-                        existing_vis.hide()
-                    except Exception:
-                        pass
-                self.spotify_visualizer_widget = None
-            else:
-                try:
-                    if existing_vis is None:
-                        vis = SpotifyVisualizerWidget(self, bar_count=int(spotify_vis_settings.get('bar_count', 32)))
-                        self.spotify_visualizer_widget = vis
-                    else:
-                        vis = existing_vis
-
-                    # ThreadManager for animation tick scheduling
-                    if self._thread_manager is not None and hasattr(vis, 'set_thread_manager'):
-                        try:
-                            vis.set_thread_manager(self._thread_manager)
-                        except Exception:
-                            pass
-
-                    # Anchor geometry to media widget
-                    try:
-                        vis.set_anchor_media_widget(self.media_widget)
-                    except Exception:
-                        pass
-
-                    # Card style inheritance from media widget card
-                    try:
-                        vis.set_bar_style(
-                            bg_color=bg_qcolor,
-                            bg_opacity=bg_opacity,
-                            border_color=border_qcolor,
-                            border_width=2,
-                            show_background=show_background,
-                        )
-                    except Exception:
-                        pass
-
-                    # Software visualiser toggle: allow explicit user control
-                    # plus automatic enablement when the renderer backend is
-                    # set to Software. This keeps the GPU overlay as the
-                    # primary path in OpenGL mode while still providing a
-                    # software-only visualiser when no GL is available.
-                    try:
-                        allow_software = bool(spotify_vis_settings.get('software_visualizer_enabled', False))
-                        backend_mode_raw = None
-                        if self.settings_manager is not None:
-                            try:
-                                backend_mode_raw = self.settings_manager.get('display.render_backend_mode', 'opengl')
-                            except Exception:
-                                backend_mode_raw = 'opengl'
-                        backend_mode = str(backend_mode_raw or 'opengl').lower().strip()
-                        if backend_mode == 'software':
-                            allow_software = True
-                        if hasattr(vis, 'set_software_visualizer_enabled'):
-                            vis.set_software_visualizer_enabled(allow_software)
-                    except Exception:
-                        logger.debug('[SPOTIFY_VIS] Failed to configure software visualiser flag', exc_info=True)
-
-                    # Per-bar colours from spotify_visualizer settings
-                    from PySide6.QtGui import QColor as _QColor
-                    try:
-                        fill_color_data = spotify_vis_settings.get('bar_fill_color', [0, 255, 128, 230])
-                        fr, fg, fb = fill_color_data[0], fill_color_data[1], fill_color_data[2]
-                        fa = fill_color_data[3] if len(fill_color_data) > 3 else 230
-                        bar_fill_qcolor = _QColor(fr, fg, fb, fa)
-                    except Exception:
-                        bar_fill_qcolor = _QColor(0, 255, 128, 230)
-
-                    try:
-                        bar_border_color_data = spotify_vis_settings.get('bar_border_color', [255, 255, 255, 230])
-                        br_r, br_g, br_b = (
-                            bar_border_color_data[0],
-                            bar_border_color_data[1],
-                            bar_border_color_data[2],
-                        )
-                        base_alpha = bar_border_color_data[3] if len(bar_border_color_data) > 3 else 230
-                        try:
-                            bo = float(spotify_vis_settings.get('bar_border_opacity', 0.85))
-                        except Exception:
-                            bo = 0.85
-                        bo = max(0.0, min(1.0, bo))
-                        br_a = int(bo * base_alpha)
-                        bar_border_qcolor = _QColor(br_r, br_g, br_b, br_a)
-                    except Exception:
-                        bar_border_qcolor = _QColor(255, 255, 255, 230)
-
-                    try:
-                        vis.set_bar_colors(bar_fill_qcolor, bar_border_qcolor)
-                    except Exception:
-                        pass
-
-                    # Ghosting configuration: enabled flag, ghost opacity and
-                    # decay speed for the GPU overlay. Defaults are driven by
-                    # SettingsManager but can be overridden per-user from the
-                    # Widgets tab.
-                    try:
-                        ghost_enabled_raw = spotify_vis_settings.get('ghosting_enabled', True)
-                        ghost_enabled = SettingsManager.to_bool(ghost_enabled_raw, True)
-                    except Exception:
-                        ghost_enabled = True
-
-                    try:
-                        ghost_alpha_val = spotify_vis_settings.get('ghost_alpha', 0.4)
-                        ghost_alpha = float(ghost_alpha_val)
-                    except Exception:
-                        ghost_alpha = 0.4
-
-                    try:
-                        ghost_decay_val = spotify_vis_settings.get('ghost_decay', 0.4)
-                        ghost_decay = float(ghost_decay_val)
-                    except Exception:
-                        ghost_decay = 0.4
-
-                    ghost_decay = max(0.0, ghost_decay)
-
-                    try:
-                        if hasattr(vis, 'set_ghost_config'):
-                            vis.set_ghost_config(ghost_enabled, ghost_alpha, ghost_decay)
-                    except Exception:
-                        logger.debug('[SPOTIFY_VIS] Failed to configure ghosting settings on visualiser', exc_info=True)
-
-                    # Sensitivity: adaptive (default) or manual scalar.
-                    try:
-                        adaptive_raw = spotify_vis_settings.get('adaptive_sensitivity', True)
-                        adaptive = SettingsManager.to_bool(adaptive_raw, True)
-                    except Exception:
-                        adaptive = True
-                    try:
-                        sens_val = spotify_vis_settings.get('sensitivity', 1.0)
-                        sens = float(sens_val)
-                    except Exception:
-                        sens = 1.0
-                    sens = max(0.25, min(2.5, sens))
-                    try:
-                        if hasattr(vis, 'set_sensitivity_config'):
-                            vis.set_sensitivity_config(adaptive, sens)
-                    except Exception:
-                        logger.debug('[SPOTIFY_VIS] Failed to configure sensitivity settings on visualiser', exc_info=True)
-
-                    # Global widget drop shadow
-                    try:
-                        vis.set_shadow_config(shadows_config)
-                    except Exception:
-                        try:
-                            apply_widget_shadow(vis, shadows_config, has_background_frame=show_background)
-                        except Exception:
-                            pass
-
-                    # Wire Spotify media state into visualizer for behavioural gating.
-                    # Guard against duplicate connections across _setup_widgets calls.
-                    try:
-                        already_connected = getattr(vis, "_srpss_media_connected", False)
-                    except Exception:
-                        already_connected = False
-                    if not already_connected:
-                        try:
-                            self.media_widget.media_updated.connect(vis.handle_media_update)
-                            setattr(vis, "_srpss_media_connected", True)
-                        except Exception:
-                            pass
-
-                    # Initial positioning + startup
-                    self._position_spotify_visualizer()
-                    vis.start()
-                except Exception:
-                    logger.debug("Failed to create/configure Spotify Beat Visualizer widget", exc_info=True)
-
-        except Exception as e:
-            logger.error("Failed to create/configure media widget: %s", e, exc_info=True)
-
-        # Widget Pixel Shift for burn-in prevention - set up AFTER all widgets
-        # are created so we can register them all.
-        # Settings are stored with dot notation (accessibility.pixel_shift.enabled)
-        pixel_shift_enabled = SettingsManager.to_bool(
-            self.settings_manager.get('accessibility.pixel_shift.enabled', False), False
-        )
-        try:
-            pixel_shift_rate = int(self.settings_manager.get('accessibility.pixel_shift.rate', 1))
-            pixel_shift_rate = max(1, min(5, pixel_shift_rate))
-        except (ValueError, TypeError):
-            pixel_shift_rate = 1
         
-        if self._pixel_shift_manager is None:
-            self._pixel_shift_manager = PixelShiftManager(resource_manager=self._resource_manager)
-            # Set defer check to avoid shifting during transitions
-            self._pixel_shift_manager.set_defer_check(lambda: self._current_transition is not None)
+        # Setup Spotify widgets (complex wiring with media widget)
+        self._setup_spotify_widgets()
         
-        self._pixel_shift_manager.set_shifts_per_minute(pixel_shift_rate)
-        
-        # Register all overlay widgets for pixel shifting (excluding dimming overlay)
-        for attr_name in (
-            "clock_widget", "clock2_widget", "clock3_widget",
-            "weather_widget", "media_widget", "spotify_visualizer_widget",
-            "spotify_volume_widget", "reddit_widget", "reddit2_widget",
-        ):
-            widget = getattr(self, attr_name, None)
-            if widget is not None:
-                self._pixel_shift_manager.register_widget(widget)
-        
-        if pixel_shift_enabled:
-            self._pixel_shift_manager.set_enabled(True)
-            logger.debug("Pixel shift enabled (rate=%d/min)", pixel_shift_rate)
-        else:
-            self._pixel_shift_manager.set_enabled(False)
-            logger.debug("Pixel shift disabled")
+        # Setup pixel shift manager
+        self._setup_pixel_shift()
         
         # Apply widget stacking for overlapping positions
-        self._apply_widget_stacking(widgets)
+        widgets = self.settings_manager.get('widgets', {})
+        self._apply_widget_stacking(widgets if isinstance(widgets, dict) else {})
 
     def _apply_widget_stacking(self, widgets_config: Dict[str, Any]) -> None:
         """Apply vertical stacking offsets to widgets sharing the same position.
@@ -2196,6 +1202,13 @@ class DisplayWidget(QWidget):
                 pass
             self._seed_pixmap = self.current_pixmap
             self._last_pixmap_seed_ts = time.monotonic()
+            
+            # Phase 4b: Notify ImagePresenter of pixmap change
+            if self._image_presenter is not None:
+                try:
+                    self._image_presenter.set_current(self.current_pixmap, update_seed=True)
+                except Exception:
+                    pass
             if is_verbose_logging():
                 logger.debug(
                     "[DIAG] Seed pixmap set (phase=pre-transition, pixmap=%s)",
@@ -2262,6 +1275,14 @@ class DisplayWidget(QWidget):
                 transition = self._create_transition()
                 if transition:
                     self._current_transition = transition
+                    
+                    # Phase 3b: Notify TransitionController of transition start
+                    if self._transition_controller is not None:
+                        try:
+                            self._transition_controller._current_transition = transition
+                            self._transition_controller._transition_started_at = time.monotonic()
+                        except Exception:
+                            pass
 
                     # For compositor-backed 3D Block Spins, keep the compositor
                     # base pixmap on the old image while the GLSL spin runs so
@@ -2443,6 +1464,16 @@ class DisplayWidget(QWidget):
 
         transition_to_clean = self._current_transition
         self._current_transition = None
+        
+        # Phase 3b: Notify TransitionController of transition finish
+        if self._transition_controller is not None:
+            try:
+                self._transition_controller._current_transition = None
+                self._transition_controller._current_overlay_key = None
+                self._transition_controller._transition_started_at = 0.0
+                self._transition_controller.transition_finished.emit()
+            except Exception:
+                pass
 
         # Use the pan preview frame if provided so the base widget matches
         # the first pan frame until the pan label takes over.
@@ -2454,6 +1485,13 @@ class DisplayWidget(QWidget):
                 pass
         self._seed_pixmap = self.current_pixmap
         self._last_pixmap_seed_ts = time.monotonic()
+        
+        # Phase 4b: Notify ImagePresenter of pixmap change
+        if self._image_presenter is not None:
+            try:
+                self._image_presenter.complete_transition(new_pixmap, pan_preview)
+            except Exception:
+                pass
         if is_verbose_logging():
             logger.debug(
                 "[DIAG] Seed pixmap set (phase=post-transition, pixmap=%s)",
@@ -3055,16 +2093,19 @@ class DisplayWidget(QWidget):
         # NOTE: Deferred Reddit URL opening is now handled by DisplayManager.cleanup()
         # to ensure it happens AFTER windows are hidden but BEFORE QApplication.quit()
         
-        # PERF: Remove from class-level cache, but only if we're still the registered instance
-        # (avoids race condition where new widget registers before old widget's __del__ runs)
+        # Phase 5: Unregister from MultiMonitorCoordinator
         if self._screen is not None:
-            if DisplayWidget._instances_by_screen.get(self._screen) is self:
-                DisplayWidget._instances_by_screen.pop(self._screen, None)
+            try:
+                self._coordinator.unregister_instance(self, self._screen)
+            except Exception:
+                pass
         
-        # Reset eventFilter flags if this was the owner
-        if DisplayWidget._event_filter_owner is self:
-            DisplayWidget._event_filter_installed = False
-            DisplayWidget._event_filter_owner = None
+        # Phase 5: Release focus and event filter ownership via coordinator
+        try:
+            self._coordinator.release_focus(self)
+            self._coordinator.uninstall_event_filter(self)
+        except Exception:
+            pass
         
         self._destroy_render_surface()
         
@@ -3563,9 +2604,16 @@ class DisplayWidget(QWidget):
         key_text = event.text().lower()
 
         if key == Qt.Key.Key_Control:
-            # Summon halo at the current cursor position and fade it in
-            # while keeping the system cursor hidden.
-            DisplayWidget._global_ctrl_held = True
+            # Phase 2c: Delegate Ctrl halo management to InputHandler
+            if self._input_handler is not None:
+                try:
+                    self._input_handler.handle_ctrl_press(self._coordinator)
+                    event.accept()
+                    return
+                except Exception:
+                    pass
+            # Fallback: original implementation
+            self._coordinator.set_ctrl_held(True)
             try:
                 try:
                     global_pos = QCursor.pos()
@@ -3640,7 +2688,8 @@ class DisplayWidget(QWidget):
                     except Exception:
                         target_pos = self.rect().center()
 
-                DisplayWidget._halo_owner = target_widget
+                # Phase 5: Use coordinator for halo ownership
+                self._coordinator.set_halo_owner(target_widget)
                 target_widget._ctrl_held = True
                 logger.debug("[CTRL HALO] Ctrl pressed; starting fade-in at %s", target_pos)
                 target_widget._show_ctrl_cursor_hint(target_pos, mode="fade_in")
@@ -3690,7 +2739,8 @@ class DisplayWidget(QWidget):
             return
 
         # Determine current interaction/exit mode.
-        ctrl_mode_active = self._ctrl_held or DisplayWidget._global_ctrl_held
+        # Phase 5: Use coordinator for global Ctrl state
+        ctrl_mode_active = self._ctrl_held or self._coordinator.ctrl_held
         hard_exit_enabled = False
         try:
             hard_exit_enabled = self._is_hard_exit_enabled()
@@ -3746,11 +2796,15 @@ class DisplayWidget(QWidget):
     def keyReleaseEvent(self, event: QKeyEvent) -> None:
         key = event.key()
         if key == Qt.Key.Key_Control:
-            # When hard-exit mode is enabled we treat the Ctrl halo as a
-            # persistent cursor proxy while the screensaver is active. In
-            # that mode releasing Ctrl should simply leave the halo as-is;
-            # it will continue to be driven by mouse movement via the
-            # global event filter.
+            # Phase 2c: Delegate Ctrl release to InputHandler
+            if self._input_handler is not None:
+                try:
+                    self._input_handler.handle_ctrl_release(self._coordinator)
+                    event.accept()
+                    return
+                except Exception:
+                    pass
+            # Fallback: original implementation
             hard_exit = False
             try:
                 hard_exit = self._is_hard_exit_enabled()
@@ -3758,18 +2812,13 @@ class DisplayWidget(QWidget):
                 hard_exit = False
 
             if hard_exit:
-                DisplayWidget._global_ctrl_held = False
-                # Also clear instance _ctrl_held so click-to-exit works after Ctrl release
+                self._coordinator.set_ctrl_held(False)
                 self._ctrl_held = False
                 event.accept()
                 return
 
-            # Clear global Ctrl-held mode and gracefully fade out the halo
-            # owned by the current DisplayWidget, while ensuring any stray
-            # halos on other displays are also cleared.
-            DisplayWidget._global_ctrl_held = False
-            owner = DisplayWidget._halo_owner
-            DisplayWidget._halo_owner = None
+            self._coordinator.set_ctrl_held(False)
+            owner = self._coordinator.clear_halo_owner()
             
             # CRITICAL: Always clear _ctrl_held on the widget that received the
             # key release, regardless of whether it's the halo owner or in the cache.
@@ -3830,14 +2879,22 @@ class DisplayWidget(QWidget):
     
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """Handle mouse press - exit on any click unless hard exit is enabled."""
-        ctrl_mode_active = self._ctrl_held or DisplayWidget._global_ctrl_held
+        # Phase 5: Use coordinator for global Ctrl state
+        ctrl_mode_active = self._ctrl_held or self._coordinator.ctrl_held
         
-        # Right-click context menu handling:
-        # - In hard exit mode: right-click shows menu
-        # - In normal mode: Ctrl+right-click shows menu (temporarily enables interaction)
+        # Phase E: Delegate right-click context menu to InputHandler if available
+        # This ensures effect invalidation is triggered consistently before menu popup
         if event.button() == Qt.MouseButton.RightButton:
             if self._is_hard_exit_enabled() or ctrl_mode_active:
-                # Show context menu
+                if self._input_handler is not None:
+                    try:
+                        # InputHandler will trigger effect invalidation and emit context_menu_requested
+                        if self._input_handler.handle_mouse_press(event, self._coordinator.ctrl_held):
+                            event.accept()
+                            return
+                    except Exception:
+                        pass
+                # Fallback: direct context menu show
                 self._show_context_menu(event.globalPosition().toPoint())
                 event.accept()
                 return
@@ -4118,7 +3175,8 @@ class DisplayWidget(QWidget):
             event.accept()
             return
         
-        ctrl_mode_active = DisplayWidget._global_ctrl_held
+        # Phase 5: Use coordinator for global Ctrl state
+        ctrl_mode_active = self._coordinator.ctrl_held
         if self._is_hard_exit_enabled() or ctrl_mode_active:
             # Hard exit or Ctrl-held mode disables mouse-move exit entirely.
             # Halo movement is handled centrally via the global event filter.
@@ -4165,8 +3223,8 @@ class DisplayWidget(QWidget):
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         """Handle mouse release; end Spotify volume drags in interaction mode."""
-
-        ctrl_mode_active = self._ctrl_held or DisplayWidget._global_ctrl_held
+        # Phase 5: Use coordinator for global Ctrl state
+        ctrl_mode_active = self._ctrl_held or self._coordinator.ctrl_held
         if self._is_hard_exit_enabled() or ctrl_mode_active:
             vw = getattr(self, "spotify_volume_widget", None)
             if vw is not None:
@@ -4187,8 +3245,8 @@ class DisplayWidget(QWidget):
         shared Spotify volume level. Outside these regions the wheel event is
         ignored for volume but still prevented from exiting the saver.
         """
-
-        ctrl_mode_active = self._ctrl_held or DisplayWidget._global_ctrl_held
+        # Phase 5: Use coordinator for global Ctrl state
+        ctrl_mode_active = self._ctrl_held or self._coordinator.ctrl_held
         if self._is_hard_exit_enabled() or ctrl_mode_active:
             vw = getattr(self, "spotify_volume_widget", None)
             mw = getattr(self, "media_widget", None)
@@ -4344,6 +3402,12 @@ class DisplayWidget(QWidget):
                             self._context_menu_active = False
                         except Exception:
                             pass
+                        # Phase E: Notify InputHandler of menu close for consistent state
+                        try:
+                            if self._input_handler is not None:
+                                self._input_handler.set_context_menu_active(False)
+                        except Exception:
+                            pass
                         try:
                             self._schedule_effect_invalidation("menu_after_hide")
                         except Exception:
@@ -4366,6 +3430,12 @@ class DisplayWidget(QWidget):
                 except Exception:
                     pass
 
+            # Phase E: Notify InputHandler of menu open for consistent state
+            try:
+                if self._input_handler is not None:
+                    self._input_handler.set_context_menu_active(True)
+            except Exception:
+                pass
             try:
                 self._invalidate_overlay_effects("menu_before_popup")
                 self._context_menu.popup(global_pos)
@@ -4429,6 +3499,22 @@ class DisplayWidget(QWidget):
         self._exiting = True
         # NOTE: Deferred Reddit URL is opened in _on_destroyed AFTER windows are hidden
         self.exit_requested.emit()
+    
+    def _on_input_exit_requested(self) -> None:
+        """Handle exit request from InputHandler (Phase E refactor)."""
+        self._exiting = True
+        self.exit_requested.emit()
+    
+    def _on_context_menu_requested(self, global_pos: QPoint) -> None:
+        """Handle context menu request from InputHandler (Phase E refactor).
+        
+        This method centralizes menu popup triggering through InputHandler,
+        ensuring consistent effect invalidation ordering.
+        """
+        try:
+            self._show_context_menu(global_pos)
+        except Exception:
+            logger.debug("[INPUT_HANDLER] Failed to show context menu", exc_info=True)
     
     def _open_pending_reddit_url(self) -> None:
         """Open any pending Reddit URL that was deferred in hard-exit mode.
@@ -4595,35 +3681,29 @@ class DisplayWidget(QWidget):
             _run()
 
     def _invalidate_overlay_effects(self, reason: str) -> None:
+        """Delegate effect invalidation to WidgetManager (Phase E refactor).
+        
+        This method now delegates to the centralized WidgetManager which owns
+        effect lifecycle to ensure deterministic ordering across displays.
+        """
+        # Delegate to WidgetManager if available
+        if self._widget_manager is not None:
+            try:
+                self._widget_manager.invalidate_overlay_effects(reason)
+                return
+            except Exception:
+                pass
+        
+        # Fallback: legacy inline invalidation (should rarely be reached)
         if win_diag_logger.isEnabledFor(logging.DEBUG):
             try:
                 win_diag_logger.debug(
-                    "[EFFECT_INVALIDATE] screen=%s reason=%s",
+                    "[EFFECT_INVALIDATE] screen=%s reason=%s (legacy fallback)",
                     getattr(self, "screen_index", "?"),
                     reason,
                 )
             except Exception:
                 pass
-
-        try:
-            strong = "menu" in str(reason)
-        except Exception:
-            strong = False
-
-        refresh_effects = False
-        if strong:
-            # Toggle-based refresh: recreate effects on every other menu
-            # invalidation to bust Qt caches without excessive churn.
-            try:
-                flip = bool(getattr(self, "_effect_refresh_flip", False))
-            except Exception:
-                flip = False
-            flip = not flip
-            try:
-                setattr(self, "_effect_refresh_flip", flip)
-            except Exception:
-                pass
-            refresh_effects = flip
 
         for name in (
             "clock_widget",
@@ -4641,85 +3721,9 @@ class DisplayWidget(QWidget):
                 continue
             try:
                 eff = w.graphicsEffect()
-            except Exception:
-                eff = None
-
-            if isinstance(eff, (QGraphicsDropShadowEffect, QGraphicsOpacityEffect)):
-                if refresh_effects:
-                    try:
-                        anim = getattr(w, "_shadowfade_anim", None)
-                    except Exception:
-                        anim = None
-                    try:
-                        shadow_anim = getattr(w, "_shadowfade_shadow_anim", None)
-                    except Exception:
-                        shadow_anim = None
-                    if anim is None and shadow_anim is None:
-                        if isinstance(eff, QGraphicsDropShadowEffect):
-                            try:
-                                blur = eff.blurRadius()
-                            except Exception:
-                                blur = None
-                            try:
-                                offset = eff.offset()
-                            except Exception:
-                                offset = None
-                            try:
-                                color = eff.color()
-                            except Exception:
-                                color = None
-                            try:
-                                w.setGraphicsEffect(None)
-                            except Exception:
-                                pass
-                            try:
-                                new_eff = QGraphicsDropShadowEffect(w)
-                                if blur is not None:
-                                    new_eff.setBlurRadius(blur)
-                                if offset is not None:
-                                    new_eff.setOffset(offset)
-                                if color is not None:
-                                    new_eff.setColor(color)
-                                w.setGraphicsEffect(new_eff)
-                                eff = new_eff
-                            except Exception:
-                                try:
-                                    eff = w.graphicsEffect()
-                                except Exception:
-                                    eff = None
-                        elif isinstance(eff, QGraphicsOpacityEffect):
-                            try:
-                                opacity = eff.opacity()
-                            except Exception:
-                                opacity = None
-                            try:
-                                w.setGraphicsEffect(None)
-                            except Exception:
-                                pass
-                            try:
-                                new_eff = QGraphicsOpacityEffect(w)
-                                if opacity is not None:
-                                    new_eff.setOpacity(opacity)
-                                w.setGraphicsEffect(new_eff)
-                                eff = new_eff
-                            except Exception:
-                                try:
-                                    eff = w.graphicsEffect()
-                                except Exception:
-                                    eff = None
-                try:
+                if eff is not None:
                     eff.setEnabled(False)
                     eff.setEnabled(True)
-                except Exception:
-                    pass
-                if isinstance(eff, QGraphicsDropShadowEffect):
-                    try:
-                        eff.setBlurRadius(eff.blurRadius())
-                        eff.setOffset(eff.offset())
-                        eff.setColor(eff.color())
-                    except Exception:
-                        pass
-            try:
                 if w.isVisible():
                     w.update()
             except Exception:
@@ -4849,7 +3853,8 @@ class DisplayWidget(QWidget):
                 except Exception:
                     hard_exit = False
 
-                if DisplayWidget._global_ctrl_held or hard_exit:
+                # Phase 5: Use coordinator for global Ctrl state and halo ownership
+                if self._coordinator.ctrl_held or hard_exit:
                     # Use global cursor position so we track even when the
                     # event originates from a child widget. Resolve the
                     # DisplayWidget that owns the halo based on the cursor's
@@ -4865,7 +3870,7 @@ class DisplayWidget(QWidget):
                     except Exception:
                         cursor_screen = None
 
-                    owner = DisplayWidget._halo_owner
+                    owner = self._coordinator.halo_owner
 
                     # If the cursor moved to a different screen, migrate the
                     # halo owner to the DisplayWidget bound to that screen.
@@ -4875,8 +3880,8 @@ class DisplayWidget(QWidget):
                             or getattr(owner, "_screen", None) is not cursor_screen
                         )
                         if screen_changed:
-                            # PERF: Use cached lookup instead of iterating topLevelWidgets
-                            new_owner = DisplayWidget._instances_by_screen.get(cursor_screen)
+                            # Phase 5: Use coordinator for instance lookup
+                            new_owner = self._coordinator.get_instance_for_screen(cursor_screen)
                             
                             # Fallback to iteration only if cache miss (shouldn't happen)
                             if new_owner is None:
@@ -4891,8 +3896,8 @@ class DisplayWidget(QWidget):
                                             continue
                                         if getattr(w, "_screen", None) is cursor_screen:
                                             new_owner = w
-                                            # Update cache for future lookups
-                                            DisplayWidget._instances_by_screen[cursor_screen] = w
+                                            # Register with coordinator for future lookups
+                                            self._coordinator.register_instance(w, cursor_screen)
                                             break
                                     except Exception:
                                         continue
@@ -4909,7 +3914,8 @@ class DisplayWidget(QWidget):
                                     pass
                                 owner._ctrl_held = False
 
-                            DisplayWidget._halo_owner = new_owner
+                            # Phase 5: Use coordinator for halo ownership
+                            self._coordinator.set_halo_owner(new_owner)
                             owner = new_owner
 
                     if owner is None:
@@ -4944,19 +3950,20 @@ class DisplayWidget(QWidget):
                             halo_hidden = hint is None or not hint.isVisible()
                             
                             # In hard exit mode, always show halo on mouse move
+                            # Phase 5: Use coordinator for halo ownership
                             if owner_hard_exit:
-                                if DisplayWidget._halo_owner is None or halo_hidden:
+                                if self._coordinator.halo_owner is None or halo_hidden:
                                     # Fade in if halo owner not set OR if halo is hidden
-                                    DisplayWidget._halo_owner = owner
+                                    self._coordinator.set_halo_owner(owner)
                                     owner._show_ctrl_cursor_hint(local_pos, mode="fade_in")
                                 else:
                                     # Just reposition
                                     owner._show_ctrl_cursor_hint(local_pos, mode="none")
-                            elif DisplayWidget._global_ctrl_held:
+                            elif self._coordinator.ctrl_held:
                                 # Ctrl mode - show/reposition halo
                                 # If halo is hidden (e.g., after settings dialog), fade it in
                                 if halo_hidden:
-                                    DisplayWidget._halo_owner = owner
+                                    self._coordinator.set_halo_owner(owner)
                                     owner._show_ctrl_cursor_hint(local_pos, mode="fade_in")
                                 else:
                                     owner._show_ctrl_cursor_hint(local_pos, mode="none")

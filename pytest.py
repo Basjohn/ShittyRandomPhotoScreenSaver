@@ -128,9 +128,9 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         sys.path = orig_sys_path
 
+    out_stream = _open_pytest_output_stream()
     try:
         # Delegate to the real pytest library. This returns an exit code int.
-        out_stream = _open_pytest_output_stream()
         with contextlib.redirect_stdout(out_stream), contextlib.redirect_stderr(out_stream):
             code = real_pytest.main(argv)
         logger.info("pytest finished with exit code %s", code)
@@ -142,6 +142,11 @@ def main(argv: list[str] | None = None) -> int:
     except Exception:
         logger.exception("pytest run failed with unexpected error")
         return 1
+    finally:
+        try:
+            out_stream.flush()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":  # pragma: no cover - thin wrapper
