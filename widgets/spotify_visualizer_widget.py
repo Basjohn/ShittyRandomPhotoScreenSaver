@@ -5,6 +5,7 @@ from typing import List, Optional
 import os
 import time
 import math
+import threading
 
 from PySide6.QtCore import QObject, QRect, Qt
 from PySide6.QtGui import QColor, QPainter, QPaintEvent
@@ -63,6 +64,32 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._running_peak = 1.0
         # Timestamp of last FFT processing - used to detect pause/resume gaps
         self._last_fft_ts: float = 0.0
+
+        # Sensitivity configuration (driven from Settings UI).
+        # "Recommended" uses the v1.4 baseline constants. Manual mode lets
+        # the user scale sensitivity relative to that baseline.
+        self._cfg_lock = threading.Lock()
+        self._use_recommended: bool = True
+        self._user_sensitivity: float = 1.0
+
+    def set_sensitivity_config(self, recommended: bool, sensitivity: float) -> None:
+        try:
+            rec = bool(recommended)
+        except Exception:
+            rec = True
+
+        try:
+            sens = float(sensitivity)
+        except Exception:
+            sens = 1.0
+        if sens < 0.25:
+            sens = 0.25
+        if sens > 2.5:
+            sens = 2.5
+
+        with self._cfg_lock:
+            self._use_recommended = rec
+            self._user_sensitivity = sens
 
     def is_running(self) -> bool:
         return self._running
@@ -253,13 +280,35 @@ class SpotifyVisualizerAudioWorker(QObject):
             # Subtract noise floor and expand dynamic range
             # raw_bass is typically 1.8-3.1, noise_floor controls drop threshold
             # TUNED: noise_floor=2.1, expansion=2.8 hit 1.0, trying slightly less
-            noise_floor = 2.1  # Sweet spot for bigger drops while keeping peaks
-            expansion = 2.5    # Slightly less push to top
+            noise_floor_base = 2.1  # v1.4 baseline
+            expansion_base = 2.5    # v1.4 baseline
+
+            try:
+                with self._cfg_lock:
+                    use_recommended = bool(self._use_recommended)
+                    user_sens = float(self._user_sensitivity)
+            except Exception:
+                use_recommended = True
+                user_sens = 1.0
+
+            if use_recommended:
+                noise_floor = noise_floor_base
+                expansion = expansion_base
+            else:
+                if user_sens < 0.25:
+                    user_sens = 0.25
+                if user_sens > 2.5:
+                    user_sens = 2.5
+                noise_floor = max(0.25, noise_floor_base / user_sens)
+                try:
+                    expansion = expansion_base * (user_sens ** 0.35)
+                except Exception:
+                    expansion = expansion_base
             
             bass_energy = max(0.0, (raw_bass - noise_floor) * expansion)
             mid_energy = max(0.0, (raw_mid - noise_floor * 0.4) * expansion)
             treble_energy = max(0.0, (raw_treble - noise_floor * 0.2) * expansion)
-            
+
             for i in range(bands):
                 dist = abs(i - center) / float(center) if center > 0 else 0.0
                 gradient = (1.0 - dist) ** 2 * 0.85 + 0.15
@@ -343,6 +392,31 @@ class SpotifyVisualizerAudioWorker(QObject):
                 mono = mono.astype("float32", copy=False)
             except Exception:
                 pass
+
+            # Measure peak once (used for both silence detection and optional gain).
+            try:
+                peak_raw = float(np_mod.abs(mono).max()) if getattr(mono, "size", 0) > 0 else 0.0
+            except Exception:
+                peak_raw = 0.0
+
+            # Input gain calibration (cheap): some loopback backends provide
+            # normalized float samples in [-1..1]. v1.4 tuning expects a higher
+            # RMS range (raw_bass ~ 1.8-3.1) so we lift low-amplitude inputs,
+            # but cap gain to avoid pinning bars at 1.0.
+            # NOTE: Keep this conservative so synthetic test signals and quiet
+            # audio don't become permanently clipped.
+            if 0.05 <= peak_raw <= 5.0:
+                try:
+                    target_peak = 1.6
+                    gain = target_peak / max(peak_raw, 1e-6)
+                    if gain < 1.0:
+                        gain = 1.0
+                    if gain > 2.8:
+                        gain = 2.8
+                    if gain != 1.0:
+                        mono = mono * gain
+                except Exception:
+                    pass
             size = getattr(mono, "size", 0)
             if size <= 0:
                 return None
@@ -351,10 +425,6 @@ class SpotifyVisualizerAudioWorker(QObject):
             # Treat very low overall amplitude as silence and return zeros so
             # we don't amplify numerical noise into full-height bars when
             # audio stops.
-            try:
-                peak_raw = float(np_mod.abs(mono).max()) if size > 0 else 0.0
-            except Exception:
-                peak_raw = 0.0
             if peak_raw < 1e-3:
                 return self._get_zero_bars()
 
@@ -373,6 +443,7 @@ class SpotifyVisualizerAudioWorker(QObject):
                     bars = bars[:target]
             # bars already clamped in _fft_to_bars, no need for extra list comprehension
             return bars
+
         except Exception:
             if is_verbose_logging():
                 logger.debug("[SPOTIFY_VIS] compute_bars_from_samples failed", exc_info=True)
@@ -383,7 +454,7 @@ class _SpotifyBeatEngine(QObject):
     """Shared beat engine with integrated smoothing.
     
     Smoothing is performed here (on COMPUTE pool callback) rather than in the
-    widget's UI thread tick, reducing UI thread load significantly.
+    UI thread tick, reducing UI thread load significantly.
     """
     
     def __init__(self, bar_count: int) -> None:
@@ -410,6 +481,12 @@ class _SpotifyBeatEngine(QObject):
         """Set the base smoothing time constant."""
         self._smoothing_tau = max(0.05, float(tau))
     
+    def set_sensitivity_config(self, recommended: bool, sensitivity: float) -> None:
+        try:
+            self._audio_worker.set_sensitivity_config(recommended, sensitivity)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to apply sensitivity config", exc_info=True)
+
     def _apply_smoothing(self, target_bars: List[float]) -> List[float]:
         """Apply time-based exponential smoothing to bars.
         
@@ -418,11 +495,10 @@ class _SpotifyBeatEngine(QObject):
         now_ts = time.time()
         last_ts = self._last_smooth_ts
         dt = max(0.0, now_ts - last_ts) if last_ts >= 0.0 else 0.0
-        self._last_smooth_ts = now_ts
         
         # CRITICAL: Reset smoothing state after a long pause (e.g., settings dialog)
-        # A gap > 2 seconds indicates a pause/resume scenario
-        if dt <= 0.0 or dt > 2.0:
+        # A gap > 2 seconds indicates a pause/resume scenario.
+        if dt > 2.0 or dt <= 0.0:
             # First frame, no time elapsed, or long pause - just copy raw values
             self._smoothed_bars = list(target_bars)
             return self._smoothed_bars
@@ -494,7 +570,7 @@ class _SpotifyBeatEngine(QObject):
             now_ts = time.time()
             dt = max(0.0, now_ts - last_smooth_ts) if last_smooth_ts >= 0.0 else 0.0
             
-            # CRITICAL: If dt is too large (e.g., after settings dialog pause),
+            # CRITICAL: If dt is too large (e.g., after settings dialog),
             # reset smoothing state to avoid erratic behavior from huge alpha values.
             # A gap > 2 seconds indicates a pause/resume scenario.
             if dt > 2.0 or dt <= 0.0:

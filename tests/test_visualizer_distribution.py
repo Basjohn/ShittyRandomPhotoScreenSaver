@@ -250,7 +250,7 @@ def analyze_band_edges(n_fft_bins, n_bars):
     return log_edges
 
 
-def test_reactivity_realistic(engine, fps=60, duration_sec=2.0):
+def run_reactivity_realistic(engine, fps=60, duration_sec=2.0):
     """Test reactivity with REAL timing like the actual app.
     
     This test simulates CONTINUOUS audio like real music:
@@ -391,7 +391,7 @@ def main():
     
     # REALISTIC reactivity test with real timing
     engine2 = create_test_engine(bar_count=15)
-    passed = test_reactivity_realistic(engine2, fps=60, duration_sec=2.0)
+    passed = run_reactivity_realistic(engine2, fps=60, duration_sec=2.0)
     
     print("\n" + "=" * 70)
     if passed:

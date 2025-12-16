@@ -351,7 +351,10 @@ class DisplayManager(QObject):
                     display.reset_after_settings()
             except Exception:
                 pass
-            display.showFullScreen()
+            try:
+                display.show_on_screen()
+            except Exception:
+                display.show()
             try:
                 hide_all_overlays(display)
             except Exception:

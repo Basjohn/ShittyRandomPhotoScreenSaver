@@ -426,7 +426,7 @@ def prepare_gl_overlay(
 
     if repaint:
         try:
-            overlay.repaint()
+            overlay.update()
         except Exception:
             pass
 

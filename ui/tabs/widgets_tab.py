@@ -859,6 +859,34 @@ class WidgetsTab(QWidget):
         spotify_vis_border_opacity_row.addWidget(self.spotify_vis_border_opacity_label)
         spotify_vis_layout.addLayout(spotify_vis_border_opacity_row)
 
+        spotify_vis_sensitivity_row = QHBoxLayout()
+        self.spotify_vis_adaptive_sensitivity = QCheckBox("Recommended")
+        self.spotify_vis_adaptive_sensitivity.setToolTip(
+            "When enabled, the visualizer uses the recommended (v1.4) sensitivity baseline. Disable to adjust manually."
+        )
+        self.spotify_vis_adaptive_sensitivity.stateChanged.connect(self._save_settings)
+        self.spotify_vis_adaptive_sensitivity.stateChanged.connect(lambda _: self._update_spotify_vis_sensitivity_enabled_state())
+        spotify_vis_sensitivity_row.addWidget(self.spotify_vis_adaptive_sensitivity)
+        spotify_vis_sensitivity_row.addStretch()
+        spotify_vis_layout.addLayout(spotify_vis_sensitivity_row)
+
+        spotify_vis_sensitivity_slider_row = QHBoxLayout()
+        spotify_vis_sensitivity_slider_row.addWidget(QLabel("Sensitivity:"))
+        self.spotify_vis_sensitivity = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.spotify_vis_sensitivity.setMinimum(25)
+        self.spotify_vis_sensitivity.setMaximum(250)
+        self.spotify_vis_sensitivity.setValue(100)
+        self.spotify_vis_sensitivity.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.spotify_vis_sensitivity.setTickInterval(25)
+        self.spotify_vis_sensitivity.valueChanged.connect(self._save_settings)
+        spotify_vis_sensitivity_slider_row.addWidget(self.spotify_vis_sensitivity)
+        self.spotify_vis_sensitivity_label = QLabel("1.00x")
+        self.spotify_vis_sensitivity.valueChanged.connect(
+            lambda v: self.spotify_vis_sensitivity_label.setText(f"{v / 100.0:.2f}x")
+        )
+        spotify_vis_sensitivity_slider_row.addWidget(self.spotify_vis_sensitivity_label)
+        spotify_vis_layout.addLayout(spotify_vis_sensitivity_slider_row)
+
         # Ghosting controls: global enable, opacity and decay speed.
         spotify_vis_ghost_enable_row = QHBoxLayout()
         self.spotify_vis_ghost_enabled = QCheckBox("Enable Ghosting")
@@ -1572,6 +1600,20 @@ class WidgetsTab(QWidget):
             bar_count = int(spotify_vis_config.get('bar_count', 32))
             self.spotify_vis_bar_count.setValue(bar_count)
 
+            adaptive_sens_raw = spotify_vis_config.get('adaptive_sensitivity', True)
+            adaptive_sens = SettingsManager.to_bool(adaptive_sens_raw, True)
+            self.spotify_vis_adaptive_sensitivity.setChecked(adaptive_sens)
+
+            sens_val = spotify_vis_config.get('sensitivity', 1.0)
+            try:
+                sens_f = float(sens_val)
+            except Exception:
+                sens_f = 1.0
+            sens_slider = int(max(0.25, min(2.5, sens_f)) * 100)
+            self.spotify_vis_sensitivity.setValue(sens_slider)
+            self.spotify_vis_sensitivity_label.setText(f"{sens_slider / 100.0:.2f}x")
+            self._update_spotify_vis_sensitivity_enabled_state()
+
             software_enabled = bool(spotify_vis_config.get('software_visualizer_enabled', False))
             self.spotify_vis_software_enabled.setChecked(software_enabled)
 
@@ -1943,6 +1985,8 @@ class WidgetsTab(QWidget):
             'enabled': self.spotify_vis_enabled.isChecked(),
             'bar_count': self.spotify_vis_bar_count.value(),
             'software_visualizer_enabled': self.spotify_vis_software_enabled.isChecked(),
+            'adaptive_sensitivity': self.spotify_vis_adaptive_sensitivity.isChecked(),
+            'sensitivity': max(0.25, min(2.5, self.spotify_vis_sensitivity.value() / 100.0)),
             'bar_fill_color': [
                 self._spotify_vis_fill_color.red(),
                 self._spotify_vis_fill_color.green(),
@@ -1960,6 +2004,8 @@ class WidgetsTab(QWidget):
             'ghost_alpha': self.spotify_vis_ghost_opacity.value() / 100.0,
             'ghost_decay': max(0.1, self.spotify_vis_ghost_decay.value() / 100.0),
         }
+
+        self._update_spotify_vis_sensitivity_enabled_state()
 
         reddit_limit_text = self.reddit_items.currentText().strip()
         try:
@@ -2059,9 +2105,17 @@ class WidgetsTab(QWidget):
 
         self._settings.set('widgets', existing_widgets)
         self._settings.save()
-        self.widgets_changed.emit()
-        
-        logger.debug("Saved widget settings")
+
+    def _update_spotify_vis_sensitivity_enabled_state(self) -> None:
+        try:
+            recommended = self.spotify_vis_adaptive_sensitivity.isChecked()
+        except Exception:
+            recommended = True
+        try:
+            self.spotify_vis_sensitivity.setEnabled(not recommended)
+            self.spotify_vis_sensitivity_label.setEnabled(not recommended)
+        except Exception:
+            pass
     
     def _populate_timezones_for_combo(self, combo) -> None:
         timezones = get_common_timezones()

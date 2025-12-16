@@ -22,7 +22,7 @@ logger = get_logger(__name__)
 # Uses same color palette as settings_dialog.py for consistency
 MENU_STYLE = """
 QMenu {
-    background-color: rgba(43, 43, 43, 245);
+    background-color: rgba(43, 43, 43, 255);
     border: 2px solid rgba(154, 154, 154, 200);
     border-radius: 8px;
     padding: 6px 4px;
@@ -67,7 +67,7 @@ QMenu::indicator:unchecked {
 
 SUBMENU_STYLE = """
 QMenu {
-    background-color: rgba(43, 43, 43, 245);
+    background-color: rgba(43, 43, 43, 255);
     border: 2px solid rgba(154, 154, 154, 200);
     border-radius: 6px;
     padding: 4px 2px;
@@ -139,8 +139,18 @@ class ScreensaverContextMenu(QMenu):
         self._hard_exit_enabled = hard_exit_enabled
         
         self.setStyleSheet(MENU_STYLE)
-        self.setWindowFlags(self.windowFlags() | Qt.WindowType.FramelessWindowHint)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        try:
+            self.setWindowFlag(Qt.WindowType.WindowDoesNotAcceptFocus, True)
+        except Exception:
+            pass
+        try:
+            self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        except Exception:
+            pass
+        try:
+            self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        except Exception:
+            pass
         
         self._setup_menu()
         logger.debug("ScreensaverContextMenu created")

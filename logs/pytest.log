@@ -2367,3 +2367,34 @@
 2025-12-15 21:04:38,201 - pytest_runner - INFO - pytest finished with exit code 0
 2025-12-15 21:18:22,973 - pytest_runner - INFO - pytest.py starting with args: ['-vv', '--maxfail=5', 'tests/test_activation_transparency_regression.py']
 2025-12-15 21:18:24,789 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-16 04:17:33,715 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', 'tests/test_context_menu_effect_invalidation.py', '-vv']
+2025-12-16 04:17:35,755 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-16 04:20:35,863 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', 'tests/test_context_menu_effect_invalidation.py', '-vv']
+2025-12-16 04:20:36,925 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-16 14:30:57,651 - pytest_runner - INFO - pytest.py starting with args: ['-vv', '--maxfail=5', 'tests/test_context_menu_effect_invalidation.py']
+2025-12-16 14:30:59,015 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-16 14:30:59,464 - pytest_runner - INFO - pytest.py starting with args: ['-vv', '--maxfail=5', 'tests/test_spotify_visualizer_widget.py']
+2025-12-16 14:31:00,349 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-16 16:02:05,584 - pytest_runner - INFO - pytest.py starting with args: []
+2025-12-16 16:02:08,497 - pytest_runner - INFO - pytest finished with exit code 2
+2025-12-16 16:02:41,953 - pytest_runner - INFO - pytest.py starting with args: []
+2025-12-16 16:04:01,027 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_context_menu_effect_invalidation.py', '-vv', '--tb=long']
+2025-12-16 16:04:02,101 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-16 16:14:29,122 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', '-vv', '--tb=long']
+2025-12-16 16:14:29,965 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-16 16:40:41,522 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', '-vv', '--tb=long']
+2025-12-16 16:40:42,489 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-16 16:40:43,444 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_context_menu_effect_invalidation.py', '-vv', '--tb=long']
+2025-12-16 16:40:44,670 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-16 16:44:27,042 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', '-vv', '--tb=long']
+2025-12-16 16:44:27,643 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-16 16:44:29,037 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_context_menu_effect_invalidation.py', '-vv', '--tb=long']
+2025-12-16 16:44:29,984 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-16 16:46:33,286 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_context_menu_effect_invalidation.py', '-vv', '--tb=long']
+2025-12-16 16:46:34,371 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-16 16:47:32,520 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_context_menu_effect_invalidation.py', '-vv', '--tb=long']
+2025-12-16 16:47:33,374 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-16 16:54:47,504 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', '-vv', '--tb=long']
+2025-12-16 16:54:48,419 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-16 16:54:49,617 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_context_menu_effect_invalidation.py', '-vv', '--tb=long']
+2025-12-16 16:54:50,812 - pytest_runner - INFO - pytest finished with exit code 0

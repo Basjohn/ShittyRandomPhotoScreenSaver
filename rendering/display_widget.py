@@ -1,14 +1,17 @@
 """Display widget for OpenGL/software rendered screensaver overlays."""
 from collections import defaultdict
 from typing import Optional, Iterable, Tuple, Callable, Dict, Any, List
+import logging
 import time
 import weakref
 import sys
+import ctypes
+from ctypes import wintypes
 try:
     from OpenGL import GL  # type: ignore[import]
 except ImportError:  # pragma: no cover - optional dependency
     GL = None
-from PySide6.QtWidgets import QWidget, QApplication
+from PySide6.QtWidgets import QWidget, QApplication, QGraphicsDropShadowEffect, QGraphicsOpacityEffect
 from PySide6.QtCore import Qt, Signal, QSize, QTimer, QEvent, QPoint
 from PySide6.QtGui import (
     QPixmap,
@@ -45,6 +48,7 @@ from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_
 from core.logging.overlay_telemetry import record_overlay_ready
 from core.resources.manager import ResourceManager
 from core.settings.settings_manager import SettingsManager
+from core.threading.manager import ThreadManager
 from transitions.overlay_manager import (
     hide_all_overlays,
     any_overlay_ready_for_display,
@@ -62,6 +66,7 @@ from rendering.backends import BackendSelectionResult, create_backend_from_setti
 from rendering.backends.base import RendererBackend, RenderSurface, SurfaceDescriptor
 
 logger = get_logger(__name__)
+win_diag_logger = logging.getLogger("win_diag")
 
 
 TRANSITION_WATCHDOG_DEFAULT_SEC = 6.0
@@ -212,10 +217,14 @@ class DisplayWidget(QWidget):
         self._overlay_fade_timeout: Optional[QTimer] = None
         self._reddit_exit_on_click: bool = True
         self._pending_reddit_url: Optional[str] = None  # URL to open when exiting (hard-exit mode)
+        self._pending_activation_refresh: bool = False
+        self._last_deactivate_ts: float = 0.0
         
         # Context menu for right-click actions
         self._context_menu: Optional[ScreensaverContextMenu] = None
         self._context_menu_active: bool = False
+        self._context_menu_prewarmed: bool = False
+        self._pending_effect_invalidation: bool = False
 
         # Central ResourceManager wiring
         self._resource_manager: Optional[ResourceManager] = resource_manager
@@ -240,6 +249,7 @@ class DisplayWidget(QWidget):
                 flags |= Qt.WindowType.Tool
         except Exception:
             pass
+
         self.setWindowFlags(flags)
         self.setCursor(Qt.CursorShape.BlankCursor)
         self.setMouseTracking(True)
@@ -432,6 +442,71 @@ class DisplayWidget(QWidget):
         # Setup overlay widgets AFTER geometry is set
         if self.settings_manager:
             self._setup_widgets()
+
+        # Prewarm context menu on the UI thread so first right-click does not
+        # pay the QMenu construction/polish cost.
+        try:
+            if self._thread_manager is not None:
+                self._thread_manager.single_shot(200, self._prewarm_context_menu)
+            else:
+                ThreadManager.single_shot(200, self._prewarm_context_menu)
+        except Exception:
+            pass
+
+    def _prewarm_context_menu(self) -> None:
+        try:
+            if getattr(self, "_context_menu_prewarmed", False):
+                return
+            if self._context_menu is not None:
+                self._context_menu_prewarmed = True
+                return
+        except Exception:
+            return
+
+        try:
+            current_transition = "Crossfade"
+            if self.settings_manager:
+                trans_cfg = self.settings_manager.get("transitions", {})
+                if isinstance(trans_cfg, dict):
+                    current_transition = trans_cfg.get("type", "Crossfade")
+            hard_exit = self._is_hard_exit_enabled()
+            dimming_enabled = False
+            if self.settings_manager:
+                dimming_enabled = SettingsManager.to_bool(
+                    self.settings_manager.get("accessibility.dimming.enabled", False),
+                    False,
+                )
+            self._context_menu = ScreensaverContextMenu(
+                parent=self,
+                current_transition=current_transition,
+                dimming_enabled=dimming_enabled,
+                hard_exit_enabled=hard_exit,
+            )
+            self._context_menu.previous_requested.connect(self.previous_requested.emit)
+            self._context_menu.next_requested.connect(self.next_requested.emit)
+            self._context_menu.transition_selected.connect(self._on_context_transition_selected)
+            self._context_menu.settings_requested.connect(self.settings_requested.emit)
+            self._context_menu.dimming_toggled.connect(self._on_context_dimming_toggled)
+            self._context_menu.hard_exit_toggled.connect(self._on_context_hard_exit_toggled)
+            self._context_menu.exit_requested.connect(self._on_context_exit_requested)
+
+            try:
+                self._context_menu.aboutToShow.connect(lambda: self._invalidate_overlay_effects("menu_about_to_show"))
+            except Exception:
+                pass
+
+            # Force Qt to polish/apply stylesheet now.
+            try:
+                self._context_menu.ensurePolished()
+            except Exception:
+                pass
+        except Exception:
+            logger.debug("Failed to prewarm context menu", exc_info=True)
+        finally:
+            try:
+                self._context_menu_prewarmed = True
+            except Exception:
+                pass
 
     def _mark_all_overlays_ready(self, overlays: Iterable[str], stage: str) -> None:
         """Mark overlays as ready when running without GL support."""
@@ -1637,6 +1712,24 @@ class DisplayWidget(QWidget):
                             vis.set_ghost_config(ghost_enabled, ghost_alpha, ghost_decay)
                     except Exception:
                         logger.debug('[SPOTIFY_VIS] Failed to configure ghosting settings on visualiser', exc_info=True)
+
+                    # Sensitivity: adaptive (default) or manual scalar.
+                    try:
+                        adaptive_raw = spotify_vis_settings.get('adaptive_sensitivity', True)
+                        adaptive = SettingsManager.to_bool(adaptive_raw, True)
+                    except Exception:
+                        adaptive = True
+                    try:
+                        sens_val = spotify_vis_settings.get('sensitivity', 1.0)
+                        sens = float(sens_val)
+                    except Exception:
+                        sens = 1.0
+                    sens = max(0.25, min(2.5, sens))
+                    try:
+                        if hasattr(vis, 'set_sensitivity_config'):
+                            vis.set_sensitivity_config(adaptive, sens)
+                    except Exception:
+                        logger.debug('[SPOTIFY_VIS] Failed to configure sensitivity settings on visualiser', exc_info=True)
 
                     # Global widget drop shadow
                     try:
@@ -4191,16 +4284,97 @@ class DisplayWidget(QWidget):
                 self._context_menu.dimming_toggled.connect(self._on_context_dimming_toggled)
                 self._context_menu.hard_exit_toggled.connect(self._on_context_hard_exit_toggled)
                 self._context_menu.exit_requested.connect(self._on_context_exit_requested)
+                try:
+                    self._context_menu.aboutToShow.connect(lambda: self._invalidate_overlay_effects("menu_about_to_show"))
+                except Exception:
+                    pass
+                try:
+                    submenu = getattr(self._context_menu, "_transition_menu", None)
+                except Exception:
+                    submenu = None
+                try:
+                    connected_sub = bool(getattr(self, "_context_menu_sub_connected", False))
+                except Exception:
+                    connected_sub = False
+                if submenu is not None and not connected_sub:
+                    try:
+                        submenu.aboutToShow.connect(lambda: self._invalidate_overlay_effects("menu_sub_about_to_show"))
+                    except Exception:
+                        pass
+                    try:
+                        submenu.aboutToHide.connect(lambda: self._schedule_effect_invalidation("menu_sub_after_hide"))
+                    except Exception:
+                        pass
+                    try:
+                        setattr(self, "_context_menu_sub_connected", True)
+                    except Exception:
+                        pass
             else:
                 # Update state before showing
                 self._context_menu.update_current_transition(current_transition)
                 self._context_menu.update_dimming_state(dimming_enabled)
                 self._context_menu.update_hard_exit_state(hard_exit)
             
-            self._context_menu_active = True
-            self._context_menu.exec(global_pos)
-            self._context_menu_active = False
-            
+            try:
+                self._context_menu_active = True
+            except Exception:
+                pass
+
+            try:
+                t0 = time.monotonic()
+                setattr(self, "_menu_open_ts", t0)
+                if win_diag_logger.isEnabledFor(logging.DEBUG):
+                    win_diag_logger.debug(
+                        "[MENU_OPEN] begin t=%.6f screen=%s pos=%s",
+                        t0,
+                        self.screen_index,
+                        global_pos,
+                    )
+            except Exception:
+                setattr(self, "_menu_open_ts", None)
+
+            try:
+                connected = getattr(self, "_context_menu_hide_connected", False)
+            except Exception:
+                connected = False
+            if not connected:
+                try:
+                    def _on_menu_hide() -> None:
+                        try:
+                            self._context_menu_active = False
+                        except Exception:
+                            pass
+                        try:
+                            self._schedule_effect_invalidation("menu_after_hide")
+                        except Exception:
+                            pass
+                        try:
+                            start = getattr(self, "_menu_open_ts", None)
+                            if start is not None and win_diag_logger.isEnabledFor(logging.DEBUG):
+                                t1 = time.monotonic()
+                                win_diag_logger.debug(
+                                    "[MENU_OPEN] end t=%.6f dt=%.3fms screen=%s",
+                                    t1,
+                                    (t1 - start) * 1000.0,
+                                    self.screen_index,
+                                )
+                        except Exception:
+                            pass
+
+                    self._context_menu.aboutToHide.connect(_on_menu_hide)
+                    setattr(self, "_context_menu_hide_connected", True)
+                except Exception:
+                    pass
+
+            try:
+                self._invalidate_overlay_effects("menu_before_popup")
+                self._context_menu.popup(global_pos)
+            except Exception:
+                try:
+                    self._context_menu.popup(QCursor.pos())
+                except Exception:
+                    pass
+
         except Exception:
             logger.debug("Failed to show context menu", exc_info=True)
             self._context_menu_active = False
@@ -4290,53 +4464,380 @@ class DisplayWidget(QWidget):
 
         super().focusOutEvent(event)
 
-    def changeEvent(self, event: QEvent) -> None:  # type: ignore[override]
+    def _debug_window_state(self, label: str, *, extra: str = "") -> None:
+        if not win_diag_logger.isEnabledFor(logging.DEBUG):
+            return
         try:
-            et = event.type() if event is not None else None
-            if et in (QEvent.Type.ActivationChange, QEvent.Type.WindowActivate):
-                try:
-                    active = self.isActiveWindow()
-                except Exception:
-                    active = True
+            try:
+                hwnd = int(self.winId())
+            except Exception:
+                hwnd = 0
+            try:
+                active = bool(self.isActiveWindow())
+            except Exception:
+                active = False
+            try:
+                visible = bool(self.isVisible())
+            except Exception:
+                visible = False
+            try:
+                ws = int(self.windowState())
+            except Exception:
+                ws = -1
+            try:
+                upd = bool(self.updatesEnabled())
+            except Exception:
+                upd = False
 
-                if active and self.isVisible() and not getattr(self, "_exiting", False):
-                    for attr_name in (
-                        "clock_widget",
-                        "clock2_widget",
-                        "clock3_widget",
-                        "weather_widget",
-                        "media_widget",
-                        "spotify_visualizer_widget",
-                        "spotify_volume_widget",
-                        "reddit_widget",
-                        "reddit2_widget",
-                    ):
-                        w = getattr(self, attr_name, None)
-                        if w is None:
-                            continue
-                        try:
-                            w.setAutoFillBackground(False)
-                        except Exception:
-                            pass
-                        try:
-                            w.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-                        except Exception:
-                            pass
-                        try:
-                            st = w.style()
-                            if st is not None:
-                                st.unpolish(w)
-                                st.polish(w)
-                        except Exception:
-                            pass
-                        try:
-                            w.update()
-                        except Exception:
-                            pass
+            win_diag_logger.debug(
+                "[WIN_STATE] %s screen=%s hwnd=%s visible=%s active=%s windowState=%s updatesEnabled=%s %s",
+                label,
+                getattr(self, "screen_index", "?"),
+                hex(hwnd) if hwnd else "?",
+                visible,
+                active,
+                ws,
+                upd,
+                extra,
+            )
         except Exception:
             pass
 
+    def _perform_activation_refresh(self, reason: str) -> None:
+        try:
+            self._pending_activation_refresh = False
+        except Exception:
+            pass
+
+        try:
+            self._base_fallback_paint_logged = False
+        except Exception:
+            pass
+
+        if win_diag_logger.isEnabledFor(logging.DEBUG):
+            try:
+                win_diag_logger.debug(
+                    "[ACTIVATE_REFRESH] screen=%s reason=%s",
+                    getattr(self, "screen_index", "?"),
+                    reason,
+                )
+            except Exception:
+                pass
+
+        comp = getattr(self, "_gl_compositor", None)
+        if comp is not None:
+            try:
+                comp.update()
+            except Exception:
+                pass
+
+        try:
+            self.update()
+        except Exception:
+            pass
+
+        try:
+            bars_gl = getattr(self, "_spotify_bars_overlay", None)
+            if bars_gl is not None:
+                try:
+                    bars_gl.update()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        for name in (
+            "clock_widget",
+            "clock2_widget",
+            "clock3_widget",
+            "weather_widget",
+            "media_widget",
+            "spotify_visualizer_widget",
+            "spotify_volume_widget",
+            "reddit_widget",
+            "reddit2_widget",
+        ):
+            w = getattr(self, name, None)
+            if w is None:
+                continue
+            try:
+                if w.isVisible():
+                    w.update()
+            except Exception:
+                pass
+
+        self._schedule_effect_invalidation(f"activate_refresh:{reason}")
+
+    def _schedule_effect_invalidation(self, reason: str) -> None:
+        try:
+            if getattr(self, "_pending_effect_invalidation", False):
+                return
+            self._pending_effect_invalidation = True
+        except Exception:
+            return
+
+        def _run() -> None:
+            try:
+                self._invalidate_overlay_effects(reason)
+            finally:
+                try:
+                    self._pending_effect_invalidation = False
+                except Exception:
+                    pass
+
+        try:
+            tm = getattr(self, "_thread_manager", None)
+            if tm is not None:
+                tm.single_shot(0, _run)
+            else:
+                ThreadManager.single_shot(0, _run)
+        except Exception:
+            _run()
+
+    def _invalidate_overlay_effects(self, reason: str) -> None:
+        if win_diag_logger.isEnabledFor(logging.DEBUG):
+            try:
+                win_diag_logger.debug(
+                    "[EFFECT_INVALIDATE] screen=%s reason=%s",
+                    getattr(self, "screen_index", "?"),
+                    reason,
+                )
+            except Exception:
+                pass
+
+        try:
+            strong = "menu" in str(reason)
+        except Exception:
+            strong = False
+
+        refresh_effects = False
+        if strong:
+            # Toggle-based refresh: recreate effects on every other menu
+            # invalidation to bust Qt caches without excessive churn.
+            try:
+                flip = bool(getattr(self, "_effect_refresh_flip", False))
+            except Exception:
+                flip = False
+            flip = not flip
+            try:
+                setattr(self, "_effect_refresh_flip", flip)
+            except Exception:
+                pass
+            refresh_effects = flip
+
+        for name in (
+            "clock_widget",
+            "clock2_widget",
+            "clock3_widget",
+            "weather_widget",
+            "media_widget",
+            "spotify_visualizer_widget",
+            "spotify_volume_widget",
+            "reddit_widget",
+            "reddit2_widget",
+        ):
+            w = getattr(self, name, None)
+            if w is None:
+                continue
+            try:
+                eff = w.graphicsEffect()
+            except Exception:
+                eff = None
+
+            if isinstance(eff, (QGraphicsDropShadowEffect, QGraphicsOpacityEffect)):
+                if refresh_effects:
+                    try:
+                        anim = getattr(w, "_shadowfade_anim", None)
+                    except Exception:
+                        anim = None
+                    try:
+                        shadow_anim = getattr(w, "_shadowfade_shadow_anim", None)
+                    except Exception:
+                        shadow_anim = None
+                    if anim is None and shadow_anim is None:
+                        if isinstance(eff, QGraphicsDropShadowEffect):
+                            try:
+                                blur = eff.blurRadius()
+                            except Exception:
+                                blur = None
+                            try:
+                                offset = eff.offset()
+                            except Exception:
+                                offset = None
+                            try:
+                                color = eff.color()
+                            except Exception:
+                                color = None
+                            try:
+                                w.setGraphicsEffect(None)
+                            except Exception:
+                                pass
+                            try:
+                                new_eff = QGraphicsDropShadowEffect(w)
+                                if blur is not None:
+                                    new_eff.setBlurRadius(blur)
+                                if offset is not None:
+                                    new_eff.setOffset(offset)
+                                if color is not None:
+                                    new_eff.setColor(color)
+                                w.setGraphicsEffect(new_eff)
+                                eff = new_eff
+                            except Exception:
+                                try:
+                                    eff = w.graphicsEffect()
+                                except Exception:
+                                    eff = None
+                        elif isinstance(eff, QGraphicsOpacityEffect):
+                            try:
+                                opacity = eff.opacity()
+                            except Exception:
+                                opacity = None
+                            try:
+                                w.setGraphicsEffect(None)
+                            except Exception:
+                                pass
+                            try:
+                                new_eff = QGraphicsOpacityEffect(w)
+                                if opacity is not None:
+                                    new_eff.setOpacity(opacity)
+                                w.setGraphicsEffect(new_eff)
+                                eff = new_eff
+                            except Exception:
+                                try:
+                                    eff = w.graphicsEffect()
+                                except Exception:
+                                    eff = None
+                try:
+                    eff.setEnabled(False)
+                    eff.setEnabled(True)
+                except Exception:
+                    pass
+                if isinstance(eff, QGraphicsDropShadowEffect):
+                    try:
+                        eff.setBlurRadius(eff.blurRadius())
+                        eff.setOffset(eff.offset())
+                        eff.setColor(eff.color())
+                    except Exception:
+                        pass
+            try:
+                if w.isVisible():
+                    w.update()
+            except Exception:
+                pass
+
+    def focusInEvent(self, event: QFocusEvent) -> None:  # type: ignore[override]
+        try:
+            self._debug_window_state("focusInEvent")
+        except Exception:
+            pass
+        try:
+            self._invalidate_overlay_effects("focus_in")
+        except Exception:
+            pass
+        super().focusInEvent(event)
+
+    def changeEvent(self, event: QEvent) -> None:  # type: ignore[override]
+        try:
+            if event is not None:
+                self._debug_window_state(f"changeEvent:{int(event.type())}")
+        except Exception:
+            pass
         super().changeEvent(event)
+
+    def nativeEvent(self, eventType, message):  # type: ignore[override]
+        try:
+            if sys.platform != "win32" or not win_diag_logger.isEnabledFor(logging.DEBUG):
+                return super().nativeEvent(eventType, message)
+
+            try:
+                msg_ptr = int(message)
+            except Exception:
+                msg_ptr = 0
+            if msg_ptr == 0:
+                return super().nativeEvent(eventType, message)
+
+            try:
+                msg = ctypes.cast(msg_ptr, ctypes.POINTER(wintypes.MSG)).contents
+            except Exception:
+                return super().nativeEvent(eventType, message)
+
+            mid = int(getattr(msg, "message", 0) or 0)
+
+            names = {
+                0x0006: "WM_ACTIVATE",
+                0x0086: "WM_NCACTIVATE",
+                0x0046: "WM_WINDOWPOSCHANGING",
+                0x0047: "WM_WINDOWPOSCHANGED",
+                0x007C: "WM_STYLECHANGING",
+                0x007D: "WM_STYLECHANGED",
+                0x0014: "WM_ERASEBKGND",
+                0x000B: "WM_SETREDRAW",
+            }
+
+            name = names.get(mid)
+            if name is not None:
+                try:
+                    hwnd = int(getattr(msg, "hwnd", 0) or 0)
+                except Exception:
+                    hwnd = 0
+                try:
+                    wparam = int(getattr(msg, "wParam", 0) or 0)
+                except Exception:
+                    wparam = 0
+                try:
+                    lparam = int(getattr(msg, "lParam", 0) or 0)
+                except Exception:
+                    lparam = 0
+
+                extra = f"msg={name} wParam={wparam} lParam={lparam} hwnd={hex(hwnd) if hwnd else '?'}"
+                try:
+                    for inst in DisplayWidget.get_all_instances():
+                        try:
+                            inst._debug_window_state("nativeEvent", extra=extra)
+                        except Exception:
+                            pass
+                except Exception:
+                    self._debug_window_state("nativeEvent", extra=extra)
+
+                if name == "WM_ACTIVATE":
+                    if wparam == 0:
+                        try:
+                            for inst in DisplayWidget.get_all_instances():
+                                try:
+                                    inst._pending_activation_refresh = True
+                                    inst._last_deactivate_ts = time.monotonic()
+                                except Exception:
+                                    pass
+                        except Exception:
+                            try:
+                                self._pending_activation_refresh = True
+                                self._last_deactivate_ts = time.monotonic()
+                            except Exception:
+                                pass
+                    elif wparam == 1:
+                        now_ts = time.monotonic()
+                        try:
+                            for inst in DisplayWidget.get_all_instances():
+                                try:
+                                    if not getattr(inst, "_pending_activation_refresh", False):
+                                        continue
+                                    dt = now_ts - float(getattr(inst, "_last_deactivate_ts", 0.0) or 0.0)
+                                    if dt <= 3.0:
+                                        try:
+                                            QTimer.singleShot(0, lambda _inst=inst: _inst._perform_activation_refresh("wm_activate"))
+                                        except Exception:
+                                            inst._perform_activation_refresh("wm_activate")
+                                    else:
+                                        inst._pending_activation_refresh = False
+                                except Exception:
+                                    pass
+                        except Exception:
+                            pass
+
+        except Exception:
+            pass
+
+        return super().nativeEvent(eventType, message)
 
     def eventFilter(self, watched, event):  # type: ignore[override]
         """Global event filter to keep the Ctrl halo responsive over children."""

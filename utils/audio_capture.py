@@ -180,6 +180,17 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
         def stream_callback(in_data, frame_count, time_info, status):
             try:
                 samples = self._np.frombuffer(in_data, dtype=self._np.float32)
+                try:
+                    ch = int(self._channels) if self._channels else 1
+                except Exception:
+                    ch = 1
+                if ch > 1:
+                    try:
+                        frames = int(samples.size // ch)
+                        if frames > 0 and (frames * ch) == int(samples.size):
+                            samples = samples.reshape(frames, ch)
+                    except Exception:
+                        pass
                 callback(samples)
             except Exception:
                 pass

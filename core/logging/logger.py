@@ -266,6 +266,15 @@ class NonPerfFilter(logging.Filter):
         return "[PERF]" not in msg
 
 
+class NonSpotifyFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        try:
+            msg = record.getMessage()
+        except Exception:
+            msg = str(record.msg)
+        return "[SPOTIFY_VIS]" not in msg and "[SPOTIFY_VOL]" not in msg
+
+
 class VerboseLogFilter(logging.Filter):
     """Filter for verbose debug log - accepts DEBUG and INFO, excludes PERF.
     
@@ -298,6 +307,35 @@ class PerfLogFilter(logging.Filter):
         except Exception:
             msg = str(record.msg)
         return "[PERF]" in msg
+
+
+class SpotifyVisLogFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        try:
+            msg = record.getMessage()
+        except Exception:
+            msg = str(record.msg)
+        if "[SPOTIFY_VIS]" in msg:
+            return True
+        name = str(getattr(record, "name", ""))
+        return (
+            "spotify_visualizer" in name
+            or "spotify_bars_gl_overlay" in name
+            or name.endswith("widgets.beat_engine")
+            or name.endswith("widgets.spotify_visualizer_widget")
+        )
+
+
+class SpotifyVolLogFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        try:
+            msg = record.getMessage()
+        except Exception:
+            msg = str(record.msg)
+        if "[SPOTIFY_VOL]" in msg:
+            return True
+        name = str(getattr(record, "name", ""))
+        return "spotify_volume" in name
 
 
 def get_log_dir() -> Path:
@@ -388,6 +426,7 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
     # drop them from the main screensaver.log to reduce noise and keep
     # per-run logs smaller and easier to inspect.
     file_handler.addFilter(NonPerfFilter())
+    file_handler.addFilter(NonSpotifyFilter())
     
     console_handler = SuppressingStreamHandler(sys.stdout)
     if debug_enabled and sys.stdout.isatty():
@@ -426,6 +465,30 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
     perf_handler.setLevel(logging.INFO)
     perf_handler.addFilter(PerfLogFilter())
     root_logger.addHandler(perf_handler)
+
+    spotify_vis_log_file = log_dir / "screensaver_spotify_vis.log"
+    spotify_vis_handler = RotatingFileHandler(
+        spotify_vis_log_file,
+        maxBytes=5 * 1024 * 1024,
+        backupCount=5,
+        encoding='utf-8',
+    )
+    spotify_vis_handler.setFormatter(formatter)
+    spotify_vis_handler.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
+    spotify_vis_handler.addFilter(SpotifyVisLogFilter())
+    root_logger.addHandler(spotify_vis_handler)
+
+    spotify_vol_log_file = log_dir / "screensaver_spotify_vol.log"
+    spotify_vol_handler = RotatingFileHandler(
+        spotify_vol_log_file,
+        maxBytes=5 * 1024 * 1024,
+        backupCount=5,
+        encoding='utf-8',
+    )
+    spotify_vol_handler.setFormatter(formatter)
+    spotify_vol_handler.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
+    spotify_vol_handler.addFilter(SpotifyVolLogFilter())
+    root_logger.addHandler(spotify_vol_handler)
     
     # Verbose debug log - captures ALL DEBUG/INFO without suppression.
     # This is the "messy" log for deep debugging when console suppression

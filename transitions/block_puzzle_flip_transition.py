@@ -332,7 +332,7 @@ class BlockPuzzleFlipTransition(BaseTransition):
 
             # Present initial frame synchronously to avoid a one-frame flash
             try:
-                widget.repaint()
+                widget.update()
             except Exception:
                 pass
             
