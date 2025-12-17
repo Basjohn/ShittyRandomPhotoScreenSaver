@@ -19,6 +19,9 @@ Shitty Showcase where I cut off the Spotify controls in recording.
     - Ripple
     - 3D Block Spin (Actual 3D like 1998!)
     - Crumble (More work than it was worth!)
+    - Particle
+    - Peel
+    - Warp Dissolve
     - Crossfade
     - Slide
     - Wipe

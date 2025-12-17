@@ -807,6 +807,40 @@ pytest tests/ --tb=short || exit 1
 
 ---
 
+### 27. `tests/test_particle_transition.py` - Particle Transition Tests
+
+**Module Purpose**: Verify particle transition shader program, state, and settings integration.
+
+**Test Count**: 14 tests  
+**Status**: 🆕 New (Dec 17, 2025)
+
+#### Test Classes:
+
+- **`TestParticleProgram`** (5 tests)
+  - `test_particle_program_import` – Verifies ParticleProgram can be imported
+  - `test_particle_program_instantiation` – Verifies program can be instantiated
+  - `test_particle_program_has_vertex_source` – Verifies vertex shader source exists
+  - `test_particle_program_has_fragment_source` – Verifies fragment shader source exists
+  - `test_particle_program_uniform_names` – Verifies expected uniforms are defined
+
+- **`TestParticleState`** (3 tests)
+  - `test_particle_state_import` – Verifies ParticleState can be imported
+  - `test_particle_state_creation` – Verifies state can be created with defaults
+  - `test_particle_state_with_values` – Verifies state accepts custom values
+
+- **`TestParticleTransition`** (4 tests)
+  - `test_particle_transition_import` – Verifies transition class can be imported
+  - `test_particle_transition_creation` – Verifies transition can be created
+  - `test_particle_transition_modes` – Verifies all modes (Directional, Swirl, Converge)
+  - `test_particle_transition_directions` – Verifies all 10 directions
+  - `test_particle_transition_swirl_orders` – Verifies swirl orders (Typical, Center Outward, Edges Inward)
+
+- **`TestSettingsDefaults`** (2 tests)
+  - `test_settings_manager_has_particle_defaults` – Verifies particle defaults in SettingsManager
+  - `test_settings_manager_has_particle_in_pool` – Verifies Particle in transition pool
+
+---
+
 ## Test Summary
 
 **Current Status** (Nov 6, 2025 - Integration Tests Added):

@@ -132,7 +132,7 @@ class ScreensaverContextMenu(QMenu):
         self._transition_types = transition_types or [
             "Ripple", "Wipe", "3D Block Spins", "Diffuse", "Slide",
             "Crossfade", "Peel", "Block Puzzle Flip", "Warp Dissolve",
-            "Blinds", "Crumble",
+            "Blinds", "Crumble", "Particle",
         ]
         self._current_transition = current_transition
         self._dimming_enabled = dimming_enabled

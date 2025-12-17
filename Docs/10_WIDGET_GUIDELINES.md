@@ -16,7 +16,7 @@ be treated as the primary reference when adding or refactoring widgets.
 
 - **Single source of truth for settings**  
   All widgets read/write from the nested `widgets` map managed by
-  `SettingsManager` and documented in `Docs/SPEC.md`.
+  `SettingsManager` and documented in `Spec.md`.
 
 - **Non-destructive, non-blocking**  
   Widgets must never block the UI thread or cause the screensaver to exit

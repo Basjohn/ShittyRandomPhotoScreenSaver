@@ -160,7 +160,7 @@ class SettingsManager(QObject):
                 },
                 'diffuse': {
                     'block_size': 18,
-                    'shape': 'Diamond',
+                    'shape': 'Rectangle',
                 },
                 'slide': {
                     'direction': 'Random',
@@ -196,6 +196,24 @@ class SettingsManager(QObject):
                     # Shuffle has been retired for v1.2 and is no longer
                     # part of the active random/switch pool.
                     'Blinds': True,
+                    'Particle': True,
+                    'Crumble': True,
+                },
+                'particle': {
+                    'mode': 'Converge',  # Default to Converge (best looking)
+                    'direction': 'Left to Right',
+                    'particle_radius': 24,
+                    'trail_strength': 0.6,
+                    'use_3d_shading': True,
+                    'texture_mapping': True,
+                    'wobble': False,
+                    'gloss_size': 64,
+                    'light_direction': 0,
+                    'swirl_turns': 2.0,
+                    'swirl_order': 2,  # Edges Inward (for Swirl mode)
+                },
+                'crumble': {
+                    'weight': 'Medium',
                 },
             },
 
@@ -382,10 +400,11 @@ class SettingsManager(QObject):
                     # Blur radius in logical pixels.
                     'blur_radius': 18,
                     # Opacity multiplier for text-only widgets (no frame).
-                    'text_opacity': 0.3,
+                    # Increased by 10% for better visibility.
+                    'text_opacity': 0.33,
                     # Opacity multiplier for widgets with active
-                    # background/frames.
-                    'frame_opacity': 0.7,
+                    # background/frames. Increased by 10% for better visibility.
+                    'frame_opacity': 0.77,
                 },
             },
         }

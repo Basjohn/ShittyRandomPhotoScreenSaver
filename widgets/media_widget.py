@@ -29,7 +29,7 @@ from core.media.media_controller import (
 )
 from core.threading.manager import ThreadManager
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
-from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
+from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile, draw_rounded_rect_with_shadow
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 
 logger = get_logger(__name__)
@@ -1153,24 +1153,16 @@ class MediaWidget(BaseOverlayWidget):
             return
 
         rect = QRect(left, top, width, height)
+        radius = min(rect.width(), rect.height()) / 2.5
 
-        painter.save()
-        try:
-            # Draw only the header border so the SPOTIFY text colour is not
-            # darkened by an overlaid semi-transparent fill.
-
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            pen = painter.pen()
-            pen.setColor(self._bg_border_color)
-            pen.setWidth(max(1, self._bg_border_width))
-            painter.setPen(pen)
-
-            path = QPainterPath()
-            radius = min(rect.width(), rect.height()) / 2.5
-            path.addRoundedRect(rect, radius, radius)
-            painter.drawPath(path)
-        finally:
-            painter.restore()
+        # Use shadow helper for border with drop shadow
+        draw_rounded_rect_with_shadow(
+            painter,
+            rect,
+            radius,
+            self._bg_border_color,
+            max(1, self._bg_border_width),
+        )
 
     def _paint_header_logo(self, painter: QPainter) -> None:
         """Paint the Spotify logo glyph next to the SPOTIFY header text.

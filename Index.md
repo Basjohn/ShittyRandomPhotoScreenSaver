@@ -206,9 +206,16 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - transitions/gl_compositor_crumble_transition.py
   - Compositor-backed GL-only Crumble transition creating a rock-like Voronoi crack pattern across the old image, then pieces fall away with physics-based motion (gravity, rotation, drift) to reveal the new image.
 - transitions/gl_compositor_particle_transition.py
-  - Compositor-backed GL-only Particle transition where smooth round particles fly in from off-screen and stack to reveal the new image. Supports Directional mode (8 directions) and Swirl mode (spiral from edges). Features 3D ball shading, motion trails, and texture mapping onto particles.
+  - Compositor-backed GL-only Particle transition where smooth round particles fly in from off-screen and stack to reveal the new image. Supports Directional mode (8 directions + Random Direction + Random Placement), Swirl mode (spiral with Typical/Center Outward/Edges Inward build orders), and Converge mode (all edges converge to center). Features 3D ball shading, motion trails, texture mapping onto particles, optional wobble on arrival, and configurable gloss/light direction.
 - rendering/gl_programs/particle_program.py
   - GLSL shader program for Particle transition. Grid-driven analytic approach for predictable performance - each pixel evaluates only a small neighborhood of candidate cells.
+  - **Timing**: 65% spawn spread, 30% flight time for smooth animation
+  - **Swirl Orders**:
+    - Typical: smooth organic swirl ordering (non-blocky)
+    - Center Outward: symmetric radial expansion from center (smooth coverage)
+    - Edges Inward: edges-to-center ordering with gentle spiral variation
+  - **Position-aware blending**: Background only blends after particles arrive at each pixel location
+  - **3D Shading**: Fresnel, diffuse, specular highlights with configurable light direction
 
 ## Sources
 - sources/base_provider.py
@@ -365,16 +372,15 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - sources.rss_save_directory: str - directory for permanent RSS image storage
 - sources.rss_background_cap: int (default 30) - max RSS images in queue
 - sources.rss_stale_minutes: int (default 30) - TTL for stale RSS images
-- sources.rss_rotating_cache_size: int (default 10) - minimum cached RSS images to keep
 
 ### Display
 - display.refresh_sync: bool
 - display.hw_accel: bool
 - display.mode: fill|fit|shrink
-- display.same_image_all_monitors: bool (default true) - same or different images per display
+- display.same_image_all_monitors: bool (default false) - same or different images per display
 
 ### Transitions
-- transitions.type: str (Crossfade, Slide, Wipe, Diffuse, Block Puzzle Flip, Blinds, Peel, 3D Block Spins, Rain Drops, Warp Dissolve, Crumble)
+- transitions.type: str (Crossfade, Slide, Wipe, Diffuse, Block Puzzle Flip, Blinds, Peel, 3D Block Spins, Ripple (legacy: Rain Drops), Warp Dissolve, Crumble, Particle)
 - transitions.random_always: bool
 - transitions.random_choice: str
 - transitions.duration_ms: int (global default duration in milliseconds)
@@ -385,6 +391,16 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - transitions.crumble.piece_count: int (4-16, default 8)
 - transitions.crumble.crack_complexity: float (0.5-2.0, default 1.0)
 - transitions.crumble.mosaic_mode: bool (default false)
+- transitions.particle.mode: str (Directional, Swirl, Converge)
+- transitions.particle.direction: str (Left to Right, Right to Left, etc., Random Direction, Random Placement)
+- transitions.particle.particle_radius: int (8-64, default 24)
+- transitions.particle.swirl_turns: float (0.5-5.0, default 2.0)
+- transitions.particle.swirl_order: int (0=Typical, 1=Center Outward, 2=Edges Inward)
+- transitions.particle.use_3d_shading: bool (default true)
+- transitions.particle.texture_mapping: bool (default true)
+- transitions.particle.wobble: bool (default false)
+- transitions.particle.gloss_size: int (16-128, default 64)
+- transitions.particle.light_direction: int (0-4, default 0=Top-Left)
 
 ### Timing
 - timing.interval: int seconds between image rotations

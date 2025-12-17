@@ -42,6 +42,8 @@ class GLCompositorParticleTransition(BaseTransition):
     DIR_TOPRIGHT_TO_BOTTOMLEFT = 5
     DIR_BOTTOMLEFT_TO_TOPRIGHT = 6
     DIR_BOTTOMRIGHT_TO_TOPLEFT = 7
+    DIR_RANDOM = 8
+    DIR_RANDOM_PLACEMENT = 9
 
     # Mode constants
     MODE_DIRECTIONAL = 0
@@ -60,6 +62,10 @@ class GLCompositorParticleTransition(BaseTransition):
         swirl_turns: float = 2.0,
         use_3d_shading: bool = True,
         texture_mapping: bool = True,
+        wobble: bool = False,
+        gloss_size: float = 64.0,
+        light_direction: int = 0,
+        swirl_order: int = 0,
     ) -> None:
         super().__init__(duration_ms)
         self._mode = mode
@@ -72,6 +78,10 @@ class GLCompositorParticleTransition(BaseTransition):
         self._swirl_turns = max(0.5, swirl_turns)
         self._use_3d_shading = use_3d_shading
         self._texture_mapping = texture_mapping
+        self._wobble = wobble
+        self._gloss_size = max(16.0, min(128.0, gloss_size))
+        self._light_direction = max(0, min(4, light_direction))
+        self._swirl_order = max(0, min(2, swirl_order))
         self._widget: Optional[QWidget] = None
         self._compositor: Optional[GLCompositorWidget] = None
         self._animation_id: Optional[str] = None
@@ -151,6 +161,10 @@ class GLCompositorParticleTransition(BaseTransition):
             swirl_turns=self._swirl_turns,
             use_3d_shading=self._use_3d_shading,
             texture_mapping=self._texture_mapping,
+            wobble=self._wobble,
+            gloss_size=self._gloss_size,
+            light_direction=self._light_direction,
+            swirl_order=self._swirl_order,
         )
 
         self._set_state(TransitionState.RUNNING)

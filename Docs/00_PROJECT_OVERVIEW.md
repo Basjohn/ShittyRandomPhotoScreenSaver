@@ -12,7 +12,7 @@ A modern, feature-rich Windows screensaver application using PySide6 that displa
 - **Local Folders**: Recursive scanning of designated directories with extension filtering
 - **RSS/JSON Feeds**: Parse RSS/Atom feeds and Reddit JSON listings for images
   - High-resolution filter for Reddit (prefers posts ≥2560px width)
-  - On-disk caching with rotating cache (always keeps 10 images minimum)
+  - On-disk caching with rotating cache (keeps at least 20 images before cleanup)
   - Optional save-to-disk mirroring for permanent storage
 - **Usage Ratio Control**: Configurable split between local and RSS sources (default 60/40)
   - Probabilistic selection based on ratio
@@ -25,8 +25,8 @@ A modern, feature-rich Windows screensaver application using PySide6 that displa
 - **Shrink Mode**: Scale down only if larger than screen
 - DPR-aware scaling for high-DPI displays
 
-### 3. Transition Effects (11 Types)
-All transitions support both GL compositor and CPU fallback paths:
+### 3. Transition Effects (12 Types)
+Transitions run on the GL compositor when hardware acceleration is available. Some transition types are GL-only and do not have CPU fallbacks.
 - **Crossfade**: Smooth opacity transition
 - **Slide**: Directional slide (cardinal directions)
 - **Wipe**: Directional wipe (includes diagonals)
@@ -38,6 +38,7 @@ All transitions support both GL compositor and CPU fallback paths:
 - **Ripple/Rain Drops**: GL-only radial ripple effect
 - **Warp Dissolve**: GL-only vortex-style dissolve
 - **Crumble**: GL-only Voronoi crack pattern with falling pieces
+- **Particle**: GL-only particle stacking transition (Directional/Swirl/Converge)
 
 ### 4. Multi-Monitor Support
 - **Same Image Mode**: Synchronized display across all monitors

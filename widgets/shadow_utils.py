@@ -9,14 +9,17 @@ effect (e.g. MediaWidget's opacity effect) to avoid conflicts.
 
 Also provides `configure_overlay_widget_attributes()` to set Qt widget
 attributes that prevent flickering when sibling QOpenGLWidgets repaint.
+
+Text shadow helpers are provided for QPainter-based text rendering with
+subtle drop shadows that improve readability on varied backgrounds.
 """
 from __future__ import annotations
 
 from typing import Any, Mapping
 
 from PySide6.QtWidgets import QWidget, QGraphicsDropShadowEffect, QGraphicsOpacityEffect
-from PySide6.QtCore import QVariantAnimation, QEasingCurve, Qt
-from PySide6.QtGui import QColor
+from PySide6.QtCore import QVariantAnimation, QEasingCurve, Qt, QRect
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 
 from core.logging.logger import get_logger, is_verbose_logging
 
@@ -446,3 +449,191 @@ class ShadowFadeProfile:
             except Exception:
                 pass
             cls.attach_shadow(widget, cfg, has_background_frame=has_background_frame)
+
+
+# ---------------------------------------------------------------------------
+# Text Shadow Helpers for QPainter-based rendering
+# ---------------------------------------------------------------------------
+
+# Default text shadow settings - bottom-right offset matching widget shadows
+TEXT_SHADOW_OFFSET_X: int = 1
+TEXT_SHADOW_OFFSET_Y: int = 1
+TEXT_SHADOW_COLOR: QColor = QColor(0, 0, 0, 100)
+
+# Smaller text gets less shadow to avoid overwhelming the text
+TEXT_SHADOW_MIN_FONT_SIZE: int = 10  # Below this, shadow is reduced
+
+
+def draw_text_with_shadow(
+    painter: QPainter,
+    x: int,
+    y: int,
+    text: str,
+    *,
+    shadow_color: QColor = None,
+    shadow_offset_x: int = None,
+    shadow_offset_y: int = None,
+    font_size: int = 12,
+) -> None:
+    """Draw text with a subtle drop shadow for better readability.
+    
+    The shadow is drawn first (offset bottom-right), then the main text
+    is drawn on top. Shadow opacity is scaled based on font size - smaller
+    text gets less shadow to avoid overwhelming it.
+    
+    Args:
+        painter: QPainter to draw with (must have font/pen already set)
+        x: X coordinate for text baseline
+        y: Y coordinate for text baseline
+        text: Text string to draw
+        shadow_color: Shadow color (default: semi-transparent black)
+        shadow_offset_x: Horizontal shadow offset (default: 1px right)
+        shadow_offset_y: Vertical shadow offset (default: 1px down)
+        font_size: Font size in points (used to scale shadow intensity)
+    """
+    if not text:
+        return
+    
+    # Use defaults if not specified
+    if shadow_color is None:
+        shadow_color = TEXT_SHADOW_COLOR
+    if shadow_offset_x is None:
+        shadow_offset_x = TEXT_SHADOW_OFFSET_X
+    if shadow_offset_y is None:
+        shadow_offset_y = TEXT_SHADOW_OFFSET_Y
+    
+    # Scale shadow opacity based on font size (smaller text = less shadow)
+    if font_size < TEXT_SHADOW_MIN_FONT_SIZE:
+        scale = max(0.3, font_size / TEXT_SHADOW_MIN_FONT_SIZE)
+        alpha = int(shadow_color.alpha() * scale)
+        shadow_color = QColor(shadow_color.red(), shadow_color.green(), shadow_color.blue(), alpha)
+    
+    # Save current pen
+    original_pen = painter.pen()
+    
+    # Draw shadow
+    painter.setPen(shadow_color)
+    painter.drawText(x + shadow_offset_x, y + shadow_offset_y, text)
+    
+    # Draw main text
+    painter.setPen(original_pen)
+    painter.drawText(x, y, text)
+
+
+def draw_text_rect_with_shadow(
+    painter: QPainter,
+    rect: QRect,
+    flags: int,
+    text: str,
+    *,
+    shadow_color: QColor = None,
+    shadow_offset_x: int = None,
+    shadow_offset_y: int = None,
+    font_size: int = 12,
+) -> None:
+    """Draw text in a rect with a subtle drop shadow.
+    
+    Similar to draw_text_with_shadow but uses drawText(rect, flags, text).
+    
+    Args:
+        painter: QPainter to draw with
+        rect: Bounding rectangle for text
+        flags: Qt alignment flags
+        text: Text string to draw
+        shadow_color: Shadow color (default: semi-transparent black)
+        shadow_offset_x: Horizontal shadow offset (default: 1px right)
+        shadow_offset_y: Vertical shadow offset (default: 1px down)
+        font_size: Font size in points (used to scale shadow intensity)
+    """
+    if not text:
+        return
+    
+    # Use defaults if not specified
+    if shadow_color is None:
+        shadow_color = TEXT_SHADOW_COLOR
+    if shadow_offset_x is None:
+        shadow_offset_x = TEXT_SHADOW_OFFSET_X
+    if shadow_offset_y is None:
+        shadow_offset_y = TEXT_SHADOW_OFFSET_Y
+    
+    # Scale shadow opacity based on font size
+    if font_size < TEXT_SHADOW_MIN_FONT_SIZE:
+        scale = max(0.3, font_size / TEXT_SHADOW_MIN_FONT_SIZE)
+        alpha = int(shadow_color.alpha() * scale)
+        shadow_color = QColor(shadow_color.red(), shadow_color.green(), shadow_color.blue(), alpha)
+    
+    # Save current pen
+    original_pen = painter.pen()
+    
+    # Draw shadow (offset rect)
+    shadow_rect = QRect(
+        rect.x() + shadow_offset_x,
+        rect.y() + shadow_offset_y,
+        rect.width(),
+        rect.height(),
+    )
+    painter.setPen(shadow_color)
+    painter.drawText(shadow_rect, flags, text)
+    
+    # Draw main text
+    painter.setPen(original_pen)
+    painter.drawText(rect, flags, text)
+
+
+def draw_rounded_rect_with_shadow(
+    painter: QPainter,
+    rect: QRect,
+    radius: float,
+    border_color: QColor,
+    border_width: int = 1,
+    *,
+    shadow_color: QColor = None,
+    shadow_offset_x: int = 2,
+    shadow_offset_y: int = 2,
+) -> None:
+    """Draw a rounded rectangle border with a drop shadow.
+    
+    Used for header frames on Reddit/Spotify widgets. Shadow is drawn
+    first (offset bottom-right), then the main border on top.
+    
+    Args:
+        painter: QPainter to draw with
+        rect: Bounding rectangle
+        radius: Corner radius
+        border_color: Border color
+        border_width: Border width in pixels
+        shadow_color: Shadow color (default: semi-transparent black)
+        shadow_offset_x: Horizontal shadow offset
+        shadow_offset_y: Vertical shadow offset
+    """
+    if shadow_color is None:
+        shadow_color = QColor(0, 0, 0, 80)
+    
+    painter.save()
+    try:
+        # Draw shadow
+        shadow_rect = QRect(
+            rect.x() + shadow_offset_x,
+            rect.y() + shadow_offset_y,
+            rect.width(),
+            rect.height(),
+        )
+        shadow_path = QPainterPath()
+        shadow_path.addRoundedRect(shadow_rect, radius, radius)
+        
+        pen = QPen(shadow_color)
+        pen.setWidth(border_width)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawPath(shadow_path)
+        
+        # Draw main border
+        main_path = QPainterPath()
+        main_path.addRoundedRect(rect, radius, radius)
+        
+        pen = QPen(border_color)
+        pen.setWidth(border_width)
+        painter.setPen(pen)
+        painter.drawPath(main_path)
+    finally:
+        painter.restore()

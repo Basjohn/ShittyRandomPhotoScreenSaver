@@ -23,14 +23,20 @@ from ctypes import wintypes
 import requests
 
 from PySide6.QtCore import Qt, QTimer, QRect, QPoint, QUrl
-from PySide6.QtGui import QFont, QColor, QPainter, QFontMetrics, QDesktopServices, QPixmap, QPainterPath
+from PySide6.QtGui import QFont, QColor, QPainter, QFontMetrics, QDesktopServices, QPixmap
 from PySide6.QtWidgets import QWidget, QToolTip
 from shiboken6 import isValid as shiboken_isValid
 
 from core.logging.logger import get_logger, is_verbose_logging
 from core.threading.manager import ThreadManager
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
-from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
+from widgets.shadow_utils import (
+    apply_widget_shadow,
+    ShadowFadeProfile,
+    draw_text_with_shadow,
+    draw_text_rect_with_shadow,
+    draw_rounded_rect_with_shadow,
+)
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 
 logger = get_logger(__name__)
@@ -673,7 +679,8 @@ class RedditWidget(BaseOverlayWidget):
                 Qt.TextElideMode.ElideRight,
                 available_header_width,
             )
-            painter.drawText(x, baseline_y, drawn_label)
+            # Draw header text with shadow for better readability
+            draw_text_with_shadow(painter, x, baseline_y, drawn_label, font_size=self._header_font_pt)
             header_text_width = header_metrics.horizontalAdvance(drawn_label)
         else:
             header_text_width = 0
@@ -728,10 +735,13 @@ class RedditWidget(BaseOverlayWidget):
             painter.setFont(age_font)
             painter.setPen(QColor(200, 200, 200, 220))
             age_rect = QRect(rect.left(), y, age_col_width, line_height)
-            painter.drawText(
+            # Draw age text with shadow (smaller text, less shadow)
+            draw_text_rect_with_shadow(
+                painter,
                 age_rect,
                 Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
                 age_text,
+                font_size=age_font_size,
             )
 
             painter.setFont(title_font)
@@ -763,7 +773,8 @@ class RedditWidget(BaseOverlayWidget):
                     available_width,
                 )
             title_y = y + title_metrics.ascent()
-            painter.drawText(title_x, title_y, display_title)
+            # Draw title with shadow for better readability
+            draw_text_with_shadow(painter, title_x, title_y, display_title, font_size=self._font_size)
 
             row_rect = QRect(rect.left(), y, rect.width(), line_height)
             self._row_hit_rects.append((row_rect, post.url, full_title))
@@ -1043,6 +1054,7 @@ class RedditWidget(BaseOverlayWidget):
 
         The frame inherits the widget's background/border colours so it feels
         like a subtle inner container, mirroring the Spotify widget header.
+        Now includes a drop shadow for better visual depth.
         """
 
         if not self._show_background:
@@ -1085,21 +1097,16 @@ class RedditWidget(BaseOverlayWidget):
             return
 
         rect = QRect(left, top, total_w, total_h)
+        radius = min(rect.width(), rect.height()) / 2.5
 
-        painter.save()
-        try:
-            pen = painter.pen()
-            pen.setColor(self._bg_border_color)
-            pen.setWidth(max(1, self._bg_border_width))
-            painter.setPen(pen)
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-
-            path = QPainterPath()
-            radius = min(rect.width(), rect.height()) / 2.5
-            path.addRoundedRect(rect, radius, radius)
-            painter.drawPath(path)
-        finally:
-            painter.restore()
+        # Use shadow helper for border with drop shadow
+        draw_rounded_rect_with_shadow(
+            painter,
+            rect,
+            radius,
+            self._bg_border_color,
+            max(1, self._bg_border_width),
+        )
 
     def _update_stylesheet(self) -> None:
         if self._show_background:

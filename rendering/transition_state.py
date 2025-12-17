@@ -149,7 +149,7 @@ class ParticleState(TransitionStateBase):
     """
     seed: float = 0.0
     mode: int = 0  # 0=Directional, 1=Swirl
-    direction: int = 0  # 0=L→R, 1=R→L, 2=T→B, 3=B→T, 4=TL→BR, 5=TR→BL, 6=BL→TR, 7=BR→TL
+    direction: int = 0  # 0-7=directions, 8=random, 9=random placement
     particle_radius: float = 24.0  # Base radius in pixels
     overlap: float = 4.0  # Overlap in pixels to avoid gaps
     trail_length: float = 0.15  # Trail length as fraction of particle size
@@ -158,6 +158,10 @@ class ParticleState(TransitionStateBase):
     swirl_turns: float = 2.0  # Number of spiral turns
     use_3d_shading: bool = True  # Enable 3D ball shading
     texture_mapping: bool = True  # Map new image onto particles
+    wobble: bool = False  # Per-particle wobble on arrival
+    gloss_size: float = 64.0  # Specular highlight sharpness (16-128)
+    light_direction: int = 0  # 0=TL, 1=TR, 2=Center, 3=BL, 4=BR
+    swirl_order: int = 0  # 0=Typical, 1=Center Outward, 2=Edges Inward
 
 
 class TransitionStateManager:

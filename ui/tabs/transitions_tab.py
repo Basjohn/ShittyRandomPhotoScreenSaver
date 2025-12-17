@@ -133,7 +133,7 @@ class TransitionsTab(QWidget):
         duration_row = QHBoxLayout()
         duration_row.addWidget(QLabel("Duration (short → long):"))
         self.duration_slider = NoWheelSlider(Qt.Orientation.Horizontal)
-        self.duration_slider.setRange(100, 12000)  # store milliseconds directly (12s max for Crumble)
+        self.duration_slider.setRange(100, 15000)  # store milliseconds directly (15s max)
         self.duration_slider.setSingleStep(100)
         self.duration_slider.setPageStep(500)
         self.duration_slider.setValue(1300)  # BUG FIX #5: Increased from 1000ms (30% slower)
@@ -319,7 +319,7 @@ class TransitionsTab(QWidget):
         mode_row = QHBoxLayout()
         mode_row.addWidget(QLabel("Mode:"))
         self.particle_mode_combo = QComboBox()
-        self.particle_mode_combo.addItems(["Directional", "Swirl"])
+        self.particle_mode_combo.addItems(["Directional", "Swirl", "Converge"])
         self.particle_mode_combo.currentIndexChanged.connect(self._on_particle_mode_changed)
         self.particle_mode_combo.currentIndexChanged.connect(self._save_settings)
         mode_row.addWidget(self.particle_mode_combo)
@@ -338,6 +338,8 @@ class TransitionsTab(QWidget):
             "Top-Right to Bottom-Left",
             "Bottom-Left to Top-Right",
             "Bottom-Right to Top-Left",
+            "Random Direction",
+            "Random Placement",
         ])
         self.particle_direction_combo.currentIndexChanged.connect(self._save_settings)
         direction_row.addWidget(self.particle_direction_combo)
@@ -379,6 +381,41 @@ class TransitionsTab(QWidget):
         texture_row.addStretch()
         particle_layout.addLayout(texture_row)
         
+        wobble_row = QHBoxLayout()
+        self.particle_wobble_check = QCheckBox("Wobble on Arrival")
+        self.particle_wobble_check.setChecked(False)
+        self.particle_wobble_check.stateChanged.connect(self._save_settings)
+        wobble_row.addWidget(self.particle_wobble_check)
+        wobble_row.addStretch()
+        particle_layout.addLayout(wobble_row)
+        
+        # Gloss/specular settings
+        gloss_row = QHBoxLayout()
+        gloss_row.addWidget(QLabel("Gloss Sharpness:"))
+        self.particle_gloss_spin = QSpinBox()
+        self.particle_gloss_spin.setRange(16, 128)
+        self.particle_gloss_spin.setValue(64)
+        self.particle_gloss_spin.setToolTip("Higher = smaller/sharper specular highlight")
+        self.particle_gloss_spin.valueChanged.connect(self._save_settings)
+        gloss_row.addWidget(self.particle_gloss_spin)
+        gloss_row.addStretch()
+        particle_layout.addLayout(gloss_row)
+        
+        light_row = QHBoxLayout()
+        light_row.addWidget(QLabel("Light Direction:"))
+        self.particle_light_combo = QComboBox()
+        self.particle_light_combo.addItems([
+            "Top-Left",
+            "Top-Right",
+            "Center",
+            "Bottom-Left",
+            "Bottom-Right",
+        ])
+        self.particle_light_combo.currentIndexChanged.connect(self._save_settings)
+        light_row.addWidget(self.particle_light_combo)
+        light_row.addStretch()
+        particle_layout.addLayout(light_row)
+        
         # Swirl-specific settings
         swirl_turns_row = QHBoxLayout()
         swirl_turns_row.addWidget(QLabel("Swirl Turns:"))
@@ -390,6 +427,20 @@ class TransitionsTab(QWidget):
         swirl_turns_row.addWidget(self.particle_swirl_turns_spin)
         swirl_turns_row.addStretch()
         particle_layout.addLayout(swirl_turns_row)
+        
+        swirl_order_row = QHBoxLayout()
+        swirl_order_row.addWidget(QLabel("Build Order:"))
+        self.particle_swirl_order_combo = QComboBox()
+        self.particle_swirl_order_combo.addItems([
+            "Typical",
+            "Center Outward",
+            "Edges Inward",
+        ])
+        self.particle_swirl_order_combo.setToolTip("How particles fill in during swirl mode")
+        self.particle_swirl_order_combo.currentIndexChanged.connect(self._save_settings)
+        swirl_order_row.addWidget(self.particle_swirl_order_combo)
+        swirl_order_row.addStretch()
+        particle_layout.addLayout(swirl_order_row)
         
         layout.addWidget(self.particle_group)
         
@@ -550,7 +601,11 @@ class TransitionsTab(QWidget):
             getattr(self, 'particle_trail_check', None),
             getattr(self, 'particle_3d_check', None),
             getattr(self, 'particle_texture_check', None),
+            getattr(self, 'particle_wobble_check', None),
+            getattr(self, 'particle_gloss_spin', None),
+            getattr(self, 'particle_light_combo', None),
             getattr(self, 'particle_swirl_turns_spin', None),
+            getattr(self, 'particle_swirl_order_combo', None),
         ]:
             if w is not None and hasattr(w, 'blockSignals'):
                 w.blockSignals(True)
@@ -627,7 +682,7 @@ class TransitionsTab(QWidget):
             # Load diffuse settings
             diffuse = transitions_config.get('diffuse', {})
             self.block_size_spin.setValue(diffuse.get('block_size', 18))
-            shape = diffuse.get('shape', 'Diamond')
+            shape = diffuse.get('shape', 'Rectangle')
             index = self.diffuse_shape_combo.findText(shape)
             if index >= 0:
                 self.diffuse_shape_combo.setCurrentIndex(index)
@@ -660,7 +715,15 @@ class TransitionsTab(QWidget):
             self.particle_trail_check.setChecked(particle.get('trail_strength', 0.6) > 0.01)
             self.particle_3d_check.setChecked(particle.get('use_3d_shading', True))
             self.particle_texture_check.setChecked(particle.get('texture_mapping', True))
+            self.particle_wobble_check.setChecked(particle.get('wobble', False))
+            self.particle_gloss_spin.setValue(int(particle.get('gloss_size', 64)))
+            light_idx = particle.get('light_direction', 0)
+            if 0 <= light_idx < self.particle_light_combo.count():
+                self.particle_light_combo.setCurrentIndex(light_idx)
             self.particle_swirl_turns_spin.setValue(particle.get('swirl_turns', 2.0))
+            swirl_order_idx = particle.get('swirl_order', 0)
+            if 0 <= swirl_order_idx < self.particle_swirl_order_combo.count():
+                self.particle_swirl_order_combo.setCurrentIndex(swirl_order_idx)
 
             # Now that in-memory per-type directions are loaded, update the direction combo
             self._update_specific_settings()
@@ -784,9 +847,14 @@ class TransitionsTab(QWidget):
     
     def _update_particle_mode_visibility(self) -> None:
         """Update visibility of particle mode-specific settings."""
-        is_swirl = self.particle_mode_combo.currentText() == "Swirl"
-        self.particle_direction_combo.setEnabled(not is_swirl)
+        mode = self.particle_mode_combo.currentText()
+        is_directional = mode == "Directional"
+        is_swirl = mode == "Swirl"
+        # Direction only applies to Directional mode
+        self.particle_direction_combo.setEnabled(is_directional)
+        # Swirl settings only apply to Swirl mode
         self.particle_swirl_turns_spin.setEnabled(is_swirl)
+        self.particle_swirl_order_combo.setEnabled(is_swirl)
 
     def _refresh_hw_dependent_options(self) -> None:
         """Grey out GL-only transitions when HW acceleration is disabled."""
@@ -898,6 +966,10 @@ class TransitionsTab(QWidget):
                 'swirl_turns': self.particle_swirl_turns_spin.value(),
                 'use_3d_shading': self.particle_3d_check.isChecked(),
                 'texture_mapping': self.particle_texture_check.isChecked(),
+                'wobble': self.particle_wobble_check.isChecked(),
+                'gloss_size': float(self.particle_gloss_spin.value()),
+                'light_direction': self.particle_light_combo.currentIndex(),
+                'swirl_order': self.particle_swirl_order_combo.currentIndex(),
             },
             'durations': dict(self._duration_by_type),
             'pool': dict(self._pool_by_type),

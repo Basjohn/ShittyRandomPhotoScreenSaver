@@ -26,9 +26,9 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 # Default watchdog timeout for transitions
-# Must be longer than the longest transition duration (currently 8.1s for Ripple/Raindrops)
+# Must be longer than the longest transition duration (15s max)
 # Plus buffer for initialization and cleanup
-TRANSITION_WATCHDOG_DEFAULT_SEC = 14.0
+TRANSITION_WATCHDOG_DEFAULT_SEC = 18.0
 
 
 class TransitionController(QObject):

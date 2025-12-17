@@ -1102,13 +1102,17 @@ class GLCompositorWidget(QOpenGLWidget):
         swirl_turns: float = 2.0,
         use_3d_shading: bool = True,
         texture_mapping: bool = True,
+        wobble: bool = False,
+        gloss_size: float = 64.0,
+        light_direction: int = 0,
+        swirl_order: int = 0,
         seed: Optional[float] = None,
     ) -> Optional[str]:
         """Begin a particle transition using the compositor.
         
         Args:
             mode: 0=Directional, 1=Swirl
-            direction: 0=L→R, 1=R→L, 2=T→B, 3=B→T, 4-7=diagonals
+            direction: 0-7=directions, 8=random, 9=random placement
             particle_radius: Base particle radius in pixels
             overlap: Overlap in pixels to avoid gaps
             trail_length: Trail length as fraction of particle size
@@ -1142,6 +1146,10 @@ class GLCompositorWidget(QOpenGLWidget):
             swirl_turns=max(0.5, swirl_turns),
             use_3d_shading=use_3d_shading,
             texture_mapping=texture_mapping,
+            wobble=wobble,
+            gloss_size=max(16.0, min(128.0, gloss_size)),
+            light_direction=max(0, min(4, light_direction)),
+            swirl_order=max(0, min(2, swirl_order)),
         )
         self._pre_upload_textures(self._prepare_particle_textures)
         self._profiler.start("particle")
@@ -1554,7 +1562,8 @@ class GLCompositorWidget(QOpenGLWidget):
         try:
             # Clean up textures via texture manager
             try:
-                self._texture_manager.cleanup()
+                if self._texture_manager is not None:
+                    self._texture_manager.cleanup()
             except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to cleanup texture manager", exc_info=True)
 
@@ -2012,6 +2021,8 @@ void main() {
             return
 
         try:
+            if self._texture_manager is None:
+                return
             try:
                 if old_pixmap is not None and not old_pixmap.isNull():
                     self._texture_manager.get_or_create_texture(old_pixmap)
@@ -2033,7 +2044,8 @@ void main() {
 
     def _release_transition_textures(self) -> None:
         """Release current transition texture references via texture manager."""
-        self._texture_manager.release_transition_textures()
+        if self._texture_manager is not None:
+            self._texture_manager.release_transition_textures()
 
     def _prepare_pair_textures(self, old_pixmap: QPixmap, new_pixmap: QPixmap) -> bool:
         """Prepare texture pair via texture manager."""
@@ -2057,6 +2069,8 @@ void main() {
         if not can_use_fn():
             return False
         if self._gl_pipeline is None:
+            return False
+        if self._texture_manager is None:
             return False
         if self._texture_manager.has_transition_textures():
             return True
@@ -2237,6 +2251,8 @@ void main() {
             ("blockflip", self._blockflip, "BlockFlip"),
             ("diffuse", self._diffuse, "Diffuse"),
             ("blinds", self._blinds, "Blinds"),
+            ("crumble", self._crumble, "Crumble"),
+            ("particle", self._particle, "Particle"),
         ]
 
         active_label = None

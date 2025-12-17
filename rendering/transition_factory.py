@@ -352,7 +352,7 @@ class TransitionFactory:
         particle_settings = settings.get('particle', {}) if isinstance(settings.get('particle', {}), dict) else {}
         
         mode_str = particle_settings.get('mode', 'Directional')
-        mode = 1 if mode_str == 'Swirl' else 0
+        mode = 2 if mode_str == 'Converge' else (1 if mode_str == 'Swirl' else 0)
         
         direction_str = particle_settings.get('direction', 'Left to Right')
         direction_map = {
@@ -364,6 +364,8 @@ class TransitionFactory:
             'Top-Right to Bottom-Left': 5,
             'Bottom-Left to Top-Right': 6,
             'Bottom-Right to Top-Left': 7,
+            'Random Direction': 8,
+            'Random Placement': 9,
         }
         direction = direction_map.get(direction_str, 0)
         
@@ -375,12 +377,17 @@ class TransitionFactory:
         swirl_turns = self._safe_float(particle_settings.get('swirl_turns', 2.0), 2.0)
         use_3d_shading = SettingsManager.to_bool(particle_settings.get('use_3d_shading', True), True)
         texture_mapping = SettingsManager.to_bool(particle_settings.get('texture_mapping', True), True)
+        wobble = SettingsManager.to_bool(particle_settings.get('wobble', False), False)
+        gloss_size = self._safe_float(particle_settings.get('gloss_size', 64.0), 64.0)
+        light_direction = int(particle_settings.get('light_direction', 0))
+        swirl_order = int(particle_settings.get('swirl_order', 0))
         
         if use_compositor:
             return GLCompositorParticleTransition(
                 duration_ms, mode, direction, particle_radius, overlap,
                 trail_length, trail_strength, swirl_strength, swirl_turns,
-                use_3d_shading, texture_mapping
+                use_3d_shading, texture_mapping, wobble, gloss_size,
+                light_direction, swirl_order
             )
         return CrossfadeTransition(duration_ms)
     

@@ -70,7 +70,7 @@ uniform float u_progress;
 uniform vec2 u_resolution;
 uniform float u_seed;
 uniform float u_mode;           // 0=Directional, 1=Swirl
-uniform float u_direction;      // 0=L→R, 1=R→L, 2=T→B, 3=B→T, 4-7=diagonals
+uniform float u_direction;      // 0-7=directions, 8=random, 9=random placement
 uniform float u_particle_radius; // Base radius in pixels
 uniform float u_overlap;        // Overlap in pixels
 uniform float u_trail_length;   // Trail length fraction
@@ -79,10 +79,19 @@ uniform float u_swirl_strength; // Swirl angular component
 uniform float u_swirl_turns;    // Spiral turns
 uniform float u_use_3d;         // 3D shading flag
 uniform float u_texture_map;    // Texture mapping flag
+uniform float u_wobble;         // Per-particle wobble enable
+uniform float u_gloss_size;     // Specular highlight size (higher = smaller/sharper)
+uniform float u_light_dir;      // Light direction: 0=TL, 1=TR, 2=Center, 3=BL, 4=BR
+uniform float u_swirl_order;    // 0=Typical, 1=Center Outward, 2=Edges Inward
 
 // Constants
 const float PI = 3.14159265359;
-const vec3 LIGHT_DIR = normalize(vec3(0.3, 0.3, 1.0));
+const float TWO_PI = 6.28318530718;
+const float SPAWN_SPREAD = 0.65;  // Particles spawn over first 65% of transition
+const float FLIGHT_TIME = 0.30;   // Each particle takes 30% of transition to arrive
+const float MAX_RADIUS_NORM = 0.707;  // sqrt(0.5) - max distance from center to corner
+const float FINAL_BLEND_START = 0.95;  // When final crossfade begins
+const float FINAL_BLEND_END = 0.995;   // When transition is complete
 
 // Hash functions for procedural randomness
 float hash1(vec2 p) {
@@ -107,8 +116,19 @@ float easeInOutQuad(float t) {
 }
 
 // Get spawn direction vector based on direction setting
-vec2 getSpawnDirection(int dir) {
+vec2 getSpawnDirection(int dir, vec2 cellUV, float seed) {
     // 0=L→R, 1=R→L, 2=T→B, 3=B→T, 4=TL→BR, 5=TR→BL, 6=BL→TR, 7=BR→TL
+    // 8=Random direction (per-transition), 9=Random placement (per-particle)
+    if (dir == 8) {
+        // Random direction - same for all particles in this transition
+        float angle = seed * 2.0 * PI;
+        return vec2(cos(angle), sin(angle));
+    }
+    if (dir == 9) {
+        // Random placement - each particle from random direction
+        float angle = hash1(cellUV * 100.0 + seed) * 2.0 * PI;
+        return vec2(cos(angle), sin(angle));
+    }
     if (dir == 0) return vec2(-1.0, 0.0);  // From left
     if (dir == 1) return vec2(1.0, 0.0);   // From right
     if (dir == 2) return vec2(0.0, -1.0);  // From top
@@ -122,7 +142,12 @@ vec2 getSpawnDirection(int dir) {
 // Calculate order key for stacking (determines when particle arrives)
 float getOrderKey(vec2 cellUV, int dir, float seed) {
     float rand = hash1(cellUV * 100.0 + seed);
-    float jitter = rand * 0.15;  // Small randomness in arrival
+    float jitter = rand * 0.12;  // Small randomness in arrival
+    
+    // Random direction/placement: use random order
+    if (dir == 8 || dir == 9) {
+        return rand;  // Fully random arrival order
+    }
     
     // For directional modes, order by position along direction
     if (dir == 0) return cellUV.x + jitter;           // L→R: left arrives first
@@ -135,55 +160,127 @@ float getOrderKey(vec2 cellUV, int dir, float seed) {
     return ((1.0 - cellUV.x) + (1.0 - cellUV.y)) * 0.5 + jitter;
 }
 
-// Calculate swirl order key
-float getSwirlOrderKey(vec2 cellUV, float swirlTurns, float seed) {
+// Calculate swirl order key based on build order setting
+float getSwirlOrderKey(vec2 cellUV, float swirlTurns, float seed, int swirlOrder) {
     vec2 center = vec2(0.5, 0.5);
     vec2 delta = cellUV - center;
     float r = length(delta);
     float theta = atan(delta.y, delta.x);
-    float thetaNorm = (theta + PI) / (2.0 * PI);
-    float rNorm = r / 0.707;  // Normalize by max distance to corner
-    
-    // Spiral order: combine angle and radius
-    float order = fract(thetaNorm + swirlTurns * rNorm);
+    float thetaNorm = (theta + PI) / TWO_PI;
+    float rNorm = clamp(r / MAX_RADIUS_NORM, 0.0, 1.0);  // Normalize and clamp
     float rand = hash1(cellUV * 100.0 + seed);
-    return order + rand * 0.1;
+    
+    if (swirlOrder == 1) {
+        // Center Outward: TRUE radial expansion from center
+        // Primary ordering is by radius - center first, edges last
+        float order = rNorm * 0.89;
+        return clamp(order, 0.0, 0.90);
+    }
+    
+    if (swirlOrder == 2) {
+        // Edges Inward: spiral from edges to center
+        // Invert radius so edges (high r) arrive first, center (low r) arrives last
+        float rInverted = 1.0 - rNorm;
+        // Gentle spiral twist
+        float spiralTwist = sin(thetaNorm * TWO_PI - rInverted * swirlTurns * TWO_PI) * 0.03;
+        float order = rInverted * 0.88 + spiralTwist;
+        return clamp(order, 0.0, 0.92) + rand * 0.02;
+    }
+    
+    // Typical (0): Smooth organic swirl with natural variation
+    // Use continuous spiral with soft randomness instead of hard dual-arm selection
+    float spiralAngle = thetaNorm + swirlTurns * rNorm;
+    // Smooth wave pattern instead of hard fract boundaries
+    float wave = (sin(spiralAngle * TWO_PI) + 1.0) * 0.5;  // 0 to 1
+    // Blend with radius for natural flow from edges
+    float order = wave * 0.5 + rNorm * 0.35 + rand * 0.08;
+    return clamp(order, 0.0, 0.92);
+}
+
+// Calculate converge order key - all edges at once, converging to center
+float getConvergeOrderKey(vec2 cellUV, float seed) {
+    vec2 center = vec2(0.5, 0.5);
+    float r = length(cellUV - center);
+    float rNorm = clamp(r / MAX_RADIUS_NORM, 0.0, 1.0);  // Clamp to valid range
+    float rand = hash1(cellUV * 100.0 + seed);
+    // Edges arrive first (low orderKey near 0), center arrives last (high orderKey near 0.9)
+    // Use pow to make center particles arrive more gradually and later
+    float centerBias = pow(1.0 - rNorm, 1.5);  // Center particles arrive much later
+    return clamp(centerBias * 0.88 + rand * 0.03, 0.0, 0.92);  // Cap so center arrives before final blend
 }
 
 // Get spawn position for a particle
-vec2 getSpawnPos(vec2 targetUV, int dir, int mode, float seed, float swirlStrength) {
-    vec2 rand = hash2(targetUV * 100.0 + seed);
+vec2 getSpawnPos(vec2 targetUV, int dir, int mode, float seed, float swirlStrength, int swirlOrder) {
+    // Use multiple hash calls for better randomization
+    vec2 rand1 = hash2(targetUV * 100.0 + seed);
+    vec2 rand2 = hash2(targetUV * 73.7 + seed * 1.3);
     
     if (mode == 1) {
-        // Swirl: spawn from edges with smooth spiral path
+        // Swirl mode - spawn position depends on swirl order
         vec2 center = vec2(0.5, 0.5);
         vec2 delta = targetUV - center;
         float r = length(delta);
-        float angle = atan(delta.y, delta.x);
+        float baseAngle = atan(delta.y, delta.x);
         
-        // Add spiral offset based on radius - creates smooth spiral inward motion
-        float spiralOffset = swirlStrength * r * 3.0;
-        angle += spiralOffset;
+        float angle;
+        if (swirlOrder == 1) {
+            angle = baseAngle;
+        } else {
+            // Add random angular offset to break grid pattern
+            float randomAngle = (rand1.x - 0.5) * PI * 0.6;
+            angle = baseAngle + randomAngle;
+            
+            // Add spiral offset
+            float spiralOffset = swirlStrength * r * 2.0;
+            angle += spiralOffset;
+        }
         
-        // Spawn from outside with some randomness to avoid grid patterns
-        float spawnDist = 1.3 + rand.x * 0.4;
-        
-        // Add slight random angular jitter to break up grid patterns
-        angle += (rand.y - 0.5) * 0.3;
-        
+        if (swirlOrder == 1) {
+            // Center Outward: spawn FROM center, fly TO target (outward)
+            // Spawn near center with slight offset for visual interest
+            float spawnDist = 0.02 + rand1.y * 0.05;
+            return center + vec2(cos(angle), sin(angle)) * spawnDist;
+        } else {
+            // Edges Inward or Typical: spawn FROM edges, fly TO target
+            float spawnDist = 0.55 + rand1.y * 0.08;
+            return center + vec2(cos(angle), sin(angle)) * spawnDist;
+        }
+    }
+    
+    if (mode == 2) {
+        // Converge: spawn from all edges, converge to center
+        vec2 center = vec2(0.5, 0.5);
+        vec2 delta = targetUV - center;
+        float baseAngle = atan(delta.y, delta.x);
+        // Add slight random angle variation
+        float angle = baseAngle + (rand1.x - 0.5) * 0.3;
+        // Spawn from edge of screen
+        float spawnDist = 0.55 + rand1.y * 0.1;
         return center + vec2(cos(angle), sin(angle)) * spawnDist;
     }
     
-    // Directional: spawn off-screen along direction
-    vec2 spawnDir = getSpawnDirection(dir);
-    float spawnDist = 1.2 + rand.x * 0.3;  // Vary spawn distance
+    // Directional: spawn at screen edge for immediate visibility
+    vec2 spawnDir = getSpawnDirection(dir, targetUV, seed);
+    // Spawn at edge (0.3-0.4) so particles enter screen immediately
+    float spawnDist = 0.3 + rand1.x * 0.1;
     vec2 perpendicular = vec2(-spawnDir.y, spawnDir.x);
-    float perpOffset = (rand.y - 0.5) * 0.1;  // Slight perpendicular jitter
+    float perpOffset = (rand1.y - 0.5) * 0.1;
     
     return targetUV - spawnDir * spawnDist + perpendicular * perpOffset;
 }
 
-// 3D ball shading with glow and reflective effects
+// Get light direction based on setting
+vec3 getLightDir(float lightSetting) {
+    int ld = int(lightSetting);
+    // 0=Top-Left, 1=Top-Right, 2=Center, 3=Bottom-Left, 4=Bottom-Right
+    if (ld == 0) return normalize(vec3(-0.4, -0.4, 1.0));  // Top-Left
+    if (ld == 1) return normalize(vec3(0.4, -0.4, 1.0));   // Top-Right
+    if (ld == 2) return normalize(vec3(0.0, 0.0, 1.0));    // Center (front)
+    if (ld == 3) return normalize(vec3(-0.4, 0.4, 1.0));   // Bottom-Left
+    return normalize(vec3(0.4, 0.4, 1.0));                  // Bottom-Right
+}
+
+// 3D ball shading with glass/reflective effects
 vec3 shade3DBall(vec2 localPos, vec3 baseColor) {
     float r2 = dot(localPos, localPos);
     if (r2 > 1.0) return baseColor;
@@ -191,34 +288,70 @@ vec3 shade3DBall(vec2 localPos, vec3 baseColor) {
     float z = sqrt(1.0 - r2);
     vec3 normal = vec3(localPos, z);
     
-    // Fresnel effect - edges glow more (rim lighting)
+    // Get configurable light direction
+    vec3 lightDir = getLightDir(u_light_dir);
+    
+    // Fresnel effect - edges are more reflective (glass-like)
     float fresnel = 1.0 - z;
-    fresnel = pow(fresnel, 2.0) * 0.6;
+    fresnel = pow(fresnel, 1.5) * 0.7;
     
-    // Diffuse lighting with softer falloff
-    float diffuse = max(dot(normal, LIGHT_DIR), 0.0);
-    diffuse = 0.35 + 0.65 * diffuse;  // Ambient + diffuse
+    // Diffuse lighting - keep base color visible
+    float diffuse = max(dot(normal, lightDir), 0.0);
+    diffuse = 0.4 + 0.6 * diffuse;
     
-    // Primary specular highlight (sharp)
+    // View direction (looking at screen)
     vec3 viewDir = vec3(0.0, 0.0, 1.0);
-    vec3 halfDir = normalize(LIGHT_DIR + viewDir);
-    float spec1 = pow(max(dot(normal, halfDir), 0.0), 64.0);
+    vec3 halfDir = normalize(lightDir + viewDir);
     
-    // Secondary specular (broader, softer glow)
-    float spec2 = pow(max(dot(normal, halfDir), 0.0), 16.0);
+    // Configurable gloss size: u_gloss_size controls sharpness (default 64, range ~16-128)
+    float glossPower = max(8.0, u_gloss_size);
     
-    // Subsurface scattering approximation - light passes through edges
-    float sss = pow(1.0 - z, 3.0) * 0.15;
-    vec3 sssColor = baseColor * 1.3;  // Brighter at edges
+    // Primary specular - sharp white highlight (glass reflection)
+    float spec1 = pow(max(dot(normal, halfDir), 0.0), glossPower * 1.5);
     
-    // Combine all lighting
+    // Secondary specular - broader highlight
+    float spec2 = pow(max(dot(normal, halfDir), 0.0), glossPower * 0.4);
+    
+    // Tertiary specular - very broad glow
+    float spec3 = pow(max(dot(normal, halfDir), 0.0), glossPower * 0.125);
+    
+    // Environment reflection approximation - reflect sky/light
+    vec3 reflectDir = reflect(-viewDir, normal);
+    float envReflect = max(0.0, reflectDir.y * 0.5 + 0.5);
+    vec3 envColor = mix(vec3(0.6, 0.7, 0.8), vec3(0.95, 0.97, 1.0), envReflect);
+    
+    // Combine lighting
     vec3 result = baseColor * diffuse;
-    result += vec3(1.0) * spec1 * 0.5;      // Sharp highlight
-    result += vec3(0.9, 0.95, 1.0) * spec2 * 0.2;  // Soft glow
-    result += sssColor * sss;               // Subsurface glow
-    result += vec3(0.8, 0.9, 1.0) * fresnel; // Rim light
+    
+    // Add reflections - glass-like appearance
+    result = mix(result, envColor, fresnel * 0.4);
+    
+    // Specular highlights
+    result += vec3(1.0) * spec1 * 0.7;
+    result += vec3(0.95, 0.97, 1.0) * spec2 * 0.25;
+    result += vec3(0.9, 0.95, 1.0) * spec3 * 0.1;
+    
+    // Rim lighting for depth
+    result += vec3(0.85, 0.9, 1.0) * fresnel * 0.3;
     
     return result;
+}
+
+// Get the expected arrival time for a pixel based on its position and mode
+float getPixelArrivalTime(vec2 pixelUV, int mode, int dir, float swirlTurns, float seed, int swirlOrder) {
+    float orderKey;
+    
+    if (mode == 1) {
+        orderKey = getSwirlOrderKey(pixelUV, swirlTurns, seed, swirlOrder);
+    } else if (mode == 2) {
+        orderKey = getConvergeOrderKey(pixelUV, seed);
+    } else {
+        // For directional, use smoother orderKey without per-pixel randomness for blend
+        orderKey = getOrderKey(pixelUV, dir, seed * 0.01);  // Reduce randomness for smoother blend
+    }
+    
+    float spawnTime = orderKey * SPAWN_SPREAD;
+    return spawnTime + FLIGHT_TIME;  // When particle arrives at this location
 }
 
 void main() {
@@ -234,7 +367,7 @@ void main() {
         return;
     }
     // At end, show new image cleanly
-    if (t >= 0.999) {
+    if (t >= FINAL_BLEND_END) {
         FragColor = newColor;
         return;
     }
@@ -258,15 +391,22 @@ void main() {
     int mode = int(u_mode);
     int dir = int(u_direction);
     
-    // Start with old image, particles will cover it
-    vec3 finalColor = oldColor.rgb;
+    // POSITION-AWARE BACKGROUND BLEND: Only blend background after particles should have arrived
+    // This prevents the center from crossfading before particles reach it in Converge mode
+    float pixelArrival = getPixelArrivalTime(uv, mode, dir, u_swirl_turns, u_seed, int(u_swirl_order));
+    // Background starts blending ONLY AFTER particle arrives at this location
+    // For Converge mode, delay center blend even more to ensure particles are visible
+    float bgBlendStart = pixelArrival;
+    float bgBlendDuration = (mode == 2) ? 0.05 : 0.10;  // Shorter blend for Converge
+    float bgBlendEnd = min(pixelArrival + bgBlendDuration, FINAL_BLEND_START);
+    float bgBlend = smoothstep(bgBlendStart, bgBlendEnd, t);
+    vec3 finalColor = mix(oldColor.rgb, newColor.rgb, bgBlend);
     float coverage = 0.0;
     
     // Find which cell this pixel is in
     vec2 cellId = floor(uv / vec2(cellW, cellH));
     
     // Search neighborhood for particles that might cover this pixel
-    // Particles move, so we need to check nearby cells
     int searchRange = 3;
     
     for (int dy = -searchRange; dy <= searchRange; dy++) {
@@ -280,48 +420,63 @@ void main() {
             // Cell center (target position)
             vec2 targetUV = (checkCell + 0.5) * vec2(cellW, cellH);
             
+            // Per-particle random values for wobble
+            vec2 particleRand = hash2(targetUV * 50.0 + u_seed * 2.0);
+            
             // Get particle timing
             float orderKey;
             if (mode == 1) {
-                orderKey = getSwirlOrderKey(targetUV, u_swirl_turns, u_seed);
+                orderKey = getSwirlOrderKey(targetUV, u_swirl_turns, u_seed, int(u_swirl_order));
+            } else if (mode == 2) {
+                orderKey = getConvergeOrderKey(targetUV, u_seed);
             } else {
                 orderKey = getOrderKey(targetUV, dir, u_seed);
             }
             
-            // Stagger arrival times - all particles should arrive by t=1.0
-            float spawnSpread = 0.5;  // Particles spawn over 50% of duration
-            float flightTime = 0.5;   // Each particle takes 50% of duration to arrive
-            float spawnTime = orderKey * spawnSpread;
-            float arrivalTime = spawnTime + flightTime;
+            // TIMING: Use global constants for consistent timing
+            float spawnTime = orderKey * SPAWN_SPREAD;
+            float arrivalTime = spawnTime + FLIGHT_TIME;
             
             // Calculate local progress for this particle
-            float tLocal = (t - spawnTime) / flightTime;
+            float tLocal = (t - spawnTime) / FLIGHT_TIME;
             tLocal = clamp(tLocal, 0.0, 1.0);
             
             // Skip if particle hasn't spawned yet
             if (tLocal <= 0.0) continue;
             
             // Get spawn position
-            vec2 spawnPos = getSpawnPos(targetUV, dir, mode, u_seed, u_swirl_strength);
+            vec2 spawnPos = getSpawnPos(targetUV, dir, mode, u_seed, u_swirl_strength, int(u_swirl_order));
             
             // Interpolate position with easing
             float easedT = easeOutCubic(tLocal);
             vec2 currentPos = mix(spawnPos, targetUV, easedT);
             
+            // Per-particle wobble (optional, uses particle's own random values)
+            if (u_wobble > 0.5 && tLocal >= 1.0 && t < 0.92) {
+                float timeSinceArrival = t - arrivalTime;
+                // Each particle has unique phase and frequency
+                float phase = particleRand.x * 6.28;
+                float freq = 15.0 + particleRand.y * 10.0;
+                float decay = exp(-timeSinceArrival * 6.0);
+                // X and Y wobble independently
+                float wobbleX = sin(timeSinceArrival * freq + phase) * decay;
+                float wobbleY = sin(timeSinceArrival * freq * 1.3 + phase + 1.5) * decay;
+                vec2 wobbleOffset = vec2(wobbleX, wobbleY) * 0.004 * radiusUVx;
+                currentPos += wobbleOffset;
+            }
+            
             // Distance from pixel to particle center (normalized to particle radius)
             vec2 delta = uv - currentPos;
-            // Normalize delta by particle radius in each dimension
             vec2 normalizedDelta = vec2(delta.x / radiusUVx, delta.y / radiusUVy);
             float dist = length(normalizedDelta);
             
-            // Check if pixel is inside particle (dist < 1.0 means inside)
+            // Check if pixel is inside particle
             if (dist < 1.0) {
                 // Inside particle - sample new image
                 vec2 sampleUV = targetUV;
                 
                 if (u_texture_map > 0.5) {
-                    // Map texture with curvature for 3D effect
-                    vec2 localPos = normalizedDelta;  // Already normalized to [-1, 1]
+                    vec2 localPos = normalizedDelta;
                     if (u_use_3d > 0.5) {
                         float z = sqrt(max(0.0, 1.0 - dot(localPos, localPos)));
                         sampleUV = targetUV + localPos * vec2(radiusUVx, radiusUVy) * 0.3 * (1.0 - z);
@@ -330,19 +485,29 @@ void main() {
                 sampleUV = clamp(sampleUV, vec2(0.0), vec2(1.0));
                 vec3 particleColor = texture(uNewTex, sampleUV).rgb;
                 
-                // Apply 3D shading if enabled
+                // SEQUENTIAL FADE: Each particle fades based on its own arrival time
+                // Early arrivers start fading first, creating a wave effect
+                float fadeStart = arrivalTime + 0.08;  // Wait 8% after arrival before fading
+                float fadeEnd = min(fadeStart + 0.20, 0.95);  // Fade over 20% duration
+                float particleFade = smoothstep(fadeStart, fadeEnd, t);
+                
+                // Apply 3D shading, reduced as particle fades
                 if (u_use_3d > 0.5) {
                     vec2 localPos = normalizedDelta;
-                    particleColor = shade3DBall(localPos, particleColor);
+                    vec3 shadedColor = shade3DBall(localPos, particleColor);
+                    // Blend from full 3D to flat as we fade
+                    particleColor = mix(shadedColor, particleColor, particleFade * 0.7);
                 }
                 
-                // Soft edge (dist is already normalized, so 0.85-1.0 range)
+                // Soft edge
                 float edge = 1.0 - smoothstep(0.85, 1.0, dist);
                 
-                // Blend with existing color (later particles on top)
-                float alpha = edge;
-                finalColor = mix(finalColor, particleColor, alpha);
-                coverage = max(coverage, alpha);
+                // Particle alpha decreases as it fades into the image
+                float particleAlpha = edge * (1.0 - particleFade * 0.85);
+                
+                // Blend particle with background (which is already transitioning to new image)
+                finalColor = mix(finalColor, particleColor, particleAlpha);
+                coverage = max(coverage, particleAlpha);
             }
             
             // Motion trail
@@ -378,6 +543,12 @@ void main() {
         }
     }
     
+    // FINAL CROSSFADE: Ensure perfect finish to new image
+    // Only start final blend after ALL particles should have arrived (t > 0.95)
+    // This prevents any premature crossfade artifacts
+    float finalBlend = smoothstep(FINAL_BLEND_START, FINAL_BLEND_END, t);
+    finalColor = mix(finalColor, newColor.rgb, finalBlend);
+    
     FragColor = vec4(finalColor, 1.0);
 }
 """
@@ -392,7 +563,8 @@ void main() {
             "uOldTex", "uNewTex", "u_progress", "u_resolution", "u_seed",
             "u_mode", "u_direction", "u_particle_radius", "u_overlap",
             "u_trail_length", "u_trail_strength", "u_swirl_strength",
-            "u_swirl_turns", "u_use_3d", "u_texture_map",
+            "u_swirl_turns", "u_use_3d", "u_texture_map", "u_wobble",
+            "u_gloss_size", "u_light_dir", "u_swirl_order",
         ]
         
         for name in uniform_names:
@@ -459,6 +631,14 @@ void main() {
                 gl.glUniform1f(uniforms["u_use_3d"], 1.0 if state.use_3d_shading else 0.0)
             if uniforms.get("u_texture_map", -1) >= 0:
                 gl.glUniform1f(uniforms["u_texture_map"], 1.0 if state.texture_mapping else 0.0)
+            if uniforms.get("u_wobble", -1) >= 0:
+                gl.glUniform1f(uniforms["u_wobble"], 1.0 if getattr(state, 'wobble', False) else 0.0)
+            if uniforms.get("u_gloss_size", -1) >= 0:
+                gl.glUniform1f(uniforms["u_gloss_size"], getattr(state, 'gloss_size', 64.0))
+            if uniforms.get("u_light_dir", -1) >= 0:
+                gl.glUniform1f(uniforms["u_light_dir"], float(getattr(state, 'light_direction', 0)))
+            if uniforms.get("u_swirl_order", -1) >= 0:
+                gl.glUniform1f(uniforms["u_swirl_order"], float(getattr(state, 'swirl_order', 0)))
             
             # Draw fullscreen quad
             self._draw_fullscreen_quad(quad_vao)

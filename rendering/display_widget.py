@@ -72,7 +72,7 @@ logger = get_logger(__name__)
 win_diag_logger = logging.getLogger("win_diag")
 
 
-TRANSITION_WATCHDOG_DEFAULT_SEC = 6.0
+TRANSITION_WATCHDOG_DEFAULT_SEC = 18.0
 _FULLSCREEN_COMPAT_WORKAROUND = True
 
 
