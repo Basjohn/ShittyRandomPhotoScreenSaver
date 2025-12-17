@@ -201,6 +201,19 @@ class RedditWidget(BaseOverlayWidget):
         """Initialise widget appearance and layout."""
         # Use base class styling setup
         self._apply_base_styling()
+        
+        # Apply dark themed tooltip styling for this widget
+        self.setStyleSheet(self.styleSheet() + """
+            QToolTip {
+                background-color: rgba(32, 32, 32, 230);
+                color: rgba(255, 255, 255, 255);
+                border: 1px solid rgba(255, 255, 255, 200);
+                border-radius: 4px;
+                padding: 5px 10px;
+                font-family: 'Segoe UI';
+                font-size: 11px;
+            }
+        """)
 
         self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         try:

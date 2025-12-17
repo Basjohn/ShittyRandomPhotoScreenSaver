@@ -8518,3 +8518,41 @@
 2025-12-17 08:49:42 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=71.34ms, min=-1.53ms, max=451.40ms
 2025-12-17 08:49:47 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=29624.4ms, frames=1466, avg_fps=49.5, dt_min=11.12ms, dt_max=68.45ms, bar_count=15
 2025-12-17 08:49:47 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=48.51ms, min=-1.58ms, max=451.40ms
+2025-12-17 09:11:20 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-17 09:11:24 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-17 09:11:24 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-17 09:11:25 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=4501.8ms, frames=181, avg_fps=40.2, dt_min=11.29ms, dt_max=94.69ms, bar_count=15
+2025-12-17 09:11:25 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=48.29ms, min=-1.56ms, max=188.43ms
+2025-12-17 09:11:30 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=9516.6ms, frames=477, avg_fps=50.1, dt_min=11.29ms, dt_max=94.69ms, bar_count=15
+2025-12-17 09:11:35 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=14524.6ms, frames=783, avg_fps=53.9, dt_min=11.29ms, dt_max=94.69ms, bar_count=15
+2025-12-17 09:11:40 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=1773.8ms, frames=74, avg_fps=41.7, dt_min=12.25ms, dt_max=98.81ms, bar_count=15
+2025-12-17 09:11:45 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=6781.5ms, frames=383, avg_fps=56.5, dt_min=12.25ms, dt_max=98.81ms, bar_count=15
+2025-12-17 09:11:45 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=15.78ms, min=-1.56ms, max=188.43ms
+2025-12-17 09:11:50 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=11790.5ms, frames=696, avg_fps=59.0, dt_min=12.25ms, dt_max=98.81ms, bar_count=15
+2025-12-17 09:11:55 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=16798.5ms, frames=1009, avg_fps=60.1, dt_min=12.25ms, dt_max=98.81ms, bar_count=15
+2025-12-17 09:12:00 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=21805.9ms, frames=1322, avg_fps=60.6, dt_min=12.25ms, dt_max=98.81ms, bar_count=15
+2025-12-17 09:12:05 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=26815.1ms, frames=1635, avg_fps=61.0, dt_min=12.25ms, dt_max=98.81ms, bar_count=15
+2025-12-17 09:12:10 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=31821.8ms, frames=1948, avg_fps=61.2, dt_min=12.25ms, dt_max=98.81ms, bar_count=15
+2025-12-17 09:12:15 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=156.0ms, frames=4, avg_fps=25.6, dt_min=15.02ms, dt_max=96.16ms, bar_count=15
+2025-12-17 09:12:15 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=44.77ms, min=-1.56ms, max=188.43ms
+2025-12-17 09:12:20 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=3251.8ms, frames=166, avg_fps=51.0, dt_min=11.58ms, dt_max=76.42ms, bar_count=15
+2025-12-17 09:12:20 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=106.63ms, min=-1.56ms, max=188.43ms
+2025-12-17 09:12:25 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=8261.3ms, frames=432, avg_fps=52.3, dt_min=11.58ms, dt_max=76.42ms, bar_count=15
+2025-12-17 09:12:30 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=13267.8ms, frames=711, avg_fps=53.6, dt_min=11.55ms, dt_max=76.42ms, bar_count=15
+2025-12-17 09:12:35 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=18277.3ms, frames=984, avg_fps=53.8, dt_min=11.20ms, dt_max=76.42ms, bar_count=15
+2025-12-17 09:12:40 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=1152.5ms, frames=51, avg_fps=44.3, dt_min=12.61ms, dt_max=77.46ms, bar_count=15
+2025-12-17 09:12:46 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=6211.4ms, frames=236, avg_fps=38.0, dt_min=12.24ms, dt_max=97.70ms, bar_count=15
+2025-12-17 09:12:46 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=80.67ms, min=-1.56ms, max=188.43ms
+2025-12-17 09:12:51 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=2264.8ms, frames=103, avg_fps=45.5, dt_min=11.83ms, dt_max=71.43ms, bar_count=15
+2025-12-17 09:12:56 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=7306.6ms, frames=316, avg_fps=43.2, dt_min=11.83ms, dt_max=92.07ms, bar_count=15
+2025-12-17 09:12:56 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=49.88ms, min=-1.56ms, max=211.23ms
+2025-12-17 09:13:01 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=4270.6ms, frames=189, avg_fps=44.3, dt_min=11.69ms, dt_max=93.75ms, bar_count=15
+2025-12-17 09:13:01 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=105.80ms, min=-1.56ms, max=287.55ms
+2025-12-17 09:13:06 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=3049.5ms, frames=143, avg_fps=46.9, dt_min=11.20ms, dt_max=80.40ms, bar_count=15
+2025-12-17 09:13:11 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=1083.4ms, frames=40, avg_fps=36.9, dt_min=12.86ms, dt_max=94.67ms, bar_count=15
+2025-12-17 09:13:15 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-17 09:13:15 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-17 09:13:17 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=5010.7ms, frames=180, avg_fps=35.9, dt_min=11.12ms, dt_max=82.04ms, bar_count=15
+2025-12-17 09:13:22 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=10025.4ms, frames=489, avg_fps=48.8, dt_min=11.12ms, dt_max=82.04ms, bar_count=15
+2025-12-17 09:13:27 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=15033.1ms, frames=793, avg_fps=52.8, dt_min=11.12ms, dt_max=82.04ms, bar_count=15
+2025-12-17 09:13:32 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=20040.7ms, frames=1088, avg_fps=54.3, dt_min=11.12ms, dt_max=82.04ms, bar_count=15

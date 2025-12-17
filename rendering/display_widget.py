@@ -2520,6 +2520,22 @@ class DisplayWidget(QWidget):
                                 )
                         except Exception:
                             pass
+                        # Restore halo after menu closes if still in hard_exit or Ctrl mode
+                        try:
+                            hard_exit = False
+                            if self.settings_manager:
+                                hard_exit = SettingsManager.to_bool(
+                                    self.settings_manager.get("input.hard_exit", False), False
+                                )
+                            if hard_exit or self._coordinator.ctrl_held:
+                                # Re-show halo at current cursor position
+                                global_pos = QCursor.pos()
+                                local_pos = self.mapFromGlobal(global_pos)
+                                if self.rect().contains(local_pos):
+                                    self._coordinator.set_halo_owner(self)
+                                    self._show_ctrl_cursor_hint(local_pos, mode="fade_in")
+                        except Exception:
+                            pass
 
                     self._context_menu.aboutToHide.connect(_on_menu_hide)
                     setattr(self, "_context_menu_hide_connected", True)

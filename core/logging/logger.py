@@ -560,6 +560,13 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
         "gui.tabs",
         "gui.settings_dialog",
         "gui.main_window",
+        # Resource manager - logs on every registration/cleanup
+        "resources.manager",
+        "core.resources.manager",
+        # Multi-monitor coordinator - logs halo owner on every check
+        "rendering.multi_monitor_coordinator",
+        # RSS source - logs every feed parse
+        "sources.rss_source",
     )
     internal_noisy_level = logging.DEBUG if verbose else logging.INFO
     for name in NOISY_INTERNAL_MODULES:
