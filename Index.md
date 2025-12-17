@@ -121,6 +121,9 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - DisplayMode enum and helpers
 - rendering/gl_programs/
   - Per-transition shader program helpers that encapsulate GLSL source, compilation, uniform caching, and draw logic.
+  - `program_cache.py`: `GLProgramCache` singleton for centralized lazy-loading of shader programs. Replaces 10+ module-level globals with single cache class.
+  - `geometry_manager.py`: `GLGeometryManager` singleton for VAO/VBO management. Handles quad and box mesh creation/cleanup.
+  - `texture_manager.py`: `GLTextureManager` singleton for texture upload, caching (LRU), and PBO pooling for async DMA transfers.
   - `base_program.py`: `BaseGLProgram` ABC with shared vertex shader and compilation helpers.
   - `peel_program.py`: `PeelProgram` for the Peel transition GLSL.
   - `blockflip_program.py`: `BlockFlipProgram` for the BlockFlip transition GLSL.
@@ -132,6 +135,16 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - `warp_program.py`: `WarpProgram` for the Warp Dissolve transition GLSL.
   - `raindrops_program.py`: `RaindropsProgram` for the Raindrops/Ripple transition GLSL.
   - `crumble_program.py`: `CrumbleProgram` for the Crumble transition GLSL (Voronoi crack pattern with falling pieces).
+- rendering/gl_transition_renderer.py
+  - `GLTransitionRenderer`: Centralized transition rendering for GL compositor. Handles both shader-based (Group A) and QPainter-based (Group B) transition rendering.
+  - **Phase E Relevance**: Isolates overlay visuals from base-image rendering, enables future shader-backed shadow implementations (Option A from CONTEXT_CACHE_CORRUPTION.md).
+  - **Methods**: `render_simple_shader()`, `render_blockspin_shader()`, `render_slide_shader()`, `render_*_fallback()` for QPainter paths.
+- rendering/gl_error_handler.py
+  - `GLErrorHandler`: Centralized GL error handling with session-level fallback policy (Group A→B→C).
+  - `GLCapabilityLevel`: Enum for capability levels (FULL_SHADERS, COMPOSITOR_ONLY, SOFTWARE_ONLY).
+  - `GLErrorState`: Dataclass tracking GL error state for fallback decisions.
+  - **Features**: Software GL detection, shader failure tracking, capability demotion logging.
+  - **Singleton**: `get_gl_error_handler()` returns shared instance.
 - rendering/gl_profiler.py
   - `TransitionProfiler`: centralized profiling helper for GL compositor transitions. Tracks frame timing, min/max frame durations, and emits PERF logs. All compositor transitions (Slide, Wipe, Peel, BlockSpin, Warp, Raindrops, BlockFlip, Diffuse, Blinds) now use this single profiler instance instead of per-transition profiling fields.
 - rendering/transition_state.py

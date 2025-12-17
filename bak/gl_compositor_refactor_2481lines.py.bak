@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field  # Still needed for _GLPipelineState
 from typing import Optional, Callable
+import math
 import ctypes
 import time
 
@@ -27,7 +28,7 @@ from core.animation.animator import AnimationManager
 from core.animation.frame_interpolator import FrameState
 from rendering.gl_format import apply_widget_surface_format
 from rendering.gl_profiler import TransitionProfiler
-from transitions.wipe_transition import WipeDirection
+from transitions.wipe_transition import WipeDirection, _compute_wipe_region
 from transitions.slide_transition import SlideDirection
 from core.resources.manager import ResourceManager
 from rendering.transition_state import (
@@ -62,8 +63,6 @@ except Exception:  # pragma: no cover - PyOpenGL not required for CPU paths
 from rendering.gl_programs.program_cache import get_program_cache, cleanup_program_cache, GLProgramCache
 from rendering.gl_programs.geometry_manager import get_geometry_manager
 from rendering.gl_programs.texture_manager import get_texture_manager
-from rendering.gl_transition_renderer import GLTransitionRenderer
-from rendering.gl_error_handler import get_gl_error_handler
 
 
 def _get_peel_program():
@@ -265,34 +264,8 @@ class GLCompositorWidget(QOpenGLWidget):
         self._use_shaders: bool = False
         self._gl_disabled_for_session: bool = False
         
-        # Centralized error handler for session-level fallback policy
-        self._error_handler = get_gl_error_handler()
-        
         # Texture management delegated to centralized manager
         self._texture_manager = get_texture_manager()
-        
-        # Transition rendering delegated to centralized renderer
-        self._transition_renderer = GLTransitionRenderer(
-            compositor=self,
-            get_pipeline=lambda: self._gl_pipeline,
-            get_texture_manager=lambda: self._texture_manager,
-            get_profiler=lambda: self._profiler,
-            get_viewport_size=self._get_viewport_size,
-            get_render_progress=lambda fallback: self._get_render_progress(fallback=fallback),
-        )
-        # Set program getters after init
-        self._transition_renderer.set_program_getters({
-            "peel": _get_peel_program,
-            "blockflip": _get_blockflip_program,
-            "crossfade": _get_crossfade_program,
-            "blinds": _get_blinds_program,
-            "diffuse": _get_diffuse_program,
-            "slide": _get_slide_program,
-            "wipe": _get_wipe_program,
-            "warp": _get_warp_program,
-            "raindrops": _get_raindrops_program,
-            "crumble": _get_crumble_program,
-        })
 
         # Optional ResourceManager hook so higher-level code can track this
         # compositor as a GUI resource. Individual GL object lifetimes remain
@@ -1309,11 +1282,18 @@ class GLCompositorWidget(QOpenGLWidget):
                         version_str or "?",
                     )
 
-                    # Record GL info in centralized error handler for session-level tracking
-                    self._error_handler.record_gl_info(vendor or "", renderer or "", version_str or "")
-                    
-                    # Check if error handler detected software GL and demoted capability
-                    if self._error_handler.is_software_gl:
+                    combo = f"{vendor} {renderer}".lower()
+                    software_markers = (
+                        "gdi generic",
+                        "microsoft basic render driver",
+                        "software rasterizer",
+                        "llvmpipe",
+                    )
+                    if any(m in combo for m in software_markers):
+                        logger.warning(
+                            "[GL COMPOSITOR] Software OpenGL implementation detected; "
+                            "disabling shader pipeline for this session"
+                        )
                         self._gl_disabled_for_session = True
                         self._use_shaders = False
                 except Exception:
@@ -2026,87 +2006,231 @@ void main() {
         return self._cached_viewport
 
     def _paint_blockspin_shader(self, target: QRect) -> None:
-        """Render BlockSpin transition - delegates to GLTransitionRenderer."""
-        if gl is None:
-            return
+        """Render 3D Block Spin transition.
+        
+        PERFORMANCE OPTIMIZED: Uses module-level easing function and avoids
+        per-frame list comprehensions.
+        """
         if not self._can_use_blockspin_shader() or self._gl_pipeline is None or self._blockspin is None:
-            return
-        if not self._blockspin.old_pixmap or self._blockspin.old_pixmap.isNull() or not self._blockspin.new_pixmap or self._blockspin.new_pixmap.isNull():
             return
         if not self._prepare_blockspin_textures():
             return
-        self._transition_renderer.render_blockspin_shader(target, self._blockspin)
+
+        vp_w, vp_h = self._get_viewport_size()
+        w = max(1, target.width())
+        h = max(1, target.height())
+
+        st = self._blockspin
+        base_p = st.progress  # Already 0..1 float, no conversion needed
+
+        aspect = w / h  # Python 3 division is float by default
+
+        gl.glViewport(0, 0, vp_w, vp_h)
+        # Enable depth testing so the front face of the slab properly occludes
+        # the back face; this avoids seeing both images blended through each
+        # other mid-spin.
+        gl.glEnable(gl.GL_DEPTH_TEST)
+        gl.glDepthMask(gl.GL_TRUE)
+
+        # Clear to a mathematically black background so the spinning slab and
+        # its rim/sheens stand out crisply against the void.
+        gl.glClearColor(0.0, 0.0, 0.0, 1.0)
+        gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
+
+        # Then draw the rotating slab (box) on top using the card-flip program.
+        gl.glUseProgram(self._gl_pipeline.basic_program)
+        try:
+            if self._gl_pipeline.u_aspect_loc != -1:
+                gl.glUniform1f(self._gl_pipeline.u_aspect_loc, float(aspect))
+
+            axis_mode = 0
+            if st.direction in (SlideDirection.UP, SlideDirection.DOWN):
+                axis_mode = 1
+            if self._gl_pipeline.u_axis_mode_loc != -1:
+                gl.glUniform1i(self._gl_pipeline.u_axis_mode_loc, int(axis_mode))
+
+            # Specular line travel direction: by default move from left edge
+            # to right edge over the course of the spin; flip for RIGHT/DOWN
+            # directions so the line traverses in the opposite sense.
+            spin_dir = 1.0
+            if st.direction in (SlideDirection.RIGHT, SlideDirection.DOWN):
+                spin_dir = -1.0
+            if self._gl_pipeline.u_spec_dir_loc != -1:
+                gl.glUniform1f(self._gl_pipeline.u_spec_dir_loc, float(spin_dir))
+
+            # Bind textures.
+            if self._gl_pipeline.u_old_tex_loc != -1:
+                gl.glActiveTexture(gl.GL_TEXTURE0)
+                gl.glBindTexture(gl.GL_TEXTURE_2D, self._texture_manager.old_tex_id)
+                gl.glUniform1i(self._gl_pipeline.u_old_tex_loc, 0)
+            if self._gl_pipeline.u_new_tex_loc != -1:
+                gl.glActiveTexture(gl.GL_TEXTURE1)
+                gl.glBindTexture(gl.GL_TEXTURE_2D, self._texture_manager.new_tex_id)
+                gl.glUniform1i(self._gl_pipeline.u_new_tex_loc, 1)
+
+            # Single full-frame slab. Direction is applied as a sign on the
+            # spin so LEFT/RIGHT and UP/DOWN produce mirrored rotations while
+            # still ending on the same final orientation.
+            spin = _blockspin_spin_from_progress(base_p)
+            angle = math.pi * spin * spin_dir
+            
+            # PERFORMANCE: Inlined _draw_slab to avoid per-frame nested function
+            # and list comprehensions. Values are already floats.
+            if self._gl_pipeline.u_angle_loc != -1:
+                gl.glUniform1f(self._gl_pipeline.u_angle_loc, angle)
+            if self._gl_pipeline.u_block_rect_loc != -1:
+                gl.glUniform4f(self._gl_pipeline.u_block_rect_loc, -1.0, -1.0, 1.0, 1.0)
+            if self._gl_pipeline.u_block_uv_rect_loc != -1:
+                gl.glUniform4f(self._gl_pipeline.u_block_uv_rect_loc, 0.0, 0.0, 1.0, 1.0)
+
+            # Prefer the dedicated box mesh for a true 3D slab; fall back to
+            # the fullscreen quad if the box geometry was not created.
+            box_vao = getattr(self._gl_pipeline, "box_vao", 0)
+            box_count = getattr(self._gl_pipeline, "box_vertex_count", 0)
+            if box_vao and box_count > 0:
+                gl.glBindVertexArray(box_vao)
+                gl.glDrawArrays(gl.GL_TRIANGLES, 0, box_count)
+                gl.glBindVertexArray(0)
+            else:
+                gl.glBindVertexArray(self._gl_pipeline.quad_vao)
+                gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+                gl.glBindVertexArray(0)
+        finally:
+            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
+            gl.glActiveTexture(gl.GL_TEXTURE0)
+            gl.glUseProgram(0)
+            # CRITICAL: Disable depth testing after BlockSpin so subsequent draws
+            # (dimming overlay, Spotify visualizer) are not depth-culled against
+            # the 3D slab geometry. This was causing the dimming overlay to glitch.
+            gl.glDisable(gl.GL_DEPTH_TEST)
+            gl.glDepthMask(gl.GL_FALSE)
 
     def _paint_peel_shader(self, target: QRect) -> None:
         self._render_simple_shader(
             self._can_use_peel_shader, self._peel, self._prepare_peel_textures,
-            "peel_program", "peel_uniforms", "peel"
+            "peel_program", "peel_uniforms", _get_peel_program
         )
 
     def _paint_crumble_shader(self, target: QRect) -> None:
         self._render_simple_shader(
             self._can_use_crumble_shader, self._crumble, self._prepare_crumble_textures,
-            "crumble_program", "crumble_uniforms", "crumble"
+            "crumble_program", "crumble_uniforms", _get_crumble_program
         )
 
     def _render_simple_shader(
-        self, can_use_fn, state, prep_fn, program_attr: str, uniforms_attr: str, helper_name: str
+        self, can_use_fn, state, prep_fn, program_attr: str, uniforms_attr: str, helper_fn
     ) -> None:
-        """Generic shader render - delegates to GLTransitionRenderer."""
-        self._transition_renderer.render_simple_shader(
-            can_use_fn, state, prep_fn, program_attr, uniforms_attr, helper_name
+        """Generic shader render for simple fullscreen quad transitions."""
+        if not can_use_fn() or self._gl_pipeline is None or state is None:
+            return
+        if not state.old_pixmap or state.old_pixmap.isNull() or not state.new_pixmap or state.new_pixmap.isNull():
+            return
+        if not prep_fn():
+            return
+        vp_w, vp_h = self._get_viewport_size()
+        helper_fn().render(
+            program=getattr(self._gl_pipeline, program_attr),
+            uniforms=getattr(self._gl_pipeline, uniforms_attr),
+            viewport=(vp_w, vp_h),
+            old_tex=self._texture_manager.old_tex_id,
+            new_tex=self._texture_manager.new_tex_id,
+            state=state,
+            quad_vao=self._gl_pipeline.quad_vao,
         )
 
     def _paint_blinds_shader(self, target: QRect) -> None:
         self._render_simple_shader(
             self._can_use_blinds_shader, self._blinds, self._prepare_blinds_textures,
-            "blinds_program", "blinds_uniforms", "blinds"
+            "blinds_program", "blinds_uniforms", _get_blinds_program
         )
 
     def _paint_wipe_shader(self, target: QRect) -> None:
         self._render_simple_shader(
             self._can_use_wipe_shader, self._wipe, self._prepare_wipe_textures,
-            "wipe_program", "wipe_uniforms", "wipe"
+            "wipe_program", "wipe_uniforms", _get_wipe_program
         )
 
     def _paint_slide_shader(self, target: QRect) -> None:
-        """Render Slide transition - delegates to GLTransitionRenderer."""
+        """Render Slide transition using the SlideProgram helper.
+        
+        PERFORMANCE OPTIMIZED: Uses pre-computed float coordinates from SlideState
+        to avoid per-frame QPoint.x()/y() calls and float() conversions.
+        """
         if not self._can_use_slide_shader() or self._gl_pipeline is None or self._slide is None:
             return
-        if not self._slide.old_pixmap or self._slide.old_pixmap.isNull() or not self._slide.new_pixmap or self._slide.new_pixmap.isNull():
+        st = self._slide
+        if not st.old_pixmap or st.old_pixmap.isNull() or not st.new_pixmap or st.new_pixmap.isNull():
             return
         if not self._prepare_slide_textures():
             return
-        self._transition_renderer.render_slide_shader(target, self._slide)
+        # Track actual paint timing (after all early-exit checks)
+        self._profiler.tick_paint("slide")
+
+        # PERFORMANCE: Use pre-computed float coordinates from SlideState
+        # This eliminates 8x float() conversions and 8x QPoint method calls per frame
+        w = max(1, target.width())
+        h = max(1, target.height())
+        inv_w = 1.0 / w
+        inv_h = 1.0 / h
+
+        # FRAME PACING: Use interpolated progress from compositor's FrameState
+        # Fall back to state progress if frame pacing not active
+        t = self._get_render_progress(fallback=st.progress)
+        
+        # Use pre-computed deltas for interpolation
+        old_x = (st._old_start_x + st._old_delta_x * t) * inv_w
+        old_y = (st._old_start_y + st._old_delta_y * t) * inv_h
+        new_x = (st._new_start_x + st._new_delta_x * t) * inv_w
+        new_y = (st._new_start_y + st._new_delta_y * t) * inv_h
+
+        start_gpu = time.perf_counter()
+        vp_w, vp_h = self._get_viewport_size()
+        slide_helper = _get_slide_program()
+        slide_helper.render(
+            program=self._gl_pipeline.slide_program,
+            uniforms=self._gl_pipeline.slide_uniforms,
+            viewport=(vp_w, vp_h),
+            old_tex=self._texture_manager.old_tex_id,
+            new_tex=self._texture_manager.new_tex_id,
+            state=st,
+            quad_vao=self._gl_pipeline.quad_vao,
+            old_rect=(old_x, old_y, 1.0, 1.0),
+            new_rect=(new_x, new_y, 1.0, 1.0),
+        )
+        try:
+            gpu_ms = max(0.0, float((time.perf_counter() - start_gpu) * 1000.0))
+            self._profiler.tick_gpu("slide", gpu_ms)
+        except Exception:
+            pass
 
     def _paint_crossfade_shader(self, target: QRect) -> None:
         self._render_simple_shader(
             self._can_use_crossfade_shader, self._crossfade, self._prepare_crossfade_textures,
-            "crossfade_program", "crossfade_uniforms", "crossfade"
+            "crossfade_program", "crossfade_uniforms", _get_crossfade_program
         )
 
     def _paint_diffuse_shader(self, target: QRect) -> None:
         self._render_simple_shader(
             self._can_use_diffuse_shader, self._diffuse, self._prepare_diffuse_textures,
-            "diffuse_program", "diffuse_uniforms", "diffuse"
+            "diffuse_program", "diffuse_uniforms", _get_diffuse_program
         )
 
     def _paint_blockflip_shader(self, target: QRect) -> None:
         self._render_simple_shader(
             self._can_use_blockflip_shader, self._blockflip, self._prepare_blockflip_textures,
-            "blockflip_program", "blockflip_uniforms", "blockflip"
+            "blockflip_program", "blockflip_uniforms", _get_blockflip_program
         )
 
     def _paint_warp_shader(self, target: QRect) -> None:
         self._render_simple_shader(
             self._can_use_warp_shader, self._warp, self._prepare_warp_textures,
-            "warp_program", "warp_uniforms", "warp"
+            "warp_program", "warp_uniforms", _get_warp_program
         )
 
     def _paint_raindrops_shader(self, target: QRect) -> None:
         self._render_simple_shader(
             self._can_use_raindrops_shader, self._raindrops, self._prepare_raindrops_textures,
-            "raindrops_program", "raindrops_uniforms", "raindrops"
+            "raindrops_program", "raindrops_uniforms", _get_raindrops_program
         )
 
     def _paint_debug_overlay(self, painter: QPainter) -> None:
@@ -2359,59 +2483,289 @@ void main() {
             if self._try_shader_path(name, state, can_use_fn, paint_fn, target, prep_fn):
                 return
 
-        # QPainter fallback path (Group B) - delegates to GLTransitionRenderer
         painter = QPainter(self)
         try:
             painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+            # target recomputed in case geometry changed after shader branch.
             target = self.rect()
-            
-            # Try each transition type in priority order
+
+            # If a peel transition is active, always draw the new image as the
+            # base frame and overlay directional, strip-based remnants of the
+            # old image that shrink and drift away over time.
             if self._peel is not None:
-                self._transition_renderer.render_peel_fallback(painter, target, self._peel)
+                st = self._peel
+                w = target.width()
+                h = target.height()
+                t = max(0.0, min(1.0, st.progress))
+
+                # Draw new image fully as the background.
+                if st.new_pixmap and not st.new_pixmap.isNull():
+                    painter.setOpacity(1.0)
+                    painter.drawPixmap(target, st.new_pixmap)
+
+                if not st.old_pixmap or st.old_pixmap.isNull():
+                    return
+
+                strips = max(1, int(st.strips))
+                # Later strips begin peeling slightly after earlier ones so the
+                # overall effect feels like sequential sheets of paper rather
+                # than a rigid shutter.
+                delay_per_strip = 0.7 / max(1, strips - 1) if strips > 1 else 0.0
+
+                for i in range(strips):
+                    if st.direction in (SlideDirection.LEFT, SlideDirection.RIGHT):
+                        # Vertical strips for horizontal peel.
+                        strip_w = max(1, w // strips)
+                        x0 = i * strip_w
+                        if i == strips - 1:
+                            strip_w = max(1, w - x0)
+                        base_rect = QRect(x0, 0, strip_w, h)
+                    else:
+                        # Horizontal strips for vertical peel.
+                        strip_h = max(1, h // strips)
+                        y0 = i * strip_h
+                        if i == strips - 1:
+                            strip_h = max(1, h - y0)
+                        base_rect = QRect(0, y0, w, strip_h)
+
+                    # Per-strip local progress: 0 = still in place, 1 = fully
+                    # peeled off-screen.
+                    start = i * delay_per_strip
+                    if t <= start:
+                        local = 0.0
+                    else:
+                        local = (t - start) / max(0.0001, 1.0 - start)
+                        if local >= 1.0:
+                            # This strip has completely peeled away.
+                            continue
+
+                    # Compute translation offset for this strip.
+                    dx = 0
+                    dy = 0
+                    if local > 0.0:
+                        if st.direction in (SlideDirection.LEFT, SlideDirection.RIGHT):
+                            sign = 1 if st.direction == SlideDirection.RIGHT else -1
+                            max_offset = w + base_rect.width()
+                            dx = int(sign * max_offset * local)
+                        else:
+                            sign = 1 if st.direction == SlideDirection.DOWN else -1
+                            max_offset = h + base_rect.height()
+                            dy = int(sign * max_offset * local)
+
+                    # Destination rect of the moving strip on screen.
+                    rect = base_rect.translated(dx, dy)
+                    if not rect.intersects(target):
+                        continue
+
+                    # Opacity falloff: keep strips opaque in the early part of
+                    # their lifetime, then fade them out as they drift away so
+                    # they do not "snap" off-screen.
+                    float_alpha = 1.0
+                    if local > 0.5:
+                        float_alpha = 1.0 - min(1.0, (local - 0.5) / 0.5)
+                    if float_alpha <= 0.0:
+                        continue
+
+                    painter.save()
+                    painter.setClipRect(rect)
+                    painter.setOpacity(float_alpha)
+                    try:
+                        # Translate the painter so the strip carries its
+                        # original content with it rather than sampling new
+                        # columns/rows of the old image.
+                        painter.translate(dx, dy)
+                        painter.drawPixmap(target, st.old_pixmap)
+                    except Exception:
+                        painter.restore()
+                        continue
+                    painter.restore()
                 return
-            
+
+            # If a warp dissolve is active, draw the new image fully and then
+            # overlay horizontally sliced bands of the old image that jitter
+            # and fade out over time.
             if self._warp is not None:
-                self._transition_renderer.render_warp_fallback(painter, target, self._warp)
+                st = self._warp
+                w = target.width()
+                h = target.height()
+                t = max(0.0, min(1.0, st.progress))
+
+                # Draw new image fully as the stable background.
+                if st.new_pixmap and not st.new_pixmap.isNull():
+                    painter.setOpacity(1.0)
+                    painter.drawPixmap(target, st.new_pixmap)
+                else:
+                    painter.fillRect(target, Qt.GlobalColor.black)
+
+                if not st.old_pixmap or st.old_pixmap.isNull():
+                    return
+
+                # Band height and warp amplitude tuned for 1080p–4K. Smaller
+                # bands and modest amplitude keep the effect gentle.
+                band_h = max(4, h // 80)
+                amp = max(4.0, w * 0.03)
+
+                # Old image fades out slightly faster than the nominal
+                # timeline so we don't see lingering noise at the end.
+                fade = max(0.0, 1.0 - t * 1.25)
+                if fade <= 0.0:
+                    return
+
+                y = 0
+                while y < h:
+                    band_height = band_h if y + band_h <= h else h - y
+                    band_rect = QRect(0, y, w, band_height)
+
+                    # Pseudo-random but deterministic phase per band.
+                    base = (y / float(max(1, h))) * math.pi * 2.0
+                    wave = math.sin(base + t * 6.0) * math.cos(base * 1.3)
+                    offset_x = int(wave * amp * (1.0 - t))
+
+                    if offset_x != 0:
+                        shifted = band_rect.translated(offset_x, 0)
+                    else:
+                        shifted = band_rect
+
+                    painter.save()
+                    painter.setClipRect(band_rect)
+                    painter.setOpacity(fade)
+                    try:
+                        painter.drawPixmap(shifted, st.old_pixmap)
+                    except Exception:
+                        painter.restore()
+                        break
+                    painter.restore()
+
+                    y += band_height
                 self._paint_spotify_visualizer(painter)
                 self._paint_debug_overlay(painter)
                 return
-            
+
+            # If a block spin is active and the GLSL path is unavailable, fall
+            # back to a simple compositor-side crossfade between the old and
+            # new images. This keeps the Group A (shader) failure behaviour
+            # visually safe and distinct from the GLSL 3D spin while still
+            # exercising the compositor surface.
             if self._blockspin is not None:
-                self._transition_renderer.render_blockspin_fallback(painter, target, self._blockspin)
+                st = self._blockspin
+                if not st.old_pixmap or st.old_pixmap.isNull() or not st.new_pixmap or st.new_pixmap.isNull():
+                    return
+
+                t = max(0.0, min(1.0, st.progress))
+
+                if t <= 0.0:
+                    painter.setOpacity(1.0)
+                    painter.drawPixmap(target, st.old_pixmap)
+                    self._paint_spotify_visualizer(painter)
+                    self._paint_debug_overlay(painter)
+                    return
+                if t >= 1.0:
+                    painter.setOpacity(1.0)
+                    painter.drawPixmap(target, st.new_pixmap)
+                    self._paint_spotify_visualizer(painter)
+                    self._paint_debug_overlay(painter)
+                    return
+
+                painter.setOpacity(1.0)
+                painter.drawPixmap(target, st.old_pixmap)
+                painter.setOpacity(t)
+                painter.drawPixmap(target, st.new_pixmap)
                 self._paint_spotify_visualizer(painter)
                 return
-            
-            # Region-based transitions (blockflip, blinds, diffuse)
+
+            # Region-based transitions (blockflip, blinds, diffuse) share the same pattern
             for st, paint_vis in [(self._blockflip, True), (self._blinds, False), (self._diffuse, False)]:
                 if st is not None:
-                    self._transition_renderer.render_region_fallback(painter, target, st)
+                    if st.old_pixmap and not st.old_pixmap.isNull():
+                        painter.setOpacity(1.0)
+                        painter.drawPixmap(target, st.old_pixmap)
+                    if st.new_pixmap and not st.new_pixmap.isNull() and st.region is not None and not st.region.isEmpty():
+                        painter.save()
+                        painter.setClipRegion(st.region)
+                        painter.setOpacity(1.0)
+                        painter.drawPixmap(target, st.new_pixmap)
+                        painter.restore()
                     if paint_vis:
                         self._paint_spotify_visualizer(painter)
                     self._paint_debug_overlay(painter)
                     return
-            
+
+            # If a wipe is active, draw old fully and new clipped to the wipe region.
             if self._wipe is not None:
-                self._transition_renderer.render_wipe_fallback(painter, target, self._wipe)
+                st = self._wipe
+                w = target.width()
+                h = target.height()
+                t = max(0.0, min(1.0, st.progress))
+
+                # Draw old image fully.
+                if st.old_pixmap and not st.old_pixmap.isNull():
+                    painter.setOpacity(1.0)
+                    painter.drawPixmap(target, st.old_pixmap)
+
+                # Clip and draw new according to wipe direction.
+                if st.new_pixmap and not st.new_pixmap.isNull():
+                    region = _compute_wipe_region(st.direction, w, h, t)
+                    if not region.isEmpty():
+                        painter.save()
+                        painter.setClipRegion(region)
+                        painter.setOpacity(1.0)
+                        painter.drawPixmap(target, st.new_pixmap)
+                        painter.restore()
                 self._paint_spotify_visualizer(painter)
                 self._paint_debug_overlay(painter)
                 return
-            
+
+            # If a slide is active, draw both images at interpolated positions.
             if self._slide is not None:
-                self._transition_renderer.render_slide_fallback(painter, target, self._slide)
+                st = self._slide
+                w = target.width()
+                h = target.height()
+
+                t = max(0.0, min(1.0, st.progress))
+                old_pos = QPoint(
+                    int(st.old_start.x() + (st.old_end.x() - st.old_start.x()) * t),
+                    int(st.old_start.y() + (st.old_end.y() - st.old_start.y()) * t),
+                )
+                new_pos = QPoint(
+                    int(st.new_start.x() + (st.new_end.x() - st.new_start.x()) * t),
+                    int(st.new_start.y() + (st.new_end.y() - st.new_start.y()) * t),
+                )
+
+                if st.old_pixmap and not st.old_pixmap.isNull():
+                    painter.setOpacity(1.0)
+                    old_rect = QRect(old_pos.x(), old_pos.y(), w, h)
+                    painter.drawPixmap(old_rect, st.old_pixmap)
+                if st.new_pixmap and not st.new_pixmap.isNull():
+                    painter.setOpacity(1.0)
+                    new_rect = QRect(new_pos.x(), new_pos.y(), w, h)
+                    painter.drawPixmap(new_rect, st.new_pixmap)
                 self._paint_dimming(painter)
                 self._paint_spotify_visualizer(painter)
                 self._paint_debug_overlay(painter)
                 return
-            
+
+            # If a crossfade is active, draw old + new with interpolated opacity.
             if self._crossfade is not None:
-                self._transition_renderer.render_crossfade_fallback(painter, target, self._crossfade)
+                cf = self._crossfade
+                if cf.old_pixmap and not cf.old_pixmap.isNull():
+                    painter.setOpacity(1.0)
+                    painter.drawPixmap(target, cf.old_pixmap)
+                if cf.new_pixmap and not cf.new_pixmap.isNull():
+                    painter.setOpacity(cf.progress)
+                    painter.drawPixmap(target, cf.new_pixmap)
                 self._paint_dimming(painter)
                 self._paint_spotify_visualizer(painter)
                 self._paint_debug_overlay(painter)
                 return
-            
-            # No active transition -> draw base pixmap
-            self._transition_renderer.render_base_image(painter, target, self._base_pixmap)
+
+            # No active transition -> draw base pixmap if present.
+            if self._base_pixmap is not None and not self._base_pixmap.isNull():
+                painter.setOpacity(1.0)
+                painter.drawPixmap(target, self._base_pixmap)
+            else:
+                # As a last resort, fill black.
+                painter.fillRect(target, Qt.GlobalColor.black)
+
             self._paint_dimming(painter)
             self._paint_spotify_visualizer(painter)
             self._paint_debug_overlay(painter)

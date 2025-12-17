@@ -13,13 +13,23 @@ Single source of truth for architecture and key decisions.
 - ThreadManager provides IO and compute pools; all business threading goes through it.
 - ResourceManager tracks Qt objects for deterministic cleanup; includes QPixmap/QImage pooling to reduce GC pressure.
 - SettingsManager provides dot-notation access, persisted across runs.
-- WidgetManager (extracted from DisplayWidget) handles overlay widget lifecycle, Z-order, and rate-limited raises.
+- WidgetManager (extracted from DisplayWidget) handles overlay widget lifecycle, Z-order, rate-limited raises, and QGraphicsEffect invalidation.
+- InputHandler (extracted from DisplayWidget) handles all user input including mouse/keyboard events, context menu triggers, and exit gestures.
+- TransitionController (extracted from DisplayWidget) manages transition lifecycle including watchdog timeout handling.
+- ImagePresenter (extracted from DisplayWidget) manages pixmap lifecycle.
+- MultiMonitorCoordinator (singleton) coordinates cross-display state for multi-monitor setups.
+- GLProgramCache (singleton) centralizes lazy-loading of shader programs.
+- GLGeometryManager (singleton) handles VAO/VBO management for GL compositor.
+- GLTextureManager (singleton) handles texture upload, caching (LRU), and PBO pooling.
+- GLTransitionRenderer (extracted from GLCompositor) centralizes shader and QPainter transition rendering.
 - TransitionStateManager (extracted from GLCompositor) manages per-transition state with change notifications.
 - BeatEngine (extracted from SpotifyVisualizerWidget) handles FFT processing and bar smoothing on COMPUTE pool.
 
 ## Active Stability Issue (Phase E): Context Menu / Effect Cache Corruption
 - Symptom: intermittent overlay shadow/opacity corruption artifacts, often correlated with context menu open/close and focus/activation cascades across multi-monitor windows.
-- Current mitigation: targeted effect invalidation on menu open/close with occasional QGraphics effect recreation (cache-bust).
+- Root cause: Qt's `QGraphicsEffect` caching breaks under rapid activation + popup menu sequencing on multi-monitor setups.
+- Current mitigation: targeted effect invalidation on menu open/close with occasional QGraphicsEffect recreation (cache-bust) via WidgetManager.
+- Long-term solution: OverlayShadowRenderer component (see below) to bypass Qt's fragile effect caching.
 - Dedicated investigation doc: `CONTEXT_CACHE_CORRUPTION.md`.
 
 ## Runtime Variants
@@ -351,5 +361,5 @@ The current Windows mixer approach is simpler and works for all users. Implement
 
 This is a **low-priority enhancement** that could be added post-v1.2 if users request Spotify-synced volume.
 
-**Version**: 1.243  
-**Last Updated**: Dec 12, 2025 - Spotify visualizer tuning finalized (noise_floor=2.1, expansion=2.5, decay_rate=0.7); volume control architecture documented.
+**Version**: 1.244  
+**Last Updated**: Dec 17, 2025 - Architecture updated with extracted modules (GLTransitionRenderer, InputHandler, TransitionController, etc.); OverlayShadowRenderer component specified for Phase E solution; refactor progress: GLCompositor 50.6% reduction (2179 lines), DisplayWidget 42% reduction (2773 lines).

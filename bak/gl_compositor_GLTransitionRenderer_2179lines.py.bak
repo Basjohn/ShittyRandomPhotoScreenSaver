@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field  # Still needed for _GLPipelineState
 from typing import Optional, Callable
+import math
 import ctypes
 import time
 
@@ -27,7 +28,7 @@ from core.animation.animator import AnimationManager
 from core.animation.frame_interpolator import FrameState
 from rendering.gl_format import apply_widget_surface_format
 from rendering.gl_profiler import TransitionProfiler
-from transitions.wipe_transition import WipeDirection
+from transitions.wipe_transition import WipeDirection, _compute_wipe_region
 from transitions.slide_transition import SlideDirection
 from core.resources.manager import ResourceManager
 from rendering.transition_state import (
@@ -63,7 +64,6 @@ from rendering.gl_programs.program_cache import get_program_cache, cleanup_progr
 from rendering.gl_programs.geometry_manager import get_geometry_manager
 from rendering.gl_programs.texture_manager import get_texture_manager
 from rendering.gl_transition_renderer import GLTransitionRenderer
-from rendering.gl_error_handler import get_gl_error_handler
 
 
 def _get_peel_program():
@@ -264,9 +264,6 @@ class GLCompositorWidget(QOpenGLWidget):
         self._gl_pipeline: Optional[_GLPipelineState] = None
         self._use_shaders: bool = False
         self._gl_disabled_for_session: bool = False
-        
-        # Centralized error handler for session-level fallback policy
-        self._error_handler = get_gl_error_handler()
         
         # Texture management delegated to centralized manager
         self._texture_manager = get_texture_manager()
@@ -1309,11 +1306,18 @@ class GLCompositorWidget(QOpenGLWidget):
                         version_str or "?",
                     )
 
-                    # Record GL info in centralized error handler for session-level tracking
-                    self._error_handler.record_gl_info(vendor or "", renderer or "", version_str or "")
-                    
-                    # Check if error handler detected software GL and demoted capability
-                    if self._error_handler.is_software_gl:
+                    combo = f"{vendor} {renderer}".lower()
+                    software_markers = (
+                        "gdi generic",
+                        "microsoft basic render driver",
+                        "software rasterizer",
+                        "llvmpipe",
+                    )
+                    if any(m in combo for m in software_markers):
+                        logger.warning(
+                            "[GL COMPOSITOR] Software OpenGL implementation detected; "
+                            "disabling shader pipeline for this session"
+                        )
                         self._gl_disabled_for_session = True
                         self._use_shaders = False
                 except Exception:

@@ -32,17 +32,16 @@ from rendering.image_processor import ImageProcessor
 from rendering.gl_compositor import GLCompositorWidget
 from transitions.base_transition import BaseTransition
 from rendering.transition_factory import TransitionFactory
-from widgets.clock_widget import ClockWidget, TimeFormat, ClockPosition
-from widgets.weather_widget import WeatherWidget, WeatherPosition
+from widgets.clock_widget import ClockWidget
+from widgets.weather_widget import WeatherWidget
 from widgets.media_widget import MediaWidget
-from widgets.reddit_widget import RedditWidget, RedditPosition
+from widgets.reddit_widget import RedditWidget
 from widgets.pixel_shift_manager import PixelShiftManager
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
 from widgets.spotify_volume_widget import SpotifyVolumeWidget
 from widgets.context_menu import ScreensaverContextMenu
 from widgets.cursor_halo import CursorHaloWidget
-from rendering.widget_setup import parse_color_to_qcolor
 from rendering.widget_manager import WidgetManager
 from rendering.input_handler import InputHandler
 from rendering.transition_controller import TransitionController
