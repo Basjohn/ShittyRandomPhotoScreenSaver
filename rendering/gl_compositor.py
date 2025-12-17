@@ -60,8 +60,8 @@ except Exception:  # pragma: no cover - PyOpenGL not required for CPU paths
 
 # Centralized shader program cache - replaces scattered module-level globals
 from rendering.gl_programs.program_cache import get_program_cache, cleanup_program_cache, GLProgramCache
-from rendering.gl_programs.geometry_manager import get_geometry_manager
-from rendering.gl_programs.texture_manager import get_texture_manager
+from rendering.gl_programs.geometry_manager import GLGeometryManager
+from rendering.gl_programs.texture_manager import GLTextureManager
 from rendering.gl_transition_renderer import GLTransitionRenderer
 from rendering.gl_error_handler import get_gl_error_handler
 
@@ -265,11 +265,16 @@ class GLCompositorWidget(QOpenGLWidget):
         self._use_shaders: bool = False
         self._gl_disabled_for_session: bool = False
         
+        # Per-compositor geometry manager - VAOs are NOT shared between GL contexts
+        # so each display's compositor needs its own geometry
+        self._geometry_manager: Optional[GLGeometryManager] = None
+        
         # Centralized error handler for session-level fallback policy
         self._error_handler = get_gl_error_handler()
         
-        # Texture management delegated to centralized manager
-        self._texture_manager = get_texture_manager()
+        # Per-compositor texture manager - textures are NOT shared between GL contexts
+        # so each display's compositor needs its own texture manager
+        self._texture_manager: Optional[GLTextureManager] = None
         
         # Transition rendering delegated to centralized renderer
         self._transition_renderer = GLTransitionRenderer(
@@ -1388,20 +1393,27 @@ class GLCompositorWidget(QOpenGLWidget):
 
             # NOTE: Shuffle and Claws shader initialization removed - these transitions are retired.
 
-            # Initialize geometry via centralized manager
-            geometry = get_geometry_manager()
-            if not geometry.initialize():
+            # Initialize geometry - each compositor needs its own VAOs since
+            # OpenGL VAOs are NOT shared between GL contexts (each display has its own context)
+            if self._geometry_manager is None:
+                self._geometry_manager = GLGeometryManager()
+            if not self._geometry_manager.initialize():
                 logger.warning("[GL COMPOSITOR] Failed to initialize geometry manager")
                 self._gl_disabled_for_session = True
                 self._use_shaders = False
                 return
             
             # Copy geometry IDs to pipeline state for backward compatibility
-            self._gl_pipeline.quad_vao = geometry.quad_vao
-            self._gl_pipeline.quad_vbo = geometry.quad_vbo
-            self._gl_pipeline.box_vao = geometry.box_vao
-            self._gl_pipeline.box_vbo = geometry.box_vbo
-            self._gl_pipeline.box_vertex_count = geometry.box_vertex_count
+            self._gl_pipeline.quad_vao = self._geometry_manager.quad_vao
+            self._gl_pipeline.quad_vbo = self._geometry_manager.quad_vbo
+            self._gl_pipeline.box_vao = self._geometry_manager.box_vao
+            self._gl_pipeline.box_vbo = self._geometry_manager.box_vbo
+            self._gl_pipeline.box_vertex_count = self._geometry_manager.box_vertex_count
+            
+            # Initialize texture manager - each compositor needs its own textures since
+            # OpenGL textures are NOT shared between GL contexts
+            if self._texture_manager is None:
+                self._texture_manager = GLTextureManager()
 
             self._gl_pipeline.initialized = True
             _pipeline_elapsed = (time.time() - _pipeline_start) * 1000.0
