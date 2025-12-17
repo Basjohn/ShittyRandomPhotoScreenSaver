@@ -22,6 +22,7 @@ Single source of truth for architecture and key decisions.
 - GLGeometryManager (singleton) handles VAO/VBO management for GL compositor.
 - GLTextureManager (singleton) handles texture upload, caching (LRU), and PBO pooling.
 - GLTransitionRenderer (extracted from GLCompositor) centralizes shader and QPainter transition rendering.
+- GLErrorHandler (singleton) implements session-level fallback policy (Group A→B→C) with software GL detection.
 - TransitionStateManager (extracted from GLCompositor) manages per-transition state with change notifications.
 - BeatEngine (extracted from SpotifyVisualizerWidget) handles FFT processing and bar smoothing on COMPUTE pool.
 
@@ -361,5 +362,5 @@ The current Windows mixer approach is simpler and works for all users. Implement
 
 This is a **low-priority enhancement** that could be added post-v1.2 if users request Spotify-synced volume.
 
-**Version**: 1.244  
-**Last Updated**: Dec 17, 2025 - Architecture updated with extracted modules (GLTransitionRenderer, InputHandler, TransitionController, etc.); OverlayShadowRenderer component specified for Phase E solution; refactor progress: GLCompositor 50.6% reduction (2179 lines), DisplayWidget 42% reduction (2773 lines).
+**Version**: 1.245  
+**Last Updated**: Dec 17, 2025 - Architecture updated with extracted modules (GLTransitionRenderer, GLErrorHandler, InputHandler, TransitionController, ImagePresenter, etc.); OverlayShadowRenderer planned for Phase E solution; refactor progress: GLCompositor 50.7% reduction (2175 lines), DisplayWidget 42% reduction (2783 lines).

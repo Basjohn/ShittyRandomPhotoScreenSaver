@@ -11,14 +11,14 @@ import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
-from PyQt6.QtGui import QImage, QPixmap
+from PySide6.QtGui import QImage, QPixmap
 
 try:
     from OpenGL import GL as gl
 except ImportError:
     gl = None
 
-from core.settings.settings_manager import is_perf_metrics_enabled
+from core.logging.logger import is_perf_metrics_enabled
 
 logger = logging.getLogger(__name__)
 

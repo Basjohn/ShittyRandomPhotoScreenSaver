@@ -993,3 +993,50 @@
 2025-12-17 01:03:05 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=26714.0ms, frames=1219, avg_fps=45.6, dt_min=11.23ms, dt_max=70.44ms, bar_count=15
 2025-12-17 01:03:10 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=1611.7ms, frames=61, avg_fps=37.8, dt_min=16.82ms, dt_max=61.10ms, bar_count=15
 2025-12-17 01:03:15 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=6619.0ms, frames=255, avg_fps=38.5, dt_min=11.68ms, dt_max=75.08ms, bar_count=15
+2025-12-17 02:31:09 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-17 02:31:09 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.501 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-17 02:31:11 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.809 Bars: [0.03 0.22 0.40 0.59 0.59 0.39 0.20 0.00 0.20 0.39 0.59 0.59 0.40 0.22 0.03]
+2025-12-17 02:31:11 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0659, max=0.4461
+2025-12-17 02:31:11 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-17 02:31:13 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.759 Bars: [0.00 0.06 0.11 0.17 0.17 0.11 0.06 0.02 0.06 0.11 0.17 0.17 0.11 0.06 0.00]
+2025-12-17 02:31:14 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.358 Bars: [0.08 0.12 0.18 0.25 0.31 0.36 0.43 0.52 0.43 0.36 0.31 0.25 0.18 0.12 0.08]
+2025-12-17 02:31:14 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=4397.8ms, frames=152, avg_fps=34.6, dt_min=11.82ms, dt_max=83.77ms, bar_count=15
+2025-12-17 02:31:15 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.456 Bars: [0.09 0.17 0.27 0.39 0.46 0.49 0.54 0.62 0.54 0.49 0.46 0.39 0.27 0.17 0.09]
+2025-12-17 02:31:16 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.905 Bars: [0.03 0.10 0.19 0.28 0.28 0.24 0.21 0.20 0.21 0.24 0.28 0.28 0.19 0.10 0.03]
+2025-12-17 02:31:17 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.036 Bars: [0.10 0.18 0.29 0.42 0.50 0.53 0.58 0.65 0.58 0.53 0.50 0.42 0.29 0.18 0.10]
+2025-12-17 02:31:18 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.130 Bars: [0.01 0.08 0.16 0.24 0.24 0.16 0.10 0.06 0.10 0.16 0.24 0.24 0.16 0.08 0.01]
+2025-12-17 02:31:18 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.370 Bars: [0.09 0.19 0.32 0.47 0.54 0.52 0.53 0.62 0.53 0.52 0.54 0.47 0.32 0.19 0.09]
+2025-12-17 02:31:19 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=9408.7ms, frames=375, avg_fps=39.9, dt_min=11.82ms, dt_max=83.77ms, bar_count=15
+2025-12-17 02:31:19 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.514 Bars: [0.12 0.15 0.21 0.29 0.39 0.51 0.65 0.83 0.65 0.51 0.39 0.29 0.21 0.15 0.12]
+2025-12-17 02:31:20 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.943 Bars: [0.01 0.07 0.14 0.21 0.21 0.15 0.08 0.08 0.08 0.15 0.21 0.21 0.14 0.07 0.01]
+2025-12-17 02:31:21 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.814 Bars: [0.04 0.08 0.14 0.20 0.23 0.22 0.22 0.26 0.22 0.22 0.23 0.20 0.14 0.08 0.04]
+2025-12-17 02:31:22 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.251 Bars: [0.04 0.08 0.13 0.18 0.22 0.24 0.26 0.29 0.26 0.24 0.22 0.18 0.13 0.08 0.04]
+2025-12-17 02:31:23 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.521 Bars: [0.13 0.27 0.44 0.64 0.74 0.75 0.78 0.84 0.78 0.75 0.74 0.64 0.44 0.27 0.13]
+2025-12-17 02:31:24 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=14423.3ms, frames=611, avg_fps=42.4, dt_min=11.18ms, dt_max=83.77ms, bar_count=15
+2025-12-17 02:31:24 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.919 Bars: [0.01 0.15 0.30 0.45 0.45 0.30 0.15 0.05 0.15 0.30 0.45 0.45 0.30 0.15 0.01]
+2025-12-17 02:31:25 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.027 Bars: [0.07 0.13 0.20 0.29 0.35 0.38 0.42 0.49 0.42 0.38 0.35 0.29 0.20 0.13 0.07]
+2025-12-17 02:31:27 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.675 Bars: [0.02 0.07 0.15 0.22 0.22 0.16 0.13 0.11 0.13 0.16 0.22 0.22 0.15 0.07 0.02]
+2025-12-17 02:31:28 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.391 Bars: [0.10 0.14 0.22 0.32 0.39 0.43 0.53 0.66 0.53 0.43 0.39 0.32 0.22 0.14 0.10]
+2025-12-17 02:31:29 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=19441.4ms, frames=798, avg_fps=41.0, dt_min=11.18ms, dt_max=95.37ms, bar_count=15
+2025-12-17 02:31:29 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.310 Bars: [0.06 0.13 0.21 0.31 0.36 0.36 0.38 0.41 0.38 0.36 0.36 0.31 0.21 0.13 0.06]
+2025-12-17 02:31:30 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.998 Bars: [0.03 0.06 0.12 0.19 0.19 0.14 0.14 0.18 0.14 0.14 0.19 0.19 0.12 0.06 0.03]
+2025-12-17 02:31:31 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.279 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-17 02:31:32 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.423 Bars: [0.00 0.01 0.02 0.03 0.03 0.02 0.01 0.00 0.01 0.02 0.03 0.03 0.02 0.01 0.00]
+2025-12-17 02:31:33 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.391 Bars: [0.00 0.01 0.03 0.04 0.04 0.03 0.01 0.00 0.01 0.03 0.04 0.04 0.03 0.01 0.00]
+2025-12-17 02:31:34 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=4447.6ms, frames=165, avg_fps=37.1, dt_min=11.14ms, dt_max=99.57ms, bar_count=15
+2025-12-17 02:31:35 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.348 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-17 02:31:36 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.229 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-17 02:31:37 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.481 Bars: [0.00 0.02 0.05 0.07 0.07 0.05 0.02 0.00 0.02 0.05 0.07 0.07 0.05 0.02 0.00]
+2025-12-17 02:31:38 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.229 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-17 02:31:39 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=9477.1ms, frames=347, avg_fps=36.6, dt_min=11.14ms, dt_max=99.57ms, bar_count=15
+2025-12-17 02:31:39 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=25.42ms, min=-1.50ms, max=346.41ms
+2025-12-17 02:31:40 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.887 Bars: [0.00 0.04 0.08 0.11 0.11 0.08 0.04 0.00 0.04 0.08 0.11 0.11 0.08 0.04 0.00]
+2025-12-17 02:31:41 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.440 Bars: [0.00 0.06 0.11 0.17 0.17 0.11 0.06 0.00 0.06 0.11 0.17 0.17 0.11 0.06 0.00]
+2025-12-17 02:31:41 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.281 Bars: [0.00 0.08 0.16 0.24 0.24 0.16 0.08 0.00 0.08 0.16 0.24 0.24 0.16 0.08 0.00]
+2025-12-17 02:31:42 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.779 Bars: [0.02 0.06 0.12 0.18 0.18 0.13 0.13 0.16 0.13 0.13 0.18 0.18 0.12 0.06 0.02]
+2025-12-17 02:31:43 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.572 Bars: [0.00 0.03 0.05 0.08 0.08 0.05 0.03 0.00 0.03 0.05 0.08 0.08 0.05 0.03 0.00]
+2025-12-17 02:31:43 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.054 Bars: [0.00 0.09 0.18 0.27 0.27 0.18 0.09 0.00 0.09 0.18 0.27 0.27 0.18 0.09 0.00]
+2025-12-17 02:31:44 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.773 Bars: [0.00 0.01 0.02 0.04 0.04 0.02 0.01 0.00 0.01 0.02 0.04 0.04 0.02 0.01 0.00]
+2025-12-17 02:31:44 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=14492.3ms, frames=609, avg_fps=42.0, dt_min=11.13ms, dt_max=99.57ms, bar_count=15
+2025-12-17 02:31:45 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.289 Bars: [0.00 0.05 0.11 0.16 0.16 0.11 0.05 0.01 0.05 0.11 0.16 0.16 0.11 0.05 0.00]
+2025-12-17 02:31:45 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.518 Bars: [0.00 0.01 0.01 0.02 0.02 0.01 0.01 0.00 0.01 0.01 0.02 0.02 0.01 0.01 0.00]

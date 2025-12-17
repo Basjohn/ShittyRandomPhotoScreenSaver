@@ -16,8 +16,8 @@ import time
 import logging
 from typing import TYPE_CHECKING, Optional, Callable, Tuple, Any
 
-from PyQt6.QtCore import Qt, QRect, QPoint
-from PyQt6.QtGui import QPainter, QPixmap
+from PySide6.QtCore import Qt, QRect, QPoint
+from PySide6.QtGui import QPainter, QPixmap
 
 try:
     from OpenGL import GL as gl
