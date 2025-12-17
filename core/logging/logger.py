@@ -529,6 +529,8 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
         "rendering.display",
         "rendering.display_widget", 
         "rendering.gl_format",
+        "rendering.input_handler",
+        "rendering.widget_manager",
         # Transitions - logs every frame during transitions
         "transitions.base_transition",
         "transitions.gl_crossfade_transition",
@@ -541,6 +543,8 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
         "transitions.gl_diffuse",
         "transitions.gl_blockflip",
         "transitions.gl_blinds",
+        "transitions.gl_compositor",
+        "transitions.gl_compositor_crumble_transition",
         # Settings manager - logs on every widget interaction
         "SettingsManager",
         # Image queue - logs every image selection
@@ -548,6 +552,14 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
         # Widget spam
         "widgets.reddit_widget",
         "widgets.media_widget",
+        "widgets.clock_widget",
+        "widgets.weather_widget",
+        # Windows diagnostics - very noisy during cleanup
+        "win_diag",
+        # GUI settings tabs - noisy during settings dialog
+        "gui.tabs",
+        "gui.settings_dialog",
+        "gui.main_window",
     )
     internal_noisy_level = logging.DEBUG if verbose else logging.INFO
     for name in NOISY_INTERNAL_MODULES:

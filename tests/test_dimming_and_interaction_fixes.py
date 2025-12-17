@@ -78,33 +78,15 @@ class TestCtrlHaloAttributes:
         assert 'WA_TransparentForMouseEvents' in source
 
 
-class TestDeferredRedditUrl:
-    """Test that deferred Reddit URL is opened on all exit paths."""
-
-    def test_open_pending_reddit_url_method_exists(self, qt_app):
-        """Verify _open_pending_reddit_url method exists on DisplayWidget."""
-        from rendering.display_widget import DisplayWidget
-        assert hasattr(DisplayWidget, '_open_pending_reddit_url')
-
-    def test_pending_reddit_url_attribute_exists(self, qt_app):
-        """Verify _pending_reddit_url attribute is initialized."""
-        from rendering.display_widget import DisplayWidget
-        
-        # Check the class defines the attribute in __init__
-        # We can't easily instantiate DisplayWidget, so check the source
-        source = inspect.getsource(DisplayWidget.__init__)
-        assert '_pending_reddit_url' in source
-
-
 class TestMediaWidgetClickDetection:
     """Test media widget click detection respects Y coordinates."""
 
     def test_click_detection_checks_y_coordinate(self, qt_app):
         """Verify click detection code checks Y coordinate for controls row."""
-        from rendering.display_widget import DisplayWidget
+        from rendering.input_handler import InputHandler
         
-        # Check that mousePressEvent contains Y coordinate logic
-        source = inspect.getsource(DisplayWidget.mousePressEvent)
+        # Check that _route_media_left_click contains Y coordinate logic
+        source = inspect.getsource(InputHandler._route_media_left_click)
         
         # Must check local_y against controls_row_top
         assert 'local_y' in source
@@ -112,9 +94,9 @@ class TestMediaWidgetClickDetection:
 
     def test_controls_row_height_is_reasonable(self, qt_app):
         """Verify controls row height constant is reasonable (40-80px)."""
-        from rendering.display_widget import DisplayWidget
+        from rendering.input_handler import InputHandler
         
-        source = inspect.getsource(DisplayWidget.mousePressEvent)
+        source = inspect.getsource(InputHandler._route_media_left_click)
         # The controls_row_height should be defined as 60
         assert 'controls_row_height = 60' in source
 
@@ -206,32 +188,3 @@ class TestDimmingOverlayZOrder:
         assert "Dimming" in source or "dimming" in source
 
 
-class TestDeferredRedditUrlAllExitPaths:
-    """Test that deferred Reddit URL is opened on ALL exit paths."""
-
-    def test_key_press_exit_opens_reddit_url(self, qt_app):
-        """Verify keyPressEvent calls _open_pending_reddit_url before exit."""
-        from rendering.display_widget import DisplayWidget
-        
-        source = inspect.getsource(DisplayWidget.keyPressEvent)
-        
-        # Must call _open_pending_reddit_url before exit_requested.emit
-        assert "_open_pending_reddit_url" in source
-
-    def test_mouse_click_exit_opens_reddit_url(self, qt_app):
-        """Verify mousePressEvent calls _open_pending_reddit_url before exit."""
-        from rendering.display_widget import DisplayWidget
-        
-        source = inspect.getsource(DisplayWidget.mousePressEvent)
-        
-        # Must call _open_pending_reddit_url before exit_requested.emit
-        assert "_open_pending_reddit_url" in source
-
-    def test_mouse_move_exit_opens_reddit_url(self, qt_app):
-        """Verify mouseMoveEvent calls _open_pending_reddit_url before exit."""
-        from rendering.display_widget import DisplayWidget
-        
-        source = inspect.getsource(DisplayWidget.mouseMoveEvent)
-        
-        # Must call _open_pending_reddit_url before exit_requested.emit
-        assert "_open_pending_reddit_url" in source

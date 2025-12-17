@@ -160,8 +160,8 @@ For media‑style widgets that show artwork:
 
 ## 5. Interaction & Input Gating
 
-Interaction is centralized in `DisplayWidget.mousePressEvent` and guarded by
-settings + Ctrl state:
+Interaction is centralized in `InputHandler` (extracted from `DisplayWidget`) and guarded by
+settings + Ctrl state. `DisplayWidget.mousePressEvent` delegates to `InputHandler.route_widget_click()`:
 
 - **Default: non‑interactive**  
   Widgets set `WA_TransparentForMouseEvents` so they are ignored by Qt’s
@@ -373,12 +373,13 @@ When adding a new widget (or extending an existing one):
      methods on the widget.
    - If the widget has optional features (artwork, controls, header frame),
      expose `set_*` methods and plumb settings through `DisplayWidget`.
+   - **Widget lifecycle** is managed by `WidgetManager` (extracted from `DisplayWidget`).
 
 4. **Cleanup & lifecycle**
    - Ensure the widget exposes a `cleanup()` method that stops timers and
      hides the widget.
-   - `DisplayWidget.cleanup()` and the shared `ResourceManager` must be able
-     to tear down the widget deterministically.
+   - `WidgetManager` and the shared `ResourceManager` handle deterministic teardown.
+   - `WidgetManager` also manages Z-order, rate-limited raises, and QGraphicsEffect invalidation.
 
 ---
 

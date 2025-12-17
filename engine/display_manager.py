@@ -562,19 +562,6 @@ class DisplayManager(QObject):
         count = len(self.displays)
         logger.info("Cleaning up %d display widgets", count)
 
-        # Collect any pending Reddit URLs BEFORE destroying displays
-        # These will be opened after windows are hidden to prevent browser
-        # from getting stuck behind still-visible screensaver windows
-        pending_reddit_urls: list[str] = []
-        for display in self.displays:
-            try:
-                url = getattr(display, "_pending_reddit_url", None)
-                if url:
-                    pending_reddit_urls.append(url)
-                    display._pending_reddit_url = None  # Clear to prevent double-open
-            except Exception:
-                pass
-
         # Reset global DisplayWidget state to avoid stale references after cleanup
         try:
             from rendering.display_widget import DisplayWidget
@@ -638,28 +625,5 @@ class DisplayManager(QObject):
 
         self.displays.clear()
         self.current_images.clear()
-        
-        # Open any pending Reddit URLs NOW - after windows are hidden/destroyed
-        # but before QApplication.quit() is called
-        if pending_reddit_urls:
-            try:
-                from PySide6.QtCore import QUrl
-                from PySide6.QtGui import QDesktopServices
-                from widgets.reddit_widget import _try_bring_reddit_window_to_front
-                
-                for url in pending_reddit_urls:
-                    try:
-                        QDesktopServices.openUrl(QUrl(url))
-                        logger.info("[REDDIT] Opened deferred URL on cleanup: %s", url)
-                    except Exception as e:
-                        logger.debug("[REDDIT] Failed to open deferred URL %s: %s", url, e)
-                
-                # Try to bring browser to front after all URLs are opened
-                try:
-                    _try_bring_reddit_window_to_front()
-                except Exception:
-                    pass
-            except Exception as e:
-                logger.debug("[REDDIT] Failed to open deferred URLs during cleanup: %s", e)
         
         logger.info("Display manager cleanup complete")

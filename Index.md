@@ -2,17 +2,15 @@
 
 A living map of modules, purposes, and key classes. Keep this up to date.
 
-## Refactor Plans (P0)
+## Refactor Status
 - audits/REFACTOR_DISPLAY_WIDGET.md
-  - **IN PROGRESS**: display_widget.py reduced from 4780 → 3351 lines (~30% reduction)
-  - Completed: Widget creation → WidgetManager (7 widgets), Input handling → InputHandler
-  - Remaining: TransitionController integration, ImagePresenter integration, final cleanup
-  - Target: ~1000 lines
+  - **COMPLETE**: display_widget.py reduced from 4780 → 2783 lines (42% reduction)
+  - Extracted: WidgetManager, InputHandler, TransitionController, ImagePresenter, MultiMonitorCoordinator
+  - Target: ~1000 lines (further reduction deferred - current flow stable)
 - audits/REFACTOR_GL_COMPOSITOR.md
-  - Comprehensive plan to decompose gl_compositor.py (6100+ lines → ~1500 lines)
-  - Extracts: GLProgramCache, GLGeometryManager, GLTextureManager, GLTransitionRenderer, GLErrorHandler
-  - 6 phases, ~15 hours estimated
-  - Cross-references 9 audit items (P0-P3)
+  - **COMPLETE**: gl_compositor.py reduced from 4416 → 2179 lines (50.6% reduction)
+  - Extracted: GLProgramCache, GLGeometryManager, GLTextureManager, GLTransitionRenderer, GLErrorHandler
+  - Per-compositor instances for GLGeometryManager and GLTextureManager (OpenGL VAOs/textures are context-specific)
 
 ## Core Managers
 - core/threading/manager.py
@@ -122,8 +120,8 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - rendering/gl_programs/
   - Per-transition shader program helpers that encapsulate GLSL source, compilation, uniform caching, and draw logic.
   - `program_cache.py`: `GLProgramCache` singleton for centralized lazy-loading of shader programs. Replaces 10+ module-level globals with single cache class.
-  - `geometry_manager.py`: `GLGeometryManager` singleton for VAO/VBO management. Handles quad and box mesh creation/cleanup.
-  - `texture_manager.py`: `GLTextureManager` singleton for texture upload, caching (LRU), and PBO pooling for async DMA transfers.
+  - `geometry_manager.py`: `GLGeometryManager` - **per-compositor instance** for VAO/VBO management. Handles quad and box mesh creation/cleanup. Changed from singleton because OpenGL VAOs are context-specific.
+  - `texture_manager.py`: `GLTextureManager` - **per-compositor instance** for texture upload, caching (LRU), and PBO pooling. Changed from singleton because OpenGL textures are context-specific.
   - `base_program.py`: `BaseGLProgram` ABC with shared vertex shader and compilation helpers.
   - `peel_program.py`: `PeelProgram` for the Peel transition GLSL.
   - `blockflip_program.py`: `BlockFlipProgram` for the BlockFlip transition GLSL.
@@ -233,7 +231,11 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - Spotify/media overlay widget extending `BaseOverlayWidget`. Driven by `core/media/media_controller.py`; per-monitor selection via `widgets.media`, corner positioning, background frame, and monochrome transport controls (Prev/Play/Pause/Next) over track metadata. Artwork uses a square frame for album covers and adapts to non-square thumbnails.
 - widgets/reddit_widget.py
   - Reddit overlay widget extending `BaseOverlayWidget`. Shows top posts from a configured subreddit with 4- and 10-item layouts, per-monitor selection via `widgets.reddit`, shared overlay fade-in coordination, and click-through to the system browser.
-  - In hard-exit mode, `handle_click(deferred=True)` returns the URL instead of opening it immediately; DisplayWidget stores this and opens it when the user exits, avoiding the edge case where Firefox gets stuck behind the screensaver.
+  - **Reddit link handling (2024-12-17)**: Smart A/B/C logic based on primary display coverage:
+    - Case A: Primary covered + hard_exit → Exit immediately, bring browser to foreground
+    - Case B: Primary covered + Ctrl held → Exit immediately, bring browser to foreground
+    - Case C: MC mode (primary NOT covered) → Stay open, bring browser to foreground
+  - System-agnostic detection using `QGuiApplication.primaryScreen()` (not screen index assumptions)
   - Supports a second instance (`reddit2_widget`) via `widgets.reddit2.*` settings with independent subreddit/position/display but inheriting all styling from Reddit 1.
 - widgets/spotify_visualizer_widget.py
    - Spotify Beat Visualizer widget and background audio worker. Captures loopback audio via a shared `_SpotifyBeatEngine` (single process-wide engine), publishes raw mono frames into a lock-free `TripleBuffer`, performs FFT/band mapping on the COMPUTE pool (not UI thread), and exposes pre-smoothed bar magnitudes plus a derived GPU fade factor to the bar overlay.
@@ -341,8 +343,10 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 ## Active Investigations
 - CONTEXT_CACHE_CORRUPTION.md
   - Phase E: context menu / QGraphicsEffect cache corruption affecting overlay shadows/opacity
-  - Correlates WM_WINDOWPOSCHANGING/activation cascades with menu open/close across displays
-  - Links to refactor leverage points in audits/REFACTOR_DISPLAY_WIDGET.md and audits/REFACTOR_GL_COMPOSITOR.md
+  - **Status**: MITIGATED - Smart Reddit link handling exits before corruption manifests
+  - Root cause: `SetForegroundWindow()` steals focus, triggering activation messages that corrupt Qt's effect cache
+  - Solution: Immediate exit when primary display is covered; users never see corruption
+  - Details: `audits/PHASE_E_ROOT_CAUSE_ANALYSIS.md`
 
 ## Settings (selected)
 

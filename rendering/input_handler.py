@@ -616,12 +616,16 @@ class InputHandler(QObject):
                     if rw.isVisible() and rw.geometry().contains(pos):
                         geom = rw.geometry()
                         local_pos = QPoint(pos.x() - geom.x(), pos.y() - geom.y())
-                        if hasattr(rw, 'handle_click') and rw.handle_click(local_pos):
-                            handled = True
-                            reddit_handled = True
+                        if hasattr(rw, 'handle_click'):
+                            result = rw.handle_click(local_pos)
+                            logger.debug("[INPUT] Reddit handle_click returned: %s", result)
+                            if result:
+                                handled = True
+                                reddit_handled = True
                 except Exception:
-                    pass
+                    logger.debug("[INPUT] Reddit click routing failed", exc_info=True)
         
+        logger.debug("[INPUT] route_widget_click returning: handled=%s reddit_handled=%s", handled, reddit_handled)
         return handled, reddit_handled
 
     def _route_media_left_click(self, mw, pos: QPoint) -> bool:

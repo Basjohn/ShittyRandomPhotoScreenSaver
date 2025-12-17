@@ -780,18 +780,14 @@ class RedditWidget(BaseOverlayWidget):
             except Exception:
                 pass
 
-    def handle_click(self, local_pos: QPoint, deferred: bool = False) -> bool | str:
+    def handle_click(self, local_pos: QPoint) -> bool:
         """Handle a click in widget-local coordinates.
 
         Args:
             local_pos: Click position in widget-local coordinates
-            deferred: If True, return the URL instead of opening it immediately.
-                      This is used when hard-exit mode is enabled so the browser
-                      open can be scheduled for when the user actually exits.
 
         Returns:
-            If deferred=False: True if a link was clicked and opened, False otherwise.
-            If deferred=True: The URL string if a link was clicked, False otherwise.
+            True if a link was clicked and opened, False otherwise.
         """
         header_rect = self._header_hit_rect
         if header_rect is not None and header_rect.contains(local_pos):
@@ -801,14 +797,9 @@ class RedditWidget(BaseOverlayWidget):
             else:
                 url = "https://www.reddit.com"
             
-            if deferred:
-                logger.info("[REDDIT] Deferred subreddit URL for exit: %s", url)
-                return url
-            
             try:
                 QDesktopServices.openUrl(QUrl(url))
                 logger.info("[REDDIT] Opened subreddit %s", url)
-                _try_bring_reddit_window_to_front()
                 return True
             except Exception:
                 logger.debug("[REDDIT] Failed to open subreddit URL %s", url, exc_info=True)
@@ -816,14 +807,9 @@ class RedditWidget(BaseOverlayWidget):
 
         for rect, url, _title in self._row_hit_rects:
             if rect.contains(local_pos):
-                if deferred:
-                    logger.info("[REDDIT] Deferred URL for exit: %s", url)
-                    return url
-                
                 try:
                     QDesktopServices.openUrl(QUrl(url))
                     logger.info("[REDDIT] Opened %s", url)
-                    _try_bring_reddit_window_to_front()
                     return True
                 except Exception:
                     logger.debug("[REDDIT] Failed to open URL %s", url, exc_info=True)

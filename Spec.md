@@ -19,19 +19,22 @@ Single source of truth for architecture and key decisions.
 - ImagePresenter (extracted from DisplayWidget) manages pixmap lifecycle.
 - MultiMonitorCoordinator (singleton) coordinates cross-display state for multi-monitor setups.
 - GLProgramCache (singleton) centralizes lazy-loading of shader programs.
-- GLGeometryManager (singleton) handles VAO/VBO management for GL compositor.
-- GLTextureManager (singleton) handles texture upload, caching (LRU), and PBO pooling.
+- GLGeometryManager (per-compositor instance) handles VAO/VBO management. Changed from singleton because OpenGL VAOs are context-specific.
+- GLTextureManager (per-compositor instance) handles texture upload, caching (LRU), and PBO pooling. Changed from singleton because OpenGL textures are context-specific.
 - GLTransitionRenderer (extracted from GLCompositor) centralizes shader and QPainter transition rendering.
 - GLErrorHandler (singleton) implements session-level fallback policy (Group A→B→C) with software GL detection.
 - TransitionStateManager (extracted from GLCompositor) manages per-transition state with change notifications.
 - BeatEngine (extracted from SpotifyVisualizerWidget) handles FFT processing and bar smoothing on COMPUTE pool.
 
-## Active Stability Issue (Phase E): Context Menu / Effect Cache Corruption
-- Symptom: intermittent overlay shadow/opacity corruption artifacts, often correlated with context menu open/close and focus/activation cascades across multi-monitor windows.
-- Root cause: Qt's `QGraphicsEffect` caching breaks under rapid activation + popup menu sequencing on multi-monitor setups.
-- Current mitigation: targeted effect invalidation on menu open/close with occasional QGraphicsEffect recreation (cache-bust) via WidgetManager.
-- Long-term solution: OverlayShadowRenderer component (see below) to bypass Qt's fragile effect caching.
-- Dedicated investigation doc: `CONTEXT_CACHE_CORRUPTION.md`.
+## Phase E Status: Context Menu / Effect Cache Corruption ✅ MITIGATED
+- Symptom: overlay shadow/opacity corruption artifacts triggered by Reddit link clicks and context menus.
+- Root cause: `SetForegroundWindow()` in `_try_bring_reddit_window_to_front()` steals focus, triggering Windows activation messages that corrupt Qt's `QGraphicsEffect` cache.
+- Solution: Smart Reddit link handling (A/B/C logic) exits screensaver immediately when primary display is covered, so corruption never manifests visually.
+  - Case A: Primary covered + hard_exit → Exit immediately
+  - Case B: Primary covered + Ctrl held → Exit immediately
+  - Case C: MC mode (primary NOT covered) → Stay open, bring browser to foreground
+- System-agnostic: Uses `QGuiApplication.primaryScreen()` for detection, not screen index assumptions.
+- Dedicated investigation doc: `audits/PHASE_E_ROOT_CAUSE_ANALYSIS.md`.
 
 ## Runtime Variants
 - Normal screensaver build:
@@ -362,5 +365,5 @@ The current Windows mixer approach is simpler and works for all users. Implement
 
 This is a **low-priority enhancement** that could be added post-v1.2 if users request Spotify-synced volume.
 
-**Version**: 1.245  
-**Last Updated**: Dec 17, 2025 - Architecture updated with extracted modules (GLTransitionRenderer, GLErrorHandler, InputHandler, TransitionController, ImagePresenter, etc.); OverlayShadowRenderer planned for Phase E solution; refactor progress: GLCompositor 50.7% reduction (2175 lines), DisplayWidget 42% reduction (2783 lines).
+**Version**: 1.246  
+**Last Updated**: Dec 17, 2025 - Phase E mitigated via smart Reddit link handling (A/B/C logic); GLGeometryManager/GLTextureManager changed to per-compositor instances (OpenGL context-specific); legacy deferred URL logic removed; transition watchdog timeout increased to 14s.

@@ -822,7 +822,7 @@ class ClockWidget(BaseOverlayWidget):
 
         # Optional subtle drop shadow under the analogue clock face.
         if self._analog_face_shadow:
-            shadow_color = QColor(0, 0, 0, max(75, self._text_color.alpha() // 3))
+            shadow_color = QColor(0, 0, 0, max(94, int(self._text_color.alpha() * 0.42)))
             shadow_pen = QPen(shadow_color)
             shadow_pen.setWidth(2)
             painter.setPen(shadow_pen)
@@ -888,7 +888,7 @@ class ClockWidget(BaseOverlayWidget):
                 # face/hand shadow so the entire dial reads as a single
                 # lit element.
                 if self._analog_face_shadow:
-                    numeral_shadow = QColor(0, 0, 0, max(65, self._text_color.alpha() // 3))
+                    numeral_shadow = QColor(0, 0, 0, max(81, int(self._text_color.alpha() * 0.42)))
                     painter.setPen(QPen(numeral_shadow))
                     painter.drawText(tx - tw // 2 + 1, ty + th // 4 + 1, text)
 
@@ -904,7 +904,7 @@ class ClockWidget(BaseOverlayWidget):
             ey = center_y + int(sin_a * length)
 
             if self._analog_face_shadow:
-                shadow_color = QColor(0, 0, 0, max(55, self._text_color.alpha() // 3))
+                shadow_color = QColor(0, 0, 0, max(69, int(self._text_color.alpha() * 0.42)))
                 shadow_pen = QPen(shadow_color)
                 shadow_pen.setWidth(thickness)
                 painter.setPen(shadow_pen)

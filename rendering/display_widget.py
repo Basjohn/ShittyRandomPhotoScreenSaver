@@ -210,7 +210,6 @@ class DisplayWidget(QWidget):
         self._overlay_fade_started: bool = False
         self._overlay_fade_timeout: Optional[QTimer] = None
         self._reddit_exit_on_click: bool = True
-        self._pending_reddit_url: Optional[str] = None  # URL to open when exiting (hard-exit mode)
         self._pending_activation_refresh: bool = False
         self._last_deactivate_ts: float = 0.0
         
@@ -2248,23 +2247,74 @@ class DisplayWidget(QWidget):
                         getattr(self, "reddit_widget", None),
                         getattr(self, "reddit2_widget", None),
                     )
+                    logger.info("[REDDIT] route_widget_click returned: handled=%s reddit_handled=%s screen=%s",
+                               handled, reddit_handled, self.screen_index)
                 except Exception:
                     logger.debug("[INPUT] Widget click routing failed", exc_info=True)
 
             if handled:
-                # Request exit after Reddit clicks when not in hard-exit mode
-                if reddit_handled and getattr(self, "_reddit_exit_on_click", True):
-                    if not self._is_hard_exit_enabled():
-                        logger.info("[REDDIT] Click handled; requesting screensaver exit")
-                        def _do_exit_after_reddit() -> None:
-                            if not self._exiting:
-                                self._exiting = True
+                # Request exit after Reddit clicks
+                reddit_exit_on_click = getattr(self, "_reddit_exit_on_click", True)
+                logger.info("[REDDIT] Click routed: handled=%s reddit_handled=%s reddit_exit_on_click=%s screen=%s", 
+                            handled, reddit_handled, reddit_exit_on_click, self.screen_index)
+                if reddit_handled and reddit_exit_on_click:
+                    # Detect display configuration for Reddit link handling:
+                    # A) All displays covered + hard_exit: Exit immediately
+                    # B) All displays covered + Ctrl held: Exit immediately
+                    # C) MC mode (primary NOT covered): Stay open, bring browser to foreground
+                    #
+                    # System-agnostic: uses QGuiApplication.primaryScreen() which is the
+                    # OS-configured primary, not necessarily screen index 0.
+                    
+                    this_is_primary = False
+                    primary_is_covered = False
+                    try:
+                        from PySide6.QtGui import QGuiApplication
+                        primary_screen = QGuiApplication.primaryScreen()
+                        
+                        # Check if THIS widget is on the primary screen
+                        if self._screen is not None and primary_screen is not None:
+                            this_is_primary = (self._screen is primary_screen)
+                        
+                        # If THIS is primary, then primary is definitely covered
+                        if this_is_primary:
+                            primary_is_covered = True
+                        else:
+                            # Check if primary screen has a DisplayWidget registered
+                            if primary_screen is not None:
+                                primary_widget = self._coordinator.get_instance_for_screen(primary_screen)
+                                primary_is_covered = (primary_widget is not None)
+                    except Exception:
+                        # Fallback: assume primary is NOT covered (MC mode behavior)
+                        # This is safer than assuming exit - user can always press Esc
+                        primary_is_covered = False
+                    
+                    logger.info("[REDDIT] Exit check: this_is_primary=%s primary_is_covered=%s exiting=%s screen=%s",
+                                this_is_primary, primary_is_covered, self._exiting, self.screen_index)
+                    
+                    if primary_is_covered:
+                        # Cases A & B: Primary is covered, user wants to leave screensaver
+                        logger.info("[REDDIT] Primary covered; requesting immediate exit")
+                        if not self._exiting:
+                            self._exiting = True
+                            # Bring browser to foreground after windows start closing
+                            def _bring_browser_foreground():
                                 try:
-                                    self.hide()
+                                    from widgets.reddit_widget import _try_bring_reddit_window_to_front
+                                    _try_bring_reddit_window_to_front()
                                 except Exception:
                                     pass
-                                self.exit_requested.emit()
-                        QTimer.singleShot(400, _do_exit_after_reddit)
+                            QTimer.singleShot(300, _bring_browser_foreground)
+                            self.exit_requested.emit()
+                    else:
+                        # Case C: MC mode - primary not covered, stay open
+                        logger.info("[REDDIT] MC mode (primary not covered); staying open, bringing browser to foreground")
+                        try:
+                            from widgets.reddit_widget import _try_bring_reddit_window_to_front
+                            _try_bring_reddit_window_to_front()
+                        except Exception:
+                            pass
+                    
                 event.accept()
                 return
 
