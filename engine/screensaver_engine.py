@@ -2126,6 +2126,27 @@ class ScreensaverEngine(QObject):
         """Handle settings request (S key)."""
         logger.info("Settings requested - pausing screensaver and opening config")
         
+        # Set settings dialog active flag FIRST - this prevents halo from showing
+        try:
+            from rendering.multi_monitor_coordinator import get_coordinator
+            coordinator = get_coordinator()
+            coordinator.set_settings_dialog_active(True)
+        except Exception:
+            pass
+        
+        # Hide and destroy all cursor halo windows
+        if self.display_manager:
+            for display in getattr(self.display_manager, 'displays', []):
+                try:
+                    halo = getattr(display, '_ctrl_cursor_hint', None)
+                    if halo is not None:
+                        halo.hide()
+                        halo.close()
+                        halo.deleteLater()
+                        display._ctrl_cursor_hint = None
+                except Exception:
+                    pass
+        
         # Stop the engine but DON'T exit the app
         self.stop(exit_app=False)
         
@@ -2150,6 +2171,15 @@ class ScreensaverEngine(QObject):
                         logger.debug("DisplayManager cleanup after settings failed", exc_info=True)
                     self.display_manager = None
                     self._display_initialized = False
+                
+                # Reset coordinator state (halo owner, ctrl state) to avoid stale refs
+                try:
+                    from rendering.multi_monitor_coordinator import get_coordinator
+                    coordinator = get_coordinator()
+                    coordinator.set_settings_dialog_active(False)  # Re-enable halo
+                    coordinator.cleanup()
+                except Exception:
+                    logger.debug("Coordinator cleanup after settings failed", exc_info=True)
 
                 # Reinitialize displays using current settings
                 if not self._initialize_display():

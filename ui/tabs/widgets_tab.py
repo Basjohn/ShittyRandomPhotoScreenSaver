@@ -1172,6 +1172,10 @@ class WidgetsTab(QWidget):
         reddit_container_layout.addWidget(reddit_group)
         layout.addWidget(self._reddit_container)
 
+        # NOTE: Gmail widget removed - archived in archive/gmail_feature/
+        # Google OAuth verification requirements block unverified apps from using
+        # sensitive Gmail scopes. See archive/gmail_feature/RESTORE_GMAIL.md
+
         layout.addStretch()
 
         # Set scroll area widget and add to main layout
@@ -1765,6 +1769,8 @@ class WidgetsTab(QWidget):
             reddit2_mon_idx = self.reddit2_monitor_combo.findText(reddit2_mon_text)
             if reddit2_mon_idx >= 0:
                 self.reddit2_monitor_combo.setCurrentIndex(reddit2_mon_idx)
+
+            # Gmail settings - archived, see archive/gmail_feature/
         finally:
             for w in blockers:
                 try:
@@ -1894,6 +1900,8 @@ class WidgetsTab(QWidget):
         if color is not None:
             self._reddit_border_color = color
             self._save_settings()
+
+    # Gmail methods removed - archived in archive/gmail_feature/
     
     def _save_settings(self) -> None:
         """Save current settings."""
@@ -2102,6 +2110,8 @@ class WidgetsTab(QWidget):
         existing_widgets['spotify_visualizer'] = spotify_vis_config
         existing_widgets['reddit'] = reddit_config
         existing_widgets['reddit2'] = reddit2_config
+
+        # Gmail config - archived, see archive/gmail_feature/
 
         self._settings.set('widgets', existing_widgets)
         self._settings.save()

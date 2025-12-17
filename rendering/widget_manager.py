@@ -20,6 +20,8 @@ from widgets.clock_widget import ClockWidget, TimeFormat, ClockPosition
 from widgets.weather_widget import WeatherWidget, WeatherPosition
 from widgets.media_widget import MediaWidget, MediaPosition
 from widgets.reddit_widget import RedditWidget, RedditPosition
+# Gmail widget archived - see archive/gmail_feature/RESTORE_GMAIL.md
+# from widgets.gmail_widget import GmailWidget, GmailPosition
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 from widgets.spotify_volume_widget import SpotifyVolumeWidget
 from widgets.shadow_utils import apply_widget_shadow
@@ -784,7 +786,8 @@ class WidgetManager:
         # Warm-up delay to reduce pops on startup
         warmup_delay_ms = 0 if force else 250
 
-        if warmup_delay_ms <= 0:
+        def _run_all_starters() -> None:
+            """Run all starters synchronously so they fade together."""
             for starter in starters:
                 try:
                     starter()
@@ -794,21 +797,16 @@ class WidgetManager:
                 self._run_spotify_secondary_fades(base_delay_ms=150)
             except Exception:
                 pass
+
+        if warmup_delay_ms <= 0:
+            _run_all_starters()
             return
 
-        for starter in starters:
-            try:
-                QTimer.singleShot(warmup_delay_ms, starter)
-            except Exception:
-                try:
-                    starter()
-                except Exception:
-                    pass
-
+        # Single timer to run ALL starters together after warmup
         try:
-            self._run_spotify_secondary_fades(base_delay_ms=warmup_delay_ms + 150)
+            QTimer.singleShot(warmup_delay_ms, _run_all_starters)
         except Exception:
-            pass
+            _run_all_starters()
 
     def _run_spotify_secondary_fades(self, *, base_delay_ms: int) -> None:
         """Start any queued Spotify second-wave fade callbacks."""
@@ -904,8 +902,8 @@ class WidgetManager:
             logger.debug("%s widget disabled in settings", settings_key)
             return None
 
-        # Add to expected overlays for fade coordination
-        self._overlay_fade_expected.add(settings_key)
+        # Add to expected overlays for fade coordination (syncs to parent)
+        self.add_expected_overlay(settings_key)
 
         def _resolve_style(key: str, default):
             """Resolve style with inheritance for secondary clocks."""
@@ -1012,13 +1010,14 @@ class WidgetManager:
             except Exception:
                 pass
 
-            # Register with WidgetManager
+            # Register with WidgetManager (but DON'T start yet - defer until all widgets created)
             self.register_widget(settings_key, clock)
 
             clock.raise_()
-            clock.start()
+            # NOTE: start() is deferred to setup_all_widgets after all widgets are created
+            # This ensures fade sync has the complete expected overlay set
             logger.info(
-                "✅ %s widget started: %s, %s, font=%spx, seconds=%s",
+                "✅ %s widget created: %s, %s, font=%spx, seconds=%s",
                 settings_key, position_str, time_format.value, font_size, show_seconds,
             )
             return clock
@@ -1057,7 +1056,7 @@ class WidgetManager:
         if not (weather_enabled and show_on_this):
             return None
 
-        self._overlay_fade_expected.add("weather")
+        self.add_expected_overlay("weather")
 
         position_str = weather_settings.get('position', 'Top Left')
         location = weather_settings.get('location', 'New York')
@@ -1125,8 +1124,8 @@ class WidgetManager:
 
             self.register_widget("weather", widget)
             widget.raise_()
-            widget.start()
-            logger.info("✅ Weather widget started: %s, %s, font=%spx", location, position_str, font_size)
+            # NOTE: start() deferred to setup_all_widgets for fade sync
+            logger.info("✅ Weather widget created: %s, %s, font=%spx", location, position_str, font_size)
             return widget
         except Exception as e:
             logger.error("Failed to create weather widget: %s", e, exc_info=True)
@@ -1163,7 +1162,7 @@ class WidgetManager:
         if not (media_enabled and show_on_this):
             return None
 
-        self._overlay_fade_expected.add("media")
+        self.add_expected_overlay("media")
 
         position_str = media_settings.get('position', 'Bottom Left')
         font_size = media_settings.get('font_size', 20)
@@ -1267,8 +1266,8 @@ class WidgetManager:
 
             self.register_widget("media", widget)
             widget.raise_()
-            widget.start()
-            logger.info("✅ Media widget started: %s, font=%spx, margin=%d", position_str, font_size, margin_val)
+            # NOTE: start() deferred to setup_all_widgets for fade sync
+            logger.info("✅ Media widget created: %s, font=%spx, margin=%d", position_str, font_size, margin_val)
             return widget
         except Exception as e:
             logger.error("Failed to create media widget: %s", e, exc_info=True)
@@ -1309,7 +1308,7 @@ class WidgetManager:
         if not (reddit_enabled and show_on_this):
             return None
 
-        self._overlay_fade_expected.add(settings_key)
+        self.add_expected_overlay(settings_key)
 
         # For reddit2, inherit styling from reddit1 (base_reddit_settings)
         style_source = base_reddit_settings if (settings_key == 'reddit2' and base_reddit_settings) else reddit_settings
@@ -1422,12 +1421,14 @@ class WidgetManager:
 
             self.register_widget(settings_key, widget)
             widget.raise_()
-            widget.start()
-            logger.info("✅ %s widget started: r/%s, %s, font=%spx, limit=%d", settings_key, subreddit, position_str, font_size, limit_val)
+            # NOTE: start() deferred to setup_all_widgets for fade sync
+            logger.info("✅ %s widget created: r/%s, %s, font=%spx, limit=%d", settings_key, subreddit, position_str, font_size, limit_val)
             return widget
         except Exception as e:
             logger.error("Failed to create %s widget: %s", settings_key, e, exc_info=True)
             return None
+
+    # Gmail widget creation method removed - archived in archive/gmail_feature/
 
     def setup_all_widgets(
         self,
@@ -1501,6 +1502,8 @@ class WidgetManager:
             if widget:
                 created[attr_name] = widget
 
+        # Gmail widget archived - see archive/gmail_feature/
+
         # Create Spotify widgets (require media widget)
         media_widget = created.get('media_widget')
         if media_widget:
@@ -1518,7 +1521,20 @@ class WidgetManager:
             if vis_widget:
                 created['spotify_visualizer_widget'] = vis_widget
 
-        logger.info("Widget setup complete: %d widgets created", len(created))
+        # NOW start all widgets - this ensures fade sync has complete expected overlay set
+        # All widgets are created and their expected overlays are registered before any
+        # widget calls request_overlay_fade_sync(), so they will all wait for each other.
+        logger.debug("[FADE_SYNC] Starting %d widgets with expected overlays: %s",
+                     len(created), sorted(self._overlay_fade_expected))
+        
+        for attr_name, widget in created.items():
+            if widget is not None and hasattr(widget, 'start'):
+                try:
+                    widget.start()
+                except Exception as e:
+                    logger.debug("Failed to start %s: %s", attr_name, e)
+
+        logger.info("Widget setup complete: %d widgets created and started", len(created))
         return created
 
     def create_spotify_volume_widget(
@@ -1626,7 +1642,7 @@ class WidgetManager:
         if not (spotify_vis_enabled and show_on_this):
             return None
         
-        self._overlay_fade_expected.add("spotify_visualizer")
+        self.add_expected_overlay("spotify_visualizer")
         
         try:
             bar_count = int(spotify_vis_settings.get('bar_count', 32))

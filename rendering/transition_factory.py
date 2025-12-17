@@ -33,6 +33,7 @@ from transitions.gl_compositor_blinds_transition import GLCompositorBlindsTransi
 from transitions.gl_compositor_raindrops_transition import GLCompositorRainDropsTransition
 from transitions.gl_compositor_warp_transition import GLCompositorWarpTransition
 from transitions.gl_compositor_crumble_transition import GLCompositorCrumbleTransition
+from transitions.gl_compositor_particle_transition import GLCompositorParticleTransition
 
 if TYPE_CHECKING:
     pass  # Future type hints if needed
@@ -239,6 +240,9 @@ class TransitionFactory:
         if transition_type == 'Crumble':
             return self._create_crumble(settings, duration_ms, use_compositor)
         
+        if transition_type == 'Particle':
+            return self._create_particle(settings, duration_ms, use_compositor)
+        
         # Unknown type - fallback to Crossfade
         logger.warning("Unknown transition type: %s, using Crossfade", transition_type)
         return CrossfadeTransition(duration_ms)
@@ -342,6 +346,42 @@ class TransitionFactory:
         
         if use_compositor:
             return GLCompositorCrumbleTransition(duration_ms, piece_count, crack_complexity, mosaic_mode, weight_mode)
+        return CrossfadeTransition(duration_ms)
+    
+    def _create_particle(self, settings: dict, duration_ms: int, use_compositor: bool) -> BaseTransition:
+        particle_settings = settings.get('particle', {}) if isinstance(settings.get('particle', {}), dict) else {}
+        
+        mode_str = particle_settings.get('mode', 'Directional')
+        mode = 1 if mode_str == 'Swirl' else 0
+        
+        direction_str = particle_settings.get('direction', 'Left to Right')
+        direction_map = {
+            'Left to Right': 0,
+            'Right to Left': 1,
+            'Top to Bottom': 2,
+            'Bottom to Top': 3,
+            'Top-Left to Bottom-Right': 4,
+            'Top-Right to Bottom-Left': 5,
+            'Bottom-Left to Top-Right': 6,
+            'Bottom-Right to Top-Left': 7,
+        }
+        direction = direction_map.get(direction_str, 0)
+        
+        particle_radius = self._safe_float(particle_settings.get('particle_radius', 24.0), 24.0)
+        overlap = self._safe_float(particle_settings.get('overlap', 4.0), 4.0)
+        trail_length = self._safe_float(particle_settings.get('trail_length', 0.15), 0.15)
+        trail_strength = self._safe_float(particle_settings.get('trail_strength', 0.6), 0.6)
+        swirl_strength = self._safe_float(particle_settings.get('swirl_strength', 1.0), 1.0)
+        swirl_turns = self._safe_float(particle_settings.get('swirl_turns', 2.0), 2.0)
+        use_3d_shading = SettingsManager.to_bool(particle_settings.get('use_3d_shading', True), True)
+        texture_mapping = SettingsManager.to_bool(particle_settings.get('texture_mapping', True), True)
+        
+        if use_compositor:
+            return GLCompositorParticleTransition(
+                duration_ms, mode, direction, particle_radius, overlap,
+                trail_length, trail_strength, swirl_strength, swirl_turns,
+                use_3d_shading, texture_mapping
+            )
         return CrossfadeTransition(duration_ms)
     
     # Direction helpers

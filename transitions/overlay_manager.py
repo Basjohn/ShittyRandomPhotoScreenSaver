@@ -237,6 +237,16 @@ def set_overlay_geometry(widget: QWidget, overlay: QWidget) -> None:
         pass
 
 
+def _raise_halo_topmost(widget: QWidget) -> None:
+    """Ensure the ctrl cursor halo is visible.
+    
+    NOTE: The halo is now a top-level frameless window with WindowStaysOnTopHint,
+    so it automatically floats above all sibling widgets. No raise_() needed.
+    This function is kept for compatibility but is now a no-op.
+    """
+    pass
+
+
 def raise_overlay(widget: QWidget, overlay: QWidget) -> None:
     """Raise overlay above the base widget while keeping clock/weather above.
     
@@ -253,20 +263,15 @@ def raise_overlay(widget: QWidget, overlay: QWidget) -> None:
     2. All other widgets (clock, weather, media, reddit, etc.)
     3. Ctrl cursor halo (topmost)
     """
-    # Always raise the halo first (before rate limit check) to ensure responsiveness
-    try:
-        halo = getattr(widget, "_ctrl_cursor_hint", None)
-        if halo is not None and halo.isVisible():
-            halo.raise_()
-    except Exception:
-        pass
-    
     # Check if we've already raised overlays recently (within 100ms)
     # This prevents the expensive raise_() calls from happening every frame
     # while still ensuring Z-order is correct after a reasonable delay.
+    # NOTE: Halo is ALWAYS raised regardless of rate limit (see end of function)
     last_raise_ts = getattr(widget, "_last_overlay_raise_ts", 0.0)
     now = time.time()
     if now - last_raise_ts < 0.1:  # Skip if raised within last 100ms
+        # Still raise halo even when rate-limited - it must always be topmost
+        _raise_halo_topmost(widget)
         return
     widget._last_overlay_raise_ts = now
     
@@ -322,14 +327,8 @@ def raise_overlay(widget: QWidget, overlay: QWidget) -> None:
     except Exception:
         pass
 
-    # Ctrl cursor halo should always be topmost - NO rate limiting for halo
-    # because it's critical for user interaction responsiveness
-    try:
-        halo = getattr(widget, "_ctrl_cursor_hint", None)
-        if halo is not None and halo.isVisible():
-            halo.raise_()
-    except Exception:
-        pass
+    # Ctrl cursor halo should always be topmost - raised LAST after all other widgets
+    _raise_halo_topmost(widget)
 
 
 def notify_overlay_stage(overlay: QWidget, stage: str, **details) -> None:

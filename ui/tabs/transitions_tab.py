@@ -99,6 +99,7 @@ class TransitionsTab(QWidget):
             "Warp Dissolve",     # 9. GL-only
             "Blinds",            # 10. GL-only
             "Crumble",           # 11. GL-only, falling pieces
+            "Particle",          # 12. GL-only, particle balls
         ])
         self.transition_combo.currentTextChanged.connect(self._on_transition_changed)
         type_row.addWidget(self.transition_combo)
@@ -311,6 +312,87 @@ class TransitionsTab(QWidget):
         
         layout.addWidget(self.crumble_group)
         
+        # Particle specific settings
+        self.particle_group = QGroupBox("Particle Settings")
+        particle_layout = QVBoxLayout(self.particle_group)
+        
+        mode_row = QHBoxLayout()
+        mode_row.addWidget(QLabel("Mode:"))
+        self.particle_mode_combo = QComboBox()
+        self.particle_mode_combo.addItems(["Directional", "Swirl"])
+        self.particle_mode_combo.currentIndexChanged.connect(self._on_particle_mode_changed)
+        self.particle_mode_combo.currentIndexChanged.connect(self._save_settings)
+        mode_row.addWidget(self.particle_mode_combo)
+        mode_row.addStretch()
+        particle_layout.addLayout(mode_row)
+        
+        direction_row = QHBoxLayout()
+        direction_row.addWidget(QLabel("Direction:"))
+        self.particle_direction_combo = QComboBox()
+        self.particle_direction_combo.addItems([
+            "Left to Right",
+            "Right to Left",
+            "Top to Bottom",
+            "Bottom to Top",
+            "Top-Left to Bottom-Right",
+            "Top-Right to Bottom-Left",
+            "Bottom-Left to Top-Right",
+            "Bottom-Right to Top-Left",
+        ])
+        self.particle_direction_combo.currentIndexChanged.connect(self._save_settings)
+        direction_row.addWidget(self.particle_direction_combo)
+        direction_row.addStretch()
+        particle_layout.addLayout(direction_row)
+        
+        radius_row = QHBoxLayout()
+        radius_row.addWidget(QLabel("Particle Size:"))
+        self.particle_radius_spin = QSpinBox()
+        self.particle_radius_spin.setRange(8, 64)
+        self.particle_radius_spin.setValue(24)
+        self.particle_radius_spin.setSuffix(" px")
+        self.particle_radius_spin.valueChanged.connect(self._save_settings)
+        radius_row.addWidget(self.particle_radius_spin)
+        radius_row.addStretch()
+        particle_layout.addLayout(radius_row)
+        
+        trail_row = QHBoxLayout()
+        self.particle_trail_check = QCheckBox("Motion Trail")
+        self.particle_trail_check.setChecked(True)
+        self.particle_trail_check.stateChanged.connect(self._save_settings)
+        trail_row.addWidget(self.particle_trail_check)
+        trail_row.addStretch()
+        particle_layout.addLayout(trail_row)
+        
+        shading_row = QHBoxLayout()
+        self.particle_3d_check = QCheckBox("3D Ball Shading")
+        self.particle_3d_check.setChecked(True)
+        self.particle_3d_check.stateChanged.connect(self._save_settings)
+        shading_row.addWidget(self.particle_3d_check)
+        shading_row.addStretch()
+        particle_layout.addLayout(shading_row)
+        
+        texture_row = QHBoxLayout()
+        self.particle_texture_check = QCheckBox("Map Image to Particles")
+        self.particle_texture_check.setChecked(True)
+        self.particle_texture_check.stateChanged.connect(self._save_settings)
+        texture_row.addWidget(self.particle_texture_check)
+        texture_row.addStretch()
+        particle_layout.addLayout(texture_row)
+        
+        # Swirl-specific settings
+        swirl_turns_row = QHBoxLayout()
+        swirl_turns_row.addWidget(QLabel("Swirl Turns:"))
+        self.particle_swirl_turns_spin = QDoubleSpinBox()
+        self.particle_swirl_turns_spin.setRange(0.5, 5.0)
+        self.particle_swirl_turns_spin.setSingleStep(0.5)
+        self.particle_swirl_turns_spin.setValue(2.0)
+        self.particle_swirl_turns_spin.valueChanged.connect(self._save_settings)
+        swirl_turns_row.addWidget(self.particle_swirl_turns_spin)
+        swirl_turns_row.addStretch()
+        particle_layout.addLayout(swirl_turns_row)
+        
+        layout.addWidget(self.particle_group)
+        
         layout.addStretch()
         
         # Set scroll area widget and add to main layout
@@ -417,6 +499,7 @@ class TransitionsTab(QWidget):
             "Warp Dissolve",
             "Blinds",
             "Crumble",
+            "Particle",
         ]
         self._duration_by_type = {}
         for name in type_keys:
@@ -461,6 +544,13 @@ class TransitionsTab(QWidget):
             getattr(self, 'blockspin_direction_combo', None),
             getattr(self, 'block_size_spin', None),
             getattr(self, 'diffuse_shape_combo', None),
+            getattr(self, 'particle_mode_combo', None),
+            getattr(self, 'particle_direction_combo', None),
+            getattr(self, 'particle_radius_spin', None),
+            getattr(self, 'particle_trail_check', None),
+            getattr(self, 'particle_3d_check', None),
+            getattr(self, 'particle_texture_check', None),
+            getattr(self, 'particle_swirl_turns_spin', None),
         ]:
             if w is not None and hasattr(w, 'blockSignals'):
                 w.blockSignals(True)
@@ -555,6 +645,22 @@ class TransitionsTab(QWidget):
                 self.crumble_weight_combo.setCurrentIndex(idx)
             except Exception:
                 pass
+
+            # Load particle settings
+            particle = transitions_config.get('particle', {})
+            mode = particle.get('mode', 'Directional')
+            idx = self.particle_mode_combo.findText(mode)
+            if idx >= 0:
+                self.particle_mode_combo.setCurrentIndex(idx)
+            direction = particle.get('direction', 'Left to Right')
+            idx = self.particle_direction_combo.findText(direction)
+            if idx >= 0:
+                self.particle_direction_combo.setCurrentIndex(idx)
+            self.particle_radius_spin.setValue(int(particle.get('particle_radius', 24)))
+            self.particle_trail_check.setChecked(particle.get('trail_strength', 0.6) > 0.01)
+            self.particle_3d_check.setChecked(particle.get('use_3d_shading', True))
+            self.particle_texture_check.setChecked(particle.get('texture_mapping', True))
+            self.particle_swirl_turns_spin.setValue(particle.get('swirl_turns', 2.0))
 
             # Now that in-memory per-type directions are loaded, update the direction combo
             self._update_specific_settings()
@@ -666,13 +772,28 @@ class TransitionsTab(QWidget):
         
         # Show/hide Crumble settings
         self.crumble_group.setVisible(transition == "Crumble")
+        
+        # Show/hide Particle settings
+        self.particle_group.setVisible(transition == "Particle")
+        if transition == "Particle":
+            self._update_particle_mode_visibility()
+
+    def _on_particle_mode_changed(self, index: int) -> None:
+        """Handle particle mode change - show/hide direction vs swirl settings."""
+        self._update_particle_mode_visibility()
+    
+    def _update_particle_mode_visibility(self) -> None:
+        """Update visibility of particle mode-specific settings."""
+        is_swirl = self.particle_mode_combo.currentText() == "Swirl"
+        self.particle_direction_combo.setEnabled(not is_swirl)
+        self.particle_swirl_turns_spin.setEnabled(is_swirl)
 
     def _refresh_hw_dependent_options(self) -> None:
         """Grey out GL-only transitions when HW acceleration is disabled."""
         try:
             from PySide6.QtCore import Qt
             hw = self._settings.get_bool('display.hw_accel', True)
-            gl_only = ["Blinds", "Peel", "3D Block Spins", "Ripple", "Warp Dissolve", "Crumble"]
+            gl_only = ["Blinds", "Peel", "3D Block Spins", "Ripple", "Warp Dissolve", "Crumble", "Particle"]
             for name in gl_only:
                 idx = self.transition_combo.findText(name)
                 if idx >= 0:
@@ -696,7 +817,7 @@ class TransitionsTab(QWidget):
         """If a GL-only transition is selected with HW off, switch to Crossfade and persist."""
         hw = self._settings.get_bool('display.hw_accel', True)
         cur = self.transition_combo.currentText()
-        gl_only = {"Blinds", "Peel", "3D Block Spins", "Ripple", "Warp Dissolve", "Crumble"}
+        gl_only = {"Blinds", "Peel", "3D Block Spins", "Ripple", "Warp Dissolve", "Crumble", "Particle"}
         if cur in gl_only and not hw:
             idx = self.transition_combo.findText("Crossfade")
             if idx >= 0:
@@ -765,6 +886,18 @@ class TransitionsTab(QWidget):
                 'crack_complexity': self.crumble_complexity_spin.value(),
                 'mosaic_mode': self.crumble_mosaic_check.isChecked(),
                 'weighting': self.crumble_weight_combo.currentText(),
+            },
+            'particle': {
+                'mode': self.particle_mode_combo.currentText(),
+                'direction': self.particle_direction_combo.currentText(),
+                'particle_radius': float(self.particle_radius_spin.value()),
+                'overlap': 4.0,
+                'trail_length': 0.15 if self.particle_trail_check.isChecked() else 0.0,
+                'trail_strength': 0.6 if self.particle_trail_check.isChecked() else 0.0,
+                'swirl_strength': 1.0,
+                'swirl_turns': self.particle_swirl_turns_spin.value(),
+                'use_3d_shading': self.particle_3d_check.isChecked(),
+                'texture_mapping': self.particle_texture_check.isChecked(),
             },
             'durations': dict(self._duration_by_type),
             'pool': dict(self._pool_by_type),

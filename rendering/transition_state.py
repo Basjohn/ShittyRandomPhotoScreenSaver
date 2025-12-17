@@ -140,6 +140,26 @@ class CrumbleState(TransitionStateBase):
     weight_mode: float = 0.0  # 0=Top,1=Bottom,2=Random,3=Random Choice,4=Age Weighted
 
 
+@dataclass
+class ParticleState(TransitionStateBase):
+    """State for a compositor-driven particle transition.
+    
+    Particles fly in from off-screen and stack to reveal the new image.
+    Uses a grid-driven analytic approach for predictable performance.
+    """
+    seed: float = 0.0
+    mode: int = 0  # 0=Directional, 1=Swirl
+    direction: int = 0  # 0=L→R, 1=R→L, 2=T→B, 3=B→T, 4=TL→BR, 5=TR→BL, 6=BL→TR, 7=BR→TL
+    particle_radius: float = 24.0  # Base radius in pixels
+    overlap: float = 4.0  # Overlap in pixels to avoid gaps
+    trail_length: float = 0.15  # Trail length as fraction of particle size
+    trail_strength: float = 0.6  # Trail opacity 0..1
+    swirl_strength: float = 1.0  # Angular component for swirl mode
+    swirl_turns: float = 2.0  # Number of spiral turns
+    use_3d_shading: bool = True  # Enable 3D ball shading
+    texture_mapping: bool = True  # Map new image onto particles
+
+
 class TransitionStateManager:
     """
     Manages active transition states.
@@ -160,6 +180,7 @@ class TransitionStateManager:
         self._warp: Optional[WarpState] = None
         self._raindrops: Optional[RaindropsState] = None
         self._crumble: Optional[CrumbleState] = None
+        self._particle: Optional[ParticleState] = None
         
         # Callbacks for state changes
         self._on_state_change: Optional[Callable[[str, bool], None]] = None
@@ -307,6 +328,18 @@ class TransitionStateManager:
         if was_active != is_active:
             self._notify("crumble", is_active)
     
+    @property
+    def particle(self) -> Optional[ParticleState]:
+        return self._particle
+    
+    @particle.setter
+    def particle(self, value: Optional[ParticleState]) -> None:
+        was_active = self._particle is not None
+        self._particle = value
+        is_active = value is not None
+        if was_active != is_active:
+            self._notify("particle", is_active)
+    
     def get_active_transition(self) -> Optional[str]:
         """Get the name of the currently active transition, or None."""
         if self._crossfade is not None:
@@ -331,6 +364,8 @@ class TransitionStateManager:
             return "raindrops"
         if self._crumble is not None:
             return "crumble"
+        if self._particle is not None:
+            return "particle"
         return None
     
     def clear_all(self) -> None:
@@ -346,3 +381,4 @@ class TransitionStateManager:
         self._warp = None
         self._raindrops = None
         self._crumble = None
+        self._particle = None

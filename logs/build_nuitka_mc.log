@@ -8,10 +8,11 @@ Nuitka: Running data composer tool for optimal constant value handling.
 Nuitka: Running C compilation via Scons.
 Nuitka-Scons: Non downloaded winlibs-gcc 'C:\ProgramData\mingw64\mingw64\bin\gcc.exe' is being ignored, Nuitka is very dependent on the precise one.
 Nuitka-Scons: Backend C compiler: gcc (gcc 14.2.0).
-Nuitka-Scons: Backend C linking with 722 files (no progress information available for this stage).
-Nuitka-Scons: Compiled 714 C files using ccache.
-Nuitka-Scons: Cached C files (using ccache) with result 'cache hit': 690
-Nuitka-Scons: Cached C files (using ccache) with result 'cache miss': 24
+Nuitka-Scons: Backend C linking with 727 files (no progress information available for this stage).
+Nuitka-Scons: Compiled 715 C files using ccache.
+Nuitka-Scons: Cached C files (using ccache) with result 'cache hit': 700
+Nuitka-Scons: Cached C files (using ccache) with result 'cache miss': 14
+Nuitka-Scons: Cached C files (using ccache) with result 'local_storage_read[2025-12-17T09:36:20.569260 20776] Result: local_storage_hit': 1
 Nuitka-Postprocessing: Adding 9 icon(s) from icon file 'F:\Programming\Apps\ShittyRandomPhotoScreenSaver\SRPSS.ico'.
 Nuitka-Plugins:pyside6: Including Qt plugins 'iconengines,imageformats,platforms,styles,tls' below 'PySide6\qt-plugins'.
 Nuitka-Plugins:dll-files: Found 4 files DLLs from shiboken6 installation.
@@ -24,6 +25,7 @@ Nuitka-Options: Included data file 'images\Reddit_Logo_C.png' due to specified d
 Nuitka-Options: Included data file 'images\Shoogle300W.png' due to specified data dir 'images' on command line.
 Nuitka-Options: Included data file 'images\Shoogle300WM.png' due to specified data dir 'images' on command line.
 Nuitka-Options: Included data file 'images\Spotify_Primary_Logo_RGB_Black.png' due to specified data dir 'images' on command line.
+Nuitka-Options: Included data file 'images\google-gmail.svg' due to specified data dir 'images' on command line.
 Nuitka-Options: Included data file 'images\icons8-musicbee-96.png' due to specified data dir 'images' on command line.
 Nuitka-Plugins:data-files: Included data file 'certifi\cacert.pem' due to package data for 'certifi'.
 Nuitka-Plugins:data-files: Included 604 data files due to package data directory 'zoneinfo' for 'pytz'.
@@ -36,7 +38,7 @@ Nuitka-Scons: Compiled 1 C files using ccache.
 Nuitka-Scons: Cached C files (using ccache) with result 'cache hit': 1
 Nuitka-Postprocessing: Adding 9 icon(s) from icon file 'F:\Programming\Apps\ShittyRandomPhotoScreenSaver\SRPSS.ico'.
 Nuitka-Onefile: Using compression for onefile payload.
-Nuitka-Onefile: Onefile payload compression ratio (25.40%) size 176452101 to 44812131.
+Nuitka-Onefile: Onefile payload compression ratio (25.41%) size 176430723 to 44831752.
 Nuitka-Onefile: Removing onefile build directory 'F:\Programming\Apps\ShittyRandomPhotoScreenSaver\release\main_mc.onefile-build'.
 Nuitka: Removing dist folder 'F:\Programming\Apps\ShittyRandomPhotoScreenSaver\release\main_mc.dist'.
 Nuitka: Removing build directory 'F:\Programming\Apps\ShittyRandomPhotoScreenSaver\release\main_mc.build'.

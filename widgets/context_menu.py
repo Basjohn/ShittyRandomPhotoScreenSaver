@@ -30,7 +30,7 @@ QMenu {
 QMenu::item {
     background-color: transparent;
     color: #ffffff;
-    padding: 8px 24px 8px 16px;
+    padding: 8px 24px 8px 8px;
     margin: 2px 4px;
     border-radius: 4px;
     font-size: 13px;
@@ -50,7 +50,7 @@ QMenu::indicator {
     width: 16px;
     height: 16px;
     margin-left: 6px;
-    margin-right: 4px;
+    margin-right: 6px;
 }
 QMenu::indicator:checked {
     background-color: #ffffff;

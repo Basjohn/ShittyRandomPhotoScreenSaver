@@ -1695,6 +1695,15 @@ class DisplayWidget(QWidget):
         self._cleanup_widget("reddit2_widget", "REDDIT2", "cleanup")
         self._cleanup_widget("_pixel_shift_manager", "PIXEL_SHIFT", "cleanup")
         
+        # Cleanup cursor halo (top-level window, must be explicitly destroyed)
+        try:
+            if self._ctrl_cursor_hint is not None:
+                self._ctrl_cursor_hint.hide()
+                self._ctrl_cursor_hint.deleteLater()
+                self._ctrl_cursor_hint = None
+        except Exception:
+            self._ctrl_cursor_hint = None
+        
         # Stop and clean up any active transition via TransitionController
         try:
             if self._transition_controller is not None:
@@ -1794,6 +1803,26 @@ class DisplayWidget(QWidget):
         # Ensure overlays are hidden to prevent residual frames during exit
         try:
             hide_all_overlays(self)
+        except Exception:
+            pass
+        
+        # Hide and destroy cursor halo (top-level window that persists independently)
+        # Must hide immediately and process events to ensure it's gone before settings dialog
+        try:
+            if self._ctrl_cursor_hint is not None:
+                self._ctrl_cursor_hint.hide()
+                self._ctrl_cursor_hint.close()
+                self._ctrl_cursor_hint.deleteLater()
+                self._ctrl_cursor_hint = None
+        except Exception:
+            self._ctrl_cursor_hint = None
+        
+        # Reset global Ctrl state to prevent halo from reappearing
+        try:
+            from rendering.multi_monitor_coordinator import get_coordinator
+            coordinator = get_coordinator()
+            coordinator.set_ctrl_held(False)
+            coordinator.clear_halo_owner()
         except Exception:
             pass
 
@@ -1927,78 +1956,20 @@ class DisplayWidget(QWidget):
     def request_overlay_fade_sync(self, overlay_name: str, starter: Callable[[], None]) -> None:
         """Register an overlay's initial fade so all widgets can fade together.
 
-        Overlays call this when they are ready to start their first fade-in.
-        We buffer the starter callbacks until either all expected overlays have
-        registered or a short timeout elapses, then run them together.
+        Delegates to WidgetManager which has the correct expected overlay set.
         """
-
-        try:
-            expected = self._overlay_fade_expected
-        except Exception:
-            expected = set()
-
-        started = getattr(self, "_overlay_fade_started", False)
-        if is_verbose_logging():
-            logger.debug(
-                "[OVERLAY_FADE] request_overlay_fade_sync: screen=%s overlay=%s expected=%s started=%s",
-                self.screen_index,
-                overlay_name,
-                sorted(expected) if expected else [],
-                started,
-            )
-
-        # If coordination is not active or fades already kicked off, run now.
-        if not expected or started:
-            if is_verbose_logging():
-                logger.debug(
-                    "[OVERLAY_FADE] %s running starter immediately (expected=%s, started=%s)",
-                    overlay_name,
-                    sorted(expected) if expected else [],
-                    started,
-                )
+        if self._widget_manager is not None:
             try:
-                starter()
+                self._widget_manager.request_overlay_fade_sync(overlay_name, starter)
+                return
             except Exception:
                 pass
-            return
-
-        pending = getattr(self, "_overlay_fade_pending", None)
-        if not isinstance(pending, dict):
-            pending = {}
-            self._overlay_fade_pending = pending
-
-        pending[overlay_name] = starter
-
-        remaining = [name for name in expected if name not in pending]
-        if is_verbose_logging():
-            logger.debug(
-                "[OVERLAY_FADE] %s registered (pending=%s, remaining=%s)",
-                overlay_name,
-                sorted(pending.keys()),
-                sorted(remaining),
-            )
-        if not remaining:
-            try:
-                QTimer.singleShot(0, lambda: self._start_overlay_fades(force=False))
-            except Exception:
-                self._start_overlay_fades(force=False)
-            return
-
-        # Arm a timeout so a misbehaving overlay cannot block all fades.
-        if self._overlay_fade_timeout is None:
-            try:
-                timeout = QTimer(self)
-                timeout.setSingleShot(True)
-
-                def _on_timeout() -> None:
-                    self._start_overlay_fades(force=True)
-
-                timeout.timeout.connect(_on_timeout)
-                timeout.start(2500)
-                self._overlay_fade_timeout = timeout
-            except Exception:
-                # If timer setup fails, just run fades immediately.
-                self._start_overlay_fades(force=True)
+        
+        # Fallback: run starter immediately if no WidgetManager
+        try:
+            starter()
+        except Exception:
+            pass
 
     def _start_overlay_fades(self, force: bool = False) -> None:
         """Kick off any pending overlay fade callbacks."""
@@ -2141,7 +2112,7 @@ class DisplayWidget(QWidget):
         """Show/animate the cursor halo at the given position.
         
         Args:
-            pos: Position to center the halo on
+            pos: Position to center the halo on (local widget coordinates)
             mode: "none" for reposition only, "fade_in" or "fade_out" for animation
         """
         self._ensure_ctrl_cursor_hint()
@@ -2149,15 +2120,17 @@ class DisplayWidget(QWidget):
         if hint is None:
             return
         
-        # Position and show
-        size = hint.size()
-        hint.move(pos.x() - size.width() // 2, pos.y() - size.height() // 2)
-        hint.show()
-        hint.raise_()
-
-        # Movement-only updates while Ctrl is held just reposition the halo.
+        # Position and show - halo is now a top-level window so use show_at/move_to
+        # which handle coordinate mapping to global screen coordinates
         if mode == "none":
+            # Just reposition
+            hint.move_to(pos.x(), pos.y())
+            if not hint.isVisible():
+                hint.show()
             return
+        
+        # Show at position (handles coordinate mapping)
+        hint.show_at(pos.x(), pos.y())
 
         # Delegate animation to CursorHaloWidget
         if mode == "fade_in":
@@ -2246,6 +2219,7 @@ class DisplayWidget(QWidget):
                         getattr(self, "media_widget", None),
                         getattr(self, "reddit_widget", None),
                         getattr(self, "reddit2_widget", None),
+                        getattr(self, "gmail_widget", None),
                     )
                     logger.info("[REDDIT] route_widget_click returned: handled=%s reddit_handled=%s screen=%s",
                                handled, reddit_handled, self.screen_index)
@@ -2549,7 +2523,11 @@ class DisplayWidget(QWidget):
             except Exception:
                 pass
             try:
-                self._invalidate_overlay_effects("menu_before_popup")
+                # Phase E: Broadcast effect invalidation to ALL displays
+                # Context menu on one display triggers Windows activation cascade
+                # that corrupts QGraphicsEffect caches on OTHER displays
+                from rendering.multi_monitor_coordinator import get_coordinator
+                get_coordinator().invalidate_all_effects("menu_before_popup_broadcast")
                 self._context_menu.popup(global_pos)
             except Exception:
                 try:

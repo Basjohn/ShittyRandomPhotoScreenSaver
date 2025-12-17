@@ -567,6 +567,10 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
         "rendering.multi_monitor_coordinator",
         # RSS source - logs every feed parse
         "sources.rss_source",
+        # Gmail modules - logs on every fetch/auth
+        "core.auth.gmail_oauth",
+        "core.gmail.gmail_client",
+        "widgets.gmail_widget",
     )
     internal_noisy_level = logging.DEBUG if verbose else logging.INFO
     for name in NOISY_INTERNAL_MODULES:

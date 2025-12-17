@@ -91,6 +91,9 @@ class MultiMonitorCoordinator(QObject):
         # Display instance registry - weak references keyed by screen
         self._instances: Dict[int, weakref.ref] = {}  # screen hash -> weak ref
         
+        # Settings dialog active flag - prevents halo from showing
+        self._settings_dialog_active: bool = False
+        
         logger.debug("[MULTI_MONITOR] Coordinator initialized")
     
     # =========================================================================
@@ -107,6 +110,9 @@ class MultiMonitorCoordinator(QObject):
         """Set the global Ctrl-held state."""
         changed = False
         with self._state_lock:
+            # Don't allow Ctrl held when settings dialog is active
+            if self._settings_dialog_active:
+                held = False
             if self._global_ctrl_held != held:
                 self._global_ctrl_held = held
                 changed = True
@@ -117,6 +123,21 @@ class MultiMonitorCoordinator(QObject):
                 self.ctrl_held_changed.emit(held)
             except Exception:
                 pass
+    
+    @property
+    def settings_dialog_active(self) -> bool:
+        """Check if settings dialog is currently active."""
+        with self._state_lock:
+            return self._settings_dialog_active
+    
+    def set_settings_dialog_active(self, active: bool) -> None:
+        """Set whether settings dialog is active. When active, halo is suppressed."""
+        with self._state_lock:
+            self._settings_dialog_active = active
+            if active:
+                # Force Ctrl held to false when settings opens
+                self._global_ctrl_held = False
+        logger.debug("[MULTI_MONITOR] Settings dialog active: %s", active)
     
     # =========================================================================
     # Halo Ownership
@@ -312,6 +333,21 @@ class MultiMonitorCoordinator(QObject):
                 if hint is not None:
                     hint.cancel_animation()
                     hint.hide()
+            except Exception:
+                pass
+
+    def invalidate_all_effects(self, reason: str) -> None:
+        """Invalidate overlay effects on ALL displays.
+        
+        Phase E fix: Context menu on one display triggers Windows activation
+        cascade that corrupts QGraphicsEffect caches on OTHER displays.
+        This broadcasts invalidation to all displays to prevent corruption.
+        """
+        for widget in self.get_all_instances():
+            try:
+                invalidate_fn = getattr(widget, "_invalidate_overlay_effects", None)
+                if callable(invalidate_fn):
+                    invalidate_fn(reason)
             except Exception:
                 pass
     

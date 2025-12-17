@@ -562,6 +562,7 @@ class InputHandler(QObject):
         media_widget,
         reddit_widget,
         reddit2_widget,
+        gmail_widget=None,
     ) -> tuple:
         """
         Route clicks to interactive widgets in interaction mode.
@@ -624,6 +625,21 @@ class InputHandler(QObject):
                                 reddit_handled = True
                 except Exception:
                     logger.debug("[INPUT] Reddit click routing failed", exc_info=True)
+        
+        # Gmail widget
+        if not handled and gmail_widget is not None:
+            try:
+                gw = gmail_widget
+                if gw.isVisible() and gw.geometry().contains(pos):
+                    geom = gw.geometry()
+                    local_pos = QPoint(pos.x() - geom.x(), pos.y() - geom.y())
+                    if hasattr(gw, 'handle_click'):
+                        result = gw.handle_click(local_pos)
+                        logger.debug("[INPUT] Gmail handle_click returned: %s", result)
+                        if result:
+                            handled = True
+            except Exception:
+                logger.debug("[INPUT] Gmail click routing failed", exc_info=True)
         
         logger.debug("[INPUT] route_widget_click returning: handled=%s reddit_handled=%s", handled, reddit_handled)
         return handled, reddit_handled

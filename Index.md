@@ -58,6 +58,9 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - `VerboseLogFilter` - Captures all DEBUG/INFO for deep debugging
 - core/logging/overlay_telemetry.py
   - Overlay telemetry logging for debugging widget behavior
+- **ARCHIVED**: Gmail modules moved to `archive/gmail_feature/` (Dec 2025)
+  - Google OAuth verification requirements block unverified apps from using sensitive Gmail scopes
+  - See `archive/gmail_feature/RESTORE_GMAIL.md` for restoration instructions
 
 ## Engine
 - engine/screensaver_engine.py
@@ -202,6 +205,10 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - Compositor-backed GL-only Warp Dissolve transition using a banded horizontal warp of the old image over a stable new image.
 - transitions/gl_compositor_crumble_transition.py
   - Compositor-backed GL-only Crumble transition creating a rock-like Voronoi crack pattern across the old image, then pieces fall away with physics-based motion (gravity, rotation, drift) to reveal the new image.
+- transitions/gl_compositor_particle_transition.py
+  - Compositor-backed GL-only Particle transition where smooth round particles fly in from off-screen and stack to reveal the new image. Supports Directional mode (8 directions) and Swirl mode (spiral from edges). Features 3D ball shading, motion trails, and texture mapping onto particles.
+- rendering/gl_programs/particle_program.py
+  - GLSL shader program for Particle transition. Grid-driven analytic approach for predictable performance - each pixel evaluates only a small neighborhood of candidate cells.
 
 ## Sources
 - sources/base_provider.py

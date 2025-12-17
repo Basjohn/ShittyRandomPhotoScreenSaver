@@ -42,6 +42,7 @@ from rendering.transition_state import (
     BlindsState,
     DiffuseState,
     CrumbleState,
+    ParticleState,
 )
 
 try:  # Optional dependency; shaders are disabled if unavailable.
@@ -97,6 +98,10 @@ def _get_wipe_program():
 def _get_crumble_program():
     """Get the CrumbleProgram instance via cache."""
     return get_program_cache().get_program_instance(GLProgramCache.CRUMBLE)
+
+def _get_particle_program():
+    """Get the ParticleProgram instance via cache."""
+    return get_program_cache().get_program_instance(GLProgramCache.PARTICLE)
 
 def _get_warp_program():
     """Get the WarpProgram instance via cache."""
@@ -167,6 +172,7 @@ class _GLPipelineState:
     wipe_program: int = 0
     blinds_program: int = 0
     crumble_program: int = 0
+    particle_program: int = 0
 
     # Uniform locations for basic card-flip program
     u_angle_loc: int = -1
@@ -186,6 +192,7 @@ class _GLPipelineState:
     peel_uniforms: dict = field(default_factory=dict)
     blinds_uniforms: dict = field(default_factory=dict)
     crumble_uniforms: dict = field(default_factory=dict)
+    particle_uniforms: dict = field(default_factory=dict)
     crossfade_uniforms: dict = field(default_factory=dict)
     slide_uniforms: dict = field(default_factory=dict)
     wipe_uniforms: dict = field(default_factory=dict)
@@ -232,6 +239,7 @@ class GLCompositorWidget(QOpenGLWidget):
         self._raindrops: Optional[RaindropsState] = None
         self._peel: Optional[PeelState] = None
         self._crumble: Optional[CrumbleState] = None
+        self._particle: Optional[ParticleState] = None
         # NOTE: _shuffle and _shooting_stars removed - these transitions are retired.
 
         # Centralized profiler for all compositor-driven transitions.
@@ -297,6 +305,7 @@ class GLCompositorWidget(QOpenGLWidget):
             "warp": _get_warp_program,
             "raindrops": _get_raindrops_program,
             "crumble": _get_crumble_program,
+            "particle": _get_particle_program,
         })
 
         # Optional ResourceManager hook so higher-level code can track this
@@ -557,6 +566,7 @@ class GLCompositorWidget(QOpenGLWidget):
         self._peel = None
         self._raindrops = None
         self._crumble = None
+        self._particle = None
 
     def _handle_no_old_image(self, new_pixmap: QPixmap, on_finished: Optional[Callable[[], None]], name: str) -> bool:
         """Handle case where there's no old image - show new image immediately. Returns True if handled."""
@@ -1073,6 +1083,80 @@ class GLCompositorWidget(QOpenGLWidget):
             lambda: self._on_crumble_complete(on_finished),
         )
 
+    def start_particle(
+        self,
+        old_pixmap: Optional[QPixmap],
+        new_pixmap: QPixmap,
+        *,
+        duration_ms: int,
+        easing: EasingCurve,
+        animation_manager: AnimationManager,
+        on_finished: Optional[Callable[[], None]] = None,
+        mode: int = 0,
+        direction: int = 0,
+        particle_radius: float = 24.0,
+        overlap: float = 4.0,
+        trail_length: float = 0.15,
+        trail_strength: float = 0.6,
+        swirl_strength: float = 1.0,
+        swirl_turns: float = 2.0,
+        use_3d_shading: bool = True,
+        texture_mapping: bool = True,
+        seed: Optional[float] = None,
+    ) -> Optional[str]:
+        """Begin a particle transition using the compositor.
+        
+        Args:
+            mode: 0=Directional, 1=Swirl
+            direction: 0=L→R, 1=R→L, 2=T→B, 3=B→T, 4-7=diagonals
+            particle_radius: Base particle radius in pixels
+            overlap: Overlap in pixels to avoid gaps
+            trail_length: Trail length as fraction of particle size
+            trail_strength: Trail opacity 0..1
+            swirl_strength: Angular component for swirl mode
+            swirl_turns: Number of spiral turns
+            use_3d_shading: Enable 3D ball shading
+            texture_mapping: Map new image onto particles
+            seed: Random seed (auto-generated if None)
+        """
+        import random as _random
+
+        if not new_pixmap or new_pixmap.isNull():
+            logger.error("[GL COMPOSITOR] Invalid new pixmap for particle")
+            return None
+
+        if old_pixmap is None or old_pixmap.isNull():
+            if self._handle_no_old_image(new_pixmap, on_finished, "particle"):
+                return None
+
+        self._clear_all_transitions()
+        actual_seed = seed if seed is not None else _random.random() * 1000.0
+        self._particle = ParticleState(
+            old_pixmap=old_pixmap, new_pixmap=new_pixmap, progress=0.0,
+            seed=actual_seed, mode=mode, direction=direction,
+            particle_radius=max(8.0, particle_radius),
+            overlap=max(0.0, overlap),
+            trail_length=max(0.0, min(1.0, trail_length)),
+            trail_strength=max(0.0, min(1.0, trail_strength)),
+            swirl_strength=max(0.0, swirl_strength),
+            swirl_turns=max(0.5, swirl_turns),
+            use_3d_shading=use_3d_shading,
+            texture_mapping=texture_mapping,
+        )
+        self._pre_upload_textures(self._prepare_particle_textures)
+        self._profiler.start("particle")
+
+        def _particle_update(progress: float) -> None:
+            self._profiler.tick("particle")
+            if self._particle is not None:
+                self._particle.progress = max(0.0, min(1.0, float(progress)))
+
+        return self._start_transition_animation(
+            duration_ms, easing, animation_manager,
+            _particle_update,
+            lambda: self._on_particle_complete(on_finished),
+        )
+
     # ------------------------------------------------------------------
     # Animation callbacks
     # ------------------------------------------------------------------
@@ -1139,6 +1223,9 @@ class GLCompositorWidget(QOpenGLWidget):
 
     def _on_crumble_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
         self._complete_transition("crumble", "_crumble", on_finished)
+
+    def _on_particle_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
+        self._complete_transition("particle", "_particle", on_finished)
 
     def _set_transition_region(self, state_attr: str, region: Optional[QRegion]) -> None:
         """Generic region setter for region-based transitions."""
@@ -1379,6 +1466,7 @@ class GLCompositorWidget(QOpenGLWidget):
                 (GLProgramCache.WIPE, "wipe_program", "wipe_uniforms"),
                 (GLProgramCache.BLINDS, "blinds_program", "blinds_uniforms"),
                 (GLProgramCache.CRUMBLE, "crumble_program", "crumble_uniforms"),
+                (GLProgramCache.PARTICLE, "particle_program", "particle_uniforms"),
             ]
             
             for program_name, program_attr, uniforms_attr in programs_to_compile:
@@ -1434,7 +1522,7 @@ class GLCompositorWidget(QOpenGLWidget):
         program_attrs = [
             "basic_program", "raindrops_program", "warp_program", "diffuse_program",
             "blockflip_program", "peel_program", "crossfade_program", "slide_program",
-            "wipe_program", "blinds_program", "crumble_program",
+            "wipe_program", "blinds_program", "crumble_program", "particle_program",
         ]
         for attr in program_attrs:
             setattr(self._gl_pipeline, attr, 0)
@@ -1865,6 +1953,9 @@ void main() {
     def _can_use_crumble_shader(self) -> bool:
         return self._can_use_simple_shader(self._crumble, getattr(self._gl_pipeline, "crumble_program", 0))
 
+    def _can_use_particle_shader(self) -> bool:
+        return self._can_use_simple_shader(self._particle, getattr(self._gl_pipeline, "particle_program", 0))
+
     def _can_use_crossfade_shader(self) -> bool:
         return self._can_use_simple_shader(self._crossfade, getattr(self._gl_pipeline, "crossfade_program", 0))
 
@@ -1997,6 +2088,9 @@ void main() {
     def _prepare_crumble_textures(self) -> bool:
         return self._prepare_transition_textures(self._can_use_crumble_shader, self._crumble)
 
+    def _prepare_particle_textures(self) -> bool:
+        return self._prepare_transition_textures(self._can_use_particle_shader, self._particle)
+
     def _prepare_crossfade_textures(self) -> bool:
         return self._prepare_transition_textures(self._can_use_crossfade_shader, self._crossfade)
 
@@ -2059,6 +2153,12 @@ void main() {
         self._render_simple_shader(
             self._can_use_crumble_shader, self._crumble, self._prepare_crumble_textures,
             "crumble_program", "crumble_uniforms", "crumble"
+        )
+
+    def _paint_particle_shader(self, target: QRect) -> None:
+        self._render_simple_shader(
+            self._can_use_particle_shader, self._particle, self._prepare_particle_textures,
+            "particle_program", "particle_uniforms", "particle"
         )
 
     def _render_simple_shader(
@@ -2359,6 +2459,8 @@ void main() {
              self._paint_blinds_shader, None),
             ("crumble", self._crumble, self._can_use_crumble_shader,
              self._paint_crumble_shader, None),
+            ("particle", self._particle, self._can_use_particle_shader,
+             self._paint_particle_shader, None),
             ("crossfade", self._crossfade, self._can_use_crossfade_shader,
              self._paint_crossfade_shader, None),
             ("slide", self._slide, self._can_use_slide_shader,

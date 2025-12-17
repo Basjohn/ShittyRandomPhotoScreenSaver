@@ -4,11 +4,19 @@ Cursor halo widget for Ctrl-click interaction mode.
 Provides a visual indicator (ring + dot) that follows the cursor when
 Ctrl is held, allowing users to interact with widgets without triggering
 the screensaver exit.
+
+The halo is implemented as a top-level frameless window (not a child widget)
+so it floats above all other widgets including QOpenGLWidget-based overlays
+like the Spotify visualizer and volume slider. This avoids Z-order fighting
+with GL widgets that have their own native window handles.
+
+Mouse events are forwarded to the parent widget so context menus and clicks
+still work. The mouse cursor is hidden when the halo is visible.
 """
 from typing import Optional
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QWidget, QApplication
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QPainter, QColor, QPaintEvent
+from PySide6.QtGui import QPainter, QColor, QPaintEvent, QMouseEvent
 
 from core.animation.animator import AnimationManager
 from core.animation.types import EasingCurve
@@ -23,16 +31,30 @@ class CursorHaloWidget(QWidget):
     
     Displays a semi-transparent ring with a center dot that follows
     the cursor position. Supports fade-in/fade-out animations.
+    
+    Implemented as a top-level frameless window to guarantee it stays
+    above QOpenGLWidget-based overlays (Spotify visualizer, volume slider).
+    Mouse events are forwarded to the parent widget for context menu support.
     """
     
     def __init__(self, parent: QWidget) -> None:
-        super().__init__(parent)
-        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        # WA_TranslucentBackground is REQUIRED for true transparency.
-        # The halo must be raised ABOVE the dimming overlay via Z-order,
-        # not by using opaque widget attributes.
+        # Create as top-level frameless window, not a child widget
+        # This ensures it floats above all sibling widgets including GL overlays
+        super().__init__(
+            None,  # No parent - top-level window
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.WindowStaysOnTopHint |
+            Qt.WindowType.Tool |  # Exclude from taskbar/alt-tab
+            Qt.WindowType.WindowDoesNotAcceptFocus
+        )
+        self._parent_widget = parent  # Keep reference for coordinate mapping and event forwarding
+        
+        # Don't use WA_TransparentForMouseEvents - we need to receive and forward events
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.setAutoFillBackground(False)
+        # Hide mouse cursor over halo - the halo IS the cursor
+        self.setCursor(Qt.CursorShape.BlankCursor)
         self.resize(40, 40)
         self._opacity = 1.0
         self._animation_id: Optional[str] = None
@@ -50,7 +72,7 @@ class CursorHaloWidget(QWidget):
         return float(self._opacity)
 
     def paintEvent(self, event: QPaintEvent) -> None:  # type: ignore[override]
-        """Paint the halo ring and center dot."""
+        """Paint the halo ring and center dot with drop shadow."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         
@@ -59,24 +81,82 @@ class CursorHaloWidget(QWidget):
         base_alpha = 200
         alpha = int(max(0.0, min(1.0, self._opacity)) * base_alpha)
         color = QColor(255, 255, 255, alpha)
+        
+        # Shadow parameters
+        shadow_offset = 2
+        shadow_alpha = int(max(0.0, min(1.0, self._opacity)) * 80)
+        shadow_color = QColor(0, 0, 0, shadow_alpha)
 
-        # Thicker outer ring
+        r = min(self.width(), self.height()) - 8
+        cx = self.width() // 2
+        cy = self.height() // 2
+        inner_radius = max(2, r // 6)
+
+        # Draw shadow ring (offset down-right)
         pen = painter.pen()
+        pen.setColor(shadow_color)
+        pen.setWidth(5)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawEllipse(4 + shadow_offset, 4 + shadow_offset, r, r)
+        
+        # Draw shadow dot
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(shadow_color)
+        painter.drawEllipse(
+            cx - inner_radius + shadow_offset,
+            cy - inner_radius + shadow_offset,
+            inner_radius * 2, inner_radius * 2
+        )
+
+        # Draw main outer ring
         pen.setColor(color)
         pen.setWidth(4)
         painter.setPen(pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        r = min(self.width(), self.height()) - 8
         painter.drawEllipse(4, 4, r, r)
 
-        # Inner solid dot to suggest the click position
-        inner_radius = max(2, r // 6)
-        cx = self.width() // 2
-        cy = self.height() // 2
+        # Draw main inner dot
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(color)
         painter.drawEllipse(cx - inner_radius, cy - inner_radius, inner_radius * 2, inner_radius * 2)
         painter.end()
+    
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        """Forward mouse press to parent widget."""
+        self._forward_mouse_event(event)
+    
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        """Forward mouse release to parent widget."""
+        self._forward_mouse_event(event)
+    
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
+        """Forward double click to parent widget."""
+        self._forward_mouse_event(event)
+    
+    def _forward_mouse_event(self, event: QMouseEvent) -> None:
+        """Forward a mouse event to the parent widget at the correct position."""
+        if self._parent_widget is None:
+            return
+        try:
+            # Map halo-local position to global, then to parent-local
+            global_pos = self.mapToGlobal(event.pos())
+            local_pos = self._parent_widget.mapFromGlobal(global_pos)
+            
+            # Create a new event with the mapped position
+            new_event = QMouseEvent(
+                event.type(),
+                local_pos,
+                global_pos,
+                event.button(),
+                event.buttons(),
+                event.modifiers()
+            )
+            
+            # Post the event to the parent widget
+            QApplication.sendEvent(self._parent_widget, new_event)
+        except Exception:
+            logger.debug("Failed to forward mouse event to parent", exc_info=True)
     
     def cancel_animation(self) -> None:
         """Cancel any running fade animation."""
@@ -150,8 +230,57 @@ class CursorHaloWidget(QWidget):
             logger.debug("Failed to start halo animation via AnimationManager", exc_info=True)
     
     def show_at(self, x: int, y: int) -> None:
-        """Show the halo centered at the given position."""
+        """Show the halo centered at the given local position.
+        
+        Args:
+            x, y: Position in parent widget coordinates (will be mapped to global)
+        """
+        # Don't show if settings dialog is active
+        try:
+            from rendering.multi_monitor_coordinator import get_coordinator
+            if get_coordinator().settings_dialog_active:
+                return
+        except Exception:
+            pass
+        
         size = self.size()
-        self.move(x - size.width() // 2, y - size.height() // 2)
+        # Convert local coordinates to global screen coordinates
+        if self._parent_widget is not None:
+            try:
+                global_pos = self._parent_widget.mapToGlobal(
+                    self._parent_widget.rect().topLeft()
+                )
+                global_x = global_pos.x() + x - size.width() // 2
+                global_y = global_pos.y() + y - size.height() // 2
+            except Exception:
+                global_x = x - size.width() // 2
+                global_y = y - size.height() // 2
+        else:
+            global_x = x - size.width() // 2
+            global_y = y - size.height() // 2
+        
+        self.move(global_x, global_y)
         self.show()
-        self.raise_()
+    
+    def move_to(self, x: int, y: int) -> None:
+        """Move the halo to be centered at the given local position.
+        
+        Args:
+            x, y: Position in parent widget coordinates (will be mapped to global)
+        """
+        size = self.size()
+        if self._parent_widget is not None:
+            try:
+                global_pos = self._parent_widget.mapToGlobal(
+                    self._parent_widget.rect().topLeft()
+                )
+                global_x = global_pos.x() + x - size.width() // 2
+                global_y = global_pos.y() + y - size.height() // 2
+            except Exception:
+                global_x = x - size.width() // 2
+                global_y = y - size.height() // 2
+        else:
+            global_x = x - size.width() // 2
+            global_y = y - size.height() // 2
+        
+        self.move(global_x, global_y)
