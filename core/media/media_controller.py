@@ -5,9 +5,12 @@ Transport Controls (GSMTC) when available, with a safe no-op fallback
 when APIs or dependencies are missing.
 
 The controller is intentionally polling-based and side-effect free
-for reads, so it can be driven from a QTimer in a widget without
-introducing new threads or event-loop coupling. All failures are
-soft (logged at debug/info) and never raise into the caller.
+for reads. Callers may poll from the UI thread.
+
+On Windows, GSMTC/WinRT calls are treated as potentially blocking IO
+and are executed via ThreadManager with a hard timeout so they cannot
+stall the UI thread or test runner. All failures are soft (logged at
+debug/info) and never raise into the caller.
 """
 from __future__ import annotations
 
@@ -18,6 +21,10 @@ from typing import Optional
 from core.logging.logger import get_logger, is_verbose_logging
 
 logger = get_logger(__name__)
+
+
+_media_tm = None
+_media_tm_lock = None
 
 
 class MediaPlaybackState(Enum):
@@ -93,9 +100,11 @@ class NoOpMediaController(BaseMediaController):
 class WindowsGlobalMediaController(BaseMediaController):
     """Windows 10/11 GSMTC-based controller.
 
-    Uses winrt.windows.media.control if available. All access is
-    performed via short-lived asyncio event loops created per call to
-    avoid coupling to any existing event loop integration.
+    Uses winrt.windows.media.control if available.
+
+    Implementation note: WinRT awaits may stall and do not always honor
+    cancellation. To keep UI polling safe, async calls are executed on
+    the ThreadManager IO pool with a hard timeout.
     """
 
     def __init__(self) -> None:
@@ -139,32 +148,107 @@ class WindowsGlobalMediaController(BaseMediaController):
 
         This avoids interfering with any existing asyncio usage.
         Failures are logged and result in None.
+
+        IMPORTANT: This function must never block the UI thread on a
+        potentially-stuck WinRT await. We therefore run the loop on the
+        ThreadManager IO pool and enforce a hard timeout; after a hard
+        timeout we disable GSMTC queries for the remainder of the session.
         """
 
         import asyncio
+        import threading
+
+        # Lazily provision a shared ThreadManager for media IO.
+        global _media_tm, _media_tm_lock
+        if _media_tm_lock is None:
+            _media_tm_lock = threading.Lock()
+        if _media_tm is None:
+            with _media_tm_lock:
+                if _media_tm is None:
+                    try:
+                        from core.threading.manager import ThreadManager
+
+                        _media_tm = ThreadManager()
+                    except Exception:
+                        logger.debug("[MEDIA] Failed to create ThreadManager for GSMTC", exc_info=True)
+                        _media_tm = None
+
+        tm = _media_tm
+        if tm is None:
+            return None
+
+        if getattr(tm, "_srpss_media_disabled", False):
+            return None
+
+        done = threading.Event()
+        holder: dict[str, object] = {"result": None}
+
+        def _run_in_loop() -> object:
+            try:
+                loop = asyncio.new_event_loop()
+                try:
+                    asyncio.set_event_loop(loop)
+
+                    async def _runner():
+                        try:
+                            # Best-effort timeout (WinRT awaits do not always
+                            # honour cancellation).
+                            return await asyncio.wait_for(coro, timeout=2.0)
+                        except asyncio.TimeoutError:
+                            logger.debug("[MEDIA] Coroutine timed out, returning None")
+                            return None
+
+                    return loop.run_until_complete(_runner())
+                finally:
+                    try:
+                        loop.close()
+                    except Exception:
+                        pass
+            except Exception:
+                logger.debug("[MEDIA] GSMTC loop runner failed", exc_info=True)
+                return None
+
+        def _on_done(task_result) -> None:
+            try:
+                holder["result"] = getattr(task_result, "result", None)
+            except Exception:
+                holder["result"] = None
+            finally:
+                done.set()
+
+        # Prevent piling up stuck WinRT calls: allow only one inflight query.
+        inflight = getattr(tm, "_srpss_media_inflight", False)
+        if inflight:
+            return None
+        setattr(tm, "_srpss_media_inflight", True)
 
         try:
-            loop = asyncio.new_event_loop()
             try:
-                async def _runner():
-                    try:
-                        # Guard against WinRT/GSMTC calls stalling the UI
-                        # thread by enforcing a short timeout. On timeout we
-                        # simply treat the result as unavailable.
-                        return await asyncio.wait_for(coro, timeout=2.0)
-                    except asyncio.TimeoutError:
-                        logger.debug("[MEDIA] Coroutine timed out, returning None")
-                        return None
+                from core.threading.manager import TaskPriority
+                tm.submit_io_task(
+                    _run_in_loop,
+                    task_id="media_gsmtc_query",
+                    priority=TaskPriority.HIGH,
+                    callback=_on_done,
+                )
+            except Exception:
+                logger.debug("[MEDIA] Failed to submit GSMTC query task", exc_info=True)
+                return None
 
-                return loop.run_until_complete(_runner())
-            finally:
+            if not done.wait(timeout=2.5):
+                logger.debug("[MEDIA] GSMTC query hard-timeout, returning None")
                 try:
-                    loop.close()
+                    setattr(tm, "_srpss_media_disabled", True)
                 except Exception:
                     pass
-        except Exception:
-            logger.debug("[MEDIA] Failed to run coroutine", exc_info=True)
-            return None
+                return None
+
+            return holder.get("result")
+        finally:
+            try:
+                setattr(tm, "_srpss_media_inflight", False)
+            except Exception:
+                pass
 
     def _select_spotify_session(self, mgr):
         """Select the Spotify media session from a GSMTC manager.

@@ -1,0 +1,46 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+cachedir: .pytest_cache
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+configfile: pytest.ini
+plugins: qt-4.5.0
+collecting ... collected 5 items
+
+tests/test_reddit_widget.py::test_reddit_filters_daily_weekly_question_threads PASSED [ 20%]
+tests/test_reddit_widget.py::test_reddit_format_age_variants FAILED      [ 40%]
+tests/test_reddit_widget.py::test_reddit_error_hides_before_first_success PASSED [ 60%]
+tests/test_reddit_widget.py::test_reddit_handle_click_row_opens_url PASSED [ 80%]
+tests/test_reddit_widget.py::test_reddit_handle_click_header_opens_subreddit PASSED [100%]
+
+================================== FAILURES ===================================
+_______________________ test_reddit_format_age_variants _______________________
+
+    def test_reddit_format_age_variants():
+        """_format_age should map seconds to human-readable buckets."""
+    
+        widget = RedditWidget()
+    
+        now = 1_000_000.0
+    
+        # Sub\u2011minute rounds up to 1M AGO.
+        assert widget._format_age(now - 10, now) == "1M AGO"  # type: ignore[attr-defined]
+        # Minutes under an hour.
+        assert widget._format_age(now - 15 * 60, now) == "15M AGO"  # type: ignore[attr-defined]
+        # Hours under a day.
+        assert widget._format_age(now - 2 * 3600, now) == "2HR AGO"  # type: ignore[attr-defined]
+        # Days under a week.
+        assert widget._format_age(now - 3 * 86400, now) == "3D AGO"  # type: ignore[attr-defined]
+        # Weeks under a year.
+>       assert widget._format_age(now - 3 * 7 * 86400, now) == "3W AGO"  # type: ignore[attr-defined]
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: assert '' == '3W AGO'
+E         
+E         - 3W AGO
+
+tests\test_reddit_widget.py:75: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_reddit_widget.py::test_reddit_format_age_variants - AssertionError: assert '' == '3W AGO'
+  
+  - 3W AGO
+========================= 1 failed, 4 passed in 0.57s =========================

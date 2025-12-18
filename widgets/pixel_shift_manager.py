@@ -112,6 +112,8 @@ class PixelShiftManager:
         """Register a widget for pixel shifting.
         
         The widget's current position is stored as its original position.
+        Note: Registration does NOT move the widget - only _apply_offset does,
+        and that only runs when enabled and the timer fires.
         """
         if widget is None:
             return
@@ -126,8 +128,8 @@ class PixelShiftManager:
             self._original_positions[widget_id] = QPoint(pos.x(), pos.y())
             if widget not in self._widgets:
                 self._widgets.append(widget)
-            logger.debug("Registered widget for pixel shift: %s at (%d, %d)",
-                        widget.__class__.__name__, pos.x(), pos.y())
+            logger.debug("Registered widget for pixel shift: %s at (%d, %d) [enabled=%s]",
+                        widget.__class__.__name__, pos.x(), pos.y(), self._enabled)
         except Exception:
             pass
     

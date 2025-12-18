@@ -198,7 +198,16 @@ class EventSystem:
             List of recent events
         """
         with self._lock:
-            return self._event_history[-limit:]
+            try:
+                limit_int = int(limit)
+            except Exception:
+                limit_int = 100
+
+            if limit_int <= 0:
+                return []
+
+            history = list(self._event_history)
+            return history[-limit_int:]
     
     def clear(self) -> None:
         """Clear all subscriptions and history."""

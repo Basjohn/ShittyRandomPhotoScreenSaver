@@ -13,13 +13,13 @@ Shitty Showcase where I cut off the Spotify controls in recording.
 - **Random Image Slideshow**
   - Local folders (recursive) as primary source
   - Optional RSS/JSON image feeds (e.g. curated Reddit wallpaper feeds)
-  - Mixed mode (folders + RSS) support
+  - Mixed mode (folders + RSS) support with ratio control
   - High‑quality scaling with optional sharpening
   - Transitions:
     - Ripple
     - 3D Block Spin (Actual 3D like 1998!)
     - Crumble (More work than it was worth!)
-    - Particle
+    - Particle (Somehow does not look shit!)
     - Peel
     - Warp Dissolve
     - Crossfade
@@ -50,15 +50,15 @@ Shitty Showcase where I cut off the Spotify controls in recording.
     - **About** – version, credits, SST-based settings Import/Export (human‑readable JSON snapshot per profile) and emergency defaults button
     
 - **Hard‑exit mode & interaction gating**
-  - Optional "hard‑exit" mode: mouse movement/clicks no longer exit; only keyboard exits
+  - Optional "hard‑exit" mode: mouse movement/clicks no longer exit; only keyboard, context menu or reddit links exit.
   - Ctrl‑driven halo to interact with overlays (e.g. media controls, Reddit links) while the screensaver stays active.
 
   Why? Because you can actually click those reddit links! You can actually control Spotify through its controls in the widget! I never clicked the clock or weather though, you probably shouldn't     try it.
 
   Cntrl holding gives you a temporary interaction mode that makes you able to move/see/click the mouse without exiting (but if you click a reddit link we're going to exit and take you to the         comments so you can join everyone else in not reading the article/source)  
 
-  Hard Exit on the other hand makes nothing except ESC close the screensaver. (This is replicated in the SRPSS_MC release version)
-  While seeming strange at first, if you have multiple monitors you can pick one or two of them, leave it running 24/7 with widgets of your choice. Your image will change reducing any burn worries   and you have pretty widgets.
+  Hard Exit on the other hand makes nothing except ESC/RightClick/Reddit links close the screensaver. (This is replicated in the SRPSS_MC release version)
+  While seeming strange at first, if you have multiple monitors you can pick one or two of them, leave it running 24/7 with widgets of your choice. Your image will change reducing any burn worries   aaaand you have pretty widgets.
 
   (If you have an OLED nothing is gonna stop burn in except a black screen but you know that already)  
 ---
@@ -89,6 +89,9 @@ Shitty Showcase where I cut off the Spotify controls in recording.
     - Any mouse button click → exits the screensaver.
   - **Hard‑exit mode** (hard‑exit ON):
     - Mouse movement and clicks **do not exit**; use `Esc` or `Q` to exit.
+  - **Right Click Context Menu**
+    - Right Click while holding Ctrl and a glorious context menu is born.
+    - Use it for quick accurate transition and settings changes.
 
 - **Ctrl halo interaction**
   - Hold `Ctrl` to show a halo/cursor proxy over the active display.
@@ -108,9 +111,9 @@ You can open the settings dialog in two ways:
 The settings dialog lets you:
 
 - Configure image sources (folders + RSS/JSON feeds)
-- Change display mode, interval, sharpen, and pan & scan
-- Choose the active transition and per‑type options
-- Enable/disable and style each overlay widget
+- Change display mode, interval, sharpen, and refresh sync
+- Choose the active transition with deep per‑type options
+- Enable/disable and style each overlay widget with sliders in your sliders.
 - Enable **Hard Exit** mode (input.hard_exit)
 
 All changes are applied immediately and persisted between runs.

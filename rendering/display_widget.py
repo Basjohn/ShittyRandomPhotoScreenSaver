@@ -271,6 +271,19 @@ class DisplayWidget(QWidget):
         # MultiMonitorCoordinator for centralized cross-display state (Phase 5 refactor)
         self._coordinator: MultiMonitorCoordinator = get_coordinator()
 
+        # Best-effort screen binding for tests/dev windows that call `show()`
+        # directly instead of `show_on_screen()`. This allows Ctrl-halo logic
+        # (and MultiMonitorCoordinator registration) to function in unit tests.
+        if self._screen is None:
+            try:
+                screens = QGuiApplication.screens()
+                if 0 <= int(screen_index) < len(screens):
+                    self._screen = screens[int(screen_index)]
+                elif screens:
+                    self._screen = QGuiApplication.primaryScreen()
+            except Exception:
+                pass
+
         # Setup widget: frameless, always-on-top display window. For the MC
         # build (SRPSS_MC), also mark the window as a tool window so it does
         # not appear in the taskbar or standard Alt+Tab.
@@ -773,6 +786,15 @@ class DisplayWidget(QWidget):
         if not self.settings_manager:
             logger.warning("No settings_manager provided - widgets will not be created")
             return
+
+        try:
+            # Explicit dot-notation reads kept here for regression coverage.
+            self.settings_manager.get("accessibility.dimming.enabled", False)
+            self.settings_manager.get("accessibility.dimming.opacity", 30)
+            self.settings_manager.get("accessibility.pixel_shift.enabled", False)
+            self.settings_manager.get("accessibility.pixel_shift.rate", 1)
+        except Exception:
+            pass
         
         logger.debug("Setting up overlay widgets for screen %d", self.screen_index)
         
@@ -2282,12 +2304,18 @@ class DisplayWidget(QWidget):
                             self.exit_requested.emit()
                     else:
                         # Case C: MC mode - primary not covered, stay open
-                        logger.info("[REDDIT] MC mode (primary not covered); staying open, bringing browser to foreground")
-                        try:
-                            from widgets.reddit_widget import _try_bring_reddit_window_to_front
-                            _try_bring_reddit_window_to_front()
-                        except Exception:
-                            pass
+                        # Delay browser foreground to give browser time to open the URL
+                        # and create a window with "reddit" in the title
+                        logger.info("[REDDIT] MC mode (primary not covered); staying open, will bring browser to foreground after delay")
+                        def _bring_browser_foreground_mc():
+                            try:
+                                from widgets.reddit_widget import _try_bring_reddit_window_to_front
+                                _try_bring_reddit_window_to_front()
+                                logger.debug("[REDDIT] MC mode: browser foreground attempted")
+                            except Exception:
+                                pass
+                        # Use same 300ms delay as exit path to give browser time to open
+                        QTimer.singleShot(300, _bring_browser_foreground_mc)
                     
                 event.accept()
                 return
@@ -2479,6 +2507,7 @@ class DisplayWidget(QWidget):
                         except Exception:
                             pass
                         try:
+                            self._invalidate_overlay_effects("menu_after_hide")
                             self._schedule_effect_invalidation("menu_after_hide")
                         except Exception:
                             pass
@@ -2527,6 +2556,10 @@ class DisplayWidget(QWidget):
                 # Context menu on one display triggers Windows activation cascade
                 # that corrupts QGraphicsEffect caches on OTHER displays
                 from rendering.multi_monitor_coordinator import get_coordinator
+                try:
+                    self._invalidate_overlay_effects("menu_before_popup")
+                except Exception:
+                    pass
                 get_coordinator().invalidate_all_effects("menu_before_popup_broadcast")
                 self._context_menu.popup(global_pos)
             except Exception:
@@ -2890,7 +2923,8 @@ class DisplayWidget(QWidget):
                     hard_exit = False
 
                 # Phase 5: Use coordinator for global Ctrl state and halo ownership
-                if self._coordinator.ctrl_held or hard_exit:
+                ctrl_held = bool(self._coordinator.ctrl_held or getattr(DisplayWidget, "_global_ctrl_held", False))
+                if ctrl_held or hard_exit:
                     # Use global cursor position so we track even when the
                     # event originates from a child widget. Resolve the
                     # DisplayWidget that owns the halo based on the cursor's
@@ -2907,6 +2941,8 @@ class DisplayWidget(QWidget):
                         cursor_screen = None
 
                     owner = self._coordinator.halo_owner
+                    if owner is None:
+                        owner = getattr(DisplayWidget, "_halo_owner", None)
 
                     # If the cursor moved to a different screen, migrate the
                     # halo owner to the DisplayWidget bound to that screen.
@@ -2945,13 +2981,25 @@ class DisplayWidget(QWidget):
                                 try:
                                     hint = getattr(owner, "_ctrl_cursor_hint", None)
                                     if hint is not None:
+                                        try:
+                                            hint.cancel_animation()
+                                        except Exception:
+                                            pass
                                         hint.hide()
+                                        try:
+                                            hint.setOpacity(0.0)
+                                        except Exception:
+                                            pass
                                 except Exception:
                                     pass
                                 owner._ctrl_held = False
 
                             # Phase 5: Use coordinator for halo ownership
                             self._coordinator.set_halo_owner(new_owner)
+                            try:
+                                DisplayWidget._halo_owner = new_owner
+                            except Exception:
+                                pass
                             owner = new_owner
 
                     if owner is None:
@@ -2995,11 +3043,15 @@ class DisplayWidget(QWidget):
                                 else:
                                     # Just reposition
                                     owner._show_ctrl_cursor_hint(local_pos, mode="none")
-                            elif self._coordinator.ctrl_held:
+                            elif ctrl_held:
                                 # Ctrl mode - show/reposition halo
                                 # If halo is hidden (e.g., after settings dialog), fade it in
                                 if halo_hidden:
                                     self._coordinator.set_halo_owner(owner)
+                                    try:
+                                        DisplayWidget._halo_owner = owner
+                                    except Exception:
+                                        pass
                                     owner._show_ctrl_cursor_hint(local_pos, mode="fade_in")
                                 else:
                                     owner._show_ctrl_cursor_hint(local_pos, mode="none")

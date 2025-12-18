@@ -1,0 +1,13 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+cachedir: .pytest_cache
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+configfile: pytest.ini
+plugins: qt-4.5.0
+collecting ... collected 0 items
+
+============================ no tests ran in 0.28s ============================
+ERROR: not found: F:\Programming\Apps\ShittyRandomPhotoScreenSaver\tests\test_timezone_support.py::TestClockWidgetTimezone::test_clock_updates_with_timezone_set
+(no match in any of [<Class TestClockWidgetTimezone>])
+

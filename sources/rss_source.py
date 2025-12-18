@@ -23,6 +23,7 @@ logger = get_logger(__name__)
 RATE_LIMIT_DELAY_SECONDS = 3.0  # Delay between feed requests (increased from 2)
 RATE_LIMIT_RETRY_DELAY_SECONDS = 120  # Delay when rate limited (2 minutes)
 MIN_CACHE_SIZE_BEFORE_CLEANUP = 20  # Don't cleanup until we have at least 20 images
+MAX_CACHED_IMAGES_TO_LOAD = 30  # Maximum cached images to load on startup (matches rss_background_cap)
 
 # Feed health tracking constants
 MAX_CONSECUTIVE_FAILURES = 3  # Skip feed after this many consecutive failures
@@ -232,6 +233,10 @@ class RSSSource(ImageProvider):
             
             # Sort by modification time (newest first) for freshness
             cached_files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+            
+            # Limit to MAX_CACHED_IMAGES_TO_LOAD to avoid loading hundreds of old images
+            # The engine will further limit based on rss_rotating_cache_size setting
+            cached_files = cached_files[:MAX_CACHED_IMAGES_TO_LOAD]
             
             valid_count = 0
             removed_count = 0
@@ -856,7 +861,7 @@ class RSSSource(ImageProvider):
         return None
     
     def _cleanup_cache(self, min_keep: int = 10) -> None:
-        """Clean up cache if it exceeds max size, always keeping at least min_keep images.
+        """Clean up cache if it exceeds max size or file count, always keeping at least min_keep images.
         
         Args:
             min_keep: Minimum number of cached images to always retain for faster startup.
@@ -874,11 +879,22 @@ class RSSSource(ImageProvider):
                     cache_files.append((file, size, mtime))
                     total_size += size
             
-            if total_size <= self.max_cache_size:
-                logger.debug(f"Cache size OK: {total_size / 1024 / 1024:.1f}MB, {len(cache_files)} files")
+            # Check both size limit AND file count limit
+            # Max files = 2x min_keep to allow some buffer but prevent unbounded growth
+            max_files = max(min_keep * 2, MAX_CACHED_IMAGES_TO_LOAD)
+            size_ok = total_size <= self.max_cache_size
+            count_ok = len(cache_files) <= max_files
+            
+            if size_ok and count_ok:
+                logger.debug(f"Cache OK: {total_size / 1024 / 1024:.1f}MB, {len(cache_files)} files (max={max_files})")
                 return
             
-            logger.info(f"[FALLBACK] Cache size exceeded ({total_size / 1024 / 1024:.1f}MB), cleaning up...")
+            reason = []
+            if not size_ok:
+                reason.append(f"size {total_size / 1024 / 1024:.1f}MB > {self.max_cache_size / 1024 / 1024:.1f}MB")
+            if not count_ok:
+                reason.append(f"count {len(cache_files)} > {max_files}")
+            logger.info(f"Cache cleanup needed: {', '.join(reason)}")
             
             # Sort by modification time (oldest first)
             cache_files.sort(key=lambda x: x[2])
@@ -886,16 +902,20 @@ class RSSSource(ImageProvider):
             # Calculate how many we can remove while keeping min_keep
             max_removable = max(0, len(cache_files) - min_keep)
             
-            # Remove oldest files until under limit, but always keep min_keep
+            # Remove oldest files until under both limits, but always keep min_keep
             removed_count = 0
             removed_size = 0
+            current_count = len(cache_files)
             
             for i, (file, size, _) in enumerate(cache_files):
                 # Stop if we've reached the minimum to keep
                 if i >= max_removable:
                     break
-                    
-                if total_size - removed_size <= self.max_cache_size * 0.8:  # 80% threshold
+                
+                # Check if we're under both limits now
+                size_under = (total_size - removed_size) <= self.max_cache_size * 0.8
+                count_under = (current_count - removed_count) <= max_files
+                if size_under and count_under:
                     break
                 
                 try:

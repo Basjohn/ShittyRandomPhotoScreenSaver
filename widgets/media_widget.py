@@ -1017,6 +1017,29 @@ class MediaWidget(BaseOverlayWidget):
 
                         border_rect = QRect(x, y, frame_w, frame_h).adjusted(-1, -1, 1, 1)
 
+                        # Draw a soft drop shadow behind the artwork frame
+                        # using multiple passes with increasing offset/blur
+                        painter.save()
+                        painter.setPen(Qt.PenStyle.NoPen)
+                        # Multi-pass shadow for softer feathering
+                        shadow_passes = [
+                            (2, 25),   # inner shadow layer
+                            (4, 35),   # mid shadow layer
+                            (6, 45),   # outer shadow layer
+                            (8, 30),   # furthest, faintest layer
+                        ]
+                        for offset, alpha in shadow_passes:
+                            shadow_rect = border_rect.adjusted(offset, offset, offset, offset)
+                            shadow_path = QPainterPath()
+                            if self._rounded_artwork_border:
+                                radius = min(shadow_rect.width(), shadow_rect.height()) / 8.0
+                                shadow_path.addRoundedRect(shadow_rect, radius, radius)
+                            else:
+                                shadow_path.addRect(shadow_rect)
+                            painter.setBrush(QColor(0, 0, 0, alpha))
+                            painter.drawPath(shadow_path)
+                        painter.restore()
+
                         # Clip the artwork to the same rounded/square frame so
                         # pixels never bleed out past the border corners.
                         path = QPainterPath()

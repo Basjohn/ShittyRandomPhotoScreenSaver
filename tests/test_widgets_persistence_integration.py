@@ -67,7 +67,7 @@ def test_widgets_tab_changes_reflected_in_display_widget(qt_app, settings_manage
     # Clock should reflect the settings from WidgetsTab
     assert widget.clock_widget is not None
     assert isinstance(widget.clock_widget, ClockWidget)
-    assert widget.clock_widget._position == ClockPosition.TOP_RIGHT
+    assert getattr(widget.clock_widget._position, "value", None) == ClockPosition.TOP_RIGHT.value
     assert widget.clock_widget._time_format == TimeFormat.TWENTY_FOUR_HOUR
     assert widget.clock_widget._show_seconds is True
     assert widget.clock_widget._enabled is True
@@ -75,7 +75,7 @@ def test_widgets_tab_changes_reflected_in_display_widget(qt_app, settings_manage
     # Weather should also reflect the settings from WidgetsTab on screen 0
     assert widget.weather_widget is not None
     assert widget.weather_widget._location == "JohANNESBURG".title() or widget.weather_widget._location == "Johannesburg"  # allow internal normalization
-    assert widget.weather_widget._position == WeatherPosition.TOP_LEFT
+    assert getattr(widget.weather_widget._position, "value", None) == WeatherPosition.TOP_LEFT.value
     assert widget.weather_widget._enabled is True
 
 
@@ -153,6 +153,6 @@ def test_display_widget_respects_widget_monitor_selection(qt_app, settings_manag
     assert w1.clock2_widget is not None
     assert isinstance(w1.clock2_widget, ClockWidget)
     assert w1.weather_widget is not None
-    assert w1.weather_widget._position == WeatherPosition.BOTTOM_LEFT
+    assert getattr(w1.weather_widget._position, "value", None) == WeatherPosition.BOTTOM_LEFT.value
     assert w1.weather_widget._location == "Johannesburg"
     assert w1.weather_widget._enabled is True

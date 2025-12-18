@@ -4,6 +4,7 @@ Settings manager implementation for screensaver.
 Uses QSettings for persistent storage. Simplified from SPQDocker reusable modules.
 """
 from typing import Any, Callable, Dict, List, Mapping, Optional
+from copy import deepcopy
 import threading
 import sys
 import json
@@ -114,300 +115,34 @@ class SettingsManager(QObject):
     
     def _set_defaults(self) -> None:
         """Set default values if not already present."""
-        defaults = {
-            # Sources - default to user's Pictures folder if available
+        from core.settings.defaults import get_default_settings
+        canonical = get_default_settings()
+
+        defaults: Dict[str, Any] = {
+            # User-specific sources should remain dynamic on first run.
             'sources.folders': self._get_default_image_folders(),
             'sources.rss_feeds': [],
-            'sources.mode': 'folders',  # 'folders' | 'rss' | 'both'
-            # RSS/JSON background controls and save-to-disk behaviour.
-            'sources.rss_save_to_disk': False,
-            'sources.rss_save_directory': '',
-            # Global background RSS queue cap and TTL/refresh configuration.
-            'sources.rss_background_cap': 30,
-            'sources.rss_refresh_minutes': 10,
-            'sources.rss_stale_minutes': 30,
-            
-            # Display
-            'display.mode': 'fill',  # 'fill' | 'fit' | 'shrink'
-            'display.hw_accel': True,
-            'display.refresh_sync': True,
-            'display.prefer_triple_buffer': True,
-            'display.gl_depth_bits': 24,
-            'display.gl_stencil_bits': 8,
-            'display.render_backend_mode': 'opengl',
-            'display.sharpen_downscale': False,
-            'display.same_image_all_monitors': False,
-            # Main display selection – canonical key: ALL monitors by default.
-            'display.show_on_monitors': 'ALL',
-
-            # Timing / queue
-            'timing.interval': 40,
-            'queue.shuffle': True,
-
-            # Input
-            'input.hard_exit': False,
-
-            # Transitions (canonical nested config)
-            'transitions': {
-                'type': 'Wipe',
-                'duration_ms': 3000,
-                'easing': 'Auto',
-                'direction': 'Random',
-                'random_always': False,
-                'block_flip': {
-                    'rows': 12,
-                    'cols': 24,
-                },
-                'diffuse': {
-                    'block_size': 18,
-                    'shape': 'Rectangle',
-                },
-                'slide': {
-                    'direction': 'Random',
-                },
-                'wipe': {
-                    'direction': 'Random',
-                },
-                'peel': {
-                    'direction': 'Random',
-                },
-                'blockspin': {
-                    # Optional multi-slab grid wave for 3D Block Spins. When
-                    # disabled the effect renders a single full-frame slab.
-                    'use_grid': False,
-                    # Cardinal wave direction across the grid.
-                    'direction': 'Left to Right',
-                },
-                # Per-transition pool membership for random/switch behaviour.
-                # When a type is marked False it will not be selected by the
-                # engine's random rotation logic nor by the C-key transition
-                # cycling, but it remains available for explicit selection in
-                # the UI dropdown.
-                'pool': {
-                    'Crossfade': True,
-                    'Slide': True,
-                    'Wipe': True,
-                    'Peel': True,
-                    'Diffuse': True,
-                    'Block Puzzle Flip': True,
-                    '3D Block Spins': True,
-                    'Rain Drops': True,
-                    'Warp Dissolve': True,
-                    # Shuffle has been retired for v1.2 and is no longer
-                    # part of the active random/switch pool.
-                    'Blinds': True,
-                    'Particle': True,
-                    'Crumble': True,
-                },
-                'particle': {
-                    'mode': 'Converge',  # Default to Converge (best looking)
-                    'direction': 'Left to Right',
-                    'particle_radius': 24,
-                    'trail_strength': 0.6,
-                    'use_3d_shading': True,
-                    'texture_mapping': True,
-                    'wobble': False,
-                    'gloss_size': 64,
-                    'light_direction': 0,
-                    'swirl_turns': 2.0,
-                    'swirl_order': 2,  # Edges Inward (for Swirl mode)
-                },
-                'crumble': {
-                    'weight': 'Medium',
-                },
-            },
-
-            # Widgets (canonical nested config). The actual stored "widgets"
-            # map is merged with these defaults in _set_defaults so that
-            # missing keys are filled in without overwriting existing user
-            # choices.
-            'widgets': {
-                'clock': {
-                    'enabled': True,
-                    'monitor': 1,
-                    'format': '24h',
-                    'position': 'Top Right',
-                    'show_seconds': True,
-                    'timezone': 'local',
-                    'show_timezone': True,
-                    'font_family': 'Segoe UI',
-                    'font_size': 48,
-                    'margin': 20,
-                    'show_background': True,
-                    'bg_opacity': 0.7,
-                    'bg_color': [35, 35, 35, 255],
-                    'color': [255, 255, 255, 230],
-                    'border_color': [255, 255, 255, 255],
-                    'border_opacity': 1.0,
-                    # Display mode: 'digital' (existing behaviour) or 'analog'.
-                    'display_mode': 'analog',
-                    # When in analogue mode, controls whether hour numerals
-                    # (1–12) are rendered around the clock face.
-                    'show_numerals': True,
-                    # Enable analogue face shadow by default.
-                    'analog_face_shadow': True,
-                },
-                'clock2': {
-                    # Exception: Clock 2 disabled by default.
-                    'enabled': False,
-                    'monitor': 2,
-                    'format': '24h',
-                    'position': 'Bottom Right',
-                    'show_seconds': False,
-                    # Exception: default timezone = local.
-                    'timezone': 'local',
-                    'show_timezone': True,
-                    'font_family': 'Segoe UI',
-                    'font_size': 32,
-                    'margin': 20,
-                    'color': [255, 255, 255, 230],
-                    'display_mode': 'digital',
-                    'show_numerals': True,
-                },
-                'clock3': {
-                    # Exception: Clock 3 disabled by default.
-                    'enabled': False,
-                    'monitor': 'ALL',
-                    'format': '24h',
-                    'position': 'Bottom Left',
-                    'show_seconds': False,
-                    # Exception: default timezone = local.
-                    'timezone': 'local',
-                    'show_timezone': True,
-                    'font_family': 'Segoe UI',
-                    'font_size': 32,
-                    'margin': 20,
-                    'color': [255, 255, 255, 230],
-                    'display_mode': 'digital',
-                    'show_numerals': True,
-                },
-                'weather': {
-                    'enabled': True,
-                    'monitor': 1,
-                    'position': 'Top Left',
-                    # Exception: default location = New York.
-                    'location': 'New York',
-                    'font_family': 'Segoe UI',
-                    'font_size': 24,
-                    'color': [255, 255, 255, 230],
-                    'show_background': True,
-                    'bg_opacity': 0.7,
-                    'bg_color': [35, 35, 35, 255],
-                    'border_color': [255, 255, 255, 255],
-                    'border_opacity': 1.0,
-                },
-                # Media widget defaults intentionally mirror other overlay
-                # widgets. It is disabled by default but configured with a
-                # Bottom Left position and a visible background frame so that
-                # enabling it in the UI immediately produces a clear overlay.
-                'media': {
-                    'enabled': True,
-                    'monitor': 1,
-                    'position': 'Bottom Left',
-                    'font_family': 'Segoe UI',
-                    'font_size': 20,
-                    'margin': 20,
-                    'color': [255, 255, 255, 230],
-                    'show_background': True,
-                    'bg_opacity': 0.7,
-                    # Darker Spotify-style card background by default.
-                    'bg_color': [35, 35, 35, 255],
-                    'border_color': [255, 255, 255, 255],
-                    'border_opacity': 1.0,
-                    # Artwork/controls behaviour
-                    # Default artwork size is larger and can be tuned per-user.
-                    'artwork_size': 200,
-                    # Rounded artwork border for album art frame.
-                    'rounded_artwork_border': True,
-                    # When False the transport control row is hidden and
-                    # the widget becomes a pure “now playing” block.
-                    'show_controls': True,
-                    # Optional header subcontainer frame around the logo +
-                    # title row to mirror the Reddit widget styling.
-                    'show_header_frame': True,
-                    # Optional Spotify-only vertical volume slider rendered
-                    # alongside the media card. When enabled and Core Audio
-                    # (pycaw) is available, a slim overlay widget appears to
-                    # the side of the Spotify card and controls the Spotify
-                    # session volume only.
-                    'spotify_volume_enabled': True,
-                },
-                # Spotify Beat Visualizer – thin bar visualizer paired with
-                # the Spotify media widget. This is Spotify-only by design and
-                # is positioned relative to the media widget rather than via a
-                # separate position control.
-                'spotify_visualizer': {
-                    'enabled': True,
-                    'monitor': 'ALL',
-                    # Number of vertical bars to render.
-                    'bar_count': 16,
-                    # Sensitivity controls the FFT mapping threshold. When
-                    # Recommended is enabled (stored under 'adaptive_sensitivity'
-                    # for backward compatibility), the runtime uses the v1.4
-                    # baseline parameters.
-                    'adaptive_sensitivity': True,
-                    'sensitivity': 1.0,
-                    # Base fill colour for bars (RGBA).
-                    'bar_fill_color': [24, 24, 24, 255],
-                    # Bar border colour (RGBA) and independent opacity scaler.
-                    'bar_border_color': [255, 255, 255, 255],
-                    'bar_border_opacity': 1.0,
-                    # Ghosting configuration: trailing bar effect above the
-                    # current height, rendered by the GPU overlay.
-                    'ghosting_enabled': True,
-                    'ghost_alpha': 0.4,
-                    'ghost_decay': 0.4,
-                    # When True, the legacy QWidget-based software visualiser is
-                    # allowed to render bars when OpenGL is unavailable or when
-                    # the renderer backend is explicitly set to 'software'. This
-                    # is disabled by default so the GPU overlay remains the
-                    # primary path in OpenGL mode.
-                    'software_visualizer_enabled': False,
-                },
-                'reddit': {
-                    'enabled': True,
-                    # Default to primary display only so the widget does not
-                    # appear on all screens out of the box.
-                    'monitor': 1,
-                    'position': 'Bottom Right',
-                    'subreddit': 'all',
-                    'font_family': 'Segoe UI',
-                    'font_size': 14,
-                    'margin': 20,
-                    'color': [255, 255, 255, 230],
-                    'show_background': True,
-                    'bg_opacity': 1.0,
-                    'bg_color': [35, 35, 35, 255],
-                    'border_color': [255, 255, 255, 255],
-                    'border_opacity': 1.0,
-                    # Default to visible separators between posts for the
-                    # compact card layout.
-                    'show_separators': True,
-                    'limit': 10,
-                    'exit_on_click': True,
-                },
-                # Global widget drop-shadow configuration shared by all
-                # overlay widgets (clocks, weather, media). The Widgets tab
-                # currently exposes only an enable/disable checkbox; other
-                # parameters may be tweaked in future UI iterations.
-                'shadows': {
-                    'enabled': True,
-                    # Base shadow colour; alpha is further scaled by the
-                    # text/frame opacity fields below.
-                    'color': [0, 0, 0, 255],
-                    # Offset in logical pixels (dx, dy).
-                    'offset': [4, 4],
-                    # Blur radius in logical pixels.
-                    'blur_radius': 18,
-                    # Opacity multiplier for text-only widgets (no frame).
-                    # Increased by 10% for better visibility.
-                    'text_opacity': 0.33,
-                    # Opacity multiplier for widgets with active
-                    # background/frames. Increased by 10% for better visibility.
-                    'frame_opacity': 0.77,
-                },
-            },
         }
+
+        for section in ('display', 'input', 'queue', 'sources', 'timing'):
+            section_value = canonical.get(section)
+            if not isinstance(section_value, Mapping):
+                continue
+            for subkey, subval in section_value.items():
+                dotted = f"{section}.{subkey}"
+                # Even if a future defaults schema includes these, keep them
+                # dynamic here.
+                if dotted in {'sources.folders', 'sources.rss_feeds'}:
+                    continue
+                defaults[dotted] = subval
+
+        canonical_transitions = canonical.get('transitions')
+        if isinstance(canonical_transitions, Mapping):
+            defaults['transitions'] = dict(canonical_transitions)
+
+        canonical_widgets = canonical.get('widgets')
+        if isinstance(canonical_widgets, Mapping):
+            defaults['widgets'] = dict(canonical_widgets)
         
         for key, value in defaults.items():
             if key == 'widgets':
@@ -415,9 +150,38 @@ class SettingsManager(QObject):
                 # that legacy configs gain new sections (e.g. media) without
                 # losing user customizations.
                 self._ensure_widgets_defaults(value)
+            elif key == 'transitions':
+                self._ensure_transitions_defaults(value)
             else:
                 if not self._settings.contains(key):
                     self._settings.setValue(key, value)
+
+    def _ensure_transitions_defaults(self, default_transitions: Dict[str, Any]) -> None:
+        with self._lock:
+            raw_transitions = self._settings.value('transitions', None)
+            if isinstance(raw_transitions, Mapping):
+                transitions: Dict[str, Any] = dict(raw_transitions)
+            else:
+                transitions = {}
+
+            def merge(existing: Dict[str, Any], defaults_map: Mapping[str, Any]) -> bool:
+                changed = False
+                for k, v in defaults_map.items():
+                    if k not in existing:
+                        existing[k] = deepcopy(v)
+                        changed = True
+                        continue
+                    if isinstance(v, Mapping) and isinstance(existing.get(k), Mapping):
+                        child = dict(existing[k])
+                        if merge(child, v):
+                            existing[k] = child
+                            changed = True
+                return changed
+
+            changed = merge(transitions, default_transitions)
+            if changed or not isinstance(raw_transitions, Mapping):
+                self._settings.setValue('transitions', transitions)
+                self._settings.sync()
 
     def _ensure_widgets_defaults(self, default_widgets: Dict[str, Any]) -> None:
         """Ensure the canonical widgets map exists and is merged with defaults.
@@ -429,7 +193,7 @@ class SettingsManager(QObject):
 
         with self._lock:
             raw_widgets = self._settings.value('widgets', None)
-            if isinstance(raw_widgets, dict):
+            if isinstance(raw_widgets, Mapping):
                 widgets: Dict[str, Any] = dict(raw_widgets)
             else:
                 widgets = {}
@@ -453,8 +217,9 @@ class SettingsManager(QObject):
                     widgets[section_name] = dict(section_defaults)
                     changed = True
 
-            if changed or not isinstance(raw_widgets, dict):
+            if changed or not isinstance(raw_widgets, Mapping):
                 self._settings.setValue('widgets', widgets)
+                self._settings.sync()
 
     def get_widget_defaults(self, section: str) -> Dict[str, Any]:
         """Return the canonical default config for a widget section.
@@ -485,7 +250,34 @@ class SettingsManager(QObject):
             Setting value or default
         """
         with self._lock:
-            return self._settings.value(key, default)
+            value = self._settings.value(key, default)
+
+        def to_plain(obj: Any) -> Any:
+            if isinstance(obj, Mapping):
+                return {k: to_plain(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [to_plain(v) for v in obj]
+            return obj
+
+        if isinstance(value, Mapping):
+            return to_plain(value)
+
+        # Some QSettings backends (notably on Windows) round-trip QVariantList
+        # items as strings. Normalize critical list-valued settings.
+        dotted = str(key) if key is not None else ""
+        if dotted == "display.show_on_monitors" and isinstance(value, list):
+            coerced: list[Any] = []
+            for item in value:
+                try:
+                    if isinstance(item, bool):
+                        coerced.append(int(item))
+                    else:
+                        coerced.append(int(item))
+                except Exception:
+                    coerced.append(item)
+            return coerced
+
+        return value
     
     @staticmethod
     def to_bool(value: Any, default: bool = False) -> bool:
@@ -573,6 +365,15 @@ class SettingsManager(QObject):
 
         return value
 
+    # Keys that require immediate sync to prevent data loss on crash/exit
+    _CRITICAL_KEYS = frozenset({
+        'transitions',
+        'widgets',
+        'sources.folders',
+        'sources.rss_feeds',
+        'display',
+    })
+
     def set(self, key: str, value: Any) -> None:
         """
         Set a setting value.
@@ -584,6 +385,12 @@ class SettingsManager(QObject):
         with self._lock:
             old_value = self._settings.value(key)
             self._settings.setValue(key, value)
+            
+            # Immediate sync for critical settings to prevent data loss
+            # QSettings on Windows uses registry and may delay writes
+            root_key = key.split('.')[0] if '.' in key else key
+            if root_key in self._CRITICAL_KEYS or key in self._CRITICAL_KEYS:
+                self._settings.sync()
             
             # Emit change signal
             self.settings_changed.emit(key, value)
@@ -679,16 +486,32 @@ class SettingsManager(QObject):
             
             # Validate widgets - must be dict
             widgets = self._settings.value('widgets')
-            if widgets is not None and not isinstance(widgets, dict):
-                logger.warning(f"Repairing widgets: was {type(widgets).__name__}, expected dict")
-                self._settings.setValue('widgets', {})
+            if widgets is not None and not isinstance(widgets, Mapping):
+                logger.warning(f"Repairing widgets: was {type(widgets).__name__}, expected mapping")
+                try:
+                    from core.settings.defaults import get_default_settings
+                    canonical_widgets = get_default_settings().get('widgets', {})
+                    if isinstance(canonical_widgets, Mapping):
+                        self._settings.setValue('widgets', dict(canonical_widgets))
+                    else:
+                        self._settings.setValue('widgets', {})
+                except Exception:
+                    self._settings.setValue('widgets', {})
                 repairs['widgets'] = f"Invalid type: {type(widgets).__name__}"
             
             # Validate transitions - must be dict
             transitions = self._settings.value('transitions')
-            if transitions is not None and not isinstance(transitions, dict):
-                logger.warning(f"Repairing transitions: was {type(transitions).__name__}, expected dict")
-                self._settings.setValue('transitions', {})
+            if transitions is not None and not isinstance(transitions, Mapping):
+                logger.warning(f"Repairing transitions: was {type(transitions).__name__}, expected mapping")
+                try:
+                    from core.settings.defaults import get_default_settings
+                    canonical_transitions = get_default_settings().get('transitions', {})
+                    if isinstance(canonical_transitions, Mapping):
+                        self._settings.setValue('transitions', dict(canonical_transitions))
+                    else:
+                        self._settings.setValue('transitions', {})
+                except Exception:
+                    self._settings.setValue('transitions', {})
                 repairs['transitions'] = f"Invalid type: {type(transitions).__name__}"
             
             if repairs:
@@ -774,9 +597,10 @@ class SettingsManager(QObject):
             
             # Preserve weather location/geo data from widgets map
             widgets_raw = self._settings.value('widgets')
-            if isinstance(widgets_raw, dict):
-                weather = widgets_raw.get('weather', {})
-                if isinstance(weather, dict):
+            if isinstance(widgets_raw, Mapping):
+                widgets_map = dict(widgets_raw)
+                weather = widgets_map.get('weather', {})
+                if isinstance(weather, Mapping):
                     for key in ('location', 'latitude', 'longitude'):
                         if key in weather:
                             preserved[f'widgets.weather.{key}'] = weather[key]
@@ -824,15 +648,17 @@ class SettingsManager(QObject):
             
             # Restore weather geo data into the nested widgets dict
             widgets = self._settings.value('widgets', {})
-            if isinstance(widgets, dict):
-                weather = widgets.get('weather', {})
-                if isinstance(weather, dict):
+            if isinstance(widgets, Mapping):
+                widgets_dict = dict(widgets)
+                weather = widgets_dict.get('weather', {})
+                if isinstance(weather, Mapping):
+                    weather_dict = dict(weather)
                     for key in ('location', 'latitude', 'longitude'):
                         pkey = f'widgets.weather.{key}'
                         if pkey in preserved:
-                            weather[key] = preserved[pkey]
-                    widgets['weather'] = weather
-                    self._settings.setValue('widgets', widgets)
+                            weather_dict[key] = preserved[pkey]
+                    widgets_dict['weather'] = weather_dict
+                    self._settings.setValue('widgets', widgets_dict)
             
             self._settings.sync()
         
@@ -891,6 +717,10 @@ class SettingsManager(QObject):
         with self._lock:
             old_value = self._settings.value(section)
             self._settings.setValue(section, mapping)
+
+            root_key = section.split('.')[0] if '.' in section else section
+            if root_key in self._CRITICAL_KEYS or section in self._CRITICAL_KEYS:
+                self._settings.sync()
 
         self.settings_changed.emit(section, mapping)
         if is_verbose_logging():

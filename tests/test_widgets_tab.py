@@ -50,13 +50,13 @@ class TestWidgetsTab:
 
         # Weather defaults: enabled on monitor 1 with a Top Left layout and a
         # non-empty location (placeholder "New York" or a timezone-derived
-        # city), styled with background and icons enabled at 70% opacity.
+        # city), styled with background enabled at 70% opacity.
         assert tab.weather_enabled.isChecked() is True
         assert tab.weather_position.currentText() == "Top Left"
         loc = tab.weather_location.text()
         assert isinstance(loc, str) and loc
+        assert tab.weather_show_forecast.isChecked() is False
         assert tab.weather_show_background.isChecked() is True
-        assert tab.weather_show_icons.isChecked() is False
         assert tab.weather_bg_opacity.value() == 70
 
         tab.deleteLater()
@@ -77,8 +77,9 @@ class TestWidgetsTab:
         tab.weather_enabled.setChecked(True)
         tab.weather_location.setText("Johannesburg")
         tab.weather_position.setCurrentText("Bottom Left")
+        tab.weather_monitor_combo.setCurrentText("ALL")
+        tab.weather_show_forecast.setChecked(True)
         tab.weather_show_background.setChecked(True)
-        tab.weather_show_icons.setChecked(True)
         tab.weather_bg_opacity.setValue(80)  # 80%
 
         # Persist settings
@@ -99,7 +100,7 @@ class TestWidgetsTab:
         assert weather_cfg.get("enabled") is True
         assert weather_cfg.get("location") == "Johannesburg"
         assert weather_cfg.get("position") == "Bottom Left"
+        assert weather_cfg.get("show_forecast") is True
         assert weather_cfg.get("show_background") is True
-        assert weather_cfg.get("show_icons") is True
         assert pytest.approx(weather_cfg.get("bg_opacity", 0.0)) == 0.80
         assert weather_cfg.get("monitor") == "ALL"

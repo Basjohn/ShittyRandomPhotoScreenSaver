@@ -64,17 +64,14 @@ class RedditPost:
 _TITLE_FILTER_RE = re.compile(r"\b(daily|weekly|question thread)\b", re.IGNORECASE)
 
 # Words to keep lowercase in title case (unless first word)
-_TITLE_CASE_SMALL_WORDS = frozenset({
-    "a", "an", "the", "and", "or", "but", "nor", "for", "yet", "so",
-    "in", "on", "at", "to", "by", "of", "with", "as", "vs", "via",
-})
+_TITLE_CASE_SMALL_WORDS = frozenset()
 
 
 def _smart_title_case(text: str) -> str:
     """Convert text to title case while preserving acronyms and handling exceptions.
     
     - Preserves ALL CAPS words (likely acronyms: USA, NASA, AI, etc.)
-    - Keeps small words lowercase (a, the, of, etc.) unless first word
+    - Capitalizes every word (including short words like "a", "to", "with")
     - Preserves standalone "I"
     - Handles punctuation correctly
     """
@@ -118,14 +115,9 @@ def _smart_title_case(text: str) -> str:
         if core.lower() == "i":
             result.append(leading + "I" + trailing)
             continue
-        
-        # Small words stay lowercase (unless first word)
-        if i > 0 and core.lower() in _TITLE_CASE_SMALL_WORDS:
-            result.append(leading + core.lower() + trailing)
-            continue
-        
-        # Title case the core word
-        result.append(leading + core.capitalize() + trailing)
+
+        # Title case the core word (capitalize first character of every word)
+        result.append(leading + core[:1].upper() + core[1:] + trailing)
     
     return " ".join(result)
 
@@ -910,7 +902,7 @@ class RedditWidget(BaseOverlayWidget):
         self._update_card_height_from_content(self._limit)
 
     def _format_age(self, created_utc: float, now_ts: Optional[float] = None) -> str:
-        if created_utc <= 0:
+        if created_utc <= 0 and now_ts is None:
             return ""
         if now_ts is None:
             now_ts = time.time()

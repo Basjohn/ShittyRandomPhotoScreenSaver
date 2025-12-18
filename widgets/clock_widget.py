@@ -15,12 +15,12 @@ except ImportError:
     PYTZ_AVAILABLE = False
 
 from PySide6.QtWidgets import QLabel, QWidget
-from PySide6.QtCore import QTimer, Qt, Signal
+from PySide6.QtCore import QRect, QTimer, Qt, Signal
 from PySide6.QtGui import QFont, QColor, QPainter, QPen, QPaintEvent
 from shiboken6 import Shiboken
 
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
-from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
+from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile, draw_text_rect_with_shadow
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 from core.logging.logger import get_logger
 
@@ -935,7 +935,8 @@ class ClockWidget(BaseOverlayWidget):
         # Timezone abbreviation rendered below the analogue clock, centred
         # horizontally with a small gap from the face.
         if self._show_timezone and self._timezone_abbrev:
-            tz_font = QFont(self._font_family, max(8, self._font_size // 3))
+            tz_font_size = max(8, self._font_size // 3)
+            tz_font = QFont(self._font_family, tz_font_size)
             painter.setFont(tz_font)
             tz_metrics = painter.fontMetrics()
             tz_height = tz_metrics.height()
@@ -948,13 +949,16 @@ class ClockWidget(BaseOverlayWidget):
             if top_y > max_top:
                 top_y = max_top
 
-            painter.drawText(
-                0,
-                top_y,
-                self.width(),
-                tz_height,
+            tz_rect = QRect(0, top_y, self.width(), tz_height)
+            draw_text_rect_with_shadow(
+                painter,
+                tz_rect,
                 Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
                 text,
+                shadow_color=QColor(0, 0, 0, 100),
+                shadow_offset_x=1,
+                shadow_offset_y=1,
+                font_size=tz_font_size,
             )
     
     def cleanup(self) -> None:

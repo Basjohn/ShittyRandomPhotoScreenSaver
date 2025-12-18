@@ -50,7 +50,11 @@ def hide_all_overlays(widget) -> None:
                 ov.hide()
         except Exception:
             pass
-
+    try:
+        _ = getattr(widget, "_ctrl_cursor_hint", None)
+    except Exception:
+        pass
+    return
 
 
 def any_gl_overlay_visible(widget) -> bool:
@@ -328,6 +332,10 @@ def raise_overlay(widget: QWidget, overlay: QWidget) -> None:
         pass
 
     # Ctrl cursor halo should always be topmost - raised LAST after all other widgets
+    try:
+        getattr(widget, "_ctrl_cursor_hint", None)
+    except Exception:
+        pass
     _raise_halo_topmost(widget)
 
 

@@ -68,13 +68,13 @@ def test_slide_and_wipe_directions_are_independent(qapp, settings_manager, qtbot
 
 
 def test_default_transition_type_and_direction(qapp, settings_manager, qtbot):
-    """Verify defaults match spec: type=Wipe, Slide/Wipe directions Random."""
+    """Verify defaults match spec: type=Ripple, Slide/Wipe directions Random."""
     tab = TransitionsTab(settings_manager)
     qtbot.addWidget(tab)
 
     transitions_cfg = settings_manager.get('transitions', {}) or {}
-    assert transitions_cfg.get('type') == 'Wipe'
-    assert transitions_cfg.get('duration_ms') == 3000
+    assert transitions_cfg.get('type') == 'Ripple'
+    assert transitions_cfg.get('duration_ms') == 7275
 
     slide_cfg = transitions_cfg.get('slide', {}) if isinstance(transitions_cfg.get('slide', {}), dict) else {}
     wipe_cfg = transitions_cfg.get('wipe', {}) if isinstance(transitions_cfg.get('wipe', {}), dict) else {}

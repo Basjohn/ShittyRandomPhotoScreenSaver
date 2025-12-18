@@ -759,14 +759,14 @@ pytest tests/ --tb=short || exit 1
 
 ---
 
-### 26. `tests/test_dimming_and_interaction_fixes.py` - Dimming & Interaction Regression Tests
+### 27. `tests/test_dimming_and_interaction_fixes.py` - Dimming & Interaction Regression Tests
 
 **Purpose**: Regression tests for dimming overlay, halo interaction, deferred Reddit URL, media widget click detection, settings dot notation, and Z-order management fixes.
 
 **Test Classes:**
 
 - **`TestDimmingOverlayAttributes`** (3 tests)
-  - `test_dimming_overlay_uses_translucent_background` – Verifies dimming overlay uses `WA_TranslucentBackground` for proper alpha compositing over GL compositor
+  - `test_dimming_overlay_uses_translucent_background` – Verifies legacy/fallback `DimmingOverlay` widget uses `WA_TranslucentBackground` for correct alpha compositing when used
   - `test_dimming_overlay_opacity_calculation` – Verifies opacity percentage (0-100) is correctly converted to alpha (0-255)
   - `test_dimming_overlay_opacity_clamping` – Verifies opacity is clamped to valid 0-100 range
 
@@ -799,7 +799,7 @@ pytest tests/ --tb=short || exit 1
   - `test_mouse_move_exit_opens_reddit_url` – Verifies mouseMoveEvent calls `_open_pending_reddit_url` before exit
 
 **Critical Tests:**
-- `test_dimming_overlay_uses_translucent_background` – Prevents regression where dimming overlay appears invisible due to wrong widget attributes
+- `test_dimming_overlay_uses_translucent_background` – Prevents regression where the legacy/fallback dimming overlay appears invisible due to wrong widget attributes
 - `test_halo_code_uses_styled_background` – Prevents regression where halo punches holes through dimming overlay
 - `test_crumble_search_range_is_reduced` – Prevents regression where Crumble transition causes severe performance degradation
 - `test_dimming_settings_use_dot_notation` – Prevents regression where dimming opacity is always 30% regardless of settings
@@ -807,7 +807,7 @@ pytest tests/ --tb=short || exit 1
 
 ---
 
-### 27. `tests/test_particle_transition.py` - Particle Transition Tests
+### 28. `tests/test_particle_transition.py` - Particle Transition Tests
 
 **Module Purpose**: Verify particle transition shader program, state, and settings integration.
 

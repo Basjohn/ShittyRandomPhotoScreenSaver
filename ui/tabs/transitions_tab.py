@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Signal, Qt
 
+from core.settings.defaults import get_default_settings
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger
 
@@ -527,8 +528,15 @@ class TransitionsTab(QWidget):
         if not isinstance(transitions_config, dict):
             transitions_config = {}
 
+        canonical_transitions = get_default_settings().get('transitions', {})
+        if not isinstance(canonical_transitions, dict):
+            canonical_transitions = {}
+
         # Canonical global default duration matches SettingsManager._set_defaults().
-        default_duration_raw = transitions_config.get('duration_ms', 3000)
+        default_duration_raw = transitions_config.get(
+            'duration_ms',
+            canonical_transitions.get('duration_ms', 3000),
+        )
         try:
             default_duration = int(default_duration_raw)
         except Exception:
@@ -595,6 +603,12 @@ class TransitionsTab(QWidget):
             getattr(self, 'blockspin_direction_combo', None),
             getattr(self, 'block_size_spin', None),
             getattr(self, 'diffuse_shape_combo', None),
+            # Crumble widgets
+            getattr(self, 'crumble_piece_count_spin', None),
+            getattr(self, 'crumble_complexity_spin', None),
+            getattr(self, 'crumble_mosaic_check', None),
+            getattr(self, 'crumble_weight_combo', None),
+            # Particle widgets
             getattr(self, 'particle_mode_combo', None),
             getattr(self, 'particle_direction_combo', None),
             getattr(self, 'particle_radius_spin', None),
@@ -613,7 +627,7 @@ class TransitionsTab(QWidget):
 
         try:
             # Load transition type (default to Wipe to match SettingsManager defaults)
-            transition_type = transitions_config.get('type', 'Wipe')
+            transition_type = transitions_config.get('type', canonical_transitions.get('type', 'Ripple'))
             # Map legacy labels to their modern equivalents.
             if transition_type == 'Rain Drops':
                 transition_type = 'Ripple'
@@ -687,12 +701,13 @@ class TransitionsTab(QWidget):
             if index >= 0:
                 self.diffuse_shape_combo.setCurrentIndex(index)
 
-            # Load crumble settings
+            # Load crumble settings - use canonical defaults from defaults.py
+            canonical_crumble = canonical_transitions.get('crumble', {})
             crumble = transitions_config.get('crumble', {})
-            self.crumble_piece_count_spin.setValue(crumble.get('piece_count', 8))
-            self.crumble_complexity_spin.setValue(crumble.get('crack_complexity', 1.0))
-            self.crumble_mosaic_check.setChecked(crumble.get('mosaic_mode', False))
-            weight = crumble.get('weighting', 'Top Weighted')
+            self.crumble_piece_count_spin.setValue(crumble.get('piece_count', canonical_crumble.get('piece_count', 14)))
+            self.crumble_complexity_spin.setValue(crumble.get('crack_complexity', canonical_crumble.get('crack_complexity', 1.0)))
+            self.crumble_mosaic_check.setChecked(crumble.get('mosaic_mode', canonical_crumble.get('mosaic_mode', False)))
+            weight = crumble.get('weighting', canonical_crumble.get('weighting', 'Random Choice'))
             try:
                 idx = self.crumble_weight_combo.findText(weight)
                 if idx < 0:
@@ -701,27 +716,28 @@ class TransitionsTab(QWidget):
             except Exception:
                 pass
 
-            # Load particle settings
+            # Load particle settings - use canonical defaults from defaults.py
+            canonical_particle = canonical_transitions.get('particle', {})
             particle = transitions_config.get('particle', {})
-            mode = particle.get('mode', 'Directional')
+            mode = particle.get('mode', canonical_particle.get('mode', 'Converge'))
             idx = self.particle_mode_combo.findText(mode)
             if idx >= 0:
                 self.particle_mode_combo.setCurrentIndex(idx)
-            direction = particle.get('direction', 'Left to Right')
+            direction = particle.get('direction', canonical_particle.get('direction', 'Left to Right'))
             idx = self.particle_direction_combo.findText(direction)
             if idx >= 0:
                 self.particle_direction_combo.setCurrentIndex(idx)
-            self.particle_radius_spin.setValue(int(particle.get('particle_radius', 24)))
-            self.particle_trail_check.setChecked(particle.get('trail_strength', 0.6) > 0.01)
-            self.particle_3d_check.setChecked(particle.get('use_3d_shading', True))
-            self.particle_texture_check.setChecked(particle.get('texture_mapping', True))
-            self.particle_wobble_check.setChecked(particle.get('wobble', False))
-            self.particle_gloss_spin.setValue(int(particle.get('gloss_size', 64)))
-            light_idx = particle.get('light_direction', 0)
+            self.particle_radius_spin.setValue(int(particle.get('particle_radius', canonical_particle.get('particle_radius', 10))))
+            self.particle_trail_check.setChecked(particle.get('trail_strength', canonical_particle.get('trail_strength', 0.6)) > 0.01)
+            self.particle_3d_check.setChecked(particle.get('use_3d_shading', canonical_particle.get('use_3d_shading', True)))
+            self.particle_texture_check.setChecked(particle.get('texture_mapping', canonical_particle.get('texture_mapping', True)))
+            self.particle_wobble_check.setChecked(particle.get('wobble', canonical_particle.get('wobble', True)))
+            self.particle_gloss_spin.setValue(int(particle.get('gloss_size', canonical_particle.get('gloss_size', 72))))
+            light_idx = particle.get('light_direction', canonical_particle.get('light_direction', 0))
             if 0 <= light_idx < self.particle_light_combo.count():
                 self.particle_light_combo.setCurrentIndex(light_idx)
-            self.particle_swirl_turns_spin.setValue(particle.get('swirl_turns', 2.0))
-            swirl_order_idx = particle.get('swirl_order', 0)
+            self.particle_swirl_turns_spin.setValue(particle.get('swirl_turns', canonical_particle.get('swirl_turns', 3.0)))
+            swirl_order_idx = particle.get('swirl_order', canonical_particle.get('swirl_order', 0))
             if 0 <= swirl_order_idx < self.particle_swirl_order_combo.count():
                 self.particle_swirl_order_combo.setCurrentIndex(swirl_order_idx)
 

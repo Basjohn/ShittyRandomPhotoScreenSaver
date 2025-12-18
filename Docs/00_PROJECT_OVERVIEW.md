@@ -57,7 +57,7 @@ Transitions run on the GL compositor when hardware acceleration is available. So
   - Tomorrow's forecast (min/max temp)
   - Location autocomplete
 - **Media Widget**:
-  - Spotify/system media integration via Windows GSMTC
+  - Spotify/system media integration via Windows GSMTC (polled safely; WinRT calls are treated as IO and guarded by a hard timeout)
   - Album artwork, track info, transport controls
   - Per-monitor selection
 - **Reddit Widget** (up to 2 instances):
@@ -87,7 +87,7 @@ Transitions run on the GL compositor when hardware acceleration is available. So
   - Hard-exit mode by default
 
 ### 8. Accessibility Features
-- **Background Dimming**: Adjustable opacity overlay for widget readability
+- **Background Dimming**: Adjustable compositor-based dimming (rendered after the base image/transition but before overlay widgets)
 - **Pixel Shift**: Periodic 1px widget movement for burn-in prevention
 - **Hard Exit Mode**: Prevents accidental exit from mouse movement
 
@@ -151,11 +151,11 @@ Transitions run on the GL compositor when hardware acceleration is available. So
 | Setting | Description | Default |
 |---------|-------------|---------|
 | `sources.local_ratio` | Local vs RSS image ratio (%) | 60 |
-| `display.same_image_all_monitors` | Same image on all displays | true |
+| `display.same_image_all_monitors` | Same image on all displays | false |
 | `display.hw_accel` | Hardware acceleration | true |
-| `transitions.type` | Active transition type | Crossfade |
+| `transitions.type` | Active transition type | Wipe |
 | `transitions.duration_ms` | Transition duration (ms) | 3000 |
-| `timing.interval` | Image rotation interval (s) | 60 |
+| `timing.interval` | Image rotation interval (s) | 40 |
 
 ## Related Documentation
 - `Index.md` - Module map and class index

@@ -302,6 +302,11 @@ class ImageQueue:
         When both local and RSS sources are available, uses the configured
         local_ratio to probabilistically select from the appropriate pool.
         Falls back to the other pool if the selected pool is empty.
+
+        Legacy single-source semantics:
+        - When only one source type exists (local-only or RSS-only), this
+          consumes from the combined queue to preserve deterministic
+          `peek()/size()/wraparound` behavior.
         
         Ensures the same image is not returned twice in a row by checking
         recent history and trying alternative images. For RSS images, also
@@ -311,6 +316,27 @@ class ImageQueue:
             Next image metadata, or None if all queues are empty
         """
         with self._lock:
+            # Compatibility path: when only one source type exists, preserve
+            # legacy queue semantics by consuming from the combined queue.
+            # This keeps peek()/size()/wraparound behaviour deterministic.
+            has_local = bool(self._local_images) or bool(self._local_queue)
+            has_rss = bool(self._rss_images) or bool(self._rss_queue)
+            if has_local != has_rss:
+                image = self._get_from_combined_queue()
+                if image is None:
+                    logger.warning("[FALLBACK] No images available from combined queue")
+                    return None
+
+                self._current_image = image
+                self._current_index += 1
+                self._history.append(image)
+                if image.source_type == ImageSourceType.FOLDER:
+                    self._local_count += 1
+                else:
+                    self._rss_count += 1
+                    self._last_rss_domain = _extract_domain(image)
+                return image
+
             # Determine which pool to use
             use_local = self._should_use_local()
             

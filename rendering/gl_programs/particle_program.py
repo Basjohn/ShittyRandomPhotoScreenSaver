@@ -171,10 +171,39 @@ float getSwirlOrderKey(vec2 cellUV, float swirlTurns, float seed, int swirlOrder
     float rand = hash1(cellUV * 100.0 + seed);
     
     if (swirlOrder == 1) {
-        // Center Outward: TRUE radial expansion from center
-        // Primary ordering is by radius - center first, edges last
-        float order = rNorm * 0.89;
-        return clamp(order, 0.0, 0.90);
+        // Center Outward: true sequential spiral from center to edges
+        // Each particle appears one at a time in a continuous clockwise spiral.
+        // 
+        // The key insight: for a true Archimedean spiral r = a*θ, the arc length
+        // from the origin is proportional to θ². We use this to create ordering
+        // where particles at the same "spiral distance" from center appear together.
+        //
+        // Convert to polar spiral coordinates:
+        // - theta gives angular position (0 to 2π mapped to 0 to 1)
+        // - r gives radial distance from center
+        //
+        // For clockwise spiral growth, we want:
+        // - Center particles first (low r)
+        // - At each radius band, particles appear in clockwise order
+        // - Smooth transition between radius bands (no grid artifacts)
+        
+        // Clockwise angle (flip direction)
+        float cwAngle = 1.0 - thetaNorm;
+        
+        // Number of spiral turns from center to edge
+        float spiralTurns = 4.0;
+        
+        // Calculate position along the spiral using Archimedean formula
+        // For r = k*θ, solving for θ gives θ = r/k
+        // We add the angular position to create the spiral effect
+        float spiralTheta = rNorm * spiralTurns + cwAngle;
+        
+        // The order key is simply the spiral theta normalized
+        // This gives a continuous ordering from center outward in a spiral
+        float order = spiralTheta / (spiralTurns + 1.0);
+        
+        // Tiny random jitter to break up any remaining patterns
+        return clamp(order, 0.0, 0.95) + rand * 0.003;
     }
     
     if (swirlOrder == 2) {

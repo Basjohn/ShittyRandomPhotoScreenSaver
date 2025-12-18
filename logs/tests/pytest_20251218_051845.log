@@ -1,0 +1,16 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+cachedir: .pytest_cache
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+configfile: pytest.ini
+plugins: qt-4.5.0
+collecting ... collected 5 items
+
+tests/test_reddit_widget.py::test_reddit_filters_daily_weekly_question_threads PASSED [ 20%]
+tests/test_reddit_widget.py::test_reddit_format_age_variants PASSED      [ 40%]
+tests/test_reddit_widget.py::test_reddit_error_hides_before_first_success PASSED [ 60%]
+tests/test_reddit_widget.py::test_reddit_handle_click_row_opens_url PASSED [ 80%]
+tests/test_reddit_widget.py::test_reddit_handle_click_header_opens_subreddit PASSED [100%]
+
+============================== 5 passed in 0.45s ==============================

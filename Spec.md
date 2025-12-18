@@ -18,7 +18,7 @@ Single source of truth for architecture and key decisions.
 - TransitionController (extracted from DisplayWidget) manages transition lifecycle including watchdog timeout handling.
 - ImagePresenter (extracted from DisplayWidget) manages pixmap lifecycle.
 - MultiMonitorCoordinator (singleton) coordinates cross-display state for multi-monitor setups.
-- GLProgramCache (singleton) centralizes lazy-loading of shader programs.
+- GLProgramCache (singleton) centralizes lazy-loading of shader programs and validates cached program IDs per-context (recompiling when IDs are stale).
 - GLGeometryManager (per-compositor instance) handles VAO/VBO management. Changed from singleton because OpenGL VAOs are context-specific.
 - GLTextureManager (per-compositor instance) handles texture upload, caching (LRU), and PBO pooling. Changed from singleton because OpenGL textures are context-specific.
 - GLTransitionRenderer (extracted from GLCompositor) centralizes shader and QPainter transition rendering.
@@ -68,6 +68,12 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
 - Look-ahead: `ImageQueue.peek_many(n)` used to determine upcoming assets.
 - Skip policy: when a transition is active, prefetch defers to avoid thrash; skipped requests are logged for pacing diagnostics.
 
+## Media (Windows GSMTC)
+
+- Windows media polling uses `core/media/media_controller.py`.
+- GSMTC/WinRT calls are treated as potentially blocking IO and are executed via `ThreadManager` with a hard timeout so they cannot stall the UI thread or test runner.
+
+
 ## Image Sources
 
 - Folder sources:
@@ -77,7 +83,8 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
   - `RSSSource` consumes `sources.rss_feeds` URLs and produces `ImageMetadata` with `source_type=ImageSourceType.RSS`.
   - Supports standard RSS/Atom feeds (via feedparser) and Reddit JSON listings with a light high‑resolution filter (prefers posts with preview width ≥ 2560px when available).
   - Uses an on-disk cache under the temp directory and optional save‑to‑disk mirroring when `sources.rss_save_to_disk` and `sources.rss_save_directory` are configured.
-  - **Rotating cache**: Cache cleanup always retains at least 20 images (`min_keep=20`) regardless of size limits, ensuring faster startup for RSS users.
+  - **Rotating cache**: Cache cleanup always retains at least 20 images (`min_keep=20`) regardless of size limits, ensuring faster startup for RSS users. Disk cache is also limited by file count (max 2x min_keep or 30, whichever is larger) to prevent unbounded growth.
+  - **Runtime caps**: Initial load limits cached images to `sources.rss_rotating_cache_size` (default 20). Async and background refresh enforce `sources.rss_background_cap` (default 30) as the maximum RSS images in queue at any time.
   - **Async loading**: `_load_rss_images_async()` processes sources in priority order (Bing=95, Unsplash=90, Wikimedia=85, NASA=75, Reddit=10) with 8 images per source per cycle to prevent any single source from blocking.
   - **State Management (2025-12-14)**: Engine uses `EngineState` enum instead of boolean flags for lifecycle management:
     - States: UNINITIALIZED → INITIALIZING → STOPPED → STARTING → RUNNING → STOPPING/SHUTTING_DOWN
@@ -93,6 +100,7 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
   - Ratio-based selection uses probabilistic sampling: each `next()` call randomly decides which pool to draw from based on the configured ratio.
   - **Fallback**: If the selected pool is empty, the queue automatically falls back to the other pool, ensuring continuous image availability.
   - The ratio control is only active when **both** local folders and RSS feeds are configured; otherwise, images come exclusively from the available source type.
+  - **Legacy single-source semantics**: when only one source type exists, `ImageQueue.next()` consumes from the combined queue to preserve deterministic `peek()/size()/wraparound` behavior.
   - UI: The Sources tab displays a slider and spinboxes ("X% Local / Y% RSS") between the folder and RSS groups. The control is grayed out when only one source type is configured.
 
 ## Transitions
@@ -171,16 +179,13 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
  - When PERF metrics are enabled, `GLCompositorWidget` can optionally draw a small on-screen FPS/debug overlay on top of compositor frames (e.g. Slide/Wipe) to visualise real frame pacing during development. This overlay is disabled implicitly when PERF metrics are turned off so retail builds incur no additional HUD cost.
  - On `initializeGL`, `GLCompositorWidget` logs the OpenGL adapter vendor/renderer/version and disables the shader pipeline for the session when a clearly software GL implementation is detected (for example, GDI Generic, Microsoft Basic Render Driver, llvmpipe). In this case, compositor QPainter-based transitions and CPU fallbacks remain active, but shader-backed paths are not used on that stack.
  - If spikes persist, further expand compute-pool pre-scale-to-screen (including DPR-specific variants) as a future enhancement.
-- When PERF metrics are enabled, `GLCompositorWidget` can optionally draw a small on-screen FPS/debug overlay on top of whichever compositor-driven transition is active (Slide, Wipe, Blinds, Peel, BlockFlip, Diffuse, Block Spins, Ripple/Raindrops, Warp Dissolve) to visualise real frame pacing during development. This overlay is disabled implicitly when PERF metrics are turned off so retail builds incur no additional HUD cost.
-- On `initializeGL`, `GLCompositorWidget` logs the OpenGL adapter vendor/renderer/version and disables the shader pipeline for the session when a clearly software GL implementation is detected (for example, GDI Generic, Microsoft Basic Render Driver, llvmpipe). In this case, compositor QPainter-based transitions and CPU fallbacks remain active, but shader-backed paths are not used on that stack.
-- If spikes persist, further expand compute-pool pre-scale-to-screen (including DPR-specific variants) as a future enhancement.
 
 ## Settings
 - `display.refresh_sync`: bool
 - `display.hw_accel`: bool
 - `display.mode`: fill|fit|shrink
 - `input.hard_exit`: bool (when true, mouse movement/clicks do not exit; only ESC/Q and hotkeys remain active). Additionally, while the Ctrl key is held, `DisplayWidget` temporarily suppresses mouse-move and left-click exit even when `input.hard_exit` is false, allowing interaction with widgets without persisting a hard-exit setting change. MC builds default this setting to true at startup in their own QSettings profile, while the normal screensaver build respects the saved value.
-- `transitions.type`: Crossfade|Slide|Wipe|Diffuse|Block Puzzle Flip|Blinds|Peel|"3D Block Spins"|"Ripple"|"Warp Dissolve"|Crumble (legacy `Shuffle` values are mapped to `Crossfade` for back-compat and are no longer exposed in the UI)
+- `transitions.type`: Crossfade|Slide|Wipe|Diffuse|Block Puzzle Flip|Blinds|Peel|"3D Block Spins"|"Ripple"|"Warp Dissolve"|Crumble|Particle (legacy `Shuffle` values are mapped to `Crossfade` for back-compat and are no longer exposed in the UI)
 - `transitions.random_always`: bool
 - `transitions.random_choice`: str (current random pick for this rotation; cleared on manual type changes)
 - `transitions.slide.direction`, `transitions.slide.last_direction` (legacy flat keys maintained).
@@ -201,9 +206,10 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
   - `sources.rss_feeds` (list[str]): RSS/JSON feed URLs; only feeds explicitly configured here are used by `RSSSource`.
   - `sources.rss_save_to_disk` (bool): when true, new RSS images are mirrored into `sources.rss_save_directory` in addition to the temp cache.
   - `sources.rss_save_directory` (str): absolute path for permanent RSS copies.
-  - `sources.rss_background_cap` (int, default 30): global cap on queued RSS/JSON images during background refresh; 0 disables the cap.
+  - `sources.rss_rotating_cache_size` (int, default 20): max RSS images to keep between sessions; controls initial load cap.
+  - `sources.rss_background_cap` (int, default 30): global cap on queued RSS/JSON images at runtime; enforced on initial load, async load, and background refresh.
   - `sources.rss_refresh_minutes` (int, default 10): background RSS refresh interval in minutes, clamped to at least 1 minute.
-  - `sources.rss_stale_minutes` (int, default 30): TTL for RSS images; stale entries are only removed when a refresh successfully adds replacements.
+  - `sources.rss_stale_minutes` (int, default 30): TTL for RSS images; dynamically adjusted based on transition interval (5-15 min). Stale entries are only removed when a refresh successfully adds replacements.
  - Widgets:
   - `widgets.clock.*` (Clock 1): monitor ('ALL'|1|2|3), position, font, colour, timezone, background options.
   - `widgets.clock2.*`, `widgets.clock3.*` (Clock 2/3): same schema as Clock 1 with independent per-monitor/timezone configuration.
@@ -219,10 +225,10 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
     - Stored settings key remains `widgets.spotify_visualizer.adaptive_sensitivity` for backward compatibility.
   - `widgets.reddit.*`: Reddit overlay widget configuration (enabled flag, per-monitor selection via `monitor` ('ALL'|1|2|3), corner position, subreddit slug, item limit (4- or 10-item layouts), font family/size, margin, text colour, optional background frame and border with opacity, background opacity). The widget fetches Reddit's unauthenticated JSON listing endpoints with a fixed candidate pool (up to 25 posts), then sorts all valid entries by `created_utc` so the newest posts appear at the top; 4- and 10-item modes draw from the same sorted list and only differ by how many rows are rendered. The widget hides itself on fetch/parse failure and only responds to clicks in Ctrl-held / hard-exit interaction modes. Initial visibility is coordinated through the shared overlay fade-in system so Reddit, Weather and Media fade together per display.
   - `widgets.reddit2.*`: Second Reddit widget configuration (enabled flag, per-monitor selection via `monitor`, corner position, subreddit slug, item limit). Inherits all styling (font, colors, background, border, opacity) from `widgets.reddit.*` to allow showing two different subreddits simultaneously.
-  - `widgets.shadows.*`: global drop-shadow configuration shared by all overlay widgets (enabled flag, colour, offset, blur radius, text/frame opacity multipliers). Individual widgets perform a two-stage startup animation: first a coordinated card opacity fade-in (driven by the overlay fade synchronizer), then a shadow fade where the drop shadow grows smoothly from transparent to its configured opacity using the same global duration/easing. Shadows are slightly enlarged/softened via a shared blur-radius multiplier so all widgets share a consistent halo.
+ - `widgets.shadows.*`: global drop-shadow configuration shared by all overlay widgets (enabled flag, colour, offset, blur radius, text/frame opacity multipliers). Individual widgets perform a two-stage startup animation: first a coordinated card opacity fade-in (driven by the overlay fade synchronizer), then a shadow fade where the drop shadow grows smoothly from transparent to its configured opacity using the same global duration/easing. Shadows are slightly enlarged/softened via a shared blur-radius multiplier so all widgets share a consistent halo.
  - Accessibility:
-  - `accessibility.dimming.enabled` (bool, default false): enables a semi-transparent black overlay that sits above transitions but below all widgets, reducing overall screen brightness.
-  - `accessibility.dimming.opacity` (int, 10-90, default 30): opacity percentage for the dimming overlay.
+  - `accessibility.dimming.enabled` (bool, default false): enables compositor-based dimming via `GLCompositorWidget.set_dimming()`, rendered after the base image/transition but before overlay widgets.
+  - `accessibility.dimming.opacity` (int, 10-90, default 30): opacity percentage (mapped to 0.0–1.0) for compositor dimming. `widgets/dimming_overlay.py` remains as a legacy/test/fallback widget.
   - `accessibility.pixel_shift.enabled` (bool, default false): enables periodic 1px shifts of all overlay widgets to prevent burn-in on older LCD displays.
   - `accessibility.pixel_shift.rate` (int, 1-5, default 1): number of shifts per minute. Widgets drift up to 4px in any direction then drift back. Shifting is deferred during transitions.
 - Settings dialog:
@@ -241,6 +247,10 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
 - UI updates only on the main thread (`run_on_ui_thread`).
 - Simple locks (Lock/RLock) guard mutable state; no raw QThread in the engine. The only remaining QThread usage is WeatherWidget's fetcher fallback when no `ThreadManager` has been injected into the widget tree.
 - Qt objects registered with `ResourceManager` where appropriate.
+
+## Semantics Audit
+
+- See `audits/SEMANTICS_AUDIT_2025_12_18.md` for the live checklist of semantics/naming changes and doc/comment updates required for long-term sanity.
 
 ## OpenGL Overlay Lifecycle
 - Persistent overlays per transition type for legacy GL paths (including Blinds and Diffuse), plus a single per-display `GLCompositorWidget` that renders the base image and compositor-backed transitions (Crossfade, Slide, Wipe, Block Puzzle Flip). Reuse prevents reallocation churn across both overlays and compositor surfaces.
@@ -324,13 +334,12 @@ debug in this order:
 ## Diagnostics & Telemetry
 - Structured logging captures overlay readiness stages, swap behavior, and watchdog activity.
 - `audits/v1_2 ROADMAP.md` and `audits/AUDIT_*.md` act as the live checklists for OpenGL stability and performance work; significant changes to GL/compositor behaviour should be reflected there alongside this Spec.
-- `Docs/FlashFlickerDiagnostic.md` tracks symptoms, triggers, and mitigation experiments; roadmap items link back for traceability.
 - High-verbosity debug sessions require log rotation (size/time bound) to avoid disk pressure. A dedicated rotating `screensaver_perf.log` file, configured via a PERF-only logging filter in `core.logging.logger`, mirrors all `[PERF]` lines (including `[PERF] [SPOTIFY_VIS]`, `[PERF] [ANIM]`, and `[PERF] [GL COMPOSITOR]` summaries) so performance telemetry remains easy to inspect across rotated main logs.
  - Telemetry counters record transition type requested vs. instantiated, cache hits/misses, and transition skips while in progress.
  - Animation timing for **all** transitions (CPU and GL/compositor) is centralised through per-display `AnimationManager` instances driven by a `PreciseTimer`-backed loop; transitions use `[PERF] [ANIM]` metrics (duration, frames, avg_fps, dt_min/max, fps_target) as the canonical timing signal rather than ad-hoc timers.
  - Background work (IO/COMPUTE) is routed through the central `ThreadManager` pools wherever possible; any remaining direct `QThread`/`QTimer` usages outside `core.threading.manager` are explicitly logged fallbacks (e.g. widget-level weather fetch when ThreadManager is unavailable) rather than parallel primary paths.
  - Console debug output uses a suppressing stream handler that groups consecutive INFO/DEBUG lines from the same logger into `[N Suppressed: CHECK LOG...]` summaries while leaving file logs untouched. The high-visibility `Initializing Screensaver Engine 🚦🚦🚦🚦🚦` banner is exempt from grouping so it always appears once per run, and when multiple `[PERF]` lines with `avg_fps=...` are collapsed, the summary includes the trailing `avg_fps` token to keep grouped telemetry readable in the console.
- - A central PERF switch is configured in `core.logging.logger`: `PERF_METRICS_ENABLED` defaults to true for development, can be overridden by the `SRPSS_PERF_METRICS` environment variable (`0/false/off/no` vs `1/true/on/yes`), and, in frozen builds, is finalised at startup by a small `<exe-stem>.perf.cfg` file written next to the executable by the build scripts (`scripts/build_nuitka*.ps1`). GUI/retail builds typically write `0` to disable PERF metrics, while console/debug builds write `1` to keep full telemetry enabled.
+ - A central PERF switch is configured in `core.logging.logger`: `PERF_METRICS_ENABLED` defaults to false and can be overridden by the `SRPSS_PERF_METRICS` environment variable (`0/false/off/no` vs `1/true/on/yes`). In frozen builds, it is finalised at startup by a small `<exe-stem>.perf.cfg` file written next to the executable by the build scripts (`scripts/build_nuitka*.ps1`). GUI/retail builds typically write `0` to disable PERF metrics, while console/debug builds write `1` to keep full telemetry enabled.
  - Optional CPU profiling for both RUN and CONFIG modes is gated by the `SRPSS_PROFILE_CPU` environment variable. When enabled, `main.py` wraps the selected entrypoint (`run_screensaver` or `run_config`) in a `cProfile.Profile` run and writes `.pstats` snapshots into the active log directory returned by `core.logging.logger.get_log_dir()`, so developers can inspect hotspots and feed them back into the roadmap.
  - When PERF metrics are enabled, `GLCompositorWidget` can optionally draw a small on-screen FPS/debug overlay on top of compositor frames (e.g. Slide/Wipe) to visualise real frame pacing during development. This overlay is disabled implicitly when PERF metrics are turned off so retail builds incur no additional HUD cost.
  - On `initializeGL`, `GLCompositorWidget` logs the OpenGL adapter vendor/renderer/version and disables the shader pipeline for the session when a clearly software GL implementation is detected (for example, GDI Generic, Microsoft Basic Render Driver, llvmpipe). In this case, compositor QPainter-based transitions and CPU fallbacks remain active, but shader-backed paths are not used on that stack.

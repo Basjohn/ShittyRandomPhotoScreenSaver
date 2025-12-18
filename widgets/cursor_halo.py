@@ -58,6 +58,7 @@ class CursorHaloWidget(QWidget):
         self.resize(40, 40)
         self._opacity = 1.0
         self._animation_id: Optional[str] = None
+        self._animation_manager = AnimationManager()
 
     def setOpacity(self, value: float) -> None:
         """Set the halo opacity (0.0 to 1.0)."""
@@ -162,8 +163,7 @@ class CursorHaloWidget(QWidget):
         """Cancel any running fade animation."""
         if self._animation_id is not None:
             try:
-                manager = AnimationManager()
-                manager.cancel_animation(self._animation_id)
+                self._animation_manager.cancel_animation(self._animation_id)
             except Exception:
                 pass
             self._animation_id = None
@@ -217,10 +217,9 @@ class CursorHaloWidget(QWidget):
                     pass
 
         try:
-            manager = AnimationManager()
             # AnimationManager uses seconds, not milliseconds
             duration_sec = duration_ms / 1000.0
-            self._animation_id = manager.animate_custom(
+            self._animation_id = self._animation_manager.animate_custom(
                 duration=duration_sec,
                 update_callback=_on_tick,
                 on_complete=_on_anim_finished,

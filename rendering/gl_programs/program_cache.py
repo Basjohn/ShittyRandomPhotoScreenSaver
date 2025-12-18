@@ -4,6 +4,13 @@ This module replaces the scattered module-level globals in gl_compositor.py
 with a proper cache class that manages lazy loading, compilation tracking,
 and cleanup of all shader programs.
 
+IMPORTANT: OpenGL program IDs are tied to the current GL context (or share
+group). In test runs we create many QOpenGLWidget contexts; cached IDs can
+become invalid when a new context is made current.
+
+GLProgramCache therefore validates cached program IDs via ``glIsProgram``
+in the current context and recompiles/recaches uniforms when IDs are stale.
+
 Phase 1 of GLCompositor refactor - see audits/REFACTOR_GL_COMPOSITOR.md
 """
 
@@ -23,6 +30,8 @@ class GLProgramCache:
     
     Centralizes all shader compilation, caching, and cleanup.
     Handles compilation errors with fallback notification.
+
+    Note: program IDs are context-specific; see module docstring.
     
     Usage:
         cache = GLProgramCache()
@@ -121,10 +130,32 @@ class GLProgramCache:
         """
         if name in self._failed:
             return None
-        
+
         if name in self._programs:
-            return self._programs[name]
-        
+            program_id = self._programs.get(name)
+            if program_id is None:
+                return None
+
+            # Program IDs are per-GL-context (or per share-group). In test
+            # runs we create many QOpenGLWidget contexts; if they are not
+            # sharing resources, previously cached IDs become invalid.
+            # Validate against the current context and recompile if needed.
+            try:
+                from OpenGL import GL as gl  # type: ignore
+
+                try:
+                    if not gl.glIsProgram(int(program_id)):
+                        self._programs.pop(name, None)
+                        self._uniforms.pop(name, None)
+                        self._initialized.discard(name)
+                    else:
+                        return int(program_id)
+                except Exception:
+                    # If we cannot validate, assume the cached program is OK.
+                    return int(program_id)
+            except Exception:
+                return int(program_id)
+
         # Need to compile
         instance = self.get_program_instance(name)
         if instance is None:

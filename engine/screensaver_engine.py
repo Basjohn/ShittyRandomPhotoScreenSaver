@@ -157,6 +157,7 @@ class ScreensaverEngine(QObject):
             "Warp Dissolve",     # 9. GL-only
             "Blinds",            # 10. GL-only
             "Crumble",           # 11. GL-only, falling pieces
+            "Particle",
         ]
         self._current_transition_index: int = 0  # Will sync with settings in initialize()
         # Caching / prefetch
@@ -483,8 +484,20 @@ class ScreensaverEngine(QObject):
                         cached_rss_images.extend(cached)
                 
                 if cached_rss_images:
+                    # Enforce RSS cap on initial load - only load up to rss_rotating_cache_size
+                    rotating_cache_size = 20
+                    try:
+                        if self.settings_manager:
+                            rotating_cache_size = int(self.settings_manager.get('sources.rss_rotating_cache_size', 20))
+                    except Exception:
+                        pass
+                    # Limit cached images to rotating cache size
+                    if len(cached_rss_images) > rotating_cache_size:
+                        import random
+                        random.shuffle(cached_rss_images)
+                        cached_rss_images = cached_rss_images[:rotating_cache_size]
                     count = self.image_queue.add_images(cached_rss_images)
-                    logger.info(f"Pre-loaded {count} cached RSS images for immediate use")
+                    logger.info(f"Pre-loaded {count} cached RSS images for immediate use (cap={rotating_cache_size})")
             
             # Load RSS images asynchronously (don't block startup)
             if self.rss_sources:
@@ -586,8 +599,18 @@ class ScreensaverEngine(QObject):
                     if images_added > 0:
                         logger.info(f"[ASYNC RSS] Loaded {images_added} images from source")
                         # Add images to queue immediately so user sees them
+                        # But respect the background cap
                         if engine.image_queue and not engine._shutting_down:
-                            engine.image_queue.add_images(images)
+                            cap = engine._get_rss_background_cap()
+                            current_rss = sum(1 for m in engine.image_queue.get_all_images() 
+                                            if getattr(m, 'source_type', None) == ImageSourceType.RSS)
+                            remaining = max(0, cap - current_rss)
+                            if remaining > 0:
+                                to_add = images[:remaining] if len(images) > remaining else images
+                                engine.image_queue.add_images(to_add)
+                                logger.debug(f"[ASYNC RSS] Added {len(to_add)} images (cap={cap}, current={current_rss})")
+                            else:
+                                logger.debug(f"[ASYNC RSS] RSS cap reached ({cap}), skipping {len(images)} images")
                     else:
                         logger.warning(f"[ASYNC RSS] Source returned 0 images (may be rate limited): {feed_url}")
                     
@@ -619,6 +642,7 @@ class ScreensaverEngine(QObject):
         """Load RSS images synchronously (only used when no local images exist)."""
         logger.info(f"Loading RSS images synchronously for {len(self.rss_sources)} sources...")
         
+        cap = self._get_rss_background_cap()
         rss_images: List[ImageMetadata] = []
         for rss_source in self.rss_sources:
             try:
@@ -629,8 +653,13 @@ class ScreensaverEngine(QObject):
                 logger.warning(f"[FALLBACK] Failed to get images from RSS source: {e}")
         
         if rss_images and self.image_queue:
+            # Enforce cap on sync load as well
+            if len(rss_images) > cap:
+                import random
+                random.shuffle(rss_images)
+                rss_images = rss_images[:cap]
             count = self.image_queue.add_images(rss_images)
-            logger.info(f"Queue initialized with {count} RSS images")
+            logger.info(f"Queue initialized with {count} RSS images (cap={cap})")
 
     def _get_rss_background_cap(self) -> int:
         """Return the global background cap for RSS images.
@@ -1927,7 +1956,7 @@ class ScreensaverEngine(QObject):
             # Treat legacy 'Rain Drops' entries as equivalent to 'Ripple' when
             # evaluating GL-only pools. "Claw Marks" and "Shuffle" have been
             # removed from the runtime and are no longer part of the random pool.
-            gl_only_types = ["Blinds", "Peel", "3D Block Spins", "Ripple", "Rain Drops", "Warp Dissolve", "Crumble"]
+            gl_only_types = ["Blinds", "Peel", "3D Block Spins", "Ripple", "Warp Dissolve", "Crumble", "Particle"]
 
             try:
                 raw_hw = self.settings_manager.get('display.hw_accel', False)
@@ -1939,7 +1968,10 @@ class ScreensaverEngine(QObject):
 
             def _in_pool(name: str) -> bool:
                 try:
-                    raw_flag = pool_cfg.get(name, True)
+                    if name == "Ripple":
+                        raw_flag = pool_cfg.get("Ripple", pool_cfg.get("Rain Drops", True))
+                    else:
+                        raw_flag = pool_cfg.get(name, True)
                     return bool(SettingsManager.to_bool(raw_flag, True))
                 except Exception:
                     return True
@@ -2070,7 +2102,7 @@ class ScreensaverEngine(QObject):
 
         raw_hw = self.settings_manager.get('display.hw_accel', False)
         hw = SettingsManager.to_bool(raw_hw, False)
-        gl_only = {"Blinds", "Peel", "3D Block Spins", "Ripple", "Rain Drops", "Warp Dissolve", "Crumble"}
+        gl_only = {"Blinds", "Peel", "3D Block Spins", "Ripple", "Rain Drops", "Warp Dissolve", "Crumble", "Particle"}
 
         transitions_config = self.settings_manager.get('transitions', {})
         if not isinstance(transitions_config, dict):

@@ -6337,3 +6337,52 @@
 2025-12-17 10:33:39,866 - pytest_runner - INFO - pytest finished with exit code 1
 2025-12-17 10:33:39,866 - pytest_runner - INFO - pytest finished with exit code 1
 2025-12-17 10:33:39,866 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-18 01:34:00,724 - pytest_runner - INFO - pytest.py starting with args: ['-vv', '--maxfail=5', 'tests']
+2025-12-18 01:34:14,992 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-18 01:37:38,131 - pytest_runner - INFO - pytest.py starting with args: ['-vv', '--maxfail=5', 'tests']
+2025-12-18 01:37:51,793 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-18 01:44:17,702 - pytest_runner - INFO - pytest.py starting with args: ['--version']
+2025-12-18 01:44:17,977 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-18 01:50:20,670 - pytest_runner - INFO - pytest.py starting with args: ['-vv', '--maxfail=1', 'tests/test_settings.py']
+2025-12-18 01:50:21,180 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-18 01:58:46,621 - pytest_runner - INFO - pytest.py starting with args: ['-vv', '--maxfail=5', 'tests/test_events.py', 'tests/test_resources.py', 'tests/test_settings.py', 'tests/test_threading.py']
+2025-12-18 01:58:47,648 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-18 07:53:22,126 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_settings_sync.py', '-v']
+2025-12-18 07:53:22,715 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-18 07:57:23,682 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_settings_sync.py', '-v']
+2025-12-18 07:57:24,042 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-18 07:57:29,369 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_settings_sync.py']
+2025-12-18 07:57:29,774 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-18 08:01:29,344 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_settings_sync.py', '-v']
+2025-12-18 08:01:29,809 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-18 09:07:19,716 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_transitions_tab.py', 'tests/test_settings.py', '-v']
+2025-12-18 09:07:20,991 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-18 09:35:55,669 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_settings.py', 'tests/test_transitions_tab.py', 'tests/test_settings_sync.py', '-v']
+2025-12-18 09:35:56,638 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-18 09:48:58,914 - pytest_runner - INFO - pytest.py starting with args: []
+2025-12-18 10:22:03,774 - pytest_runner - INFO - pytest.py starting with args: ['tests/', '--ignore=tests/test_gl_compositor_blinds.py', '--ignore=tests/test_gl_transitions.py', '-v']
+2025-12-18 10:30:45,989 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-18 11:07:09,683 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_settings.py', 'tests/test_transitions_tab.py', 'tests/test_rss_behavior.py', '-v']
+2025-12-18 11:07:22,822 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-18 11:07:29,754 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_settings.py', 'tests/test_transitions_tab.py', 'tests/test_rss_behavior.py', '-v', '--tb=short']
+2025-12-18 11:07:42,915 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-18 11:07:49,804 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_settings.py', '-v', '--tb=short']
+2025-12-18 11:07:50,274 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-18 11:07:56,808 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_settings.py', '-v', '--tb=short']
+2025-12-18 11:07:57,412 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-18 11:08:17,378 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_settings.py', '-v', '--tb=short']
+2025-12-18 11:08:17,831 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-18 11:08:24,077 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_settings.py', '-v', '--tb=short']
+2025-12-18 11:08:24,628 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-18 11:08:38,268 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_settings.py', '-v', '--tb=short']
+2025-12-18 11:08:38,710 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-18 11:09:13,326 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_settings.py', 'tests/test_transitions_tab.py', 'tests/test_rss_behavior.py', '-v', '--tb=short']
+2025-12-18 11:09:27,022 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-18 11:09:54,422 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_settings.py', 'tests/test_transitions_tab.py', 'tests/test_transitions_integration.py', 'tests/test_image_queue.py', '-v', '--tb=short']
+2025-12-18 11:09:55,831 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-18 11:16:21,517 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_reddit_exit_logic.py', '-v', '--tb=short']
+2025-12-18 11:16:22,454 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-18 11:27:32,532 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_transitions_tab.py', 'tests/test_settings.py', '-v', '--tb=short']
+2025-12-18 11:27:33,432 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-18 11:40:03,613 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_transitions_tab.py', 'tests/test_settings.py', '-v', '--tb=short']
+2025-12-18 11:40:04,662 - pytest_runner - INFO - pytest finished with exit code 0

@@ -502,10 +502,39 @@ class WidgetManager:
                 pass
             refresh_effects = flip
 
+        seen: set[int] = set()
         for name, widget in self._widgets.items():
             if widget is None:
                 continue
+            try:
+                seen.add(id(widget))
+            except Exception:
+                pass
             self._invalidate_widget_effect(widget, name, refresh_effects)
+
+        for attr_name in (
+            "clock_widget",
+            "clock2_widget",
+            "clock3_widget",
+            "weather_widget",
+            "media_widget",
+            "spotify_visualizer_widget",
+            "spotify_volume_widget",
+            "reddit_widget",
+            "reddit2_widget",
+        ):
+            try:
+                widget = getattr(self._parent, attr_name, None)
+            except Exception:
+                widget = None
+            if widget is None:
+                continue
+            try:
+                if id(widget) in seen:
+                    continue
+            except Exception:
+                pass
+            self._invalidate_widget_effect(widget, attr_name, refresh_effects)
 
     def _invalidate_widget_effect(self, widget: QWidget, name: str, refresh: bool) -> None:
         """Invalidate a single widget's graphics effect.

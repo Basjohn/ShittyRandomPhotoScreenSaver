@@ -206,14 +206,16 @@ disappears during a transition, debug **only these integration points** first.
 
 - All overlay widgets are **direct children of `DisplayWidget`**.
 - Widgets **never** create their own `QOpenGLWidget` overlays or top‑level
-  windows.
+  windows. (Exception: `CursorHaloWidget` is a top-level helper used for
+  Ctrl-held interaction and is not considered an overlay widget.)
 - GL transitions and the compositor render **behind** widgets; Z‑order is
-  maintained explicitly by `DisplayWidget` and `overlay_manager`.
+  maintained explicitly by `WidgetManager` and `overlay_manager`.
 
-### 6.2 Creation & basic wiring (`DisplayWidget._setup_widgets`)
+### 6.2 Creation & basic wiring (`DisplayWidget._setup_widgets` / `WidgetManager`)
 
 For every overlay widget (clock / weather / media / Spotify visualizer /
-Reddit / future widgets), `DisplayWidget._setup_widgets` must:
+Reddit / future widgets), `DisplayWidget._setup_widgets` (delegating to
+`WidgetManager`) must:
 
 1. **Gate on settings**
    - Check `widgets.<name>.enabled` and per‑monitor selection before creating.

@@ -1,0 +1,183 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+cachedir: .pytest_cache
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+configfile: pytest.ini
+plugins: qt-4.5.0
+collecting ... collected 2 items
+
+tests/test_widgets_persistence_integration.py::test_widgets_tab_changes_reflected_in_display_widget FAILED [ 50%]
+tests/test_widgets_persistence_integration.py::test_display_widget_respects_widget_monitor_selection FAILED [100%]
+
+================================== FAILURES ===================================
+____________ test_widgets_tab_changes_reflected_in_display_widget _____________
+
+qt_app = <PySide6.QtWidgets.QApplication(0x1fd8ae00ca0) at 0x000001FDBAA648C0>
+settings_manager = <core.settings.settings_manager.SettingsManager(0x1fd8ae2a580) at 0x000001FDBA42B940>
+qtbot = <pytestqt.qtbot.QtBot object at 0x000001FDBA6E6B50>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001FDBA6E67D0>
+
+    @pytest.mark.qt
+    def test_widgets_tab_changes_reflected_in_display_widget(qt_app, settings_manager, qtbot, monkeypatch):
+        """WidgetsTab -> settings -> DisplayWidget roundtrip for clock + weather.
+    
+        This simulates a user changing settings in the Widgets tab, then the
+        screensaver restarting and DisplayWidget reading those settings to
+        configure overlay widgets on screen 0.
+        """
+        # Create WidgetsTab bound to the shared SettingsManager
+        tab = WidgetsTab(settings_manager)
+        qtbot.addWidget(tab)
+    
+        # Configure clock via UI controls
+        tab.clock_enabled.setChecked(True)
+        tab.clock_format.setCurrentText("24 Hour")
+        tab.clock_seconds.setChecked(True)
+        tab.clock_position.setCurrentText("Top Right")
+        tab.clock_monitor_combo.setCurrentText("1")  # primary monitor
+        tab.clock_show_background.setChecked(True)
+        tab.clock_bg_opacity.setValue(80)  # 80%
+    
+        # Configure weather via UI controls
+        tab.weather_enabled.setChecked(True)
+        tab.weather_location.setText("Johannesburg")
+        tab.weather_position.setCurrentText("Top Left")
+        tab.weather_monitor_combo.setCurrentText("ALL")  # show on all monitors
+        tab.weather_show_background.setChecked(True)
+        tab.weather_bg_opacity.setValue(80)  # 80%
+    
+        # Persist settings through the tab (canonical nested `widgets` dict)
+        tab._save_settings()
+    
+        # Avoid real network/weather fetches during DisplayWidget._setup_widgets
+        def _fake_weather_start(self):  # type: ignore[override]
+            self._enabled = True
+    
+        monkeypatch.setattr(WeatherWidget, "start", _fake_weather_start, raising=False)
+    
+        # Simulate a restart: new DisplayWidget instance using the same settings
+        widget = DisplayWidget(
+            screen_index=0,
+            display_mode=DisplayMode.FILL,
+            settings_manager=settings_manager,
+        )
+        qtbot.addWidget(widget)
+        widget.resize(800, 600)
+    
+        # Normally called from show_on_screen(); invoke directly here
+        widget._setup_widgets()
+    
+        # Clock should reflect the settings from WidgetsTab
+        assert widget.clock_widget is not None
+        assert isinstance(widget.clock_widget, ClockWidget)
+>       assert widget.clock_widget._position == ClockPosition.TOP_RIGHT
+E       assert <OverlayPosition.TOP_RIGHT: 'top_right'> == <ClockPosition.TOP_RIGHT: 'top_right'>
+E        +  where <OverlayPosition.TOP_RIGHT: 'top_right'> = <widgets.clock_widget.ClockWidget(0x1fd8b2751c0, name="clock_main") at 0x000001FDBA9FC080>._position
+E        +    where <widgets.clock_widget.ClockWidget(0x1fd8b2751c0, name="clock_main") at 0x000001FDBA9FC080> = <rendering.display_widget.DisplayWidget(0x1fd8b275f40) at 0x000001FDBAA06AC0>.clock_widget
+E        +  and   <ClockPosition.TOP_RIGHT: 'top_right'> = ClockPosition.TOP_RIGHT
+
+tests\test_widgets_persistence_integration.py:70: AssertionError
+---------------------------- Captured log teardown ----------------------------
+WARNING  SettingsManager:settings_manager.py:879 All settings cleared
+____________ test_display_widget_respects_widget_monitor_selection ____________
+
+qt_app = <PySide6.QtWidgets.QApplication(0x1fd8ae00ca0) at 0x000001FDBAA648C0>
+settings_manager = <core.settings.settings_manager.SettingsManager(0x1fdbda6ff80) at 0x000001FDD7B67C40>
+qtbot = <pytestqt.qtbot.QtBot object at 0x000001FDD7A8A750>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001FDD7B67910>
+
+    @pytest.mark.qt
+    def test_display_widget_respects_widget_monitor_selection(qt_app, settings_manager, qtbot, monkeypatch):
+        """Per-monitor routing: widgets appear on the configured screens only.
+    
+        This test writes the nested `widgets` config directly, then creates
+        DisplayWidget instances for two screens and verifies that the primary
+        clock, secondary clock, and weather widget are routed to the correct
+        monitors based on their `monitor` selectors.
+        """
+    
+        # Avoid timers and network work from widgets while keeping creation logic.
+        def _fake_clock_start(self):  # type: ignore[override]
+            self._enabled = True
+    
+        def _fake_weather_start(self):  # type: ignore[override]
+            self._enabled = True
+    
+        monkeypatch.setattr(ClockWidget, "start", _fake_clock_start, raising=False)
+        monkeypatch.setattr(WeatherWidget, "start", _fake_weather_start, raising=False)
+    
+        # Configure widgets with explicit per-monitor selectors.
+        # Main clock on monitor 1, Clock 2 on monitor 2, weather on monitor 2.
+        settings_manager.set(
+            "widgets",
+            {
+                "clock": {
+                    "enabled": True,
+                    "monitor": "1",
+                    "position": "Top Right",
+                },
+                "clock2": {
+                    "enabled": True,
+                    "monitor": "2",
+                    "position": "Top Right",
+                },
+                "weather": {
+                    "enabled": True,
+                    "monitor": "2",
+                    "location": "Johannesburg",
+                    "position": "Bottom Left",
+                },
+            },
+        )
+    
+        # Screen 0 (index 0 -> monitor 1)
+        w0 = DisplayWidget(
+            screen_index=0,
+            display_mode=DisplayMode.FILL,
+            settings_manager=settings_manager,
+        )
+        qtbot.addWidget(w0)
+        w0.resize(800, 600)
+        w0._setup_widgets()
+    
+        # Primary clock should be present; secondary clock and weather should not.
+        assert w0.clock_widget is not None
+        assert w0.clock2_widget is None
+        assert w0.weather_widget is None
+    
+        # Screen 1 (index 1 -> monitor 2)
+        w1 = DisplayWidget(
+            screen_index=1,
+            display_mode=DisplayMode.FILL,
+            settings_manager=settings_manager,
+        )
+        qtbot.addWidget(w1)
+        w1.resize(800, 600)
+        w1._setup_widgets()
+    
+        # Secondary clock and weather should be present here; primary clock should not.
+        assert w1.clock_widget is None
+        assert w1.clock2_widget is not None
+        assert isinstance(w1.clock2_widget, ClockWidget)
+        assert w1.weather_widget is not None
+>       assert w1.weather_widget._position == WeatherPosition.BOTTOM_LEFT
+E       AssertionError: assert <OverlayPosition.BOTTOM_LEFT: 'bottom_left'> == <WeatherPosition.BOTTOM_LEFT: 'bottom_left'>
+E        +  where <OverlayPosition.BOTTOM_LEFT: 'bottom_left'> = <widgets.weather_widget.WeatherWidget(0x1fd89333a80) at 0x000001FDD7AB6CC0>._position
+E        +    where <widgets.weather_widget.WeatherWidget(0x1fd89333a80) at 0x000001FDD7AB6CC0> = <rendering.display_widget.DisplayWidget(0x1fd8b26b800) at 0x000001FDD7BE8EC0>.weather_widget
+E        +  and   <WeatherPosition.BOTTOM_LEFT: 'bottom_left'> = WeatherPosition.BOTTOM_LEFT
+
+tests\test_widgets_persistence_integration.py:156: AssertionError
+---------------------------- Captured log teardown ----------------------------
+WARNING  SettingsManager:settings_manager.py:879 All settings cleared
+=========================== short test summary info ===========================
+FAILED tests/test_widgets_persistence_integration.py::test_widgets_tab_changes_reflected_in_display_widget - assert <OverlayPosition.TOP_RIGHT: 'top_right'> == <ClockPosition.TOP_RIGHT: 'top_right'>
+ +  where <OverlayPosition.TOP_RIGHT: 'top_right'> = <widgets.clock_widget.ClockWidget(0x1fd8b2751c0, name="clock_main") at 0x000001FDBA9FC080>._position
+ +    where <widgets.clock_widget.ClockWidget(0x1fd8b2751c0, name="clock_main") at 0x000001FDBA9FC080> = <rendering.display_widget.DisplayWidget(0x1fd8b275f40) at 0x000001FDBAA06AC0>.clock_widget
+ +  and   <ClockPosition.TOP_RIGHT: 'top_right'> = ClockPosition.TOP_RIGHT
+FAILED tests/test_widgets_persistence_integration.py::test_display_widget_respects_widget_monitor_selection - AssertionError: assert <OverlayPosition.BOTTOM_LEFT: 'bottom_left'> == <WeatherPosition.BOTTOM_LEFT: 'bottom_left'>
+ +  where <OverlayPosition.BOTTOM_LEFT: 'bottom_left'> = <widgets.weather_widget.WeatherWidget(0x1fd89333a80) at 0x000001FDD7AB6CC0>._position
+ +    where <widgets.weather_widget.WeatherWidget(0x1fd89333a80) at 0x000001FDD7AB6CC0> = <rendering.display_widget.DisplayWidget(0x1fd8b26b800) at 0x000001FDD7BE8EC0>.weather_widget
+ +  and   <WeatherPosition.BOTTOM_LEFT: 'bottom_left'> = WeatherPosition.BOTTOM_LEFT
+============================== 2 failed in 3.17s ==============================
+QSettings: Failed to delete key "Software\Test\ScreensaverTest" (Illegal operation attempted on a registry key that has been marked for deletion.)

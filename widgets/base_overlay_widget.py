@@ -16,7 +16,7 @@ from abc import abstractmethod
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
-from PySide6.QtCore import QPoint, QSize, Signal
+from PySide6.QtCore import QPoint, QRect, QSize, Signal
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import QLabel, QWidget
 
@@ -258,10 +258,15 @@ class BaseOverlayWidget(QLabel):
         self._update_position()
     
     def _update_position(self) -> None:
-        """Update widget position based on position enum and margin."""
-        parent = self.parent()
+        """Update widget position based on current settings."""
+        parent = self.parentWidget()
         if not parent:
             return
+
+        try:
+            old_geo = self.geometry()
+        except Exception:
+            old_geo = QRect()
         
         parent_size = parent.size()
         widget_size = self.sizeHint()
@@ -295,6 +300,16 @@ class BaseOverlayWidget(QLabel):
         y += self._pixel_shift_offset.y() + self._stack_offset.y()
         
         self.move(x, y)
+
+        try:
+            new_geo = self.geometry()
+        except Exception:
+            new_geo = QRect()
+
+        try:
+            parent.update(old_geo.united(new_geo))
+        except Exception:
+            pass
     
     # -------------------------------------------------------------------------
     # Shadow Management

@@ -136,7 +136,10 @@ class GLTransitionRenderer:
         )
     
     def render_blockspin_shader(self, target: QRect, state: Any) -> None:
-        """Render BlockSpin transition using 3D card-flip shader."""
+        """Render BlockSpin transition using 3D card-flip shader.
+
+        Rendering contract: the slab is rendered over a black void.
+        """
         pipeline = self._get_pipeline()
         if gl is None or pipeline is None or state is None:
             return
@@ -154,8 +157,14 @@ class GLTransitionRenderer:
         gl.glViewport(0, 0, vp_w, vp_h)
         gl.glEnable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_TRUE)
-        gl.glClearColor(0.0, 0.0, 0.0, 1.0)
-        gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
+
+        # Ensure the depth buffer is actually cleared before rendering the slab.
+        try:
+            gl.glDepthMask(gl.GL_TRUE)
+            gl.glClearColor(0.0, 0.0, 0.0, 1.0)
+            gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
+        except Exception:
+            pass
         
         gl.glUseProgram(pipeline.basic_program)
         try:

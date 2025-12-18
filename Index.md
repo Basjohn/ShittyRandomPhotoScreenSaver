@@ -31,8 +31,13 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - `validate_and_repair()`: Validates settings types and repairs corrupted values (lists, ranges, enums)
   - `backup_settings(path)`: Creates timestamped JSON backup of all settings
   - `_get_default_image_folders()`: Dynamic default folders (user's Pictures) instead of hardcoded paths
+  - Normalizes QSettings nested Mapping values to plain dicts on read to prevent type confusion
+  - Preserves user-specific keys (sources folders, RSS feeds, weather location/geo) during reset_to_defaults
 - core/settings/defaults.py
-  - Default settings values for all configuration options
+  - **Single source of truth** for all default settings values
+  - `get_default_settings()`: Returns canonical defaults dict used by SettingsManager and UI
+  - `PRESERVE_ON_RESET`: Set of keys to preserve during reset (user-specific data)
+  - `get_flat_defaults()`: Flattened dot-notation defaults for validation
 - core/animation/animator.py
   - AnimationManager and easing types
   - Animation class with optional FrameState for decoupled rendering
@@ -45,6 +50,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - Animation type definitions and enums
 - core/media/media_controller.py
   - Centralized media playback state via Windows GSMTC (Global System Media Transport Controls)
+  - GSMTC queries run via ThreadManager with a hard timeout so WinRT calls cannot stall the UI thread or test runner; on hard-timeout, media integration is disabled for the remainder of the session.
 - core/media/spotify_volume.py
   - Spotify volume control via pycaw/Core Audio (Windows mixer session level)
   - Uses `ISimpleAudioVolume` to control per-application session volume, NOT Spotify's internal volume
@@ -86,6 +92,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - ImageQueue with RLock, shuffle/history, wraparound
   - **Ratio-based source selection**: Separate pools for local and RSS images with configurable usage ratio (default 60% local / 40% RSS)
   - Automatic fallback: if selected pool empty, falls back to other pool
+  - **Legacy single-source semantics**: When only one source type exists, `next()` consumes from the combined queue to preserve deterministic `peek()/size()/wraparound` behavior.
   - peek() and peek_many(n) for prefetch look-ahead
   - `set_local_ratio(ratio)` / `get_local_ratio()` for runtime ratio adjustment
   - `has_both_source_types()` to check if ratio control is applicable
@@ -122,7 +129,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - DisplayMode enum and helpers
 - rendering/gl_programs/
   - Per-transition shader program helpers that encapsulate GLSL source, compilation, uniform caching, and draw logic.
-  - `program_cache.py`: `GLProgramCache` singleton for centralized lazy-loading of shader programs. Replaces 10+ module-level globals with single cache class.
+  - `program_cache.py`: `GLProgramCache` singleton for centralized lazy-loading of shader programs. Replaces 10+ module-level globals with single cache class. Validates cached program IDs per-context via `glIsProgram()` and recompiles when IDs are stale.
   - `geometry_manager.py`: `GLGeometryManager` - **per-compositor instance** for VAO/VBO management. Handles quad and box mesh creation/cleanup. Changed from singleton because OpenGL VAOs are context-specific.
   - `texture_manager.py`: `GLTextureManager` - **per-compositor instance** for texture upload, caching (LRU), and PBO pooling. Changed from singleton because OpenGL textures are context-specific.
   - `base_program.py`: `BaseGLProgram` ABC with shared vertex shader and compilation helpers.
@@ -260,7 +267,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - widgets/spotify_volume_widget.py
   - Spotify-only vertical volume slider paired with the media card; gated on a Spotify GSMTC session and participating in the secondary Spotify fade wave via a GPU fade factor derived from the visualiser card’s `ShadowFadeProfile` progress so it fades in slightly after the card while respecting the same hard-exit / Ctrl interaction gating as the media widget.
 - widgets/dimming_overlay.py
-   - `DimmingOverlay`: Semi-transparent black overlay for background dimming. Sits above transitions but below all widgets to reduce brightness and improve widget readability.
+   - `DimmingOverlay`: Legacy widget-based dimming overlay (kept for fallback/testing). Primary runtime dimming is implemented in the GL compositor (`GLCompositorWidget.set_dimming`).
  - widgets/pixel_shift_manager.py
    - `PixelShiftManager`: Manages periodic 1px shifts of overlay widgets for burn-in prevention. Maximum drift of 4px in any direction with automatic drift-back. Defers during transitions.
  - widgets/context_menu.py
@@ -353,6 +360,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - Docs/PERFORMANCE_BASELINE.md – Performance metrics and baselines
 - Docs/SAKURA_PETALS_TRANSITION_DESIGN.md – Design document for future sakura petals transition (low priority)
 - audits/*.md – Repository-level architecture/optimization audit documents with live checklists
+  - audits/SEMANTICS_AUDIT_2025_12_18.md – Live checklist of semantics/naming corrections and code/doc comment updates for sanity/accuracy.
 
 ## Active Investigations
 - CONTEXT_CACHE_CORRUPTION.md
@@ -370,8 +378,10 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - sources.local_ratio: int (0-100, default 60) - percentage of images from local sources vs RSS
 - sources.rss_save_to_disk: bool (default false) - permanently save RSS images
 - sources.rss_save_directory: str - directory for permanent RSS image storage
-- sources.rss_background_cap: int (default 30) - max RSS images in queue
-- sources.rss_stale_minutes: int (default 30) - TTL for stale RSS images
+- sources.rss_background_cap: int (default 30) - max RSS images in queue at runtime
+- sources.rss_rotating_cache_size: int (default 20) - max RSS images to keep between sessions
+- sources.rss_stale_minutes: int (default 30) - TTL for stale RSS images (dynamic based on transition interval)
+- sources.rss_refresh_minutes: int (default 10) - background RSS refresh interval
 
 ### Display
 - display.refresh_sync: bool
@@ -425,15 +435,9 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - accessibility.pixel_shift.rate: int (1-5, default 1)
 
 ## Audits
-- audits/COMPREHENSIVE_AUDIT_2025_12_14.md: **ACTIVE** Full codebase audit triggered by RSS reload bug - 67 items across testing, architecture, reliability, performance, UX, documentation
-- audits/v1_2 ROADMAP.md: Living roadmap for v1.2 features and performance goals
-- audits/GLSL_Performance_Optimizations.md: GLSL shader optimization analysis and implementation notes
-- audits/Performance_Audit_2025-12-05.md: Comprehensive performance audit identifying frame timing issues
-- audits/FLICKER_INVESTIGATION.md: Widget and transition flicker root cause analysis and fixes
-- audits/UI_THREAD_AUDIT.md: UI thread blocking operations inventory and optimization plan
-- audits/ARCHITECTURE_AUDIT.md: Exhaustive architecture audit with prioritized action plan
-- audits/ARCHITECTURE_AUDIT_2025_12.md: December 2025 deep audit with live checklists (threading, centralization, resources, performance, deadlocks, cache) - 24 items completed
-- audits/DIMMING_WIDGET_BUGS_2025_12.md: Dimming overlay and widget startup bugs investigation and fixes
+- audits/CODEBASE_AUDIT_2025_12_17.md: Codebase audit checklist and status snapshot
+- audits/PHASE_E_ROOT_CAUSE_ANALYSIS.md: Context menu / effect cache corruption mitigation write-up
+- audits/VISUALIZER_DEBUG.md: Spotify visualizer debugging notes
 
 ## Notes
 - DPR-aware scaling in DisplayWidget → ImageProcessor to reduce GL upload cost

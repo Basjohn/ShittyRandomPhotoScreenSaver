@@ -10,6 +10,7 @@ import random
 from typing import Optional, TYPE_CHECKING, Callable
 
 from core.logging.logger import get_logger
+from core.settings.defaults import get_default_settings
 from core.settings.settings_manager import SettingsManager
 from core.resources.manager import ResourceManager
 
@@ -111,9 +112,13 @@ class TransitionFactory:
         transitions_settings = self._settings.get('transitions', {})
         if not isinstance(transitions_settings, dict):
             transitions_settings = {}
+
+        canonical_transitions = get_default_settings().get('transitions', {})
+        if not isinstance(canonical_transitions, dict):
+            canonical_transitions = {}
         
         # Get transition type
-        transition_type = transitions_settings.get('type') or 'Crossfade'
+        transition_type = transitions_settings.get('type') or canonical_transitions.get('type') or 'Crossfade'
         requested_type = transition_type
         
         # Handle random mode
@@ -156,7 +161,11 @@ class TransitionFactory:
     
     def _get_duration(self, settings: dict, transition_type: str) -> int:
         """Get duration for the transition type."""
-        base_duration_raw = settings.get('duration_ms', 1300)
+        canonical_transitions = get_default_settings().get('transitions', {})
+        if not isinstance(canonical_transitions, dict):
+            canonical_transitions = {}
+
+        base_duration_raw = settings.get('duration_ms', canonical_transitions.get('duration_ms', 1300))
         try:
             base_duration_ms = int(base_duration_raw)
         except Exception:
@@ -165,10 +174,20 @@ class TransitionFactory:
         duration_ms = base_duration_ms
         try:
             durations_cfg = settings.get('durations', {})
+            canonical_durations = canonical_transitions.get('durations', {})
+            if not isinstance(canonical_durations, dict):
+                canonical_durations = {}
+
             if isinstance(durations_cfg, dict):
                 per_type_raw = durations_cfg.get(transition_type)
-                if per_type_raw is not None:
-                    duration_ms = int(per_type_raw)
+            else:
+                per_type_raw = None
+
+            if per_type_raw is None:
+                per_type_raw = canonical_durations.get(transition_type)
+
+            if per_type_raw is not None:
+                duration_ms = int(per_type_raw)
         except Exception:
             pass
         
@@ -330,11 +349,15 @@ class TransitionFactory:
         return CrossfadeTransition(duration_ms)
     
     def _create_crumble(self, settings: dict, duration_ms: int, use_compositor: bool) -> BaseTransition:
+        # Get canonical defaults from defaults.py
+        from core.settings.defaults import get_default_settings
+        canonical = get_default_settings().get('transitions', {}).get('crumble', {})
+        
         crumble_settings = settings.get('crumble', {}) if isinstance(settings.get('crumble', {}), dict) else {}
-        piece_count = self._safe_int(crumble_settings.get('piece_count', 8), 8)
-        crack_complexity = self._safe_float(crumble_settings.get('crack_complexity', 1.0), 1.0)
-        mosaic_mode = bool(crumble_settings.get('mosaic_mode', False))
-        weight_str = crumble_settings.get('weighting', 'Top Weighted')
+        piece_count = self._safe_int(crumble_settings.get('piece_count', canonical.get('piece_count', 14)), 14)
+        crack_complexity = self._safe_float(crumble_settings.get('crack_complexity', canonical.get('crack_complexity', 1.0)), 1.0)
+        mosaic_mode = bool(crumble_settings.get('mosaic_mode', canonical.get('mosaic_mode', False)))
+        weight_str = crumble_settings.get('weighting', canonical.get('weighting', 'Random Choice'))
         weight_map = {
             'Top Weighted': 0.0,
             'Bottom Weighted': 1.0,
@@ -349,12 +372,16 @@ class TransitionFactory:
         return CrossfadeTransition(duration_ms)
     
     def _create_particle(self, settings: dict, duration_ms: int, use_compositor: bool) -> BaseTransition:
+        # Get canonical defaults from defaults.py
+        from core.settings.defaults import get_default_settings
+        canonical = get_default_settings().get('transitions', {}).get('particle', {})
+        
         particle_settings = settings.get('particle', {}) if isinstance(settings.get('particle', {}), dict) else {}
         
-        mode_str = particle_settings.get('mode', 'Directional')
+        mode_str = particle_settings.get('mode', canonical.get('mode', 'Converge'))
         mode = 2 if mode_str == 'Converge' else (1 if mode_str == 'Swirl' else 0)
         
-        direction_str = particle_settings.get('direction', 'Left to Right')
+        direction_str = particle_settings.get('direction', canonical.get('direction', 'Left to Right'))
         direction_map = {
             'Left to Right': 0,
             'Right to Left': 1,
@@ -369,18 +396,18 @@ class TransitionFactory:
         }
         direction = direction_map.get(direction_str, 0)
         
-        particle_radius = self._safe_float(particle_settings.get('particle_radius', 24.0), 24.0)
-        overlap = self._safe_float(particle_settings.get('overlap', 4.0), 4.0)
-        trail_length = self._safe_float(particle_settings.get('trail_length', 0.15), 0.15)
-        trail_strength = self._safe_float(particle_settings.get('trail_strength', 0.6), 0.6)
-        swirl_strength = self._safe_float(particle_settings.get('swirl_strength', 1.0), 1.0)
-        swirl_turns = self._safe_float(particle_settings.get('swirl_turns', 2.0), 2.0)
-        use_3d_shading = SettingsManager.to_bool(particle_settings.get('use_3d_shading', True), True)
-        texture_mapping = SettingsManager.to_bool(particle_settings.get('texture_mapping', True), True)
-        wobble = SettingsManager.to_bool(particle_settings.get('wobble', False), False)
-        gloss_size = self._safe_float(particle_settings.get('gloss_size', 64.0), 64.0)
-        light_direction = int(particle_settings.get('light_direction', 0))
-        swirl_order = int(particle_settings.get('swirl_order', 0))
+        particle_radius = self._safe_float(particle_settings.get('particle_radius', canonical.get('particle_radius', 10.0)), 10.0)
+        overlap = self._safe_float(particle_settings.get('overlap', canonical.get('overlap', 4.0)), 4.0)
+        trail_length = self._safe_float(particle_settings.get('trail_length', canonical.get('trail_length', 0.15)), 0.15)
+        trail_strength = self._safe_float(particle_settings.get('trail_strength', canonical.get('trail_strength', 0.6)), 0.6)
+        swirl_strength = self._safe_float(particle_settings.get('swirl_strength', canonical.get('swirl_strength', 1.0)), 1.0)
+        swirl_turns = self._safe_float(particle_settings.get('swirl_turns', canonical.get('swirl_turns', 3.0)), 3.0)
+        use_3d_shading = SettingsManager.to_bool(particle_settings.get('use_3d_shading', canonical.get('use_3d_shading', True)), True)
+        texture_mapping = SettingsManager.to_bool(particle_settings.get('texture_mapping', canonical.get('texture_mapping', True)), True)
+        wobble = SettingsManager.to_bool(particle_settings.get('wobble', canonical.get('wobble', True)), True)
+        gloss_size = self._safe_float(particle_settings.get('gloss_size', canonical.get('gloss_size', 72.0)), 72.0)
+        light_direction = int(particle_settings.get('light_direction', canonical.get('light_direction', 0)))
+        swirl_order = int(particle_settings.get('swirl_order', canonical.get('swirl_order', 0)))
         
         if use_compositor:
             return GLCompositorParticleTransition(

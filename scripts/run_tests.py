@@ -152,7 +152,26 @@ def main() -> int:
     pytest_args = _resolve_pytest_args(args)
     log_file = _ensure_log_dir(args.log_dir)
 
-    command = [sys.executable, "-m", "pytest", *pytest_args]
+    # IMPORTANT:
+    # This repository includes a local helper script named `pytest.py` at the
+    # project root. When running `python -m pytest` from the root, Python would
+    # resolve that file instead of the third-party `pytest` package, causing our
+    # suite logs to appear empty.
+    #
+    # To avoid this, we temporarily remove the project root from sys.path while
+    # importing the real `pytest` package, then restore sys.path before
+    # executing pytest so test imports still work.
+    runner = (
+        "import importlib, sys;"
+        "from pathlib import Path;"
+        "root=Path.cwd().resolve();"
+        "orig=list(sys.path);"
+        "sys.path=[p for p in sys.path if p and Path(p).resolve()!=root];"
+        "pytest=importlib.import_module('pytest');"
+        "sys.path=orig;"
+        "raise SystemExit(pytest.main(sys.argv[1:]));"
+    )
+    command = [sys.executable, "-u", "-c", runner, *pytest_args]
 
     print("→ Running:", " ".join(command))
     print(f"→ Logging to: {log_file}")
@@ -165,8 +184,12 @@ def main() -> int:
 
     _purge_pycache(project_root)
 
+    env = os.environ.copy()
+    env.setdefault("PYTHONUNBUFFERED", "1")
+    env.setdefault("PYTHONFAULTHANDLER", "1")
+
     with log_file.open("w", encoding="utf-8") as fh:
-        process = subprocess.run(command, stdout=fh, stderr=subprocess.STDOUT)
+        process = subprocess.run(command, stdout=fh, stderr=subprocess.STDOUT, env=env)
 
     _purge_pycache(project_root)
 

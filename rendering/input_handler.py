@@ -16,6 +16,7 @@ from typing import Optional, TYPE_CHECKING
 
 from PySide6.QtCore import Qt, Signal, QObject, QPoint
 from PySide6.QtGui import QKeyEvent, QMouseEvent, QCursor, QGuiApplication
+from PySide6.QtWidgets import QApplication
 
 from core.logging.logger import get_logger
 from core.settings.settings_manager import SettingsManager
@@ -401,6 +402,12 @@ class InputHandler(QObject):
             The DisplayWidget that should own the halo, or None
         """
         coordinator.set_ctrl_held(True)
+        try:
+            from rendering.display_widget import DisplayWidget
+
+            DisplayWidget._global_ctrl_held = True  # type: ignore[attr-defined]
+        except Exception:
+            pass
         
         try:
             global_pos = QCursor.pos()
@@ -415,6 +422,15 @@ class InputHandler(QObject):
                 cursor_screen = None
 
         display_widgets = coordinator.get_all_instances()
+        if not display_widgets:
+            try:
+                from rendering.display_widget import DisplayWidget
+
+                display_widgets = [
+                    w for w in QApplication.topLevelWidgets() if isinstance(w, DisplayWidget)
+                ]
+            except Exception:
+                display_widgets = []
 
         # Reset Ctrl state and hide halos on all displays
         for w in display_widgets:
@@ -470,6 +486,12 @@ class InputHandler(QObject):
 
         coordinator.set_halo_owner(target_widget)
         target_widget._ctrl_held = True
+        try:
+            from rendering.display_widget import DisplayWidget
+
+            DisplayWidget._halo_owner = target_widget  # type: ignore[attr-defined]
+        except Exception:
+            pass
         
         logger.debug("[CTRL HALO] Ctrl pressed; target screen=%s pos=%s",
                      getattr(target_widget, "screen_index", "?"), target_pos)
@@ -497,6 +519,12 @@ class InputHandler(QObject):
             # In hard-exit mode, just clear Ctrl state but keep halo
             coordinator.set_ctrl_held(False)
             self._ctrl_held = False
+            try:
+                from rendering.display_widget import DisplayWidget
+
+                DisplayWidget._global_ctrl_held = False  # type: ignore[attr-defined]
+            except Exception:
+                pass
             return
 
         # Clear global Ctrl state and fade out halo
@@ -505,14 +533,31 @@ class InputHandler(QObject):
         self._ctrl_held = False
 
         try:
+            from rendering.display_widget import DisplayWidget
+
+            DisplayWidget._global_ctrl_held = False  # type: ignore[attr-defined]
+            DisplayWidget._halo_owner = None  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
+        try:
             global_pos = QCursor.pos()
         except Exception:
             global_pos = None
 
         display_widgets = coordinator.get_all_instances()
+        if not display_widgets:
+            try:
+                from rendering.display_widget import DisplayWidget
 
-        # Fade out halo on owner
-        if owner is not None and owner in display_widgets:
+                display_widgets = [
+                    w for w in QApplication.topLevelWidgets() if isinstance(w, DisplayWidget)
+                ]
+            except Exception:
+                display_widgets = []
+
+        # Fade out halo on owner (owner may not be registered in coordinator during tests).
+        if owner is not None:
             try:
                 owner._ctrl_held = False
             except Exception:

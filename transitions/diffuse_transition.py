@@ -42,6 +42,7 @@ class DiffuseTransition(BaseTransition):
         self._old_label: Optional[QLabel] = None
         self._new_label: Optional[QLabel] = None
         self._animation_id: Optional[str] = None
+        self._timer = None
         self._elapsed_ms = 0
         self._fps = 60
         
@@ -222,6 +223,7 @@ class DiffuseTransition(BaseTransition):
         self._widget = None
         self._old_pixmap = None
         self._new_pixmap = None
+        self._timer = None
         self._pixel_grid = []
         
         if self._state not in [TransitionState.FINISHED, TransitionState.CANCELLED]:
