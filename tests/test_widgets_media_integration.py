@@ -7,6 +7,7 @@ values.
 """
 
 import pytest
+import uuid
 
 from core.settings import SettingsManager
 from core.animation import AnimationManager
@@ -16,10 +17,9 @@ from ui.settings_dialog import SettingsDialog
 @pytest.mark.qt
 def test_widgets_tab_media_roundtrip(qt_app):
     org = "Test"
-    app = "WidgetsTabMediaRoundtripTest"
+    app = f"WidgetsTabMediaRoundtripTest_{uuid.uuid4().hex}"
 
     settings = SettingsManager(organization=org, application=app)
-    settings.clear()
 
     animations = AnimationManager()
     dialog = SettingsDialog(settings, animations)
@@ -38,16 +38,15 @@ def test_widgets_tab_media_roundtrip(qt_app):
     assert media_cfg.get("monitor") == "ALL"
 
     dialog.close()
-    settings.clear()
+
 
 
 @pytest.mark.qt
 def test_media_widget_created_after_config_roundtrip(qt_app, qtbot):
     org = "Test"
-    app = "MediaConfigRoundtripDisplayTest"
+    app = f"MediaConfigRoundtripDisplayTest_{uuid.uuid4().hex}"
 
     settings = SettingsManager(organization=org, application=app)
-    settings.clear()
 
     animations = AnimationManager()
     dialog = SettingsDialog(settings, animations)
@@ -69,5 +68,3 @@ def test_media_widget_created_after_config_roundtrip(qt_app, qtbot):
     assert media_cfg2.get("enabled") is True
     assert media_cfg2.get("monitor") == "ALL"
 
-    settings.clear()
-    settings2.clear()

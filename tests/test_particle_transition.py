@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt
+import uuid
 
 
 @pytest.fixture
@@ -197,31 +198,24 @@ class TestSettingsDefaults:
         """Test SettingsManager includes particle defaults."""
         from core.settings.settings_manager import SettingsManager
         
-        manager = SettingsManager(organization="Test", application="ParticleTest")
-        try:
-            transitions = manager.get('transitions', {})
-            
-            assert 'particle' in transitions, "Particle settings missing from defaults"
-            particle = transitions['particle']
-            
-            assert particle.get('mode') == 'Converge'
-            assert particle.get('swirl_order') == 2  # Edges Inward
-            assert particle.get('particle_radius') == 24
-            assert particle.get('use_3d_shading') is True
-            assert particle.get('texture_mapping') is True
-        finally:
-            manager._settings.clear()
+        manager = SettingsManager(organization="Test", application=f"ParticleTest_{uuid.uuid4().hex}")
+
+        transitions = manager.get('transitions', {})
+        assert 'particle' in transitions, "Particle settings missing from defaults"
+        particle = transitions['particle']
+        assert particle.get('mode') == 'Converge'
+        assert particle.get('swirl_order') == 2  # Edges Inward
+        assert particle.get('particle_radius') == 24
+        assert particle.get('use_3d_shading') is True
+        assert particle.get('texture_mapping') is True
 
     def test_settings_manager_has_particle_in_pool(self):
         """Test SettingsManager includes Particle in transition pool."""
         from core.settings.settings_manager import SettingsManager
         
-        manager = SettingsManager(organization="Test", application="ParticlePoolTest")
-        try:
-            transitions = manager.get('transitions', {})
-            pool = transitions.get('pool', {})
-            
-            assert 'Particle' in pool, "Particle missing from transition pool"
-            assert pool['Particle'] is True
-        finally:
-            manager._settings.clear()
+        manager = SettingsManager(organization="Test", application=f"ParticlePoolTest_{uuid.uuid4().hex}")
+
+        transitions = manager.get('transitions', {})
+        pool = transitions.get('pool', {})
+        assert 'Particle' in pool, "Particle missing from transition pool"
+        assert pool['Particle'] is True

@@ -14,10 +14,7 @@ CRITICAL: Display widgets must be hidden when settings open,
 otherwise they cover the dialog with black fullscreen windows!
 """
 import pytest
-from pathlib import Path
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtWidgets import QApplication
-from PySide6.QtTest import QTest
+import uuid
 
 from core.settings import SettingsManager
 from engine.screensaver_engine import ScreensaverEngine
@@ -28,7 +25,7 @@ def engine_with_settings(qt_app, tmp_path):
     """Create engine with test settings."""
     settings = SettingsManager(
         organization="Test",
-        application="SHotkeyTest"
+        application=f"SHotkeyTest_{uuid.uuid4().hex}"
     )
     
     # Create test folder with one image
@@ -51,7 +48,7 @@ def engine_with_settings(qt_app, tmp_path):
     if engine._running:
         engine.stop()
     engine.cleanup()
-    settings.clear()
+
 
 
 def test_s_hotkey_opens_settings_without_crash(engine_with_settings, qt_app):
@@ -108,7 +105,7 @@ def test_display_initialized_flag_lifecycle(qt_app):
     """
     settings = SettingsManager(
         organization="Test",
-        application="DisplayFlagTest"
+        application=f"DisplayFlagTest_{uuid.uuid4().hex}"
     )
     
     engine = ScreensaverEngine()
@@ -130,7 +127,7 @@ def test_display_initialized_flag_lifecycle(qt_app):
     
     # Cleanup
     engine.cleanup()
-    settings.clear()
+
 
 
 def test_engine_has_required_attributes(qt_app):

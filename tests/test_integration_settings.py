@@ -6,9 +6,8 @@ These tests verify the ACTUAL workflow that was broken:
 - Settings persist to disk
 - Settings load correctly on next run
 """
-import pytest
 from pathlib import Path
-from PySide6.QtCore import Qt
+import uuid
 from core.settings import SettingsManager
 from core.animation import AnimationManager
 from ui.settings_dialog import SettingsDialog
@@ -23,22 +22,20 @@ def test_sources_tab_folder_persistence(qt_app, tmp_path):
     but were never persisted.
     """
     # Use temporary settings location
-    settings = SettingsManager(
-        organization="Test",
-        application="IntegrationTest"
-    )
+    app = f"IntegrationTest_{uuid.uuid4().hex}"
+    settings = SettingsManager(organization="Test", application=app)
     
     # Create sources tab
-    sources_tab = SourcesTab(settings)
+    _sources_tab = SourcesTab(settings)
     
     # Simulate adding a folder (bypass file dialog)
     test_folder = str(tmp_path / "test_images")
     Path(test_folder).mkdir(exist_ok=True)
     
     # Get current folders and add test folder (simulating the dialog workflow)
-    folders = settings.get('sources.folders', [])
-    folders.append(test_folder)
-    settings.set('sources.folders', folders)
+    _folders = settings.get('sources.folders', [])
+    _folders.append(test_folder)
+    settings.set('sources.folders', _folders)
     settings.save()
     
     # Verify it was saved
@@ -46,26 +43,19 @@ def test_sources_tab_folder_persistence(qt_app, tmp_path):
     assert test_folder in saved_folders, "Folder should be in settings"
     
     # Create NEW SettingsManager - simulate app restart
-    settings2 = SettingsManager(
-        organization="Test",
-        application="IntegrationTest"
-    )
+    settings2 = SettingsManager(organization="Test", application=app)
     
     # Verify persistence
     loaded_folders = settings2.get('sources.folders', [])
     assert test_folder in loaded_folders, "Folder should persist across SettingsManager instances"
     
-    # Cleanup
-    settings.clear()
-    settings2.clear()
+
 
 
 def test_sources_tab_rss_persistence(qt_app):
     """Test that adding RSS feed in SourcesTab actually saves to disk."""
-    settings = SettingsManager(
-        organization="Test",
-        application="IntegrationTestRSS"
-    )
+    app = f"IntegrationTestRSS_{uuid.uuid4().hex}"
+    settings = SettingsManager(organization="Test", application=app)
     
     # Add RSS feed
     test_feed = "https://www.nasa.gov/feeds/iotd-feed"
@@ -79,17 +69,11 @@ def test_sources_tab_rss_persistence(qt_app):
     assert test_feed in saved_feeds
     
     # Create new manager - test persistence
-    settings2 = SettingsManager(
-        organization="Test",
-        application="IntegrationTestRSS"
-    )
+    settings2 = SettingsManager(organization="Test", application=app)
     
     loaded_feeds = settings2.get('sources.rss_feeds', [])
     assert test_feed in loaded_feeds, "RSS feed should persist"
-    
-    # Cleanup
-    settings.clear()
-    settings2.clear()
+
 
 
 def test_settings_dialog_full_workflow(qt_app, tmp_path):
@@ -101,10 +85,8 @@ def test_settings_dialog_full_workflow(qt_app, tmp_path):
     4. Create new SettingsManager
     5. Verify folder is still there
     """
-    settings = SettingsManager(
-        organization="Test",
-        application="FullWorkflowTest"
-    )
+    app = f"FullWorkflowTest_{uuid.uuid4().hex}"
+    settings = SettingsManager(organization="Test", application=app)
     
     animations = AnimationManager()
     
@@ -112,35 +94,29 @@ def test_settings_dialog_full_workflow(qt_app, tmp_path):
     dialog = SettingsDialog(settings, animations)
     
     # Get sources tab
-    sources_tab = dialog.sources_tab
+    _sources_tab = dialog.sources_tab
     
     # Add folder programmatically (bypass file dialog)
     test_folder = str(tmp_path / "images")
     Path(test_folder).mkdir(exist_ok=True)
     
-    folders = settings.get('sources.folders', [])
-    if test_folder not in folders:
-        folders.append(test_folder)
-        settings.set('sources.folders', folders)
+    _folders = settings.get('sources.folders', [])
+    if test_folder not in _folders:
+        _folders.append(test_folder)
+        settings.set('sources.folders', _folders)
         settings.save()
     
     # Close dialog
     dialog.close()
     
     # Simulate app restart - create new SettingsManager
-    settings2 = SettingsManager(
-        organization="Test",
-        application="FullWorkflowTest"
-    )
+    settings2 = SettingsManager(organization="Test", application=app)
     
     # THIS IS THE CRITICAL TEST - does it persist?
     loaded_folders = settings2.get('sources.folders', [])
     assert test_folder in loaded_folders, \
         "Folder must persist after dialog close and new SettingsManager creation"
-    
-    # Cleanup
-    settings.clear()
-    settings2.clear()
+
 
 
 def test_nested_dict_does_not_work(qt_app):
@@ -149,17 +125,14 @@ def test_nested_dict_does_not_work(qt_app):
     
     This documents the bug that was present.
     """
-    settings = SettingsManager(
-        organization="Test",
-        application="NestedDictTest"
-    )
+    settings = SettingsManager(organization="Test", application=f"NestedDictTest_{uuid.uuid4().hex}")
     
     # The WRONG way (what the bug was doing)
     settings.set('sources', {'folders': ['/wrong/path'], 'rss_feeds': []})
     settings.save()
     
     # Try to read with dot notation
-    folders = settings.get('sources.folders', [])
+    _folders = settings.get('sources.folders', [])
     
     # This will be empty or wrong because nested dict doesn't create the key
     # Note: QSettings behavior may vary, but it definitely doesn't work as expected
@@ -170,9 +143,7 @@ def test_nested_dict_does_not_work(qt_app):
     
     folders2 = settings.get('sources.folders', [])
     assert '/right/path' in folders2, "Dot notation should work correctly"
-    
-    # Cleanup
-    settings.clear()
+
 
 
 def test_settings_load_on_startup(qt_app, tmp_path):
@@ -182,10 +153,7 @@ def test_settings_load_on_startup(qt_app, tmp_path):
     This verifies the _load_sources() method works correctly.
     """
     # Pre-populate settings
-    settings = SettingsManager(
-        organization="Test",
-        application="LoadTest"
-    )
+    settings = SettingsManager(organization="Test", application=f"LoadTest_{uuid.uuid4().hex}")
     
     test_folder = str(tmp_path / "preloaded")
     Path(test_folder).mkdir(exist_ok=True)
@@ -207,9 +175,7 @@ def test_settings_load_on_startup(qt_app, tmp_path):
     
     assert sources_tab.folder_list.item(0).text() == test_folder
     assert sources_tab.rss_list.item(0).text() == test_feed
-    
-    # Cleanup
-    settings.clear()
+
 
 
 # =============================================================================
@@ -283,12 +249,7 @@ class TestEngineSettingsIntegration:
         """
         from core.settings import SettingsManager
         from ui.tabs.sources_tab import SourcesTab
-        from pathlib import Path
-        
-        settings = SettingsManager(
-            organization="Test",
-            application="JustMakeItWorkTest"
-        )
+        settings = SettingsManager(organization="Test", application=f"JustMakeItWorkTest_{uuid.uuid4().hex}")
         
         # Create a fake cache directory
         cache_dir = tmp_path / "screensaver_rss_cache"
@@ -309,8 +270,7 @@ class TestEngineSettingsIntegration:
             # This would clear the cache if it existed at the expected location
             pass
         
-        # Cleanup
-        settings.clear()
+
     
     def test_add_rss_feed_triggers_source_reinit(self, qt_app):
         """Test that adding an RSS feed triggers source reinitialization."""
@@ -318,10 +278,7 @@ class TestEngineSettingsIntegration:
         from ui.tabs.sources_tab import SourcesTab
         from unittest.mock import Mock
         
-        settings = SettingsManager(
-            organization="Test",
-            application="AddRSSTest"
-        )
+        settings = SettingsManager(organization="Test", application=f"AddRSSTest_{uuid.uuid4().hex}")
         
         sources_tab = SourcesTab(settings)
         
@@ -342,7 +299,7 @@ class TestEngineSettingsIntegration:
         assert mock_handler.called, "sources_changed signal should be emitted"
         
         # Cleanup
-        settings.clear()
+    
     
     def test_remove_folder_triggers_queue_rebuild(self, qt_app, tmp_path):
         """Test that removing a folder triggers queue rebuild."""
@@ -351,10 +308,7 @@ class TestEngineSettingsIntegration:
         from unittest.mock import Mock
         from pathlib import Path
         
-        settings = SettingsManager(
-            organization="Test",
-            application="RemoveFolderTest"
-        )
+        settings = SettingsManager(organization="Test", application=f"RemoveFolderTest_{uuid.uuid4().hex}")
         
         # Pre-populate with a folder
         test_folder = str(tmp_path / "test_images")
@@ -377,5 +331,4 @@ class TestEngineSettingsIntegration:
         
         assert mock_handler.called, "sources_changed should be emitted on folder removal"
         
-        # Cleanup
-        settings.clear()
+

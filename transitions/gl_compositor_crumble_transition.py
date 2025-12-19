@@ -41,8 +41,8 @@ class GLCompositorCrumbleTransition(BaseTransition):
         self._piece_count = max(4, piece_count)
         self._crack_complexity = max(0.5, min(2.0, crack_complexity))
         self._mosaic_mode = mosaic_mode
-        # 0=Top Weighted, 1=Bottom Weighted, 2=Random Weighted
-        self._weight_mode = max(0.0, min(2.0, weight_mode))
+        # 0=Top Weighted, 1=Bottom Weighted, 2=Random Weighted, 3=Random Choice, 4=Age Weighted
+        self._weight_mode = max(0.0, min(4.0, weight_mode))
         self._widget: Optional[QWidget] = None
         self._compositor: Optional[GLCompositorWidget] = None
         self._animation_id: Optional[str] = None

@@ -12,11 +12,12 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     GL = None
 from PySide6.QtWidgets import QWidget, QApplication
-from PySide6.QtCore import Qt, Signal, QSize, QTimer, QEvent, QPoint
+from PySide6.QtCore import Qt, Signal, QSize, QTimer, QEvent, QPoint, QPointF
 from PySide6.QtGui import (
     QPixmap,
     QPainter,
     QKeyEvent,
+    QCloseEvent,
     QMouseEvent,
     QPaintEvent,
     QFont,
@@ -305,6 +306,14 @@ class DisplayWidget(QWidget):
         try:
             if self._coordinator.claim_focus(self):
                 self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+                try:
+                    self.setWindowFlag(Qt.WindowType.WindowDoesNotAcceptFocus, False)
+                except Exception:
+                    pass
+                try:
+                    self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, False)
+                except Exception:
+                    pass
             else:
                 self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
                 try:
@@ -458,6 +467,12 @@ class DisplayWidget(QWidget):
             pass
         try:
             self.activateWindow()
+            try:
+                handle = self.windowHandle()
+                if handle is not None:
+                    handle.requestActivate()
+            except Exception:
+                pass
             try:
                 self.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
             except Exception:
@@ -2126,9 +2141,15 @@ class DisplayWidget(QWidget):
 
     def _ensure_ctrl_cursor_hint(self) -> None:
         """Create the cursor halo widget if it doesn't exist."""
-        if self._ctrl_cursor_hint is not None:
-            return
-        self._ctrl_cursor_hint = CursorHaloWidget(self)
+        hint = self._ctrl_cursor_hint
+        if hint is None:
+            hint = CursorHaloWidget(self)
+            self._ctrl_cursor_hint = hint
+        else:
+            try:
+                hint.set_parent_widget(self)
+            except Exception:
+                logger.debug("[HALO] Failed to refresh halo parent", exc_info=True)
 
     def _show_ctrl_cursor_hint(self, pos, mode: str = "none") -> None:
         """Show/animate the cursor halo at the given position.
@@ -2159,6 +2180,14 @@ class DisplayWidget(QWidget):
             hint.fade_in()
         elif mode == "fade_out":
             hint.fade_out()
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        try:
+            self._coordinator.release_focus(self)
+            self._coordinator.uninstall_event_filter(self)
+        except Exception:
+            pass
+        super().closeEvent(event)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """Handle key press - delegate to InputHandler."""
@@ -2382,28 +2411,98 @@ class DisplayWidget(QWidget):
         super().mouseReleaseEvent(event)
 
     def wheelEvent(self, event: QWheelEvent) -> None:
-        """Route wheel scrolling to Spotify volume widget in interaction mode."""
+        """Route wheel scrolling to Spotify volume widget anywhere on the saver."""
+        handled = False
+        if self._input_handler is not None:
+            try:
+                pos = event.position().toPoint()
+                delta_y = int(event.angleDelta().y())
+                logger.debug(
+                    "[WHEEL] DisplayWidget wheelEvent start: pos=%s global=%s delta=%d ctrl=%s hard_exit=%s",
+                    pos,
+                    event.globalPosition(),
+                    delta_y,
+                    self._ctrl_held or self._coordinator.ctrl_held,
+                    self._is_hard_exit_enabled(),
+                )
+                handled = self._input_handler.route_wheel_event(
+                    pos,
+                    delta_y,
+                    getattr(self, "spotify_volume_widget", None),
+                    getattr(self, "media_widget", None),
+                    getattr(self, "spotify_visualizer_widget", None),
+                )
+                logger.debug("[WHEEL] DisplayWidget route result: handled=%s", handled)
+            except Exception:
+                logger.debug("[WHEEL] routing failed", exc_info=True)
+        if handled:
+            event.accept()
+            return
+        
         ctrl_mode_active = self._ctrl_held or self._coordinator.ctrl_held
         if self._is_hard_exit_enabled() or ctrl_mode_active:
-            # Delegate to InputHandler
-            if self._input_handler is not None:
-                try:
-                    pos = event.position().toPoint()
-                    delta_y = int(event.angleDelta().y())
-                    if self._input_handler.route_wheel_event(
-                        pos, delta_y,
-                        getattr(self, "spotify_volume_widget", None),
-                        getattr(self, "media_widget", None),
-                        getattr(self, "spotify_visualizer_widget", None),
-                    ):
-                        event.accept()
-                        return
-                except Exception:
-                    logger.debug("[WHEEL] routing failed", exc_info=True)
-            # In interaction mode, wheel should never exit
+            # In interaction mode, wheel should never exit even if we didn't handle it
             event.accept()
             return
         super().wheelEvent(event)
+
+    def handle_forwarded_halo_wheel(
+        self, local_pos: QPointF, global_pos: QPointF, angle_delta: QPoint
+    ) -> bool:
+        """Direct wheel routing entry point used by CursorHaloWidget.
+
+        Returns True when the Spotify volume widget handled the wheel scroll.
+        """
+        if self._input_handler is None:
+            logger.debug("[WHEEL] Halo forward skipped (no input handler)")
+            return False
+        if not self.isVisible():
+            logger.debug("[WHEEL] Halo forward skipped (display hidden)")
+            return False
+
+        ctrl_mode_active = self._ctrl_held or self._coordinator.ctrl_held
+        hard_exit_enabled = self._is_hard_exit_enabled()
+
+        try:
+            pos = QPoint(int(local_pos.x()), int(local_pos.y()))
+        except Exception:
+            logger.debug("[WHEEL] Halo forward skipped (invalid local_pos=%s)", local_pos)
+            return False
+
+        delta_y = int(angle_delta.y())
+        if delta_y == 0:
+            logger.debug("[WHEEL] Halo forward skipped (zero delta)")
+            return False
+
+        if not (hard_exit_enabled or ctrl_mode_active):
+            logger.debug(
+                "[WHEEL] Halo forward forcing routing despite inactive mode ctrl=%s hard_exit=%s",
+                ctrl_mode_active,
+                hard_exit_enabled,
+            )
+
+        handled = False
+        try:
+            handled = self._input_handler.route_wheel_event(
+                pos,
+                delta_y,
+                getattr(self, "spotify_volume_widget", None),
+                getattr(self, "media_widget", None),
+                getattr(self, "spotify_visualizer_widget", None),
+            )
+        except Exception:
+            logger.debug("[WHEEL] Halo forward failed via InputHandler", exc_info=True)
+
+        logger.debug(
+            "[WHEEL] Halo forwarded wheel: handled=%s pos=%s global=%s delta=%d ctrl=%s hard_exit=%s",
+            handled,
+            pos,
+            global_pos,
+            delta_y,
+            ctrl_mode_active,
+            hard_exit_enabled,
+        )
+        return handled
 
     def _show_context_menu(self, global_pos) -> None:
         """Show the context menu at the given global position."""
@@ -2915,6 +3014,70 @@ class DisplayWidget(QWidget):
     def eventFilter(self, watched, event):  # type: ignore[override]
         """Global event filter to keep the Ctrl halo responsive over children."""
         try:
+            # DEBUG_WHEEL_TRACE: log every wheel event hitting the global filter.
+            if event is not None and event.type() == QEvent.Type.Wheel:
+                try:
+                    wheel_event = event  # QWheelEvent
+                    logger.debug(
+                        "[WHEEL] eventFilter wheel: watched=%s accepted=%s pos=%s global=%s delta=%s",
+                        getattr(watched, "objectName", None) or watched.__class__.__name__,
+                        wheel_event.isAccepted(),
+                        wheel_event.position(),
+                        wheel_event.globalPosition(),
+                        wheel_event.angleDelta(),
+                    )
+                except Exception:
+                    logger.debug("[WHEEL] eventFilter wheel logging failed", exc_info=True)
+
+            if event is not None and event.type() == QEvent.Type.KeyPress:
+                try:
+                    key_event = event  # QKeyEvent
+                    target = self._coordinator.focus_owner
+                    if target is None or not isinstance(target, DisplayWidget) or not target.isVisible():
+                        target = self
+                    if isinstance(target, DisplayWidget) and target.isVisible():
+                        if key_event.key() == Qt.Key.Key_Control:
+                            if target._input_handler is not None:
+                                try:
+                                    target._input_handler.handle_ctrl_press(self._coordinator)
+                                    event.accept()
+                                    return True
+                                except Exception:
+                                    logger.debug("[KEY] Ctrl press delegation failed", exc_info=True)
+                            event.accept()
+                            return True
+                        if target._input_handler is not None:
+                            try:
+                                if target._input_handler.handle_key_press(key_event):
+                                    if target._input_handler.is_exiting():
+                                        target._exiting = True
+                                    event.accept()
+                                    return True
+                            except Exception:
+                                logger.debug("[KEY] Key press delegation failed", exc_info=True)
+                except Exception:
+                    pass
+
+            if event is not None and event.type() == QEvent.Type.KeyRelease:
+                try:
+                    key_event = event  # QKeyEvent
+                    if key_event.key() == Qt.Key.Key_Control:
+                        target = self._coordinator.focus_owner
+                        if target is None or not isinstance(target, DisplayWidget) or not target.isVisible():
+                            target = self
+                        if isinstance(target, DisplayWidget) and target.isVisible():
+                            if target._input_handler is not None:
+                                try:
+                                    target._input_handler.handle_ctrl_release(self._coordinator)
+                                    event.accept()
+                                    return True
+                                except Exception:
+                                    logger.debug("[KEY] Ctrl release delegation failed", exc_info=True)
+                            event.accept()
+                            return True
+                except Exception:
+                    pass
+
             if event is not None and event.type() == QEvent.Type.MouseMove:
                 hard_exit = False
                 try:

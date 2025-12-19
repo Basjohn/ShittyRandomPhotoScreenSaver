@@ -59,6 +59,11 @@ class SettingsManager(QObject):
         # Initialize defaults
         self._set_defaults()
 
+        try:
+            self.validate_and_repair()
+        except Exception:
+            logger.debug("Settings validation failed", exc_info=True)
+
         # Diagnostic snapshot so widget enable/monitor issues can be traced
         # without guessing what QSettings returned on this machine. The
         # full widgets map can be large, so we only dump it in verbose
@@ -483,6 +488,54 @@ class SettingsManager(QObject):
                 logger.warning(f"Repairing display.mode: {display_mode!r} not in {valid_modes}")
                 self._settings.setValue('display.mode', 'fill')
                 repairs['display.mode'] = f"Invalid value: {display_mode!r}"
+
+            # Validate display.render_backend_mode - must be valid enum
+            backend_mode = self._settings.value('display.render_backend_mode')
+            valid_backends = {'opengl', 'software', 'd3d11'}
+            if backend_mode is not None:
+                normalized = None
+                if isinstance(backend_mode, str):
+                    normalized = backend_mode.lower().strip()
+                if not isinstance(normalized, str) or normalized not in valid_backends:
+                    logger.warning(
+                        "Repairing display.render_backend_mode: %r not in %s",
+                        backend_mode,
+                        valid_backends,
+                    )
+                    self._settings.setValue('display.render_backend_mode', 'opengl')
+                    repairs['display.render_backend_mode'] = f"Invalid value: {backend_mode!r}"
+                elif normalized == 'd3d11':
+                    logger.info("Normalizing legacy display.render_backend_mode=d3d11 to opengl")
+                    self._settings.setValue('display.render_backend_mode', 'opengl')
+                    repairs['display.render_backend_mode'] = "Legacy value: d3d11"
+
+            # Validate display.hw_accel - keep in sync with backend mode
+            hw_accel = self._settings.value('display.hw_accel')
+            backend_mode_final = self._settings.value('display.render_backend_mode')
+            backend_is_opengl = False
+            if isinstance(backend_mode_final, str) and backend_mode_final.lower().strip() == 'opengl':
+                backend_is_opengl = True
+            expected_hw = bool(backend_is_opengl)
+            if hw_accel is not None:
+                if isinstance(hw_accel, bool):
+                    hw_val = hw_accel
+                elif isinstance(hw_accel, str):
+                    hw_val = hw_accel.lower().strip() in {'1', 'true', 'yes', 'on'}
+                else:
+                    hw_val = bool(hw_accel)
+                if hw_val != expected_hw:
+                    logger.info(
+                        "Repairing display.hw_accel: %r -> %r (backend=%r)",
+                        hw_accel,
+                        expected_hw,
+                        backend_mode_final,
+                    )
+                    self._settings.setValue('display.hw_accel', expected_hw)
+                    repairs['display.hw_accel'] = f"Mismatch with backend: {backend_mode_final!r}"
+            else:
+                # Missing key: populate to avoid ambiguous startup paths.
+                self._settings.setValue('display.hw_accel', expected_hw)
+                repairs['display.hw_accel'] = "Missing key"
             
             # Validate widgets - must be dict
             widgets = self._settings.value('widgets')

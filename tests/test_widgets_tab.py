@@ -5,6 +5,7 @@ Verifies that WidgetsTab integrates correctly with the canonical nested
 roundtrips behave as expected.
 """
 import pytest
+import uuid
 
 from ui.tabs.widgets_tab import WidgetsTab
 from core.settings import SettingsManager
@@ -30,7 +31,7 @@ class TestWidgetsTab:
 
     def test_widgets_tab_default_values(self, qt_app):
         """Default widget settings match canonical SettingsManager defaults."""
-        mgr = SettingsManager(organization="Test", application="WidgetsTabTest")
+        mgr = SettingsManager(organization="Test", application=f"WidgetsTabTest_{uuid.uuid4().hex}")
         # Ensure a clean slate and then re-apply canonical defaults so the
         # nested `widgets` map reflects SettingsManager._set_defaults().
         mgr.reset_to_defaults()
@@ -60,7 +61,7 @@ class TestWidgetsTab:
         assert tab.weather_bg_opacity.value() == 70
 
         tab.deleteLater()
-        mgr.clear()
+
 
     def test_widgets_tab_saves_and_roundtrips(self, qt_app, widgets_tab):
         """Changing widget controls and saving updates nested `widgets` config."""

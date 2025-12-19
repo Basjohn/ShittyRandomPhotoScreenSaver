@@ -15,12 +15,14 @@ still work. The mouse cursor is hidden when the halo is visible.
 """
 from typing import Optional
 from PySide6.QtWidgets import QWidget, QApplication
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QPainter, QColor, QPaintEvent, QMouseEvent
+from PySide6.QtCore import Qt, QPointF
+from PySide6.QtGui import QPainter, QColor, QPaintEvent, QMouseEvent, QWheelEvent
+from shiboken6 import Shiboken
 
 from core.animation.animator import AnimationManager
 from core.animation.types import EasingCurve
 from core.logging.logger import get_logger
+from rendering.multi_monitor_coordinator import get_coordinator
 
 logger = get_logger(__name__)
 
@@ -55,10 +57,15 @@ class CursorHaloWidget(QWidget):
         self.setAutoFillBackground(False)
         # Hide mouse cursor over halo - the halo IS the cursor
         self.setCursor(Qt.CursorShape.BlankCursor)
-        self.resize(40, 40)
+        self.resize(60, 60)
         self._opacity = 1.0
         self._animation_id: Optional[str] = None
         self._animation_manager = AnimationManager()
+
+    def set_parent_widget(self, parent: QWidget) -> None:
+        """Refresh the parent widget reference after display rebuilds."""
+        if parent is not None and Shiboken.isValid(parent):
+            self._parent_widget = parent
 
     def setOpacity(self, value: float) -> None:
         """Set the halo opacity (0.0 to 1.0)."""
@@ -135,14 +142,50 @@ class CursorHaloWidget(QWidget):
         """Forward double click to parent widget."""
         self._forward_mouse_event(event)
     
+    def wheelEvent(self, event: QWheelEvent) -> None:  # type: ignore[override]
+        """Forward wheel events to the parent widget."""
+        self._forward_wheel_event(event)
+    
+    def _resolve_target_widget(self) -> Optional[QWidget]:
+        """Return a valid DisplayWidget target, refreshing stale references."""
+        parent = self._parent_widget
+        if parent is not None and Shiboken.isValid(parent):
+            return parent
+
+        target = None
+        coordinator = None
+        try:
+            coordinator = get_coordinator()
+        except Exception:
+            coordinator = None
+
+        if coordinator is not None:
+            target = coordinator.halo_owner or coordinator.focus_owner
+
+        if target is None and coordinator is not None:
+            try:
+                instances = coordinator.get_all_instances()
+            except Exception:
+                instances = []
+            for inst in instances:
+                if inst is not None and Shiboken.isValid(inst):
+                    target = inst
+                    break
+
+        if target is not None and Shiboken.isValid(target):
+            self._parent_widget = target
+            return target
+        return None
+
     def _forward_mouse_event(self, event: QMouseEvent) -> None:
         """Forward a mouse event to the parent widget at the correct position."""
-        if self._parent_widget is None:
+        parent = self._resolve_target_widget()
+        if parent is None:
             return
         try:
             # Map halo-local position to global, then to parent-local
             global_pos = self.mapToGlobal(event.pos())
-            local_pos = self._parent_widget.mapFromGlobal(global_pos)
+            local_pos = parent.mapFromGlobal(global_pos)
             
             # Create a new event with the mapped position
             new_event = QMouseEvent(
@@ -155,9 +198,59 @@ class CursorHaloWidget(QWidget):
             )
             
             # Post the event to the parent widget
-            QApplication.sendEvent(self._parent_widget, new_event)
+            QApplication.sendEvent(parent, new_event)
         except Exception:
             logger.debug("Failed to forward mouse event to parent", exc_info=True)
+    
+    def _forward_wheel_event(self, event: QWheelEvent) -> None:
+        """Forward a wheel event to the parent widget."""
+        parent = self._resolve_target_widget()
+        if parent is None:
+            return
+        try:
+            global_pos = event.globalPosition()
+            local_point = parent.mapFromGlobal(global_pos.toPoint())
+            local_pos = QPointF(local_point)
+            logger.debug(
+                "[HALO] Forwarding wheel event to parent: local=%s global=(%.1f, %.1f) delta=%s",
+                local_pos,
+                global_pos.x(),
+                global_pos.y(),
+                event.angleDelta(),
+            )
+            new_event = QWheelEvent(
+                local_pos,
+                global_pos,
+                event.pixelDelta(),
+                event.angleDelta(),
+                event.buttons(),
+                event.modifiers(),
+                event.phase(),
+                event.inverted(),
+                event.source(),
+            )
+            # DEBUG_WHEEL_TRACE: parent metadata for easy removal once routing fixed.
+            logger.debug(
+                "[HALO] Wheel target parent id=%s screen=%s object=%s",
+                hex(id(parent)),
+                getattr(parent, "screen_index", None),
+                getattr(parent, "objectName", None) or parent.__class__.__name__,
+            )
+            handled_direct = False
+            if hasattr(parent, "handle_forwarded_halo_wheel"):
+                try:
+                    handled_direct = bool(
+                        parent.handle_forwarded_halo_wheel(local_pos, global_pos, event.angleDelta())
+                    )
+                except Exception:
+                    logger.debug("[HALO] Direct halo routing failed", exc_info=True)
+            if not handled_direct:
+                # DEBUG_WHEEL_TRACE: use postEvent so the app-wide filters observe it.
+                QApplication.sendEvent(parent, new_event)
+            event.accept()
+            logger.debug("[HALO] Wheel event forwarded to parent (direct=%s)", handled_direct)
+        except Exception:
+            logger.debug("Failed to forward wheel event to parent", exc_info=True)
     
     def cancel_animation(self) -> None:
         """Cancel any running fade animation."""

@@ -101,6 +101,7 @@ class SuppressingStreamHandler(logging.StreamHandler):
         super().__init__(*args, **kwargs)
         self._last_name: str | None = None
         self._last_level: int | None = None
+        self._last_message: str | None = None
         self._suppress_count: int = 0
         self._last_record: logging.LogRecord | None = None
 
@@ -116,6 +117,7 @@ class SuppressingStreamHandler(logging.StreamHandler):
             self._emit_record(record)
             self._last_name = None
             self._last_level = None
+            self._last_message = None
             self._suppress_count = 0
             self._last_record = None
             return
@@ -140,11 +142,12 @@ class SuppressingStreamHandler(logging.StreamHandler):
             self._emit_record(record)
             self._last_name = name
             self._last_level = level
+            self._last_message = msg_text
             self._suppress_count = 0
             self._last_record = record
             return
 
-        if name == self._last_name and level == self._last_level:
+        if name == self._last_name and level == self._last_level and msg_text == self._last_message:
             self._suppress_count += 1
             if self._last_record is None:
                 self._last_record = record
@@ -154,6 +157,7 @@ class SuppressingStreamHandler(logging.StreamHandler):
         self._emit_record(record)
         self._last_name = name
         self._last_level = level
+        self._last_message = msg_text
         self._suppress_count = 0
         self._last_record = record
 
@@ -198,6 +202,7 @@ class SuppressingStreamHandler(logging.StreamHandler):
         if self._suppress_count <= 0 or self._last_record is None:
             self._suppress_count = 0
             self._last_record = None
+            self._last_message = None
             return
 
         last = self._last_record
@@ -241,6 +246,7 @@ class SuppressingStreamHandler(logging.StreamHandler):
 
         self._suppress_count = 0
         self._last_record = None
+        self._last_message = None
 
     def close(self) -> None:
         try:
@@ -403,8 +409,10 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
     
     log_file = log_dir / "screensaver.log"
     
-    # Configure root logger
-    level = logging.DEBUG if debug_enabled else logging.INFO
+    # Root logger must be DEBUG in debug/verbose modes so the verbose handler
+    # can capture full traces. Individual handlers decide what they write.
+    root_level = logging.DEBUG if debug_enabled else logging.INFO
+    main_level = logging.INFO
     
     # Create formatter with aligned columns for logger name and level
     formatter = logging.Formatter(
@@ -421,7 +429,7 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
         encoding='utf-8'
     )
     file_handler.setFormatter(formatter)
-    file_handler.setLevel(level)
+    file_handler.setLevel(main_level)
     # PERF-tagged records are redirected to the dedicated PERF log, so we
     # drop them from the main screensaver.log to reduce noise and keep
     # per-run logs smaller and easier to inspect.
@@ -441,11 +449,13 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
             datefmt='%H:%M:%S',
         )
         console_handler.setFormatter(console_formatter)
-    console_handler.setLevel(level)
+    console_handler.setLevel(main_level)
+    console_handler.addFilter(NonPerfFilter())
+    console_handler.addFilter(NonSpotifyFilter())
     
     # Configure root logger
     root_logger = logging.getLogger()
-    root_logger.setLevel(level)
+    root_logger.setLevel(root_level)
     root_logger.addHandler(file_handler)
     
     if debug_enabled:

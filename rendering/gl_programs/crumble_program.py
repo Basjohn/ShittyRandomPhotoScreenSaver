@@ -244,6 +244,48 @@ void main() {
     
     // Get the cell at current screen position as starting point
     vec4 vorHere = voronoi(uv, scale, u_seed, complexity);
+
+    // Pre-fall phase: ensure full old-image coverage while cracks form.
+    // This avoids gaps (new image leaking through) at high complexity due to
+    // early candidate pruning and numeric edge cases.
+    if (t < 0.05) {
+        vec3 color = texture(uOldTex, uv).rgb;
+
+        float crackPhase = t / 0.25;
+        crackPhase = clamp(crackPhase, 0.0, 1.0);
+        float pieceRandCrack = hash1(vorHere.xy + u_seed);
+
+        float edgeCellDist = min(
+            min(vorHere.x, (scale - 1.0) - vorHere.x),
+            min(vorHere.y, (scale - 1.0) - vorHere.y)
+        );
+        float edgeNorm = edgeCellDist / max(1.0, (scale - 1.0));
+        edgeNorm = clamp(edgeNorm, 0.0, 1.0);
+        float crackDelay = edgeNorm * 0.75 + pieceRandCrack * 0.10;
+        float crackProgress = smoothstep(crackDelay, min(1.0, crackDelay + 0.22), crackPhase);
+
+        float localCrackWidth = crackWidth * crackProgress;
+        float localBorderWidth = localCrackWidth + 0.020 * crackProgress;
+        bool showBorder = crackProgress > 0.001;
+
+        if (showBorder) {
+            float edgeDist = min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y));
+            float effectiveEdge = min(vorHere.z, edgeDist * 8.0);
+
+            if (effectiveEdge < localBorderWidth && effectiveEdge >= localCrackWidth) {
+                float borderDenom = max(0.0001, (localBorderWidth - localCrackWidth));
+                float borderBlend = 1.0 - (effectiveEdge - localCrackWidth) / borderDenom;
+                borderBlend = borderBlend * borderBlend;
+                color = mix(color, vec3(0.0), borderBlend * 0.6);
+            }
+            if (effectiveEdge < localCrackWidth) {
+                color = vec3(0.0);
+            }
+        }
+
+        FragColor = vec4(color, 1.0);
+        return;
+    }
     
     // Search nearby cells - pieces fall DOWNWARD so we need to search UPWARD
     // (negative dy in cell space) to find pieces that started above and fell here.
@@ -253,9 +295,11 @@ void main() {
     // to skip most iterations. The bounds check eliminates ~90% of candidates.
     //
     // Search range: dy from -16 to +2 (wider for larger fall distance and DPI)
+    // and dx from -4 to +4 to account for horizontal drift (which can exceed
+    // 1 cell at higher piece counts).
     // With early exits, actual work per pixel is typically limited.
     for (int dy = -16; dy <= 2; dy++) {
-        for (int dx = -1; dx <= 1; dx++) {
+        for (int dx = -4; dx <= 4; dx++) {
             vec2 candidateCell = vorHere.xy + vec2(float(dx), float(dy));
             
             // Skip cells far outside valid range
@@ -311,10 +355,23 @@ void main() {
                         float crackPhase = t / 0.25;  // Cracks appear early
                         crackPhase = clamp(crackPhase, 0.0, 1.0);
                         float pieceRandCrack = hash1(candidateCell + u_seed);
-                        float crackAppear = crackPhase > pieceRandCrack * 0.2 ? 1.0 : 0.0;
+
+                        // Make cracks propagate inward from the screen edges
+                        // rather than appearing all at once.
+                        float edgeCellDist = min(
+                            min(candidateCell.x, (scale - 1.0) - candidateCell.x),
+                            min(candidateCell.y, (scale - 1.0) - candidateCell.y)
+                        );
+                        float edgeNorm = edgeCellDist / max(1.0, (scale - 1.0));
+                        edgeNorm = clamp(edgeNorm, 0.0, 1.0);
+                        float crackDelay = edgeNorm * 0.75 + pieceRandCrack * 0.10;
+                        float crackProgress = smoothstep(crackDelay, min(1.0, crackDelay + 0.22), crackPhase);
                         
+                        float localCrackWidth = crackWidth * crackProgress;
+                        float localBorderWidth = localCrackWidth + 0.020 * crackProgress;
+
                         // Once piece starts falling, always show the border
-                        bool showBorder = crackAppear > 0.5 || pieceFall > 0.01;
+                        bool showBorder = crackProgress > 0.001 || pieceFall > 0.01;
                         
                         if (showBorder) {
                             // Calculate distance to screen edge (for pieces at screen boundary)
@@ -325,14 +382,15 @@ void main() {
                             float effectiveEdge = min(vorCheck.z, edgeDist * 8.0);  // Scale screen edge to match Voronoi units
                             
                             // Dark border zone (outer edge of piece)
-                            if (effectiveEdge < borderWidth && effectiveEdge >= crackWidth) {
+                            if (effectiveEdge < localBorderWidth && effectiveEdge >= localCrackWidth) {
                                 // Soft dark border - blend based on distance
-                                float borderBlend = 1.0 - (effectiveEdge - crackWidth) / (borderWidth - crackWidth);
+                                float borderDenom = max(0.0001, (localBorderWidth - localCrackWidth));
+                                float borderBlend = 1.0 - (effectiveEdge - localCrackWidth) / borderDenom;
                                 borderBlend = borderBlend * borderBlend; // Quadratic falloff
                                 finalColor = mix(finalColor, vec3(0.0), borderBlend * 0.6);
                             }
                             // Inner crack (darkest)
-                            if (effectiveEdge < crackWidth) {
+                            if (effectiveEdge < localCrackWidth) {
                                 finalColor = vec3(0.0);  // Pure black crack
                             }
                         }

@@ -21172,3 +21172,2479 @@ PASSED                                                                          
 
 =========================================================================================== 11 passed in 0.65s ============================================================================================
 
+
+===== pytest run 2025-12-19 01:08:06 args=['-q', 'tests/test_geometry_dpi_matrix.py', '-vv'] =====
+
+============================= test session starts =============================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 6 items
+
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[1080p_dpr1_primary] 
+FAILED [ 16%]
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[left_negative_origin] 
+FAILED [ 33%]
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[4k_125pct] 
+FAILED [ 50%]
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[right_4k_150pct] 
+FAILED [ 66%]
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[portrait_above_200pct] 
+FAILED [ 83%]
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[laptop_175pct] 
+FAILED [100%]
+
+
+
+
+================================== FAILURES ===================================
+
+___ test_handle_screen_change_applies_geometry_and_dpr[1080p_dpr1_primary] ____
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x151792546e0) at 0x000001517E78A880>
+
+settings_manager = <core.settings.settings_manager.SettingsManager(0x15177d641e0) at 0x000001517E78A6C0>
+
+rect = PySide6.QtCore.QRect(0, 0, 1920, 1080), dpr = 1.0
+
+
+
+    @pytest.mark.parametrize(
+
+        "rect,dpr",
+
+        [
+
+            pytest.param(QRect(0, 0, 1920, 1080), 1.0, id="1080p_dpr1_primary"),
+
+            pytest.param(QRect(-2560, 0, 2560, 1440), 1.0, id="left_negative_origin"),
+
+            pytest.param(QRect(0, 0, 3840, 2160), 1.25, id="4k_125pct"),
+
+            pytest.param(QRect(3840, 0, 3840, 2160), 1.5, id="right_4k_150pct"),
+
+            pytest.param(QRect(0, -1920, 1080, 1920), 2.0, id="portrait_above_200pct"),
+
+            pytest.param(QRect(0, 0, 1366, 768), 1.75, id="laptop_175pct"),
+
+        ],
+
+    )
+
+    def test_handle_screen_change_applies_geometry_and_dpr(qt_app, settings_manager, rect: QRect, dpr: float):
+
+        widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+
+        widget.resize(100, 100)
+
+    
+
+        try:
+
+            fake = _FakeScreen(rect, dpr)
+
+            widget._handle_screen_change(fake)
+
+    
+
+            # Geometry should match, including negative origins.
+
+            assert widget.x() == rect.x()
+
+            assert widget.y() == rect.y()
+
+            assert widget.width() == rect.width()
+
+    
+
+            # Height may be reduced by the fullscreen compat workaround (-1).
+
+            expected_h = rect.height()
+
+            assert widget.height() in {expected_h, max(1, expected_h - 1)}
+
+    
+
+            assert pytest.approx(widget._device_pixel_ratio, rel=1e-3) == float(dpr)
+
+    
+
+            # Physical size should scale by DPR.
+
+            logical = widget.size()
+
+>           physical = widget.logical_to_physical_size()
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+E           AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+
+
+tests\test_geometry_dpi_matrix.py:66: AttributeError
+
+---------------------------- Captured log teardown ----------------------------
+
+WARNING  SettingsManager:settings_manager.py:741 All settings cleared
+
+__ test_handle_screen_change_applies_geometry_and_dpr[left_negative_origin] ___
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x151792546e0) at 0x000001517E78A880>
+
+settings_manager = <core.settings.settings_manager.SettingsManager(0x15177d6fe40) at 0x000001517E801E40>
+
+rect = PySide6.QtCore.QRect(-2560, 0, 2560, 1440), dpr = 1.0
+
+
+
+    @pytest.mark.parametrize(
+
+        "rect,dpr",
+
+        [
+
+            pytest.param(QRect(0, 0, 1920, 1080), 1.0, id="1080p_dpr1_primary"),
+
+            pytest.param(QRect(-2560, 0, 2560, 1440), 1.0, id="left_negative_origin"),
+
+            pytest.param(QRect(0, 0, 3840, 2160), 1.25, id="4k_125pct"),
+
+            pytest.param(QRect(3840, 0, 3840, 2160), 1.5, id="right_4k_150pct"),
+
+            pytest.param(QRect(0, -1920, 1080, 1920), 2.0, id="portrait_above_200pct"),
+
+            pytest.param(QRect(0, 0, 1366, 768), 1.75, id="laptop_175pct"),
+
+        ],
+
+    )
+
+    def test_handle_screen_change_applies_geometry_and_dpr(qt_app, settings_manager, rect: QRect, dpr: float):
+
+        widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+
+        widget.resize(100, 100)
+
+    
+
+        try:
+
+            fake = _FakeScreen(rect, dpr)
+
+            widget._handle_screen_change(fake)
+
+    
+
+            # Geometry should match, including negative origins.
+
+            assert widget.x() == rect.x()
+
+            assert widget.y() == rect.y()
+
+            assert widget.width() == rect.width()
+
+    
+
+            # Height may be reduced by the fullscreen compat workaround (-1).
+
+            expected_h = rect.height()
+
+            assert widget.height() in {expected_h, max(1, expected_h - 1)}
+
+    
+
+            assert pytest.approx(widget._device_pixel_ratio, rel=1e-3) == float(dpr)
+
+    
+
+            # Physical size should scale by DPR.
+
+            logical = widget.size()
+
+>           physical = widget.logical_to_physical_size()
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+E           AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+
+
+tests\test_geometry_dpi_matrix.py:66: AttributeError
+
+---------------------------- Captured log teardown ----------------------------
+
+WARNING  SettingsManager:settings_manager.py:741 All settings cleared
+
+________ test_handle_screen_change_applies_geometry_and_dpr[4k_125pct] ________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x151792546e0) at 0x000001517E78A880>
+
+settings_manager = <core.settings.settings_manager.SettingsManager(0x15177d8e420) at 0x000001517E843780>
+
+rect = PySide6.QtCore.QRect(0, 0, 3840, 2160), dpr = 1.25
+
+
+
+    @pytest.mark.parametrize(
+
+        "rect,dpr",
+
+        [
+
+            pytest.param(QRect(0, 0, 1920, 1080), 1.0, id="1080p_dpr1_primary"),
+
+            pytest.param(QRect(-2560, 0, 2560, 1440), 1.0, id="left_negative_origin"),
+
+            pytest.param(QRect(0, 0, 3840, 2160), 1.25, id="4k_125pct"),
+
+            pytest.param(QRect(3840, 0, 3840, 2160), 1.5, id="right_4k_150pct"),
+
+            pytest.param(QRect(0, -1920, 1080, 1920), 2.0, id="portrait_above_200pct"),
+
+            pytest.param(QRect(0, 0, 1366, 768), 1.75, id="laptop_175pct"),
+
+        ],
+
+    )
+
+    def test_handle_screen_change_applies_geometry_and_dpr(qt_app, settings_manager, rect: QRect, dpr: float):
+
+        widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+
+        widget.resize(100, 100)
+
+    
+
+        try:
+
+            fake = _FakeScreen(rect, dpr)
+
+            widget._handle_screen_change(fake)
+
+    
+
+            # Geometry should match, including negative origins.
+
+            assert widget.x() == rect.x()
+
+            assert widget.y() == rect.y()
+
+            assert widget.width() == rect.width()
+
+    
+
+            # Height may be reduced by the fullscreen compat workaround (-1).
+
+            expected_h = rect.height()
+
+            assert widget.height() in {expected_h, max(1, expected_h - 1)}
+
+    
+
+            assert pytest.approx(widget._device_pixel_ratio, rel=1e-3) == float(dpr)
+
+    
+
+            # Physical size should scale by DPR.
+
+            logical = widget.size()
+
+>           physical = widget.logical_to_physical_size()
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+E           AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+
+
+tests\test_geometry_dpi_matrix.py:66: AttributeError
+
+---------------------------- Captured log teardown ----------------------------
+
+WARNING  SettingsManager:settings_manager.py:741 All settings cleared
+
+_____ test_handle_screen_change_applies_geometry_and_dpr[right_4k_150pct] _____
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x151792546e0) at 0x000001517E78A880>
+
+settings_manager = <core.settings.settings_manager.SettingsManager(0x15177d8df20) at 0x000001517F0849C0>
+
+rect = PySide6.QtCore.QRect(3840, 0, 3840, 2160), dpr = 1.5
+
+
+
+    @pytest.mark.parametrize(
+
+        "rect,dpr",
+
+        [
+
+            pytest.param(QRect(0, 0, 1920, 1080), 1.0, id="1080p_dpr1_primary"),
+
+            pytest.param(QRect(-2560, 0, 2560, 1440), 1.0, id="left_negative_origin"),
+
+            pytest.param(QRect(0, 0, 3840, 2160), 1.25, id="4k_125pct"),
+
+            pytest.param(QRect(3840, 0, 3840, 2160), 1.5, id="right_4k_150pct"),
+
+            pytest.param(QRect(0, -1920, 1080, 1920), 2.0, id="portrait_above_200pct"),
+
+            pytest.param(QRect(0, 0, 1366, 768), 1.75, id="laptop_175pct"),
+
+        ],
+
+    )
+
+    def test_handle_screen_change_applies_geometry_and_dpr(qt_app, settings_manager, rect: QRect, dpr: float):
+
+        widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+
+        widget.resize(100, 100)
+
+    
+
+        try:
+
+            fake = _FakeScreen(rect, dpr)
+
+            widget._handle_screen_change(fake)
+
+    
+
+            # Geometry should match, including negative origins.
+
+            assert widget.x() == rect.x()
+
+            assert widget.y() == rect.y()
+
+            assert widget.width() == rect.width()
+
+    
+
+            # Height may be reduced by the fullscreen compat workaround (-1).
+
+            expected_h = rect.height()
+
+            assert widget.height() in {expected_h, max(1, expected_h - 1)}
+
+    
+
+            assert pytest.approx(widget._device_pixel_ratio, rel=1e-3) == float(dpr)
+
+    
+
+            # Physical size should scale by DPR.
+
+            logical = widget.size()
+
+>           physical = widget.logical_to_physical_size()
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+E           AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+
+
+tests\test_geometry_dpi_matrix.py:66: AttributeError
+
+---------------------------- Captured log teardown ----------------------------
+
+WARNING  SettingsManager:settings_manager.py:741 All settings cleared
+
+__ test_handle_screen_change_applies_geometry_and_dpr[portrait_above_200pct] __
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x151792546e0) at 0x000001517E78A880>
+
+settings_manager = <core.settings.settings_manager.SettingsManager(0x15177d8de60) at 0x000001517F084100>
+
+rect = PySide6.QtCore.QRect(0, -1920, 1080, 1920), dpr = 2.0
+
+
+
+    @pytest.mark.parametrize(
+
+        "rect,dpr",
+
+        [
+
+            pytest.param(QRect(0, 0, 1920, 1080), 1.0, id="1080p_dpr1_primary"),
+
+            pytest.param(QRect(-2560, 0, 2560, 1440), 1.0, id="left_negative_origin"),
+
+            pytest.param(QRect(0, 0, 3840, 2160), 1.25, id="4k_125pct"),
+
+            pytest.param(QRect(3840, 0, 3840, 2160), 1.5, id="right_4k_150pct"),
+
+            pytest.param(QRect(0, -1920, 1080, 1920), 2.0, id="portrait_above_200pct"),
+
+            pytest.param(QRect(0, 0, 1366, 768), 1.75, id="laptop_175pct"),
+
+        ],
+
+    )
+
+    def test_handle_screen_change_applies_geometry_and_dpr(qt_app, settings_manager, rect: QRect, dpr: float):
+
+        widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+
+        widget.resize(100, 100)
+
+    
+
+        try:
+
+            fake = _FakeScreen(rect, dpr)
+
+            widget._handle_screen_change(fake)
+
+    
+
+            # Geometry should match, including negative origins.
+
+            assert widget.x() == rect.x()
+
+            assert widget.y() == rect.y()
+
+            assert widget.width() == rect.width()
+
+    
+
+            # Height may be reduced by the fullscreen compat workaround (-1).
+
+            expected_h = rect.height()
+
+            assert widget.height() in {expected_h, max(1, expected_h - 1)}
+
+    
+
+            assert pytest.approx(widget._device_pixel_ratio, rel=1e-3) == float(dpr)
+
+    
+
+            # Physical size should scale by DPR.
+
+            logical = widget.size()
+
+>           physical = widget.logical_to_physical_size()
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+E           AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+
+
+tests\test_geometry_dpi_matrix.py:66: AttributeError
+
+---------------------------- Captured log teardown ----------------------------
+
+WARNING  SettingsManager:settings_manager.py:741 All settings cleared
+
+______ test_handle_screen_change_applies_geometry_and_dpr[laptop_175pct] ______
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x151792546e0) at 0x000001517E78A880>
+
+settings_manager = <core.settings.settings_manager.SettingsManager(0x15177d8e900) at 0x000001517F0B8EC0>
+
+rect = PySide6.QtCore.QRect(0, 0, 1366, 768), dpr = 1.75
+
+
+
+    @pytest.mark.parametrize(
+
+        "rect,dpr",
+
+        [
+
+            pytest.param(QRect(0, 0, 1920, 1080), 1.0, id="1080p_dpr1_primary"),
+
+            pytest.param(QRect(-2560, 0, 2560, 1440), 1.0, id="left_negative_origin"),
+
+            pytest.param(QRect(0, 0, 3840, 2160), 1.25, id="4k_125pct"),
+
+            pytest.param(QRect(3840, 0, 3840, 2160), 1.5, id="right_4k_150pct"),
+
+            pytest.param(QRect(0, -1920, 1080, 1920), 2.0, id="portrait_above_200pct"),
+
+            pytest.param(QRect(0, 0, 1366, 768), 1.75, id="laptop_175pct"),
+
+        ],
+
+    )
+
+    def test_handle_screen_change_applies_geometry_and_dpr(qt_app, settings_manager, rect: QRect, dpr: float):
+
+        widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+
+        widget.resize(100, 100)
+
+    
+
+        try:
+
+            fake = _FakeScreen(rect, dpr)
+
+            widget._handle_screen_change(fake)
+
+    
+
+            # Geometry should match, including negative origins.
+
+            assert widget.x() == rect.x()
+
+            assert widget.y() == rect.y()
+
+            assert widget.width() == rect.width()
+
+    
+
+            # Height may be reduced by the fullscreen compat workaround (-1).
+
+            expected_h = rect.height()
+
+            assert widget.height() in {expected_h, max(1, expected_h - 1)}
+
+    
+
+            assert pytest.approx(widget._device_pixel_ratio, rel=1e-3) == float(dpr)
+
+    
+
+            # Physical size should scale by DPR.
+
+            logical = widget.size()
+
+>           physical = widget.logical_to_physical_size()
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+E           AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+
+
+tests\test_geometry_dpi_matrix.py:66: AttributeError
+
+---------------------------- Captured log teardown ----------------------------
+
+WARNING  SettingsManager:settings_manager.py:741 All settings cleared
+
+=========================== short test summary info ===========================
+
+FAILED tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[1080p_dpr1_primary]
+
+FAILED tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[left_negative_origin]
+
+FAILED tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[4k_125pct]
+
+FAILED tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[right_4k_150pct]
+
+FAILED tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[portrait_above_200pct]
+
+FAILED tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[laptop_175pct]
+
+============================== 6 failed in 1.18s ==============================
+
+
+===== pytest run 2025-12-19 01:12:04 args=['-q', 'tests/test_geometry_dpi_matrix.py', '-vv'] =====
+
+============================= test session starts =============================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 6 items
+
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[1080p_dpr1_primary] 
+FAILED [ 16%]
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[left_negative_origin] 
+FAILED [ 33%]
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[4k_125pct] 
+FAILED [ 50%]
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[right_4k_150pct] 
+FAILED [ 66%]
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[portrait_above_200pct] 
+FAILED [ 83%]
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[laptop_175pct] 
+FAILED [100%]
+
+
+
+
+================================== FAILURES ===================================
+
+___ test_handle_screen_change_applies_geometry_and_dpr[1080p_dpr1_primary] ____
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x1d6abcf42c0) at 0x000001D6DB37EE00>
+
+settings_manager = <core.settings.settings_manager.SettingsManager(0x1d6ab6bd5f0) at 0x000001D6DB394FC0>
+
+rect = PySide6.QtCore.QRect(0, 0, 1920, 1080), dpr = 1.0
+
+
+
+    @pytest.mark.parametrize(
+
+        "rect,dpr",
+
+        [
+
+            pytest.param(QRect(0, 0, 1920, 1080), 1.0, id="1080p_dpr1_primary"),
+
+            pytest.param(QRect(-2560, 0, 2560, 1440), 1.0, id="left_negative_origin"),
+
+            pytest.param(QRect(0, 0, 3840, 2160), 1.25, id="4k_125pct"),
+
+            pytest.param(QRect(3840, 0, 3840, 2160), 1.5, id="right_4k_150pct"),
+
+            pytest.param(QRect(0, -1920, 1080, 1920), 2.0, id="portrait_above_200pct"),
+
+            pytest.param(QRect(0, 0, 1366, 768), 1.75, id="laptop_175pct"),
+
+        ],
+
+    )
+
+    def test_handle_screen_change_applies_geometry_and_dpr(qt_app, settings_manager, rect: QRect, dpr: float):
+
+        widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+
+        widget.resize(100, 100)
+
+    
+
+        try:
+
+            fake = _FakeScreen(rect, dpr)
+
+            widget._handle_screen_change(fake)
+
+    
+
+            # Geometry should match, including negative origins.
+
+            assert widget.x() == rect.x()
+
+            assert widget.y() == rect.y()
+
+            assert widget.width() == rect.width()
+
+    
+
+            # Height may be reduced by the fullscreen compat workaround (-1).
+
+            expected_h = rect.height()
+
+            assert widget.height() in {expected_h, max(1, expected_h - 1)}
+
+    
+
+            assert pytest.approx(widget._device_pixel_ratio, rel=1e-3) == float(dpr)
+
+    
+
+            # Physical size should scale by DPR.
+
+            logical = widget.size()
+
+>           physical = widget.logical_to_physical_size()
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+E           AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+
+
+tests\test_geometry_dpi_matrix.py:66: AttributeError
+
+__ test_handle_screen_change_applies_geometry_and_dpr[left_negative_origin] ___
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x1d6abcf42c0) at 0x000001D6DB37EE00>
+
+settings_manager = <core.settings.settings_manager.SettingsManager(0x1d6aa772780) at 0x000001D6DBA51E00>
+
+rect = PySide6.QtCore.QRect(-2560, 0, 2560, 1440), dpr = 1.0
+
+
+
+    @pytest.mark.parametrize(
+
+        "rect,dpr",
+
+        [
+
+            pytest.param(QRect(0, 0, 1920, 1080), 1.0, id="1080p_dpr1_primary"),
+
+            pytest.param(QRect(-2560, 0, 2560, 1440), 1.0, id="left_negative_origin"),
+
+            pytest.param(QRect(0, 0, 3840, 2160), 1.25, id="4k_125pct"),
+
+            pytest.param(QRect(3840, 0, 3840, 2160), 1.5, id="right_4k_150pct"),
+
+            pytest.param(QRect(0, -1920, 1080, 1920), 2.0, id="portrait_above_200pct"),
+
+            pytest.param(QRect(0, 0, 1366, 768), 1.75, id="laptop_175pct"),
+
+        ],
+
+    )
+
+    def test_handle_screen_change_applies_geometry_and_dpr(qt_app, settings_manager, rect: QRect, dpr: float):
+
+        widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+
+        widget.resize(100, 100)
+
+    
+
+        try:
+
+            fake = _FakeScreen(rect, dpr)
+
+            widget._handle_screen_change(fake)
+
+    
+
+            # Geometry should match, including negative origins.
+
+            assert widget.x() == rect.x()
+
+            assert widget.y() == rect.y()
+
+            assert widget.width() == rect.width()
+
+    
+
+            # Height may be reduced by the fullscreen compat workaround (-1).
+
+            expected_h = rect.height()
+
+            assert widget.height() in {expected_h, max(1, expected_h - 1)}
+
+    
+
+            assert pytest.approx(widget._device_pixel_ratio, rel=1e-3) == float(dpr)
+
+    
+
+            # Physical size should scale by DPR.
+
+            logical = widget.size()
+
+>           physical = widget.logical_to_physical_size()
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+E           AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+
+
+tests\test_geometry_dpi_matrix.py:66: AttributeError
+
+________ test_handle_screen_change_applies_geometry_and_dpr[4k_125pct] ________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x1d6abcf42c0) at 0x000001D6DB37EE00>
+
+settings_manager = <core.settings.settings_manager.SettingsManager(0x1d6aa772120) at 0x000001D6DBA625C0>
+
+rect = PySide6.QtCore.QRect(0, 0, 3840, 2160), dpr = 1.25
+
+
+
+    @pytest.mark.parametrize(
+
+        "rect,dpr",
+
+        [
+
+            pytest.param(QRect(0, 0, 1920, 1080), 1.0, id="1080p_dpr1_primary"),
+
+            pytest.param(QRect(-2560, 0, 2560, 1440), 1.0, id="left_negative_origin"),
+
+            pytest.param(QRect(0, 0, 3840, 2160), 1.25, id="4k_125pct"),
+
+            pytest.param(QRect(3840, 0, 3840, 2160), 1.5, id="right_4k_150pct"),
+
+            pytest.param(QRect(0, -1920, 1080, 1920), 2.0, id="portrait_above_200pct"),
+
+            pytest.param(QRect(0, 0, 1366, 768), 1.75, id="laptop_175pct"),
+
+        ],
+
+    )
+
+    def test_handle_screen_change_applies_geometry_and_dpr(qt_app, settings_manager, rect: QRect, dpr: float):
+
+        widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+
+        widget.resize(100, 100)
+
+    
+
+        try:
+
+            fake = _FakeScreen(rect, dpr)
+
+            widget._handle_screen_change(fake)
+
+    
+
+            # Geometry should match, including negative origins.
+
+            assert widget.x() == rect.x()
+
+            assert widget.y() == rect.y()
+
+            assert widget.width() == rect.width()
+
+    
+
+            # Height may be reduced by the fullscreen compat workaround (-1).
+
+            expected_h = rect.height()
+
+            assert widget.height() in {expected_h, max(1, expected_h - 1)}
+
+    
+
+            assert pytest.approx(widget._device_pixel_ratio, rel=1e-3) == float(dpr)
+
+    
+
+            # Physical size should scale by DPR.
+
+            logical = widget.size()
+
+>           physical = widget.logical_to_physical_size()
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+E           AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+
+
+tests\test_geometry_dpi_matrix.py:66: AttributeError
+
+_____ test_handle_screen_change_applies_geometry_and_dpr[right_4k_150pct] _____
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x1d6abcf42c0) at 0x000001D6DB37EE00>
+
+settings_manager = <core.settings.settings_manager.SettingsManager(0x1d6aa772220) at 0x000001D6DB43EF40>
+
+rect = PySide6.QtCore.QRect(3840, 0, 3840, 2160), dpr = 1.5
+
+
+
+    @pytest.mark.parametrize(
+
+        "rect,dpr",
+
+        [
+
+            pytest.param(QRect(0, 0, 1920, 1080), 1.0, id="1080p_dpr1_primary"),
+
+            pytest.param(QRect(-2560, 0, 2560, 1440), 1.0, id="left_negative_origin"),
+
+            pytest.param(QRect(0, 0, 3840, 2160), 1.25, id="4k_125pct"),
+
+            pytest.param(QRect(3840, 0, 3840, 2160), 1.5, id="right_4k_150pct"),
+
+            pytest.param(QRect(0, -1920, 1080, 1920), 2.0, id="portrait_above_200pct"),
+
+            pytest.param(QRect(0, 0, 1366, 768), 1.75, id="laptop_175pct"),
+
+        ],
+
+    )
+
+    def test_handle_screen_change_applies_geometry_and_dpr(qt_app, settings_manager, rect: QRect, dpr: float):
+
+        widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+
+        widget.resize(100, 100)
+
+    
+
+        try:
+
+            fake = _FakeScreen(rect, dpr)
+
+            widget._handle_screen_change(fake)
+
+    
+
+            # Geometry should match, including negative origins.
+
+            assert widget.x() == rect.x()
+
+            assert widget.y() == rect.y()
+
+            assert widget.width() == rect.width()
+
+    
+
+            # Height may be reduced by the fullscreen compat workaround (-1).
+
+            expected_h = rect.height()
+
+            assert widget.height() in {expected_h, max(1, expected_h - 1)}
+
+    
+
+            assert pytest.approx(widget._device_pixel_ratio, rel=1e-3) == float(dpr)
+
+    
+
+            # Physical size should scale by DPR.
+
+            logical = widget.size()
+
+>           physical = widget.logical_to_physical_size()
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+E           AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+
+
+tests\test_geometry_dpi_matrix.py:66: AttributeError
+
+__ test_handle_screen_change_applies_geometry_and_dpr[portrait_above_200pct] __
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x1d6abcf42c0) at 0x000001D6DB37EE00>
+
+settings_manager = <core.settings.settings_manager.SettingsManager(0x1d6aa794490) at 0x000001D6DB43ED40>
+
+rect = PySide6.QtCore.QRect(0, -1920, 1080, 1920), dpr = 2.0
+
+
+
+    @pytest.mark.parametrize(
+
+        "rect,dpr",
+
+        [
+
+            pytest.param(QRect(0, 0, 1920, 1080), 1.0, id="1080p_dpr1_primary"),
+
+            pytest.param(QRect(-2560, 0, 2560, 1440), 1.0, id="left_negative_origin"),
+
+            pytest.param(QRect(0, 0, 3840, 2160), 1.25, id="4k_125pct"),
+
+            pytest.param(QRect(3840, 0, 3840, 2160), 1.5, id="right_4k_150pct"),
+
+            pytest.param(QRect(0, -1920, 1080, 1920), 2.0, id="portrait_above_200pct"),
+
+            pytest.param(QRect(0, 0, 1366, 768), 1.75, id="laptop_175pct"),
+
+        ],
+
+    )
+
+    def test_handle_screen_change_applies_geometry_and_dpr(qt_app, settings_manager, rect: QRect, dpr: float):
+
+        widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+
+        widget.resize(100, 100)
+
+    
+
+        try:
+
+            fake = _FakeScreen(rect, dpr)
+
+            widget._handle_screen_change(fake)
+
+    
+
+            # Geometry should match, including negative origins.
+
+            assert widget.x() == rect.x()
+
+            assert widget.y() == rect.y()
+
+            assert widget.width() == rect.width()
+
+    
+
+            # Height may be reduced by the fullscreen compat workaround (-1).
+
+            expected_h = rect.height()
+
+            assert widget.height() in {expected_h, max(1, expected_h - 1)}
+
+    
+
+            assert pytest.approx(widget._device_pixel_ratio, rel=1e-3) == float(dpr)
+
+    
+
+            # Physical size should scale by DPR.
+
+            logical = widget.size()
+
+>           physical = widget.logical_to_physical_size()
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+E           AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+
+
+tests\test_geometry_dpi_matrix.py:66: AttributeError
+
+______ test_handle_screen_change_applies_geometry_and_dpr[laptop_175pct] ______
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x1d6abcf42c0) at 0x000001D6DB37EE00>
+
+settings_manager = <core.settings.settings_manager.SettingsManager(0x1d6aa7941d0) at 0x000001D6DB43E740>
+
+rect = PySide6.QtCore.QRect(0, 0, 1366, 768), dpr = 1.75
+
+
+
+    @pytest.mark.parametrize(
+
+        "rect,dpr",
+
+        [
+
+            pytest.param(QRect(0, 0, 1920, 1080), 1.0, id="1080p_dpr1_primary"),
+
+            pytest.param(QRect(-2560, 0, 2560, 1440), 1.0, id="left_negative_origin"),
+
+            pytest.param(QRect(0, 0, 3840, 2160), 1.25, id="4k_125pct"),
+
+            pytest.param(QRect(3840, 0, 3840, 2160), 1.5, id="right_4k_150pct"),
+
+            pytest.param(QRect(0, -1920, 1080, 1920), 2.0, id="portrait_above_200pct"),
+
+            pytest.param(QRect(0, 0, 1366, 768), 1.75, id="laptop_175pct"),
+
+        ],
+
+    )
+
+    def test_handle_screen_change_applies_geometry_and_dpr(qt_app, settings_manager, rect: QRect, dpr: float):
+
+        widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+
+        widget.resize(100, 100)
+
+    
+
+        try:
+
+            fake = _FakeScreen(rect, dpr)
+
+            widget._handle_screen_change(fake)
+
+    
+
+            # Geometry should match, including negative origins.
+
+            assert widget.x() == rect.x()
+
+            assert widget.y() == rect.y()
+
+            assert widget.width() == rect.width()
+
+    
+
+            # Height may be reduced by the fullscreen compat workaround (-1).
+
+            expected_h = rect.height()
+
+            assert widget.height() in {expected_h, max(1, expected_h - 1)}
+
+    
+
+            assert pytest.approx(widget._device_pixel_ratio, rel=1e-3) == float(dpr)
+
+    
+
+            # Physical size should scale by DPR.
+
+            logical = widget.size()
+
+>           physical = widget.logical_to_physical_size()
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+E           AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+
+
+tests\test_geometry_dpi_matrix.py:66: AttributeError
+
+=========================== short test summary info ===========================
+
+FAILED tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[1080p_dpr1_primary]
+
+FAILED tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[left_negative_origin]
+
+FAILED tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[4k_125pct]
+
+FAILED tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[right_4k_150pct]
+
+FAILED tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[portrait_above_200pct]
+
+FAILED tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[laptop_175pct]
+
+============================== 6 failed in 0.80s ==============================
+
+
+===== pytest run 2025-12-19 01:15:54 args=['-vv', 'tests/test_geometry_dpi_matrix.py'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 6 items
+
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[1080p_dpr1_primary] 
+FAILED                                                                                     [ 16%]
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[left_negative_origin] 
+FAILED                                                                                   [ 33%]
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[4k_125pct] 
+FAILED                                                                                              [ 50%]
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[right_4k_150pct] 
+FAILED                                                                                        [ 66%]
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[portrait_above_200pct] 
+FAILED                                                                                  [ 83%]
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[laptop_175pct] 
+FAILED                                                                                          [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+_________________________________________________________________ test_handle_screen_change_applies_geometry_and_dpr[1080p_dpr1_primary] __________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x1e7cf1872b0) at 0x000001E7FE7D1100>, settings_manager = <core.settings.settings_manager.SettingsManager(0x1e7cdc4f7d0) at 0x000001E7FE7D12C0>
+
+rect = PySide6.QtCore.QRect(0, 0, 1920, 1080), dpr = 1.0
+
+
+
+    @pytest.mark.parametrize(
+
+        "rect,dpr",
+
+        [
+
+            pytest.param(QRect(0, 0, 1920, 1080), 1.0, id="1080p_dpr1_primary"),
+
+            pytest.param(QRect(-2560, 0, 2560, 1440), 1.0, id="left_negative_origin"),
+
+            pytest.param(QRect(0, 0, 3840, 2160), 1.25, id="4k_125pct"),
+
+            pytest.param(QRect(3840, 0, 3840, 2160), 1.5, id="right_4k_150pct"),
+
+            pytest.param(QRect(0, -1920, 1080, 1920), 2.0, id="portrait_above_200pct"),
+
+            pytest.param(QRect(0, 0, 1366, 768), 1.75, id="laptop_175pct"),
+
+        ],
+
+    )
+
+    def test_handle_screen_change_applies_geometry_and_dpr(qt_app, settings_manager, rect: QRect, dpr: float):
+
+        widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+
+        widget.resize(100, 100)
+
+    
+
+        try:
+
+            fake = _FakeScreen(rect, dpr)
+
+            widget._handle_screen_change(fake)
+
+    
+
+            # Geometry should match, including negative origins.
+
+            assert widget.x() == rect.x()
+
+            assert widget.y() == rect.y()
+
+            assert widget.width() == rect.width()
+
+    
+
+            # Height may be reduced by the fullscreen compat workaround (-1).
+
+            expected_h = rect.height()
+
+            assert widget.height() in {expected_h, max(1, expected_h - 1)}
+
+    
+
+            assert pytest.approx(widget._device_pixel_ratio, rel=1e-3) == float(dpr)
+
+    
+
+            # Physical size should scale by DPR.
+
+            logical = widget.size()
+
+>           physical = widget.logical_to_physical_size()
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+E           AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+
+
+tests\test_geometry_dpi_matrix.py:66: AttributeError
+
+________________________________________________________________ test_handle_screen_change_applies_geometry_and_dpr[left_negative_origin] _________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x1e7cf1872b0) at 0x000001E7FE7D1100>, settings_manager = <core.settings.settings_manager.SettingsManager(0x1e7cdc5dc90) at 0x000001E7FE7E1F80>
+
+rect = PySide6.QtCore.QRect(-2560, 0, 2560, 1440), dpr = 1.0
+
+
+
+    @pytest.mark.parametrize(
+
+        "rect,dpr",
+
+        [
+
+            pytest.param(QRect(0, 0, 1920, 1080), 1.0, id="1080p_dpr1_primary"),
+
+            pytest.param(QRect(-2560, 0, 2560, 1440), 1.0, id="left_negative_origin"),
+
+            pytest.param(QRect(0, 0, 3840, 2160), 1.25, id="4k_125pct"),
+
+            pytest.param(QRect(3840, 0, 3840, 2160), 1.5, id="right_4k_150pct"),
+
+            pytest.param(QRect(0, -1920, 1080, 1920), 2.0, id="portrait_above_200pct"),
+
+            pytest.param(QRect(0, 0, 1366, 768), 1.75, id="laptop_175pct"),
+
+        ],
+
+    )
+
+    def test_handle_screen_change_applies_geometry_and_dpr(qt_app, settings_manager, rect: QRect, dpr: float):
+
+        widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+
+        widget.resize(100, 100)
+
+    
+
+        try:
+
+            fake = _FakeScreen(rect, dpr)
+
+            widget._handle_screen_change(fake)
+
+    
+
+            # Geometry should match, including negative origins.
+
+            assert widget.x() == rect.x()
+
+            assert widget.y() == rect.y()
+
+            assert widget.width() == rect.width()
+
+    
+
+            # Height may be reduced by the fullscreen compat workaround (-1).
+
+            expected_h = rect.height()
+
+            assert widget.height() in {expected_h, max(1, expected_h - 1)}
+
+    
+
+            assert pytest.approx(widget._device_pixel_ratio, rel=1e-3) == float(dpr)
+
+    
+
+            # Physical size should scale by DPR.
+
+            logical = widget.size()
+
+>           physical = widget.logical_to_physical_size()
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+E           AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+
+
+tests\test_geometry_dpi_matrix.py:66: AttributeError
+
+______________________________________________________________________ test_handle_screen_change_applies_geometry_and_dpr[4k_125pct] ______________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x1e7cf1872b0) at 0x000001E7FE7D1100>, settings_manager = <core.settings.settings_manager.SettingsManager(0x1e7ce062ef0) at 0x000001E7FEE9B0C0>
+
+rect = PySide6.QtCore.QRect(0, 0, 3840, 2160), dpr = 1.25
+
+
+
+    @pytest.mark.parametrize(
+
+        "rect,dpr",
+
+        [
+
+            pytest.param(QRect(0, 0, 1920, 1080), 1.0, id="1080p_dpr1_primary"),
+
+            pytest.param(QRect(-2560, 0, 2560, 1440), 1.0, id="left_negative_origin"),
+
+            pytest.param(QRect(0, 0, 3840, 2160), 1.25, id="4k_125pct"),
+
+            pytest.param(QRect(3840, 0, 3840, 2160), 1.5, id="right_4k_150pct"),
+
+            pytest.param(QRect(0, -1920, 1080, 1920), 2.0, id="portrait_above_200pct"),
+
+            pytest.param(QRect(0, 0, 1366, 768), 1.75, id="laptop_175pct"),
+
+        ],
+
+    )
+
+    def test_handle_screen_change_applies_geometry_and_dpr(qt_app, settings_manager, rect: QRect, dpr: float):
+
+        widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+
+        widget.resize(100, 100)
+
+    
+
+        try:
+
+            fake = _FakeScreen(rect, dpr)
+
+            widget._handle_screen_change(fake)
+
+    
+
+            # Geometry should match, including negative origins.
+
+            assert widget.x() == rect.x()
+
+            assert widget.y() == rect.y()
+
+            assert widget.width() == rect.width()
+
+    
+
+            # Height may be reduced by the fullscreen compat workaround (-1).
+
+            expected_h = rect.height()
+
+            assert widget.height() in {expected_h, max(1, expected_h - 1)}
+
+    
+
+            assert pytest.approx(widget._device_pixel_ratio, rel=1e-3) == float(dpr)
+
+    
+
+            # Physical size should scale by DPR.
+
+            logical = widget.size()
+
+>           physical = widget.logical_to_physical_size()
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+E           AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+
+
+tests\test_geometry_dpi_matrix.py:66: AttributeError
+
+___________________________________________________________________ test_handle_screen_change_applies_geometry_and_dpr[right_4k_150pct] ___________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x1e7cf1872b0) at 0x000001E7FE7D1100>, settings_manager = <core.settings.settings_manager.SettingsManager(0x1e7cf2f62d0) at 0x000001E7FEE8DB80>
+
+rect = PySide6.QtCore.QRect(3840, 0, 3840, 2160), dpr = 1.5
+
+
+
+    @pytest.mark.parametrize(
+
+        "rect,dpr",
+
+        [
+
+            pytest.param(QRect(0, 0, 1920, 1080), 1.0, id="1080p_dpr1_primary"),
+
+            pytest.param(QRect(-2560, 0, 2560, 1440), 1.0, id="left_negative_origin"),
+
+            pytest.param(QRect(0, 0, 3840, 2160), 1.25, id="4k_125pct"),
+
+            pytest.param(QRect(3840, 0, 3840, 2160), 1.5, id="right_4k_150pct"),
+
+            pytest.param(QRect(0, -1920, 1080, 1920), 2.0, id="portrait_above_200pct"),
+
+            pytest.param(QRect(0, 0, 1366, 768), 1.75, id="laptop_175pct"),
+
+        ],
+
+    )
+
+    def test_handle_screen_change_applies_geometry_and_dpr(qt_app, settings_manager, rect: QRect, dpr: float):
+
+        widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+
+        widget.resize(100, 100)
+
+    
+
+        try:
+
+            fake = _FakeScreen(rect, dpr)
+
+            widget._handle_screen_change(fake)
+
+    
+
+            # Geometry should match, including negative origins.
+
+            assert widget.x() == rect.x()
+
+            assert widget.y() == rect.y()
+
+            assert widget.width() == rect.width()
+
+    
+
+            # Height may be reduced by the fullscreen compat workaround (-1).
+
+            expected_h = rect.height()
+
+            assert widget.height() in {expected_h, max(1, expected_h - 1)}
+
+    
+
+            assert pytest.approx(widget._device_pixel_ratio, rel=1e-3) == float(dpr)
+
+    
+
+            # Physical size should scale by DPR.
+
+            logical = widget.size()
+
+>           physical = widget.logical_to_physical_size()
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+E           AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+
+
+tests\test_geometry_dpi_matrix.py:66: AttributeError
+
+________________________________________________________________ test_handle_screen_change_applies_geometry_and_dpr[portrait_above_200pct] ________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x1e7cf1872b0) at 0x000001E7FE7D1100>, settings_manager = <core.settings.settings_manager.SettingsManager(0x1e7cf2f6630) at 0x000001E7FE873F00>
+
+rect = PySide6.QtCore.QRect(0, -1920, 1080, 1920), dpr = 2.0
+
+
+
+    @pytest.mark.parametrize(
+
+        "rect,dpr",
+
+        [
+
+            pytest.param(QRect(0, 0, 1920, 1080), 1.0, id="1080p_dpr1_primary"),
+
+            pytest.param(QRect(-2560, 0, 2560, 1440), 1.0, id="left_negative_origin"),
+
+            pytest.param(QRect(0, 0, 3840, 2160), 1.25, id="4k_125pct"),
+
+            pytest.param(QRect(3840, 0, 3840, 2160), 1.5, id="right_4k_150pct"),
+
+            pytest.param(QRect(0, -1920, 1080, 1920), 2.0, id="portrait_above_200pct"),
+
+            pytest.param(QRect(0, 0, 1366, 768), 1.75, id="laptop_175pct"),
+
+        ],
+
+    )
+
+    def test_handle_screen_change_applies_geometry_and_dpr(qt_app, settings_manager, rect: QRect, dpr: float):
+
+        widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+
+        widget.resize(100, 100)
+
+    
+
+        try:
+
+            fake = _FakeScreen(rect, dpr)
+
+            widget._handle_screen_change(fake)
+
+    
+
+            # Geometry should match, including negative origins.
+
+            assert widget.x() == rect.x()
+
+            assert widget.y() == rect.y()
+
+            assert widget.width() == rect.width()
+
+    
+
+            # Height may be reduced by the fullscreen compat workaround (-1).
+
+            expected_h = rect.height()
+
+            assert widget.height() in {expected_h, max(1, expected_h - 1)}
+
+    
+
+            assert pytest.approx(widget._device_pixel_ratio, rel=1e-3) == float(dpr)
+
+    
+
+            # Physical size should scale by DPR.
+
+            logical = widget.size()
+
+>           physical = widget.logical_to_physical_size()
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+E           AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+
+
+tests\test_geometry_dpi_matrix.py:66: AttributeError
+
+____________________________________________________________________ test_handle_screen_change_applies_geometry_and_dpr[laptop_175pct] ____________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x1e7cf1872b0) at 0x000001E7FE7D1100>, settings_manager = <core.settings.settings_manager.SettingsManager(0x1e7cf2f6150) at 0x000001E7FEE8DF80>
+
+rect = PySide6.QtCore.QRect(0, 0, 1366, 768), dpr = 1.75
+
+
+
+    @pytest.mark.parametrize(
+
+        "rect,dpr",
+
+        [
+
+            pytest.param(QRect(0, 0, 1920, 1080), 1.0, id="1080p_dpr1_primary"),
+
+            pytest.param(QRect(-2560, 0, 2560, 1440), 1.0, id="left_negative_origin"),
+
+            pytest.param(QRect(0, 0, 3840, 2160), 1.25, id="4k_125pct"),
+
+            pytest.param(QRect(3840, 0, 3840, 2160), 1.5, id="right_4k_150pct"),
+
+            pytest.param(QRect(0, -1920, 1080, 1920), 2.0, id="portrait_above_200pct"),
+
+            pytest.param(QRect(0, 0, 1366, 768), 1.75, id="laptop_175pct"),
+
+        ],
+
+    )
+
+    def test_handle_screen_change_applies_geometry_and_dpr(qt_app, settings_manager, rect: QRect, dpr: float):
+
+        widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+
+        widget.resize(100, 100)
+
+    
+
+        try:
+
+            fake = _FakeScreen(rect, dpr)
+
+            widget._handle_screen_change(fake)
+
+    
+
+            # Geometry should match, including negative origins.
+
+            assert widget.x() == rect.x()
+
+            assert widget.y() == rect.y()
+
+            assert widget.width() == rect.width()
+
+    
+
+            # Height may be reduced by the fullscreen compat workaround (-1).
+
+            expected_h = rect.height()
+
+            assert widget.height() in {expected_h, max(1, expected_h - 1)}
+
+    
+
+            assert pytest.approx(widget._device_pixel_ratio, rel=1e-3) == float(dpr)
+
+    
+
+            # Physical size should scale by DPR.
+
+            logical = widget.size()
+
+>           physical = widget.logical_to_physical_size()
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+E           AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+
+
+tests\test_geometry_dpi_matrix.py:66: AttributeError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[1080p_dpr1_primary] - AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+FAILED tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[left_negative_origin] - AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+FAILED tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[4k_125pct] - AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+FAILED tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[right_4k_150pct] - AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+FAILED tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[portrait_above_200pct] - AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+FAILED tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[laptop_175pct] - AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+============================================================================================ 6 failed in 0.95s ============================================================================================
+
+
+===== pytest run 2025-12-19 01:16:35 args=['-vv', 'tests/test_geometry_dpi_matrix.py'] =====
+
+============================= test session starts =============================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 6 items
+
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[1080p_dpr1_primary] 
+FAILED [ 16%]
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[left_negative_origin] 
+FAILED [ 33%]
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[4k_125pct] 
+FAILED [ 50%]
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[right_4k_150pct] 
+FAILED [ 66%]
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[portrait_above_200pct] 
+FAILED [ 83%]
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[laptop_175pct] 
+FAILED [100%]
+
+
+
+
+================================== FAILURES ===================================
+
+___ test_handle_screen_change_applies_geometry_and_dpr[1080p_dpr1_primary] ____
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x2af5c052da0) at 0x000002AF7FA65540>
+
+settings_manager = <core.settings.settings_manager.SettingsManager(0x2af5ae96690) at 0x000002AF7FA85880>
+
+rect = PySide6.QtCore.QRect(0, 0, 1920, 1080), dpr = 1.0
+
+
+
+    @pytest.mark.parametrize(
+
+        "rect,dpr",
+
+        [
+
+            pytest.param(QRect(0, 0, 1920, 1080), 1.0, id="1080p_dpr1_primary"),
+
+            pytest.param(QRect(-2560, 0, 2560, 1440), 1.0, id="left_negative_origin"),
+
+            pytest.param(QRect(0, 0, 3840, 2160), 1.25, id="4k_125pct"),
+
+            pytest.param(QRect(3840, 0, 3840, 2160), 1.5, id="right_4k_150pct"),
+
+            pytest.param(QRect(0, -1920, 1080, 1920), 2.0, id="portrait_above_200pct"),
+
+            pytest.param(QRect(0, 0, 1366, 768), 1.75, id="laptop_175pct"),
+
+        ],
+
+    )
+
+    def test_handle_screen_change_applies_geometry_and_dpr(qt_app, settings_manager, rect: QRect, dpr: float):
+
+        widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+
+        widget.resize(100, 100)
+
+    
+
+        try:
+
+            fake = _FakeScreen(rect, dpr)
+
+            widget._handle_screen_change(fake)
+
+    
+
+            # Geometry should match, including negative origins.
+
+            assert widget.x() == rect.x()
+
+            assert widget.y() == rect.y()
+
+            assert widget.width() == rect.width()
+
+    
+
+            # Height may be reduced by the fullscreen compat workaround (-1).
+
+            expected_h = rect.height()
+
+            assert widget.height() in {expected_h, max(1, expected_h - 1)}
+
+    
+
+            assert pytest.approx(widget._device_pixel_ratio, rel=1e-3) == float(dpr)
+
+    
+
+            # Physical size should scale by DPR.
+
+            logical = widget.size()
+
+>           physical = widget.logical_to_physical_size()
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+E           AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+
+
+tests\test_geometry_dpi_matrix.py:66: AttributeError
+
+__ test_handle_screen_change_applies_geometry_and_dpr[left_negative_origin] ___
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x2af5c052da0) at 0x000002AF7FA65540>
+
+settings_manager = <core.settings.settings_manager.SettingsManager(0x2af5ae96a10) at 0x000002AF0C13C680>
+
+rect = PySide6.QtCore.QRect(-2560, 0, 2560, 1440), dpr = 1.0
+
+
+
+    @pytest.mark.parametrize(
+
+        "rect,dpr",
+
+        [
+
+            pytest.param(QRect(0, 0, 1920, 1080), 1.0, id="1080p_dpr1_primary"),
+
+            pytest.param(QRect(-2560, 0, 2560, 1440), 1.0, id="left_negative_origin"),
+
+            pytest.param(QRect(0, 0, 3840, 2160), 1.25, id="4k_125pct"),
+
+            pytest.param(QRect(3840, 0, 3840, 2160), 1.5, id="right_4k_150pct"),
+
+            pytest.param(QRect(0, -1920, 1080, 1920), 2.0, id="portrait_above_200pct"),
+
+            pytest.param(QRect(0, 0, 1366, 768), 1.75, id="laptop_175pct"),
+
+        ],
+
+    )
+
+    def test_handle_screen_change_applies_geometry_and_dpr(qt_app, settings_manager, rect: QRect, dpr: float):
+
+        widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+
+        widget.resize(100, 100)
+
+    
+
+        try:
+
+            fake = _FakeScreen(rect, dpr)
+
+            widget._handle_screen_change(fake)
+
+    
+
+            # Geometry should match, including negative origins.
+
+            assert widget.x() == rect.x()
+
+            assert widget.y() == rect.y()
+
+            assert widget.width() == rect.width()
+
+    
+
+            # Height may be reduced by the fullscreen compat workaround (-1).
+
+            expected_h = rect.height()
+
+            assert widget.height() in {expected_h, max(1, expected_h - 1)}
+
+    
+
+            assert pytest.approx(widget._device_pixel_ratio, rel=1e-3) == float(dpr)
+
+    
+
+            # Physical size should scale by DPR.
+
+            logical = widget.size()
+
+>           physical = widget.logical_to_physical_size()
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+E           AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+
+
+tests\test_geometry_dpi_matrix.py:66: AttributeError
+
+________ test_handle_screen_change_applies_geometry_and_dpr[4k_125pct] ________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x2af5c052da0) at 0x000002AF7FA65540>
+
+settings_manager = <core.settings.settings_manager.SettingsManager(0x2af5ae96e10) at 0x000002AF0C14AD80>
+
+rect = PySide6.QtCore.QRect(0, 0, 3840, 2160), dpr = 1.25
+
+
+
+    @pytest.mark.parametrize(
+
+        "rect,dpr",
+
+        [
+
+            pytest.param(QRect(0, 0, 1920, 1080), 1.0, id="1080p_dpr1_primary"),
+
+            pytest.param(QRect(-2560, 0, 2560, 1440), 1.0, id="left_negative_origin"),
+
+            pytest.param(QRect(0, 0, 3840, 2160), 1.25, id="4k_125pct"),
+
+            pytest.param(QRect(3840, 0, 3840, 2160), 1.5, id="right_4k_150pct"),
+
+            pytest.param(QRect(0, -1920, 1080, 1920), 2.0, id="portrait_above_200pct"),
+
+            pytest.param(QRect(0, 0, 1366, 768), 1.75, id="laptop_175pct"),
+
+        ],
+
+    )
+
+    def test_handle_screen_change_applies_geometry_and_dpr(qt_app, settings_manager, rect: QRect, dpr: float):
+
+        widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+
+        widget.resize(100, 100)
+
+    
+
+        try:
+
+            fake = _FakeScreen(rect, dpr)
+
+            widget._handle_screen_change(fake)
+
+    
+
+            # Geometry should match, including negative origins.
+
+            assert widget.x() == rect.x()
+
+            assert widget.y() == rect.y()
+
+            assert widget.width() == rect.width()
+
+    
+
+            # Height may be reduced by the fullscreen compat workaround (-1).
+
+            expected_h = rect.height()
+
+            assert widget.height() in {expected_h, max(1, expected_h - 1)}
+
+    
+
+            assert pytest.approx(widget._device_pixel_ratio, rel=1e-3) == float(dpr)
+
+    
+
+            # Physical size should scale by DPR.
+
+            logical = widget.size()
+
+>           physical = widget.logical_to_physical_size()
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+E           AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+
+
+tests\test_geometry_dpi_matrix.py:66: AttributeError
+
+_____ test_handle_screen_change_applies_geometry_and_dpr[right_4k_150pct] _____
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x2af5c052da0) at 0x000002AF7FA65540>
+
+settings_manager = <core.settings.settings_manager.SettingsManager(0x2af5ae97650) at 0x000002AF0C13CCC0>
+
+rect = PySide6.QtCore.QRect(3840, 0, 3840, 2160), dpr = 1.5
+
+
+
+    @pytest.mark.parametrize(
+
+        "rect,dpr",
+
+        [
+
+            pytest.param(QRect(0, 0, 1920, 1080), 1.0, id="1080p_dpr1_primary"),
+
+            pytest.param(QRect(-2560, 0, 2560, 1440), 1.0, id="left_negative_origin"),
+
+            pytest.param(QRect(0, 0, 3840, 2160), 1.25, id="4k_125pct"),
+
+            pytest.param(QRect(3840, 0, 3840, 2160), 1.5, id="right_4k_150pct"),
+
+            pytest.param(QRect(0, -1920, 1080, 1920), 2.0, id="portrait_above_200pct"),
+
+            pytest.param(QRect(0, 0, 1366, 768), 1.75, id="laptop_175pct"),
+
+        ],
+
+    )
+
+    def test_handle_screen_change_applies_geometry_and_dpr(qt_app, settings_manager, rect: QRect, dpr: float):
+
+        widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+
+        widget.resize(100, 100)
+
+    
+
+        try:
+
+            fake = _FakeScreen(rect, dpr)
+
+            widget._handle_screen_change(fake)
+
+    
+
+            # Geometry should match, including negative origins.
+
+            assert widget.x() == rect.x()
+
+            assert widget.y() == rect.y()
+
+            assert widget.width() == rect.width()
+
+    
+
+            # Height may be reduced by the fullscreen compat workaround (-1).
+
+            expected_h = rect.height()
+
+            assert widget.height() in {expected_h, max(1, expected_h - 1)}
+
+    
+
+            assert pytest.approx(widget._device_pixel_ratio, rel=1e-3) == float(dpr)
+
+    
+
+            # Physical size should scale by DPR.
+
+            logical = widget.size()
+
+>           physical = widget.logical_to_physical_size()
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+E           AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+
+
+tests\test_geometry_dpi_matrix.py:66: AttributeError
+
+__ test_handle_screen_change_applies_geometry_and_dpr[portrait_above_200pct] __
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x2af5c052da0) at 0x000002AF7FA65540>
+
+settings_manager = <core.settings.settings_manager.SettingsManager(0x2af5ae971b0) at 0x000002AF7FB27C00>
+
+rect = PySide6.QtCore.QRect(0, -1920, 1080, 1920), dpr = 2.0
+
+
+
+    @pytest.mark.parametrize(
+
+        "rect,dpr",
+
+        [
+
+            pytest.param(QRect(0, 0, 1920, 1080), 1.0, id="1080p_dpr1_primary"),
+
+            pytest.param(QRect(-2560, 0, 2560, 1440), 1.0, id="left_negative_origin"),
+
+            pytest.param(QRect(0, 0, 3840, 2160), 1.25, id="4k_125pct"),
+
+            pytest.param(QRect(3840, 0, 3840, 2160), 1.5, id="right_4k_150pct"),
+
+            pytest.param(QRect(0, -1920, 1080, 1920), 2.0, id="portrait_above_200pct"),
+
+            pytest.param(QRect(0, 0, 1366, 768), 1.75, id="laptop_175pct"),
+
+        ],
+
+    )
+
+    def test_handle_screen_change_applies_geometry_and_dpr(qt_app, settings_manager, rect: QRect, dpr: float):
+
+        widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+
+        widget.resize(100, 100)
+
+    
+
+        try:
+
+            fake = _FakeScreen(rect, dpr)
+
+            widget._handle_screen_change(fake)
+
+    
+
+            # Geometry should match, including negative origins.
+
+            assert widget.x() == rect.x()
+
+            assert widget.y() == rect.y()
+
+            assert widget.width() == rect.width()
+
+    
+
+            # Height may be reduced by the fullscreen compat workaround (-1).
+
+            expected_h = rect.height()
+
+            assert widget.height() in {expected_h, max(1, expected_h - 1)}
+
+    
+
+            assert pytest.approx(widget._device_pixel_ratio, rel=1e-3) == float(dpr)
+
+    
+
+            # Physical size should scale by DPR.
+
+            logical = widget.size()
+
+>           physical = widget.logical_to_physical_size()
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+E           AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+
+
+tests\test_geometry_dpi_matrix.py:66: AttributeError
+
+______ test_handle_screen_change_applies_geometry_and_dpr[laptop_175pct] ______
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x2af5c052da0) at 0x000002AF7FA65540>
+
+settings_manager = <core.settings.settings_manager.SettingsManager(0x2af5ae97290) at 0x000002AF0C13FC40>
+
+rect = PySide6.QtCore.QRect(0, 0, 1366, 768), dpr = 1.75
+
+
+
+    @pytest.mark.parametrize(
+
+        "rect,dpr",
+
+        [
+
+            pytest.param(QRect(0, 0, 1920, 1080), 1.0, id="1080p_dpr1_primary"),
+
+            pytest.param(QRect(-2560, 0, 2560, 1440), 1.0, id="left_negative_origin"),
+
+            pytest.param(QRect(0, 0, 3840, 2160), 1.25, id="4k_125pct"),
+
+            pytest.param(QRect(3840, 0, 3840, 2160), 1.5, id="right_4k_150pct"),
+
+            pytest.param(QRect(0, -1920, 1080, 1920), 2.0, id="portrait_above_200pct"),
+
+            pytest.param(QRect(0, 0, 1366, 768), 1.75, id="laptop_175pct"),
+
+        ],
+
+    )
+
+    def test_handle_screen_change_applies_geometry_and_dpr(qt_app, settings_manager, rect: QRect, dpr: float):
+
+        widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+
+        widget.resize(100, 100)
+
+    
+
+        try:
+
+            fake = _FakeScreen(rect, dpr)
+
+            widget._handle_screen_change(fake)
+
+    
+
+            # Geometry should match, including negative origins.
+
+            assert widget.x() == rect.x()
+
+            assert widget.y() == rect.y()
+
+            assert widget.width() == rect.width()
+
+    
+
+            # Height may be reduced by the fullscreen compat workaround (-1).
+
+            expected_h = rect.height()
+
+            assert widget.height() in {expected_h, max(1, expected_h - 1)}
+
+    
+
+            assert pytest.approx(widget._device_pixel_ratio, rel=1e-3) == float(dpr)
+
+    
+
+            # Physical size should scale by DPR.
+
+            logical = widget.size()
+
+>           physical = widget.logical_to_physical_size()
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+E           AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+
+
+tests\test_geometry_dpi_matrix.py:66: AttributeError
+
+=========================== short test summary info ===========================
+
+FAILED tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[1080p_dpr1_primary] - AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+FAILED tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[left_negative_origin] - AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+FAILED tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[4k_125pct] - AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+FAILED tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[right_4k_150pct] - AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+FAILED tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[portrait_above_200pct] - AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+FAILED tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[laptop_175pct] - AttributeError: 'DisplayWidget' object has no attribute 'logical_to_physical_size'
+
+============================== 6 failed in 0.99s ==============================
+
+
+===== pytest run 2025-12-19 01:57:05 args=['-q', 'tests/test_hotkeys_no_text.py', 'tests/test_scrollwheel_volume.py'] =====
+
+.
+F
+                                                                                                                                                                                                   [100%]
+
+
+================================================================================================ FAILURES =================================================================================================
+
+___________________________________________________________________________ test_ctrl_mode_wheel_adjusts_spotify_volume_widget ____________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x245288fd7d0) at 0x000002452926E3C0>, settings_manager = <core.settings.settings_manager.SettingsManager(0x24528abab90) at 0x00000245293F7640>
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x000002452941F310>, monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000002452941F690>
+
+
+
+    @pytest.mark.qt
+
+    def test_ctrl_mode_wheel_adjusts_spotify_volume_widget(qt_app, settings_manager, qtbot, monkeypatch):
+
+        from rendering.display_widget import DisplayWidget
+
+        from rendering.multi_monitor_coordinator import MultiMonitorCoordinator
+
+        from widgets.spotify_volume_widget import SpotifyVolumeWidget
+
+    
+
+        monkeypatch.setattr(SpotifyVolumeWidget, "_schedule_set_volume", lambda self, level: None)
+
+    
+
+        # Keep the test independent of OpenGL availability.
+
+        try:
+
+            settings_manager.set("display.hw_accel", False)
+
+        except Exception:
+
+            pass
+
+        try:
+
+            settings_manager.set("display.render_backend_mode", "software")
+
+        except Exception:
+
+            pass
+
+    
+
+        MultiMonitorCoordinator.reset()
+
+        try:
+
+            w = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+
+            qtbot.addWidget(w)
+
+            w.resize(640, 360)
+
+    
+
+            vol = SpotifyVolumeWidget(w)
+
+            qtbot.addWidget(vol)
+
+            w.spotify_volume_widget = vol
+
+    
+
+            vol.setGeometry(10, 10, 32, 180)
+
+            vol._volume = 0.5
+
+            vol.show()
+
+    
+
+            w._coordinator.set_ctrl_held(True)
+
+    
+
+            pos = QPointF(15.0, 20.0)
+
+            global_pos = QPointF(15.0, 20.0)
+
+            event = QWheelEvent(
+
+                pos,
+
+                global_pos,
+
+                QPoint(0, 0),
+
+                QPoint(0, 120),
+
+                Qt.MouseButton.NoButton,
+
+                Qt.KeyboardModifier.NoModifier,
+
+                Qt.ScrollPhase.ScrollUpdate,
+
+                False,
+
+            )
+
+    
+
+            before = vol._volume
+
+            w.wheelEvent(event)
+
+            after = vol._volume
+
+    
+
+>           assert after > before
+
+E           assert 0.5 > 0.5
+
+
+
+tests\test_scrollwheel_volume.py:57: AssertionError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_scrollwheel_volume.py::test_ctrl_mode_wheel_adjusts_spotify_volume_widget - assert 0.5 > 0.5
+
+1 failed, 1 passed in 0.94s
+

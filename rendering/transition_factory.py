@@ -356,7 +356,6 @@ class TransitionFactory:
         crumble_settings = settings.get('crumble', {}) if isinstance(settings.get('crumble', {}), dict) else {}
         piece_count = self._safe_int(crumble_settings.get('piece_count', canonical.get('piece_count', 14)), 14)
         crack_complexity = self._safe_float(crumble_settings.get('crack_complexity', canonical.get('crack_complexity', 1.0)), 1.0)
-        mosaic_mode = bool(crumble_settings.get('mosaic_mode', canonical.get('mosaic_mode', False)))
         weight_str = crumble_settings.get('weighting', canonical.get('weighting', 'Random Choice'))
         weight_map = {
             'Top Weighted': 0.0,
@@ -368,7 +367,7 @@ class TransitionFactory:
         weight_mode = weight_map.get(weight_str, 0.0)
         
         if use_compositor:
-            return GLCompositorCrumbleTransition(duration_ms, piece_count, crack_complexity, mosaic_mode, weight_mode)
+            return GLCompositorCrumbleTransition(duration_ms, piece_count, crack_complexity, False, weight_mode)
         return CrossfadeTransition(duration_ms)
     
     def _create_particle(self, settings: dict, duration_ms: int, use_compositor: bool) -> BaseTransition:

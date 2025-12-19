@@ -1,20 +1,25 @@
 """Tests for SettingsManager."""
 import json
+import uuid
 from core.settings import SettingsManager
+
+
+def _make_manager() -> SettingsManager:
+    # Use a unique application key per test to avoid registry key reuse issues
+    # on Windows.
+    return SettingsManager(organization="Test", application=f"ScreensaverTest_{uuid.uuid4().hex}")
 
 
 def test_settings_manager_initialization(qt_app):
     """Test SettingsManager initialization."""
-    manager = SettingsManager(organization="Test", application="ScreensaverTest")
+    manager = _make_manager()
     
     assert manager is not None
-    
-    manager.clear()
 
 
 def test_get_set_setting(qt_app):
     """Test getting and setting values."""
-    manager = SettingsManager(organization="Test", application="ScreensaverTest")
+    manager = _make_manager()
     
     # Set a value
     manager.set("test.key", "test value")
@@ -22,20 +27,16 @@ def test_get_set_setting(qt_app):
     # Get the value
     value = manager.get("test.key")
     assert value == "test value"
-    
-    manager.clear()
 
 
 def test_default_values(qt_app):
     """Test default values are set."""
-    manager = SettingsManager(organization="Test", application="ScreensaverTest")
+    manager = _make_manager()
     
     # Check some defaults exist
     assert manager.contains("sources.mode")
     assert manager.contains("display.mode")
     assert manager.contains("transitions")
-    
-    manager.clear()
 
 
 def test_widget_defaults_helper_matches_schema(qt_app):
@@ -44,7 +45,7 @@ def test_widget_defaults_helper_matches_schema(qt_app):
     This is a light invariant test to catch accidental drift between the
     canonical defaults map and the helper used by UI code.
     """
-    manager = SettingsManager(organization="Test", application="ScreensaverTest")
+    manager = _make_manager()
 
     # Force canonical defaults to be present in the underlying QSettings.
     manager.reset_to_defaults()
@@ -69,7 +70,7 @@ def test_widget_defaults_helper_matches_schema(qt_app):
 
 def test_on_changed_handler(qt_app):
     """Test change notification handler."""
-    manager = SettingsManager(organization="Test", application="ScreensaverTest")
+    manager = _make_manager()
     
     changed_values = []
     
@@ -83,13 +84,11 @@ def test_on_changed_handler(qt_app):
     manager.set("test.key", "updated")
     
     assert len(changed_values) >= 1
-    
-    manager.clear()
 
 
 def test_reset_to_defaults(qt_app):
     """Test resetting to defaults."""
-    manager = SettingsManager(organization="Test", application="ScreensaverTest")
+    manager = _make_manager()
     
     # Change a value
     manager.set("sources.mode", "custom_value")
@@ -100,26 +99,22 @@ def test_reset_to_defaults(qt_app):
     
     # Should be back to default
     assert manager.get("sources.mode") == "folders"
-    
-    manager.clear()
 
 
 def test_get_all_keys(qt_app):
     """Test getting all keys."""
-    manager = SettingsManager(organization="Test", application="ScreensaverTest")
+    manager = _make_manager()
     
     keys = manager.get_all_keys()
     
     assert isinstance(keys, list)
     assert len(keys) > 0
     assert "sources.mode" in keys
-    
-    manager.clear()
 
 
 def test_sst_round_trip_defaults(qt_app, tmp_path):
     """Exporting and re-importing defaults should restore canonical values."""
-    manager = SettingsManager(organization="Test", application="ScreensaverTest")
+    manager = _make_manager()
 
     # Start from a clean canonical state and export it.
     manager.reset_to_defaults()
@@ -153,13 +148,11 @@ def test_sst_round_trip_defaults(qt_app, tmp_path):
     assert isinstance(widgets_after, dict)
     assert widgets_after["spotify_visualizer"]["ghost_alpha"] == 0.4
 
-    manager.clear()
-
 
 def test_sst_merge_and_type_coercion_and_preview(qt_app, tmp_path):
     """SST import should merge sections, coerce basic types, and be previewable."""
 
-    manager = SettingsManager(organization="Test", application="ScreensaverTest")
+    manager = _make_manager()
     manager.reset_to_defaults()
 
     # Add an extra widget entry that should survive a merge-based import.
@@ -208,5 +201,3 @@ def test_sst_merge_and_type_coercion_and_preview(qt_app, tmp_path):
     interval_val = manager.get("timing.interval")
     assert isinstance(interval_val, int)
     assert interval_val == 99
-
-    manager.clear()

@@ -153,7 +153,17 @@ class InputHandler(QObject):
             True if the event was consumed, False otherwise
         """
         key = event.key()
-        key_text = event.text().lower()
+        try:
+            key_text = event.text().lower() if event.text() else ""
+        except Exception:
+            key_text = ""
+
+        native_vk = 0
+        try:
+            if hasattr(event, "nativeVirtualKey"):
+                native_vk = int(event.nativeVirtualKey() or 0)
+        except Exception:
+            native_vk = 0
         
         # Ctrl key handling is done by DisplayWidget for halo management
         if key == Qt.Key.Key_Control:
@@ -169,19 +179,19 @@ class InputHandler(QObject):
         hard_exit_enabled = self.is_hard_exit_enabled()
         
         # Hotkeys (always available regardless of hard-exit/ctrl state)
-        if key_text == 'z':
+        if key_text == 'z' or key == Qt.Key.Key_Z or native_vk == 0x5A:
             logger.info("Z key pressed - previous image requested")
             self.previous_image_requested.emit()
             return True
-        if key_text == 'x':
+        if key_text == 'x' or key == Qt.Key.Key_X or native_vk == 0x58:
             logger.info("X key pressed - next image requested")
             self.next_image_requested.emit()
             return True
-        if key_text == 'c':
+        if key_text == 'c' or key == Qt.Key.Key_C or native_vk == 0x43:
             logger.info("C key pressed - cycle transition requested")
             self.cycle_transition_requested.emit()
             return True
-        if key_text == 's':
+        if key_text == 's' or key == Qt.Key.Key_S or native_vk == 0x53:
             logger.info("S key pressed - settings requested")
             self.settings_requested.emit()
             return True
@@ -765,38 +775,23 @@ class InputHandler(QObject):
         """
         vw = spotify_volume_widget
         if vw is None or not vw.isVisible():
+            logger.debug("[WHEEL] Volume widget not available or hidden; skipping wheel routing")
             return False
         
         try:
             geom_vol = vw.geometry()
-            over_volume = geom_vol.contains(pos)
-            
-            over_media = False
-            if media_widget is not None and media_widget.isVisible():
-                try:
-                    over_media = media_widget.geometry().contains(pos)
-                except Exception:
-                    pass
-            
-            over_vis = False
-            if spotify_visualizer_widget is not None and spotify_visualizer_widget.isVisible():
-                try:
-                    over_vis = spotify_visualizer_widget.geometry().contains(pos)
-                except Exception:
-                    pass
-            
-            local_pos = None
-            if over_volume:
-                local_pos = QPoint(pos.x() - geom_vol.x(), pos.y() - geom_vol.y())
-            elif over_media or over_vis:
-                # Map wheel to volume slider's centre X
-                center_x = vw.rect().center().x()
-                local_pos = QPoint(center_x, pos.y() - geom_vol.y())
-            
-            if local_pos is not None:
-                if hasattr(vw, 'handle_wheel') and vw.handle_wheel(local_pos, delta_y):
-                    return True
+            local_pos = QPoint(pos.x() - geom_vol.x(), pos.y() - geom_vol.y())
+            logger.debug(
+                "[WHEEL] Routing wheel to volume widget: global=%s local=%s delta=%d",
+                pos,
+                local_pos,
+                delta_y,
+            )
+            if hasattr(vw, "handle_wheel") and vw.handle_wheel(local_pos, delta_y):
+                logger.debug("[WHEEL] Volume widget handled wheel event")
+                return True
         except Exception:
             pass
         
+        logger.debug("[WHEEL] Volume widget ignored wheel event")
         return False

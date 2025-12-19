@@ -1067,7 +1067,7 @@ class GLCompositorWidget(QOpenGLWidget):
             old_pixmap=old_pixmap, new_pixmap=new_pixmap, progress=0.0,
             seed=actual_seed, piece_count=float(max(4, piece_count)),
             crack_complexity=max(0.5, min(2.0, crack_complexity)),
-            mosaic_mode=mosaic_mode, weight_mode=max(0.0, min(2.0, float(weight_mode))),
+            mosaic_mode=mosaic_mode, weight_mode=max(0.0, min(4.0, float(weight_mode))),
         )
         self._pre_upload_textures(self._prepare_crumble_textures)
         self._profiler.start("crumble")

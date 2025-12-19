@@ -1,0 +1,77 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+cachedir: .pytest_cache
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+configfile: pytest.ini
+plugins: qt-4.5.0
+collecting ... collected 1 item
+
+tests/test_scrollwheel_volume.py::test_ctrl_mode_wheel_adjusts_spotify_volume_widget FAILED [100%]
+
+================================== FAILURES ===================================
+_____________ test_ctrl_mode_wheel_adjusts_spotify_volume_widget ______________
+
+qt_app = <PySide6.QtWidgets.QApplication(0x1e58e9c4ab0) at 0x000001E59007AB00>
+settings_manager = <core.settings.settings_manager.SettingsManager(0x1e58f731e70) at 0x000001E59007AF80>
+qtbot = <pytestqt.qtbot.QtBot object at 0x000001E58FF5D210>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001E58FF51A10>
+
+    @pytest.mark.qt
+    def test_ctrl_mode_wheel_adjusts_spotify_volume_widget(qt_app, settings_manager, qtbot, monkeypatch):
+        from rendering.display_widget import DisplayWidget
+        from rendering.multi_monitor_coordinator import MultiMonitorCoordinator
+        from widgets.spotify_volume_widget import SpotifyVolumeWidget
+    
+        monkeypatch.setattr(SpotifyVolumeWidget, "_schedule_set_volume", lambda self, level: None)
+    
+        # Keep the test independent of OpenGL availability.
+        try:
+            settings_manager.set("display.hw_accel", False)
+        except Exception:
+            pass
+        try:
+            settings_manager.set("display.render_backend_mode", "software")
+        except Exception:
+            pass
+    
+        MultiMonitorCoordinator.reset()
+        try:
+            w = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+            qtbot.addWidget(w)
+            w.resize(640, 360)
+    
+            vol = SpotifyVolumeWidget(w)
+            qtbot.addWidget(vol)
+            w.spotify_volume_widget = vol
+    
+            vol.setGeometry(10, 10, 32, 180)
+            vol._volume = 0.5
+            vol.show()
+    
+            w._coordinator.set_ctrl_held(True)
+    
+            pos = QPointF(15.0, 20.0)
+            global_pos = QPointF(15.0, 20.0)
+            event = QWheelEvent(
+                pos,
+                global_pos,
+                QPoint(0, 0),
+                QPoint(0, 120),
+                Qt.MouseButton.NoButton,
+                Qt.KeyboardModifier.NoModifier,
+                Qt.ScrollPhase.ScrollUpdate,
+                False,
+            )
+    
+            before = vol._volume
+            w.wheelEvent(event)
+            after = vol._volume
+    
+>           assert after > before
+E           assert 0.5 > 0.5
+
+tests\test_scrollwheel_volume.py:57: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_scrollwheel_volume.py::test_ctrl_mode_wheel_adjusts_spotify_volume_widget - assert 0.5 > 0.5
+============================== 1 failed in 1.27s ==============================

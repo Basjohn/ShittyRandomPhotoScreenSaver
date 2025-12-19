@@ -3,7 +3,7 @@ Shared pytest fixtures for screensaver tests.
 """
 import pytest
 import sys
-from pathlib import Path
+import uuid
 from PySide6.QtWidgets import QApplication
 
 
@@ -21,10 +21,10 @@ def qt_app():
 def settings_manager():
     """Create SettingsManager instance for testing."""
     from core.settings import SettingsManager
-    manager = SettingsManager(organization="Test", application="ScreensaverTest")
+    manager = SettingsManager(organization="Test", application=f"ScreensaverTest_{uuid.uuid4().hex}")
     yield manager
-    # Clear test settings
-    manager.clear()
+    # Intentionally do not clear QSettings on Windows. Rapid create/clear cycles
+    # against the same registry key can trigger "marked for deletion" errors.
 
 
 @pytest.fixture

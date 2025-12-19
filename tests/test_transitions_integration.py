@@ -7,6 +7,7 @@ and that they trigger automatically during normal rotation.
 import pytest
 import time
 from pathlib import Path
+import uuid
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QPixmap
 import sys
@@ -48,7 +49,7 @@ def settings_manager(tmp_path):
     # into SettingsManager (its constructor expects org/app, not a path).
     manager = SettingsManager(
         organization="Test",
-        application="TransitionsIntegrationTest",
+        application=f"TransitionsIntegrationTest_{uuid.uuid4().hex}",
     )
 
     # Configure for testing

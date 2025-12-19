@@ -6386,3 +6386,13 @@
 2025-12-18 11:27:33,432 - pytest_runner - INFO - pytest finished with exit code 0
 2025-12-18 11:40:03,613 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_transitions_tab.py', 'tests/test_settings.py', '-v', '--tb=short']
 2025-12-18 11:40:04,662 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-19 01:08:06,661 - pytest_runner - INFO - pytest.py starting with args: ['-q', 'tests/test_geometry_dpi_matrix.py', '-vv']
+2025-12-19 01:08:08,482 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-19 01:12:04,035 - pytest_runner - INFO - pytest.py starting with args: ['-q', 'tests/test_geometry_dpi_matrix.py', '-vv']
+2025-12-19 01:12:05,216 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-19 01:15:54,324 - pytest_runner - INFO - pytest.py starting with args: ['-vv', 'tests/test_geometry_dpi_matrix.py']
+2025-12-19 01:15:55,770 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-19 01:16:35,178 - pytest_runner - INFO - pytest.py starting with args: ['-vv', 'tests/test_geometry_dpi_matrix.py']
+2025-12-19 01:16:36,699 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-19 01:57:05,441 - pytest_runner - INFO - pytest.py starting with args: ['-q', 'tests/test_hotkeys_no_text.py', 'tests/test_scrollwheel_volume.py']
+2025-12-19 01:57:06,809 - pytest_runner - INFO - pytest finished with exit code 1

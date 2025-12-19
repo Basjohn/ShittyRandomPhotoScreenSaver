@@ -199,6 +199,18 @@ class MultiMonitorCoordinator(QObject):
                 logger.debug("[MULTI_MONITOR] Focus claimed by screen %s", 
                              widget.screen_index)
                 return True
+            try:
+                if not getattr(current, "isVisible", lambda: True)():
+                    self._focus_owner_ref = weakref.ref(widget)
+                    logger.debug(
+                        "[MULTI_MONITOR] Focus re-claimed by screen %s (previous owner not visible)",
+                        widget.screen_index,
+                    )
+                    return True
+            except Exception:
+                # If visibility probing fails, treat the owner as stale.
+                self._focus_owner_ref = weakref.ref(widget)
+                return True
             return current is widget
     
     def release_focus(self, widget: "DisplayWidget") -> None:
@@ -243,7 +255,21 @@ class MultiMonitorCoordinator(QObject):
         """
         with self._state_lock:
             if self._event_filter_installed:
-                return self._event_filter_owner_ref() is widget
+                current = self._event_filter_owner_ref() if self._event_filter_owner_ref else None
+                if current is widget:
+                    return True
+                try:
+                    if current is None or not getattr(current, "isVisible", lambda: True)():
+                        self._event_filter_owner_ref = weakref.ref(widget)
+                        logger.debug(
+                            "[MULTI_MONITOR] Event filter migrated to screen %s (previous owner not visible)",
+                            widget.screen_index,
+                        )
+                        return True
+                except Exception:
+                    self._event_filter_owner_ref = weakref.ref(widget)
+                    return True
+                return False
             self._event_filter_installed = True
             self._event_filter_owner_ref = weakref.ref(widget)
         

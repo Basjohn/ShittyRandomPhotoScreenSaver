@@ -261,17 +261,18 @@ class SpotifyVolumeWidget(QWidget):
         return True
 
     def handle_release(self) -> None:
+        """End drag interaction."""
         self._dragging = False
 
     def handle_wheel(self, local_pos: QPoint, delta_y: int) -> bool:
+        """Adjust volume from a wheel delta routed by DisplayWidget."""
         if not self.isVisible():
             return False
-        if not self.rect().contains(local_pos):
+
+        if delta_y == 0:
             return False
 
         step = 0.05
-        # Scroll up (delta_y > 0) should increase volume; scroll down should
-        # decrease it.
         direction = 1 if delta_y > 0 else -1
         new_level = self._volume + (step * direction)
         self._apply_volume_and_broadcast(new_level)

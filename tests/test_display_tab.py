@@ -3,6 +3,7 @@
 Tests the new Display tab created in Phase 1 for settings management.
 """
 import pytest
+import uuid
 from ui.tabs.display_tab import DisplayTab
 from core.settings import SettingsManager
 
@@ -167,7 +168,7 @@ class TestDisplayTab:
     def test_display_tab_default_values(self, qt_app):
         """Test that DisplayTab uses correct default values."""
         # Create fresh settings manager
-        fresh_settings = SettingsManager(organization="Test", application="DisplayTabTest")
+        fresh_settings = SettingsManager(organization="Test", application=f"DisplayTabTest_{uuid.uuid4().hex}")
         fresh_settings.reset_to_defaults()
         
         tab = DisplayTab(fresh_settings)
@@ -183,7 +184,7 @@ class TestDisplayTab:
         assert interval == 40
         
         tab.deleteLater()
-        fresh_settings.clear()
+
     
     def test_display_tab_invalid_mode_handling(self, qt_app, display_tab):
         """Test handling of invalid display mode."""

@@ -286,14 +286,6 @@ class TransitionsTab(QWidget):
         complexity_row.addWidget(self.crumble_complexity_spin)
         complexity_row.addStretch()
         crumble_layout.addLayout(complexity_row)
-        
-        mosaic_row = QHBoxLayout()
-        self.crumble_mosaic_check = QCheckBox("Glass Shatter Mode")
-        self.crumble_mosaic_check.setToolTip("Use glass shatter effect with 3D depth instead of rock crumble")
-        self.crumble_mosaic_check.stateChanged.connect(self._save_settings)
-        mosaic_row.addWidget(self.crumble_mosaic_check)
-        mosaic_row.addStretch()
-        crumble_layout.addLayout(mosaic_row)
 
         weight_row = QHBoxLayout()
         weight_row.addWidget(QLabel("Fall Weighting:"))
@@ -606,7 +598,6 @@ class TransitionsTab(QWidget):
             # Crumble widgets
             getattr(self, 'crumble_piece_count_spin', None),
             getattr(self, 'crumble_complexity_spin', None),
-            getattr(self, 'crumble_mosaic_check', None),
             getattr(self, 'crumble_weight_combo', None),
             # Particle widgets
             getattr(self, 'particle_mode_combo', None),
@@ -706,7 +697,6 @@ class TransitionsTab(QWidget):
             crumble = transitions_config.get('crumble', {})
             self.crumble_piece_count_spin.setValue(crumble.get('piece_count', canonical_crumble.get('piece_count', 14)))
             self.crumble_complexity_spin.setValue(crumble.get('crack_complexity', canonical_crumble.get('crack_complexity', 1.0)))
-            self.crumble_mosaic_check.setChecked(crumble.get('mosaic_mode', canonical_crumble.get('mosaic_mode', False)))
             weight = crumble.get('weighting', canonical_crumble.get('weighting', 'Random Choice'))
             try:
                 idx = self.crumble_weight_combo.findText(weight)
@@ -968,7 +958,6 @@ class TransitionsTab(QWidget):
             'crumble': {
                 'piece_count': self.crumble_piece_count_spin.value(),
                 'crack_complexity': self.crumble_complexity_spin.value(),
-                'mosaic_mode': self.crumble_mosaic_check.isChecked(),
                 'weighting': self.crumble_weight_combo.currentText(),
             },
             'particle': {
