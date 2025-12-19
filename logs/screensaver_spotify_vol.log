@@ -2771,3 +2771,79 @@
 2025-12-19 19:09:18 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.800 (session=Spotify.exe)
 2025-12-19 19:09:18 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
 2025-12-19 19:09:18 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.600 (session=Spotify.exe)
+2025-12-19 19:16:32 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:16:32 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.420 (session=Spotify.exe)
+2025-12-19 19:16:33 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:16:33 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.992 (session=Spotify.exe)
+2025-12-19 19:16:33 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:16:33 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.172 (session=Spotify.exe)
+2025-12-19 19:16:34 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:16:34 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.096 (session=Spotify.exe)
+2025-12-19 19:16:34 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:16:34 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.088 (session=Spotify.exe)
+2025-12-19 19:16:36 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:16:36 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.944 (session=Spotify.exe)
+2025-12-19 19:16:36 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:16:36 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.996 (session=Spotify.exe)
+2025-12-19 19:16:43 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:16:43 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.846 (session=Spotify.exe)
+2025-12-19 19:16:43 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:16:43 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.896 (session=Spotify.exe)
+2025-12-19 19:16:44 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:16:44 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.696 (session=Spotify.exe)
+2025-12-19 19:16:44 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:16:44 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.846 (session=Spotify.exe)
+2025-12-19 19:16:44 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:16:44 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.896 (session=Spotify.exe)
+2025-12-19 19:16:46 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:16:46 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.946 (session=Spotify.exe)
+2025-12-19 19:16:48 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:16:48 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.746 (session=Spotify.exe)
+2025-12-19 19:16:48 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:16:48 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.596 (session=Spotify.exe)
+2025-12-19 19:16:48 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:16:48 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.396 (session=Spotify.exe)
+2025-12-19 19:16:49 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:16:49 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.196 (session=Spotify.exe)
+2025-12-19 19:16:49 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:16:49 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.046 (session=Spotify.exe)
+2025-12-19 19:16:49 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:16:49 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.246 (session=Spotify.exe)
+2025-12-19 19:16:50 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:16:50 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.446 (session=Spotify.exe)
+2025-12-19 19:16:50 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:16:50 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.646 (session=Spotify.exe)
+2025-12-19 19:16:50 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:16:50 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.796 (session=Spotify.exe)
+2025-12-19 19:16:51 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:16:51 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.696 (session=Spotify.exe)
+2025-12-19 19:29:57 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:29:57 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.340 (session=Spotify.exe)
+2025-12-19 19:29:58 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:29:58 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.420 (session=Spotify.exe)
+2025-12-19 19:29:59 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:29:59 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.552 (session=Spotify.exe)
+2025-12-19 19:42:34 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:42:34 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.850 (session=Spotify.exe)
+2025-12-19 19:42:40 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:42:40 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.900 (session=Spotify.exe)
+2025-12-19 19:42:57 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:42:57 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.950 (session=Spotify.exe)
+2025-12-19 19:43:00 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:43:00 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.980 (session=Spotify.exe)
+2025-12-19 19:43:18 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:43:18 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 1.000 (session=Spotify.exe)
+2025-12-19 19:47:40 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:47:40 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.850 (session=Spotify.exe)
+2025-12-19 19:47:40 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 19:47:40 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.800 (session=Spotify.exe)
+2025-12-19 20:06:31 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 20:06:31 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.750 (session=Spotify.exe)
+2025-12-19 20:06:32 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 20:06:32 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.600 (session=Spotify.exe)
+2025-12-19 20:06:32 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 20:06:32 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.750 (session=Spotify.exe)
+2025-12-19 20:06:32 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 20:06:32 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.850 (session=Spotify.exe)
+2025-12-19 20:06:33 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Found Spotify session: Spotify.exe
+2025-12-19 20:06:33 - core.media.spotify_volume      - DEBUG    - [SPOTIFY_VOL] Set Spotify session volume to 0.950 (session=Spotify.exe)
