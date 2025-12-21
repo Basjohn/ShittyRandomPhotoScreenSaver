@@ -197,6 +197,9 @@ class DisplayWidget(QWidget):
         self._transitions_enabled: bool = True
         self._ctrl_held: bool = False
         self._ctrl_cursor_hint: Optional[CursorHaloWidget] = None
+        self._last_halo_activity_ts: float = 0.0
+        self._halo_last_local_pos: Optional[QPoint] = None
+        self._halo_activity_timeout: float = 2.0
         self._exiting: bool = False
         self._focus_loss_logged: bool = False
         self._transition_watchdog: Optional[QTimer] = None
@@ -2156,24 +2159,100 @@ class DisplayWidget(QWidget):
         hint = self._ctrl_cursor_hint
         if hint is None:
             return
-        
-        # Position and show - halo is now a top-level window so use show_at/move_to
-        # which handle coordinate mapping to global screen coordinates
-        if mode == "none":
-            # Just reposition
-            hint.move_to(pos.x(), pos.y())
+
+        # Normalize incoming position to QPoint for consistency
+        try:
+            if isinstance(pos, QPoint):
+                local_point = QPoint(pos)
+            else:
+                local_point = QPoint(int(pos.x()), int(pos.y()))
+        except Exception:
+            return
+        rect = self.rect()
+        context_menu_active = bool(getattr(self, "_context_menu_active", False))
+        halo_slack = float(max(0.0, getattr(self, "_halo_out_of_bounds_slack", 8.0)))
+
+        if mode != "fade_out":
+            if not rect.contains(local_point):
+                should_hide = (
+                    local_point.x() < rect.left() - halo_slack
+                    or local_point.y() < rect.top() - halo_slack
+                    or local_point.x() > rect.right() + halo_slack
+                    or local_point.y() > rect.bottom() + halo_slack
+                )
+                if should_hide:
+                    self._hide_ctrl_cursor_hint(immediate=True)
+                    return
+            if context_menu_active:
+                self._hide_ctrl_cursor_hint(immediate=True)
+                return
+            self._halo_last_local_pos = QPoint(local_point)
+            self._last_halo_activity_ts = time.monotonic()
+            self._reset_halo_inactivity_timer()
+            hint.move_to(local_point.x(), local_point.y())
             if not hint.isVisible():
                 hint.show()
-            return
-        
-        # Show at position (handles coordinate mapping)
-        hint.show_at(pos.x(), pos.y())
+        else:
+            self._cancel_halo_inactivity_timer()
 
-        # Delegate animation to CursorHaloWidget
         if mode == "fade_in":
+            if not hint.isVisible():
+                hint.show()
             hint.fade_in()
         elif mode == "fade_out":
             hint.fade_out()
+        elif mode != "fade_out":
+            # Already ensured move/show above
+            pass
+
+    def _hide_ctrl_cursor_hint(self, *, immediate: bool = False) -> None:
+        """Hide the cursor halo widget."""
+        hint = self._ctrl_cursor_hint
+        if hint is None:
+            return
+        self._cancel_halo_inactivity_timer()
+        try:
+            if immediate:
+                hint.cancel_animation()
+                hint.hide()
+            else:
+                hint.fade_out()
+        except Exception:
+            hint.hide()
+
+    def _reset_halo_inactivity_timer(self) -> None:
+        """Restart the inactivity timer that hides the halo after inactivity."""
+        timeout_sec = float(max(0.5, getattr(self, "_halo_activity_timeout", 2.0)))
+        timeout_ms = int(timeout_sec * 1000)
+
+        timer = getattr(self, "_halo_inactivity_timer", None)
+        if timer is None:
+            timer = QTimer(self)
+            timer.setSingleShot(True)
+            timer.timeout.connect(self._on_halo_inactivity_timeout)
+            self._halo_inactivity_timer = timer
+
+        try:
+            timer.start(timeout_ms)
+        except Exception:
+            pass
+
+    def _cancel_halo_inactivity_timer(self) -> None:
+        timer = getattr(self, "_halo_inactivity_timer", None)
+        if timer is None:
+            return
+        try:
+            timer.stop()
+        except Exception:
+            pass
+
+    def _on_halo_inactivity_timeout(self) -> None:
+        """Hide the halo if there has been no local movement recently."""
+        now = time.monotonic()
+        last = float(getattr(self, "_last_halo_activity_ts", 0.0) or 0.0)
+        timeout_sec = float(max(0.5, getattr(self, "_halo_activity_timeout", 2.0)))
+        if last <= 0.0 or (now - last) >= timeout_sec:
+            self._hide_ctrl_cursor_hint(immediate=True)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         try:
@@ -2498,6 +2577,7 @@ class DisplayWidget(QWidget):
                 self._context_menu_active = True
             except Exception:
                 pass
+            self._hide_ctrl_cursor_hint(immediate=True)
 
             try:
                 t0 = time.monotonic()

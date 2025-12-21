@@ -137,6 +137,10 @@ class CursorHaloWidget(QWidget):
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         """Forward mouse release to parent widget."""
         self._forward_mouse_event(event)
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        """Forward mouse move to parent widget."""
+        self._forward_mouse_event(event)
     
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         """Forward double click to parent widget."""

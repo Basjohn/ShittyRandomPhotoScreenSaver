@@ -5,6 +5,9 @@ while still allowing exit keys to function, and that the behaviour applies
 consistently across multiple DisplayWidget instances.
 """
 
+import time
+import types
+
 import pytest
 from PySide6.QtCore import Qt, QPoint, QEvent
 from PySide6.QtGui import QMouseEvent, QKeyEvent
@@ -12,6 +15,7 @@ from PySide6.QtTest import QTest
 
 from rendering.display_widget import DisplayWidget
 from rendering.display_modes import DisplayMode
+from rendering.multi_monitor_coordinator import get_coordinator
 
 
 @pytest.mark.qt
@@ -72,6 +76,7 @@ def test_ctrl_held_global_across_multiple_widgets(qt_app, settings_manager, qtbo
     for w in (w0, w1):
         qtbot.addWidget(w)
         w.resize(400, 300)
+        w.move(0, 0)
         w.show()
 
     exits0 = []
@@ -222,6 +227,18 @@ def test_ctrl_halo_owner_migrates_between_screens(qt_app, settings_manager, qtbo
     screen1 = object()
     w0._screen = screen0  # type: ignore[attr-defined]
     w1._screen = screen1  # type: ignore[attr-defined]
+    coord = get_coordinator()
+    coord.register_instance(w0, screen0)  # type: ignore[arg-type]
+    coord.register_instance(w1, screen1)  # type: ignore[arg-type]
+    coord.set_halo_owner(w0)
+
+    def _bind_map(widget, point):
+        def _map(self, pos):
+            return QPoint(point)
+        widget.mapFromGlobal = types.MethodType(_map, widget)  # type: ignore[attr-defined]
+
+    _bind_map(w0, QPoint(30, 30))
+    _bind_map(w1, QPoint(40, 40))
 
     # Start with Ctrl held and the halo owned by w0.
     from rendering import display_widget as display_mod
@@ -260,10 +277,12 @@ def test_ctrl_halo_owner_migrates_between_screens(qt_app, settings_manager, qtbo
     )
 
     w0.eventFilter(w0, event)
+    QTest.qWait(1400)
     qt_app.processEvents()
 
     # After migration, the global owner should be w1, w0's halo should be
     # hidden, and w1's halo should be visible.
+    assert coord.halo_owner is w1
     assert display_mod.DisplayWidget._halo_owner is w1  # type: ignore[attr-defined]
 
     hint0 = getattr(w0, "_ctrl_cursor_hint", None)
@@ -273,3 +292,112 @@ def test_ctrl_halo_owner_migrates_between_screens(qt_app, settings_manager, qtbo
         assert not hint0.isVisible()
     assert hint1 is not None
     assert hint1.isVisible()
+
+
+@pytest.mark.qt
+def test_ctrl_halo_shows_without_slack_attr(qt_app, settings_manager, qtbot):
+    """Halo should render even if halo slack attribute has never been set."""
+    settings_manager.set("input.hard_exit", True)
+    widget = DisplayWidget(
+        screen_index=0,
+        display_mode=DisplayMode.FILL,
+        settings_manager=settings_manager,
+    )
+    qtbot.addWidget(widget)
+    widget.resize(300, 200)
+    widget.show()
+
+    assert not hasattr(widget, "_halo_out_of_bounds_slack")
+
+    widget._show_ctrl_cursor_hint(QPoint(100, 120), mode="fade_in")  # type: ignore[attr-defined]
+    qt_app.processEvents()
+
+    hint = getattr(widget, "_ctrl_cursor_hint", None)
+    assert hint is not None
+    assert hint.isVisible()
+
+
+@pytest.mark.qt
+def test_ctrl_halo_suppressed_while_context_menu_active(qt_app, settings_manager, qtbot):
+    """Halo should hide and refuse to show when context menu is open."""
+    settings_manager.set("input.hard_exit", True)
+    widget = DisplayWidget(
+        screen_index=0,
+        display_mode=DisplayMode.FILL,
+        settings_manager=settings_manager,
+    )
+    qtbot.addWidget(widget)
+    widget.resize(400, 300)
+    widget.show()
+
+    QTest.keyPress(widget, Qt.Key.Key_Control)
+    qt_app.processEvents()
+    widget._show_ctrl_cursor_hint(QPoint(50, 50), mode="none")  # type: ignore[attr-defined]
+    qt_app.processEvents()
+
+    hint = getattr(widget, "_ctrl_cursor_hint", None)
+    assert hint is not None and hint.isVisible()
+
+    widget._context_menu_active = True  # type: ignore[attr-defined]
+    widget._show_ctrl_cursor_hint(QPoint(80, 80), mode="none")  # type: ignore[attr-defined]
+    QTest.qWait(50)
+    qt_app.processEvents()
+
+    assert not hint.isVisible()
+
+
+@pytest.mark.qt
+def test_ctrl_halo_hides_when_cursor_leaves_display(qt_app, settings_manager, qtbot):
+    """Halo should disappear when event filter supplies out-of-bounds coordinates."""
+    settings_manager.set("input.hard_exit", True)
+    widget = DisplayWidget(
+        screen_index=0,
+        display_mode=DisplayMode.FILL,
+        settings_manager=settings_manager,
+    )
+    qtbot.addWidget(widget)
+    widget.resize(400, 300)
+    widget.show()
+
+    QTest.keyPress(widget, Qt.Key.Key_Control)
+    qt_app.processEvents()
+    widget._show_ctrl_cursor_hint(QPoint(40, 40), mode="none")  # type: ignore[attr-defined]
+    qt_app.processEvents()
+
+    hint = getattr(widget, "_ctrl_cursor_hint", None)
+    assert hint is not None and hint.isVisible()
+
+    widget._show_ctrl_cursor_hint(QPoint(-10, -10), mode="none")  # type: ignore[attr-defined]
+    QTest.qWait(50)
+    qt_app.processEvents()
+
+    assert not hint.isVisible()
+
+
+@pytest.mark.qt
+def test_ctrl_halo_inactivity_timeout(qt_app, settings_manager, qtbot):
+    """Halo should auto-hide after inactivity timeout (~2s)."""
+    settings_manager.set("input.hard_exit", True)
+    widget = DisplayWidget(
+        screen_index=0,
+        display_mode=DisplayMode.FILL,
+        settings_manager=settings_manager,
+    )
+    qtbot.addWidget(widget)
+    widget.resize(400, 300)
+    widget.show()
+
+    QTest.keyPress(widget, Qt.Key.Key_Control)
+    qt_app.processEvents()
+    widget._show_ctrl_cursor_hint(QPoint(60, 60), mode="none")  # type: ignore[attr-defined]
+    qt_app.processEvents()
+
+    hint = getattr(widget, "_ctrl_cursor_hint", None)
+    assert hint is not None and hint.isVisible()
+
+    widget._last_halo_activity_ts = time.monotonic() - (widget._halo_activity_timeout + 0.5)  # type: ignore[attr-defined]
+    widget._on_halo_inactivity_timeout()  # type: ignore[attr-defined]
+    QTest.qWait(50)
+    qt_app.processEvents()
+
+    assert not hint.isVisible()
