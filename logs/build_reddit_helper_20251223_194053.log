@@ -1,0 +1,14 @@
+Nuitka-Options: Used command line options:
+Nuitka-Options:   --onefile --standalone --remove-output --windows-console-mode=disable --output-dir=F:\Programming\Apps\ShittyRandomPhotoScreenSaver\release_helpers --output-filename=SRPSS_RedditHelper --product-name="SRPSS Reddit Helper" --file-description="SRPSS Reddit URL Helper" --company-name=SRPSS --product-version=1.5.5 --file-version=1.5.5.0 --nofollow-import-to=PySide6 --nofollow-import-to=PySide2 --nofollow-import-to=PyQt5 --nofollow-import-to=winrt --noinclude-default-mode=error --windows-icon-from-ico=F:\Programming\Apps\ShittyRandomPhotoScreenSaver\SRPSS.ico F:\Programming\Apps\ShittyRandomPhotoScreenSaver\helpers\reddit_helper_worker.py
+Nuitka: Starting Python compilation with:
+Nuitka:   Version '2.7.12' on Python 3.11 (flavor 'CPython Official') commercial grade 'not installed'.
+  File "F:\Programming\Apps\ShittyRandomPhotoScreenSaver\helpers\reddit_helper_worker.py", line 153
+    folder_path = "\\" if not task_path else f"\\{task_path.strip('\\')}\\"
+                                                                           ^
+SyntaxError: f-string expression part cannot include a backslash
+
+Nuitka is very syntax compatible with standard Python. It is currently running
+with Python version '3.11', you might want to specify more clearly with the use
+of the precise Python interpreter binary and '-m nuitka', e.g. use this
+'python3.13 -m nuitka' option, if that's not the one the program expects.
+

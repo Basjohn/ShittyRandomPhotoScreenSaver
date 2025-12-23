@@ -1329,6 +1329,11 @@ class ScreensaverEngine(QObject):
                         logger.debug("Displays cleared and cleaned up")
                     except Exception as e:
                         logger.warning("DisplayManager.cleanup() failed during stop: %s", e, exc_info=True)
+                    else:
+                        try:
+                            self.display_manager.flush_deferred_reddit_urls(ensure_widgets_dismissed=True)
+                        except Exception as e:
+                            logger.warning("Deferred Reddit flush failed: %s", e, exc_info=True)
                 else:
                     # Just pausing (e.g., for settings) - hide windows
                     try:
@@ -1430,6 +1435,11 @@ class ScreensaverEngine(QObject):
                     logger.debug("Display manager cleaned up")
                 except Exception as e:
                     logger.warning("DisplayManager.cleanup() failed during engine cleanup: %s", e, exc_info=True)
+                else:
+                    try:
+                        self.display_manager.flush_deferred_reddit_urls(ensure_widgets_dismissed=True)
+                    except Exception as e:
+                        logger.warning("Deferred Reddit flush failed during engine cleanup: %s", e, exc_info=True)
             
             # Cleanup thread manager
             if self.thread_manager:

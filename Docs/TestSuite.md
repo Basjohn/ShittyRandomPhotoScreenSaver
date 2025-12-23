@@ -432,6 +432,24 @@ Get-Content test_output.log -Tail 50
   - Rotation interval (slightly longer gaps between images), and/or
   - Mix of very heavy transitions, then re-run this scenario and compare `transition_skip_count` and `[PERF] Engine summary` output.
 
+#### Scenario: Deferred Reddit Helper (Scheduler Path)
+**Goal**: Validate the ProgramData queue helper on Winlogon builds using the scheduler-first flow shared by both SCR and standard frozen builds.
+
+1. Build either `scripts\build_nuitka_scr.ps1` or the standard `scripts\build_nuitka.ps1` so the frozen helper payload is embedded.
+2. Run the diagnostic harness:  
+   `powershell -ExecutionPolicy Bypass -File .\scripts\diagnose_reddit_helper.ps1`
+   - Ensures the helper payload is installed under `%ProgramData%\SRPSS\helper`, runs the helper in `--register-only` mode to refresh the `SRPSS\RedditHelper` scheduled task, triggers `trigger_helper_run()`, and tails `%ProgramData%\SRPSS\logs\scr_helper.log` plus `reddit_helper.log`.
+3. Confirm the console output and `scr_helper.log` include `Helper triggered via scheduled task`. If privileges are missing, the log will explicitly list the failing privilege (e.g. `SeTcbPrivilege`).
+4. Confirm `reddit_helper.log` shows `Scheduled task ensured (SRPSS\RedditHelper)` and (if queue entries exist) `Helper started` / `Launch succeeded ...`.
+5. Queue a dummy URL for validation:  
+   `python -c "from core.windows import reddit_helper_bridge as b; b.enqueue_url('https://example.com/helper-smoke')"`
+6. Re-run the diagnostic script; the helper log should show the queued URL being launched and the JSON entry removed from `%ProgramData%\SRPSS\url_queue`.
+
+**Pass Criteria**:
+- Scheduled task registration succeeds (`Scheduled task ensured`) and `trigger_helper_run` reports `True`.
+- `%ProgramData%\SRPSS\logs\scr_helper.log` contains `Helper triggered via scheduled task` for the most recent run.
+- Queued URLs are drained (no lingering `.json` files) after the helper runs, and the browser opens the queued link on the interactive desktop.
+
 ---
 
 ## PowerShell Test Patterns
@@ -759,7 +777,39 @@ pytest tests/ --tb=short || exit 1
 
 ---
 
-### 27. `tests/test_dimming_and_interaction_fixes.py` - Dimming & Interaction Regression Tests
+### 27. `tests/test_reddit_exit_logic.py` - Reddit Exit Logic Regression Tests
+
+**Purpose**: Verify the A/B/C Reddit exit policy (primary covered vs MC mode), ensure InputHandler exposes deferred URLs, and confirm DisplayManager cleanup opens stored links.
+
+**Test Classes:**
+
+- **`TestRedditExitLogic`** (3 tests)
+  - `test_primary_covered_detection_same_screen` – Validates case A detection when the active display is the primary.
+  - `test_primary_covered_detection_different_screen` – Validates coordinator lookup path when another display covers the primary.
+  - `test_mc_mode_detection` – Validates MC mode detection when no widget covers the primary screen.
+
+- **`TestRedditClickRouting`** (2 tests)
+  - `test_reddit_click_returns_handled_tuple` – Ensures InputHandler routes Reddit clicks and flags them as handled in Ctrl/hard-exit modes.
+  - `test_reddit_click_returns_deferred_url` – Ensures the tuple includes the resolved URL for deferred handling paths.
+
+- **`TestCacheInvalidationMitigation`** (1 test)
+  - `test_primary_covered_path_exits_before_foreground` – Confirms ordering (exit signal precedes delayed foregrounding) to avoid the Phase E corruption.
+
+- **`TestDisplayManagerDeferredUrls`** (1 test)
+  - `test_cleanup_opens_pending_reddit_urls` – Verifies DisplayManager collects `_pending_reddit_url` entries and opens them after windows close.
+- **`TestRedditHelperLauncher`** (2 tests)
+  - `test_flush_prefers_helper_when_available` – Forces the Windows helper shim to claim availability and confirms `flush_deferred_reddit_urls` routes URLs through the helper without touching `QDesktopServices`.
+  - `test_flush_falls_back_when_helper_rejects` – Simulates the helper declining launch so the code path falls back to `QDesktopServices`, ensuring frost-proof behavior even if the helper cannot spawn.
+
+**Status**: ✅ All passing
+**Critical Tests**:
+- `test_reddit_click_returns_deferred_url` – Locks in the deferred URL signal path feeding DisplayWidget.
+- `test_cleanup_opens_pending_reddit_urls` – Ensures Firefox/DDE-safe behavior when running as a native screensaver.
+- `test_flush_prefers_helper_when_available` – Confirms native Winlogon builds reach the helper launcher so URLs open on the user desktop instead of failing inside Winlogon.
+
+---
+
+### 28. `tests/test_dimming_and_interaction_fixes.py` - Dimming & Interaction Regression Tests
 
 **Purpose**: Regression tests for dimming overlay, halo interaction, deferred Reddit URL, media widget click detection, settings dot notation, and Z-order management fixes.
 

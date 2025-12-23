@@ -7,6 +7,7 @@ Includes colored console output for debug mode.
 import logging
 import os
 import sys
+import tempfile
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -19,6 +20,8 @@ _PERF_METRICS_ENABLED: bool = False
 # project root by default and updated by setup_logging() for frozen builds so
 # helpers like get_log_dir() always point at the effective runtime location.
 _BASE_DIR: Path = Path(__file__).parent.parent.parent
+_FORCED_LOG_DIR: Path | None = None
+_ACTIVE_LOG_DIR: Path | None = None
 
 _env_perf = os.getenv("SRPSS_PERF_METRICS")
 if _env_perf is not None:
@@ -29,6 +32,16 @@ if _env_perf is not None:
             _PERF_METRICS_ENABLED = True
     except Exception:
         pass  # Keep default (False) on parse failure
+
+_env_log_dir = os.getenv("SRPSS_FORCE_LOG_DIR")
+if _env_log_dir:
+    try:
+        candidate = Path(_env_log_dir).expanduser()
+        if not candidate.is_absolute():
+            candidate = candidate.resolve()
+        _FORCED_LOG_DIR = candidate
+    except Exception:
+        _FORCED_LOG_DIR = None
 
 
 class ColoredFormatter(logging.Formatter):
@@ -346,13 +359,64 @@ class SpotifyVolLogFilter(logging.Filter):
 
 def get_log_dir() -> Path:
     """Return the directory used for log files.
-
+    
     setup_logging() should be called once at startup so that _BASE_DIR is
     updated for frozen builds and the returned path matches the location used
     by the active RotatingFileHandler.
     """
-
+    if _ACTIVE_LOG_DIR is not None:
+        return _ACTIVE_LOG_DIR
+    if _FORCED_LOG_DIR is not None:
+        return _FORCED_LOG_DIR
     return _BASE_DIR / "logs"
+
+
+def _candidate_programdata_dir() -> Path | None:
+    program_data = os.getenv("PROGRAMDATA")
+    if not program_data:
+        return None
+    return Path(program_data) / "SRPSS" / "logs"
+
+
+def _select_log_dir(
+    forced_dir: Path | None,
+    base_dir: Path,
+) -> Path:
+    """
+    Determine a writable log directory, falling back to ProgramData or temp.
+    """
+    global _ACTIVE_LOG_DIR
+
+    def _try_path(path: Path | None) -> Path | None:
+        if path is None:
+            return None
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+            probe = path / ".srpss_log_probe"
+            with probe.open("w", encoding="utf-8") as handle:
+                handle.write("ok")
+            probe.unlink(missing_ok=True)
+            return path
+        except Exception:
+            return None
+
+    candidates: list[Path | None] = []
+    candidates.append(forced_dir)
+    candidates.append(base_dir / "logs")
+    candidates.append(_candidate_programdata_dir())
+    candidates.append(Path(tempfile.gettempdir()) / "SRPSS" / "logs")
+
+    for candidate in candidates:
+        chosen = _try_path(candidate)
+        if chosen is not None:
+            _ACTIVE_LOG_DIR = chosen
+            return chosen
+
+    # As a last resort, use current working directory logs/ without validation.
+    fallback = Path.cwd() / "logs"
+    fallback.mkdir(parents=True, exist_ok=True)
+    _ACTIVE_LOG_DIR = fallback
+    return fallback
 
 
 def setup_logging(debug: bool = False, verbose: bool = False) -> None:
@@ -365,14 +429,15 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
             selected modules (media widget polling, raw settings dumps,
             etc.). Verbose mode also implies debug-level logging.
     """
-    global _VERBOSE, _PERF_METRICS_ENABLED
+    global _VERBOSE, _PERF_METRICS_ENABLED, _BASE_DIR, _FORCED_LOG_DIR, _ACTIVE_LOG_DIR
 
     debug_enabled = debug or verbose
     # Create logs directory. In frozen builds (Nuitka/PyInstaller) we prefer
     # a logs/ directory next to the executable so users can easily find it.
-    global _VERBOSE, _PERF_METRICS_ENABLED, _BASE_DIR
 
     base_dir = _BASE_DIR
+    forced_dir = _FORCED_LOG_DIR
+    _ACTIVE_LOG_DIR = None
     try:
         import sys as _sys
         import builtins as _builtins
@@ -381,8 +446,8 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
         # Nuitka sets a module-level __compiled__ flag rather than sys.frozen.
         nuitka_compiled = bool(getattr(_builtins, "__compiled__", False))
 
+        exe_path = Path(getattr(_sys, "executable", "") or "")
         if frozen or nuitka_compiled:
-            exe_path = Path(getattr(_sys, "executable", "") or "")
             if exe_path.exists():
                 base_dir = exe_path.parent
                 try:
@@ -397,15 +462,31 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
                 except Exception:
                     # On any failure, keep existing _PERF_METRICS_ENABLED value.
                     pass
+                try:
+                    if forced_dir is None:
+                        log_cfg_name = exe_path.stem + ".logdir.cfg"
+                        log_cfg_path = exe_path.parent / log_cfg_name
+                        if log_cfg_path.exists():
+                            raw_dir = log_cfg_path.read_text(encoding="utf-8").strip()
+                            if raw_dir:
+                                candidate = Path(raw_dir).expanduser()
+                                if not candidate.is_absolute():
+                                    candidate = candidate.resolve()
+                                forced_dir = candidate
+                except Exception:
+                    forced_dir = forced_dir
     except Exception:
         pass
 
     # Persist the resolved base_dir so helpers like get_log_dir() can return
     # a consistent location for logs and profiling artefacts.
     _BASE_DIR = base_dir
+    if forced_dir is not None:
+        _FORCED_LOG_DIR = forced_dir
+    else:
+        _FORCED_LOG_DIR = None
 
-    log_dir = get_log_dir()
-    log_dir.mkdir(exist_ok=True)
+    log_dir = _select_log_dir(forced_dir, base_dir)
     
     log_file = log_dir / "screensaver.log"
     
@@ -422,19 +503,20 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
     
     # File handler with rotation (cap keeps individual log files bounded
     # while a separate PERF log captures detailed metrics).
-    file_handler = RotatingFileHandler(
+    main_handler = RotatingFileHandler(
         log_file,
         maxBytes=5 * 1024 * 1024,
         backupCount=5,
         encoding='utf-8'
     )
-    file_handler.setFormatter(formatter)
-    file_handler.setLevel(main_level)
+    main_handler.setFormatter(formatter)
+    main_handler.setLevel(main_level)
+    
     # PERF-tagged records are redirected to the dedicated PERF log, so we
     # drop them from the main screensaver.log to reduce noise and keep
     # per-run logs smaller and easier to inspect.
-    file_handler.addFilter(NonPerfFilter())
-    file_handler.addFilter(NonSpotifyFilter())
+    main_handler.addFilter(NonPerfFilter())
+    main_handler.addFilter(NonSpotifyFilter())
     
     console_handler = SuppressingStreamHandler(sys.stdout)
     if debug_enabled and sys.stdout.isatty():
@@ -456,7 +538,7 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
     # Configure root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(root_level)
-    root_logger.addHandler(file_handler)
+    root_logger.addHandler(main_handler)
     
     if debug_enabled:
         root_logger.addHandler(console_handler)

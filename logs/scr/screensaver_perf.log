@@ -1,0 +1,1 @@
+2025-12-23 17:09:36 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=608.1ms, frames=38, avg_fps=62.5, dt_min=6.14ms, dt_max=28.11ms, active_count=0, fps_target=60

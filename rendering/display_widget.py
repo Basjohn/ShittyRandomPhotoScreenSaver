@@ -214,6 +214,7 @@ class DisplayWidget(QWidget):
         self._overlay_fade_started: bool = False
         self._overlay_fade_timeout: Optional[QTimer] = None
         self._reddit_exit_on_click: bool = True
+        self._pending_reddit_url: Optional[str] = None  # URL to open once saver exits
         self._pending_activation_refresh: bool = False
         self._last_deactivate_ts: float = 0.0
         
@@ -2335,9 +2336,10 @@ class DisplayWidget(QWidget):
             handled = False
             reddit_handled = False
             
+            reddit_url = None
             if self._input_handler is not None:
                 try:
-                    handled, reddit_handled = self._input_handler.route_widget_click(
+                    handled, reddit_handled, reddit_url = self._input_handler.route_widget_click(
                         event,
                         getattr(self, "spotify_volume_widget", None),
                         getattr(self, "media_widget", None),
@@ -2395,6 +2397,8 @@ class DisplayWidget(QWidget):
                         logger.info("[REDDIT] Primary covered; requesting immediate exit")
                         if not self._exiting:
                             self._exiting = True
+                            if reddit_url:
+                                self._pending_reddit_url = reddit_url
                             # Bring browser to foreground after windows start closing
                             def _bring_browser_foreground():
                                 try:
@@ -2409,15 +2413,29 @@ class DisplayWidget(QWidget):
                         # Delay browser foreground to give browser time to open the URL
                         # and create a window with "reddit" in the title
                         logger.info("[REDDIT] MC mode (primary not covered); staying open, will bring browser to foreground after delay")
-                        def _bring_browser_foreground_mc():
+                        url_to_open = reddit_url
+                        if url_to_open:
                             try:
-                                from widgets.reddit_widget import _try_bring_reddit_window_to_front
-                                _try_bring_reddit_window_to_front()
-                                logger.debug("[REDDIT] MC mode: browser foreground attempted")
+                                from PySide6.QtCore import QUrl
+                                from PySide6.QtGui import QDesktopServices
+                                if QDesktopServices.openUrl(QUrl(url_to_open)):
+                                    logger.info("[REDDIT] MC mode: opened %s immediately", url_to_open)
+                                else:
+                                    logger.warning("[REDDIT] MC mode: QDesktopServices rejected %s", url_to_open)
                             except Exception:
-                                pass
-                        # Use same 300ms delay as exit path to give browser time to open
-                        QTimer.singleShot(300, _bring_browser_foreground_mc)
+                                logger.debug("[REDDIT] MC mode immediate open failed; falling back", exc_info=True)
+                                url_to_open = None
+                        if not url_to_open:
+                            logger.info("[REDDIT] MC mode: no URL opened immediately; skipping foreground attempt")
+                        else:
+                            def _bring_browser_foreground_mc():
+                                try:
+                                    from widgets.reddit_widget import _try_bring_reddit_window_to_front
+                                    _try_bring_reddit_window_to_front()
+                                    logger.debug("[REDDIT] MC mode: browser foreground attempted")
+                                except Exception:
+                                    pass
+                            QTimer.singleShot(300, _bring_browser_foreground_mc)
                     
                 event.accept()
                 return
@@ -2428,7 +2446,7 @@ class DisplayWidget(QWidget):
 
         logger.info(f"Mouse clicked at ({event.pos().x()}, {event.pos().y()}), requesting exit")
         self._exiting = True
-        # NOTE: Deferred Reddit URL is opened in _on_destroyed AFTER windows are hidden
+        # Deferred Reddit URLs are now flushed centrally by DisplayManager after teardown.
         self.exit_requested.emit()
         event.accept()
     
@@ -2468,7 +2486,6 @@ class DisplayWidget(QWidget):
         if distance > self._mouse_move_threshold:
             logger.info(f"Mouse moved {distance:.1f} pixels, requesting exit")
             self._exiting = True
-            # NOTE: Deferred Reddit URL is opened in _on_destroyed AFTER windows are hidden
             self.exit_requested.emit()
         
         event.accept()
@@ -2723,7 +2740,6 @@ class DisplayWidget(QWidget):
         """Handle exit request from context menu."""
         logger.info("Context menu: exit requested")
         self._exiting = True
-        # NOTE: Deferred Reddit URL is opened in _on_destroyed AFTER windows are hidden
         self.exit_requested.emit()
     
     def _on_input_exit_requested(self) -> None:

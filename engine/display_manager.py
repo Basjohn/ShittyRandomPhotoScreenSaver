@@ -5,8 +5,8 @@ Manages DisplayWidget instances across multiple screens.
 """
 import time
 from typing import List, Dict, Optional, Set
-from PySide6.QtCore import QObject, Signal
-from PySide6.QtGui import QGuiApplication, QScreen, QPixmap
+from PySide6.QtCore import QObject, Signal, QUrl
+from PySide6.QtGui import QGuiApplication, QScreen, QPixmap, QDesktopServices
 
 from core.logging.logger import get_logger
 from core.resources.manager import ResourceManager
@@ -16,6 +16,14 @@ from transitions.overlay_manager import hide_all_overlays
 from utils.lockfree.spsc_queue import SPSCQueue
 
 logger = get_logger(__name__)
+REDDIT_FLUSH_LOGGING = True  # Set to False to silence deferred Reddit flush diagnostics once stable.
+
+try:  # Windows-only helper to escape Winlogon desktop
+    from core.windows import url_launcher as windows_url_launcher
+    from core.windows import reddit_helper_bridge
+except Exception:  # pragma: no cover - non-Windows or optional import failure
+    windows_url_launcher = None
+    reddit_helper_bridge = None
 
 
 class DisplayManager(QObject):
@@ -66,6 +74,7 @@ class DisplayManager(QObject):
         self._thread_manager = thread_manager
         self.displays: List[DisplayWidget] = []
         self.current_images: Dict[int, str] = {}  # screen_index -> image_path
+        self._deferred_reddit_urls: list[str] = []
         
         # Phase 3: Multi-display synchronization (lock-free)
         self._transition_ready_queue: Optional[SPSCQueue] = None
@@ -588,6 +597,8 @@ class DisplayManager(QObject):
         except Exception:
             pass
 
+        pending_reddit_urls: list[str] = []
+
         for idx, display in enumerate(self.displays):
             try:
                 screen_index = getattr(display, "screen_index", idx)
@@ -601,6 +612,13 @@ class DisplayManager(QObject):
             )
 
             try:
+                url = getattr(display, "_pending_reddit_url", None)
+                if isinstance(url, str) and url:
+                    pending_reddit_urls.append(url)
+                    try:
+                        setattr(display, "_pending_reddit_url", None)
+                    except Exception:
+                        pass
                 # Ensure per-display cleanup (pan & scan, transitions, overlays)
                 try:
                     display.clear()
@@ -625,5 +643,83 @@ class DisplayManager(QObject):
 
         self.displays.clear()
         self.current_images.clear()
-        
+
+        self._deferred_reddit_urls = pending_reddit_urls
+
         logger.info("Display manager cleanup complete")
+
+    def take_deferred_reddit_urls(self) -> list[str]:
+        """Retrieve and clear deferred Reddit URLs collected during cleanup."""
+        urls, self._deferred_reddit_urls = self._deferred_reddit_urls, []
+        return urls
+
+    def flush_deferred_reddit_urls(self, *, ensure_widgets_dismissed: bool = False) -> None:
+        """Open any deferred Reddit URLs collected during the last cleanup."""
+        urls = self.take_deferred_reddit_urls()
+        if not urls:
+            return
+
+        if ensure_widgets_dismissed:
+            try:
+                app = QGuiApplication.instance()
+                if app is not None:
+                    app.processEvents()
+            except Exception:
+                logger.debug("[REDDIT] processEvents failed before flush", exc_info=True)
+
+        if REDDIT_FLUSH_LOGGING:
+            logger.info("[REDDIT] Deferred URL flush started (count=%d)", len(urls))
+        else:
+            logger.info("[REDDIT] Opening %d deferred Reddit URLs", len(urls))
+
+        helper_module = windows_url_launcher
+        helper_bridge = reddit_helper_bridge
+        use_helper = False
+        use_bridge = False
+        if helper_module is not None:
+            try:
+                use_helper = helper_module.should_use_session_launcher()
+            except Exception:
+                logger.debug("[REDDIT] Helper capability check failed", exc_info=True)
+                use_helper = False
+        if helper_bridge is not None and helper_bridge.is_bridge_available():
+            use_bridge = True
+
+        for url in urls:
+            launched = False
+
+            if use_bridge:
+                try:
+                    launched = helper_bridge.enqueue_url(url)
+                    if launched:
+                        logger.info("[REDDIT] Deferred URL queued via ProgramData bridge: %s", url)
+                        continue
+                except Exception:
+                    logger.warning("[REDDIT] Bridge enqueue failed; falling back", exc_info=True)
+                    launched = False
+
+            if use_helper:
+                try:
+                    launched = bool(helper_module.launch_url_via_user_desktop(url))
+                    if launched:
+                        logger.info("[REDDIT] Helper launched deferred URL: %s", url)
+                    else:
+                        logger.debug("[REDDIT] Helper declined to launch URL; falling back")
+                except Exception:
+                    logger.warning("[REDDIT] Helper launch failed; falling back", exc_info=True)
+                    launched = False
+
+            if not launched:
+                try:
+                    launched = QDesktopServices.openUrl(QUrl(url))
+                except Exception as exc:
+                    logger.warning("[REDDIT] Failed to open deferred URL: %s", exc, exc_info=True)
+                    launched = False
+
+                if launched:
+                    logger.info("[REDDIT] Deferred URL opened: %s", url)
+                else:
+                    logger.warning(
+                        "[REDDIT] Failed to open deferred URL (QDesktopServices rejected): %s",
+                        url,
+                    )

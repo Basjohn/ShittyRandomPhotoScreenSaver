@@ -796,6 +796,20 @@ class RedditWidget(BaseOverlayWidget):
             except Exception:
                 pass
 
+    def resolve_click_target(self, local_pos: QPoint) -> Optional[str]:
+        """Return the Reddit URL associated with the given click, if any."""
+        header_rect = self._header_hit_rect
+        if header_rect is not None and header_rect.contains(local_pos):
+            slug = self._subreddit
+            if slug:
+                return f"https://www.reddit.com/r/{slug}"
+            return "https://www.reddit.com"
+
+        for rect, url, _title in self._row_hit_rects:
+            if rect.contains(local_pos):
+                return url
+        return None
+
     def handle_click(self, local_pos: QPoint) -> bool:
         """Handle a click in widget-local coordinates.
 
@@ -805,32 +819,17 @@ class RedditWidget(BaseOverlayWidget):
         Returns:
             True if a link was clicked and opened, False otherwise.
         """
-        header_rect = self._header_hit_rect
-        if header_rect is not None and header_rect.contains(local_pos):
-            slug = self._subreddit
-            if slug:
-                url = f"https://www.reddit.com/r/{slug}"
-            else:
-                url = "https://www.reddit.com"
-            
-            try:
-                QDesktopServices.openUrl(QUrl(url))
-                logger.info("[REDDIT] Opened subreddit %s", url)
-                return True
-            except Exception:
-                logger.debug("[REDDIT] Failed to open subreddit URL %s", url, exc_info=True)
-                return False
+        url = self.resolve_click_target(local_pos)
+        if not url:
+            return False
 
-        for rect, url, _title in self._row_hit_rects:
-            if rect.contains(local_pos):
-                try:
-                    QDesktopServices.openUrl(QUrl(url))
-                    logger.info("[REDDIT] Opened %s", url)
-                    return True
-                except Exception:
-                    logger.debug("[REDDIT] Failed to open URL %s", url, exc_info=True)
-                    return False
-        return False
+        try:
+            QDesktopServices.openUrl(QUrl(url))
+            logger.info("[REDDIT] Opened %s", url)
+            return True
+        except Exception:
+            logger.debug("[REDDIT] Failed to open URL %s", url, exc_info=True)
+            return False
 
     # ------------------------------------------------------------------
     # Helpers

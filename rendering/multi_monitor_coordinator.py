@@ -88,8 +88,8 @@ class MultiMonitorCoordinator(QObject):
         self._event_filter_installed: bool = False
         self._event_filter_owner_ref: Optional[weakref.ref] = None
         
-        # Display instance registry - weak references keyed by screen
-        self._instances: Dict[int, weakref.ref] = {}  # screen hash -> weak ref
+        # Display instance registry - weak references keyed by screen signature
+        self._instances: Dict[str, weakref.ref] = {}  # screen signature -> weak ref
         
         # Settings dialog active flag - prevents halo from showing
         self._settings_dialog_active: bool = False
@@ -290,21 +290,55 @@ class MultiMonitorCoordinator(QObject):
     # Instance Registry
     # =========================================================================
     
+    @staticmethod
+    def _screen_signature(screen: QScreen) -> str:
+        """Build a stable signature for a screen across QScreen instances."""
+        if screen is None:
+            return "screen:none"
+
+        parts: List[str] = []
+        for label, getter in (
+            ("serial", getattr(screen, "serialNumber", None)),
+            ("manufacturer", getattr(screen, "manufacturer", None)),
+            ("model", getattr(screen, "model", None)),
+            ("name", getattr(screen, "name", None)),
+        ):
+            try:
+                if callable(getter):
+                    value = getter()
+                    if value:
+                        parts.append(f"{label}:{value}")
+            except Exception:
+                continue
+
+        # Geometry (pos + size) is a decent fallback when metadata is missing.
+        try:
+            geom = screen.geometry()
+            parts.append(
+                f"geom:{geom.x()}_{geom.y()}_{geom.width()}x{geom.height()}"
+            )
+        except Exception:
+            pass
+
+        if not parts:
+            parts.append(f"id:{id(screen)}")
+        return "|".join(parts)
+
     def register_instance(self, widget: "DisplayWidget", screen: QScreen) -> None:
         """Register a DisplayWidget instance for a screen."""
-        screen_hash = id(screen)
+        screen_key = self._screen_signature(screen)
         with self._state_lock:
-            self._instances[screen_hash] = weakref.ref(widget)
-        logger.debug("[MULTI_MONITOR] Registered screen %s (hash=%s)",
-                     widget.screen_index, screen_hash)
+            self._instances[screen_key] = weakref.ref(widget)
+        logger.debug("[MULTI_MONITOR] Registered screen %s (key=%s)",
+                     widget.screen_index, screen_key)
     
     def unregister_instance(self, widget: "DisplayWidget", screen: QScreen) -> None:
         """Unregister a DisplayWidget instance."""
-        screen_hash = id(screen)
+        screen_key = self._screen_signature(screen)
         with self._state_lock:
-            current_ref = self._instances.get(screen_hash)
+            current_ref = self._instances.get(screen_key)
             if current_ref is not None and current_ref() is widget:
-                del self._instances[screen_hash]
+                del self._instances[screen_key]
                 logger.debug("[MULTI_MONITOR] Unregistered screen %s",
                              widget.screen_index)
     
@@ -326,9 +360,9 @@ class MultiMonitorCoordinator(QObject):
     
     def get_instance_for_screen(self, screen: QScreen) -> Optional["DisplayWidget"]:
         """Get the DisplayWidget for a specific screen."""
-        screen_hash = id(screen)
+        screen_key = self._screen_signature(screen)
         with self._state_lock:
-            ref = self._instances.get(screen_hash)
+            ref = self._instances.get(screen_key)
             if ref is not None:
                 return ref()
         return None

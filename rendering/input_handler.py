@@ -623,10 +623,11 @@ class InputHandler(QObject):
         Route clicks to interactive widgets in interaction mode.
         
         Returns:
-            Tuple of (handled, reddit_handled)
+            Tuple of (handled, reddit_handled, reddit_url)
         """
         handled = False
         reddit_handled = False
+        reddit_url = None
         pos = event.pos()
         button = event.button()
         
@@ -667,19 +668,34 @@ class InputHandler(QObject):
         
         # Reddit widgets
         for rw in [reddit_widget, reddit2_widget]:
-            if not handled and rw is not None:
-                try:
-                    if rw.isVisible() and rw.geometry().contains(pos):
-                        geom = rw.geometry()
-                        local_pos = QPoint(pos.x() - geom.x(), pos.y() - geom.y())
-                        if hasattr(rw, 'handle_click'):
-                            result = rw.handle_click(local_pos)
-                            logger.debug("[INPUT] Reddit handle_click returned: %s", result)
-                            if result:
-                                handled = True
-                                reddit_handled = True
-                except Exception:
-                    logger.debug("[INPUT] Reddit click routing failed", exc_info=True)
+            if handled or rw is None:
+                continue
+            try:
+                if rw.isVisible() and rw.geometry().contains(pos):
+                    geom = rw.geometry()
+                    local_pos = QPoint(pos.x() - geom.x(), pos.y() - geom.y())
+                    url = None
+                    if hasattr(rw, "resolve_click_target"):
+                        try:
+                            url = rw.resolve_click_target(local_pos)
+                        except Exception:
+                            logger.debug("[INPUT] resolve_click_target failed", exc_info=True)
+                    if not url and hasattr(rw, "handle_click"):
+                        result = rw.handle_click(local_pos)
+                        logger.debug("[INPUT] Reddit fallback handle_click returned: %s", result)
+                        if isinstance(result, str) and result:
+                            url = result
+                        elif result:
+                            # Legacy behaviour: handle_click already opened the URL
+                            handled = True
+                            reddit_handled = True
+                            break
+                    if url:
+                        handled = True
+                        reddit_handled = True
+                        reddit_url = url
+            except Exception:
+                logger.debug("[INPUT] Reddit click routing failed", exc_info=True)
         
         # Gmail widget
         if not handled and gmail_widget is not None:
@@ -696,8 +712,13 @@ class InputHandler(QObject):
             except Exception:
                 logger.debug("[INPUT] Gmail click routing failed", exc_info=True)
         
-        logger.debug("[INPUT] route_widget_click returning: handled=%s reddit_handled=%s", handled, reddit_handled)
-        return handled, reddit_handled
+        logger.debug(
+            "[INPUT] route_widget_click returning: handled=%s reddit_handled=%s reddit_url=%s",
+            handled,
+            reddit_handled,
+            reddit_url,
+        )
+        return handled, reddit_handled, reddit_url
 
     def _route_media_left_click(self, mw, pos: QPoint) -> bool:
         """Route left click to media widget transport controls."""
