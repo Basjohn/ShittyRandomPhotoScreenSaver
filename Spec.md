@@ -194,7 +194,7 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
 - `transitions.durations`: mapping of transition type name → per-type duration in milliseconds (e.g. `{"Crossfade": 1300, "Slide": 2000, "Ripple": 7000, ...}`) used by the Transitions tab and `DisplayWidget` to make durations independent per transition. Legacy settings keys using the label `"Rain Drops"` are migrated to `"Ripple"` at load time.
 - `transitions.diffuse.block_size` (int, clamped to a 4–256px range) and `transitions.diffuse.shape` (`Rectangle`|`Membrane`). The same block-size was historically reused by Shuffle to size its GL grid; Shuffle is now retired but the configuration key is kept for back-compat.
 - `transitions.pool`: mapping of transition type name → bool controlling whether a type participates in engine random rotation and C-key cycling (explicit selection is always allowed regardless of this flag).
-- `timing.interval`: int seconds
+- `timing.interval`: int seconds (default 45). The Display tab now always loads this canonical 45 s value when the key is missing so UI defaults match `SettingsManager`. Regression test `tests/test_display_tab.py::TestDisplayTab::test_display_tab_default_values` guards this.
 - `display.same_image_all_monitors`: bool
 - Cache:
   - `cache.prefetch_ahead` (default 5)

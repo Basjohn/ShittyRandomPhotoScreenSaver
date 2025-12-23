@@ -292,7 +292,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - `StyledPopup`: Dark glass themed popup notifications (info, warning, error, success)
   - `StyledColorPicker`: Centralized dark-themed color picker dialog wrapping QColorDialog
 - ui/tabs/sources_tab.py - Image source configuration (folders, RSS feeds)
-- ui/tabs/display_tab.py - Display mode and hardware acceleration settings
+- ui/tabs/display_tab.py - Display mode and hardware acceleration settings. Loads canonical timing defaults (45 s interval) from SettingsManager so tests cover `tests/test_display_tab.py::TestDisplayTab::test_display_tab_default_values`.
 - ui/tabs/transitions_tab.py - Transition type, duration, and direction settings
 - ui/tabs/widgets_tab.py - Overlay widget configuration (clocks, weather, media, Reddit). Includes stacking prediction labels next to position combos.
 - ui/tabs/accessibility_tab.py - Accessibility features (background dimming, pixel shift)
