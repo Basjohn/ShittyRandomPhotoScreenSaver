@@ -39,7 +39,11 @@ if IS_WINDOWS:
     CREATE_NO_WINDOW = 0x08000000
     CREATE_UNICODE_ENVIRONMENT = 0x00000400
     LOGON_WITH_PROFILE = 0x00000001
+    _NO_WINDOW_FLAG = CREATE_NO_WINDOW
+else:
+    _NO_WINDOW_FLAG = 0
 
+if IS_WINDOWS:
     TOKEN_ASSIGN_PRIMARY = 0x0001
     TOKEN_DUPLICATE = 0x0002
     TOKEN_QUERY = 0x0008
@@ -301,6 +305,7 @@ def _trigger_helper_via_scheduler() -> bool:
     if not IS_WINDOWS or not _HELPER_TASK_NAME:
         return False
     try:
+        creation_flags = _NO_WINDOW_FLAG if _NO_WINDOW_FLAG else 0
         result = subprocess.run(
             [
                 "schtasks",
@@ -311,6 +316,7 @@ def _trigger_helper_via_scheduler() -> bool:
             capture_output=True,
             text=True,
             check=False,
+            creationflags=creation_flags,
         )
         if result.returncode == 0:
             _log_helper_event(f"schtasks fallback triggered {_HELPER_TASK_NAME}")
@@ -357,11 +363,13 @@ def _maybe_register_helper_task(helper_exe: Path, queue_dir: Path) -> None:
         str(log_arg),
     ]
     try:
+        creation_flags = _NO_WINDOW_FLAG if _NO_WINDOW_FLAG else 0
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             check=False,
+            creationflags=creation_flags,
         )
         if result.returncode == 0:
             HELPER_TASK_SENTINEL.parent.mkdir(parents=True, exist_ok=True)

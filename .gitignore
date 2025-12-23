@@ -27,6 +27,7 @@ audits/
 temp/
 settings/
 docs/
+logs/
 
 # IDE and editor files
 .vscode/
@@ -53,3 +54,7 @@ dist/
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Big Shit GIT Sucks With
+*.exe
+*.scr

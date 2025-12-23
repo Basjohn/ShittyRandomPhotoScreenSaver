@@ -5589,3 +5589,10 @@
 2025-12-23 03:22:34 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=601.2ms, frames=26, avg_fps=43.2, dt_min=17.83ms, dt_max=57.72ms, active_count=0, fps_target=60
 2025-12-23 03:22:35 - engine.screensaver             - INFO     - [PERF] ImageCache: items=6/24, mem=237.7/1024MB, hits=0, misses=2, hit_rate=0.0%%, evictions=0
 2025-12-23 03:22:36 - __main__                       - WARNING  - [PERF] [GC] Collection took 22.17ms (gen=2, collected=494)
+2025-12-23 21:58:31 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=316.1ms, frames=17, avg_fps=53.8, dt_min=1.00ms, dt_max=39.92ms, active_count=0, fps_target=60
+2025-12-23 21:58:31 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=320.2ms, frames=19, avg_fps=59.3, dt_min=2.13ms, dt_max=36.39ms, active_count=0, fps_target=60
+2025-12-23 21:58:33 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=321.0ms, frames=19, avg_fps=59.2, dt_min=5.11ms, dt_max=42.58ms, active_count=0, fps_target=60
+2025-12-23 21:58:34 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=320.3ms, frames=19, avg_fps=59.3, dt_min=3.49ms, dt_max=41.87ms, active_count=0, fps_target=60
+2025-12-23 21:58:37 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=320.2ms, frames=17, avg_fps=53.1, dt_min=0.99ms, dt_max=44.60ms, active_count=0, fps_target=60
+2025-12-23 21:58:38 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=341.0ms, frames=17, avg_fps=49.9, dt_min=4.61ms, dt_max=40.98ms, active_count=0, fps_target=60
+2025-12-23 21:58:39 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=320.4ms, frames=19, avg_fps=59.3, dt_min=3.17ms, dt_max=33.86ms, active_count=0, fps_target=60

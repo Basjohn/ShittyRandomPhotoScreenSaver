@@ -10,14 +10,17 @@ user's default browser.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import json
 import logging
 import os
+import subprocess
 import sys
 import time
-from pathlib import Path
-import subprocess
 import textwrap
+from ctypes import wintypes
+from pathlib import Path
+from urllib.parse import urlparse
 
 DEFAULT_PROGRAM_DATA = Path(os.getenv("PROGRAMDATA", r"C:\ProgramData"))
 DEFAULT_BASE = DEFAULT_PROGRAM_DATA / "SRPSS"
@@ -25,6 +28,9 @@ DEFAULT_QUEUE = DEFAULT_BASE / "url_queue"
 DEFAULT_LOG_DIR = DEFAULT_BASE / "logs"
 DEFAULT_MAX_BATCH = 50
 _DEFAULT_TASK_NAME = os.getenv("SRPSS_REDDIT_HELPER_TASK", r"SRPSS\RedditHelper")
+WINDOW_POLL_INTERVAL = 0.25
+BROWSER_FOREGROUND_TIMEOUT = 5.0
+_NO_WINDOW_FLAG = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
 def configure_logging(log_dir: Path, verbose: bool) -> None:
@@ -93,6 +99,20 @@ def open_url(url: str) -> bool:
         return False
 
 
+def _hide_own_window() -> None:
+    """Hide the helper process window if any transient console is created."""
+    if sys.platform != "win32":
+        return
+    try:
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+        hwnd = kernel32.GetConsoleWindow()
+        if hwnd:
+            user32.ShowWindow(hwnd, 0)  # SW_HIDE
+    except Exception:
+        pass
+
+
 def process_queue(queue_dir: Path, max_batch: int) -> int:
     processed = 0
     for entry_path in iter_queue_files(queue_dir):
@@ -121,6 +141,13 @@ def process_queue(queue_dir: Path, max_batch: int) -> int:
                 duration * 1000.0,
                 url,
             )
+            try:
+                if bring_browser_foreground(url):
+                    logging.info("Browser foregrounded after helper launch: %s", url)
+                else:
+                    logging.debug("Browser foreground attempt skipped/failed: %s", url)
+            except Exception:
+                logging.debug("Browser foreground attempt errored: %s", url, exc_info=True)
             entry_path.unlink(missing_ok=True)
         else:
             logging.error("Launch failed: %s", url)
@@ -131,6 +158,7 @@ def process_queue(queue_dir: Path, max_batch: int) -> int:
 
 def main() -> int:
     args = parse_args()
+    _hide_own_window()
     args.queue.mkdir(parents=True, exist_ok=True)
     configure_logging(args.log_dir, args.verbose)
     helper_path = Path(sys.argv[0]).resolve()
@@ -200,6 +228,7 @@ def ensure_scheduled_task_registered(helper_exe: Path, queue_dir: Path, log_dir:
             $definition.Settings.DisallowStartIfOnBatteries = $false
             $definition.Settings.StopIfGoingOnBatteries = $false
             $definition.Settings.ExecutionTimeLimit = "PT5M"
+            $definition.Settings.Hidden = $true
             $definition.Principal.UserId = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
             $definition.Principal.LogonType = 3  # TASK_LOGON_INTERACTIVE_TOKEN
             $definition.Principal.RunLevel = 1   # TASK_RUNLEVEL_HIGHEST
@@ -233,6 +262,7 @@ def ensure_scheduled_task_registered(helper_exe: Path, queue_dir: Path, log_dir:
         capture_output=True,
         text=True,
         check=False,
+        creationflags=_NO_WINDOW_FLAG if os.name == "nt" and _NO_WINDOW_FLAG else 0,
     )
     if result.returncode != 0:
         message = (result.stderr or result.stdout or "").strip()
@@ -249,6 +279,94 @@ def ensure_scheduled_task_registered(helper_exe: Path, queue_dir: Path, log_dir:
         return False
     logging.info("Scheduled task ensured (%s)", _DEFAULT_TASK_NAME)
     return True
+
+
+def bring_browser_foreground(url: str) -> bool:
+    """Attempt to foreground the Reddit browser window for the launched URL."""
+    if sys.platform != "win32":
+        return False
+
+    keywords = _build_keyword_list(url)
+    deadline = time.perf_counter() + BROWSER_FOREGROUND_TIMEOUT
+    success = False
+
+    while time.perf_counter() < deadline:
+        success = _foreground_first_matching_window(keywords)
+        if success:
+            break
+        time.sleep(WINDOW_POLL_INTERVAL)
+
+    return success
+
+
+def _build_keyword_list(url: str) -> list[str]:
+    keywords: list[str] = []
+    try:
+        parsed = urlparse(url)
+        host = (parsed.netloc or "").lower()
+        if host:
+            host = host.split("@")[-1]
+            host = host.split(":")[0]
+            tokens = [part for part in host.replace("-", ".").split(".") if part]
+            keywords.extend(token for token in tokens if token not in ("www", "m"))
+    except Exception:
+        pass
+
+    if "reddit" not in keywords:
+        keywords.append("reddit")
+    # Deduplicate while preserving order
+    seen = set()
+    deduped: list[str] = []
+    for kw in keywords:
+        if kw and kw not in seen:
+            deduped.append(kw)
+            seen.add(kw)
+    return deduped or ["reddit"]
+
+
+def _foreground_first_matching_window(keywords: list[str]) -> bool:
+    try:
+        user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+    except Exception:
+        return False
+
+    EnumWindowsProc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    candidates: list[wintypes.HWND] = []
+
+    @EnumWindowsProc
+    def _enum_proc(hwnd: wintypes.HWND, lparam: wintypes.LPARAM) -> bool:  # noqa: ARG001
+        try:
+            if not user32.IsWindowVisible(hwnd):
+                return True
+            length = user32.GetWindowTextLengthW(hwnd)
+            if length <= 0:
+                return True
+            buf = ctypes.create_unicode_buffer(length + 1)
+            user32.GetWindowTextW(hwnd, buf, length + 1)
+            title = (buf.value or "").lower()
+            if any(kw in title for kw in keywords):
+                candidates.append(hwnd)
+                return False
+        except Exception:
+            return True
+        return True
+
+    try:
+        user32.EnumWindows(_enum_proc, 0)
+    except Exception:
+        return False
+
+    if not candidates:
+        return False
+
+    hwnd = candidates[0]
+    try:
+        if hasattr(user32, "AllowSetForegroundWindow"):
+            user32.AllowSetForegroundWindow(0xFFFFFFFF)
+        user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+        return bool(user32.SetForegroundWindow(hwnd))
+    except Exception:
+        return False
 
 
 if __name__ == "__main__":

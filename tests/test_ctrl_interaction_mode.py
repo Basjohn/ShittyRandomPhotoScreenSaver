@@ -401,3 +401,56 @@ def test_ctrl_halo_inactivity_timeout(qt_app, settings_manager, qtbot):
     qt_app.processEvents()
 
     assert not hint.isVisible()
+
+
+@pytest.mark.qt
+def test_ctrl_halo_suppressed_while_settings_dialog_active(qt_app, settings_manager, qtbot):
+    """Settings dialog active flag must fully suppress Ctrl halo in hard-exit mode."""
+    settings_manager.set("input.hard_exit", True)
+    widget = DisplayWidget(
+        screen_index=0,
+        display_mode=DisplayMode.FILL,
+        settings_manager=settings_manager,
+    )
+    qtbot.addWidget(widget)
+    widget.resize(400, 300)
+    widget.show()
+
+    coord = get_coordinator()
+    coord.set_settings_dialog_active(False)
+    coord.set_ctrl_held(False)
+
+    # Warm-up: halo should appear normally when settings dialog is inactive.
+    QTest.keyPress(widget, Qt.Key.Key_Control)
+    qt_app.processEvents()
+    QTest.mouseMove(widget, widget.rect().center())
+    qt_app.processEvents()
+    hint = getattr(widget, "_ctrl_cursor_hint", None)
+    assert hint is not None and hint.isVisible()
+    QTest.keyRelease(widget, Qt.Key.Key_Control)
+    coord.set_ctrl_held(False)
+    qt_app.processEvents()
+
+    # Activate settings dialog flag - halo must hide and refuse to show.
+    coord.set_settings_dialog_active(True)
+    QTest.keyPress(widget, Qt.Key.Key_Control)
+    qt_app.processEvents()
+    QTest.mouseMove(widget, widget.rect().center() + QPoint(10, 10))
+    qt_app.processEvents()
+    hint_active = getattr(widget, "_ctrl_cursor_hint", None)
+    if hint_active is not None:
+        assert not hint_active.isVisible()
+    QTest.keyRelease(widget, Qt.Key.Key_Control)
+    coord.set_ctrl_held(False)
+    qt_app.processEvents()
+
+    # Clearing the flag should allow the halo to render again.
+    coord.set_settings_dialog_active(False)
+    QTest.keyPress(widget, Qt.Key.Key_Control)
+    qt_app.processEvents()
+    QTest.mouseMove(widget, widget.rect().center() + QPoint(20, 20))
+    qt_app.processEvents()
+    hint_final = getattr(widget, "_ctrl_cursor_hint", None)
+    assert hint_final is not None and hint_final.isVisible()
+    QTest.keyRelease(widget, Qt.Key.Key_Control)
+    coord.set_ctrl_held(False)

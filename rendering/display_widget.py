@@ -3034,6 +3034,28 @@ class DisplayWidget(QWidget):
     def eventFilter(self, watched, event):  # type: ignore[override]
         """Global event filter to keep the Ctrl halo responsive over children."""
         try:
+            coordinator = self._coordinator
+        except Exception:
+            coordinator = None
+
+        settings_dialog_active = False
+        if coordinator is not None:
+            try:
+                settings_dialog_active = bool(coordinator.settings_dialog_active)
+            except Exception:
+                settings_dialog_active = False
+
+        if settings_dialog_active:
+            # Settings dialog suppresses halo/activity entirely.
+            try:
+                owner = coordinator.halo_owner if coordinator is not None else None
+                if owner is not None:
+                    owner._hide_ctrl_cursor_hint(immediate=True)
+            except Exception:
+                pass
+            return super().eventFilter(watched, event)
+
+        try:
             if event is not None and event.type() == QEvent.Type.KeyPress:
                 try:
                     key_event = event  # QKeyEvent

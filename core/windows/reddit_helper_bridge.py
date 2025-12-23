@@ -37,6 +37,7 @@ _PROGRAM_DATA = os.getenv("PROGRAMDATA", r"C:\ProgramData")
 _BASE_DIR = Path(_PROGRAM_DATA) / "SRPSS"
 _QUEUE_DIR = _BASE_DIR / "url_queue"
 _HELPER_TASK_NAME = os.getenv("SRPSS_REDDIT_HELPER_TASK", r"SRPSS\RedditHelper")
+_NO_WINDOW_FLAG = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 _SPOOL_READY = False
 
 
@@ -121,6 +122,7 @@ def _kick_helper() -> None:
             capture_output=True,
             text=True,
             check=False,
+            creationflags=_NO_WINDOW_FLAG if _NO_WINDOW_FLAG else 0,
         )
         if result.returncode != 0:
             logger.debug(
