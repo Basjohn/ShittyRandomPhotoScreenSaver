@@ -274,9 +274,10 @@ class SpotifyVolumeWidget(QWidget):
 
         step = 0.05
         direction = 1 if delta_y > 0 else -1
-        new_level = self._volume + (step * direction)
-        self._apply_volume_and_broadcast(new_level)
-        self._schedule_set_volume(new_level)
+        unclamped = self._volume + (step * direction)
+        clamped = max(0.0, min(1.0, unclamped))
+        self._apply_volume_and_broadcast(clamped)
+        self._schedule_set_volume(clamped)
         return True
 
     # ------------------------------------------------------------------

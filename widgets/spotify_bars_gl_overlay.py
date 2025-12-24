@@ -474,6 +474,7 @@ void main() {
     float margin_y = 6.0;
     float gap = 2.0;
     float seg_gap = 1.0;
+    float bars_inset = 5.0;
 
     // Match QWidget geometry: inner rect is rect.adjusted(margin_x, margin_y,
     // -margin_x, -margin_y). For a logical rect starting at (0, 0) this
@@ -495,19 +496,32 @@ void main() {
         discard;
     }
 
-    float bars_left = inner_left + 5.0;
-    float total_gap = gap * float(u_bar_count - 1);
-    float bar_width = (inner_width - total_gap) / float(u_bar_count);
-    bar_width = floor(bar_width);
+    float bar_region_width = inner_width - (bars_inset * 2.0);
+    if (bar_region_width <= 0.0) {
+        discard;
+    }
+
+    int bar_count_int = max(u_bar_count, 1);
+    float bar_count = float(bar_count_int);
+    float total_gap = gap * float(bar_count_int - 1);
+    float usable_width = bar_region_width - total_gap;
+    if (usable_width <= 0.0) {
+        discard;
+    }
+
+    float bar_width = floor(usable_width / bar_count);
     if (bar_width < 1.0) {
         discard;
     }
+
+    float span = bar_width * bar_count + total_gap;
+    float remaining = max(0.0, bar_region_width - span);
+    float bars_left = inner_left + bars_inset + floor(remaining * 0.5);
 
     float x_rel = fragCoord.x - bars_left;
     if (x_rel < 0.0) {
         discard;
     }
-    float span = float(u_bar_count) * bar_width + total_gap;
     if (x_rel >= span) {
         discard;
     }

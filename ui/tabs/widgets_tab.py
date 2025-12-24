@@ -225,6 +225,13 @@ class WidgetsTab(QWidget):
         self.clock_analog_shadow.stateChanged.connect(self._save_settings)
         clock_layout.addWidget(self.clock_analog_shadow)
 
+        self.clock_analog_shadow_intense = QCheckBox("Intense Analogue Shadows")
+        self.clock_analog_shadow_intense.setToolTip(
+            "Doubles analogue shadow opacity and enlarges the drop shadow by ~50% for dramatic lighting."
+        )
+        self.clock_analog_shadow_intense.stateChanged.connect(self._save_settings)
+        clock_layout.addWidget(self.clock_analog_shadow_intense)
+
         self.clock_show_numerals = QCheckBox("Show Hour Numerals (Analogue)")
         self.clock_show_numerals.stateChanged.connect(self._save_settings)
         clock_layout.addWidget(self.clock_show_numerals)
@@ -979,8 +986,8 @@ class WidgetsTab(QWidget):
         reddit_items_row = QHBoxLayout()
         reddit_items_row.addWidget(QLabel("Items:"))
         self.reddit_items = QComboBox()
-        # Expose a "4"-item mode (formerly labelled "5") plus a 10-item mode.
-        self.reddit_items.addItems(["4", "10"])
+        # Expose 4/10/20 item modes (legacy configs <=5 map to the 4-item option).
+        self.reddit_items.addItems(["4", "10", "20"])
         self.reddit_items.currentTextChanged.connect(self._save_settings)
         self.reddit_items.currentTextChanged.connect(self._update_stack_status)
         reddit_items_row.addWidget(self.reddit_items)
@@ -1146,7 +1153,7 @@ class WidgetsTab(QWidget):
         reddit2_row.addWidget(self.reddit2_subreddit)
         reddit2_row.addWidget(QLabel("Items:"))
         self.reddit2_items = QComboBox()
-        self.reddit2_items.addItems(["4", "10"])
+        self.reddit2_items.addItems(["4", "10", "20"])
         self.reddit2_items.setMaximumWidth(60)
         self.reddit2_items.currentTextChanged.connect(self._save_settings)
         self.reddit2_items.currentTextChanged.connect(self._update_stack_status)
@@ -1401,6 +1408,10 @@ class WidgetsTab(QWidget):
             analog_shadow_val = clock_config.get('analog_face_shadow', True)
             analog_shadow = SettingsManager.to_bool(analog_shadow_val, True)
             self.clock_analog_shadow.setChecked(analog_shadow)
+
+            intense_shadow_val = clock_config.get('analog_shadow_intense', False)
+            intense_shadow = SettingsManager.to_bool(intense_shadow_val, False)
+            self.clock_analog_shadow_intense.setChecked(intense_shadow)
             
             position = clock_config.get('position', 'Top Right')
             index = self.clock_position.findText(position)
@@ -1705,11 +1716,10 @@ class WidgetsTab(QWidget):
             self.reddit_subreddit.setText(subreddit)
 
             limit_val = int(reddit_config.get('limit', 10))
-            # Historical configs used 5 as the low-count option; we now
-            # present this as a 4-item mode but treat any saved value
-            # <=5 as selecting the "4" entry.
             if limit_val <= 5:
                 items_text = "4"
+            elif limit_val >= 20:
+                items_text = "20"
             else:
                 items_text = "10"
             idx_items = self.reddit_items.findText(items_text)
@@ -1761,8 +1771,14 @@ class WidgetsTab(QWidget):
             reddit2_config = widgets.get('reddit2', {})
             self.reddit2_enabled.setChecked(SettingsManager.to_bool(reddit2_config.get('enabled', False), False))
             self.reddit2_subreddit.setText(reddit2_config.get('subreddit', ''))
-            reddit2_limit = reddit2_config.get('limit', 4)
-            reddit2_items_idx = self.reddit2_items.findText(str(reddit2_limit))
+            reddit2_limit = int(reddit2_config.get('limit', 4))
+            if reddit2_limit <= 5:
+                reddit2_limit_text = "4"
+            elif reddit2_limit >= 20:
+                reddit2_limit_text = "20"
+            else:
+                reddit2_limit_text = "10"
+            reddit2_items_idx = self.reddit2_items.findText(reddit2_limit_text)
             if reddit2_items_idx >= 0:
                 self.reddit2_items.setCurrentIndex(reddit2_items_idx)
             reddit2_pos = reddit2_config.get('position', 'Top Left')
@@ -1918,8 +1934,9 @@ class WidgetsTab(QWidget):
         
         clock_config = {
             'enabled': self.clock_enabled.isChecked(),
-            'format': '12h' if self.clock_format.currentText() == "12 Hour" else '24h',
-            'show_seconds': self.clock_seconds.isChecked(),
+            'exit_on_click': self.clock_exit_on_click.isChecked(),
+            'format': '12h' if self.clock_format_12.isChecked() else '24h',
+            'show_seconds': self.clock_show_seconds.isChecked(),
             'timezone': timezone_str,
             'show_timezone': self.clock_show_tz.isChecked(),
             'position': self.clock_position.currentText(),
@@ -1938,6 +1955,7 @@ class WidgetsTab(QWidget):
             'display_mode': 'analog' if self.clock_analog_mode.isChecked() else 'digital',
             'show_numerals': self.clock_show_numerals.isChecked(),
             'analog_face_shadow': self.clock_analog_shadow.isChecked(),
+            'analog_shadow_intense': self.clock_analog_shadow_intense.isChecked(),
         }
         # Monitor selection save: 'ALL' or int
         cmon_text = self.clock_monitor_combo.currentText()

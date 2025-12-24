@@ -6396,3 +6396,37 @@
 2025-12-19 01:16:36,699 - pytest_runner - INFO - pytest finished with exit code 1
 2025-12-19 01:57:05,441 - pytest_runner - INFO - pytest.py starting with args: ['-q', 'tests/test_hotkeys_no_text.py', 'tests/test_scrollwheel_volume.py']
 2025-12-19 01:57:06,809 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-24 02:28:18,222 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_weather_widget.py']
+2025-12-24 02:28:20,090 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-24 02:56:05,725 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_weather_widget.py']
+2025-12-24 02:56:06,684 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-24 02:56:49,905 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_weather_widget.py']
+2025-12-24 02:56:50,678 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-24 03:00:07,141 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_geometry_dpi_matrix.py']
+2025-12-24 03:00:09,064 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-24 03:03:05,531 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_context_menu_effect_invalidation.py', '-vv']
+2025-12-24 03:03:06,772 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-24 03:03:19,812 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_scrollwheel_volume.py', '-vv']
+2025-12-24 03:03:21,709 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-24 03:04:16,960 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_scrollwheel_volume.py', '-vv']
+2025-12-24 03:04:18,731 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-24 03:05:09,851 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_scrollwheel_volume.py', '-vv']
+2025-12-24 03:05:11,465 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-24 04:15:14,402 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', '-vv', '-k', 'bars_not_stuck_at_top or kick_emphasizes_center_more_than_vocals']
+2025-12-24 04:15:15,304 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-24 04:15:47,509 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', '-vv']
+2025-12-24 04:15:48,868 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-24 04:17:49,839 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_clock_widget.py', '-vv']
+2025-12-24 04:17:55,927 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-24 04:18:26,539 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_clock_widget.py', '-vv']
+2025-12-24 04:18:31,566 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-24 04:19:37,548 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_ctrl_interaction_mode.py', '-vv']
+2025-12-24 04:19:43,732 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-24 04:20:22,329 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_ctrl_interaction_mode.py', '-vv', '-k', 'settings_dialog_active']
+2025-12-24 04:20:24,071 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-24 04:23:36,033 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_ctrl_interaction_mode.py', '-vv', '-k', 'settings_dialog_active']
+2025-12-24 04:23:37,664 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-24 04:24:21,086 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_ctrl_interaction_mode.py', '-vv', '-k', 'settings_dialog_active']
+2025-12-24 04:24:22,793 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-24 04:31:35,237 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_ctrl_interaction_mode.py', '-vv', '-k', 'settings_dialog_active']
+2025-12-24 04:31:36,818 - pytest_runner - INFO - pytest finished with exit code 0

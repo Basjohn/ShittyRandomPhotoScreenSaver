@@ -1020,6 +1020,16 @@ class DisplayWidget(QWidget):
             int(logical_size.height() * self._device_pixel_ratio)
         )
 
+    def logical_to_physical_size(self) -> QSize:
+        """
+        Convenience alias for tests/utilities that expect a physical size helper.
+
+        Historically DisplayWidget exposed logical_to_physical_size(); the modern
+        pipeline uses get_target_size(). Keep this thin wrapper so geometry/DPI
+        regression tests can validate DPR scaling without duplicating logic.
+        """
+        return self.get_target_size()
+
     def set_image(self, pixmap: QPixmap, image_path: str = "") -> None:
         """Display a new image with transition (backward-compatible sync version)."""
         if pixmap.isNull():
@@ -1436,6 +1446,12 @@ class DisplayWidget(QWidget):
                         )
                     except Exception:
                         logger.debug("[SPOTIFY_VIS] Failed to register SpotifyBarsGLOverlay", exc_info=True)
+                pixel_shift_manager = getattr(self, "_pixel_shift_manager", None)
+                if pixel_shift_manager is not None:
+                    try:
+                        pixel_shift_manager.register_widget(overlay)
+                    except Exception:
+                        logger.debug("[SPOTIFY_VIS] Failed to register GL overlay with PixelShiftManager", exc_info=True)
             except Exception:
                 self._spotify_bars_overlay = None
                 return False
@@ -1458,6 +1474,12 @@ class DisplayWidget(QWidget):
                 ghost_alpha=ghost_alpha,
                 ghost_decay=ghost_decay,
             )
+            pixel_shift_manager = getattr(self, "_pixel_shift_manager", None)
+            if pixel_shift_manager is not None and hasattr(pixel_shift_manager, "update_original_position"):
+                try:
+                    pixel_shift_manager.update_original_position(overlay)
+                except Exception:
+                    logger.debug("[SPOTIFY_VIS] Failed to sync GL overlay baseline with PixelShiftManager", exc_info=True)
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to push frame to SpotifyBarsGLOverlay", exc_info=True)
             return False
@@ -2160,6 +2182,16 @@ class DisplayWidget(QWidget):
         hint = self._ctrl_cursor_hint
         if hint is None:
             return
+
+        # Do not show the halo while the settings dialog is active.
+        try:
+            from rendering.multi_monitor_coordinator import get_coordinator
+
+            if get_coordinator().settings_dialog_active:
+                self._hide_ctrl_cursor_hint(immediate=True)
+                return
+        except Exception:
+            pass
 
         # Normalize incoming position to QPoint for consistency
         try:

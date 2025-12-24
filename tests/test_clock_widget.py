@@ -51,6 +51,7 @@ def test_clock_creation(qapp, parent_widget):
     assert clock is not None
     assert clock._time_format == TimeFormat.TWELVE_HOUR
     assert clock._clock_position == ClockPosition.TOP_RIGHT
+    assert clock.get_position().value == ClockPosition.TOP_RIGHT.value
     assert clock._show_seconds is True
     assert clock.is_running() is False
 
@@ -213,6 +214,7 @@ def test_clock_all_positions(qapp, parent_widget):
         
         # Check position is set
         assert clock._clock_position == position
+        assert clock.get_position().value == position.value
         
         # Check widget is visible
         assert clock.isVisible() is True
@@ -243,9 +245,9 @@ def test_clock_set_font_size(qapp, parent_widget):
     clock.set_font_size(72)
     assert clock._font_size == 72
     
-    # Invalid size should fall back
+    # Invalid size should fall back to widget default
     clock.set_font_size(-10)
-    assert clock._font_size == 48
+    assert clock._font_size == ClockWidget.DEFAULT_FONT_SIZE
 
 
 def test_clock_set_text_color(qapp, parent_widget):
@@ -265,9 +267,9 @@ def test_clock_set_margin(qapp, parent_widget):
     clock.set_margin(50)
     assert clock._margin == 50
     
-    # Invalid margin should fall back
+    # Negative margin reuses default edge offset
     clock.set_margin(-10)
-    assert clock._margin == 20
+    assert clock._margin == ClockWidget.DEFAULT_MARGIN
 
 
 def test_clock_cleanup(qapp, parent_widget):

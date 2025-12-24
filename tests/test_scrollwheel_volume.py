@@ -149,7 +149,7 @@ def test_input_handler_route_wheel_propagates_widget_rejection(qt_app, settings_
 
         assert handled is False
     finally:
-        MultiMonitorCoordinato
+        MultiMonitorCoordinator.reset()
 @pytest.mark.qt
 def test_ctrl_mode_wheel_adjusts_spotify_volume_widget(qt_app, settings_manager, qtbot, monkeypatch):
     from rendering.display_widget import DisplayWidget

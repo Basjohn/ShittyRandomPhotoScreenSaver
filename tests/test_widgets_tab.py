@@ -38,7 +38,7 @@ class TestWidgetsTab:
 
         tab = WidgetsTab(mgr)
 
-        # Clock defaults: enabled on monitor 1, Top Right, 24h, seconds on,
+        # Clock defaults: enabled on all monitors, Top Right, 24h, seconds on,
         # analogue mode with background frame enabled at 70% opacity.
         assert tab.clock_enabled.isChecked() is True
         assert tab.clock_position.currentText() == "Top Right"
@@ -46,8 +46,8 @@ class TestWidgetsTab:
         assert tab.clock_seconds.isChecked() is True
         assert tab.clock_show_background.isChecked() is True
         assert tab.clock_bg_opacity.value() == 70
-        # Monitor selection stored as integer 1 in settings → combo shows "1"
-        assert tab.clock_monitor_combo.currentText() == "1"
+        # Monitor selection uses canonical 'ALL' default so combo reflects that
+        assert tab.clock_monitor_combo.currentText() == "ALL"
 
         # Weather defaults: enabled on monitor 1 with a Top Left layout and a
         # non-empty location (placeholder "New York" or a timezone-derived

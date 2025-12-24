@@ -23648,3 +23648,1942 @@ FAILED tests/test_scrollwheel_volume.py::test_ctrl_mode_wheel_adjusts_spotify_vo
 
 1 failed, 1 passed in 0.94s
 
+
+===== pytest run 2025-12-24 02:28:18 args=['tests/test_weather_widget.py'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collected 21 items
+
+
+
+tests\test_weather_widget.py 
+.
+F
+.
+.
+.
+.
+F
+F
+.
+.
+.
+F
+.
+.
+.
+.
+.
+.
+F
+.
+.
+                                                                                                                                                   [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+__________________________________________________________________________________________ test_weather_creation __________________________________________________________________________________________
+
+
+
+qapp = <PySide6.QtWidgets.QApplication(0x2558e064c80) at 0x000002558EE8EB80>, parent_widget = <PySide6.QtWidgets.QWidget(0x2558df0e960) at 0x000002558EE8E740>
+
+
+
+    def test_weather_creation(qapp, parent_widget):
+
+        """Test weather widget creation."""
+
+        weather = WeatherWidget(
+
+            parent=parent_widget,
+
+            location="London",
+
+            position=WeatherPosition.BOTTOM_LEFT
+
+        )
+
+    
+
+        assert weather is not None
+
+        assert weather._location == "London"
+
+>       assert weather._position == WeatherPosition.BOTTOM_LEFT
+
+E       AssertionError: assert <OverlayPosition.BOTTOM_LEFT: 'bottom_left'> == <WeatherPosition.BOTTOM_LEFT: 'bottom_left'>
+
+E        +  where <OverlayPosition.BOTTOM_LEFT: 'bottom_left'> = <widgets.weather_widget.WeatherWidget(0x2558df0d940) at 0x000002558EE8E440>._position
+
+E        +  and   <WeatherPosition.BOTTOM_LEFT: 'bottom_left'> = WeatherPosition.BOTTOM_LEFT
+
+
+
+tests\test_weather_widget.py:63: AssertionError
+
+___________________________________________________________________________________________ test_weather_cache ____________________________________________________________________________________________
+
+
+
+qapp = <PySide6.QtWidgets.QApplication(0x2558e064c80) at 0x000002558EE8EB80>, parent_widget = <PySide6.QtWidgets.QWidget(0x2558e07eff0) at 0x000002558F5159C0>
+
+mock_weather_data = {'main': {'humidity': 65, 'temp': 20.5}, 'name': 'London', 'weather': [{'description': 'scattered clouds', 'main': 'Clouds'}]}
+
+
+
+    def test_weather_cache(qapp, parent_widget, mock_weather_data):
+
+        """Test weather caching."""
+
+        weather = WeatherWidget(parent=parent_widget)
+
+    
+
+        # Initially no cache
+
+>       assert weather._is_cache_valid() is False
+
+E       assert True is False
+
+E        +  where True = _is_cache_valid()
+
+E        +    where _is_cache_valid = <widgets.weather_widget.WeatherWidget(0x2558e07f470) at 0x000002558F515D80>._is_cache_valid
+
+
+
+tests\test_weather_widget.py:122: AssertionError
+
+_______________________________________________________________________________________ test_weather_all_positions ________________________________________________________________________________________
+
+
+
+qapp = <PySide6.QtWidgets.QApplication(0x2558e064c80) at 0x000002558EE8EB80>, parent_widget = <PySide6.QtWidgets.QWidget(0x2558e4fd6e0) at 0x000002558EEEBC00>
+
+
+
+    def test_weather_all_positions(qapp, parent_widget):
+
+        """Test all weather positions."""
+
+        positions = [
+
+            WeatherPosition.TOP_LEFT,
+
+            WeatherPosition.TOP_RIGHT,
+
+            WeatherPosition.BOTTOM_LEFT,
+
+            WeatherPosition.BOTTOM_RIGHT
+
+        ]
+
+    
+
+        for position in positions:
+
+            weather = WeatherWidget(
+
+                parent=parent_widget,
+
+                position=position
+
+            )
+
+    
+
+>           assert weather._position == position
+
+E           AssertionError: assert <OverlayPosition.TOP_LEFT: 'top_left'> == <WeatherPosition.TOP_LEFT: 'top_left'>
+
+E            +  where <OverlayPosition.TOP_LEFT: 'top_left'> = <widgets.weather_widget.WeatherWidget(0x2558e4fd260) at 0x000002558EEEBD80>._position
+
+
+
+tests\test_weather_widget.py:147: AssertionError
+
+_______________________________________________________________________________________ test_weather_set_font_size ________________________________________________________________________________________
+
+
+
+qapp = <PySide6.QtWidgets.QApplication(0x2558e064c80) at 0x000002558EE8EB80>, parent_widget = <PySide6.QtWidgets.QWidget(0x2558e4fa320) at 0x000002558F592AC0>
+
+
+
+    def test_weather_set_font_size(qapp, parent_widget):
+
+        """Test setting font size."""
+
+        weather = WeatherWidget(parent=parent_widget)
+
+    
+
+        weather.set_font_size(32)
+
+        assert weather._font_size == 32
+
+    
+
+        # Invalid size should fall back
+
+        weather.set_font_size(-10)
+
+>       assert weather._font_size == 24
+
+E       assert 8 == 24
+
+E        +  where 8 = <widgets.weather_widget.WeatherWidget(0x2558e4fa140) at 0x000002558F599580>._font_size
+
+
+
+tests\test_weather_widget.py:203: AssertionError
+
+_______________________________________________________________________________________ test_weather_fetcher_error ________________________________________________________________________________________
+
+
+
+mock_get = <MagicMock name='get' id='2566499953552'>, qapp = <PySide6.QtWidgets.QApplication(0x2558e064c80) at 0x000002558EE8EB80>
+
+
+
+    @patch('weather.open_meteo_provider.requests.get')
+
+    def test_weather_fetcher_error(mock_get, qapp):
+
+        """Test weather fetch error."""
+
+        # Mock failed API response
+
+        mock_get.side_effect = Exception("Network error")
+
+    
+
+        fetcher = WeatherFetcher(location="London")
+
+    
+
+        errors_received = []
+
+        fetcher.error_occurred.connect(lambda e: errors_received.append(e))
+
+    
+
+        fetcher.fetch()
+
+    
+
+>       assert len(errors_received) == 1
+
+E       assert 0 == 1
+
+E        +  where 0 = len([])
+
+
+
+tests\test_weather_widget.py:302: AssertionError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_weather_widget.py::test_weather_creation - AssertionError: assert <OverlayPosition.BOTTOM_LEFT: 'bottom_left'> == <WeatherPosition.BOTTOM_LEFT: 'bottom_left'>
+
+FAILED tests/test_weather_widget.py::test_weather_cache - assert True is False
+
+FAILED tests/test_weather_widget.py::test_weather_all_positions - AssertionError: assert <OverlayPosition.TOP_LEFT: 'top_left'> == <WeatherPosition.TOP_LEFT: 'top_left'>
+
+FAILED tests/test_weather_widget.py::test_weather_set_font_size - assert 8 == 24
+
+FAILED tests/test_weather_widget.py::test_weather_fetcher_error - assert 0 == 1
+
+====================================================================================== 5 failed, 16 passed in 1.10s =======================================================================================
+
+
+===== pytest run 2025-12-24 02:56:05 args=['tests/test_weather_widget.py'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collected 21 items
+
+
+
+tests\test_weather_widget.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+F
+.
+.
+                                                                                                                                                   [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+_______________________________________________________________________________________ test_weather_fetcher_error ________________________________________________________________________________________
+
+
+
+mock_get = <MagicMock name='get' id='2009844222864'>, qapp = <PySide6.QtWidgets.QApplication(0x1d3f330c360) at 0x000001D3F408BA80>
+
+
+
+    @patch('weather.open_meteo_provider.requests.get')
+
+    def test_weather_fetcher_error(mock_get, qapp):
+
+        """Test weather fetch error."""
+
+        # Mock failed API response
+
+        mock_get.side_effect = Exception("Network error")
+
+    
+
+        fetcher = WeatherFetcher(location="London")
+
+    
+
+        errors_received = []
+
+        fetcher.error_occurred.connect(lambda e: errors_received.append(e))
+
+    
+
+        fetcher.fetch()
+
+    
+
+        assert len(errors_received) == 1
+
+>       assert "Network error" in errors_received[0]
+
+E       AssertionError: assert 'Network error' in 'No weather data returned for London'
+
+
+
+tests\test_weather_widget.py:317: AssertionError
+
+-------------------------------------------------------------------------------------------- Captured log call --------------------------------------------------------------------------------------------
+
+ERROR    weather.open_meteo_provider:open_meteo_provider.py:225 Unexpected error during geocoding for London: Network error
+Traceback (most recent call last):
+  File "F:\Programming\Apps\ShittyRandomPhotoScreenSaver\weather\open_meteo_provider.py", line 193, in geocode
+    response = requests.get(self.GEOCODING_URL, params=params, timeout=self._timeout)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python311\Lib\unittest\mock.py", line 1124, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python311\Lib\unittest\mock.py", line 1128, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python311\Lib\unittest\mock.py", line 1183, in _execute_mock_call
+    raise effect
+Exception: Network error
+ERROR    weather.open_meteo_provider:open_meteo_provider.py:258 Cannot fetch weather - failed to geocode: London
+ERROR    widgets.weather_widget:weather_widget.py:71 No weather data returned for London
+
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_weather_widget.py::test_weather_fetcher_error - AssertionError: assert 'Network error' in 'No weather data returned for London'
+
+====================================================================================== 1 failed, 20 passed in 0.55s =======================================================================================
+
+
+===== pytest run 2025-12-24 02:56:50 args=['tests/test_weather_widget.py'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collected 21 items
+
+
+
+tests\test_weather_widget.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                                                                                                                                                   [100%]
+
+
+
+
+=========================================================================================== 21 passed in 0.40s ============================================================================================
+
+
+===== pytest run 2025-12-24 03:00:07 args=['tests/test_geometry_dpi_matrix.py'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collected 6 items
+
+
+
+tests\test_geometry_dpi_matrix.py 
+.
+.
+.
+.
+.
+.
+                                                                                                                                                             [100%]
+
+
+
+
+============================================================================================ 6 passed in 1.52s ============================================================================================
+
+
+===== pytest run 2025-12-24 03:03:05 args=['tests/test_context_menu_effect_invalidation.py', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 1 item
+
+
+
+tests/test_context_menu_effect_invalidation.py::test_context_menu_invalidates_effects_before_popup 
+PASSED                                                                                            [100%]
+
+
+
+
+============================================================================================ 1 passed in 0.76s ============================================================================================
+
+
+===== pytest run 2025-12-24 03:03:19 args=['tests/test_scrollwheel_volume.py', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 6 items
+
+
+
+tests/test_scrollwheel_volume.py::test_spotify_volume_widget_handle_wheel_clamps_and_schedules 
+FAILED                                                                                                [ 16%]
+
+
+tests/test_scrollwheel_volume.py::test_input_handler_route_wheel_uses_local_coordinates 
+PASSED                                                                                                       [ 33%]
+
+
+tests/test_scrollwheel_volume.py::test_input_handler_route_wheel_ignores_hidden_volume 
+PASSED                                                                                                        [ 50%]
+
+
+tests/test_scrollwheel_volume.py::test_input_handler_route_wheel_propagates_widget_rejection 
+FAILED                                                                                                  [ 66%]
+
+
+tests/test_scrollwheel_volume.py::test_ctrl_mode_wheel_adjusts_spotify_volume_widget 
+PASSED                                                                                                          [ 83%]
+
+
+tests/test_scrollwheel_volume.py::test_cursor_halo_forwarded_wheel_adjusts_volume 
+PASSED                                                                                                             [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+______________________________________________________________________ test_spotify_volume_widget_handle_wheel_clamps_and_schedules _______________________________________________________________________
+
+
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x000002639813F2D0>, monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000002639813F690>
+
+
+
+    @pytest.mark.qt
+
+    def test_spotify_volume_widget_handle_wheel_clamps_and_schedules(qtbot, monkeypatch):
+
+        from widgets.spotify_volume_widget import SpotifyVolumeWidget
+
+    
+
+        vol = SpotifyVolumeWidget()
+
+        qtbot.addWidget(vol)
+
+        vol.setGeometry(0, 0, 32, 180)
+
+        vol.show()
+
+        qtbot.wait(1)
+
+    
+
+        applied_levels: list[float] = []
+
+        scheduled_levels: list[float] = []
+
+    
+
+        def _fake_apply(level: float) -> None:
+
+            applied_levels.append(level)
+
+            vol._volume = level
+
+    
+
+        def _fake_schedule(level: float) -> None:
+
+            scheduled_levels.append(level)
+
+    
+
+        monkeypatch.setattr(vol, "_apply_volume_and_broadcast", _fake_apply)
+
+        monkeypatch.setattr(vol, "_schedule_set_volume", _fake_schedule)
+
+    
+
+        vol._volume = 0.95
+
+        assert vol.handle_wheel(QPoint(10, 10), 120)
+
+        assert applied_levels[-1] <= 1.0
+
+        assert scheduled_levels[-1] == applied_levels[-1]
+
+    
+
+        vol._volume = 0.02
+
+        assert vol.handle_wheel(QPoint(10, 170), -120)
+
+>       assert applied_levels[-1] >= 0.0
+
+E       assert -0.030000000000000002 >= 0.0
+
+
+
+tests\test_scrollwheel_volume.py:37: AssertionError
+
+_______________________________________________________________________ test_input_handler_route_wheel_propagates_widget_rejection ________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x263975c6570) at 0x000002639813F1C0>, settings_manager = <core.settings.settings_manager.SettingsManager(0x26399836590) at 0x00000263C8C67A00>
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x00000263C8C67E90>, monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000263C8C70310>
+
+
+
+    @pytest.mark.qt
+
+    def test_input_handler_route_wheel_propagates_widget_rejection(qt_app, settings_manager, qtbot, monkeypatch):
+
+        from rendering.display_widget import DisplayWidget
+
+        from rendering.multi_monitor_coordinator import MultiMonitorCoordinator
+
+        from widgets.spotify_volume_widget import SpotifyVolumeWidget
+
+    
+
+        MultiMonitorCoordinator.reset()
+
+        try:
+
+            w = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+
+            qtbot.addWidget(w)
+
+            w.resize(500, 300)
+
+            w.show()
+
+            qt_app.processEvents()
+
+    
+
+            vol = SpotifyVolumeWidget(w)
+
+            qtbot.addWidget(vol)
+
+            vol.setGeometry(70, 40, 32, 180)
+
+            vol._volume = 0.4
+
+            vol.show()
+
+            w.spotify_volume_widget = vol
+
+            qt_app.processEvents()
+
+    
+
+            assert w._input_handler is not None
+
+    
+
+            def _fake_handle(self, local_pos, delta_y):
+
+                return False
+
+    
+
+            monkeypatch.setattr(SpotifyVolumeWidget, "handle_wheel", _fake_handle)
+
+    
+
+            handled = w._input_handler.route_wheel_event(QPoint(80, 60), 120, vol, None, None)
+
+    
+
+            assert handled is False
+
+        finally:
+
+>           MultiMonitorCoordinato
+
+E           NameError: name 'MultiMonitorCoordinato' is not defined
+
+
+
+tests\test_scrollwheel_volume.py:152: NameError
+
+============================================================================================ warnings summary =============================================================================================
+
+tests/test_scrollwheel_volume.py::test_cursor_halo_forwarded_wheel_adjusts_volume
+
+  F:\Programming\Apps\ShittyRandomPhotoScreenSaver\rendering\display_widget.py:2486: DeprecationWarning: Function: 'QMouseEvent.pos() const' is marked as deprecated, please check the documentation for more information.
+    self._initial_mouse_pos = event.pos()
+
+
+
+
+tests/test_scrollwheel_volume.py::test_cursor_halo_forwarded_wheel_adjusts_volume
+tests/test_scrollwheel_volume.py::test_cursor_halo_forwarded_wheel_adjusts_volume
+tests/test_scrollwheel_volume.py::test_cursor_halo_forwarded_wheel_adjusts_volume
+
+
+  F:\Programming\Apps\ShittyRandomPhotoScreenSaver\rendering\display_widget.py:2491: DeprecationWarning: Function: 'QMouseEvent.pos() const' is marked as deprecated, please check the documentation for more information.
+    dx = event.pos().x() - self._initial_mouse_pos.x()
+
+
+
+
+tests/test_scrollwheel_volume.py::test_cursor_halo_forwarded_wheel_adjusts_volume
+tests/test_scrollwheel_volume.py::test_cursor_halo_forwarded_wheel_adjusts_volume
+tests/test_scrollwheel_volume.py::test_cursor_halo_forwarded_wheel_adjusts_volume
+
+
+  F:\Programming\Apps\ShittyRandomPhotoScreenSaver\rendering\display_widget.py:2492: DeprecationWarning: Function: 'QMouseEvent.pos() const' is marked as deprecated, please check the documentation for more information.
+    dy = event.pos().y() - self._initial_mouse_pos.y()
+
+
+
+
+tests/test_scrollwheel_volume.py::test_cursor_halo_forwarded_wheel_adjusts_volume
+tests/test_scrollwheel_volume.py::test_cursor_halo_forwarded_wheel_adjusts_volume
+tests/test_scrollwheel_volume.py::test_cursor_halo_forwarded_wheel_adjusts_volume
+
+
+  F:\Programming\Apps\ShittyRandomPhotoScreenSaver\rendering\display_widget.py:2477: DeprecationWarning: Function: 'QMouseEvent.pos() const' is marked as deprecated, please check the documentation for more information.
+    event.pos(), getattr(self, "spotify_volume_widget", None)
+
+
+
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_scrollwheel_volume.py::test_spotify_volume_widget_handle_wheel_clamps_and_schedules - assert -0.030000000000000002 >= 0.0
+
+FAILED tests/test_scrollwheel_volume.py::test_input_handler_route_wheel_propagates_widget_rejection - NameError: name 'MultiMonitorCoordinato' is not defined
+
+================================================================================ 2 failed, 4 passed, 10 warnings in 1.38s =================================================================================
+
+
+===== pytest run 2025-12-24 03:04:17 args=['tests/test_scrollwheel_volume.py', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 6 items
+
+
+
+tests/test_scrollwheel_volume.py::test_spotify_volume_widget_handle_wheel_clamps_and_schedules 
+PASSED                                                                                                [ 16%]
+
+
+tests/test_scrollwheel_volume.py::test_input_handler_route_wheel_uses_local_coordinates 
+PASSED                                                                                                       [ 33%]
+
+
+tests/test_scrollwheel_volume.py::test_input_handler_route_wheel_ignores_hidden_volume 
+PASSED                                                                                                        [ 50%]
+
+
+tests/test_scrollwheel_volume.py::test_input_handler_route_wheel_propagates_widget_rejection 
+FAILED                                                                                                  [ 66%]
+
+
+tests/test_scrollwheel_volume.py::test_ctrl_mode_wheel_adjusts_spotify_volume_widget 
+PASSED                                                                                                          [ 83%]
+
+
+tests/test_scrollwheel_volume.py::test_cursor_halo_forwarded_wheel_adjusts_volume 
+PASSED                                                                                                             [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+_______________________________________________________________________ test_input_handler_route_wheel_propagates_widget_rejection ________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x14f82c50db0) at 0x0000014F8379B340>, settings_manager = <core.settings.settings_manager.SettingsManager(0x14f82d90990) at 0x0000014FB42F26C0>
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x0000014FB42F3150>, monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000014FB42F3490>
+
+
+
+    @pytest.mark.qt
+
+    def test_input_handler_route_wheel_propagates_widget_rejection(qt_app, settings_manager, qtbot, monkeypatch):
+
+        from rendering.display_widget import DisplayWidget
+
+        from rendering.multi_monitor_coordinator import MultiMonitorCoordinator
+
+        from widgets.spotify_volume_widget import SpotifyVolumeWidget
+
+    
+
+        MultiMonitorCoordinator.reset()
+
+        try:
+
+            w = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+
+            qtbot.addWidget(w)
+
+            w.resize(500, 300)
+
+            w.show()
+
+            qt_app.processEvents()
+
+    
+
+            vol = SpotifyVolumeWidget(w)
+
+            qtbot.addWidget(vol)
+
+            vol.setGeometry(70, 40, 32, 180)
+
+            vol._volume = 0.4
+
+            vol.show()
+
+            w.spotify_volume_widget = vol
+
+            qt_app.processEvents()
+
+    
+
+            assert w._input_handler is not None
+
+    
+
+            def _fake_handle(self, local_pos, delta_y):
+
+                return False
+
+    
+
+            monkeypatch.setattr(SpotifyVolumeWidget, "handle_wheel", _fake_handle)
+
+    
+
+            handled = w._input_handler.route_wheel_event(QPoint(80, 60), 120, vol, None, None)
+
+    
+
+            assert handled is False
+
+        finally:
+
+>           MultiMonitorCoordinato
+
+E           NameError: name 'MultiMonitorCoordinato' is not defined
+
+
+
+tests\test_scrollwheel_volume.py:152: NameError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_scrollwheel_volume.py::test_input_handler_route_wheel_propagates_widget_rejection - NameError: name 'MultiMonitorCoordinato' is not defined
+
+======================================================================================= 1 failed, 5 passed in 1.28s =======================================================================================
+
+
+===== pytest run 2025-12-24 03:05:10 args=['tests/test_scrollwheel_volume.py', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 6 items
+
+
+
+tests/test_scrollwheel_volume.py::test_spotify_volume_widget_handle_wheel_clamps_and_schedules 
+PASSED                                                                                                [ 16%]
+
+
+tests/test_scrollwheel_volume.py::test_input_handler_route_wheel_uses_local_coordinates 
+PASSED                                                                                                       [ 33%]
+
+
+tests/test_scrollwheel_volume.py::test_input_handler_route_wheel_ignores_hidden_volume 
+PASSED                                                                                                        [ 50%]
+
+
+tests/test_scrollwheel_volume.py::test_input_handler_route_wheel_propagates_widget_rejection 
+PASSED                                                                                                  [ 66%]
+
+
+tests/test_scrollwheel_volume.py::test_ctrl_mode_wheel_adjusts_spotify_volume_widget 
+PASSED                                                                                                          [ 83%]
+
+
+tests/test_scrollwheel_volume.py::test_cursor_halo_forwarded_wheel_adjusts_volume 
+PASSED                                                                                                             [100%]
+
+
+
+
+============================================================================================ 6 passed in 1.09s ============================================================================================
+
+
+===== pytest run 2025-12-24 04:15:14 args=['tests/test_spotify_visualizer_widget.py', '-vv', '-k', 'bars_not_stuck_at_top or kick_emphasizes_center_more_than_vocals'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 6 items / 4 deselected / 2 selected
+
+
+
+tests/test_spotify_visualizer_widget.py::test_spotify_visualizer_bars_not_stuck_at_top 
+PASSED                                                                                                        [ 50%]
+
+
+tests/test_spotify_visualizer_widget.py::test_spotify_visualizer_kick_emphasizes_center_more_than_vocals 
+PASSED                                                                                      [100%]
+
+
+
+
+===================================================================================== 2 passed, 4 deselected in 0.45s =====================================================================================
+
+
+===== pytest run 2025-12-24 04:15:47 args=['tests/test_spotify_visualizer_widget.py', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 6 items
+
+
+
+tests/test_spotify_visualizer_widget.py::test_spotify_visualizer_tick_consumes_engine_smoothed_bars 
+PASSED                                                                                           [ 16%]
+
+
+tests/test_spotify_visualizer_widget.py::test_spotify_visualizer_compute_bars_reasonable_runtime 
+PASSED                                                                                              [ 33%]
+
+
+tests/test_spotify_visualizer_widget.py::test_spotify_visualizer_widgets_share_audio_engine 
+PASSED                                                                                                   [ 50%]
+
+
+tests/test_spotify_visualizer_widget.py::test_spotify_visualizer_emits_perf_metrics 
+PASSED                                                                                                           [ 66%]
+
+
+tests/test_spotify_visualizer_widget.py::test_spotify_visualizer_bars_not_stuck_at_top 
+PASSED                                                                                                        [ 83%]
+
+
+tests/test_spotify_visualizer_widget.py::test_spotify_visualizer_kick_emphasizes_center_more_than_vocals 
+PASSED                                                                                      [100%]
+
+
+
+
+============================================================================================ 6 passed in 0.85s ============================================================================================
+
+
+===== pytest run 2025-12-24 04:17:50 args=['tests/test_clock_widget.py', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 19 items
+
+
+
+tests/test_clock_widget.py::test_time_format_enum 
+PASSED                                                                                                                                             [  5%]
+
+
+tests/test_clock_widget.py::test_clock_position_enum 
+PASSED                                                                                                                                          [ 10%]
+
+
+tests/test_clock_widget.py::test_clock_creation 
+PASSED                                                                                                                                               [ 15%]
+
+
+tests/test_clock_widget.py::test_clock_start_stop 
+PASSED                                                                                                                                             [ 21%]
+
+
+tests/test_clock_widget.py::test_clock_signals 
+PASSED                                                                                                                                                [ 26%]
+
+
+tests/test_clock_widget.py::test_clock_12h_format 
+PASSED                                                                                                                                             [ 31%]
+
+
+tests/test_clock_widget.py::test_clock_24h_format 
+PASSED                                                                                                                                             [ 36%]
+
+
+tests/test_clock_widget.py::test_clock_without_seconds 
+PASSED                                                                                                                                        [ 42%]
+
+
+tests/test_clock_widget.py::test_clock_with_seconds 
+PASSED                                                                                                                                           [ 47%]
+
+
+tests/test_clock_widget.py::test_clock_set_time_format 
+PASSED                                                                                                                                        [ 52%]
+
+
+tests/test_clock_widget.py::test_clock_set_show_seconds 
+PASSED                                                                                                                                       [ 57%]
+
+
+tests/test_clock_widget.py::test_clock_all_positions 
+PASSED                                                                                                                                          [ 63%]
+
+
+tests/test_clock_widget.py::test_clock_set_position 
+PASSED                                                                                                                                           [ 68%]
+
+
+tests/test_clock_widget.py::test_clock_set_font_size 
+FAILED                                                                                                                                          [ 73%]
+
+
+tests/test_clock_widget.py::test_clock_set_text_color 
+PASSED                                                                                                                                         [ 78%]
+
+
+tests/test_clock_widget.py::test_clock_set_margin 
+FAILED                                                                                                                                             [ 84%]
+
+
+tests/test_clock_widget.py::test_clock_cleanup 
+PASSED                                                                                                                                                [ 89%]
+
+
+tests/test_clock_widget.py::test_clock_concurrent_start_prevention 
+PASSED                                                                                                                            [ 94%]
+
+
+tests/test_clock_widget.py::test_clock_updates_over_time 
+PASSED                                                                                                                                      [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+________________________________________________________________________________________ test_clock_set_font_size _________________________________________________________________________________________
+
+
+
+qapp = <PySide6.QtWidgets.QApplication(0x238c24ca5a0) at 0x00000238C30DF540>, parent_widget = <PySide6.QtWidgets.QWidget(0x238c271d400) at 0x00000238C3727A40>
+
+
+
+    def test_clock_set_font_size(qapp, parent_widget):
+
+        """Test setting font size."""
+
+        clock = ClockWidget(parent=parent_widget)
+
+    
+
+        clock.set_font_size(72)
+
+        assert clock._font_size == 72
+
+    
+
+        # Invalid size should fall back
+
+        clock.set_font_size(-10)
+
+>       assert clock._font_size == 8
+
+E       assert 48 == 8
+
+E        +  where 48 = <widgets.clock_widget.ClockWidget(0x238c271cda0, name="clock_main") at 0x00000238C3727BC0>._font_size
+
+
+
+tests\test_clock_widget.py:250: AssertionError
+
+__________________________________________________________________________________________ test_clock_set_margin __________________________________________________________________________________________
+
+
+
+qapp = <PySide6.QtWidgets.QApplication(0x238c24ca5a0) at 0x00000238C30DF540>, parent_widget = <PySide6.QtWidgets.QWidget(0x238c2719c20) at 0x00000238C379CFC0>
+
+
+
+    def test_clock_set_margin(qapp, parent_widget):
+
+        """Test setting margin."""
+
+        clock = ClockWidget(parent=parent_widget)
+
+    
+
+        clock.set_margin(50)
+
+        assert clock._margin == 50
+
+    
+
+        # Invalid margin should clamp to zero per BaseOverlayWidget
+
+        clock.set_margin(-10)
+
+>       assert clock._margin == 0
+
+E       assert 20 == 0
+
+E        +  where 20 = <widgets.clock_widget.ClockWidget(0x238c271a2e0, name="clock_main") at 0x00000238C379D680>._margin
+
+
+
+tests\test_clock_widget.py:272: AssertionError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_clock_widget.py::test_clock_set_font_size - assert 48 == 8
+ +  where 48 = <widgets.clock_widget.ClockWidget(0x238c271cda0, name="clock_main") at 0x00000238C3727BC0>._font_size
+
+
+FAILED tests/test_clock_widget.py::test_clock_set_margin - assert 20 == 0
+ +  where 20 = <widgets.clock_widget.ClockWidget(0x238c271a2e0, name="clock_main") at 0x00000238C379D680>._margin
+
+
+====================================================================================== 2 failed, 17 passed in 5.35s =======================================================================================
+
+
+===== pytest run 2025-12-24 04:18:26 args=['tests/test_clock_widget.py', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 19 items
+
+
+
+tests/test_clock_widget.py::test_time_format_enum 
+PASSED                                                                                                                                             [  5%]
+
+
+tests/test_clock_widget.py::test_clock_position_enum 
+PASSED                                                                                                                                          [ 10%]
+
+
+tests/test_clock_widget.py::test_clock_creation 
+PASSED                                                                                                                                               [ 15%]
+
+
+tests/test_clock_widget.py::test_clock_start_stop 
+PASSED                                                                                                                                             [ 21%]
+
+
+tests/test_clock_widget.py::test_clock_signals 
+PASSED                                                                                                                                                [ 26%]
+
+
+tests/test_clock_widget.py::test_clock_12h_format 
+PASSED                                                                                                                                             [ 31%]
+
+
+tests/test_clock_widget.py::test_clock_24h_format 
+PASSED                                                                                                                                             [ 36%]
+
+
+tests/test_clock_widget.py::test_clock_without_seconds 
+PASSED                                                                                                                                        [ 42%]
+
+
+tests/test_clock_widget.py::test_clock_with_seconds 
+PASSED                                                                                                                                           [ 47%]
+
+
+tests/test_clock_widget.py::test_clock_set_time_format 
+PASSED                                                                                                                                        [ 52%]
+
+
+tests/test_clock_widget.py::test_clock_set_show_seconds 
+PASSED                                                                                                                                       [ 57%]
+
+
+tests/test_clock_widget.py::test_clock_all_positions 
+PASSED                                                                                                                                          [ 63%]
+
+
+tests/test_clock_widget.py::test_clock_set_position 
+PASSED                                                                                                                                           [ 68%]
+
+
+tests/test_clock_widget.py::test_clock_set_font_size 
+PASSED                                                                                                                                          [ 73%]
+
+
+tests/test_clock_widget.py::test_clock_set_text_color 
+PASSED                                                                                                                                         [ 78%]
+
+
+tests/test_clock_widget.py::test_clock_set_margin 
+PASSED                                                                                                                                             [ 84%]
+
+
+tests/test_clock_widget.py::test_clock_cleanup 
+PASSED                                                                                                                                                [ 89%]
+
+
+tests/test_clock_widget.py::test_clock_concurrent_start_prevention 
+PASSED                                                                                                                            [ 94%]
+
+
+tests/test_clock_widget.py::test_clock_updates_over_time 
+PASSED                                                                                                                                      [100%]
+
+
+
+
+=========================================================================================== 19 passed in 4.57s ============================================================================================
+
+
+===== pytest run 2025-12-24 04:19:37 args=['tests/test_ctrl_interaction_mode.py', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 16 items
+
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_held_suppresses_mouse_exit_single_widget 
+PASSED                                                                                                       [  6%]
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_held_global_across_multiple_widgets 
+PASSED                                                                                                            [ 12%]
+
+
+tests/test_ctrl_interaction_mode.py::test_media_keys_do_not_exit_screensaver[16777344] 
+PASSED                                                                                                        [ 18%]
+
+
+tests/test_ctrl_interaction_mode.py::test_media_keys_do_not_exit_screensaver[16777349] 
+PASSED                                                                                                        [ 25%]
+
+
+tests/test_ctrl_interaction_mode.py::test_media_keys_do_not_exit_screensaver[16777347] 
+PASSED                                                                                                        [ 31%]
+
+
+tests/test_ctrl_interaction_mode.py::test_media_keys_do_not_exit_screensaver[16777346] 
+PASSED                                                                                                        [ 37%]
+
+
+tests/test_ctrl_interaction_mode.py::test_media_keys_do_not_exit_screensaver[16777330] 
+PASSED                                                                                                        [ 43%]
+
+
+tests/test_ctrl_interaction_mode.py::test_media_keys_do_not_exit_screensaver[16777328] 
+PASSED                                                                                                        [ 50%]
+
+
+tests/test_ctrl_interaction_mode.py::test_media_keys_do_not_exit_screensaver[16777329] 
+PASSED                                                                                                        [ 56%]
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_fades_in_and_out 
+PASSED                                                                                                                          [ 62%]
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_owner_migrates_between_screens 
+PASSED                                                                                                            [ 68%]
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_shows_without_slack_attr 
+PASSED                                                                                                                  [ 75%]
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_context_menu_active 
+PASSED                                                                                                      [ 81%]
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_hides_when_cursor_leaves_display 
+PASSED                                                                                                          [ 87%]
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_inactivity_timeout 
+PASSED                                                                                                                        [ 93%]
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_settings_dialog_active 
+FAILED                                                                                                   [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+_________________________________________________________________________ test_ctrl_halo_suppressed_while_settings_dialog_active __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x15d792538f0) at 0x0000015D7E4E9CC0>, settings_manager = <core.settings.settings_manager.SettingsManager(0x15d782b84e0) at 0x0000015D7F273700>
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x0000015D7F26BC50>
+
+
+
+    @pytest.mark.qt
+
+    def test_ctrl_halo_suppressed_while_settings_dialog_active(qt_app, settings_manager, qtbot):
+
+        """Settings dialog active flag must fully suppress Ctrl halo in hard-exit mode."""
+
+        settings_manager.set("input.hard_exit", True)
+
+        widget = DisplayWidget(
+
+            screen_index=0,
+
+            display_mode=DisplayMode.FILL,
+
+            settings_manager=settings_manager,
+
+        )
+
+        qtbot.addWidget(widget)
+
+        widget.resize(400, 300)
+
+        widget.show()
+
+    
+
+        coord = get_coordinator()
+
+        coord.set_settings_dialog_active(False)
+
+        coord.set_ctrl_held(False)
+
+    
+
+        # Warm-up: halo should appear normally when settings dialog is inactive.
+
+        QTest.keyPress(widget, Qt.Key.Key_Control)
+
+        qt_app.processEvents()
+
+        QTest.mouseMove(widget, widget.rect().center())
+
+        qt_app.processEvents()
+
+        hint = getattr(widget, "_ctrl_cursor_hint", None)
+
+        assert hint is not None and hint.isVisible()
+
+        QTest.keyRelease(widget, Qt.Key.Key_Control)
+
+        coord.set_ctrl_held(False)
+
+        qt_app.processEvents()
+
+    
+
+        # Activate settings dialog flag - halo must hide and refuse to show.
+
+        coord.set_settings_dialog_active(True)
+
+        QTest.keyPress(widget, Qt.Key.Key_Control)
+
+        qt_app.processEvents()
+
+        QTest.mouseMove(widget, widget.rect().center() + QPoint(10, 10))
+
+        qt_app.processEvents()
+
+        hint_active = getattr(widget, "_ctrl_cursor_hint", None)
+
+        if hint_active is not None:
+
+>           assert not hint_active.isVisible()
+
+E           assert not True
+
+E            +  where True = <built-in method isVisible of CursorHaloWidget object at 0x0000015D7F26A740>()
+
+E            +    where <built-in method isVisible of CursorHaloWidget object at 0x0000015D7F26A740> = <widgets.cursor_halo.CursorHaloWidget(0x15d794f59d0) at 0x0000015D7F26A740>.isVisible
+
+
+
+tests\test_ctrl_interaction_mode.py:442: AssertionError
+
+============================================================================================ warnings summary =============================================================================================
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_held_suppresses_mouse_exit_single_widget
+tests/test_ctrl_interaction_mode.py::test_ctrl_held_global_across_multiple_widgets
+
+
+  F:\Programming\Apps\ShittyRandomPhotoScreenSaver\rendering\input_handler.py:631: DeprecationWarning: Function: 'QMouseEvent.pos() const' is marked as deprecated, please check the documentation for more information.
+    pos = event.pos()
+
+
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_held_suppresses_mouse_exit_single_widget
+tests/test_ctrl_interaction_mode.py::test_ctrl_held_suppresses_mouse_exit_single_widget
+tests/test_ctrl_interaction_mode.py::test_ctrl_held_global_across_multiple_widgets
+tests/test_ctrl_interaction_mode.py::test_ctrl_held_global_across_multiple_widgets
+
+
+  F:\Programming\Apps\ShittyRandomPhotoScreenSaver\rendering\display_widget.py:2457: DeprecationWarning: Function: 'QMouseEvent.pos() const' is marked as deprecated, please check the documentation for more information.
+    logger.info(f"Mouse clicked at ({event.pos().x()}, {event.pos().y()}), requesting exit")
+
+
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_held_suppresses_mouse_exit_single_widget
+
+  F:\Programming\Apps\ShittyRandomPhotoScreenSaver\rendering\display_widget.py:2486: DeprecationWarning: Function: 'QMouseEvent.pos() const' is marked as deprecated, please check the documentation for more information.
+    self._initial_mouse_pos = event.pos()
+
+
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_fades_in_and_out
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_fades_in_and_out
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_fades_in_and_out
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_fades_in_and_out
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_fades_in_and_out
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_fades_in_and_out
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_fades_in_and_out
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_settings_dialog_active
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_settings_dialog_active
+
+
+  F:\Programming\Apps\ShittyRandomPhotoScreenSaver\rendering\display_widget.py:2477: DeprecationWarning: Function: 'QMouseEvent.pos() const' is marked as deprecated, please check the documentation for more information.
+    event.pos(), getattr(self, "spotify_volume_widget", None)
+
+
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_owner_migrates_between_screens
+
+  F:\Programming\Apps\ShittyRandomPhotoScreenSaver\tests\test_ctrl_interaction_mode.py:271: DeprecationWarning: Function: 'QMouseEvent.QMouseEvent(QEvent.Type type, const QPointF &localPos, Qt.MouseButton button, QFlags<Qt.MouseButton> buttons, QFlags<Qt.KeyboardModifier> modifiers, const QPointingDevice *device)' is marked as deprecated, please check the documentation for more information.
+    event = QMouseEvent(
+
+
+
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_settings_dialog_active - assert not True
+ +  where True = <built-in method isVisible of CursorHaloWidget object at 0x0000015D7F26A740>()
+ +    where <built-in method isVisible of CursorHaloWidget object at 0x0000015D7F26A740> = <widgets.cursor_halo.CursorHaloWidget(0x15d794f59d0) at 0x0000015D7F26A740>.isVisible
+
+
+================================================================================ 1 failed, 15 passed, 17 warnings in 5.58s ================================================================================
+
+
+===== pytest run 2025-12-24 04:20:22 args=['tests/test_ctrl_interaction_mode.py', '-vv', '-k', 'settings_dialog_active'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 16 items / 15 deselected / 1 selected
+
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_settings_dialog_active 
+FAILED                                                                                                   [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+_________________________________________________________________________ test_ctrl_halo_suppressed_while_settings_dialog_active __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x210e47fa7a0) at 0x00000210FFC1B740>, settings_manager = <core.settings.settings_manager.SettingsManager(0x210e47fab00) at 0x000002109436CA00>
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x00000210943853D0>
+
+
+
+    @pytest.mark.qt
+
+    def test_ctrl_halo_suppressed_while_settings_dialog_active(qt_app, settings_manager, qtbot):
+
+        """Settings dialog active flag must fully suppress Ctrl halo in hard-exit mode."""
+
+        settings_manager.set("input.hard_exit", True)
+
+        widget = DisplayWidget(
+
+            screen_index=0,
+
+            display_mode=DisplayMode.FILL,
+
+            settings_manager=settings_manager,
+
+        )
+
+        qtbot.addWidget(widget)
+
+        widget.resize(400, 300)
+
+        widget.show()
+
+    
+
+        coord = get_coordinator()
+
+        coord.set_settings_dialog_active(False)
+
+        coord.set_ctrl_held(False)
+
+    
+
+        # Warm-up: halo should appear normally when settings dialog is inactive.
+
+        QTest.keyPress(widget, Qt.Key.Key_Control)
+
+        qt_app.processEvents()
+
+        QTest.mouseMove(widget, widget.rect().center())
+
+        qt_app.processEvents()
+
+        hint = getattr(widget, "_ctrl_cursor_hint", None)
+
+>       assert hint is not None and hint.isVisible()
+
+E       assert (<widgets.cursor_halo.CursorHaloWidget(0x210e4a7a0f0) at 0x00000210943A3980> is not None and False)
+
+E        +  where False = <built-in method isVisible of CursorHaloWidget object at 0x00000210943A3980>()
+
+E        +    where <built-in method isVisible of CursorHaloWidget object at 0x00000210943A3980> = <widgets.cursor_halo.CursorHaloWidget(0x210e4a7a0f0) at 0x00000210943A3980>.isVisible
+
+
+
+tests\test_ctrl_interaction_mode.py:429: AssertionError
+
+============================================================================================ warnings summary =============================================================================================
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_settings_dialog_active
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_settings_dialog_active
+
+
+  F:\Programming\Apps\ShittyRandomPhotoScreenSaver\rendering\display_widget.py:2487: DeprecationWarning: Function: 'QMouseEvent.pos() const' is marked as deprecated, please check the documentation for more information.
+    event.pos(), getattr(self, "spotify_volume_widget", None)
+
+
+
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_settings_dialog_active - assert (<widgets.cursor_halo.CursorHaloWidget(0x210e4a7a0f0) at 0x00000210943A3980> is not None and False)
+ +  where False = <built-in method isVisible of CursorHaloWidget object at 0x00000210943A3980>()
+ +    where <built-in method isVisible of CursorHaloWidget object at 0x00000210943A3980> = <widgets.cursor_halo.CursorHaloWidget(0x210e4a7a0f0) at 0x00000210943A3980>.isVisible
+
+
+============================================================================== 1 failed, 15 deselected, 2 warnings in 1.19s ===============================================================================
+
+
+===== pytest run 2025-12-24 04:23:36 args=['tests/test_ctrl_interaction_mode.py', '-vv', '-k', 'settings_dialog_active'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 16 items / 15 deselected / 1 selected
+
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_settings_dialog_active 
+FAILED                                                                                                   [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+_________________________________________________________________________ test_ctrl_halo_suppressed_while_settings_dialog_active __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x2e3a5ff9130) at 0x000002E3D51A9CC0>, settings_manager = <core.settings.settings_manager.SettingsManager(0x2e3a5ff9210) at 0x000002E3D5619600>
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x000002E3D561AD50>
+
+
+
+    @pytest.mark.qt
+
+    def test_ctrl_halo_suppressed_while_settings_dialog_active(qt_app, settings_manager, qtbot):
+
+        """Settings dialog active flag must fully suppress Ctrl halo in hard-exit mode."""
+
+        settings_manager.set("input.hard_exit", True)
+
+        widget = DisplayWidget(
+
+            screen_index=0,
+
+            display_mode=DisplayMode.FILL,
+
+            settings_manager=settings_manager,
+
+        )
+
+        qtbot.addWidget(widget)
+
+        widget.resize(400, 300)
+
+        widget.show()
+
+    
+
+        coord = get_coordinator()
+
+        coord.set_settings_dialog_active(False)
+
+        coord.set_ctrl_held(False)
+
+>       coord.register_display_widget(widget)
+
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+E       AttributeError: 'MultiMonitorCoordinator' object has no attribute 'register_display_widget'
+
+
+
+tests\test_ctrl_interaction_mode.py:422: AttributeError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_settings_dialog_active - AttributeError: 'MultiMonitorCoordinator' object has no attribute 'register_display_widget'
+
+==================================================================================== 1 failed, 15 deselected in 1.14s =====================================================================================
+
+
+===== pytest run 2025-12-24 04:24:21 args=['tests/test_ctrl_interaction_mode.py', '-vv', '-k', 'settings_dialog_active'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 16 items / 15 deselected / 1 selected
+
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_settings_dialog_active 
+FAILED                                                                                                   [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+_________________________________________________________________________ test_ctrl_halo_suppressed_while_settings_dialog_active __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x1efc8f378a0) at 0x000001EFF852D480>, settings_manager = <core.settings.settings_manager.SettingsManager(0x1efc7876040) at 0x000001EFF850D980>
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x000001EFF852ED10>
+
+
+
+    @pytest.mark.qt
+
+    def test_ctrl_halo_suppressed_while_settings_dialog_active(qt_app, settings_manager, qtbot):
+
+        """Settings dialog active flag must fully suppress Ctrl halo in hard-exit mode."""
+
+        settings_manager.set("input.hard_exit", True)
+
+        widget = DisplayWidget(
+
+            screen_index=0,
+
+            display_mode=DisplayMode.FILL,
+
+            settings_manager=settings_manager,
+
+        )
+
+        qtbot.addWidget(widget)
+
+        widget.resize(400, 300)
+
+        widget.show()
+
+    
+
+        coord = get_coordinator()
+
+        coord.set_settings_dialog_active(False)
+
+        coord.set_ctrl_held(False)
+
+        coord.register_instance(widget, widget.screen())
+
+        coord.hide_all_halos()
+
+        coord.reset_all_ctrl_state()
+
+    
+
+        # Warm-up: halo should appear normally when settings dialog is inactive.
+
+        QTest.keyPress(widget, Qt.Key.Key_Control)
+
+        qt_app.processEvents()
+
+        QTest.mouseMove(widget, widget.rect().center())
+
+        qt_app.processEvents()
+
+        hint = getattr(widget, "_ctrl_cursor_hint", None)
+
+>       assert hint is not None and hint.isVisible()
+
+E       assert (<widgets.cursor_halo.CursorHaloWidget(0x1efc9019830) at 0x000001EFF855FD80> is not None and False)
+
+E        +  where False = <built-in method isVisible of CursorHaloWidget object at 0x000001EFF855FD80>()
+
+E        +    where <built-in method isVisible of CursorHaloWidget object at 0x000001EFF855FD80> = <widgets.cursor_halo.CursorHaloWidget(0x1efc9019830) at 0x000001EFF855FD80>.isVisible
+
+
+
+tests\test_ctrl_interaction_mode.py:432: AssertionError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_settings_dialog_active - assert (<widgets.cursor_halo.CursorHaloWidget(0x1efc9019830) at 0x000001EFF855FD80> is not None and False)
+ +  where False = <built-in method isVisible of CursorHaloWidget object at 0x000001EFF855FD80>()
+ +    where <built-in method isVisible of CursorHaloWidget object at 0x000001EFF855FD80> = <widgets.cursor_halo.CursorHaloWidget(0x1efc9019830) at 0x000001EFF855FD80>.isVisible
+
+
+==================================================================================== 1 failed, 15 deselected in 1.15s =====================================================================================
+
+
+===== pytest run 2025-12-24 04:31:35 args=['tests/test_ctrl_interaction_mode.py', '-vv', '-k', 'settings_dialog_active'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 16 items / 15 deselected / 1 selected
+
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_settings_dialog_active 
+PASSED                                                                                                   [100%]
+
+
+
+
+============================================================================================ warnings summary =============================================================================================
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_settings_dialog_active
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_settings_dialog_active
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_settings_dialog_active
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_settings_dialog_active
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_settings_dialog_active
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_settings_dialog_active
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_settings_dialog_active
+
+
+  F:\Programming\Apps\ShittyRandomPhotoScreenSaver\rendering\display_widget.py:2487: DeprecationWarning: Function: 'QMouseEvent.pos() const' is marked as deprecated, please check the documentation for more information.
+    event.pos(), getattr(self, "spotify_volume_widget", None)
+
+
+
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+
+============================================================================== 1 passed, 15 deselected, 7 warnings in 1.03s ===============================================================================
+

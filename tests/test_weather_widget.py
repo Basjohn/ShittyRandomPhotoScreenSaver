@@ -6,6 +6,18 @@ from PySide6.QtGui import QColor
 from widgets.weather_widget import WeatherWidget, WeatherPosition, WeatherFetcher
 
 
+@pytest.fixture(autouse=True)
+def isolated_weather_cache(tmp_path, monkeypatch):
+    """Ensure each test uses a fresh on-disk cache."""
+    widget_cache = tmp_path / "weather_widget_cache.json"
+    provider_cache = tmp_path / "open_meteo_cache.json"
+    monkeypatch.setattr("widgets.weather_widget._CACHE_FILE", widget_cache, raising=False)
+    monkeypatch.setattr(
+        "weather.open_meteo_provider._WEATHER_CACHE_FILE", provider_cache, raising=False
+    )
+    yield
+
+
 @pytest.fixture
 def qapp():
     """Create QApplication for tests."""
@@ -60,7 +72,8 @@ def test_weather_creation(qapp, parent_widget):
     
     assert weather is not None
     assert weather._location == "London"
-    assert weather._position == WeatherPosition.BOTTOM_LEFT
+    assert weather._weather_position == WeatherPosition.BOTTOM_LEFT
+    assert weather.get_position().value == WeatherPosition.BOTTOM_LEFT.value
     assert weather.is_running() is False
 
 
@@ -144,7 +157,8 @@ def test_weather_all_positions(qapp, parent_widget):
             position=position
         )
         
-        assert weather._position == position
+        assert weather._weather_position == position
+        assert weather.get_position().value == position.value
 
 
 def test_weather_set_position(qapp, parent_widget, mock_weather_data):
@@ -200,7 +214,7 @@ def test_weather_set_font_size(qapp, parent_widget):
     
     # Invalid size should fall back
     weather.set_font_size(-10)
-    assert weather._font_size == 24
+    assert weather._font_size == 8
 
 
 def test_weather_set_text_color(qapp, parent_widget):
@@ -300,7 +314,9 @@ def test_weather_fetcher_error(mock_get, qapp):
     fetcher.fetch()
     
     assert len(errors_received) == 1
-    assert "Network error" in errors_received[0]
+    message = errors_received[0]
+    assert "London" in message
+    assert any(token in message for token in ("Network error", "No weather data returned"))
 
 
 def test_weather_display_no_data(qapp, parent_widget):

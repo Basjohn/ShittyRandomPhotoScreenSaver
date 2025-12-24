@@ -15,12 +15,12 @@ except ImportError:
     PYTZ_AVAILABLE = False
 
 from PySide6.QtWidgets import QLabel, QWidget
-from PySide6.QtCore import QRect, QTimer, Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QFont, QColor, QPainter, QPen, QPaintEvent
 from shiboken6 import Shiboken
 
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
-from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile, draw_text_rect_with_shadow
+from widgets.shadow_utils import ShadowFadeProfile, apply_widget_shadow
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 from core.logging.logger import get_logger
 
@@ -110,6 +110,7 @@ class ClockWidget(BaseOverlayWidget):
         self._show_numerals: bool = True
         # Optional analogue-only drop shadow under the clock face and hands.
         self._analog_face_shadow: bool = True
+        self._analog_shadow_intense: bool = False
 
         # Last timestamp used for analogue rendering.
         self._current_dt: Optional[datetime] = None
@@ -639,6 +640,13 @@ class ClockWidget(BaseOverlayWidget):
         if self._display_mode == "analog":
             self.update()
 
+    def set_analog_shadow_intense(self, intense: bool) -> None:
+        """Enable or disable the intensified analogue shadow styling."""
+
+        self._analog_shadow_intense = bool(intense)
+        if self._display_mode == "analog":
+            self.update()
+
     def set_font_family(self, family: str) -> None:
         """Set font family - override to use bold weight and update tz label."""
         super().set_font_family(family)
@@ -746,7 +754,7 @@ class ClockWidget(BaseOverlayWidget):
                     bottom_padding = 20
             # With background frame
             self.setStyleSheet(f"""
-                QLabel#clock_main {{
+                QLabel {{
                     color: rgba({self._text_color.red()}, {self._text_color.green()}, 
                                {self._text_color.blue()}, {self._text_color.alpha()});
                     background-color: rgba({self._bg_color.red()}, {self._bg_color.green()}, 
@@ -756,17 +764,17 @@ class ClockWidget(BaseOverlayWidget):
                                                                  {self._bg_border_color.blue()}, 
                                                                  {self._bg_border_color.alpha()});
                     border-radius: 8px;
-                    padding: 6px 12px {bottom_padding}px 16px;
+                    padding: 6px 28px {bottom_padding}px 21px;
                 }}
             """)
         else:
             # Transparent background (default)
             self.setStyleSheet(f"""
-                QLabel#clock_main {{
+                QLabel {{
                     color: rgba({self._text_color.red()}, {self._text_color.green()}, 
                                {self._text_color.blue()}, {self._text_color.alpha()});
                     background-color: transparent;
-                    padding: 6px 12px 6px 16px;
+                    padding: 6px 28px 6px 21px;
                 }}
             """)
     
@@ -790,176 +798,184 @@ class ClockWidget(BaseOverlayWidget):
             now = self._current_dt
 
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        try:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            high_quality_hint = getattr(QPainter.RenderHint, "HighQualityAntialiasing", None)
+            if high_quality_hint is not None:
+                painter.setRenderHint(high_quality_hint, True)
+            else:
+                painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
 
-        # Leave a generous outer margin, with extra space at the bottom for
-        # the timezone abbreviation.
-        rect = self.rect().adjusted(16, 16, -16, -36)
-        side = min(rect.width(), rect.height())
-        if side <= 0:
-            return
+            shadow_scale = 1.5 if self._analog_shadow_intense else 1.0
+            opacity_scale = 2.0 if self._analog_shadow_intense else 1.0
 
-        center_x = rect.x() + rect.width() // 2
-        center_y = rect.y() + rect.height() // 2
+            def _scaled_alpha(base_alpha: int) -> int:
+                return min(255, int(round(base_alpha * opacity_scale)))
 
-        # Precompute numeral metrics so we can keep the face well inside
-        # the widget and place numerals just outside the circle. Numeral
-        # size is scaled from both the configured font size and the
-        # available side length so they stay readable but subtle. This
-        # keeps them smaller than the main time text and avoids crowding
-        # the clock face.
-        numeral_pt = max(8, min(int(self._font_size * 0.25), max(9, side // 18)))
-        numeral_font = QFont(self._font_family, numeral_pt)
-        painter.setFont(numeral_font)
-        numeral_metrics = painter.fontMetrics()
-        numeral_height = numeral_metrics.height()
+            # Leave a generous outer margin, with extra space at the bottom for
+            # the timezone abbreviation.
+            rect = self.rect().adjusted(16, 16, -16, -36)
+            side = min(rect.width(), rect.height())
+            if side <= 0:
+                return
 
-        # Pull the clock face further in from the widget edges so there is
-        # comfortable space for numerals plus a bit of padding.
-        radius = side // 2 - (numeral_height * 2) - 8
-        if radius <= 0:
-            return
+            center_x = rect.x() + rect.width() // 2
+            center_y = rect.y() + rect.height() // 2
 
-        # Optional subtle drop shadow under the analogue clock face.
-        if self._analog_face_shadow:
-            shadow_color = QColor(0, 0, 0, max(94, int(self._text_color.alpha() * 0.42)))
-            shadow_pen = QPen(shadow_color)
-            shadow_pen.setWidth(2)
-            painter.setPen(shadow_pen)
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawEllipse(
-                center_x - radius + 2,
-                center_y - radius + 2,
-                radius * 2,
-                radius * 2,
-            )
-
-        # Clock face border
-        face_pen = QPen(self._text_color)
-        face_pen.setWidth(2)
-        painter.setPen(face_pen)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawEllipse(center_x - radius, center_y - radius, radius * 2, radius * 2)
-
-        # Hour markers
-        marker_len = max(6, radius // 10)
-        for i in range(12):
-            angle = math.radians((i / 12.0) * 360.0 - 90.0)
-            cos_a = math.cos(angle)
-            sin_a = math.sin(angle)
-            outer_x = center_x + int(cos_a * (radius - 2))
-            outer_y = center_y + int(sin_a * (radius - 2))
-            inner_x = center_x + int(cos_a * (radius - marker_len - 2))
-            inner_y = center_y + int(sin_a * (radius - marker_len - 2))
-            painter.drawLine(inner_x, inner_y, outer_x, outer_y)
-
-        # Optional numerals (I–XII) placed just outside the clock face.
-        if self._show_numerals:
-            roman_map = {
-                1: "I",
-                2: "II",
-                3: "III",
-                4: "IV",
-                5: "V",
-                6: "VI",
-                7: "VII",
-                8: "VIII",
-                9: "IX",
-                10: "X",
-                11: "XI",
-                12: "XII",
-            }
-
-            # Place numerals with a clear gap from the face so they never
-            # visually touch the circle or its hour markers.
-            numeral_radius = radius + numeral_height
+            # Precompute numeral metrics so we can keep the face well inside
+            # the widget and place numerals just outside the circle.
+            numeral_pt = max(8, min(int(self._font_size * 0.25), max(9, side // 18)))
+            numeral_font = QFont(self._font_family, numeral_pt)
             painter.setFont(numeral_font)
-            for hour in range(1, 13):
-                angle = math.radians((hour / 12.0) * 360.0 - 90.0)
+            numeral_metrics = painter.fontMetrics()
+            numeral_height = numeral_metrics.height()
+
+            # Pull the clock face further in from the widget edges so there is
+            # comfortable space for numerals plus a bit of padding.
+            radius = side // 2 - (numeral_height * 2) - 8
+            if radius <= 0:
+                return
+
+            # Optional subtle drop shadow under the analogue clock face.
+            if self._analog_face_shadow:
+                base_alpha = max(94, int(self._text_color.alpha() * 0.504))
+                shadow_color = QColor(0, 0, 0, _scaled_alpha(base_alpha))
+                shadow_pen = QPen(shadow_color)
+                shadow_pen.setWidthF(2.0 * shadow_scale)
+                painter.setPen(shadow_pen)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                shadow_offset = max(2, int(round(2 * shadow_scale)))
+                radius_expand = 0
+                if self._analog_shadow_intense:
+                    radius_expand = max(2, int(round(radius * 0.1)))
+                shadow_radius = radius + radius_expand
+                painter.drawEllipse(
+                    center_x - shadow_radius + shadow_offset,
+                    center_y - shadow_radius + shadow_offset,
+                    shadow_radius * 2,
+                    shadow_radius * 2,
+                )
+
+            # Clock face border
+            face_pen = QPen(self._text_color)
+            face_pen.setWidth(2)
+            painter.setPen(face_pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawEllipse(center_x - radius, center_y - radius, radius * 2, radius * 2)
+
+            # Hour markers
+            marker_len = max(6, radius // 10)
+            for i in range(12):
+                angle = math.radians((i / 12.0) * 360.0 - 90.0)
                 cos_a = math.cos(angle)
                 sin_a = math.sin(angle)
-                tx = center_x + int(cos_a * numeral_radius)
-                ty = center_y + int(sin_a * numeral_radius)
-                text = roman_map.get(hour, str(hour))
-                tw = numeral_metrics.horizontalAdvance(text)
-                th = numeral_metrics.height()
+                outer_x = center_x + int(cos_a * (radius - 2))
+                outer_y = center_y + int(sin_a * (radius - 2))
+                inner_x = center_x + int(cos_a * (radius - marker_len - 2))
+                inner_y = center_y + int(sin_a * (radius - marker_len - 2))
+                painter.drawLine(inner_x, inner_y, outer_x, outer_y)
 
-                # Subtle drop shadow for numerals, matching the analogue
-                # face/hand shadow so the entire dial reads as a single
-                # lit element.
+            # Optional numerals (I–XII) placed just outside the clock face.
+            if self._show_numerals:
+                roman_map = {
+                    1: "I",
+                    2: "II",
+                    3: "III",
+                    4: "IV",
+                    5: "V",
+                    6: "VI",
+                    7: "VII",
+                    8: "VIII",
+                    9: "IX",
+                    10: "X",
+                    11: "XI",
+                    12: "XII",
+                }
+
+                # Place numerals with a clear gap from the face so they never
+                # visually touch the circle or its hour markers.
+                numeral_radius = radius + numeral_height
+                painter.setFont(numeral_font)
+                for hour in range(1, 13):
+                    angle = math.radians((hour / 12.0) * 360.0 - 90.0)
+                    cos_a = math.cos(angle)
+                    sin_a = math.sin(angle)
+                    tx = center_x + int(cos_a * numeral_radius)
+                    ty = center_y + int(sin_a * numeral_radius)
+                    text = roman_map.get(hour, str(hour))
+                    tw = numeral_metrics.horizontalAdvance(text)
+                    th = numeral_metrics.height()
+
+                    # Subtle drop shadow for numerals, matching the analogue
+                    # face/hand shadow so the entire dial reads as a single lit element.
+                    if self._analog_face_shadow:
+                        base_numeral_alpha = max(81, int(self._text_color.alpha() * 0.504))
+                        numeral_shadow = QColor(0, 0, 0, _scaled_alpha(base_numeral_alpha))
+                        painter.setPen(QPen(numeral_shadow))
+                        numeral_offset = max(1, int(round(shadow_scale)))
+                        painter.drawText(tx - tw // 2 + numeral_offset, ty + th // 4 + numeral_offset, text)
+
+                    painter.setPen(QPen(self._text_color))
+                    painter.drawText(tx - tw // 2, ty + th // 4, text)
+
+            # Helper to draw a hand with a subtle bottom-right shadow.
+            def _draw_hand(angle_deg: float, length: float, thickness: int) -> None:
+                angle = math.radians(angle_deg - 90.0)
+                cos_a = math.cos(angle)
+                sin_a = math.sin(angle)
+                ex = center_x + int(cos_a * length)
+                ey = center_y + int(sin_a * length)
+
                 if self._analog_face_shadow:
-                    numeral_shadow = QColor(0, 0, 0, max(81, int(self._text_color.alpha() * 0.42)))
-                    painter.setPen(QPen(numeral_shadow))
-                    painter.drawText(tx - tw // 2 + 1, ty + th // 4 + 1, text)
+                    base_hand_alpha = max(69, int(self._text_color.alpha() * 0.504))
+                    shadow_color = QColor(0, 0, 0, _scaled_alpha(base_hand_alpha))
+                    shadow_pen = QPen(shadow_color)
+                    shadow_pen.setWidthF(max(1.5, float(thickness)) * shadow_scale)
+                    shadow_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+                    shadow_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+                    painter.setPen(shadow_pen)
+                    hand_offset = max(2, int(round(2 * shadow_scale)))
+                    painter.drawLine(center_x + hand_offset, center_y + hand_offset, ex + hand_offset, ey + hand_offset)
 
+                hand_pen = QPen(self._text_color)
+                hand_pen.setWidthF(max(1.5, float(thickness)))
+                hand_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+                hand_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+                painter.setPen(hand_pen)
+                painter.drawLine(center_x, center_y, ex, ey)
+
+            # Compute hand angles
+            sec = now.second + now.microsecond / 1_000_000.0
+            minute = now.minute + sec / 60.0
+            hour = (now.hour % 12) + minute / 60.0
+
+            hour_angle = (hour / 12.0) * 360.0
+            minute_angle = (minute / 60.0) * 360.0
+            second_angle = (sec / 60.0) * 360.0
+
+            # Draw hour and minute hands
+            _draw_hand(hour_angle, radius * 0.5, max(3, radius // 15))
+            _draw_hand(minute_angle, radius * 0.75, max(2, radius // 20))
+
+            # Optional seconds hand (thinner and longer)
+            if self._show_seconds:
+                _draw_hand(second_angle, radius * 0.85, 1)
+
+            # Timezone abbreviation rendered below the analogue clock, centred horizontally.
+            if self._show_timezone and self._timezone_abbrev:
+                tz_font_size = max(8, self._font_size // 3)
+                tz_font = QFont(self._font_family, tz_font_size)
+                painter.setFont(tz_font)
+                tz_metrics = painter.fontMetrics()
+                tz_height = tz_metrics.height()
+                text = self._timezone_abbrev
+
+                tz_y = center_y + radius + numeral_height + tz_height + 4
+                tz_x = center_x - tz_metrics.horizontalAdvance(text) // 2
                 painter.setPen(QPen(self._text_color))
-                painter.drawText(tx - tw // 2, ty + th // 4, text)
-
-        # Helper to draw a hand with a subtle bottom-right shadow.
-        def _draw_hand(angle_deg: float, length: float, thickness: int) -> None:
-            angle = math.radians(angle_deg - 90.0)
-            cos_a = math.cos(angle)
-            sin_a = math.sin(angle)
-            ex = center_x + int(cos_a * length)
-            ey = center_y + int(sin_a * length)
-
-            if self._analog_face_shadow:
-                shadow_color = QColor(0, 0, 0, max(69, int(self._text_color.alpha() * 0.42)))
-                shadow_pen = QPen(shadow_color)
-                shadow_pen.setWidth(thickness)
-                painter.setPen(shadow_pen)
-                painter.drawLine(center_x + 2, center_y + 2, ex + 2, ey + 2)
-
-            hand_pen = QPen(self._text_color)
-            hand_pen.setWidth(thickness)
-            painter.setPen(hand_pen)
-            painter.drawLine(center_x, center_y, ex, ey)
-
-        # Compute hand angles
-        sec = now.second + now.microsecond / 1_000_000.0
-        minute = now.minute + sec / 60.0
-        hour = (now.hour % 12) + minute / 60.0
-
-        hour_angle = (hour / 12.0) * 360.0
-        minute_angle = (minute / 60.0) * 360.0
-        second_angle = (sec / 60.0) * 360.0
-
-        # Draw hour and minute hands
-        _draw_hand(hour_angle, radius * 0.5, max(3, radius // 15))
-        _draw_hand(minute_angle, radius * 0.75, max(2, radius // 20))
-
-        # Optional seconds hand (thinner and longer)
-        if self._show_seconds:
-            _draw_hand(second_angle, radius * 0.85, 1)
-
-        # Timezone abbreviation rendered below the analogue clock, centred
-        # horizontally with a small gap from the face.
-        if self._show_timezone and self._timezone_abbrev:
-            tz_font_size = max(8, self._font_size // 3)
-            tz_font = QFont(self._font_family, tz_font_size)
-            painter.setFont(tz_font)
-            tz_metrics = painter.fontMetrics()
-            tz_height = tz_metrics.height()
-            text = self._timezone_abbrev
-
-            # Position the timezone label below both the face and the
-            # numerals with extra padding so nothing overlaps visually.
-            top_y = center_y + radius + (numeral_height * 2) + 8
-            max_top = self.height() - tz_height - 4
-            if top_y > max_top:
-                top_y = max_top
-
-            tz_rect = QRect(0, top_y, self.width(), tz_height)
-            draw_text_rect_with_shadow(
-                painter,
-                tz_rect,
-                Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
-                text,
-                shadow_color=QColor(0, 0, 0, 100),
-                shadow_offset_x=1,
-                shadow_offset_y=1,
-                font_size=tz_font_size,
-            )
+                painter.drawText(tz_x, tz_y, text)
+        finally:
+            painter.end()
     
     def cleanup(self) -> None:
         """Clean up resources."""

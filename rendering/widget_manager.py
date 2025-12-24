@@ -317,6 +317,15 @@ class WidgetManager:
             
             vis_widget.setGeometry(x, y, width, height)
             vis_widget.raise_()
+            
+            # Keep pixel-shift drift baseline aligned with the media card so the
+            # GL overlay inherits the same reference frame as the QWidget card.
+            pixel_shift_manager = getattr(self._parent, "_pixel_shift_manager", None)
+            if pixel_shift_manager is not None and hasattr(pixel_shift_manager, "update_original_position"):
+                try:
+                    pixel_shift_manager.update_original_position(vis_widget)
+                except Exception:
+                    pass
         except Exception:
             pass
 
@@ -1022,6 +1031,14 @@ class WidgetManager:
                 analog_shadow = SettingsManager.to_bool(analog_shadow_val, True)
                 if hasattr(clock, 'set_analog_face_shadow'):
                     clock.set_analog_face_shadow(analog_shadow)
+            except Exception:
+                pass
+
+            try:
+                intense_shadow_val = _resolve_style('analog_shadow_intense', False)
+                intense_shadow = SettingsManager.to_bool(intense_shadow_val, False)
+                if hasattr(clock, 'set_analog_shadow_intense'):
+                    clock.set_analog_shadow_intense(intense_shadow)
             except Exception:
                 pass
 

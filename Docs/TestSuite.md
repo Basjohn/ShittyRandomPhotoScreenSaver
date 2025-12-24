@@ -269,17 +269,20 @@ Get-Content test_output.log -Tail 50
 
 ## Testing Strategy
 
-### Unit Tests (Current)
+-### Unit Tests (Current)
 - **EventSystem**: All core functionality
 - **ResourceManager**: Lifecycle and cleanup
 - **SettingsManager**: Configuration persistence
 - **ThreadManager**: Thread pool operations
+- **Upcoming additions**: Fast-path coverage for `ClockWidget.set_analog_shadow_intense()` (ensures painter state toggles without entering paintEvent) and `RedditWidget.set_item_limit()` (verifies 20-item cap obeys the 25-post ceiling and trims live data when limits shrink).
 
 ### Integration Tests (Planned - Day 5+)
 - Complete startup → slideshow → exit flow
 - Multi-monitor scenarios
 - Settings persistence across restarts
 - Monitor hotplug events
+- **Reddit widget layout sizing**: Add regression coverage that verifies 4-, 10-, and new 20-item modes render the correct number of posts, clamp to the configured limit, and stay within stacking predictor estimates on ultra-wide displays.
+- **Analogue clock shader profile**: Add UI-driven test that toggles “Intense Analogue Shadows” and asserts the analogue renderer reports the doubled opacity/expanded radius via telemetry hooks (no pixel diff needed, just shadow configuration coverage).
 
 ### Performance Tests (Planned - Day 5+)
 - 24-hour stability test

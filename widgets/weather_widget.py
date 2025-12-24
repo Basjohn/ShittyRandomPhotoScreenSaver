@@ -117,9 +117,11 @@ class WeatherWidget(BaseOverlayWidget):
         
         self._location = location
         self._weather_position = position  # Keep original enum for compatibility
+        self._position = OverlayPosition(position.value)
         self._update_timer: Optional[QTimer] = None
         self._retry_timer: Optional[QTimer] = None
         self._update_timer_handle: Optional[OverlayTimerHandle] = None
+        self._icon_timer_handle: Optional[OverlayTimerHandle] = None
         
         # Caching
         self._cached_data: Optional[Dict[str, Any]] = None
@@ -136,11 +138,12 @@ class WeatherWidget(BaseOverlayWidget):
         # Override base class font size default
         self._font_size = 24
         
-        # Padding: slightly more at top/bottom, 15% more on right
+        # Padding: slightly more at top/bottom, extra slack on the right so the
+        # drop shadow doesn't make TOP_RIGHT appear flush with the screen edge.
         self._padding_top = 8
         self._padding_bottom = 8
-        self._padding_left = 16
-        self._padding_right = 18  # ~15% more than left
+        self._padding_left = 21  # +5 to align with overlay cards
+        self._padding_right = 28  # wider to match visual spacing on right-anchored layouts
         
         # Optional forecast line
         self._show_forecast = False

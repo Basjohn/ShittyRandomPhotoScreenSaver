@@ -162,7 +162,7 @@ class MediaWidget(BaseOverlayWidget):
 
         # Base contents margins; _update_display() will tighten these once we
         # know the artwork size, but start with a modest frame.
-        self.setContentsMargins(24, 12, 12, 12)
+        self.setContentsMargins(29, 12, 12, 12)
 
         # Ensure a reasonable default footprint before artwork/metadata arrive.
         self.setMinimumWidth(600)
@@ -864,7 +864,7 @@ class MediaWidget(BaseOverlayWidget):
         right_margin = max(self._artwork_size + 40, 60)
         # Extra bottom margin so the painted controls row has breathing
         # room above the card edge while keeping text clear of the glyphs.
-        self.setContentsMargins(24, 12, right_margin, 40)
+        self.setContentsMargins(29, 12, right_margin, 40)
 
         # After adjusting margins, recompute the widget's anchored position
         # once so we do not "jump" after the fade completes.

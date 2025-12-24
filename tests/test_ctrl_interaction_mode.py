@@ -419,6 +419,9 @@ def test_ctrl_halo_suppressed_while_settings_dialog_active(qt_app, settings_mana
     coord = get_coordinator()
     coord.set_settings_dialog_active(False)
     coord.set_ctrl_held(False)
+    coord.register_instance(widget, widget.screen())
+    coord.hide_all_halos()
+    coord.reset_all_ctrl_state()
 
     # Warm-up: halo should appear normally when settings dialog is inactive.
     QTest.keyPress(widget, Qt.Key.Key_Control)

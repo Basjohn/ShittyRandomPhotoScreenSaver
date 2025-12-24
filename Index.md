@@ -245,13 +245,13 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - `calculate_widget_collision()`: Check if two widget rects overlap
   - `calculate_stack_offset()`: Calculate offset for widget stacking
 - widgets/clock_widget.py
-  - Digital clock widget extending `BaseOverlayWidget`. Supports three instances (Clock 1/2/3) with per-monitor selection, independent timezones, optional seconds and timezone labels, analog/digital modes.
+  - Digital/analogue clock widget extending `BaseOverlayWidget`. Supports three instances (Clock 1/2/3) with per-monitor selection, independent timezones, optional seconds/timezone labels, analogue numerals toggle, subtle vs “Intense Analogue Shadows” mode (doubles drop-shadow opacity/size), and digital/analogue display modes.
 - widgets/weather_widget.py
   - Weather widget extending `BaseOverlayWidget`. Per-monitor selection via settings (ALL or 1/2/3). Features optional forecast line (tomorrow's min/max temp and condition, 8pt smaller than base font). Planned QPainter-based iconography.
 - widgets/media_widget.py
   - Spotify/media overlay widget extending `BaseOverlayWidget`. Driven by `core/media/media_controller.py`; per-monitor selection via `widgets.media`, corner positioning, background frame, and monochrome transport controls (Prev/Play/Pause/Next) over track metadata. Artwork uses a square frame for album covers and adapts to non-square thumbnails.
 - widgets/reddit_widget.py
-  - Reddit overlay widget extending `BaseOverlayWidget`. Shows top posts from a configured subreddit with 4- and 10-item layouts, per-monitor selection via `widgets.reddit`, shared overlay fade-in coordination, and click-through to the system browser.
+  - Reddit overlay widget extending `BaseOverlayWidget`. Shows top posts from a configured subreddit with 4-, 10-, or 20-item layouts (20-item mode for ultra-wide displays), per-monitor selection via `widgets.reddit`, shared overlay fade-in coordination, and click-through to the system browser.
   - **Reddit link handling (2024-12-17)**: Smart A/B/C logic based on primary display coverage:
     - Case A: Primary covered + hard_exit → Exit immediately, bring browser to foreground
     - Case B: Primary covered + Ctrl held → Exit immediately, bring browser to foreground

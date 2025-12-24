@@ -831,6 +831,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._base_max_fps: float = 90.0
         self._transition_max_fps: float = 60.0
         self._last_gpu_fade_sent: float = -1.0
+        self._last_gpu_geom: Optional[QRect] = None
 
         # When GPU overlay rendering is available, we disable the
         # widget's own bar drawing and instead push frames up to the
@@ -1295,10 +1296,25 @@ class SpotifyVisualizerWidget(QWidget):
 
         gap = 2
         total_gap = gap * (count - 1) if count > 1 else 0
-        bar_width = max(1, int((inner.width() - total_gap) / max(1, count)))
-        # Small horizontal offset so the bar field aligns visually with the
-        # card frame and matches the GL overlay geometry.
-        x0 = inner.left() + 5
+        bars_inset = 5
+        bar_region_width = inner.width() - (bars_inset * 2)
+        if bar_region_width <= 0:
+            self._geom_cache_rect = inner
+            self._geom_cache_bar_count = count
+            self._geom_cache_segments = segments
+            self._geom_bar_x = []
+            self._geom_seg_y = []
+            self._geom_bar_width = 0
+            self._geom_seg_height = 0
+            return
+
+        usable_width = max(0, bar_region_width - total_gap)
+        bar_width = max(1, int(usable_width / max(1, count)))
+        span = bar_width * count + total_gap
+        remaining = max(0, bar_region_width - span)
+        # Center the bar field horizontally within the usable region so rounding
+        # differences never bias to the right.
+        x0 = inner.left() + bars_inset + (remaining // 2)
         bar_x = [x0 + i * (bar_width + gap) for i in range(count)]
 
         seg_gap = 1
@@ -1462,6 +1478,13 @@ class SpotifyVisualizerWidget(QWidget):
         # When DisplayWidget exposes a GPU overlay path, prefer
         # that and disable CPU bar drawing once it succeeds.
         if parent is not None and hasattr(parent, "push_spotify_visualizer_frame"):
+            try:
+                current_geom = self.geometry()
+            except Exception:
+                current_geom = None
+            last_geom = self._last_gpu_geom
+            geom_changed = last_geom is None or (current_geom is not None and current_geom != last_geom)
+
             fade = self._get_gpu_fade_factor(now_ts)
             prev_fade = self._last_gpu_fade_sent
             self._last_gpu_fade_sent = fade
@@ -1469,7 +1492,7 @@ class SpotifyVisualizerWidget(QWidget):
                 fade_changed = True
                 need_card_update = True
 
-            should_push = changed or fade_changed or first_frame
+            should_push = changed or fade_changed or first_frame or geom_changed
             if should_push:
                 _gpu_push_start = time.time()
                 used_gpu = parent.push_spotify_visualizer_frame(
@@ -1491,6 +1514,12 @@ class SpotifyVisualizerWidget(QWidget):
             if used_gpu:
                 self._has_pushed_first_frame = True
                 self._cpu_bars_enabled = False
+                try:
+                    if current_geom is None:
+                        current_geom = self.geometry()
+                    self._last_gpu_geom = QRect(current_geom)
+                except Exception:
+                    self._last_gpu_geom = None
                 # Card/background/shadow still repaint via stylesheet
                 # Only request QWidget repaint when fade changes
                 if need_card_update:

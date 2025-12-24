@@ -1108,7 +1108,7 @@ class RedditWidget(BaseOverlayWidget):
                     background-color: rgba(%d, %d, %d, %d);
                     border: %dpx solid rgba(%d, %d, %d, %d);
                     border-radius: 8px;
-                    padding: 6px 12px 6px 16px;
+                    padding: 6px 28px 6px 21px;
                 }
                 """
                 % (
@@ -1133,7 +1133,7 @@ class RedditWidget(BaseOverlayWidget):
                 QLabel {
                     color: rgba(%d, %d, %d, %d);
                     background-color: transparent;
-                    padding: 6px 12px 6px 16px;
+                    padding: 6px 28px 6px 21px;
                 }
                 """
                 % (

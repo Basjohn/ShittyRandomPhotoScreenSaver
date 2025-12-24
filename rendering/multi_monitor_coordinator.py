@@ -324,7 +324,7 @@ class MultiMonitorCoordinator(QObject):
             parts.append(f"id:{id(screen)}")
         return "|".join(parts)
 
-    def register_instance(self, widget: "DisplayWidget", screen: QScreen) -> None:
+    def register_instance(self, widget: "DisplayWidget", screen: Optional[QScreen]) -> None:
         """Register a DisplayWidget instance for a screen."""
         screen_key = self._screen_signature(screen)
         with self._state_lock:
