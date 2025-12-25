@@ -17,6 +17,12 @@ be treated as the primary reference when adding or refactoring widgets.
 - **Single source of truth for settings**  
   All widgets read/write from the nested `widgets` map managed by
   `SettingsManager` and documented in `Spec.md`.
+- **Unified tooltip styling**  
+  Any tooltip (settings UI, overlay widget hover details, etc.) must use the
+  global `QToolTip` definition from `themes/dark.qss`. This matches the
+  “Just Make It Work” reference tooltip: semi-transparent charcoal background,
+  fully white text, white 1 px border, 4 px radius, and 5×10 px padding. Avoid
+  per-widget tooltip styles so every tooltip inherits the shared look.
 
 - **Non-destructive, non-blocking**  
   Widgets must never block the UI thread or cause the screensaver to exit

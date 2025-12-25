@@ -1379,8 +1379,7 @@ class WidgetManager:
             limit_val = int(reddit_settings.get('limit', 10))
         except Exception:
             limit_val = 10
-        if limit_val <= 5:
-            limit_val = 4
+        limit_val = max(4, min(limit_val, 25))
 
         reddit_position_map = {
             'Top Left': RedditPosition.TOP_LEFT,

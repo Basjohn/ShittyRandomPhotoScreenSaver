@@ -16,7 +16,7 @@ except ImportError:
 
 from PySide6.QtWidgets import QLabel, QWidget
 from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtGui import QFont, QColor, QPainter, QPen, QPaintEvent
+from PySide6.QtGui import QFont, QColor, QPainter, QPen, QPaintEvent, QPainterPath, QPainterPathStroker
 from shiboken6 import Shiboken
 
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
@@ -837,34 +837,12 @@ class ClockWidget(BaseOverlayWidget):
                 return
 
             # Optional subtle drop shadow under the analogue clock face.
-            if self._analog_face_shadow:
-                base_alpha = max(94, int(self._text_color.alpha() * 0.504))
-                shadow_color = QColor(0, 0, 0, _scaled_alpha(base_alpha))
-                shadow_pen = QPen(shadow_color)
-                shadow_pen.setWidthF(2.0 * shadow_scale)
-                painter.setPen(shadow_pen)
-                painter.setBrush(Qt.BrushStyle.NoBrush)
-                shadow_offset = max(2, int(round(2 * shadow_scale)))
-                radius_expand = 0
-                if self._analog_shadow_intense:
-                    radius_expand = max(2, int(round(radius * 0.1)))
-                shadow_radius = radius + radius_expand
-                painter.drawEllipse(
-                    center_x - shadow_radius + shadow_offset,
-                    center_y - shadow_radius + shadow_offset,
-                    shadow_radius * 2,
-                    shadow_radius * 2,
-                )
+            drop_offset = 2
 
-            # Clock face border
-            face_pen = QPen(self._text_color)
-            face_pen.setWidth(2)
-            painter.setPen(face_pen)
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawEllipse(center_x - radius, center_y - radius, radius * 2, radius * 2)
-
-            # Hour markers
+            # Precompute hour marker line positions for reuse in stroke + drop shadow.
             marker_len = max(6, radius // 10)
+            marker_lines: list[tuple[int, int, int, int]] = []
+            marker_path = QPainterPath()
             for i in range(12):
                 angle = math.radians((i / 12.0) * 360.0 - 90.0)
                 cos_a = math.cos(angle)
@@ -873,7 +851,52 @@ class ClockWidget(BaseOverlayWidget):
                 outer_y = center_y + int(sin_a * (radius - 2))
                 inner_x = center_x + int(cos_a * (radius - marker_len - 2))
                 inner_y = center_y + int(sin_a * (radius - marker_len - 2))
-                painter.drawLine(inner_x, inner_y, outer_x, outer_y)
+                marker_lines.append((inner_x, inner_y, outer_x, outer_y))
+                marker_path.moveTo(inner_x, inner_y)
+                marker_path.lineTo(outer_x, outer_y)
+
+            if self._analog_face_shadow:
+                base_alpha = max(110, int(self._text_color.alpha() * (0.55 if self._analog_shadow_intense else 0.4)))
+                shadow_color = QColor(0, 0, 0, _scaled_alpha(base_alpha))
+
+                ring_path = QPainterPath()
+                ring_path.addEllipse(center_x - radius, center_y - radius, radius * 2, radius * 2)
+                ring_stroke = QPainterPathStroker()
+                ring_stroke.setWidth(max(4.0, radius * (0.035 if self._analog_shadow_intense else 0.02)))
+                ring_stroke.setCapStyle(Qt.PenCapStyle.RoundCap)
+                ring_stroke.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+                ring_shape = ring_stroke.createStroke(ring_path)
+
+                marker_stroke = QPainterPathStroker()
+                marker_stroke.setWidth(max(2.0, radius * (0.012 if self._analog_shadow_intense else 0.008)))
+                marker_stroke.setCapStyle(Qt.PenCapStyle.RoundCap)
+                marker_stroke.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+                marker_shape = marker_stroke.createStroke(marker_path)
+
+                combined_shadow = QPainterPath()
+                combined_shadow.addPath(ring_shape)
+                combined_shadow.addPath(marker_shape)
+                combined_shadow.translate(drop_offset, drop_offset)
+
+                painter.save()
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(shadow_color)
+                painter.drawPath(combined_shadow)
+                painter.restore()
+
+            # Clock face border
+            face_pen = QPen(self._text_color)
+            face_pen.setWidth(max(2, int(round(radius * (0.025 if not self._analog_shadow_intense else 0.032)))))
+            painter.setPen(face_pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawEllipse(center_x - radius, center_y - radius, radius * 2, radius * 2)
+
+            # Hour markers
+            marker_pen = QPen(self._text_color)
+            marker_pen.setWidth(max(2, radius // 60))
+            painter.setPen(marker_pen)
+            for line in marker_lines:
+                painter.drawLine(*line)
 
             # Optional numerals (I–XII) placed just outside the clock face.
             if self._show_numerals:
@@ -894,7 +917,8 @@ class ClockWidget(BaseOverlayWidget):
 
                 # Place numerals with a clear gap from the face so they never
                 # visually touch the circle or its hour markers.
-                numeral_radius = radius + numeral_height
+                numeral_pull_in = max(2, numeral_height // 3) - 4
+                numeral_radius = radius + numeral_height - numeral_pull_in
                 painter.setFont(numeral_font)
                 for hour in range(1, 13):
                     angle = math.radians((hour / 12.0) * 360.0 - 90.0)
@@ -954,12 +978,11 @@ class ClockWidget(BaseOverlayWidget):
             second_angle = (sec / 60.0) * 360.0
 
             # Draw hour and minute hands
-            _draw_hand(hour_angle, radius * 0.5, max(3, radius // 15))
-            _draw_hand(minute_angle, radius * 0.75, max(2, radius // 20))
-
-            # Optional seconds hand (thinner and longer)
+            # draw order keeps minute underneath hour for better readability
             if self._show_seconds:
                 _draw_hand(second_angle, radius * 0.85, 1)
+            _draw_hand(minute_angle, radius * 0.72, max(2, radius // 20))
+            _draw_hand(hour_angle, radius * 0.52, max(3, radius // 15))
 
             # Timezone abbreviation rendered below the analogue clock, centred horizontally.
             if self._show_timezone and self._timezone_abbrev:
@@ -972,6 +995,12 @@ class ClockWidget(BaseOverlayWidget):
 
                 tz_y = center_y + radius + numeral_height + tz_height + 4
                 tz_x = center_x - tz_metrics.horizontalAdvance(text) // 2
+                painter.setPen(QPen(self._text_color))
+                if self._analog_face_shadow:
+                    tz_shadow_offset = 2 if self._analog_shadow_intense else 1
+                    tz_shadow_color = QColor(0, 0, 0, _scaled_alpha(max(60, int(self._text_color.alpha() * 0.45))))
+                    painter.setPen(QPen(tz_shadow_color))
+                    painter.drawText(tz_x + tz_shadow_offset, tz_y + tz_shadow_offset, text)
                 painter.setPen(QPen(self._text_color))
                 painter.drawText(tz_x, tz_y, text)
         finally:

@@ -1928,15 +1928,26 @@ class WidgetsTab(QWidget):
         """Save current settings."""
         if getattr(self, "_loading", False):
             return
+
+        try:
+            logger.debug("[WIDGETS_TAB] _save_settings start")
+        except Exception:
+            pass
         # Get timezone from current selection
         tz_data = self.clock_timezone.currentData()
         timezone_str = tz_data if tz_data else 'local'
         
+        format_text = ""
+        try:
+            format_text = (self.clock_format.currentText() or "").strip().lower()
+        except Exception:
+            format_text = ""
+        clock_format_value = '12h' if format_text.startswith('12') else '24h'
+
         clock_config = {
             'enabled': self.clock_enabled.isChecked(),
-            'exit_on_click': self.clock_exit_on_click.isChecked(),
-            'format': '12h' if self.clock_format_12.isChecked() else '24h',
-            'show_seconds': self.clock_show_seconds.isChecked(),
+            'format': clock_format_value,
+            'show_seconds': self.clock_seconds.isChecked(),
             'timezone': timezone_str,
             'show_timezone': self.clock_show_tz.isChecked(),
             'position': self.clock_position.currentText(),
@@ -2136,6 +2147,19 @@ class WidgetsTab(QWidget):
 
         # Gmail config - archived, see archive/gmail_feature/
 
+        try:
+            logger.debug(
+                "[WIDGETS_TAB] Saving widgets config: "
+                "clock.enabled=%s, clock.analog_shadow_intense=%s, "
+                "reddit.limit=%s, reddit.enabled=%s",
+                clock_config.get('enabled'),
+                clock_config.get('analog_shadow_intense'),
+                reddit_config.get('limit'),
+                reddit_config.get('enabled'),
+            )
+        except Exception:
+            pass
+
         self._settings.set('widgets', existing_widgets)
         self._settings.save()
 
@@ -2238,10 +2262,11 @@ class WidgetsTab(QWidget):
         # Clock
         config['clock'] = {
             'enabled': getattr(self, 'clock_enabled', None) and self.clock_enabled.isChecked(),
+            'mode': getattr(self, 'clock_mode_combo', None) and self.clock_mode_combo.currentText() or 'Digital',
             'position': getattr(self, 'clock_position', None) and self.clock_position.currentText() or 'Top Right',
             'monitor': getattr(self, 'clock_monitor_combo', None) and self.clock_monitor_combo.currentText() or 'ALL',
             'font_size': getattr(self, 'clock_font_size', None) and self.clock_font_size.value() or 48,
-            'show_seconds': getattr(self, 'clock_show_seconds', None) and self.clock_show_seconds.isChecked(),
+            'show_seconds': getattr(self, 'clock_seconds', None) and self.clock_seconds.isChecked(),
             'show_timezone_label': getattr(self, 'clock_show_tz_label', None) and self.clock_show_tz_label.isChecked(),
         }
         
@@ -2276,17 +2301,20 @@ class WidgetsTab(QWidget):
         }
         
         # Reddit
+        reddit_limit = 10
+        reddit_items_combo = getattr(self, 'reddit_items', None)
+        if reddit_items_combo is not None:
+            try:
+                reddit_limit = int(reddit_items_combo.currentText())
+            except Exception:
+                reddit_limit = 10
         config['reddit'] = {
             'enabled': getattr(self, 'reddit_enabled', None) and self.reddit_enabled.isChecked(),
             'position': getattr(self, 'reddit_position', None) and self.reddit_position.currentText() or 'Bottom Right',
             'monitor': getattr(self, 'reddit_monitor_combo', None) and self.reddit_monitor_combo.currentText() or 'ALL',
             'font_size': getattr(self, 'reddit_font_size', None) and self.reddit_font_size.value() or 18,
-            'limit': 10,
+            'limit': reddit_limit,
         }
-        try:
-            config['reddit']['limit'] = int(self.reddit_items.currentText())
-        except Exception:
-            pass
         
         # Reddit 2
         config['reddit2'] = {

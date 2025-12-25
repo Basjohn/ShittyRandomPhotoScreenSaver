@@ -122,19 +122,6 @@ class GmailWidget(BaseOverlayWidget):
         """Initialise widget appearance and layout."""
         self._apply_base_styling()
         
-        # Apply dark themed tooltip styling
-        self.setStyleSheet(self.styleSheet() + """
-            QToolTip {
-                background-color: rgba(32, 32, 32, 230);
-                color: rgba(255, 255, 255, 255);
-                border: 1px solid rgba(255, 255, 255, 200);
-                border-radius: 4px;
-                padding: 5px 10px;
-                font-family: 'Segoe UI';
-                font-size: 11px;
-            }
-        """)
-
         self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         try:
             self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
@@ -183,8 +170,6 @@ class GmailWidget(BaseOverlayWidget):
             return None
         
         try:
-            from PySide6.QtGui import QImage
-            
             img = self._brand_pixmap.toImage()
             # Convert to grayscale with 60% saturation reduction
             for y in range(img.height()):

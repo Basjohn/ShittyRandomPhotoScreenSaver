@@ -22238,3 +22238,440 @@ RuntimeError: SpotifyBarsGLOverlay fragment shader compile failed
 2025-12-24 18:03:03 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.216 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
 2025-12-24 18:03:04 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.769 Bars: [0.02 0.02 0.02 0.03 0.05 0.06 0.08 0.11 0.08 0.06 0.05 0.03 0.02 0.02 0.02]
 2025-12-24 18:03:04 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.160 Bars: [0.11 0.12 0.15 0.22 0.30 0.41 0.55 0.71 0.55 0.41 0.30 0.22 0.15 0.12 0.11]
+2025-12-24 18:04:42 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-24 18:04:45 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-24 18:04:45 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 18:04:45 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-24 18:04:45 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 20:01:59 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-24 20:02:01 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-24 20:02:01 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 20:02:02 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-24 20:02:02 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 21:14:48 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-24 21:14:49 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.677 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-24 21:14:50 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.709 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-24 21:14:50 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.893 Bars: [0.00 0.01 0.01 0.01 0.01 0.02 0.03 0.03 0.03 0.02 0.01 0.01 0.01 0.01 0.00]
+2025-12-24 21:14:51 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0100, max=0.0656
+2025-12-24 21:14:51 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 21:14:52 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.525 Bars: [0.02 0.03 0.04 0.06 0.08 0.10 0.12 0.16 0.12 0.10 0.08 0.06 0.04 0.03 0.02]
+2025-12-24 21:14:52 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0217, max=0.1445
+2025-12-24 21:14:52 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 21:14:54 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.070 Bars: [0.01 0.02 0.02 0.04 0.04 0.06 0.08 0.10 0.08 0.06 0.04 0.04 0.02 0.02 0.01]
+2025-12-24 21:14:55 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.843 Bars: [0.04 0.05 0.08 0.11 0.14 0.18 0.23 0.29 0.23 0.18 0.14 0.11 0.08 0.05 0.04]
+2025-12-24 21:14:55 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.315 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-24 21:14:56 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.646 Bars: [0.14 0.17 0.22 0.31 0.42 0.56 0.73 0.93 0.73 0.56 0.42 0.31 0.22 0.17 0.14]
+2025-12-24 21:14:56 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.254 Bars: [0.32 0.43 0.62 0.88 1.00 1.00 1.00 1.00 1.00 1.00 1.00 0.88 0.62 0.43 0.32]
+2025-12-24 21:14:56 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.894 Bars: [0.24 0.27 0.35 0.49 0.68 0.93 1.00 1.00 1.00 0.93 0.68 0.49 0.35 0.27 0.24]
+2025-12-24 21:14:58 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.734 Bars: [0.01 0.02 0.02 0.03 0.04 0.06 0.07 0.10 0.07 0.06 0.04 0.03 0.02 0.02 0.01]
+2025-12-24 21:14:59 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.756 Bars: [0.10 0.11 0.14 0.20 0.27 0.37 0.50 0.64 0.50 0.37 0.27 0.20 0.14 0.11 0.10]
+2025-12-24 21:14:59 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.474 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-24 21:15:00 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.629 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-24 21:15:01 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.519 Bars: [0.01 0.01 0.01 0.01 0.02 0.02 0.03 0.04 0.03 0.02 0.02 0.01 0.01 0.01 0.01]
+2025-12-24 21:15:01 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.939 Bars: [0.24 0.27 0.36 0.50 0.70 0.95 1.00 1.00 1.00 0.95 0.70 0.50 0.36 0.27 0.24]
+2025-12-24 21:15:02 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.607 Bars: [0.15 0.18 0.24 0.34 0.46 0.60 0.77 0.98 0.77 0.60 0.46 0.34 0.24 0.18 0.15]
+2025-12-24 21:15:02 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.251 Bars: [0.04 0.04 0.06 0.08 0.11 0.15 0.20 0.26 0.20 0.15 0.11 0.08 0.06 0.04 0.04]
+2025-12-24 21:15:03 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.634 Bars: [0.01 0.01 0.01 0.01 0.02 0.03 0.03 0.04 0.03 0.03 0.02 0.01 0.01 0.01 0.01]
+2025-12-24 21:15:04 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.359 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-24 21:15:04 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.931 Bars: [0.04 0.07 0.10 0.14 0.18 0.20 0.24 0.28 0.24 0.20 0.18 0.14 0.10 0.07 0.04]
+2025-12-24 21:15:05 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.222 Bars: [0.10 0.15 0.21 0.31 0.39 0.46 0.56 0.68 0.56 0.46 0.39 0.31 0.21 0.15 0.10]
+2025-12-24 21:15:05 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.101 Bars: [0.06 0.07 0.10 0.14 0.19 0.24 0.31 0.39 0.31 0.24 0.19 0.14 0.10 0.07 0.06]
+2025-12-24 21:15:06 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.509 Bars: [0.12 0.14 0.19 0.26 0.36 0.47 0.61 0.77 0.61 0.47 0.36 0.26 0.19 0.14 0.12]
+2025-12-24 21:15:06 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.713 Bars: [0.17 0.19 0.24 0.34 0.47 0.65 0.86 1.00 0.86 0.65 0.47 0.34 0.24 0.19 0.17]
+2025-12-24 21:15:07 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.164 Bars: [0.03 0.04 0.05 0.07 0.10 0.13 0.18 0.23 0.18 0.13 0.10 0.07 0.05 0.04 0.03]
+2025-12-24 21:15:07 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.291 Bars: [0.07 0.11 0.17 0.25 0.29 0.31 0.38 0.48 0.38 0.31 0.29 0.25 0.17 0.11 0.07]
+2025-12-24 21:15:08 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.341 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-24 21:15:08 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.703 Bars: [0.05 0.06 0.08 0.11 0.15 0.21 0.28 0.36 0.28 0.21 0.15 0.11 0.08 0.06 0.05]
+2025-12-24 21:15:09 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.386 Bars: [0.07 0.08 0.11 0.15 0.21 0.28 0.38 0.49 0.38 0.28 0.21 0.15 0.11 0.08 0.07]
+2025-12-24 21:15:10 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.839 Bars: [0.22 0.25 0.32 0.45 0.63 0.86 1.00 1.00 1.00 0.86 0.63 0.45 0.32 0.25 0.22]
+2025-12-24 21:15:11 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.757 Bars: [0.18 0.21 0.27 0.38 0.52 0.72 0.95 1.00 0.95 0.72 0.52 0.38 0.27 0.21 0.18]
+2025-12-24 21:15:11 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.321 Bars: [0.06 0.08 0.12 0.17 0.22 0.26 0.31 0.38 0.31 0.26 0.22 0.17 0.12 0.08 0.06]
+2025-12-24 21:15:12 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.1309, max=0.6886
+2025-12-24 21:15:12 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 21:15:12 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.1027, max=0.5556
+2025-12-24 21:15:12 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 21:15:13 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.803 Bars: [0.15 0.24 0.36 0.52 0.65 0.73 0.86 1.00 0.86 0.73 0.65 0.52 0.36 0.24 0.15]
+2025-12-24 21:31:24 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-24 21:31:26 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-24 21:31:26 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 21:31:26 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-24 21:31:26 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 21:31:56 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-24 21:31:56 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 21:31:57 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-24 21:31:57 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 21:48:23 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-24 21:48:23 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.401 Bars: [0.00 0.04 0.07 0.11 0.11 0.07 0.04 0.00 0.04 0.07 0.11 0.11 0.07 0.04 0.00]
+2025-12-24 21:48:24 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.935 Bars: [0.01 0.05 0.10 0.16 0.16 0.11 0.05 0.04 0.05 0.11 0.16 0.16 0.10 0.05 0.01]
+2025-12-24 21:48:24 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.594 Bars: [0.00 0.04 0.08 0.12 0.12 0.08 0.04 0.01 0.04 0.08 0.12 0.12 0.08 0.04 0.00]
+2025-12-24 21:48:24 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.839 Bars: [0.09 0.13 0.20 0.29 0.36 0.41 0.48 0.57 0.48 0.41 0.36 0.29 0.20 0.13 0.09]
+2025-12-24 21:48:25 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.232 Bars: [0.04 0.09 0.16 0.23 0.26 0.25 0.26 0.26 0.26 0.25 0.26 0.23 0.16 0.09 0.04]
+2025-12-24 21:48:26 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.922 Bars: [0.04 0.06 0.09 0.13 0.17 0.20 0.24 0.30 0.24 0.20 0.17 0.13 0.09 0.06 0.04]
+2025-12-24 21:48:26 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0518, max=0.3450
+2025-12-24 21:48:26 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 21:48:27 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0517, max=0.3448
+2025-12-24 21:48:27 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 21:48:27 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.765 Bars: [0.03 0.08 0.15 0.22 0.23 0.16 0.15 0.17 0.15 0.16 0.23 0.22 0.15 0.08 0.03]
+2025-12-24 21:48:29 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.380 Bars: [0.00 0.02 0.03 0.05 0.05 0.03 0.02 0.00 0.02 0.03 0.05 0.05 0.03 0.02 0.00]
+2025-12-24 21:48:30 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.021 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-24 21:48:30 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.771 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-24 21:48:31 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.438 Bars: [0.01 0.01 0.01 0.01 0.02 0.03 0.04 0.05 0.04 0.03 0.02 0.01 0.01 0.01 0.01]
+2025-12-24 21:48:31 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.302 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-24 21:48:32 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.440 Bars: [0.00 0.01 0.01 0.02 0.02 0.01 0.01 0.00 0.01 0.01 0.02 0.02 0.01 0.01 0.00]
+2025-12-24 21:48:33 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.984 Bars: [0.03 0.03 0.05 0.07 0.09 0.12 0.15 0.19 0.15 0.12 0.09 0.07 0.05 0.03 0.03]
+2025-12-24 21:48:33 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.400 Bars: [0.08 0.09 0.12 0.17 0.24 0.32 0.43 0.55 0.43 0.32 0.24 0.17 0.12 0.09 0.08]
+2025-12-24 21:48:34 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.719 Bars: [0.01 0.01 0.01 0.02 0.03 0.04 0.05 0.06 0.05 0.04 0.03 0.02 0.01 0.01 0.01]
+2025-12-24 21:48:34 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.958 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-24 21:48:35 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.850 Bars: [0.07 0.10 0.13 0.19 0.25 0.31 0.39 0.48 0.39 0.31 0.25 0.19 0.13 0.10 0.07]
+2025-12-24 21:48:35 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.043 Bars: [0.00 0.00 0.00 0.00 0.00 0.01 0.01 0.01 0.01 0.01 0.00 0.00 0.00 0.00 0.00]
+2025-12-24 21:48:36 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.592 Bars: [0.01 0.01 0.01 0.01 0.02 0.03 0.03 0.04 0.03 0.03 0.02 0.01 0.01 0.01 0.01]
+2025-12-24 21:48:36 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.352 Bars: [0.10 0.12 0.16 0.22 0.30 0.40 0.53 0.68 0.53 0.40 0.30 0.22 0.16 0.12 0.10]
+2025-12-24 21:48:37 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.994 Bars: [0.07 0.12 0.18 0.26 0.31 0.35 0.39 0.45 0.39 0.35 0.31 0.26 0.18 0.12 0.07]
+2025-12-24 21:48:37 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.748 Bars: [0.14 0.20 0.29 0.41 0.52 0.63 0.77 0.95 0.77 0.63 0.52 0.41 0.29 0.20 0.14]
+2025-12-24 21:48:37 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.516 Bars: [0.00 0.00 0.01 0.01 0.01 0.01 0.00 0.00 0.00 0.01 0.01 0.01 0.01 0.00 0.00]
+2025-12-24 21:48:38 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.855 Bars: [0.04 0.05 0.07 0.10 0.12 0.15 0.20 0.26 0.20 0.15 0.12 0.10 0.07 0.05 0.04]
+2025-12-24 21:48:38 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.737 Bars: [0.01 0.01 0.01 0.01 0.02 0.02 0.03 0.04 0.03 0.02 0.02 0.01 0.01 0.01 0.01]
+2025-12-24 21:48:39 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.465 Bars: [0.09 0.11 0.16 0.22 0.29 0.38 0.48 0.61 0.48 0.38 0.29 0.22 0.16 0.11 0.09]
+2025-12-24 21:48:40 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.399 Bars: [0.09 0.14 0.22 0.31 0.38 0.43 0.50 0.58 0.50 0.43 0.38 0.31 0.22 0.14 0.09]
+2025-12-24 21:48:40 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.636 Bars: [0.13 0.15 0.21 0.29 0.39 0.53 0.69 0.88 0.69 0.53 0.39 0.29 0.21 0.15 0.13]
+2025-12-24 21:48:40 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.322 Bars: [0.00 0.02 0.04 0.06 0.06 0.04 0.02 0.00 0.02 0.04 0.06 0.06 0.04 0.02 0.00]
+2025-12-24 21:48:41 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.388 Bars: [0.08 0.14 0.22 0.32 0.38 0.41 0.45 0.51 0.45 0.41 0.38 0.32 0.22 0.14 0.08]
+2025-12-24 21:48:41 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.1161, max=0.6796
+2025-12-24 21:48:41 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 21:48:42 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0942, max=0.5621
+2025-12-24 21:48:42 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 21:48:42 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.517 Bars: [0.00 0.07 0.14 0.21 0.21 0.14 0.07 0.01 0.07 0.14 0.21 0.21 0.14 0.07 0.00]
+2025-12-24 21:48:44 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.005 Bars: [0.02 0.03 0.04 0.05 0.07 0.09 0.12 0.16 0.12 0.09 0.07 0.05 0.04 0.03 0.02]
+2025-12-24 21:48:44 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.104 Bars: [0.02 0.05 0.10 0.15 0.16 0.11 0.11 0.12 0.11 0.11 0.16 0.15 0.10 0.05 0.02]
+2025-12-24 21:48:44 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.400 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-24 21:48:45 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.198 Bars: [0.06 0.12 0.21 0.31 0.34 0.28 0.32 0.39 0.32 0.28 0.34 0.31 0.21 0.12 0.06]
+2025-12-24 22:34:46 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-24 22:34:50 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-24 22:34:50 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 22:34:50 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-24 22:34:50 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 22:35:09 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-24 22:35:09 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 22:35:09 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-24 22:35:09 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 22:38:04 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-24 22:38:06 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-24 22:38:06 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 22:38:07 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-24 22:38:07 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 22:38:23 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-24 22:38:23 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 22:38:23 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-24 22:38:23 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 22:45:35 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-24 22:45:37 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-24 22:45:37 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 22:45:38 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-24 22:45:38 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 22:46:01 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-24 22:46:01 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 22:46:02 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-24 22:46:02 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 22:46:17 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-24 22:46:17 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-24 22:46:17 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-24 22:46:17 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 00:38:13 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-25 00:38:18 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 00:38:18 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 00:38:19 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 00:38:19 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 00:39:11 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 00:39:11 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 00:39:11 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 00:39:11 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 00:41:41 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-25 00:41:44 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 00:41:44 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 00:41:45 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 00:41:45 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 00:41:59 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 00:41:59 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 00:41:59 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 00:41:59 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 01:15:06 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-25 01:15:06 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.005 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:15:07 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.636 Bars: [0.16 0.18 0.24 0.34 0.47 0.62 0.81 1.00 0.81 0.62 0.47 0.34 0.24 0.18 0.16]
+2025-12-25 01:15:07 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.168 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:15:08 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.518 Bars: [0.00 0.00 0.00 0.01 0.01 0.00 0.00 0.00 0.00 0.00 0.01 0.01 0.00 0.00 0.00]
+2025-12-25 01:15:08 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.487 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:15:09 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.778 Bars: [0.04 0.05 0.07 0.10 0.13 0.18 0.23 0.29 0.23 0.18 0.13 0.10 0.07 0.05 0.04]
+2025-12-25 01:15:09 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0334, max=0.2163
+2025-12-25 01:15:09 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 01:15:10 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0287
+2025-12-25 01:15:10 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 01:15:10 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.913 Bars: [0.02 0.03 0.03 0.05 0.07 0.09 0.12 0.16 0.12 0.09 0.07 0.05 0.03 0.03 0.02]
+2025-12-25 01:15:12 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.065 Bars: [0.02 0.02 0.03 0.04 0.06 0.09 0.11 0.15 0.11 0.09 0.06 0.04 0.03 0.02 0.02]
+2025-12-25 01:15:12 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.740 Bars: [0.01 0.01 0.01 0.02 0.02 0.03 0.04 0.05 0.04 0.03 0.02 0.02 0.01 0.01 0.01]
+2025-12-25 01:15:13 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.757 Bars: [0.01 0.01 0.01 0.01 0.01 0.02 0.03 0.03 0.03 0.02 0.01 0.01 0.01 0.01 0.01]
+2025-12-25 01:15:13 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.553 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:15:13 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.466 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:15:14 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.694 Bars: [0.01 0.02 0.02 0.03 0.04 0.05 0.07 0.09 0.07 0.05 0.04 0.03 0.02 0.02 0.01]
+2025-12-25 01:15:14 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.926 Bars: [0.00 0.01 0.01 0.02 0.02 0.01 0.01 0.00 0.01 0.01 0.02 0.02 0.01 0.01 0.00]
+2025-12-25 01:15:15 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.932 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:15:16 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.719 Bars: [0.01 0.01 0.02 0.02 0.03 0.03 0.03 0.03 0.03 0.03 0.03 0.02 0.02 0.01 0.01]
+2025-12-25 01:15:16 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.851 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:15:17 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.463 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:15:17 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.358 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:15:18 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.552 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:15:19 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.533 Bars: [0.00 0.02 0.04 0.05 0.05 0.04 0.02 0.00 0.02 0.04 0.05 0.05 0.04 0.02 0.00]
+2025-12-25 01:15:19 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.557 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:15:19 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.594 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:15:20 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.785 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:15:20 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.030 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:15:21 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.798 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:15:21 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.789 Bars: [0.00 0.01 0.01 0.02 0.02 0.01 0.01 0.00 0.01 0.01 0.02 0.02 0.01 0.01 0.00]
+2025-12-25 01:15:22 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.674 Bars: [0.00 0.05 0.10 0.15 0.15 0.10 0.05 0.00 0.05 0.10 0.15 0.15 0.10 0.05 0.00]
+2025-12-25 01:15:22 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.346 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:15:23 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.401 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.01 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:15:23 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.479 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:15:24 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.083 Bars: [0.00 0.04 0.09 0.13 0.13 0.09 0.04 0.00 0.04 0.09 0.13 0.13 0.09 0.04 0.00]
+2025-12-25 01:15:25 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.395 Bars: [0.08 0.08 0.11 0.16 0.22 0.30 0.39 0.51 0.39 0.30 0.22 0.16 0.11 0.08 0.08]
+2025-12-25 01:15:26 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0031, max=0.0205
+2025-12-25 01:15:26 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 01:15:26 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0020, max=0.0134
+2025-12-25 01:15:26 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 01:15:26 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.881 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:15:28 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.381 Bars: [0.02 0.06 0.12 0.17 0.17 0.12 0.10 0.10 0.10 0.12 0.17 0.17 0.12 0.06 0.02]
+2025-12-25 01:15:28 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.694 Bars: [0.01 0.02 0.03 0.04 0.05 0.04 0.04 0.05 0.04 0.04 0.05 0.04 0.03 0.02 0.01]
+2025-12-25 01:15:29 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.518 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.01 0.01 0.01 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:15:29 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.741 Bars: [0.00 0.13 0.27 0.40 0.40 0.27 0.13 0.01 0.13 0.27 0.40 0.40 0.27 0.13 0.00]
+2025-12-25 01:15:29 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.233 Bars: [0.04 0.09 0.15 0.21 0.25 0.24 0.24 0.25 0.24 0.24 0.25 0.21 0.15 0.09 0.04]
+2025-12-25 01:15:30 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.470 Bars: [0.00 0.00 0.01 0.01 0.01 0.01 0.02 0.02 0.02 0.01 0.01 0.01 0.01 0.00 0.00]
+2025-12-25 01:15:30 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.423 Bars: [0.10 0.24 0.41 0.60 0.68 0.64 0.63 0.63 0.63 0.64 0.68 0.60 0.41 0.24 0.10]
+2025-12-25 01:15:31 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.061 Bars: [0.00 0.04 0.07 0.11 0.11 0.07 0.04 0.00 0.04 0.07 0.11 0.11 0.07 0.04 0.00]
+2025-12-25 01:15:31 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.716 Bars: [0.00 0.01 0.02 0.02 0.02 0.02 0.03 0.03 0.03 0.02 0.02 0.02 0.02 0.01 0.00]
+2025-12-25 01:20:10 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-25 01:20:10 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.658 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:20:11 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.871 Bars: [0.00 0.04 0.07 0.11 0.11 0.07 0.04 0.00 0.04 0.07 0.11 0.11 0.07 0.04 0.00]
+2025-12-25 01:20:12 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.308 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:20:13 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0340, max=0.2264
+2025-12-25 01:20:13 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 01:20:13 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.938 Bars: [0.01 0.01 0.02 0.03 0.04 0.05 0.07 0.09 0.07 0.05 0.04 0.03 0.02 0.01 0.01]
+2025-12-25 01:20:13 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0176, max=0.1170
+2025-12-25 01:20:13 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 01:20:15 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.307 Bars: [0.00 0.02 0.04 0.05 0.05 0.04 0.02 0.00 0.02 0.04 0.05 0.05 0.04 0.02 0.00]
+2025-12-25 01:20:16 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.860 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:20:16 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.617 Bars: [0.05 0.06 0.08 0.11 0.15 0.20 0.27 0.35 0.27 0.20 0.15 0.11 0.08 0.06 0.05]
+2025-12-25 01:20:17 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.950 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:20:17 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.385 Bars: [0.07 0.08 0.11 0.15 0.21 0.28 0.38 0.49 0.38 0.28 0.21 0.15 0.11 0.08 0.07]
+2025-12-25 01:20:18 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.485 Bars: [0.02 0.08 0.17 0.25 0.25 0.17 0.13 0.11 0.13 0.17 0.25 0.25 0.17 0.08 0.02]
+2025-12-25 01:20:18 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.384 Bars: [0.11 0.13 0.17 0.24 0.32 0.44 0.57 0.74 0.57 0.44 0.32 0.24 0.17 0.13 0.11]
+2025-12-25 01:20:20 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.917 Bars: [0.03 0.14 0.27 0.41 0.41 0.28 0.16 0.17 0.16 0.28 0.41 0.41 0.27 0.14 0.03]
+2025-12-25 01:20:20 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.958 Bars: [0.01 0.03 0.07 0.10 0.10 0.07 0.06 0.08 0.06 0.07 0.10 0.10 0.07 0.03 0.01]
+2025-12-25 01:20:21 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.514 Bars: [0.00 0.02 0.05 0.07 0.07 0.05 0.02 0.00 0.02 0.05 0.07 0.07 0.05 0.02 0.00]
+2025-12-25 01:20:22 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.784 Bars: [0.01 0.01 0.01 0.01 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.01 0.01 0.01 0.01]
+2025-12-25 01:20:22 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.524 Bars: [0.00 0.01 0.01 0.02 0.02 0.02 0.02 0.03 0.02 0.02 0.02 0.02 0.01 0.01 0.00]
+2025-12-25 01:20:23 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.781 Bars: [0.11 0.14 0.19 0.27 0.36 0.45 0.57 0.72 0.57 0.45 0.36 0.27 0.19 0.14 0.11]
+2025-12-25 01:20:24 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.654 Bars: [0.05 0.20 0.37 0.54 0.58 0.47 0.38 0.36 0.38 0.47 0.58 0.54 0.37 0.20 0.05]
+2025-12-25 01:20:25 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.801 Bars: [0.01 0.03 0.05 0.07 0.08 0.08 0.08 0.08 0.08 0.08 0.08 0.07 0.05 0.03 0.01]
+2025-12-25 01:20:25 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.951 Bars: [0.00 0.00 0.01 0.01 0.01 0.01 0.00 0.00 0.00 0.01 0.01 0.01 0.01 0.00 0.00]
+2025-12-25 01:20:26 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.243 Bars: [0.04 0.05 0.08 0.11 0.14 0.17 0.20 0.25 0.20 0.17 0.14 0.11 0.08 0.05 0.04]
+2025-12-25 01:20:26 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.108 Bars: [0.03 0.03 0.04 0.06 0.08 0.10 0.13 0.17 0.13 0.10 0.08 0.06 0.04 0.03 0.03]
+2025-12-25 01:20:27 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.036 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:20:28 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.061 Bars: [0.05 0.09 0.14 0.20 0.24 0.25 0.28 0.32 0.28 0.25 0.24 0.20 0.14 0.09 0.05]
+2025-12-25 01:20:28 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.873 Bars: [0.01 0.01 0.02 0.02 0.03 0.05 0.06 0.08 0.06 0.05 0.03 0.02 0.02 0.01 0.01]
+2025-12-25 01:20:29 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.243 Bars: [0.04 0.14 0.25 0.36 0.39 0.33 0.28 0.25 0.28 0.33 0.39 0.36 0.25 0.14 0.04]
+2025-12-25 01:20:30 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0207, max=0.1411
+2025-12-25 01:20:30 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 01:20:30 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.1391, max=0.8979
+2025-12-25 01:20:30 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 01:20:30 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.851 Bars: [0.02 0.04 0.07 0.10 0.12 0.13 0.14 0.16 0.14 0.13 0.12 0.10 0.07 0.04 0.02]
+2025-12-25 01:20:32 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.646 Bars: [0.00 0.01 0.02 0.04 0.04 0.02 0.01 0.02 0.01 0.02 0.04 0.04 0.02 0.01 0.00]
+2025-12-25 01:20:32 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.609 Bars: [0.00 0.00 0.01 0.01 0.01 0.01 0.00 0.00 0.00 0.01 0.01 0.01 0.01 0.00 0.00]
+2025-12-25 01:20:33 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.109 Bars: [0.02 0.05 0.10 0.15 0.15 0.11 0.09 0.11 0.09 0.11 0.15 0.15 0.10 0.05 0.02]
+2025-12-25 01:20:33 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.821 Bars: [0.00 0.01 0.02 0.03 0.03 0.02 0.01 0.00 0.01 0.02 0.03 0.03 0.02 0.01 0.00]
+2025-12-25 01:20:34 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.589 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:20:34 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.598 Bars: [0.00 0.00 0.01 0.01 0.01 0.02 0.02 0.02 0.02 0.02 0.01 0.01 0.01 0.00 0.00]
+2025-12-25 01:20:34 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.440 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:20:35 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.746 Bars: [0.00 0.06 0.12 0.18 0.18 0.12 0.06 0.03 0.06 0.12 0.18 0.18 0.12 0.06 0.00]
+2025-12-25 01:20:35 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.517 Bars: [0.00 0.01 0.02 0.02 0.02 0.02 0.01 0.00 0.01 0.02 0.02 0.02 0.02 0.01 0.00]
+2025-12-25 01:20:35 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.902 Bars: [0.22 0.33 0.49 0.70 0.88 1.00 1.00 1.00 1.00 1.00 0.88 0.70 0.49 0.33 0.22]
+2025-12-25 01:20:36 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.636 Bars: [0.01 0.01 0.01 0.02 0.02 0.03 0.04 0.05 0.04 0.03 0.02 0.02 0.01 0.01 0.01]
+2025-12-25 01:20:36 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.938 Bars: [0.01 0.02 0.02 0.03 0.04 0.05 0.06 0.08 0.06 0.05 0.04 0.03 0.02 0.02 0.01]
+2025-12-25 01:20:37 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.673 Bars: [0.00 0.01 0.02 0.03 0.03 0.02 0.01 0.00 0.01 0.02 0.03 0.03 0.02 0.01 0.00]
+2025-12-25 01:20:37 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.209 Bars: [0.03 0.13 0.23 0.35 0.37 0.30 0.25 0.22 0.25 0.30 0.37 0.35 0.23 0.13 0.03]
+2025-12-25 01:20:37 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.313 Bars: [0.00 0.02 0.04 0.06 0.06 0.04 0.02 0.00 0.02 0.04 0.06 0.06 0.04 0.02 0.00]
+2025-12-25 01:20:38 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.701 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:20:39 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.575 Bars: [0.12 0.20 0.30 0.44 0.54 0.61 0.71 0.83 0.71 0.61 0.54 0.44 0.30 0.20 0.12]
+2025-12-25 01:20:39 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.720 Bars: [0.03 0.06 0.09 0.13 0.16 0.17 0.18 0.21 0.18 0.17 0.16 0.13 0.09 0.06 0.03]
+2025-12-25 01:20:40 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.685 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:20:41 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.042 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:20:42 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.815 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:20:42 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.566 Bars: [0.00 0.00 0.00 0.01 0.01 0.01 0.01 0.02 0.01 0.01 0.01 0.01 0.00 0.00 0.00]
+2025-12-25 01:20:43 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.456 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:20:44 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.619 Bars: [0.05 0.07 0.10 0.15 0.19 0.23 0.28 0.34 0.28 0.23 0.19 0.15 0.10 0.07 0.05]
+2025-12-25 01:20:45 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.496 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:20:46 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.676 Bars: [0.01 0.01 0.01 0.01 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.01 0.01 0.01 0.01]
+2025-12-25 01:20:47 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.500 Bars: [0.04 0.05 0.07 0.10 0.13 0.17 0.21 0.26 0.21 0.17 0.13 0.10 0.07 0.05 0.04]
+2025-12-25 01:20:48 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.948 Bars: [0.00 0.02 0.04 0.06 0.06 0.04 0.02 0.00 0.02 0.04 0.06 0.06 0.04 0.02 0.00]
+2025-12-25 01:20:48 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.876 Bars: [0.00 0.00 0.00 0.01 0.01 0.01 0.01 0.02 0.01 0.01 0.01 0.01 0.00 0.00 0.00]
+2025-12-25 01:20:49 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.170 Bars: [0.02 0.02 0.03 0.04 0.05 0.07 0.09 0.12 0.09 0.07 0.05 0.04 0.03 0.02 0.02]
+2025-12-25 01:20:50 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.477 Bars: [0.00 0.01 0.03 0.04 0.04 0.03 0.01 0.00 0.01 0.03 0.04 0.04 0.03 0.01 0.00]
+2025-12-25 01:20:51 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.740 Bars: [0.16 0.20 0.28 0.39 0.52 0.67 0.86 1.00 0.86 0.67 0.52 0.39 0.28 0.20 0.16]
+2025-12-25 01:20:51 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.678 Bars: [0.00 0.04 0.07 0.11 0.11 0.07 0.04 0.00 0.04 0.07 0.11 0.11 0.07 0.04 0.00]
+2025-12-25 01:20:51 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.858 Bars: [0.00 0.04 0.07 0.10 0.11 0.07 0.05 0.02 0.05 0.07 0.11 0.10 0.07 0.04 0.00]
+2025-12-25 01:20:52 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.711 Bars: [0.00 0.00 0.01 0.01 0.01 0.01 0.00 0.00 0.00 0.01 0.01 0.01 0.01 0.00 0.00]
+2025-12-25 01:20:52 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.849 Bars: [0.06 0.07 0.09 0.13 0.18 0.24 0.32 0.41 0.32 0.24 0.18 0.13 0.09 0.07 0.06]
+2025-12-25 01:20:52 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.531 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:20:53 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.732 Bars: [0.00 0.03 0.06 0.09 0.09 0.06 0.03 0.00 0.03 0.06 0.09 0.09 0.06 0.03 0.00]
+2025-12-25 01:20:53 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.252 Bars: [0.04 0.10 0.18 0.26 0.29 0.27 0.26 0.27 0.26 0.27 0.29 0.26 0.18 0.10 0.04]
+2025-12-25 01:20:53 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.608 Bars: [0.00 0.01 0.01 0.02 0.02 0.01 0.01 0.00 0.01 0.01 0.02 0.02 0.01 0.01 0.00]
+2025-12-25 01:20:54 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.696 Bars: [0.01 0.01 0.01 0.01 0.02 0.03 0.04 0.05 0.04 0.03 0.02 0.01 0.01 0.01 0.01]
+2025-12-25 01:20:54 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.220 Bars: [0.03 0.08 0.13 0.19 0.22 0.21 0.21 0.22 0.21 0.21 0.22 0.19 0.13 0.08 0.03]
+2025-12-25 01:20:54 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.978 Bars: [0.01 0.02 0.02 0.03 0.04 0.06 0.07 0.10 0.07 0.06 0.04 0.03 0.02 0.02 0.01]
+2025-12-25 01:20:55 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.672 Bars: [0.02 0.05 0.09 0.14 0.14 0.11 0.12 0.14 0.12 0.11 0.14 0.14 0.09 0.05 0.02]
+2025-12-25 01:20:55 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.531 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:20:55 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.546 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:20:56 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.389 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:20:56 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.843 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:20:57 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.003 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:20:57 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.736 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:20:57 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.627 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:20:58 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.768 Bars: [0.01 0.01 0.02 0.02 0.03 0.04 0.05 0.06 0.05 0.04 0.03 0.02 0.02 0.01 0.01]
+2025-12-25 01:20:58 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.920 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:20:59 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.717 Bars: [0.03 0.05 0.10 0.15 0.15 0.13 0.17 0.22 0.17 0.13 0.15 0.15 0.10 0.05 0.03]
+2025-12-25 01:21:00 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.836 Bars: [0.05 0.09 0.15 0.22 0.26 0.27 0.30 0.35 0.30 0.27 0.26 0.22 0.15 0.09 0.05]
+2025-12-25 01:21:00 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.826 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:21:01 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.453 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:21:02 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.704 Bars: [0.01 0.01 0.02 0.02 0.03 0.03 0.04 0.04 0.04 0.03 0.03 0.02 0.02 0.01 0.01]
+2025-12-25 01:21:03 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.500 Bars: [0.00 0.01 0.02 0.04 0.04 0.02 0.01 0.00 0.01 0.02 0.04 0.04 0.02 0.01 0.00]
+2025-12-25 01:21:04 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.823 Bars: [0.03 0.04 0.06 0.08 0.10 0.12 0.15 0.19 0.15 0.12 0.10 0.08 0.06 0.04 0.03]
+2025-12-25 01:21:05 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.488 Bars: [0.00 0.01 0.01 0.02 0.02 0.01 0.01 0.00 0.01 0.01 0.02 0.02 0.01 0.01 0.00]
+2025-12-25 01:21:05 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.643 Bars: [0.00 0.05 0.10 0.16 0.16 0.10 0.05 0.00 0.05 0.10 0.16 0.16 0.10 0.05 0.00]
+2025-12-25 01:21:06 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.681 Bars: [0.00 0.01 0.02 0.03 0.03 0.02 0.01 0.00 0.01 0.02 0.03 0.03 0.02 0.01 0.00]
+2025-12-25 01:21:07 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.720 Bars: [0.00 0.02 0.03 0.05 0.05 0.03 0.02 0.00 0.02 0.03 0.05 0.05 0.03 0.02 0.00]
+2025-12-25 01:21:08 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.429 Bars: [0.04 0.05 0.08 0.11 0.14 0.18 0.22 0.28 0.22 0.18 0.14 0.11 0.08 0.05 0.04]
+2025-12-25 01:21:09 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.991 Bars: [0.01 0.03 0.05 0.07 0.08 0.07 0.06 0.06 0.06 0.07 0.08 0.07 0.05 0.03 0.01]
+2025-12-25 01:21:09 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.639 Bars: [0.01 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.01]
+2025-12-25 01:21:10 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.003 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:21:11 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.726 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:24:21 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-25 01:24:23 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 01:24:23 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 01:24:24 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 01:24:24 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 01:25:08 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-25 01:25:10 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 01:25:10 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 01:25:11 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 01:25:11 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 01:33:40 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-25 01:33:40 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.667 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:33:41 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.664 Bars: [0.17 0.19 0.25 0.35 0.48 0.66 0.87 1.00 0.87 0.66 0.48 0.35 0.25 0.19 0.17]
+2025-12-25 01:33:41 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.048 Bars: [0.05 0.13 0.22 0.33 0.37 0.35 0.35 0.35 0.35 0.35 0.37 0.33 0.22 0.13 0.05]
+2025-12-25 01:33:41 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.503 Bars: [0.10 0.09 0.07 0.06 0.04 0.03 0.01 0.00 0.01 0.03 0.04 0.06 0.07 0.09 0.10]
+2025-12-25 01:33:42 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.600 Bars: [0.19 0.37 0.59 0.85 1.00 1.00 1.00 1.00 1.00 1.00 1.00 0.85 0.59 0.37 0.19]
+2025-12-25 01:33:42 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.1710, max=0.9331
+2025-12-25 01:33:42 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 01:33:43 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.3264, max=0.9725
+2025-12-25 01:33:43 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 01:33:43 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.054 Bars: [0.02 0.02 0.04 0.05 0.06 0.07 0.08 0.11 0.08 0.07 0.06 0.05 0.04 0.02 0.02]
+2025-12-25 01:33:45 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.633 Bars: [0.46 0.61 0.87 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 0.87 0.61 0.46]
+2025-12-25 01:33:45 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.311 Bars: [0.35 0.56 0.85 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 0.85 0.56 0.35]
+2025-12-25 01:33:46 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.981 Bars: [0.26 0.29 0.39 0.54 0.75 1.00 1.00 1.00 1.00 1.00 0.75 0.54 0.39 0.29 0.26]
+2025-12-25 01:33:46 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.898 Bars: [0.01 0.17 0.34 0.51 0.51 0.34 0.17 0.05 0.17 0.34 0.51 0.51 0.34 0.17 0.01]
+2025-12-25 01:33:46 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.581 Bars: [0.04 0.04 0.05 0.07 0.10 0.14 0.18 0.24 0.18 0.14 0.10 0.07 0.05 0.04 0.04]
+2025-12-25 01:33:47 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.119 Bars: [0.06 0.07 0.10 0.15 0.19 0.24 0.31 0.40 0.31 0.24 0.19 0.15 0.10 0.07 0.06]
+2025-12-25 01:33:47 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.123 Bars: [0.15 0.17 0.22 0.30 0.42 0.58 0.77 0.99 0.77 0.58 0.42 0.30 0.22 0.17 0.15]
+2025-12-25 01:33:47 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.554 Bars: [0.05 0.06 0.07 0.10 0.14 0.19 0.26 0.33 0.26 0.19 0.14 0.10 0.07 0.06 0.05]
+2025-12-25 01:33:48 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.318 Bars: [0.01 0.01 0.01 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.01 0.01 0.01]
+2025-12-25 01:33:48 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.514 Bars: [0.00 0.04 0.08 0.12 0.12 0.08 0.04 0.00 0.04 0.08 0.12 0.12 0.08 0.04 0.00]
+2025-12-25 01:33:48 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.270 Bars: [0.19 0.16 0.13 0.11 0.08 0.05 0.03 0.00 0.03 0.05 0.08 0.11 0.13 0.16 0.19]
+2025-12-25 01:33:49 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.204 Bars: [0.04 0.12 0.21 0.31 0.33 0.28 0.25 0.28 0.25 0.28 0.33 0.31 0.21 0.12 0.04]
+2025-12-25 01:33:49 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.384 Bars: [0.38 0.51 0.72 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 0.72 0.51 0.38]
+2025-12-25 01:33:49 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.740 Bars: [0.19 0.23 0.31 0.44 0.59 0.77 1.00 1.00 1.00 0.77 0.59 0.44 0.31 0.23 0.19]
+2025-12-25 01:33:50 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.843 Bars: [0.04 0.06 0.08 0.12 0.15 0.18 0.22 0.27 0.22 0.18 0.15 0.12 0.08 0.06 0.04]
+2025-12-25 01:33:50 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.026 Bars: [0.27 0.37 0.53 0.76 0.97 1.00 1.00 1.00 1.00 1.00 0.97 0.76 0.53 0.37 0.27]
+2025-12-25 01:33:50 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.742 Bars: [0.46 0.58 0.81 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 0.81 0.58 0.46]
+2025-12-25 01:33:51 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.147 Bars: [0.03 0.10 0.20 0.30 0.30 0.22 0.16 0.21 0.16 0.22 0.30 0.30 0.20 0.10 0.03]
+2025-12-25 01:33:52 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.400 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:33:52 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.192 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 01:33:53 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.860 Bars: [0.53 0.78 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 0.78 0.53]
+2025-12-25 01:33:54 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.541 Bars: [0.13 0.24 0.38 0.55 0.66 0.70 0.78 0.88 0.78 0.70 0.66 0.55 0.38 0.24 0.13]
+2025-12-25 01:33:54 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.768 Bars: [0.19 0.21 0.30 0.43 0.55 0.74 0.98 1.00 0.98 0.74 0.55 0.43 0.30 0.21 0.19]
+2025-12-25 01:33:55 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.570 Bars: [0.23 0.19 0.16 0.13 0.14 0.19 0.25 0.32 0.25 0.19 0.14 0.13 0.16 0.19 0.23]
+2025-12-25 04:19:06 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-25 04:19:09 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 04:19:09 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 04:19:10 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 04:19:10 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 04:19:34 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.011 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-25 04:19:34 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.628 Bars: [0.00 0.13 0.25 0.38 0.38 0.25 0.13 0.02 0.13 0.25 0.38 0.38 0.25 0.13 0.00]
+2025-12-25 04:19:35 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.392 Bars: [0.01 0.15 0.30 0.45 0.45 0.30 0.15 0.05 0.15 0.30 0.45 0.45 0.30 0.15 0.01]
+2025-12-25 04:19:35 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.442 Bars: [0.09 0.17 0.27 0.39 0.46 0.48 0.52 0.58 0.52 0.48 0.46 0.39 0.27 0.17 0.09]
+2025-12-25 04:19:35 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.329 Bars: [0.00 0.06 0.13 0.19 0.19 0.13 0.06 0.00 0.06 0.13 0.19 0.19 0.13 0.06 0.00]
+2025-12-25 04:19:36 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.846 Bars: [0.00 0.09 0.18 0.27 0.27 0.18 0.09 0.00 0.09 0.18 0.27 0.27 0.18 0.09 0.00]
+2025-12-25 04:19:36 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.547 Bars: [0.00 0.09 0.18 0.27 0.27 0.18 0.09 0.01 0.09 0.18 0.27 0.27 0.18 0.09 0.00]
+2025-12-25 04:19:36 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.534 Bars: [0.00 0.10 0.21 0.31 0.31 0.21 0.10 0.02 0.10 0.21 0.31 0.31 0.21 0.10 0.00]
+2025-12-25 04:30:02 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-25 04:30:04 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 04:30:04 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 04:30:05 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 04:30:05 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 04:39:01 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-25 04:39:03 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 04:39:03 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 04:39:04 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 04:39:04 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 04:39:32 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 04:39:32 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 04:39:32 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 04:39:32 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 04:57:15 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-25 04:57:18 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 04:57:18 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 04:57:19 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 04:57:19 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 05:01:04 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-25 05:01:07 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 05:01:07 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 05:01:08 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 05:01:08 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 05:07:24 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-25 05:07:27 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 05:07:27 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 05:07:29 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 05:07:29 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 05:07:54 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 05:07:54 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 05:07:55 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 05:07:55 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 15:12:14 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-25 15:12:16 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 15:12:16 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 15:12:17 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 15:12:17 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 15:15:55 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-25 15:15:57 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 15:15:57 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 15:15:58 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 15:15:58 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 15:16:11 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 15:16:11 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 15:16:11 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 15:16:11 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 15:16:30 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 15:16:30 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 15:16:31 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 15:16:31 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 15:18:40 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-25 15:18:43 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 15:18:43 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 15:18:43 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 15:18:43 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 15:21:56 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-25 15:21:59 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 15:21:59 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 15:21:59 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 15:21:59 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 15:22:49 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-25 15:22:51 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 15:22:51 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-25 15:22:52 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-25 15:22:52 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
