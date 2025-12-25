@@ -567,6 +567,9 @@ class ClockWidget(BaseOverlayWidget):
         """
         self._time_format = time_format
         
+        # Update stylesheet to tighten padding when timezone hidden
+        self._update_stylesheet()
+
         # Update display immediately if running
         if self._enabled:
             self._update_time()
@@ -718,6 +721,7 @@ class ClockWidget(BaseOverlayWidget):
             return
 
         self._show_timezone = show_timezone
+        self._update_stylesheet()
 
         if show_timezone and self._tz_label is None and self.parent():
             # Lazily create timezone label if needed
@@ -744,15 +748,16 @@ class ClockWidget(BaseOverlayWidget):
     def _update_stylesheet(self) -> None:
         """Update widget stylesheet based on current settings."""
         if self._show_background:
-            # Extend bottom padding if timezone is shown to include it in the frame
-            bottom_padding = 6
-            if self._show_timezone and self._tz_label:
-                try:
-                    self._tz_label.adjustSize()
-                    bottom_padding = max(6, self._tz_label.height() + 6)
-                except Exception:
-                    bottom_padding = 20
-            # With background frame
+            if self._display_mode == "analog":
+                padding_left, padding_top, padding_bottom, _ = self._compute_analog_padding()
+                padding_right = padding_left
+            else:
+                padding_top = 6
+                padding_right = 28
+                padding_bottom = 6
+                padding_left = 21
+                padding_right = 28
+
             self.setStyleSheet(f"""
                 QLabel {{
                     color: rgba({self._text_color.red()}, {self._text_color.green()}, 
@@ -764,9 +769,10 @@ class ClockWidget(BaseOverlayWidget):
                                                                  {self._bg_border_color.blue()}, 
                                                                  {self._bg_border_color.alpha()});
                     border-radius: 8px;
-                    padding: 6px 28px {bottom_padding}px 21px;
+                    padding: {padding_top}px {padding_right}px {padding_bottom}px {padding_left}px;
                 }}
             """)
+            self.setContentsMargins(padding_left, padding_top, padding_right, padding_bottom)
         else:
             # Transparent background (default)
             self.setStyleSheet(f"""
@@ -777,6 +783,7 @@ class ClockWidget(BaseOverlayWidget):
                     padding: 6px 28px 6px 21px;
                 }}
             """)
+            self.setContentsMargins(0, 0, 0, 0)
     
     def paintEvent(self, event: QPaintEvent) -> None:
         """Custom paint for analogue mode; fall back to QLabel for digital."""
@@ -806,15 +813,17 @@ class ClockWidget(BaseOverlayWidget):
             else:
                 painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
 
-            shadow_scale = 1.5 if self._analog_shadow_intense else 1.0
-            opacity_scale = 2.0 if self._analog_shadow_intense else 1.0
+            shadow_scale = 1.5 if self._analog_shadow_intense else 1.1
+            opacity_scale = 2.0 if self._analog_shadow_intense else 1.4
 
             def _scaled_alpha(base_alpha: int) -> int:
                 return min(255, int(round(base_alpha * opacity_scale)))
 
-            # Leave a generous outer margin, with extra space at the bottom for
-            # the timezone abbreviation.
-            rect = self.rect().adjusted(16, 16, -16, -36)
+            left_pad, top_pad, bottom_margin, tz_font_size = self._compute_analog_padding()
+            if self._show_background:
+                rect = self.contentsRect()
+            else:
+                rect = self.rect().adjusted(left_pad, top_pad, -left_pad, -bottom_margin)
             side = min(rect.width(), rect.height())
             if side <= 0:
                 return
@@ -830,9 +839,9 @@ class ClockWidget(BaseOverlayWidget):
             numeral_metrics = painter.fontMetrics()
             numeral_height = numeral_metrics.height()
 
-            # Pull the clock face further in from the widget edges so there is
-            # comfortable space for numerals plus a bit of padding.
-            radius = side // 2 - (numeral_height * 2) - 8
+            # Pull the clock face in just enough to clear the numerals (~15px total padding).
+            numeral_clearance = numeral_height + max(6, numeral_height // 3)
+            radius = side // 2 - numeral_clearance
             if radius <= 0:
                 return
 
@@ -917,7 +926,7 @@ class ClockWidget(BaseOverlayWidget):
 
                 # Place numerals with a clear gap from the face so they never
                 # visually touch the circle or its hour markers.
-                numeral_pull_in = max(2, numeral_height // 3) - 4
+                numeral_pull_in = max(2, numeral_height // 3) - 5
                 numeral_radius = radius + numeral_height - numeral_pull_in
                 painter.setFont(numeral_font)
                 for hour in range(1, 13):
@@ -986,7 +995,6 @@ class ClockWidget(BaseOverlayWidget):
 
             # Timezone abbreviation rendered below the analogue clock, centred horizontally.
             if self._show_timezone and self._timezone_abbrev:
-                tz_font_size = max(8, self._font_size // 3)
                 tz_font = QFont(self._font_family, tz_font_size)
                 painter.setFont(tz_font)
                 tz_metrics = painter.fontMetrics()
@@ -1005,6 +1013,16 @@ class ClockWidget(BaseOverlayWidget):
                 painter.drawText(tz_x, tz_y, text)
         finally:
             painter.end()
+
+    def _compute_analog_padding(self) -> tuple[int, int, int, int]:
+        dpi_y = max(96, int(round(self.logicalDpiY()))) if hasattr(self, "logicalDpiY") else 96
+        vertical_padding = max(12, int(round(15 * dpi_y / 96.0)))
+        horizontal_padding = vertical_padding
+        tz_font_size = max(8, self._font_size // 3)
+        bottom_margin = vertical_padding
+        if self._show_timezone:
+            bottom_margin += tz_font_size + max(4, vertical_padding // 2)
+        return horizontal_padding, vertical_padding, bottom_margin, tz_font_size
     
     def cleanup(self) -> None:
         """Clean up resources."""

@@ -32,6 +32,25 @@ WINDOW_POLL_INTERVAL = 0.25
 BROWSER_FOREGROUND_TIMEOUT = 5.0
 _NO_WINDOW_FLAG = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
+BROWSER_WINDOW_CLASSES = {
+    "chrome_widgetwin_1",
+    "chrome_widgetwin_0",
+    "applicationframewindow",
+    "mozillawindowclass",
+    "ieframe",
+}
+
+
+class WINDOWPLACEMENT(ctypes.Structure):
+    _fields_ = [
+        ("length", wintypes.UINT),
+        ("flags", wintypes.UINT),
+        ("showCmd", wintypes.UINT),
+        ("ptMinPosition", wintypes.POINT),
+        ("ptMaxPosition", wintypes.POINT),
+        ("rcNormalPosition", wintypes.RECT),
+    ]
+
 
 def configure_logging(log_dir: Path, verbose: bool) -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -363,7 +382,29 @@ def _foreground_first_matching_window(keywords: list[str]) -> bool:
     try:
         if hasattr(user32, "AllowSetForegroundWindow"):
             user32.AllowSetForegroundWindow(0xFFFFFFFF)
-        user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+
+        # Only restore minimized windows; keep maximized windows maximized.
+        SW_RESTORE = 9
+        SW_SHOW = 5
+        SW_SHOWMAXIMIZED = 3
+
+        is_iconic = bool(user32.IsIconic(hwnd))
+        show_cmd = 0
+        try:
+            placement = wintypes.WINDOWPLACEMENT()  # type: ignore[attr-defined]
+            placement.length = ctypes.sizeof(placement)  # type: ignore[arg-type]
+            if user32.GetWindowPlacement(hwnd, ctypes.byref(placement)):
+                show_cmd = placement.showCmd
+        except AttributeError:
+            show_cmd = 0
+
+        if is_iconic:
+            user32.ShowWindow(hwnd, SW_RESTORE)
+        elif show_cmd == SW_SHOWMAXIMIZED:
+            user32.ShowWindow(hwnd, SW_SHOWMAXIMIZED)
+        else:
+            user32.ShowWindow(hwnd, SW_SHOW)
+
         return bool(user32.SetForegroundWindow(hwnd))
     except Exception:
         return False
