@@ -751,7 +751,12 @@ class DisplayWidget(QWidget):
             pixel_shift_rate = 1
         
         if self._pixel_shift_manager is None:
-            self._pixel_shift_manager = PixelShiftManager(resource_manager=self._resource_manager)
+            self._pixel_shift_manager = PixelShiftManager(
+                resource_manager=self._resource_manager,
+                thread_manager=self._thread_manager,
+            )
+            if self._thread_manager is not None:
+                self._pixel_shift_manager.set_thread_manager(self._thread_manager)
             self._pixel_shift_manager.set_defer_check(lambda: self.has_running_transition())
         
         self._pixel_shift_manager.set_shifts_per_minute(pixel_shift_rate)
@@ -822,6 +827,8 @@ class DisplayWidget(QWidget):
         
         # Delegate widget creation to WidgetManager
         if self._widget_manager is not None:
+            widgets_config = self.settings_manager.get('widgets', {}) if self.settings_manager else {}
+            self._widget_manager.configure_expected_overlays(widgets_config)
             created = self._widget_manager.setup_all_widgets(
                 self.settings_manager,
                 self.screen_index,

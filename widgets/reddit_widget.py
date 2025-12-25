@@ -228,10 +228,11 @@ class RedditWidget(BaseOverlayWidget):
         self._fetch_feed()
 
     def start(self) -> None:
-        """Begin periodic Reddit fetches and show widget on first data."""
-
+        """Start fetching Reddit posts."""
         if self._enabled:
-            logger.warning("[FALLBACK] Reddit widget already running")
+            logger.debug("Reddit widget already running")
+            return
+        if not self._ensure_thread_manager("RedditWidget.start"):
             return
 
         self._enabled = True

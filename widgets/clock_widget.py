@@ -3,7 +3,7 @@ Clock widget for screensaver overlay.
 
 Displays current time with configurable format, position, and styling.
 """
-from typing import Optional, Union
+from typing import Optional, Union, TYPE_CHECKING
 from datetime import datetime, timezone, timedelta
 from enum import Enum
 import math
@@ -15,7 +15,7 @@ except ImportError:
     PYTZ_AVAILABLE = False
 
 from PySide6.QtWidgets import QLabel, QWidget
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QColor, QPainter, QPen, QPaintEvent, QPainterPath, QPainterPathStroker
 from shiboken6 import Shiboken
 
@@ -25,6 +25,9 @@ from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
+
+if TYPE_CHECKING:
+    from core.threading import ThreadManager
 
 
 class TimeFormat(Enum):
@@ -91,7 +94,7 @@ class ClockWidget(BaseOverlayWidget):
         self._clock_position = position  # Keep original enum for compatibility
         self._show_seconds = show_seconds
         self._show_timezone = show_timezone
-        self._timer: Optional[QTimer] = None
+        self._thread_manager: Optional["ThreadManager"] = None
         self._timer_handle: Optional[OverlayTimerHandle] = None
         
         # Separate label for timezone
@@ -163,6 +166,8 @@ class ClockWidget(BaseOverlayWidget):
         """Start clock updates."""
         if self._enabled:
             logger.warning("[FALLBACK] Clock already running")
+            return
+        if not self._ensure_thread_manager("ClockWidget.start"):
             return
         
         # Update immediately

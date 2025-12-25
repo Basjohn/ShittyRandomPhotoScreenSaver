@@ -69,33 +69,13 @@ def test_overlay_timer_uses_thread_manager_when_available(qt_app):
 
 
 @pytest.mark.qt
-def test_overlay_timer_falls_back_to_qtimer_without_thread_manager(qt_app, qtbot):
-    """Without a ThreadManager, create_overlay_timer should use a local QTimer.
-
-    We verify that the timer fires at least once and that the OverlayTimerHandle
-    correctly tracks active/stop state.
-    """
+def test_overlay_timer_raises_without_thread_manager(qt_app):
+    """Without a ThreadManager, create_overlay_timer should raise immediately."""
 
     widget = _DummyWidget()
-    # No _thread_manager attribute set → forces QTimer path.
-
-    fired: Dict[str, int] = {"count": 0}
 
     def _cb() -> None:
-        fired["count"] += 1
+        pass
 
-    handle = create_overlay_timer(widget, 5, _cb, description="local-qtimer")
-    assert isinstance(handle, OverlayTimerHandle)
-    assert handle.is_active()
-
-    # Allow a short period for the QTimer to fire.
-    qtbot.wait(30)
-    assert fired["count"] >= 1
-
-    # After stop(), timer should no longer be active and should not fire again.
-    handle.stop()
-    active_after_stop = handle.is_active()
-    fired_before = fired["count"]
-    qtbot.wait(30)
-    assert not active_after_stop
-    assert fired["count"] == fired_before
+    with pytest.raises(RuntimeError):
+        create_overlay_timer(widget, 5, _cb, description="missing-thread-manager")

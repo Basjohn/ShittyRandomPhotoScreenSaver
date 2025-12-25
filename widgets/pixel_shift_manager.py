@@ -20,6 +20,7 @@ from PySide6.QtWidgets import QWidget
 
 from core.logging.logger import get_logger
 from core.resources.manager import ResourceManager
+from core.threading.manager import ThreadManager
 
 logger = get_logger(__name__)
 
@@ -38,6 +39,7 @@ class PixelShiftManager:
     def __init__(
         self,
         resource_manager: Optional[ResourceManager] = None,
+        thread_manager: Optional[ThreadManager] = None,
     ) -> None:
         """
         Initialize the pixel shift manager.
@@ -46,6 +48,7 @@ class PixelShiftManager:
             resource_manager: Optional ResourceManager for timer lifecycle
         """
         self._resource_manager = resource_manager
+        self._thread_manager = thread_manager
         self._enabled = False
         self._shifts_per_minute = 1
         self._timer: Optional[QTimer] = None
@@ -67,6 +70,16 @@ class PixelShiftManager:
         
         logger.debug("PixelShiftManager created")
     
+    def set_thread_manager(self, thread_manager: ThreadManager) -> None:
+        """Inject the shared ThreadManager for timer scheduling."""
+        self._thread_manager = thread_manager
+
+    def _require_thread_manager(self) -> ThreadManager:
+        """Ensure we have a ThreadManager before scheduling timers."""
+        if self._thread_manager is None:
+            raise RuntimeError("PixelShiftManager requires a ThreadManager before enabling shifts.")
+        return self._thread_manager
+
     def set_enabled(self, enabled: bool) -> None:
         """Enable or disable pixel shifting."""
         if enabled == self._enabled:
@@ -140,7 +153,6 @@ class PixelShiftManager:
         
         widget_id = id(widget)
         if widget_id in self._original_positions:
-            # Restore original position before unregistering
             try:
                 orig = self._original_positions[widget_id]
                 widget.move(orig)
@@ -150,6 +162,11 @@ class PixelShiftManager:
         
         if widget in self._widgets:
             self._widgets.remove(widget)
+    
+    def _require_thread_manager(self) -> ThreadManager:
+        if self._thread_manager is None:
+            raise RuntimeError("PixelShiftManager requires a ThreadManager before enabling shifts.")
+        return self._thread_manager
     
     def update_original_position(self, widget: QWidget) -> None:
         """Update the stored original position for a widget.
@@ -191,9 +208,8 @@ class PixelShiftManager:
         # Calculate interval: shifts_per_minute -> milliseconds between shifts
         interval_ms = int(60000 / self._shifts_per_minute)
         
-        self._timer = QTimer()
-        self._timer.timeout.connect(self._on_shift_tick)
-        self._timer.start(interval_ms)
+        tm = self._require_thread_manager()
+        self._timer = tm.schedule_recurring(interval_ms, self._on_shift_tick)
         
         if self._resource_manager is not None:
             try:

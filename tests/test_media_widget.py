@@ -165,12 +165,18 @@ def test_windows_media_controller_live_spotify_track():
     assert info is not None, "Expected a Spotify track via GSMTC; ensure Spotify is running and playing"
 
 
+def _wait_for_media_refresh(qtbot, widget: MediaWidget, timeout: int = 2000) -> None:
+    """Wait until MediaWidget finishes its async refresh."""
+    qtbot.waitUntil(lambda: not getattr(widget, "_refresh_in_flight", False), timeout=timeout)
+
+
 @pytest.mark.qt
-def test_media_widget_placeholder_when_no_media(qt_app, qtbot):
+def test_media_widget_placeholder_when_no_media(qt_app, qtbot, thread_manager):
     """When controller returns None, widget should remain hidden (no media)."""
 
     ctrl = _DummyController(info=None)
     w = MediaWidget(parent=None, controller=ctrl)
+    w.set_thread_manager(thread_manager)
     qtbot.addWidget(w)
     w.resize(400, 80)
 
@@ -179,13 +185,14 @@ def test_media_widget_placeholder_when_no_media(qt_app, qtbot):
 
     # Force a single refresh and verify widget is not shown when no media is available.
     w._refresh()  # type: ignore[attr-defined]
+    _wait_for_media_refresh(qtbot, w)
     qt_app.processEvents()
 
     assert not w.isVisible()
 
 
 @pytest.mark.qt
-def test_media_widget_displays_metadata(qt_app, qtbot):
+def test_media_widget_displays_metadata(qt_app, qtbot, thread_manager):
     """MediaWidget should render title/artist/album and state text."""
 
     info = mc.MediaTrackInfo(
@@ -196,6 +203,7 @@ def test_media_widget_displays_metadata(qt_app, qtbot):
     )
     ctrl = _DummyController(info=info)
     w = MediaWidget(parent=None, controller=ctrl)
+    w.set_thread_manager(thread_manager)
     qtbot.addWidget(w)
     w.resize(500, 100)
 
@@ -203,6 +211,7 @@ def test_media_widget_displays_metadata(qt_app, qtbot):
     qt_app.processEvents()
 
     w._refresh()  # type: ignore[attr-defined]
+    _wait_for_media_refresh(qtbot, w)
     qt_app.processEvents()
 
     html = w.text()
@@ -214,7 +223,7 @@ def test_media_widget_displays_metadata(qt_app, qtbot):
 
 
 @pytest.mark.qt
-def test_media_widget_hides_again_when_media_disappears(qt_app, qtbot):
+def test_media_widget_hides_again_when_media_disappears(qt_app, qtbot, thread_manager):
     """Widget should hide after being visible when media goes away."""
 
     info = mc.MediaTrackInfo(
@@ -225,6 +234,7 @@ def test_media_widget_hides_again_when_media_disappears(qt_app, qtbot):
     )
     ctrl = _DummyController(info=info)
     w = MediaWidget(parent=None, controller=ctrl)
+    w.set_thread_manager(thread_manager)
     qtbot.addWidget(w)
     w.resize(500, 100)
 
@@ -243,7 +253,7 @@ def test_media_widget_hides_again_when_media_disappears(qt_app, qtbot):
 
 
 @pytest.mark.qt
-def test_media_widget_decodes_artwork_and_adjusts_margins(qt_app, qtbot):
+def test_media_widget_decodes_artwork_and_adjusts_margins(qt_app, qtbot, thread_manager):
     """Artwork bytes should be decoded into a pixmap and margins updated."""
 
     # Create a tiny in-memory PNG for artwork
@@ -254,7 +264,7 @@ def test_media_widget_decodes_artwork_and_adjusts_margins(qt_app, qtbot):
     # Encode to PNG bytes using an in-memory buffer so loadFromData can decode it.
     buf = QBuffer()
     buf.open(QIODevice.OpenModeFlag.ReadWrite)
-    assert pm.save(buf, b"PNG")
+    assert pm.save(buf, "PNG")
     png_bytes = bytes(buf.data())
 
     info = mc.MediaTrackInfo(
@@ -288,7 +298,7 @@ def test_media_widget_decodes_artwork_and_adjusts_margins(qt_app, qtbot):
 
 
 @pytest.mark.qt
-def test_media_widget_starts_fade_in_when_artwork_appears(qt_app, qtbot):
+def test_media_widget_starts_fade_in_when_artwork_appears(qt_app, qtbot, thread_manager):
     """Artwork appearing should trigger a fade-in animation."""
 
     img = QImage(8, 8, QImage.Format.Format_ARGB32)
@@ -297,7 +307,7 @@ def test_media_widget_starts_fade_in_when_artwork_appears(qt_app, qtbot):
 
     buf = QBuffer()
     buf.open(QIODevice.OpenModeFlag.ReadWrite)
-    assert pm.save(buf, b"PNG")
+    assert pm.save(buf, "PNG")
     png_bytes = bytes(buf.data())
 
     info = mc.MediaTrackInfo(
@@ -310,6 +320,7 @@ def test_media_widget_starts_fade_in_when_artwork_appears(qt_app, qtbot):
 
     ctrl = _DummyController(info=None)
     w = MediaWidget(parent=None, controller=ctrl)
+    w.set_thread_manager(thread_manager)
     qtbot.addWidget(w)
     w.resize(400, 120)
 
@@ -347,7 +358,9 @@ def test_media_widget_transport_delegates_to_controller():
 
 
 @pytest.mark.qt
-def test_display_widget_ctrl_click_routes_to_media_widget(qt_app, settings_manager, qtbot, monkeypatch):
+def test_display_widget_ctrl_click_routes_to_media_widget(
+    qt_app, settings_manager, qtbot, monkeypatch, thread_manager
+):
     """Ctrl-held click over media widget should trigger play/pause, not exit."""
 
     fake_info = mc.MediaTrackInfo(title="Track", state=mc.MediaPlaybackState.PLAYING)
@@ -370,6 +383,7 @@ def test_display_widget_ctrl_click_routes_to_media_widget(qt_app, settings_manag
         screen_index=0,
         display_mode=DisplayMode.FILL,
         settings_manager=settings_manager,
+        thread_manager=thread_manager,
     )
     qtbot.addWidget(w)
     w.resize(800, 600)
@@ -403,7 +417,9 @@ def test_display_widget_ctrl_click_routes_to_media_widget(qt_app, settings_manag
 
 
 @pytest.mark.qt
-def test_display_widget_hard_exit_click_routes_to_media_widget(qt_app, settings_manager, qtbot, monkeypatch):
+def test_display_widget_hard_exit_click_routes_to_media_widget(
+    qt_app, settings_manager, qtbot, monkeypatch, thread_manager
+):
     """Hard-exit mode should also allow media widget interaction without exit."""
 
     fake_info = mc.MediaTrackInfo(title="Track", state=mc.MediaPlaybackState.PLAYING)
@@ -427,6 +443,7 @@ def test_display_widget_hard_exit_click_routes_to_media_widget(qt_app, settings_
         screen_index=0,
         display_mode=DisplayMode.FILL,
         settings_manager=settings_manager,
+        thread_manager=thread_manager,
     )
     qtbot.addWidget(w)
     w.resize(800, 600)

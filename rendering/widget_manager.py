@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QWidget, QGraphicsDropShadowEffect, QGraphicsOpaci
 from core.logging.logger import get_logger, is_verbose_logging
 from core.resources.manager import ResourceManager
 from core.settings.settings_manager import SettingsManager
-from rendering.widget_setup import parse_color_to_qcolor
+from rendering.widget_setup import parse_color_to_qcolor, compute_expected_overlays
 from widgets.clock_widget import ClockWidget, TimeFormat, ClockPosition
 from widgets.weather_widget import WeatherWidget, WeatherPosition
 from widgets.media_widget import MediaWidget, MediaPosition
@@ -97,12 +97,27 @@ class WidgetManager:
             widget: The widget to manage
         """
         self._widgets[name] = widget
+        if widget is not None and hasattr(widget, "set_widget_manager"):
+            try:
+                widget.set_widget_manager(self)
+            except Exception:
+                pass
         if self._resource_manager:
             try:
                 self._resource_manager.register_qt(widget, description=f"Widget: {name}")
             except Exception:
                 pass
         logger.debug(f"[WIDGET_MANAGER] Registered widget: {name}")
+
+    def configure_expected_overlays(self, widgets_config: Dict[str, Any]) -> None:
+        """Compute and store the overlays expected to participate in fade sync."""
+        if widgets_config is None:
+            widgets_config = {}
+        try:
+            expected = compute_expected_overlays(self._parent, widgets_config)
+        except Exception:
+            expected = set()
+        self.set_expected_overlays(expected)
     
     def unregister_widget(self, name: str) -> Optional[QWidget]:
         """

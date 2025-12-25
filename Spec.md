@@ -245,6 +245,7 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
 
 ## Thread Safety & Centralization
 - All business logic threading goes via `ThreadManager` where available.
+- Overlay widgets and engine-level timers (image rotation + background RSS refresh) must obtain timers via `ThreadManager.schedule_recurring`; the legacy raw `QTimer` fallback has been removed and widgets now log/abort startup when no manager is injected.
 - UI updates only on the main thread (`run_on_ui_thread`).
 - Simple locks (Lock/RLock) guard mutable state; no raw QThread in the engine. The only remaining QThread usage is WeatherWidget's fetcher fallback when no `ThreadManager` has been injected into the widget tree.
 - Qt objects registered with `ResourceManager` where appropriate.

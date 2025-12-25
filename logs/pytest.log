@@ -6430,3 +6430,25 @@
 2025-12-24 04:24:22,793 - pytest_runner - INFO - pytest finished with exit code 1
 2025-12-24 04:31:35,237 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_ctrl_interaction_mode.py', '-vv', '-k', 'settings_dialog_active']
 2025-12-24 04:31:36,818 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-25 18:41:20,899 - pytest_runner - INFO - pytest.py starting with args: []
+2025-12-25 18:51:02,870 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_gl_compositor_blinds.py', '-vv']
+2025-12-25 18:51:06,696 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-25 18:51:39,639 - pytest_runner - INFO - pytest.py starting with args: ['--maxfail=1', 'tests/test_ctrl_interaction_mode.py', '-k', 'settings_dialog_active', '-vv']
+2025-12-25 18:51:41,232 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-25 19:19:14,208 - pytest_runner - INFO - pytest.py starting with args: []
+2025-12-25 19:38:34,676 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_media_widget.py', '-vv']
+2025-12-25 19:38:36,305 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-25 19:56:49,394 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_media_widget.py', '-vv']
+2025-12-25 19:56:51,089 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-25 20:08:50,193 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_media_widget.py', '-vv']
+2025-12-25 20:08:52,439 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-25 20:11:15,548 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_media_widget.py', '-vv']
+2025-12-25 20:11:17,415 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-25 20:16:36,257 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_media_widget.py', '-vv']
+2025-12-25 20:16:38,252 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-25 20:19:00,065 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_media_widget.py', '-vv']
+2025-12-25 20:19:01,820 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-25 20:21:21,657 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_media_widget.py', '-vv']
+2025-12-25 20:21:23,344 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-25 22:39:54,847 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_media_widget.py', '-vv']
+2025-12-25 22:39:57,377 - pytest_runner - INFO - pytest finished with exit code 1

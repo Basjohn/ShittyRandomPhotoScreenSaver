@@ -25587,3 +25587,6189 @@ tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_settings_di
 
 ============================================================================== 1 passed, 15 deselected, 7 warnings in 1.03s ===============================================================================
 
+
+===== pytest run 2025-12-25 18:41:21 args=[] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collected 593 items / 4 skipped
+
+
+
+archive\gmail_feature\test_gmail_widget.py 
+F
+F
+F
+F
+F
+F
+F
+F
+F
+F
+F
+                                                                                                                                               [  1%]
+
+
+tests\test_animation.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                                                                                                                                                                  [  3%]
+
+
+tests\test_animation_set_target_fps.py 
+.
+                                                                                                                                                             [  3%]
+
+
+tests\test_block_puzzle_flip.py 
+.
+.
+.
+.
+.
+.
+.
+                                                                                                                                                              [  5%]
+
+
+tests\test_clock_integration_regression.py 
+.
+.
+F
+F
+.
+.
+.
+.
+F
+F
+.
+F
+                                                                                                                                              [  7%]
+
+
+tests\test_clock_widget.py 
+.
+.
+.
+F
+F
+F
+F
+F
+F
+F
+F
+F
+F
+.
+.
+.
+F
+F
+F
+                                                                                                                                                       [ 10%]
+
+
+tests\test_context_menu_effect_invalidation.py 
+.
+                                                                                                                                                     [ 10%]
+
+
+tests\test_ctrl_interaction_mode.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+F
+                                                                                                                                                 [ 13%]
+
+
+tests\test_diffuse_transition.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                                                                                                                                                       [ 15%]
+
+
+tests\test_dimming_and_interaction_fixes.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                                                                                                                                             [ 17%]
+
+
+tests\test_display_tab.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                                                                                                                                                             [ 19%]
+
+
+tests\test_engine_lifecycle.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                                                                                                                                                  [ 23%]
+
+
+tests\test_events.py 
+.
+.
+.
+.
+.
+.
+                                                                                                                                                                          [ 24%]
+
+
+tests\test_flicker_fix_integration.py 
+.
+.
+F
+.
+.
+.
+.
+                                                                                                                                                        [ 25%]
+
+
+tests\test_frame_timing_workload.py 
+.
+.
+                                                                                                                                                               [ 25%]
+
+
+tests\test_geometry_dpi_matrix.py 
+.
+
+===== pytest run 2025-12-25 18:51:03 args=['tests/test_gl_compositor_blinds.py', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 1 item
+
+
+
+tests/test_gl_compositor_blinds.py::test_gl_compositor_blinds_no_underlay_and_no_black 
+PASSED                                                                                                        [100%]
+
+
+
+
+============================================================================================ 1 passed in 3.31s ============================================================================================
+
+
+===== pytest run 2025-12-25 18:51:39 args=['--maxfail=1', 'tests/test_ctrl_interaction_mode.py', '-k', 'settings_dialog_active', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 16 items / 15 deselected / 1 selected
+
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_settings_dialog_active 
+FAILED                                                                                                   [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+_________________________________________________________________________ test_ctrl_halo_suppressed_while_settings_dialog_active __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x171964d1ba0) at 0x00000171C56AAE80>, settings_manager = <core.settings.settings_manager.SettingsManager(0x17194e752d0) at 0x00000171C5B09740>
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x00000171C5B21BD0>
+
+
+
+    @pytest.mark.qt
+
+    def test_ctrl_halo_suppressed_while_settings_dialog_active(qt_app, settings_manager, qtbot):
+
+        """Settings dialog active flag must fully suppress Ctrl halo in hard-exit mode."""
+
+        settings_manager.set("input.hard_exit", True)
+
+        widget = DisplayWidget(
+
+            screen_index=0,
+
+            display_mode=DisplayMode.FILL,
+
+            settings_manager=settings_manager,
+
+        )
+
+        qtbot.addWidget(widget)
+
+        widget.resize(400, 300)
+
+        widget.show()
+
+    
+
+        coord = get_coordinator()
+
+        coord.set_settings_dialog_active(False)
+
+        coord.set_ctrl_held(False)
+
+        coord.register_instance(widget, widget.screen())
+
+        coord.hide_all_halos()
+
+        coord.reset_all_ctrl_state()
+
+    
+
+        # Warm-up: halo should appear normally when settings dialog is inactive.
+
+        QTest.keyPress(widget, Qt.Key.Key_Control)
+
+        qt_app.processEvents()
+
+        QTest.mouseMove(widget, widget.rect().center())
+
+        qt_app.processEvents()
+
+        hint = getattr(widget, "_ctrl_cursor_hint", None)
+
+>       assert hint is not None and hint.isVisible()
+
+E       assert (<widgets.cursor_halo.CursorHaloWidget(0x1719661d1d0) at 0x00000171C5B3DAC0> is not None and False)
+
+E        +  where False = <built-in method isVisible of CursorHaloWidget object at 0x00000171C5B3DAC0>()
+
+E        +    where <built-in method isVisible of CursorHaloWidget object at 0x00000171C5B3DAC0> = <widgets.cursor_halo.CursorHaloWidget(0x1719661d1d0) at 0x00000171C5B3DAC0>.isVisible
+
+
+
+tests\test_ctrl_interaction_mode.py:432: AssertionError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_settings_dialog_active - assert (<widgets.cursor_halo.CursorHaloWidget(0x1719661d1d0) at 0x00000171C5B3DAC0> is not None and False)
+ +  where False = <built-in method isVisible of CursorHaloWidget object at 0x00000171C5B3DAC0>()
+ +    where <built-in method isVisible of CursorHaloWidget object at 0x00000171C5B3DAC0> = <widgets.cursor_halo.CursorHaloWidget(0x1719661d1d0) at 0x00000171C5B3DAC0>.isVisible
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+==================================================================================== 1 failed, 15 deselected in 1.17s =====================================================================================
+
+
+===== pytest run 2025-12-25 19:19:14 args=[] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collected 593 items / 4 skipped
+
+
+
+archive\gmail_feature\test_gmail_widget.py 
+F
+F
+F
+F
+F
+F
+F
+F
+F
+F
+F
+                                                                                                                                               [  1%]
+
+
+tests\test_animation.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                                                                                                                                                                  [  3%]
+
+
+tests\test_animation_set_target_fps.py 
+.
+                                                                                                                                                             [  3%]
+
+
+tests\test_block_puzzle_flip.py 
+.
+.
+.
+.
+.
+.
+.
+                                                                                                                                                              [  5%]
+
+
+tests\test_clock_integration_regression.py 
+.
+.
+F
+F
+.
+.
+.
+.
+F
+F
+.
+F
+                                                                                                                                              [  7%]
+
+
+tests\test_clock_widget.py 
+.
+.
+.
+F
+F
+F
+F
+F
+F
+F
+F
+F
+F
+.
+.
+.
+F
+F
+F
+                                                                                                                                                       [ 10%]
+
+
+tests\test_context_menu_effect_invalidation.py 
+.
+                                                                                                                                                     [ 10%]
+
+
+tests\test_ctrl_interaction_mode.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+F
+                                                                                                                                                 [ 13%]
+
+
+tests\test_diffuse_transition.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                                                                                                                                                       [ 15%]
+
+
+tests\test_dimming_and_interaction_fixes.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                                                                                                                                             [ 17%]
+
+
+tests\test_display_tab.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                                                                                                                                                             [ 19%]
+
+
+tests\test_engine_lifecycle.py 
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+                                                                                                                                                  [ 23%]
+
+
+tests\test_events.py 
+.
+.
+.
+.
+.
+.
+                                                                                                                                                                          [ 24%]
+
+
+tests\test_flicker_fix_integration.py 
+.
+.
+F
+.
+.
+.
+.
+                                                                                                                                                        [ 25%]
+
+
+tests\test_frame_timing_workload.py 
+.
+.
+                                                                                                                                                               [ 25%]
+
+
+tests\test_geometry_dpi_matrix.py 
+.
+.
+
+===== pytest run 2025-12-25 19:38:34 args=['tests/test_media_widget.py', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 13 items
+
+
+
+tests/test_media_widget.py::test_noop_media_controller_safe_calls 
+PASSED                                                                                                                             [  7%]
+
+
+tests/test_media_widget.py::test_create_media_controller_falls_back_to_noop 
+PASSED                                                                                                                   [ 15%]
+
+
+tests/test_media_widget.py::test_windows_media_controller_selects_spotify_session 
+PASSED                                                                                                             [ 23%]
+
+
+tests/test_media_widget.py::test_windows_media_controller_returns_none_when_no_spotify 
+PASSED                                                                                                        [ 30%]
+
+
+tests/test_media_widget.py::test_windows_media_controller_live_spotify_track 
+PASSED                                                                                                                  [ 38%]
+
+
+tests/test_media_widget.py::test_media_widget_placeholder_when_no_media 
+FAILED                                                                                                                       [ 46%]
+
+
+tests/test_media_widget.py::test_media_widget_displays_metadata 
+FAILED                                                                                                                               [ 53%]
+
+
+tests/test_media_widget.py::test_media_widget_hides_again_when_media_disappears 
+FAILED                                                                                                               [ 61%]
+
+
+tests/test_media_widget.py::test_media_widget_decodes_artwork_and_adjusts_margins 
+FAILED                                                                                                             [ 69%]
+
+
+tests/test_media_widget.py::test_media_widget_starts_fade_in_when_artwork_appears 
+FAILED                                                                                                             [ 76%]
+
+
+tests/test_media_widget.py::test_media_widget_transport_delegates_to_controller 
+PASSED                                                                                                               [ 84%]
+
+
+tests/test_media_widget.py::test_display_widget_ctrl_click_routes_to_media_widget 
+FAILED                                                                                                             [ 92%]
+
+
+tests/test_media_widget.py::test_display_widget_hard_exit_click_routes_to_media_widget 
+FAILED                                                                                                        [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+_______________________________________________________________________________ test_media_widget_placeholder_when_no_media _______________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x17a67f0bde0) at 0x0000017A7FDCE580>, qtbot = <pytestqt.qtbot.QtBot object at 0x0000017A7FDC5C90>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x0000017A7FE15090>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_placeholder_when_no_media(qt_app, qtbot, thread_manager):
+
+        """When controller returns None, widget should remain hidden (no media)."""
+
+    
+
+        ctrl = _DummyController(info=None)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        w.set_thread_manager(thread_manager)
+
+        qtbot.addWidget(w)
+
+        w.resize(400, 80)
+
+    
+
+>       w.start()
+
+
+
+tests\test_media_widget.py:178: 
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+
+
+self = <widgets.media_widget.MediaWidget(0x17a68480b10) at 0x0000017A7FD7FD00>
+
+
+
+    def start(self) -> None:
+
+        """Begin polling media controller and showing widget."""
+
+    
+
+        if self._enabled:
+
+            logger.warning("Media widget already running")
+
+            return
+
+        if not self._ensure_thread_manager("MediaWidget.start"):
+
+            return
+
+    
+
+        self._enabled = True
+
+>       self._refresh_media()
+
+        ^^^^^^^^^^^^^^^^^^^
+
+E       AttributeError: 'MediaWidget' object has no attribute '_refresh_media'
+
+
+
+widgets\media_widget.py:187: AttributeError
+
+___________________________________________________________________________________ test_media_widget_displays_metadata ___________________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x17a67f0bde0) at 0x0000017A7FDCE580>, qtbot = <pytestqt.qtbot.QtBot object at 0x0000017A678A84D0>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x0000017A678A8510>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_displays_metadata(qt_app, qtbot, thread_manager):
+
+        """MediaWidget should render title/artist/album and state text."""
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Song Title",
+
+            artist="Artist Name",
+
+            album="Album Name",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+        )
+
+        ctrl = _DummyController(info=info)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        qtbot.addWidget(w)
+
+        w.resize(500, 100)
+
+    
+
+        w.start()
+
+        qt_app.processEvents()
+
+    
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        qt_app.processEvents()
+
+    
+
+        html = w.text()
+
+>       assert "Song Title" in html
+
+E       AssertionError: assert 'Song Title' in ''
+
+
+
+tests\test_media_widget.py:210: AssertionError
+
+-------------------------------------------------------------------------------------------- Captured log call --------------------------------------------------------------------------------------------
+
+ERROR    widgets.base_overlay_widget:base_overlay_widget.py:351 [THREAD_MANAGER] Missing ThreadManager for media during MediaWidget.start; timer-driven features disabled.
+
+___________________________________________________________________________ test_media_widget_hides_again_when_media_disappears ___________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x17a67f0bde0) at 0x0000017A7FDCE580>, qtbot = <pytestqt.qtbot.QtBot object at 0x0000017A678CDF90>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x0000017A678B1390>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_hides_again_when_media_disappears(qt_app, qtbot, thread_manager):
+
+        """Widget should hide after being visible when media goes away."""
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Song Title",
+
+            artist="Artist Name",
+
+            album="Album Name",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+        )
+
+        ctrl = _DummyController(info=info)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        qtbot.addWidget(w)
+
+        w.resize(500, 100)
+
+    
+
+        # Start with media present
+
+        w.start()
+
+        qt_app.processEvents()
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        qt_app.processEvents()
+
+>       assert w.isVisible()
+
+E       assert False
+
+E        +  where False = <built-in method isVisible of MediaWidget object at 0x0000017A678B0EC0>()
+
+E        +    where <built-in method isVisible of MediaWidget object at 0x0000017A678B0EC0> = <widgets.media_widget.MediaWidget(0x17a68480f90) at 0x0000017A678B0EC0>.isVisible
+
+
+
+tests\test_media_widget.py:237: AssertionError
+
+-------------------------------------------------------------------------------------------- Captured log call --------------------------------------------------------------------------------------------
+
+ERROR    widgets.base_overlay_widget:base_overlay_widget.py:351 [THREAD_MANAGER] Missing ThreadManager for media during MediaWidget.start; timer-driven features disabled.
+
+__________________________________________________________________________ test_media_widget_decodes_artwork_and_adjusts_margins __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x17a67f0bde0) at 0x0000017A7FDCE580>, qtbot = <pytestqt.qtbot.QtBot object at 0x0000017A7FDC6F10>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x0000017A7FE16410>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_decodes_artwork_and_adjusts_margins(qt_app, qtbot, thread_manager):
+
+        """Artwork bytes should be decoded into a pixmap and margins updated."""
+
+    
+
+        # Create a tiny in-memory PNG for artwork
+
+        img = QImage(8, 8, QImage.Format.Format_ARGB32)
+
+        img.fill(Qt.GlobalColor.red)
+
+        pm = QPixmap.fromImage(img)
+
+    
+
+        # Encode to PNG bytes using an in-memory buffer so loadFromData can decode it.
+
+        buf = QBuffer()
+
+        buf.open(QIODevice.OpenModeFlag.ReadWrite)
+
+        assert pm.save(buf, "PNG")
+
+        png_bytes = bytes(buf.data())
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Artwork Test",
+
+            artist="Artist",
+
+            album="Album",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+            artwork=png_bytes,
+
+        )
+
+    
+
+        ctrl = _DummyController(info=info)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        qtbot.addWidget(w)
+
+        w.resize(400, 120)
+
+    
+
+        w.start()
+
+        qt_app.processEvents()
+
+    
+
+        # Capture initial left margin, then refresh and ensure it increases
+
+        # when artwork is successfully decoded.
+
+        initial_margins = w.contentsMargins()
+
+    
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        qt_app.processEvents()
+
+    
+
+        updated_margins = w.contentsMargins()
+
+        assert updated_margins.left() >= initial_margins.left()
+
+        # When artwork is decoded, we expect the left margin to grow to
+
+        # accommodate the icon.
+
+>       assert updated_margins.left() > initial_margins.left()
+
+E       assert 29 > 29
+
+E        +  where 29 = <built-in method left of PySide6.QtCore.QMargins object at 0x0000017A678C4D40>()
+
+E        +    where <built-in method left of PySide6.QtCore.QMargins object at 0x0000017A678C4D40> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x0000017A678C4D40>.left
+
+E        +  and   29 = <built-in method left of PySide6.QtCore.QMargins object at 0x0000017A678C5E00>()
+
+E        +    where <built-in method left of PySide6.QtCore.QMargins object at 0x0000017A678C5E00> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x0000017A678C5E00>.left
+
+
+
+tests\test_media_widget.py:288: AssertionError
+
+-------------------------------------------------------------------------------------------- Captured log call --------------------------------------------------------------------------------------------
+
+ERROR    widgets.base_overlay_widget:base_overlay_widget.py:351 [THREAD_MANAGER] Missing ThreadManager for media during MediaWidget.start; timer-driven features disabled.
+
+__________________________________________________________________________ test_media_widget_starts_fade_in_when_artwork_appears __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x17a67f0bde0) at 0x0000017A7FDCE580>, qtbot = <pytestqt.qtbot.QtBot object at 0x0000017A7FE3F0D0>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x0000017A7FE3EA50>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_starts_fade_in_when_artwork_appears(qt_app, qtbot, thread_manager):
+
+        """Artwork appearing should trigger a fade-in animation."""
+
+    
+
+        img = QImage(8, 8, QImage.Format.Format_ARGB32)
+
+        img.fill(Qt.GlobalColor.blue)
+
+        pm = QPixmap.fromImage(img)
+
+    
+
+        buf = QBuffer()
+
+        buf.open(QIODevice.OpenModeFlag.ReadWrite)
+
+        assert pm.save(buf, "PNG")
+
+        png_bytes = bytes(buf.data())
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Artwork Fade Test",
+
+            artist="Artist",
+
+            album="Album",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+            artwork=png_bytes,
+
+        )
+
+    
+
+        ctrl = _DummyController(info=None)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        qtbot.addWidget(w)
+
+        w.resize(400, 120)
+
+    
+
+        # First refresh with no media keeps widget hidden and no artwork.
+
+        w.start()
+
+        qt_app.processEvents()
+
+        ctrl._info = None
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        qt_app.processEvents()
+
+        assert not w.isVisible()
+
+    
+
+        # Now provide artwork-bearing media and refresh once; this should
+
+        # create an artwork pixmap and start a fade-in (opacity starts at 0).
+
+        ctrl._info = info
+
+        w._refresh()  # type: ignore[attr-defined]
+
+    
+
+>       assert getattr(w, "_artwork_opacity", 1.0) == 0.0
+
+E       AssertionError: assert 1.0 == 0.0
+
+E        +  where 1.0 = getattr(<widgets.media_widget.MediaWidget(0x17a6864bf00) at 0x0000017A7FE3DD40>, '_artwork_opacity', 1.0)
+
+
+
+tests\test_media_widget.py:330: AssertionError
+
+-------------------------------------------------------------------------------------------- Captured log call --------------------------------------------------------------------------------------------
+
+ERROR    widgets.base_overlay_widget:base_overlay_widget.py:351 [THREAD_MANAGER] Missing ThreadManager for media during MediaWidget.start; timer-driven features disabled.
+
+__________________________________________________________________________ test_display_widget_ctrl_click_routes_to_media_widget __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x17a67f0bde0) at 0x0000017A7FDCE580>, settings_manager = <core.settings.settings_manager.SettingsManager(0x17a68586b10) at 0x0000017A7FB95FC0>
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x0000017A18956750>, monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000017A18954CD0>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x0000017A189549D0>
+
+
+
+    @pytest.mark.qt
+
+    def test_display_widget_ctrl_click_routes_to_media_widget(
+
+        qt_app, settings_manager, qtbot, monkeypatch, thread_manager
+
+    ):
+
+        """Ctrl-held click over media widget should trigger play/pause, not exit."""
+
+    
+
+        fake_info = mc.MediaTrackInfo(title="Track", state=mc.MediaPlaybackState.PLAYING)
+
+        fake_ctrl = _DummyController(info=fake_info)
+
+    
+
+        monkeypatch.setattr(media_mod, "create_media_controller", lambda: fake_ctrl)
+
+    
+
+        settings_manager.set(
+
+            "widgets",
+
+            {
+
+                "media": {
+
+                    "enabled": True,
+
+                    "position": "Bottom Left",
+
+                    "monitor": "ALL",
+
+                }
+
+            },
+
+        )
+
+    
+
+        w = DisplayWidget(
+
+            screen_index=0,
+
+            display_mode=DisplayMode.FILL,
+
+            settings_manager=settings_manager,
+
+            thread_manager=thread_manager,
+
+        )
+
+        qtbot.addWidget(w)
+
+        w.resize(800, 600)
+
+        w.show()
+
+        qt_app.processEvents()
+
+    
+
+>       assert isinstance(w.media_widget, MediaWidget)
+
+E       assert False
+
+E        +  where False = isinstance(None, MediaWidget)
+
+E        +    where None = <rendering.display_widget.DisplayWidget(0x17a6864cfe0) at 0x0000017A678B3AC0>.media_widget
+
+
+
+tests\test_media_widget.py:383: AssertionError
+
+_______________________________________________________________________ test_display_widget_hard_exit_click_routes_to_media_widget ________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x17a67f0bde0) at 0x0000017A7FDCE580>, settings_manager = <core.settings.settings_manager.SettingsManager(0x17a687c5660) at 0x0000017A7FDC60C0>
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x0000017A18931A50>, monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000017A678E72D0>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x0000017A678E4FD0>
+
+
+
+    @pytest.mark.qt
+
+    def test_display_widget_hard_exit_click_routes_to_media_widget(
+
+        qt_app, settings_manager, qtbot, monkeypatch, thread_manager
+
+    ):
+
+        """Hard-exit mode should also allow media widget interaction without exit."""
+
+    
+
+        fake_info = mc.MediaTrackInfo(title="Track", state=mc.MediaPlaybackState.PLAYING)
+
+        fake_ctrl = _DummyController(info=fake_info)
+
+    
+
+        monkeypatch.setattr(mc, "create_media_controller", lambda: fake_ctrl)
+
+    
+
+        settings_manager.set(
+
+            "widgets",
+
+            {
+
+                "media": {
+
+                    "enabled": True,
+
+                    "position": "Bottom Left",
+
+                    "monitor": "ALL",
+
+                }
+
+            },
+
+        )
+
+        settings_manager.set("input.hard_exit", True)
+
+    
+
+        w = DisplayWidget(
+
+            screen_index=0,
+
+            display_mode=DisplayMode.FILL,
+
+            settings_manager=settings_manager,
+
+            thread_manager=thread_manager,
+
+        )
+
+        qtbot.addWidget(w)
+
+        w.resize(800, 600)
+
+        w.show()
+
+        qt_app.processEvents()
+
+    
+
+>       assert isinstance(w.media_widget, MediaWidget)
+
+E       assert False
+
+E        +  where False = isinstance(None, MediaWidget)
+
+E        +    where None = <rendering.display_widget.DisplayWidget(0x17a689057f0) at 0x0000017A1891B8C0>.media_widget
+
+
+
+tests\test_media_widget.py:443: AssertionError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_media_widget.py::test_media_widget_placeholder_when_no_media - AttributeError: 'MediaWidget' object has no attribute '_refresh_media'
+
+FAILED tests/test_media_widget.py::test_media_widget_displays_metadata - AssertionError: assert 'Song Title' in ''
+
+FAILED tests/test_media_widget.py::test_media_widget_hides_again_when_media_disappears - assert False
+ +  where False = <built-in method isVisible of MediaWidget object at 0x0000017A678B0EC0>()
+ +    where <built-in method isVisible of MediaWidget object at 0x0000017A678B0EC0> = <widgets.media_widget.MediaWidget(0x17a68480f90) at 0x0000017A678B0EC0>.isVisible
+
+
+FAILED tests/test_media_widget.py::test_media_widget_decodes_artwork_and_adjusts_margins - assert 29 > 29
+ +  where 29 = <built-in method left of PySide6.QtCore.QMargins object at 0x0000017A678C4D40>()
+ +    where <built-in method left of PySide6.QtCore.QMargins object at 0x0000017A678C4D40> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x0000017A678C4D40>.left
+ +  and   29 = <built-in method left of PySide6.QtCore.QMargins object at 0x0000017A678C5E00>()
+ +    where <built-in method left of PySide6.QtCore.QMargins object at 0x0000017A678C5E00> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x0000017A678C5E00>.left
+
+
+FAILED tests/test_media_widget.py::test_media_widget_starts_fade_in_when_artwork_appears - AssertionError: assert 1.0 == 0.0
+ +  where 1.0 = getattr(<widgets.media_widget.MediaWidget(0x17a6864bf00) at 0x0000017A7FE3DD40>, '_artwork_opacity', 1.0)
+
+
+FAILED tests/test_media_widget.py::test_display_widget_ctrl_click_routes_to_media_widget - assert False
+ +  where False = isinstance(None, MediaWidget)
+ +    where None = <rendering.display_widget.DisplayWidget(0x17a6864cfe0) at 0x0000017A678B3AC0>.media_widget
+
+
+FAILED tests/test_media_widget.py::test_display_widget_hard_exit_click_routes_to_media_widget - assert False
+ +  where False = isinstance(None, MediaWidget)
+ +    where None = <rendering.display_widget.DisplayWidget(0x17a689057f0) at 0x0000017A1891B8C0>.media_widget
+
+
+======================================================================================= 7 failed, 6 passed in 1.27s =======================================================================================
+
+
+===== pytest run 2025-12-25 19:56:49 args=['tests/test_media_widget.py', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 13 items
+
+
+
+tests/test_media_widget.py::test_noop_media_controller_safe_calls 
+PASSED                                                                                                                             [  7%]
+
+
+tests/test_media_widget.py::test_create_media_controller_falls_back_to_noop 
+PASSED                                                                                                                   [ 15%]
+
+
+tests/test_media_widget.py::test_windows_media_controller_selects_spotify_session 
+PASSED                                                                                                             [ 23%]
+
+
+tests/test_media_widget.py::test_windows_media_controller_returns_none_when_no_spotify 
+PASSED                                                                                                        [ 30%]
+
+
+tests/test_media_widget.py::test_windows_media_controller_live_spotify_track 
+PASSED                                                                                                                  [ 38%]
+
+
+tests/test_media_widget.py::test_media_widget_placeholder_when_no_media 
+FAILED                                                                                                                       [ 46%]
+
+
+tests/test_media_widget.py::test_media_widget_displays_metadata 
+FAILED                                                                                                                               [ 53%]
+
+
+tests/test_media_widget.py::test_media_widget_hides_again_when_media_disappears 
+FAILED                                                                                                               [ 61%]
+
+
+tests/test_media_widget.py::test_media_widget_decodes_artwork_and_adjusts_margins 
+FAILED                                                                                                             [ 69%]
+
+
+tests/test_media_widget.py::test_media_widget_starts_fade_in_when_artwork_appears 
+FAILED                                                                                                             [ 76%]
+
+
+tests/test_media_widget.py::test_media_widget_transport_delegates_to_controller 
+PASSED                                                                                                               [ 84%]
+
+
+tests/test_media_widget.py::test_display_widget_ctrl_click_routes_to_media_widget 
+FAILED                                                                                                             [ 92%]
+
+
+tests/test_media_widget.py::test_display_widget_hard_exit_click_routes_to_media_widget 
+FAILED                                                                                                        [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+_______________________________________________________________________________ test_media_widget_placeholder_when_no_media _______________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x2688691a3f0) at 0x00000268B5E5FEC0>, qtbot = <pytestqt.qtbot.QtBot object at 0x00000268B66A7E90>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x00000268B66C8150>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_placeholder_when_no_media(qt_app, qtbot, thread_manager):
+
+        """When controller returns None, widget should remain hidden (no media)."""
+
+    
+
+        ctrl = _DummyController(info=None)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        w.set_thread_manager(thread_manager)
+
+        qtbot.addWidget(w)
+
+        w.resize(400, 80)
+
+    
+
+>       w.start()
+
+
+
+tests\test_media_widget.py:183: 
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+
+
+self = <widgets.media_widget.MediaWidget(0x26886cedd10) at 0x00000268B5FCC580>
+
+
+
+    def start(self) -> None:
+
+        """Begin polling media controller and showing widget."""
+
+    
+
+        if self._enabled:
+
+            logger.warning("Media widget already running")
+
+            return
+
+        if not self._ensure_thread_manager("MediaWidget.start"):
+
+            return
+
+    
+
+        self._enabled = True
+
+>       self._refresh_media()
+
+        ^^^^^^^^^^^^^^^^^^^
+
+E       AttributeError: 'MediaWidget' object has no attribute '_refresh_media'
+
+
+
+widgets\media_widget.py:187: AttributeError
+
+___________________________________________________________________________________ test_media_widget_displays_metadata ___________________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x2688691a3f0) at 0x00000268B5E5FEC0>, qtbot = <pytestqt.qtbot.QtBot object at 0x00000268861AABD0>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x00000268861AB090>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_displays_metadata(qt_app, qtbot, thread_manager):
+
+        """MediaWidget should render title/artist/album and state text."""
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Song Title",
+
+            artist="Artist Name",
+
+            album="Album Name",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+        )
+
+        ctrl = _DummyController(info=info)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        qtbot.addWidget(w)
+
+        w.resize(500, 100)
+
+    
+
+        w.start()
+
+        qt_app.processEvents()
+
+    
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        _wait_for_media_refresh(qtbot, w)
+
+        qt_app.processEvents()
+
+    
+
+        html = w.text()
+
+>       assert "Song Title" in html
+
+E       AssertionError: assert 'Song Title' in ''
+
+
+
+tests\test_media_widget.py:217: AssertionError
+
+-------------------------------------------------------------------------------------------- Captured log call --------------------------------------------------------------------------------------------
+
+ERROR    widgets.base_overlay_widget:base_overlay_widget.py:351 [THREAD_MANAGER] Missing ThreadManager for media during MediaWidget.start; timer-driven features disabled.
+
+___________________________________________________________________________ test_media_widget_hides_again_when_media_disappears ___________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x2688691a3f0) at 0x00000268B5E5FEC0>, qtbot = <pytestqt.qtbot.QtBot object at 0x00000268861D7DD0>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x00000268861D78D0>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_hides_again_when_media_disappears(qt_app, qtbot, thread_manager):
+
+        """Widget should hide after being visible when media goes away."""
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Song Title",
+
+            artist="Artist Name",
+
+            album="Album Name",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+        )
+
+        ctrl = _DummyController(info=info)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        qtbot.addWidget(w)
+
+        w.resize(500, 100)
+
+    
+
+        # Start with media present
+
+        w.start()
+
+        qt_app.processEvents()
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        qt_app.processEvents()
+
+>       assert w.isVisible()
+
+E       assert False
+
+E        +  where False = <built-in method isVisible of MediaWidget object at 0x00000268861E0E80>()
+
+E        +    where <built-in method isVisible of MediaWidget object at 0x00000268861E0E80> = <widgets.media_widget.MediaWidget(0x26886cec390) at 0x00000268861E0E80>.isVisible
+
+
+
+tests\test_media_widget.py:244: AssertionError
+
+-------------------------------------------------------------------------------------------- Captured log call --------------------------------------------------------------------------------------------
+
+ERROR    widgets.base_overlay_widget:base_overlay_widget.py:351 [THREAD_MANAGER] Missing ThreadManager for media during MediaWidget.start; timer-driven features disabled.
+
+__________________________________________________________________________ test_media_widget_decodes_artwork_and_adjusts_margins __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x2688691a3f0) at 0x00000268B5E5FEC0>, qtbot = <pytestqt.qtbot.QtBot object at 0x00000268861EFCD0>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x00000268861ED710>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_decodes_artwork_and_adjusts_margins(qt_app, qtbot, thread_manager):
+
+        """Artwork bytes should be decoded into a pixmap and margins updated."""
+
+    
+
+        # Create a tiny in-memory PNG for artwork
+
+        img = QImage(8, 8, QImage.Format.Format_ARGB32)
+
+        img.fill(Qt.GlobalColor.red)
+
+        pm = QPixmap.fromImage(img)
+
+    
+
+        # Encode to PNG bytes using an in-memory buffer so loadFromData can decode it.
+
+        buf = QBuffer()
+
+        buf.open(QIODevice.OpenModeFlag.ReadWrite)
+
+        assert pm.save(buf, "PNG")
+
+        png_bytes = bytes(buf.data())
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Artwork Test",
+
+            artist="Artist",
+
+            album="Album",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+            artwork=png_bytes,
+
+        )
+
+    
+
+        ctrl = _DummyController(info=info)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        qtbot.addWidget(w)
+
+        w.resize(400, 120)
+
+    
+
+        w.start()
+
+        qt_app.processEvents()
+
+    
+
+        # Capture initial left margin, then refresh and ensure it increases
+
+        # when artwork is successfully decoded.
+
+        initial_margins = w.contentsMargins()
+
+    
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        qt_app.processEvents()
+
+    
+
+        updated_margins = w.contentsMargins()
+
+        assert updated_margins.left() >= initial_margins.left()
+
+        # When artwork is decoded, we expect the left margin to grow to
+
+        # accommodate the icon.
+
+>       assert updated_margins.left() > initial_margins.left()
+
+E       assert 29 > 29
+
+E        +  where 29 = <built-in method left of PySide6.QtCore.QMargins object at 0x00000268861EEBC0>()
+
+E        +    where <built-in method left of PySide6.QtCore.QMargins object at 0x00000268861EEBC0> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x00000268861EEBC0>.left
+
+E        +  and   29 = <built-in method left of PySide6.QtCore.QMargins object at 0x00000268861E0F40>()
+
+E        +    where <built-in method left of PySide6.QtCore.QMargins object at 0x00000268861E0F40> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x00000268861E0F40>.left
+
+
+
+tests\test_media_widget.py:295: AssertionError
+
+-------------------------------------------------------------------------------------------- Captured log call --------------------------------------------------------------------------------------------
+
+ERROR    widgets.base_overlay_widget:base_overlay_widget.py:351 [THREAD_MANAGER] Missing ThreadManager for media during MediaWidget.start; timer-driven features disabled.
+
+__________________________________________________________________________ test_media_widget_starts_fade_in_when_artwork_appears __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x2688691a3f0) at 0x00000268B5E5FEC0>, qtbot = <pytestqt.qtbot.QtBot object at 0x00000268861C94D0>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x00000268861C8F10>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_starts_fade_in_when_artwork_appears(qt_app, qtbot, thread_manager):
+
+        """Artwork appearing should trigger a fade-in animation."""
+
+    
+
+        img = QImage(8, 8, QImage.Format.Format_ARGB32)
+
+        img.fill(Qt.GlobalColor.blue)
+
+        pm = QPixmap.fromImage(img)
+
+    
+
+        buf = QBuffer()
+
+        buf.open(QIODevice.OpenModeFlag.ReadWrite)
+
+        assert pm.save(buf, "PNG")
+
+        png_bytes = bytes(buf.data())
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Artwork Fade Test",
+
+            artist="Artist",
+
+            album="Album",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+            artwork=png_bytes,
+
+        )
+
+    
+
+        ctrl = _DummyController(info=None)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        qtbot.addWidget(w)
+
+        w.resize(400, 120)
+
+    
+
+        # First refresh with no media keeps widget hidden and no artwork.
+
+        w.start()
+
+        qt_app.processEvents()
+
+        ctrl._info = None
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        qt_app.processEvents()
+
+        assert not w.isVisible()
+
+    
+
+        # Now provide artwork-bearing media and refresh once; this should
+
+        # create an artwork pixmap and start a fade-in (opacity starts at 0).
+
+        ctrl._info = info
+
+        w._refresh()  # type: ignore[attr-defined]
+
+    
+
+>       assert getattr(w, "_artwork_opacity", 1.0) == 0.0
+
+E       AssertionError: assert 1.0 == 0.0
+
+E        +  where 1.0 = getattr(<widgets.media_widget.MediaWidget(0x268869502c0) at 0x00000268B66DE480>, '_artwork_opacity', 1.0)
+
+
+
+tests\test_media_widget.py:337: AssertionError
+
+-------------------------------------------------------------------------------------------- Captured log call --------------------------------------------------------------------------------------------
+
+ERROR    widgets.base_overlay_widget:base_overlay_widget.py:351 [THREAD_MANAGER] Missing ThreadManager for media during MediaWidget.start; timer-driven features disabled.
+
+__________________________________________________________________________ test_display_widget_ctrl_click_routes_to_media_widget __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x2688691a3f0) at 0x00000268B5E5FEC0>, settings_manager = <core.settings.settings_manager.SettingsManager(0x26886da8310) at 0x00000268861C3800>
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x00000268B71B5550>, monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000268B71B6150>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x00000268B71B5D90>
+
+
+
+    @pytest.mark.qt
+
+    def test_display_widget_ctrl_click_routes_to_media_widget(
+
+        qt_app, settings_manager, qtbot, monkeypatch, thread_manager
+
+    ):
+
+        """Ctrl-held click over media widget should trigger play/pause, not exit."""
+
+    
+
+        fake_info = mc.MediaTrackInfo(title="Track", state=mc.MediaPlaybackState.PLAYING)
+
+        fake_ctrl = _DummyController(info=fake_info)
+
+    
+
+        monkeypatch.setattr(media_mod, "create_media_controller", lambda: fake_ctrl)
+
+    
+
+        settings_manager.set(
+
+            "widgets",
+
+            {
+
+                "media": {
+
+                    "enabled": True,
+
+                    "position": "Bottom Left",
+
+                    "monitor": "ALL",
+
+                }
+
+            },
+
+        )
+
+    
+
+        w = DisplayWidget(
+
+            screen_index=0,
+
+            display_mode=DisplayMode.FILL,
+
+            settings_manager=settings_manager,
+
+            thread_manager=thread_manager,
+
+        )
+
+        qtbot.addWidget(w)
+
+        w.resize(800, 600)
+
+        w.show()
+
+        qt_app.processEvents()
+
+    
+
+>       assert isinstance(w.media_widget, MediaWidget)
+
+E       assert False
+
+E        +  where False = isinstance(None, MediaWidget)
+
+E        +    where None = <rendering.display_widget.DisplayWidget(0x2688694d860) at 0x00000268B60DF6C0>.media_widget
+
+
+
+tests\test_media_widget.py:390: AssertionError
+
+_______________________________________________________________________ test_display_widget_hard_exit_click_routes_to_media_widget ________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x2688691a3f0) at 0x00000268B5E5FEC0>, settings_manager = <core.settings.settings_manager.SettingsManager(0x26886da9510) at 0x00000268861EC540>
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x00000268861EFD10>, monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000268861AB290>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x00000268861AB890>
+
+
+
+    @pytest.mark.qt
+
+    def test_display_widget_hard_exit_click_routes_to_media_widget(
+
+        qt_app, settings_manager, qtbot, monkeypatch, thread_manager
+
+    ):
+
+        """Hard-exit mode should also allow media widget interaction without exit."""
+
+    
+
+        fake_info = mc.MediaTrackInfo(title="Track", state=mc.MediaPlaybackState.PLAYING)
+
+        fake_ctrl = _DummyController(info=fake_info)
+
+    
+
+        monkeypatch.setattr(mc, "create_media_controller", lambda: fake_ctrl)
+
+    
+
+        settings_manager.set(
+
+            "widgets",
+
+            {
+
+                "media": {
+
+                    "enabled": True,
+
+                    "position": "Bottom Left",
+
+                    "monitor": "ALL",
+
+                }
+
+            },
+
+        )
+
+        settings_manager.set("input.hard_exit", True)
+
+    
+
+        w = DisplayWidget(
+
+            screen_index=0,
+
+            display_mode=DisplayMode.FILL,
+
+            settings_manager=settings_manager,
+
+            thread_manager=thread_manager,
+
+        )
+
+        qtbot.addWidget(w)
+
+        w.resize(800, 600)
+
+        w.show()
+
+        qt_app.processEvents()
+
+    
+
+>       assert isinstance(w.media_widget, MediaWidget)
+
+E       assert False
+
+E        +  where False = isinstance(None, MediaWidget)
+
+E        +    where None = <rendering.display_widget.DisplayWidget(0x268871430b0) at 0x00000268861DC980>.media_widget
+
+
+
+tests\test_media_widget.py:450: AssertionError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_media_widget.py::test_media_widget_placeholder_when_no_media - AttributeError: 'MediaWidget' object has no attribute '_refresh_media'
+
+FAILED tests/test_media_widget.py::test_media_widget_displays_metadata - AssertionError: assert 'Song Title' in ''
+
+FAILED tests/test_media_widget.py::test_media_widget_hides_again_when_media_disappears - assert False
+ +  where False = <built-in method isVisible of MediaWidget object at 0x00000268861E0E80>()
+ +    where <built-in method isVisible of MediaWidget object at 0x00000268861E0E80> = <widgets.media_widget.MediaWidget(0x26886cec390) at 0x00000268861E0E80>.isVisible
+
+
+FAILED tests/test_media_widget.py::test_media_widget_decodes_artwork_and_adjusts_margins - assert 29 > 29
+ +  where 29 = <built-in method left of PySide6.QtCore.QMargins object at 0x00000268861EEBC0>()
+ +    where <built-in method left of PySide6.QtCore.QMargins object at 0x00000268861EEBC0> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x00000268861EEBC0>.left
+ +  and   29 = <built-in method left of PySide6.QtCore.QMargins object at 0x00000268861E0F40>()
+ +    where <built-in method left of PySide6.QtCore.QMargins object at 0x00000268861E0F40> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x00000268861E0F40>.left
+
+
+FAILED tests/test_media_widget.py::test_media_widget_starts_fade_in_when_artwork_appears - AssertionError: assert 1.0 == 0.0
+ +  where 1.0 = getattr(<widgets.media_widget.MediaWidget(0x268869502c0) at 0x00000268B66DE480>, '_artwork_opacity', 1.0)
+
+
+FAILED tests/test_media_widget.py::test_display_widget_ctrl_click_routes_to_media_widget - assert False
+ +  where False = isinstance(None, MediaWidget)
+ +    where None = <rendering.display_widget.DisplayWidget(0x2688694d860) at 0x00000268B60DF6C0>.media_widget
+
+
+FAILED tests/test_media_widget.py::test_display_widget_hard_exit_click_routes_to_media_widget - assert False
+ +  where False = isinstance(None, MediaWidget)
+ +    where None = <rendering.display_widget.DisplayWidget(0x268871430b0) at 0x00000268861DC980>.media_widget
+
+
+======================================================================================= 7 failed, 6 passed in 1.27s =======================================================================================
+
+
+===== pytest run 2025-12-25 20:08:50 args=['tests/test_media_widget.py', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 13 items
+
+
+
+tests/test_media_widget.py::test_noop_media_controller_safe_calls 
+PASSED                                                                                                                             [  7%]
+
+
+tests/test_media_widget.py::test_create_media_controller_falls_back_to_noop 
+PASSED                                                                                                                   [ 15%]
+
+
+tests/test_media_widget.py::test_windows_media_controller_selects_spotify_session 
+PASSED                                                                                                             [ 23%]
+
+
+tests/test_media_widget.py::test_windows_media_controller_returns_none_when_no_spotify 
+PASSED                                                                                                        [ 30%]
+
+
+tests/test_media_widget.py::test_windows_media_controller_live_spotify_track 
+PASSED                                                                                                                  [ 38%]
+
+
+tests/test_media_widget.py::test_media_widget_placeholder_when_no_media 
+FAILED                                                                                                                       [ 46%]
+
+
+tests/test_media_widget.py::test_media_widget_displays_metadata 
+FAILED                                                                                                                               [ 53%]
+
+
+tests/test_media_widget.py::test_media_widget_hides_again_when_media_disappears 
+FAILED                                                                                                               [ 61%]
+
+
+tests/test_media_widget.py::test_media_widget_decodes_artwork_and_adjusts_margins 
+FAILED                                                                                                             [ 69%]
+
+
+tests/test_media_widget.py::test_media_widget_starts_fade_in_when_artwork_appears 
+FAILED                                                                                                             [ 76%]
+
+
+tests/test_media_widget.py::test_media_widget_transport_delegates_to_controller 
+PASSED                                                                                                               [ 84%]
+
+
+tests/test_media_widget.py::test_display_widget_ctrl_click_routes_to_media_widget 
+FAILED                                                                                                             [ 92%]
+
+
+tests/test_media_widget.py::test_display_widget_hard_exit_click_routes_to_media_widget 
+FAILED                                                                                                        [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+_______________________________________________________________________________ test_media_widget_placeholder_when_no_media _______________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x238f579be90) at 0x00000238FF6BC200>, qtbot = <pytestqt.qtbot.QtBot object at 0x00000238FF6D3910>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x00000238FF6D3CD0>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_placeholder_when_no_media(qt_app, qtbot, thread_manager):
+
+        """When controller returns None, widget should remain hidden (no media)."""
+
+    
+
+        ctrl = _DummyController(info=None)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        w.set_thread_manager(thread_manager)
+
+        w.set_thread_manager(thread_manager)
+
+        qtbot.addWidget(w)
+
+        w.resize(400, 80)
+
+    
+
+>       w.start()
+
+
+
+tests\test_media_widget.py:184: 
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+
+
+self = <widgets.media_widget.MediaWidget(0x238f48cbca0) at 0x00000238FF6E0780>
+
+
+
+    def start(self) -> None:
+
+        """Begin polling media controller and showing widget."""
+
+    
+
+        if self._enabled:
+
+            logger.warning("Media widget already running")
+
+            return
+
+        if not self._ensure_thread_manager("MediaWidget.start"):
+
+            return
+
+    
+
+        self._enabled = True
+
+>       self._refresh_media()
+
+        ^^^^^^^^^^^^^^^^^^^
+
+E       AttributeError: 'MediaWidget' object has no attribute '_refresh_media'
+
+
+
+widgets\media_widget.py:194: AttributeError
+
+___________________________________________________________________________________ test_media_widget_displays_metadata ___________________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x238f579be90) at 0x00000238FF6BC200>, qtbot = <pytestqt.qtbot.QtBot object at 0x00000238F517C610>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x00000238F517FB10>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_displays_metadata(qt_app, qtbot, thread_manager):
+
+        """MediaWidget should render title/artist/album and state text."""
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Song Title",
+
+            artist="Artist Name",
+
+            album="Album Name",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+        )
+
+        ctrl = _DummyController(info=info)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        qtbot.addWidget(w)
+
+        w.resize(500, 100)
+
+    
+
+        w.start()
+
+        qt_app.processEvents()
+
+    
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        _wait_for_media_refresh(qtbot, w)
+
+        qt_app.processEvents()
+
+    
+
+        html = w.text()
+
+>       assert "Song Title" in html
+
+E       AssertionError: assert 'Song Title' in ''
+
+
+
+tests\test_media_widget.py:218: AssertionError
+
+-------------------------------------------------------------------------------------------- Captured log call --------------------------------------------------------------------------------------------
+
+ERROR    widgets.base_overlay_widget:base_overlay_widget.py:351 [THREAD_MANAGER] Missing ThreadManager for media during MediaWidget.start; timer-driven features disabled.
+
+___________________________________________________________________________ test_media_widget_hides_again_when_media_disappears ___________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x238f579be90) at 0x00000238FF6BC200>, qtbot = <pytestqt.qtbot.QtBot object at 0x00000238F4FB3CD0>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x00000238F657F910>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_hides_again_when_media_disappears(qt_app, qtbot, thread_manager):
+
+        """Widget should hide after being visible when media goes away."""
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Song Title",
+
+            artist="Artist Name",
+
+            album="Album Name",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+        )
+
+        ctrl = _DummyController(info=info)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        qtbot.addWidget(w)
+
+        w.resize(500, 100)
+
+    
+
+        # Start with media present
+
+        w.start()
+
+        qt_app.processEvents()
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        qt_app.processEvents()
+
+>       assert w.isVisible()
+
+E       assert False
+
+E        +  where False = <built-in method isVisible of MediaWidget object at 0x00000238F6587D40>()
+
+E        +    where <built-in method isVisible of MediaWidget object at 0x00000238F6587D40> = <widgets.media_widget.MediaWidget(0x238f48cd620) at 0x00000238F6587D40>.isVisible
+
+
+
+tests\test_media_widget.py:245: AssertionError
+
+-------------------------------------------------------------------------------------------- Captured log call --------------------------------------------------------------------------------------------
+
+ERROR    widgets.base_overlay_widget:base_overlay_widget.py:351 [THREAD_MANAGER] Missing ThreadManager for media during MediaWidget.start; timer-driven features disabled.
+
+__________________________________________________________________________ test_media_widget_decodes_artwork_and_adjusts_margins __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x238f579be90) at 0x00000238FF6BC200>, qtbot = <pytestqt.qtbot.QtBot object at 0x00000238F5169690>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x00000238F516A210>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_decodes_artwork_and_adjusts_margins(qt_app, qtbot, thread_manager):
+
+        """Artwork bytes should be decoded into a pixmap and margins updated."""
+
+    
+
+        # Create a tiny in-memory PNG for artwork
+
+        img = QImage(8, 8, QImage.Format.Format_ARGB32)
+
+        img.fill(Qt.GlobalColor.red)
+
+        pm = QPixmap.fromImage(img)
+
+    
+
+        # Encode to PNG bytes using an in-memory buffer so loadFromData can decode it.
+
+        buf = QBuffer()
+
+        buf.open(QIODevice.OpenModeFlag.ReadWrite)
+
+        assert pm.save(buf, "PNG")
+
+        png_bytes = bytes(buf.data())
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Artwork Test",
+
+            artist="Artist",
+
+            album="Album",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+            artwork=png_bytes,
+
+        )
+
+    
+
+        ctrl = _DummyController(info=info)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        qtbot.addWidget(w)
+
+        w.resize(400, 120)
+
+    
+
+        w.start()
+
+        qt_app.processEvents()
+
+    
+
+        # Capture initial left margin, then refresh and ensure it increases
+
+        # when artwork is successfully decoded.
+
+        initial_margins = w.contentsMargins()
+
+    
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        qt_app.processEvents()
+
+    
+
+        updated_margins = w.contentsMargins()
+
+        assert updated_margins.left() >= initial_margins.left()
+
+        # When artwork is decoded, we expect the left margin to grow to
+
+        # accommodate the icon.
+
+>       assert updated_margins.left() > initial_margins.left()
+
+E       assert 29 > 29
+
+E        +  where 29 = <built-in method left of PySide6.QtCore.QMargins object at 0x00000238FEFD9D40>()
+
+E        +    where <built-in method left of PySide6.QtCore.QMargins object at 0x00000238FEFD9D40> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x00000238FEFD9D40>.left
+
+E        +  and   29 = <built-in method left of PySide6.QtCore.QMargins object at 0x00000238F65840C0>()
+
+E        +    where <built-in method left of PySide6.QtCore.QMargins object at 0x00000238F65840C0> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x00000238F65840C0>.left
+
+
+
+tests\test_media_widget.py:296: AssertionError
+
+-------------------------------------------------------------------------------------------- Captured log call --------------------------------------------------------------------------------------------
+
+ERROR    widgets.base_overlay_widget:base_overlay_widget.py:351 [THREAD_MANAGER] Missing ThreadManager for media during MediaWidget.start; timer-driven features disabled.
+
+__________________________________________________________________________ test_media_widget_starts_fade_in_when_artwork_appears __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x238f579be90) at 0x00000238FF6BC200>, qtbot = <pytestqt.qtbot.QtBot object at 0x00000238FF67FF50>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x00000238FF67FB90>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_starts_fade_in_when_artwork_appears(qt_app, qtbot, thread_manager):
+
+        """Artwork appearing should trigger a fade-in animation."""
+
+    
+
+        img = QImage(8, 8, QImage.Format.Format_ARGB32)
+
+        img.fill(Qt.GlobalColor.blue)
+
+        pm = QPixmap.fromImage(img)
+
+    
+
+        buf = QBuffer()
+
+        buf.open(QIODevice.OpenModeFlag.ReadWrite)
+
+        assert pm.save(buf, "PNG")
+
+        png_bytes = bytes(buf.data())
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Artwork Fade Test",
+
+            artist="Artist",
+
+            album="Album",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+            artwork=png_bytes,
+
+        )
+
+    
+
+        ctrl = _DummyController(info=None)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        qtbot.addWidget(w)
+
+        w.resize(400, 120)
+
+    
+
+        # First refresh with no media keeps widget hidden and no artwork.
+
+        w.start()
+
+        qt_app.processEvents()
+
+        ctrl._info = None
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        qt_app.processEvents()
+
+        assert not w.isVisible()
+
+    
+
+        # Now provide artwork-bearing media and refresh once; this should
+
+        # create an artwork pixmap and start a fade-in (opacity starts at 0).
+
+        ctrl._info = info
+
+        w._refresh()  # type: ignore[attr-defined]
+
+    
+
+>       assert getattr(w, "_artwork_opacity", 1.0) == 0.0
+
+E       AssertionError: assert 1.0 == 0.0
+
+E        +  where 1.0 = getattr(<widgets.media_widget.MediaWidget(0x238f48ca4a0) at 0x00000238F5195580>, '_artwork_opacity', 1.0)
+
+
+
+tests\test_media_widget.py:338: AssertionError
+
+-------------------------------------------------------------------------------------------- Captured log call --------------------------------------------------------------------------------------------
+
+ERROR    widgets.base_overlay_widget:base_overlay_widget.py:351 [THREAD_MANAGER] Missing ThreadManager for media during MediaWidget.start; timer-driven features disabled.
+
+__________________________________________________________________________ test_display_widget_ctrl_click_routes_to_media_widget __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x238f579be90) at 0x00000238FF6BC200>, settings_manager = <core.settings.settings_manager.SettingsManager(0x238f483de30) at 0x00000238A61E4900>
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x00000238A6246190>, monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000238A6244F90>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x00000238A6244ED0>
+
+
+
+    @pytest.mark.qt
+
+    def test_display_widget_ctrl_click_routes_to_media_widget(
+
+        qt_app, settings_manager, qtbot, monkeypatch, thread_manager
+
+    ):
+
+        """Ctrl-held click over media widget should trigger play/pause, not exit."""
+
+    
+
+        fake_info = mc.MediaTrackInfo(title="Track", state=mc.MediaPlaybackState.PLAYING)
+
+        fake_ctrl = _DummyController(info=fake_info)
+
+    
+
+        monkeypatch.setattr(media_mod, "create_media_controller", lambda: fake_ctrl)
+
+    
+
+        settings_manager.set(
+
+            "widgets",
+
+            {
+
+                "media": {
+
+                    "enabled": True,
+
+                    "position": "Bottom Left",
+
+                    "monitor": "ALL",
+
+                }
+
+            },
+
+        )
+
+    
+
+        w = DisplayWidget(
+
+            screen_index=0,
+
+            display_mode=DisplayMode.FILL,
+
+            settings_manager=settings_manager,
+
+            thread_manager=thread_manager,
+
+        )
+
+        qtbot.addWidget(w)
+
+        w.resize(800, 600)
+
+        w.show()
+
+        qt_app.processEvents()
+
+    
+
+>       assert isinstance(w.media_widget, MediaWidget)
+
+E       assert False
+
+E        +  where False = isinstance(None, MediaWidget)
+
+E        +    where None = <rendering.display_widget.DisplayWidget(0x238f48cdce0) at 0x00000238FF4FB4C0>.media_widget
+
+
+
+tests\test_media_widget.py:391: AssertionError
+
+_______________________________________________________________________ test_display_widget_hard_exit_click_routes_to_media_widget ________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x238f579be90) at 0x00000238FF6BC200>, settings_manager = <core.settings.settings_manager.SettingsManager(0x238f5e92220) at 0x00000238F516B340>
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x00000238F5142690>, monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000238F5143950>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x00000238FF73C350>
+
+
+
+    @pytest.mark.qt
+
+    def test_display_widget_hard_exit_click_routes_to_media_widget(
+
+        qt_app, settings_manager, qtbot, monkeypatch, thread_manager
+
+    ):
+
+        """Hard-exit mode should also allow media widget interaction without exit."""
+
+    
+
+        fake_info = mc.MediaTrackInfo(title="Track", state=mc.MediaPlaybackState.PLAYING)
+
+        fake_ctrl = _DummyController(info=fake_info)
+
+    
+
+        monkeypatch.setattr(mc, "create_media_controller", lambda: fake_ctrl)
+
+    
+
+        settings_manager.set(
+
+            "widgets",
+
+            {
+
+                "media": {
+
+                    "enabled": True,
+
+                    "position": "Bottom Left",
+
+                    "monitor": "ALL",
+
+                }
+
+            },
+
+        )
+
+        settings_manager.set("input.hard_exit", True)
+
+    
+
+        w = DisplayWidget(
+
+            screen_index=0,
+
+            display_mode=DisplayMode.FILL,
+
+            settings_manager=settings_manager,
+
+            thread_manager=thread_manager,
+
+        )
+
+        qtbot.addWidget(w)
+
+        w.resize(800, 600)
+
+        w.show()
+
+        qt_app.processEvents()
+
+    
+
+>       assert isinstance(w.media_widget, MediaWidget)
+
+E       assert False
+
+E        +  where False = isinstance(None, MediaWidget)
+
+E        +    where None = <rendering.display_widget.DisplayWidget(0x238f5fe0580) at 0x00000238A621D140>.media_widget
+
+
+
+tests\test_media_widget.py:451: AssertionError
+
+============================================================================================ warnings summary =============================================================================================
+
+tests/test_media_widget.py::test_display_widget_hard_exit_click_routes_to_media_widget
+tests/test_media_widget.py::test_display_widget_hard_exit_click_routes_to_media_widget
+tests/test_media_widget.py::test_display_widget_hard_exit_click_routes_to_media_widget
+tests/test_media_widget.py::test_display_widget_hard_exit_click_routes_to_media_widget
+tests/test_media_widget.py::test_display_widget_hard_exit_click_routes_to_media_widget
+tests/test_media_widget.py::test_display_widget_hard_exit_click_routes_to_media_widget
+tests/test_media_widget.py::test_display_widget_hard_exit_click_routes_to_media_widget
+tests/test_media_widget.py::test_display_widget_hard_exit_click_routes_to_media_widget
+
+
+  F:\Programming\Apps\ShittyRandomPhotoScreenSaver\rendering\display_widget.py:2508: DeprecationWarning: Function: 'QMouseEvent.pos() const' is marked as deprecated, please check the documentation for more information.
+    event.pos(), getattr(self, "spotify_volume_widget", None)
+
+
+
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_media_widget.py::test_media_widget_placeholder_when_no_media - AttributeError: 'MediaWidget' object has no attribute '_refresh_media'
+
+FAILED tests/test_media_widget.py::test_media_widget_displays_metadata - AssertionError: assert 'Song Title' in ''
+
+FAILED tests/test_media_widget.py::test_media_widget_hides_again_when_media_disappears - assert False
+ +  where False = <built-in method isVisible of MediaWidget object at 0x00000238F6587D40>()
+ +    where <built-in method isVisible of MediaWidget object at 0x00000238F6587D40> = <widgets.media_widget.MediaWidget(0x238f48cd620) at 0x00000238F6587D40>.isVisible
+
+
+FAILED tests/test_media_widget.py::test_media_widget_decodes_artwork_and_adjusts_margins - assert 29 > 29
+ +  where 29 = <built-in method left of PySide6.QtCore.QMargins object at 0x00000238FEFD9D40>()
+ +    where <built-in method left of PySide6.QtCore.QMargins object at 0x00000238FEFD9D40> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x00000238FEFD9D40>.left
+ +  and   29 = <built-in method left of PySide6.QtCore.QMargins object at 0x00000238F65840C0>()
+ +    where <built-in method left of PySide6.QtCore.QMargins object at 0x00000238F65840C0> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x00000238F65840C0>.left
+
+
+FAILED tests/test_media_widget.py::test_media_widget_starts_fade_in_when_artwork_appears - AssertionError: assert 1.0 == 0.0
+ +  where 1.0 = getattr(<widgets.media_widget.MediaWidget(0x238f48ca4a0) at 0x00000238F5195580>, '_artwork_opacity', 1.0)
+
+
+FAILED tests/test_media_widget.py::test_display_widget_ctrl_click_routes_to_media_widget - assert False
+ +  where False = isinstance(None, MediaWidget)
+ +    where None = <rendering.display_widget.DisplayWidget(0x238f48cdce0) at 0x00000238FF4FB4C0>.media_widget
+
+
+FAILED tests/test_media_widget.py::test_display_widget_hard_exit_click_routes_to_media_widget - assert False
+ +  where False = isinstance(None, MediaWidget)
+ +    where None = <rendering.display_widget.DisplayWidget(0x238f5fe0580) at 0x00000238A621D140>.media_widget
+
+
+================================================================================= 7 failed, 6 passed, 8 warnings in 1.79s =================================================================================
+
+
+===== pytest run 2025-12-25 20:11:15 args=['tests/test_media_widget.py', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 13 items
+
+
+
+tests/test_media_widget.py::test_noop_media_controller_safe_calls 
+PASSED                                                                                                                             [  7%]
+
+
+tests/test_media_widget.py::test_create_media_controller_falls_back_to_noop 
+PASSED                                                                                                                   [ 15%]
+
+
+tests/test_media_widget.py::test_windows_media_controller_selects_spotify_session 
+PASSED                                                                                                             [ 23%]
+
+
+tests/test_media_widget.py::test_windows_media_controller_returns_none_when_no_spotify 
+PASSED                                                                                                        [ 30%]
+
+
+tests/test_media_widget.py::test_windows_media_controller_live_spotify_track 
+PASSED                                                                                                                  [ 38%]
+
+
+tests/test_media_widget.py::test_media_widget_placeholder_when_no_media 
+FAILED                                                                                                                       [ 46%]
+
+
+tests/test_media_widget.py::test_media_widget_displays_metadata 
+FAILED                                                                                                                               [ 53%]
+
+
+tests/test_media_widget.py::test_media_widget_hides_again_when_media_disappears 
+FAILED                                                                                                               [ 61%]
+
+
+tests/test_media_widget.py::test_media_widget_decodes_artwork_and_adjusts_margins 
+FAILED                                                                                                             [ 69%]
+
+
+tests/test_media_widget.py::test_media_widget_starts_fade_in_when_artwork_appears 
+FAILED                                                                                                             [ 76%]
+
+
+tests/test_media_widget.py::test_media_widget_transport_delegates_to_controller 
+PASSED                                                                                                               [ 84%]
+
+
+tests/test_media_widget.py::test_display_widget_ctrl_click_routes_to_media_widget 
+FAILED                                                                                                             [ 92%]
+
+
+tests/test_media_widget.py::test_display_widget_hard_exit_click_routes_to_media_widget 
+FAILED                                                                                                        [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+_______________________________________________________________________________ test_media_widget_placeholder_when_no_media _______________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x29136850a30) at 0x000002916632D880>, qtbot = <pytestqt.qtbot.QtBot object at 0x00000291663D4310>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x000002916632D690>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_placeholder_when_no_media(qt_app, qtbot, thread_manager):
+
+        """When controller returns None, widget should remain hidden (no media)."""
+
+    
+
+        ctrl = _DummyController(info=None)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        w.set_thread_manager(thread_manager)
+
+        w.set_thread_manager(thread_manager)
+
+        qtbot.addWidget(w)
+
+        w.resize(400, 80)
+
+    
+
+>       w.start()
+
+
+
+tests\test_media_widget.py:184: 
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+
+
+self = <widgets.media_widget.MediaWidget(0x291353a51a0) at 0x000002916632F000>
+
+
+
+    def start(self) -> None:
+
+        """Begin polling media controller and showing widget."""
+
+    
+
+        if self._enabled:
+
+            logger.warning("Media widget already running")
+
+            return
+
+        if not self._ensure_thread_manager("MediaWidget.start"):
+
+            return
+
+    
+
+        self._enabled = True
+
+>       self._refresh_media()
+
+        ^^^^^^^^^^^^^^^^^^^
+
+E       AttributeError: 'MediaWidget' object has no attribute '_refresh_media'
+
+
+
+widgets\media_widget.py:194: AttributeError
+
+___________________________________________________________________________________ test_media_widget_displays_metadata ___________________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x29136850a30) at 0x000002916632D880>, qtbot = <pytestqt.qtbot.QtBot object at 0x00000291661AB850>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x000002916632DD10>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_displays_metadata(qt_app, qtbot, thread_manager):
+
+        """MediaWidget should render title/artist/album and state text."""
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Song Title",
+
+            artist="Artist Name",
+
+            album="Album Name",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+        )
+
+        ctrl = _DummyController(info=info)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        qtbot.addWidget(w)
+
+        w.resize(500, 100)
+
+    
+
+        w.start()
+
+        qt_app.processEvents()
+
+    
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        _wait_for_media_refresh(qtbot, w)
+
+        qt_app.processEvents()
+
+    
+
+        html = w.text()
+
+>       assert "Song Title" in html
+
+E       AssertionError: assert 'Song Title' in ''
+
+
+
+tests\test_media_widget.py:218: AssertionError
+
+-------------------------------------------------------------------------------------------- Captured log call --------------------------------------------------------------------------------------------
+
+ERROR    widgets.base_overlay_widget:base_overlay_widget.py:351 [THREAD_MANAGER] Missing ThreadManager for media during MediaWidget.start; timer-driven features disabled.
+
+___________________________________________________________________________ test_media_widget_hides_again_when_media_disappears ___________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x29136850a30) at 0x000002916632D880>, qtbot = <pytestqt.qtbot.QtBot object at 0x0000029166EC8710>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x0000029166EC86D0>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_hides_again_when_media_disappears(qt_app, qtbot, thread_manager):
+
+        """Widget should hide after being visible when media goes away."""
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Song Title",
+
+            artist="Artist Name",
+
+            album="Album Name",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+        )
+
+        ctrl = _DummyController(info=info)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        qtbot.addWidget(w)
+
+        w.resize(500, 100)
+
+    
+
+        # Start with media present
+
+        w.start()
+
+        qt_app.processEvents()
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        qt_app.processEvents()
+
+>       assert w.isVisible()
+
+E       assert False
+
+E        +  where False = <built-in method isVisible of MediaWidget object at 0x0000029166EC8840>()
+
+E        +    where <built-in method isVisible of MediaWidget object at 0x0000029166EC8840> = <widgets.media_widget.MediaWidget(0x29135522410) at 0x0000029166EC8840>.isVisible
+
+
+
+tests\test_media_widget.py:245: AssertionError
+
+-------------------------------------------------------------------------------------------- Captured log call --------------------------------------------------------------------------------------------
+
+ERROR    widgets.base_overlay_widget:base_overlay_widget.py:351 [THREAD_MANAGER] Missing ThreadManager for media during MediaWidget.start; timer-driven features disabled.
+
+__________________________________________________________________________ test_media_widget_decodes_artwork_and_adjusts_margins __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x29136850a30) at 0x000002916632D880>, qtbot = <pytestqt.qtbot.QtBot object at 0x00000291663BB2D0>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x0000029135E32950>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_decodes_artwork_and_adjusts_margins(qt_app, qtbot, thread_manager):
+
+        """Artwork bytes should be decoded into a pixmap and margins updated."""
+
+    
+
+        # Create a tiny in-memory PNG for artwork
+
+        img = QImage(8, 8, QImage.Format.Format_ARGB32)
+
+        img.fill(Qt.GlobalColor.red)
+
+        pm = QPixmap.fromImage(img)
+
+    
+
+        # Encode to PNG bytes using an in-memory buffer so loadFromData can decode it.
+
+        buf = QBuffer()
+
+        buf.open(QIODevice.OpenModeFlag.ReadWrite)
+
+        assert pm.save(buf, "PNG")
+
+        png_bytes = bytes(buf.data())
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Artwork Test",
+
+            artist="Artist",
+
+            album="Album",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+            artwork=png_bytes,
+
+        )
+
+    
+
+        ctrl = _DummyController(info=info)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        qtbot.addWidget(w)
+
+        w.resize(400, 120)
+
+    
+
+        w.start()
+
+        qt_app.processEvents()
+
+    
+
+        # Capture initial left margin, then refresh and ensure it increases
+
+        # when artwork is successfully decoded.
+
+        initial_margins = w.contentsMargins()
+
+    
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        qt_app.processEvents()
+
+    
+
+        updated_margins = w.contentsMargins()
+
+        assert updated_margins.left() >= initial_margins.left()
+
+        # When artwork is decoded, we expect the left margin to grow to
+
+        # accommodate the icon.
+
+>       assert updated_margins.left() > initial_margins.left()
+
+E       assert 29 > 29
+
+E        +  where 29 = <built-in method left of PySide6.QtCore.QMargins object at 0x0000029135E33140>()
+
+E        +    where <built-in method left of PySide6.QtCore.QMargins object at 0x0000029135E33140> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x0000029135E33140>.left
+
+E        +  and   29 = <built-in method left of PySide6.QtCore.QMargins object at 0x0000029135E336C0>()
+
+E        +    where <built-in method left of PySide6.QtCore.QMargins object at 0x0000029135E336C0> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x0000029135E336C0>.left
+
+
+
+tests\test_media_widget.py:296: AssertionError
+
+-------------------------------------------------------------------------------------------- Captured log call --------------------------------------------------------------------------------------------
+
+ERROR    widgets.base_overlay_widget:base_overlay_widget.py:351 [THREAD_MANAGER] Missing ThreadManager for media during MediaWidget.start; timer-driven features disabled.
+
+__________________________________________________________________________ test_media_widget_starts_fade_in_when_artwork_appears __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x29136850a30) at 0x000002916632D880>, qtbot = <pytestqt.qtbot.QtBot object at 0x0000029135E73E50>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x0000029135E722D0>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_starts_fade_in_when_artwork_appears(qt_app, qtbot, thread_manager):
+
+        """Artwork appearing should trigger a fade-in animation."""
+
+    
+
+        img = QImage(8, 8, QImage.Format.Format_ARGB32)
+
+        img.fill(Qt.GlobalColor.blue)
+
+        pm = QPixmap.fromImage(img)
+
+    
+
+        buf = QBuffer()
+
+        buf.open(QIODevice.OpenModeFlag.ReadWrite)
+
+        assert pm.save(buf, "PNG")
+
+        png_bytes = bytes(buf.data())
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Artwork Fade Test",
+
+            artist="Artist",
+
+            album="Album",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+            artwork=png_bytes,
+
+        )
+
+    
+
+        ctrl = _DummyController(info=None)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        qtbot.addWidget(w)
+
+        w.resize(400, 120)
+
+    
+
+        # First refresh with no media keeps widget hidden and no artwork.
+
+        w.start()
+
+        qt_app.processEvents()
+
+        ctrl._info = None
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        qt_app.processEvents()
+
+        assert not w.isVisible()
+
+    
+
+        # Now provide artwork-bearing media and refresh once; this should
+
+        # create an artwork pixmap and start a fade-in (opacity starts at 0).
+
+        ctrl._info = info
+
+        w._refresh()  # type: ignore[attr-defined]
+
+    
+
+>       assert getattr(w, "_artwork_opacity", 1.0) == 0.0
+
+E       AssertionError: assert 1.0 == 0.0
+
+E        +  where 1.0 = getattr(<widgets.media_widget.MediaWidget(0x2913551eed0) at 0x0000029135E87300>, '_artwork_opacity', 1.0)
+
+
+
+tests\test_media_widget.py:338: AssertionError
+
+-------------------------------------------------------------------------------------------- Captured log call --------------------------------------------------------------------------------------------
+
+ERROR    widgets.base_overlay_widget:base_overlay_widget.py:351 [THREAD_MANAGER] Missing ThreadManager for media during MediaWidget.start; timer-driven features disabled.
+
+__________________________________________________________________________ test_display_widget_ctrl_click_routes_to_media_widget __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x29136850a30) at 0x000002916632D880>, settings_manager = <core.settings.settings_manager.SettingsManager(0x291355040b0) at 0x0000029166F44D80>
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x0000029166F46FD0>, monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000029166F47F90>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x0000029166F47650>
+
+
+
+    @pytest.mark.qt
+
+    def test_display_widget_ctrl_click_routes_to_media_widget(
+
+        qt_app, settings_manager, qtbot, monkeypatch, thread_manager
+
+    ):
+
+        """Ctrl-held click over media widget should trigger play/pause, not exit."""
+
+    
+
+        fake_info = mc.MediaTrackInfo(title="Track", state=mc.MediaPlaybackState.PLAYING)
+
+        fake_ctrl = _DummyController(info=fake_info)
+
+    
+
+        monkeypatch.setattr(media_mod, "create_media_controller", lambda: fake_ctrl)
+
+    
+
+        settings_manager.set(
+
+            "widgets",
+
+            {
+
+                "media": {
+
+                    "enabled": True,
+
+                    "position": "Bottom Left",
+
+                    "monitor": "ALL",
+
+                }
+
+            },
+
+        )
+
+    
+
+        w = DisplayWidget(
+
+            screen_index=0,
+
+            display_mode=DisplayMode.FILL,
+
+            settings_manager=settings_manager,
+
+            thread_manager=thread_manager,
+
+        )
+
+        qtbot.addWidget(w)
+
+        w.resize(800, 600)
+
+        w.show()
+
+        qt_app.processEvents()
+
+    
+
+>       assert isinstance(w.media_widget, MediaWidget)
+
+E       assert False
+
+E        +  where False = isinstance(None, MediaWidget)
+
+E        +    where None = <rendering.display_widget.DisplayWidget(0x2913551f9b0) at 0x0000029166F47940>.media_widget
+
+
+
+tests\test_media_widget.py:391: AssertionError
+
+_______________________________________________________________________ test_display_widget_hard_exit_click_routes_to_media_widget ________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x29136850a30) at 0x000002916632D880>, settings_manager = <core.settings.settings_manager.SettingsManager(0x2913708ba00) at 0x0000029166E8ED40>
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x0000029166E8ED90>, monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000029135E64B50>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x0000029135E66110>
+
+
+
+    @pytest.mark.qt
+
+    def test_display_widget_hard_exit_click_routes_to_media_widget(
+
+        qt_app, settings_manager, qtbot, monkeypatch, thread_manager
+
+    ):
+
+        """Hard-exit mode should also allow media widget interaction without exit."""
+
+    
+
+        fake_info = mc.MediaTrackInfo(title="Track", state=mc.MediaPlaybackState.PLAYING)
+
+        fake_ctrl = _DummyController(info=fake_info)
+
+    
+
+        monkeypatch.setattr(mc, "create_media_controller", lambda: fake_ctrl)
+
+    
+
+        settings_manager.set(
+
+            "widgets",
+
+            {
+
+                "media": {
+
+                    "enabled": True,
+
+                    "position": "Bottom Left",
+
+                    "monitor": "ALL",
+
+                }
+
+            },
+
+        )
+
+        settings_manager.set("input.hard_exit", True)
+
+    
+
+        w = DisplayWidget(
+
+            screen_index=0,
+
+            display_mode=DisplayMode.FILL,
+
+            settings_manager=settings_manager,
+
+            thread_manager=thread_manager,
+
+        )
+
+        qtbot.addWidget(w)
+
+        w.resize(800, 600)
+
+        w.show()
+
+        qt_app.processEvents()
+
+    
+
+>       assert isinstance(w.media_widget, MediaWidget)
+
+E       assert False
+
+E        +  where False = isinstance(None, MediaWidget)
+
+E        +    where None = <rendering.display_widget.DisplayWidget(0x2913702f8c0) at 0x0000029166F34300>.media_widget
+
+
+
+tests\test_media_widget.py:451: AssertionError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_media_widget.py::test_media_widget_placeholder_when_no_media - AttributeError: 'MediaWidget' object has no attribute '_refresh_media'
+
+FAILED tests/test_media_widget.py::test_media_widget_displays_metadata - AssertionError: assert 'Song Title' in ''
+
+FAILED tests/test_media_widget.py::test_media_widget_hides_again_when_media_disappears - assert False
+ +  where False = <built-in method isVisible of MediaWidget object at 0x0000029166EC8840>()
+ +    where <built-in method isVisible of MediaWidget object at 0x0000029166EC8840> = <widgets.media_widget.MediaWidget(0x29135522410) at 0x0000029166EC8840>.isVisible
+
+
+FAILED tests/test_media_widget.py::test_media_widget_decodes_artwork_and_adjusts_margins - assert 29 > 29
+ +  where 29 = <built-in method left of PySide6.QtCore.QMargins object at 0x0000029135E33140>()
+ +    where <built-in method left of PySide6.QtCore.QMargins object at 0x0000029135E33140> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x0000029135E33140>.left
+ +  and   29 = <built-in method left of PySide6.QtCore.QMargins object at 0x0000029135E336C0>()
+ +    where <built-in method left of PySide6.QtCore.QMargins object at 0x0000029135E336C0> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x0000029135E336C0>.left
+
+
+FAILED tests/test_media_widget.py::test_media_widget_starts_fade_in_when_artwork_appears - AssertionError: assert 1.0 == 0.0
+ +  where 1.0 = getattr(<widgets.media_widget.MediaWidget(0x2913551eed0) at 0x0000029135E87300>, '_artwork_opacity', 1.0)
+
+
+FAILED tests/test_media_widget.py::test_display_widget_ctrl_click_routes_to_media_widget - assert False
+ +  where False = isinstance(None, MediaWidget)
+ +    where None = <rendering.display_widget.DisplayWidget(0x2913551f9b0) at 0x0000029166F47940>.media_widget
+
+
+FAILED tests/test_media_widget.py::test_display_widget_hard_exit_click_routes_to_media_widget - assert False
+ +  where False = isinstance(None, MediaWidget)
+ +    where None = <rendering.display_widget.DisplayWidget(0x2913702f8c0) at 0x0000029166F34300>.media_widget
+
+
+======================================================================================= 7 failed, 6 passed in 1.40s =======================================================================================
+
+
+===== pytest run 2025-12-25 20:16:36 args=['tests/test_media_widget.py', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 13 items
+
+
+
+tests/test_media_widget.py::test_noop_media_controller_safe_calls 
+PASSED                                                                                                                             [  7%]
+
+
+tests/test_media_widget.py::test_create_media_controller_falls_back_to_noop 
+PASSED                                                                                                                   [ 15%]
+
+
+tests/test_media_widget.py::test_windows_media_controller_selects_spotify_session 
+PASSED                                                                                                             [ 23%]
+
+
+tests/test_media_widget.py::test_windows_media_controller_returns_none_when_no_spotify 
+PASSED                                                                                                        [ 30%]
+
+
+tests/test_media_widget.py::test_windows_media_controller_live_spotify_track 
+PASSED                                                                                                                  [ 38%]
+
+
+tests/test_media_widget.py::test_media_widget_placeholder_when_no_media 
+FAILED                                                                                                                       [ 46%]
+
+
+tests/test_media_widget.py::test_media_widget_displays_metadata 
+FAILED                                                                                                                               [ 53%]
+
+
+tests/test_media_widget.py::test_media_widget_hides_again_when_media_disappears 
+FAILED                                                                                                               [ 61%]
+
+
+tests/test_media_widget.py::test_media_widget_decodes_artwork_and_adjusts_margins 
+FAILED                                                                                                             [ 69%]
+
+
+tests/test_media_widget.py::test_media_widget_starts_fade_in_when_artwork_appears 
+FAILED                                                                                                             [ 76%]
+
+
+tests/test_media_widget.py::test_media_widget_transport_delegates_to_controller 
+PASSED                                                                                                               [ 84%]
+
+
+tests/test_media_widget.py::test_display_widget_ctrl_click_routes_to_media_widget 
+FAILED                                                                                                             [ 92%]
+
+
+tests/test_media_widget.py::test_display_widget_hard_exit_click_routes_to_media_widget 
+FAILED                                                                                                        [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+_______________________________________________________________________________ test_media_widget_placeholder_when_no_media _______________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x208c629c4b0) at 0x00000208F5F700C0>, qtbot = <pytestqt.qtbot.QtBot object at 0x00000208F5FC3810>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x00000208F5FC3B90>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_placeholder_when_no_media(qt_app, qtbot, thread_manager):
+
+        """When controller returns None, widget should remain hidden (no media)."""
+
+    
+
+        ctrl = _DummyController(info=None)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        w.set_thread_manager(thread_manager)
+
+        w.set_thread_manager(thread_manager)
+
+        qtbot.addWidget(w)
+
+        w.resize(400, 80)
+
+    
+
+>       w.start()
+
+
+
+tests\test_media_widget.py:184: 
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+
+
+self = <widgets.media_widget.MediaWidget(0x208c67c9390) at 0x00000208F584F000>
+
+
+
+    def start(self) -> None:
+
+        """Begin polling media controller and showing widget."""
+
+    
+
+        if self._enabled:
+
+            logger.warning("Media widget already running")
+
+            return
+
+        if not self._ensure_thread_manager("MediaWidget.start"):
+
+            return
+
+    
+
+        self._enabled = True
+
+>       self._refresh_media()
+
+        ^^^^^^^^^^^^^^^^^^^
+
+E       AttributeError: 'MediaWidget' object has no attribute '_refresh_media'
+
+
+
+widgets\media_widget.py:194: AttributeError
+
+___________________________________________________________________________________ test_media_widget_displays_metadata ___________________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x208c629c4b0) at 0x00000208F5F700C0>, qtbot = <pytestqt.qtbot.QtBot object at 0x00000208C5A01090>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x00000208C5A037D0>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_displays_metadata(qt_app, qtbot, thread_manager):
+
+        """MediaWidget should render title/artist/album and state text."""
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Song Title",
+
+            artist="Artist Name",
+
+            album="Album Name",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+        )
+
+        ctrl = _DummyController(info=info)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        w.set_thread_manager(thread_manager)
+
+        qtbot.addWidget(w)
+
+        w.resize(500, 100)
+
+    
+
+>       w.start()
+
+
+
+tests\test_media_widget.py:211: 
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+
+
+self = <widgets.media_widget.MediaWidget(0x208c67c9450) at 0x00000208C5A14540>
+
+
+
+    def start(self) -> None:
+
+        """Begin polling media controller and showing widget."""
+
+    
+
+        if self._enabled:
+
+            logger.warning("Media widget already running")
+
+            return
+
+        if not self._ensure_thread_manager("MediaWidget.start"):
+
+            return
+
+    
+
+        self._enabled = True
+
+>       self._refresh_media()
+
+        ^^^^^^^^^^^^^^^^^^^
+
+E       AttributeError: 'MediaWidget' object has no attribute '_refresh_media'
+
+
+
+widgets\media_widget.py:194: AttributeError
+
+___________________________________________________________________________ test_media_widget_hides_again_when_media_disappears ___________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x208c629c4b0) at 0x00000208F5F700C0>, qtbot = <pytestqt.qtbot.QtBot object at 0x00000208C6DFF210>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x00000208C59D94D0>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_hides_again_when_media_disappears(qt_app, qtbot, thread_manager):
+
+        """Widget should hide after being visible when media goes away."""
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Song Title",
+
+            artist="Artist Name",
+
+            album="Album Name",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+        )
+
+        ctrl = _DummyController(info=info)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        qtbot.addWidget(w)
+
+        w.resize(500, 100)
+
+    
+
+        # Start with media present
+
+        w.start()
+
+        qt_app.processEvents()
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        qt_app.processEvents()
+
+>       assert w.isVisible()
+
+E       assert False
+
+E        +  where False = <built-in method isVisible of MediaWidget object at 0x00000208C59DBC40>()
+
+E        +    where <built-in method isVisible of MediaWidget object at 0x00000208C59DBC40> = <widgets.media_widget.MediaWidget(0x208c67c9bd0) at 0x00000208C59DBC40>.isVisible
+
+
+
+tests\test_media_widget.py:246: AssertionError
+
+-------------------------------------------------------------------------------------------- Captured log call --------------------------------------------------------------------------------------------
+
+ERROR    widgets.base_overlay_widget:base_overlay_widget.py:351 [THREAD_MANAGER] Missing ThreadManager for media during MediaWidget.start; timer-driven features disabled.
+
+__________________________________________________________________________ test_media_widget_decodes_artwork_and_adjusts_margins __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x208c629c4b0) at 0x00000208F5F700C0>, qtbot = <pytestqt.qtbot.QtBot object at 0x00000208C59E0410>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x00000208C59E1F10>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_decodes_artwork_and_adjusts_margins(qt_app, qtbot, thread_manager):
+
+        """Artwork bytes should be decoded into a pixmap and margins updated."""
+
+    
+
+        # Create a tiny in-memory PNG for artwork
+
+        img = QImage(8, 8, QImage.Format.Format_ARGB32)
+
+        img.fill(Qt.GlobalColor.red)
+
+        pm = QPixmap.fromImage(img)
+
+    
+
+        # Encode to PNG bytes using an in-memory buffer so loadFromData can decode it.
+
+        buf = QBuffer()
+
+        buf.open(QIODevice.OpenModeFlag.ReadWrite)
+
+        assert pm.save(buf, "PNG")
+
+        png_bytes = bytes(buf.data())
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Artwork Test",
+
+            artist="Artist",
+
+            album="Album",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+            artwork=png_bytes,
+
+        )
+
+    
+
+        ctrl = _DummyController(info=info)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        qtbot.addWidget(w)
+
+        w.resize(400, 120)
+
+    
+
+        w.start()
+
+        qt_app.processEvents()
+
+    
+
+        # Capture initial left margin, then refresh and ensure it increases
+
+        # when artwork is successfully decoded.
+
+        initial_margins = w.contentsMargins()
+
+    
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        qt_app.processEvents()
+
+    
+
+        updated_margins = w.contentsMargins()
+
+        assert updated_margins.left() >= initial_margins.left()
+
+        # When artwork is decoded, we expect the left margin to grow to
+
+        # accommodate the icon.
+
+>       assert updated_margins.left() > initial_margins.left()
+
+E       assert 29 > 29
+
+E        +  where 29 = <built-in method left of PySide6.QtCore.QMargins object at 0x00000208C59E3640>()
+
+E        +    where <built-in method left of PySide6.QtCore.QMargins object at 0x00000208C59E3640> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x00000208C59E3640>.left
+
+E        +  and   29 = <built-in method left of PySide6.QtCore.QMargins object at 0x00000208C59E3040>()
+
+E        +    where <built-in method left of PySide6.QtCore.QMargins object at 0x00000208C59E3040> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x00000208C59E3040>.left
+
+
+
+tests\test_media_widget.py:297: AssertionError
+
+-------------------------------------------------------------------------------------------- Captured log call --------------------------------------------------------------------------------------------
+
+ERROR    widgets.base_overlay_widget:base_overlay_widget.py:351 [THREAD_MANAGER] Missing ThreadManager for media during MediaWidget.start; timer-driven features disabled.
+
+__________________________________________________________________________ test_media_widget_starts_fade_in_when_artwork_appears __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x208c629c4b0) at 0x00000208F5F700C0>, qtbot = <pytestqt.qtbot.QtBot object at 0x00000208F5FAE510>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x00000208F5FC1990>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_starts_fade_in_when_artwork_appears(qt_app, qtbot, thread_manager):
+
+        """Artwork appearing should trigger a fade-in animation."""
+
+    
+
+        img = QImage(8, 8, QImage.Format.Format_ARGB32)
+
+        img.fill(Qt.GlobalColor.blue)
+
+        pm = QPixmap.fromImage(img)
+
+    
+
+        buf = QBuffer()
+
+        buf.open(QIODevice.OpenModeFlag.ReadWrite)
+
+        assert pm.save(buf, "PNG")
+
+        png_bytes = bytes(buf.data())
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Artwork Fade Test",
+
+            artist="Artist",
+
+            album="Album",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+            artwork=png_bytes,
+
+        )
+
+    
+
+        ctrl = _DummyController(info=None)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        w.set_thread_manager(thread_manager)
+
+        qtbot.addWidget(w)
+
+        w.resize(400, 120)
+
+    
+
+        # First refresh with no media keeps widget hidden and no artwork.
+
+>       w.start()
+
+
+
+tests\test_media_widget.py:328: 
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+
+
+self = <widgets.media_widget.MediaWidget(0x208c67c7710) at 0x00000208C59E9CC0>
+
+
+
+    def start(self) -> None:
+
+        """Begin polling media controller and showing widget."""
+
+    
+
+        if self._enabled:
+
+            logger.warning("Media widget already running")
+
+            return
+
+        if not self._ensure_thread_manager("MediaWidget.start"):
+
+            return
+
+    
+
+        self._enabled = True
+
+>       self._refresh_media()
+
+        ^^^^^^^^^^^^^^^^^^^
+
+E       AttributeError: 'MediaWidget' object has no attribute '_refresh_media'
+
+
+
+widgets\media_widget.py:194: AttributeError
+
+__________________________________________________________________________ test_display_widget_ctrl_click_routes_to_media_widget __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x208c629c4b0) at 0x00000208F5F700C0>, settings_manager = <core.settings.settings_manager.SettingsManager(0x208c66bea00) at 0x00000208C59E08C0>
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x00000208F6AFE090>, monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000208F6AFEF10>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x00000208F6AFCC50>
+
+
+
+    @pytest.mark.qt
+
+    def test_display_widget_ctrl_click_routes_to_media_widget(
+
+        qt_app, settings_manager, qtbot, monkeypatch, thread_manager
+
+    ):
+
+        """Ctrl-held click over media widget should trigger play/pause, not exit."""
+
+    
+
+        fake_info = mc.MediaTrackInfo(title="Track", state=mc.MediaPlaybackState.PLAYING)
+
+        fake_ctrl = _DummyController(info=fake_info)
+
+    
+
+        monkeypatch.setattr(media_mod, "create_media_controller", lambda: fake_ctrl)
+
+    
+
+        settings_manager.set(
+
+            "widgets",
+
+            {
+
+                "media": {
+
+                    "enabled": True,
+
+                    "position": "Bottom Left",
+
+                    "monitor": "ALL",
+
+                }
+
+            },
+
+        )
+
+    
+
+        w = DisplayWidget(
+
+            screen_index=0,
+
+            display_mode=DisplayMode.FILL,
+
+            settings_manager=settings_manager,
+
+            thread_manager=thread_manager,
+
+        )
+
+        qtbot.addWidget(w)
+
+        w.resize(800, 600)
+
+        w.show()
+
+        qt_app.processEvents()
+
+    
+
+>       assert isinstance(w.media_widget, MediaWidget)
+
+E       assert False
+
+E        +  where False = isinstance(None, MediaWidget)
+
+E        +    where None = <rendering.display_widget.DisplayWidget(0x208c4834ff0) at 0x00000208F6AFEBC0>.media_widget
+
+
+
+tests\test_media_widget.py:393: AssertionError
+
+_______________________________________________________________________ test_display_widget_hard_exit_click_routes_to_media_widget ________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x208c629c4b0) at 0x00000208F5F700C0>, settings_manager = <core.settings.settings_manager.SettingsManager(0x208c6984020) at 0x00000208C5A011C0>
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x00000208F6A78D90>, monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000208F6A79210>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x00000208F6A79110>
+
+
+
+    @pytest.mark.qt
+
+    def test_display_widget_hard_exit_click_routes_to_media_widget(
+
+        qt_app, settings_manager, qtbot, monkeypatch, thread_manager
+
+    ):
+
+        """Hard-exit mode should also allow media widget interaction without exit."""
+
+    
+
+        fake_info = mc.MediaTrackInfo(title="Track", state=mc.MediaPlaybackState.PLAYING)
+
+        fake_ctrl = _DummyController(info=fake_info)
+
+    
+
+        monkeypatch.setattr(mc, "create_media_controller", lambda: fake_ctrl)
+
+    
+
+        settings_manager.set(
+
+            "widgets",
+
+            {
+
+                "media": {
+
+                    "enabled": True,
+
+                    "position": "Bottom Left",
+
+                    "monitor": "ALL",
+
+                }
+
+            },
+
+        )
+
+        settings_manager.set("input.hard_exit", True)
+
+    
+
+        w = DisplayWidget(
+
+            screen_index=0,
+
+            display_mode=DisplayMode.FILL,
+
+            settings_manager=settings_manager,
+
+            thread_manager=thread_manager,
+
+        )
+
+        qtbot.addWidget(w)
+
+        w.resize(800, 600)
+
+        w.show()
+
+        qt_app.processEvents()
+
+    
+
+>       assert isinstance(w.media_widget, MediaWidget)
+
+E       assert False
+
+E        +  where False = isinstance(None, MediaWidget)
+
+E        +    where None = <rendering.display_widget.DisplayWidget(0x208c6795fa0) at 0x00000208F6A792C0>.media_widget
+
+
+
+tests\test_media_widget.py:453: AssertionError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_media_widget.py::test_media_widget_placeholder_when_no_media - AttributeError: 'MediaWidget' object has no attribute '_refresh_media'
+
+FAILED tests/test_media_widget.py::test_media_widget_displays_metadata - AttributeError: 'MediaWidget' object has no attribute '_refresh_media'
+
+FAILED tests/test_media_widget.py::test_media_widget_hides_again_when_media_disappears - assert False
+ +  where False = <built-in method isVisible of MediaWidget object at 0x00000208C59DBC40>()
+ +    where <built-in method isVisible of MediaWidget object at 0x00000208C59DBC40> = <widgets.media_widget.MediaWidget(0x208c67c9bd0) at 0x00000208C59DBC40>.isVisible
+
+
+FAILED tests/test_media_widget.py::test_media_widget_decodes_artwork_and_adjusts_margins - assert 29 > 29
+ +  where 29 = <built-in method left of PySide6.QtCore.QMargins object at 0x00000208C59E3640>()
+ +    where <built-in method left of PySide6.QtCore.QMargins object at 0x00000208C59E3640> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x00000208C59E3640>.left
+ +  and   29 = <built-in method left of PySide6.QtCore.QMargins object at 0x00000208C59E3040>()
+ +    where <built-in method left of PySide6.QtCore.QMargins object at 0x00000208C59E3040> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x00000208C59E3040>.left
+
+
+FAILED tests/test_media_widget.py::test_media_widget_starts_fade_in_when_artwork_appears - AttributeError: 'MediaWidget' object has no attribute '_refresh_media'
+
+FAILED tests/test_media_widget.py::test_display_widget_ctrl_click_routes_to_media_widget - assert False
+ +  where False = isinstance(None, MediaWidget)
+ +    where None = <rendering.display_widget.DisplayWidget(0x208c4834ff0) at 0x00000208F6AFEBC0>.media_widget
+
+
+FAILED tests/test_media_widget.py::test_display_widget_hard_exit_click_routes_to_media_widget - assert False
+ +  where False = isinstance(None, MediaWidget)
+ +    where None = <rendering.display_widget.DisplayWidget(0x208c6795fa0) at 0x00000208F6A792C0>.media_widget
+
+
+======================================================================================= 7 failed, 6 passed in 1.57s =======================================================================================
+
+
+===== pytest run 2025-12-25 20:19:00 args=['tests/test_media_widget.py', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 13 items
+
+
+
+tests/test_media_widget.py::test_noop_media_controller_safe_calls 
+PASSED                                                                                                                             [  7%]
+
+
+tests/test_media_widget.py::test_create_media_controller_falls_back_to_noop 
+PASSED                                                                                                                   [ 15%]
+
+
+tests/test_media_widget.py::test_windows_media_controller_selects_spotify_session 
+PASSED                                                                                                             [ 23%]
+
+
+tests/test_media_widget.py::test_windows_media_controller_returns_none_when_no_spotify 
+PASSED                                                                                                        [ 30%]
+
+
+tests/test_media_widget.py::test_windows_media_controller_live_spotify_track 
+PASSED                                                                                                                  [ 38%]
+
+
+tests/test_media_widget.py::test_media_widget_placeholder_when_no_media 
+PASSED                                                                                                                       [ 46%]
+
+
+tests/test_media_widget.py::test_media_widget_displays_metadata 
+FAILED                                                                                                                               [ 53%]
+
+
+tests/test_media_widget.py::test_media_widget_hides_again_when_media_disappears 
+FAILED                                                                                                               [ 61%]
+
+
+tests/test_media_widget.py::test_media_widget_decodes_artwork_and_adjusts_margins 
+FAILED                                                                                                             [ 69%]
+
+
+tests/test_media_widget.py::test_media_widget_starts_fade_in_when_artwork_appears 
+FAILED                                                                                                             [ 76%]
+
+
+tests/test_media_widget.py::test_media_widget_transport_delegates_to_controller 
+PASSED                                                                                                               [ 84%]
+
+
+tests/test_media_widget.py::test_display_widget_ctrl_click_routes_to_media_widget 
+FAILED                                                                                                             [ 92%]
+
+
+tests/test_media_widget.py::test_display_widget_hard_exit_click_routes_to_media_widget 
+FAILED                                                                                                        [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+___________________________________________________________________________________ test_media_widget_displays_metadata ___________________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x1750589bb20) at 0x00000175352D4840>, qtbot = <pytestqt.qtbot.QtBot object at 0x000001753525EE90>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x00000175353069D0>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_displays_metadata(qt_app, qtbot, thread_manager):
+
+        """MediaWidget should render title/artist/album and state text."""
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Song Title",
+
+            artist="Artist Name",
+
+            album="Album Name",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+        )
+
+        ctrl = _DummyController(info=info)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        w.set_thread_manager(thread_manager)
+
+        qtbot.addWidget(w)
+
+        w.resize(500, 100)
+
+    
+
+        w.start()
+
+        qt_app.processEvents()
+
+    
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        _wait_for_media_refresh(qtbot, w)
+
+        qt_app.processEvents()
+
+    
+
+        html = w.text()
+
+        assert "Song Title" in html
+
+        assert "Artist Name" in html
+
+>       assert "Album Name" in html
+
+E       assert 'Album Name' in "<div style='line-height:1.25'><div style='font-size:24pt; font-weight:750; letter-spacing:1px; margin-left:36px; color:rgba(255,255,255,255);'>SPOTIFY</div><div style='margin-top:8px;'><div style='font-size:23pt; font-weight:700;'>Song Title</div><div style='margin-top:4px; font-size:18pt; font-weight:600; opacity:0.95;'>Artist Name</div></div></div>"
+
+
+
+tests\test_media_widget.py:221: AssertionError
+
+___________________________________________________________________________ test_media_widget_hides_again_when_media_disappears ___________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x1750589bb20) at 0x00000175352D4840>, qtbot = <pytestqt.qtbot.QtBot object at 0x0000017538768150>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x0000017538768490>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_hides_again_when_media_disappears(qt_app, qtbot, thread_manager):
+
+        """Widget should hide after being visible when media goes away."""
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Song Title",
+
+            artist="Artist Name",
+
+            album="Album Name",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+        )
+
+        ctrl = _DummyController(info=info)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        qtbot.addWidget(w)
+
+        w.resize(500, 100)
+
+    
+
+        # Start with media present
+
+        w.start()
+
+        qt_app.processEvents()
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        qt_app.processEvents()
+
+>       assert w.isVisible()
+
+E       assert False
+
+E        +  where False = <built-in method isVisible of MediaWidget object at 0x0000017538768D80>()
+
+E        +    where <built-in method isVisible of MediaWidget object at 0x0000017538768D80> = <widgets.media_widget.MediaWidget(0x17505dd8f90) at 0x0000017538768D80>.isVisible
+
+
+
+tests\test_media_widget.py:246: AssertionError
+
+-------------------------------------------------------------------------------------------- Captured log call --------------------------------------------------------------------------------------------
+
+ERROR    widgets.base_overlay_widget:base_overlay_widget.py:351 [THREAD_MANAGER] Missing ThreadManager for media during MediaWidget.start; timer-driven features disabled.
+
+__________________________________________________________________________ test_media_widget_decodes_artwork_and_adjusts_margins __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x1750589bb20) at 0x00000175352D4840>, qtbot = <pytestqt.qtbot.QtBot object at 0x000001753877B410>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x000001753877B6D0>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_decodes_artwork_and_adjusts_margins(qt_app, qtbot, thread_manager):
+
+        """Artwork bytes should be decoded into a pixmap and margins updated."""
+
+    
+
+        # Create a tiny in-memory PNG for artwork
+
+        img = QImage(8, 8, QImage.Format.Format_ARGB32)
+
+        img.fill(Qt.GlobalColor.red)
+
+        pm = QPixmap.fromImage(img)
+
+    
+
+        # Encode to PNG bytes using an in-memory buffer so loadFromData can decode it.
+
+        buf = QBuffer()
+
+        buf.open(QIODevice.OpenModeFlag.ReadWrite)
+
+        assert pm.save(buf, "PNG")
+
+        png_bytes = bytes(buf.data())
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Artwork Test",
+
+            artist="Artist",
+
+            album="Album",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+            artwork=png_bytes,
+
+        )
+
+    
+
+        ctrl = _DummyController(info=info)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        qtbot.addWidget(w)
+
+        w.resize(400, 120)
+
+    
+
+        w.start()
+
+        qt_app.processEvents()
+
+    
+
+        # Capture initial left margin, then refresh and ensure it increases
+
+        # when artwork is successfully decoded.
+
+        initial_margins = w.contentsMargins()
+
+    
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        qt_app.processEvents()
+
+    
+
+        updated_margins = w.contentsMargins()
+
+        assert updated_margins.left() >= initial_margins.left()
+
+        # When artwork is decoded, we expect the left margin to grow to
+
+        # accommodate the icon.
+
+>       assert updated_margins.left() > initial_margins.left()
+
+E       assert 29 > 29
+
+E        +  where 29 = <built-in method left of PySide6.QtCore.QMargins object at 0x000001753877BBC0>()
+
+E        +    where <built-in method left of PySide6.QtCore.QMargins object at 0x000001753877BBC0> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x000001753877BBC0>.left
+
+E        +  and   29 = <built-in method left of PySide6.QtCore.QMargins object at 0x0000017538778140>()
+
+E        +    where <built-in method left of PySide6.QtCore.QMargins object at 0x0000017538778140> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x0000017538778140>.left
+
+
+
+tests\test_media_widget.py:297: AssertionError
+
+-------------------------------------------------------------------------------------------- Captured log call --------------------------------------------------------------------------------------------
+
+ERROR    widgets.base_overlay_widget:base_overlay_widget.py:351 [THREAD_MANAGER] Missing ThreadManager for media during MediaWidget.start; timer-driven features disabled.
+
+__________________________________________________________________________ test_media_widget_starts_fade_in_when_artwork_appears __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x1750589bb20) at 0x00000175352D4840>, qtbot = <pytestqt.qtbot.QtBot object at 0x0000017535313C90>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x0000017535311110>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_starts_fade_in_when_artwork_appears(qt_app, qtbot, thread_manager):
+
+        """Artwork appearing should trigger a fade-in animation."""
+
+    
+
+        img = QImage(8, 8, QImage.Format.Format_ARGB32)
+
+        img.fill(Qt.GlobalColor.blue)
+
+        pm = QPixmap.fromImage(img)
+
+    
+
+        buf = QBuffer()
+
+        buf.open(QIODevice.OpenModeFlag.ReadWrite)
+
+        assert pm.save(buf, "PNG")
+
+        png_bytes = bytes(buf.data())
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Artwork Fade Test",
+
+            artist="Artist",
+
+            album="Album",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+            artwork=png_bytes,
+
+        )
+
+    
+
+        ctrl = _DummyController(info=None)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        w.set_thread_manager(thread_manager)
+
+        qtbot.addWidget(w)
+
+        w.resize(400, 120)
+
+    
+
+        # First refresh with no media keeps widget hidden and no artwork.
+
+        w.start()
+
+        qt_app.processEvents()
+
+        ctrl._info = None
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        qt_app.processEvents()
+
+        assert not w.isVisible()
+
+    
+
+        # Now provide artwork-bearing media and refresh once; this should
+
+        # create an artwork pixmap and start a fade-in (opacity starts at 0).
+
+        ctrl._info = info
+
+        w._refresh()  # type: ignore[attr-defined]
+
+    
+
+>       assert getattr(w, "_artwork_opacity", 1.0) == 0.0
+
+E       AssertionError: assert 1.0 == 0.0
+
+E        +  where 1.0 = getattr(<widgets.media_widget.MediaWidget(0x17505df5c60) at 0x000001753536BB00>, '_artwork_opacity', 1.0)
+
+
+
+tests\test_media_widget.py:340: AssertionError
+
+__________________________________________________________________________ test_display_widget_ctrl_click_routes_to_media_widget __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x1750589bb20) at 0x00000175352D4840>, settings_manager = <core.settings.settings_manager.SettingsManager(0x17505cf10e0) at 0x0000017538780900>
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x0000017538782050>, monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000017538781550>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x00000175387816D0>
+
+
+
+    @pytest.mark.qt
+
+    def test_display_widget_ctrl_click_routes_to_media_widget(
+
+        qt_app, settings_manager, qtbot, monkeypatch, thread_manager
+
+    ):
+
+        """Ctrl-held click over media widget should trigger play/pause, not exit."""
+
+    
+
+        fake_info = mc.MediaTrackInfo(title="Track", state=mc.MediaPlaybackState.PLAYING)
+
+        fake_ctrl = _DummyController(info=fake_info)
+
+    
+
+        monkeypatch.setattr(media_mod, "create_media_controller", lambda: fake_ctrl)
+
+    
+
+        settings_manager.set(
+
+            "widgets",
+
+            {
+
+                "media": {
+
+                    "enabled": True,
+
+                    "position": "Bottom Left",
+
+                    "monitor": "ALL",
+
+                }
+
+            },
+
+        )
+
+    
+
+        w = DisplayWidget(
+
+            screen_index=0,
+
+            display_mode=DisplayMode.FILL,
+
+            settings_manager=settings_manager,
+
+            thread_manager=thread_manager,
+
+        )
+
+        qtbot.addWidget(w)
+
+        w.resize(800, 600)
+
+        w.show()
+
+        qt_app.processEvents()
+
+    
+
+>       assert isinstance(w.media_widget, MediaWidget)
+
+E       assert False
+
+E        +  where False = isinstance(None, MediaWidget)
+
+E        +    where None = <rendering.display_widget.DisplayWidget(0x17505df7580) at 0x000001753877C140>.media_widget
+
+
+
+tests\test_media_widget.py:393: AssertionError
+
+_______________________________________________________________________ test_display_widget_hard_exit_click_routes_to_media_widget ________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x1750589bb20) at 0x00000175352D4840>, settings_manager = <core.settings.settings_manager.SettingsManager(0x17505cf1a80) at 0x0000017538781300>
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x0000017538E216D0>, monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000017538E21910>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x0000017538E21A50>
+
+
+
+    @pytest.mark.qt
+
+    def test_display_widget_hard_exit_click_routes_to_media_widget(
+
+        qt_app, settings_manager, qtbot, monkeypatch, thread_manager
+
+    ):
+
+        """Hard-exit mode should also allow media widget interaction without exit."""
+
+    
+
+        fake_info = mc.MediaTrackInfo(title="Track", state=mc.MediaPlaybackState.PLAYING)
+
+        fake_ctrl = _DummyController(info=fake_info)
+
+    
+
+        monkeypatch.setattr(mc, "create_media_controller", lambda: fake_ctrl)
+
+    
+
+        settings_manager.set(
+
+            "widgets",
+
+            {
+
+                "media": {
+
+                    "enabled": True,
+
+                    "position": "Bottom Left",
+
+                    "monitor": "ALL",
+
+                }
+
+            },
+
+        )
+
+        settings_manager.set("input.hard_exit", True)
+
+    
+
+        w = DisplayWidget(
+
+            screen_index=0,
+
+            display_mode=DisplayMode.FILL,
+
+            settings_manager=settings_manager,
+
+            thread_manager=thread_manager,
+
+        )
+
+        qtbot.addWidget(w)
+
+        w.resize(800, 600)
+
+        w.show()
+
+        qt_app.processEvents()
+
+    
+
+>       assert isinstance(w.media_widget, MediaWidget)
+
+E       assert False
+
+E        +  where False = isinstance(None, MediaWidget)
+
+E        +    where None = <rendering.display_widget.DisplayWidget(0x17505c4d3b0) at 0x0000017538E20880>.media_widget
+
+
+
+tests\test_media_widget.py:453: AssertionError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_media_widget.py::test_media_widget_displays_metadata - assert 'Album Name' in "<div style='line-height:1.25'><div style='font-size:24pt; font-weight:750; letter-spacing:1px; margin-left:36px; color:rgba(255,255,255,255);'>SPOTIFY</div><div style='margin-top:8px;'><div style='font-size:23pt; font-weight:700;'>Song Title</div><div style='margin-top:4px; font-size:18pt; font-weight:600; opacity:0.95;'>Artist Name</div></div></div>"
+
+FAILED tests/test_media_widget.py::test_media_widget_hides_again_when_media_disappears - assert False
+ +  where False = <built-in method isVisible of MediaWidget object at 0x0000017538768D80>()
+ +    where <built-in method isVisible of MediaWidget object at 0x0000017538768D80> = <widgets.media_widget.MediaWidget(0x17505dd8f90) at 0x0000017538768D80>.isVisible
+
+
+FAILED tests/test_media_widget.py::test_media_widget_decodes_artwork_and_adjusts_margins - assert 29 > 29
+ +  where 29 = <built-in method left of PySide6.QtCore.QMargins object at 0x000001753877BBC0>()
+ +    where <built-in method left of PySide6.QtCore.QMargins object at 0x000001753877BBC0> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x000001753877BBC0>.left
+ +  and   29 = <built-in method left of PySide6.QtCore.QMargins object at 0x0000017538778140>()
+ +    where <built-in method left of PySide6.QtCore.QMargins object at 0x0000017538778140> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x0000017538778140>.left
+
+
+FAILED tests/test_media_widget.py::test_media_widget_starts_fade_in_when_artwork_appears - AssertionError: assert 1.0 == 0.0
+ +  where 1.0 = getattr(<widgets.media_widget.MediaWidget(0x17505df5c60) at 0x000001753536BB00>, '_artwork_opacity', 1.0)
+
+
+FAILED tests/test_media_widget.py::test_display_widget_ctrl_click_routes_to_media_widget - assert False
+ +  where False = isinstance(None, MediaWidget)
+ +    where None = <rendering.display_widget.DisplayWidget(0x17505df7580) at 0x000001753877C140>.media_widget
+
+
+FAILED tests/test_media_widget.py::test_display_widget_hard_exit_click_routes_to_media_widget - assert False
+ +  where False = isinstance(None, MediaWidget)
+ +    where None = <rendering.display_widget.DisplayWidget(0x17505c4d3b0) at 0x0000017538E20880>.media_widget
+
+
+======================================================================================= 6 failed, 7 passed in 1.34s =======================================================================================
+
+
+===== pytest run 2025-12-25 20:21:21 args=['tests/test_media_widget.py', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 13 items
+
+
+
+tests/test_media_widget.py::test_noop_media_controller_safe_calls 
+PASSED                                                                                                                             [  7%]
+
+
+tests/test_media_widget.py::test_create_media_controller_falls_back_to_noop 
+PASSED                                                                                                                   [ 15%]
+
+
+tests/test_media_widget.py::test_windows_media_controller_selects_spotify_session 
+PASSED                                                                                                             [ 23%]
+
+
+tests/test_media_widget.py::test_windows_media_controller_returns_none_when_no_spotify 
+PASSED                                                                                                        [ 30%]
+
+
+tests/test_media_widget.py::test_windows_media_controller_live_spotify_track 
+PASSED                                                                                                                  [ 38%]
+
+
+tests/test_media_widget.py::test_media_widget_placeholder_when_no_media 
+PASSED                                                                                                                       [ 46%]
+
+
+tests/test_media_widget.py::test_media_widget_displays_metadata 
+FAILED                                                                                                                               [ 53%]
+
+
+tests/test_media_widget.py::test_media_widget_hides_again_when_media_disappears 
+FAILED                                                                                                               [ 61%]
+
+
+tests/test_media_widget.py::test_media_widget_decodes_artwork_and_adjusts_margins 
+FAILED                                                                                                             [ 69%]
+
+
+tests/test_media_widget.py::test_media_widget_starts_fade_in_when_artwork_appears 
+FAILED                                                                                                             [ 76%]
+
+
+tests/test_media_widget.py::test_media_widget_transport_delegates_to_controller 
+PASSED                                                                                                               [ 84%]
+
+
+tests/test_media_widget.py::test_display_widget_ctrl_click_routes_to_media_widget 
+FAILED                                                                                                             [ 92%]
+
+
+tests/test_media_widget.py::test_display_widget_hard_exit_click_routes_to_media_widget 
+FAILED                                                                                                        [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+___________________________________________________________________________________ test_media_widget_displays_metadata ___________________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x27777817880) at 0x00000277285DFEC0>, qtbot = <pytestqt.qtbot.QtBot object at 0x00000277286904D0>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x00000277286938D0>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_displays_metadata(qt_app, qtbot, thread_manager):
+
+        """MediaWidget should render title/artist/album and state text."""
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Song Title",
+
+            artist="Artist Name",
+
+            album="Album Name",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+        )
+
+        ctrl = _DummyController(info=info)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        w.set_thread_manager(thread_manager)
+
+        qtbot.addWidget(w)
+
+        w.resize(500, 100)
+
+    
+
+        w.start()
+
+        qt_app.processEvents()
+
+    
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        _wait_for_media_refresh(qtbot, w)
+
+        qt_app.processEvents()
+
+    
+
+        html = w.text()
+
+        assert "Song Title" in html
+
+        assert "Artist Name" in html
+
+>       assert "Album Name" in html
+
+E       assert 'Album Name' in "<div style='line-height:1.25'><div style='font-size:24pt; font-weight:750; letter-spacing:1px; margin-left:36px; color:rgba(255,255,255,255);'>SPOTIFY</div><div style='margin-top:8px;'><div style='font-size:23pt; font-weight:700;'>Song Title</div><div style='margin-top:4px; font-size:18pt; font-weight:600; opacity:0.95;'>Artist Name</div></div></div>"
+
+
+
+tests\test_media_widget.py:220: AssertionError
+
+___________________________________________________________________________ test_media_widget_hides_again_when_media_disappears ___________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x27777817880) at 0x00000277285DFEC0>, qtbot = <pytestqt.qtbot.QtBot object at 0x000002772B5F8C50>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x000002772B5F82D0>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_hides_again_when_media_disappears(qt_app, qtbot, thread_manager):
+
+        """Widget should hide after being visible when media goes away."""
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Song Title",
+
+            artist="Artist Name",
+
+            album="Album Name",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+        )
+
+        ctrl = _DummyController(info=info)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        qtbot.addWidget(w)
+
+        w.resize(500, 100)
+
+    
+
+        # Start with media present
+
+        w.start()
+
+        qt_app.processEvents()
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        qt_app.processEvents()
+
+>       assert w.isVisible()
+
+E       assert False
+
+E        +  where False = <built-in method isVisible of MediaWidget object at 0x000002772B5F8A80>()
+
+E        +    where <built-in method isVisible of MediaWidget object at 0x000002772B5F8A80> = <widgets.media_widget.MediaWidget(0x27779169540) at 0x000002772B5F8A80>.isVisible
+
+
+
+tests\test_media_widget.py:245: AssertionError
+
+-------------------------------------------------------------------------------------------- Captured log call --------------------------------------------------------------------------------------------
+
+ERROR    widgets.base_overlay_widget:base_overlay_widget.py:351 [THREAD_MANAGER] Missing ThreadManager for media during MediaWidget.start; timer-driven features disabled.
+
+__________________________________________________________________________ test_media_widget_decodes_artwork_and_adjusts_margins __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x27777817880) at 0x00000277285DFEC0>, qtbot = <pytestqt.qtbot.QtBot object at 0x000002772B624490>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x000002772B624CD0>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_decodes_artwork_and_adjusts_margins(qt_app, qtbot, thread_manager):
+
+        """Artwork bytes should be decoded into a pixmap and margins updated."""
+
+    
+
+        # Create a tiny in-memory PNG for artwork
+
+        img = QImage(8, 8, QImage.Format.Format_ARGB32)
+
+        img.fill(Qt.GlobalColor.red)
+
+        pm = QPixmap.fromImage(img)
+
+    
+
+        # Encode to PNG bytes using an in-memory buffer so loadFromData can decode it.
+
+        buf = QBuffer()
+
+        buf.open(QIODevice.OpenModeFlag.ReadWrite)
+
+        assert pm.save(buf, "PNG")
+
+        png_bytes = bytes(buf.data())
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Artwork Test",
+
+            artist="Artist",
+
+            album="Album",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+            artwork=png_bytes,
+
+        )
+
+    
+
+        ctrl = _DummyController(info=info)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        qtbot.addWidget(w)
+
+        w.resize(400, 120)
+
+    
+
+        w.start()
+
+        qt_app.processEvents()
+
+    
+
+        # Capture initial left margin, then refresh and ensure it increases
+
+        # when artwork is successfully decoded.
+
+        initial_margins = w.contentsMargins()
+
+    
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        qt_app.processEvents()
+
+    
+
+        updated_margins = w.contentsMargins()
+
+        assert updated_margins.left() >= initial_margins.left()
+
+        # When artwork is decoded, we expect the left margin to grow to
+
+        # accommodate the icon.
+
+>       assert updated_margins.left() > initial_margins.left()
+
+E       assert 29 > 29
+
+E        +  where 29 = <built-in method left of PySide6.QtCore.QMargins object at 0x000002772B6252C0>()
+
+E        +    where <built-in method left of PySide6.QtCore.QMargins object at 0x000002772B6252C0> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x000002772B6252C0>.left
+
+E        +  and   29 = <built-in method left of PySide6.QtCore.QMargins object at 0x000002772B6254C0>()
+
+E        +    where <built-in method left of PySide6.QtCore.QMargins object at 0x000002772B6254C0> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x000002772B6254C0>.left
+
+
+
+tests\test_media_widget.py:296: AssertionError
+
+-------------------------------------------------------------------------------------------- Captured log call --------------------------------------------------------------------------------------------
+
+ERROR    widgets.base_overlay_widget:base_overlay_widget.py:351 [THREAD_MANAGER] Missing ThreadManager for media during MediaWidget.start; timer-driven features disabled.
+
+__________________________________________________________________________ test_media_widget_starts_fade_in_when_artwork_appears __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x27777817880) at 0x00000277285DFEC0>, qtbot = <pytestqt.qtbot.QtBot object at 0x00000277285C5810>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x0000027728679750>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_starts_fade_in_when_artwork_appears(qt_app, qtbot, thread_manager):
+
+        """Artwork appearing should trigger a fade-in animation."""
+
+    
+
+        img = QImage(8, 8, QImage.Format.Format_ARGB32)
+
+        img.fill(Qt.GlobalColor.blue)
+
+        pm = QPixmap.fromImage(img)
+
+    
+
+        buf = QBuffer()
+
+        buf.open(QIODevice.OpenModeFlag.ReadWrite)
+
+        assert pm.save(buf, "PNG")
+
+        png_bytes = bytes(buf.data())
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Artwork Fade Test",
+
+            artist="Artist",
+
+            album="Album",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+            artwork=png_bytes,
+
+        )
+
+    
+
+        ctrl = _DummyController(info=None)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        w.set_thread_manager(thread_manager)
+
+        qtbot.addWidget(w)
+
+        w.resize(400, 120)
+
+    
+
+        # First refresh with no media keeps widget hidden and no artwork.
+
+        w.start()
+
+        qt_app.processEvents()
+
+        ctrl._info = None
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        qt_app.processEvents()
+
+        assert not w.isVisible()
+
+    
+
+        # Now provide artwork-bearing media and refresh once; this should
+
+        # create an artwork pixmap and start a fade-in (opacity starts at 0).
+
+        ctrl._info = info
+
+        w._refresh()  # type: ignore[attr-defined]
+
+    
+
+>       assert getattr(w, "_artwork_opacity", 1.0) == 0.0
+
+E       AssertionError: assert 1.0 == 0.0
+
+E        +  where 1.0 = getattr(<widgets.media_widget.MediaWidget(0x27778e964e0) at 0x0000027778003680>, '_artwork_opacity', 1.0)
+
+
+
+tests\test_media_widget.py:339: AssertionError
+
+__________________________________________________________________________ test_display_widget_ctrl_click_routes_to_media_widget __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x27777817880) at 0x00000277285DFEC0>, settings_manager = <core.settings.settings_manager.SettingsManager(0x27778ffd2f0) at 0x000002777803D340>
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x000002777804F6D0>, monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000027778021B50>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x0000027778020150>
+
+
+
+    @pytest.mark.qt
+
+    def test_display_widget_ctrl_click_routes_to_media_widget(
+
+        qt_app, settings_manager, qtbot, monkeypatch, thread_manager
+
+    ):
+
+        """Ctrl-held click over media widget should trigger play/pause, not exit."""
+
+    
+
+        fake_info = mc.MediaTrackInfo(title="Track", state=mc.MediaPlaybackState.PLAYING)
+
+        fake_ctrl = _DummyController(info=fake_info)
+
+    
+
+        monkeypatch.setattr(media_mod, "create_media_controller", lambda: fake_ctrl)
+
+    
+
+        settings_manager.set(
+
+            "widgets",
+
+            {
+
+                "media": {
+
+                    "enabled": True,
+
+                    "position": "Bottom Left",
+
+                    "monitor": "ALL",
+
+                }
+
+            },
+
+        )
+
+    
+
+        w = DisplayWidget(
+
+            screen_index=0,
+
+            display_mode=DisplayMode.FILL,
+
+            settings_manager=settings_manager,
+
+            thread_manager=thread_manager,
+
+        )
+
+        qtbot.addWidget(w)
+
+        w.resize(800, 600)
+
+        w.show()
+
+        qt_app.processEvents()
+
+    
+
+>       assert isinstance(w.media_widget, MediaWidget)
+
+E       assert False
+
+E        +  where False = isinstance(None, MediaWidget)
+
+E        +    where None = <rendering.display_widget.DisplayWidget(0x27778e939c0) at 0x0000027778056280>.media_widget
+
+
+
+tests\test_media_widget.py:392: AssertionError
+
+_______________________________________________________________________ test_display_widget_hard_exit_click_routes_to_media_widget ________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x27777817880) at 0x00000277285DFEC0>, settings_manager = <core.settings.settings_manager.SettingsManager(0x27779305390) at 0x000002772B62FE00>
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x000002772B62FFD0>, monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000002772BC91B90>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x000002772BC91A90>
+
+
+
+    @pytest.mark.qt
+
+    def test_display_widget_hard_exit_click_routes_to_media_widget(
+
+        qt_app, settings_manager, qtbot, monkeypatch, thread_manager
+
+    ):
+
+        """Hard-exit mode should also allow media widget interaction without exit."""
+
+    
+
+        fake_info = mc.MediaTrackInfo(title="Track", state=mc.MediaPlaybackState.PLAYING)
+
+        fake_ctrl = _DummyController(info=fake_info)
+
+    
+
+        monkeypatch.setattr(mc, "create_media_controller", lambda: fake_ctrl)
+
+    
+
+        settings_manager.set(
+
+            "widgets",
+
+            {
+
+                "media": {
+
+                    "enabled": True,
+
+                    "position": "Bottom Left",
+
+                    "monitor": "ALL",
+
+                }
+
+            },
+
+        )
+
+        settings_manager.set("input.hard_exit", True)
+
+    
+
+        w = DisplayWidget(
+
+            screen_index=0,
+
+            display_mode=DisplayMode.FILL,
+
+            settings_manager=settings_manager,
+
+            thread_manager=thread_manager,
+
+        )
+
+        qtbot.addWidget(w)
+
+        w.resize(800, 600)
+
+        w.show()
+
+        qt_app.processEvents()
+
+    
+
+>       assert isinstance(w.media_widget, MediaWidget)
+
+E       assert False
+
+E        +  where False = isinstance(None, MediaWidget)
+
+E        +    where None = <rendering.display_widget.DisplayWidget(0x27776e082f0) at 0x000002772BC90CC0>.media_widget
+
+
+
+tests\test_media_widget.py:452: AssertionError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_media_widget.py::test_media_widget_displays_metadata - assert 'Album Name' in "<div style='line-height:1.25'><div style='font-size:24pt; font-weight:750; letter-spacing:1px; margin-left:36px; color:rgba(255,255,255,255);'>SPOTIFY</div><div style='margin-top:8px;'><div style='font-size:23pt; font-weight:700;'>Song Title</div><div style='margin-top:4px; font-size:18pt; font-weight:600; opacity:0.95;'>Artist Name</div></div></div>"
+
+FAILED tests/test_media_widget.py::test_media_widget_hides_again_when_media_disappears - assert False
+ +  where False = <built-in method isVisible of MediaWidget object at 0x000002772B5F8A80>()
+ +    where <built-in method isVisible of MediaWidget object at 0x000002772B5F8A80> = <widgets.media_widget.MediaWidget(0x27779169540) at 0x000002772B5F8A80>.isVisible
+
+
+FAILED tests/test_media_widget.py::test_media_widget_decodes_artwork_and_adjusts_margins - assert 29 > 29
+ +  where 29 = <built-in method left of PySide6.QtCore.QMargins object at 0x000002772B6252C0>()
+ +    where <built-in method left of PySide6.QtCore.QMargins object at 0x000002772B6252C0> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x000002772B6252C0>.left
+ +  and   29 = <built-in method left of PySide6.QtCore.QMargins object at 0x000002772B6254C0>()
+ +    where <built-in method left of PySide6.QtCore.QMargins object at 0x000002772B6254C0> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x000002772B6254C0>.left
+
+
+FAILED tests/test_media_widget.py::test_media_widget_starts_fade_in_when_artwork_appears - AssertionError: assert 1.0 == 0.0
+ +  where 1.0 = getattr(<widgets.media_widget.MediaWidget(0x27778e964e0) at 0x0000027778003680>, '_artwork_opacity', 1.0)
+
+
+FAILED tests/test_media_widget.py::test_display_widget_ctrl_click_routes_to_media_widget - assert False
+ +  where False = isinstance(None, MediaWidget)
+ +    where None = <rendering.display_widget.DisplayWidget(0x27778e939c0) at 0x0000027778056280>.media_widget
+
+
+FAILED tests/test_media_widget.py::test_display_widget_hard_exit_click_routes_to_media_widget - assert False
+ +  where False = isinstance(None, MediaWidget)
+ +    where None = <rendering.display_widget.DisplayWidget(0x27776e082f0) at 0x000002772BC90CC0>.media_widget
+
+
+======================================================================================= 6 failed, 7 passed in 1.29s =======================================================================================
+
+
+===== pytest run 2025-12-25 22:39:55 args=['tests/test_media_widget.py', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 13 items
+
+
+
+tests/test_media_widget.py::test_noop_media_controller_safe_calls 
+PASSED                                                                                                                             [  7%]
+
+
+tests/test_media_widget.py::test_create_media_controller_falls_back_to_noop 
+PASSED                                                                                                                   [ 15%]
+
+
+tests/test_media_widget.py::test_windows_media_controller_selects_spotify_session 
+PASSED                                                                                                             [ 23%]
+
+
+tests/test_media_widget.py::test_windows_media_controller_returns_none_when_no_spotify 
+PASSED                                                                                                        [ 30%]
+
+
+tests/test_media_widget.py::test_windows_media_controller_live_spotify_track 
+PASSED                                                                                                                  [ 38%]
+
+
+tests/test_media_widget.py::test_media_widget_placeholder_when_no_media 
+PASSED                                                                                                                       [ 46%]
+
+
+tests/test_media_widget.py::test_media_widget_displays_metadata 
+FAILED                                                                                                                               [ 53%]
+
+
+tests/test_media_widget.py::test_media_widget_hides_again_when_media_disappears 
+FAILED                                                                                                               [ 61%]
+
+
+tests/test_media_widget.py::test_media_widget_decodes_artwork_and_adjusts_margins 
+FAILED                                                                                                             [ 69%]
+
+
+tests/test_media_widget.py::test_media_widget_starts_fade_in_when_artwork_appears 
+FAILED                                                                                                             [ 76%]
+
+
+tests/test_media_widget.py::test_media_widget_transport_delegates_to_controller 
+PASSED                                                                                                               [ 84%]
+
+
+tests/test_media_widget.py::test_display_widget_ctrl_click_routes_to_media_widget 
+FAILED                                                                                                             [ 92%]
+
+
+tests/test_media_widget.py::test_display_widget_hard_exit_click_routes_to_media_widget 
+FAILED                                                                                                        [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+___________________________________________________________________________________ test_media_widget_displays_metadata ___________________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x1fe1c4c8400) at 0x000001FE4C482A80>, qtbot = <pytestqt.qtbot.QtBot object at 0x000001FE4BD57B90>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x000001FE4C4FB1D0>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_displays_metadata(qt_app, qtbot, thread_manager):
+
+        """MediaWidget should render title/artist/album and state text."""
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Song Title",
+
+            artist="Artist Name",
+
+            album="Album Name",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+        )
+
+        ctrl = _DummyController(info=info)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        w.set_thread_manager(thread_manager)
+
+        qtbot.addWidget(w)
+
+        w.resize(500, 100)
+
+    
+
+        w.start()
+
+        qt_app.processEvents()
+
+    
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        _wait_for_media_refresh(qtbot, w)
+
+        qt_app.processEvents()
+
+    
+
+        html = w.text()
+
+        assert "Song Title" in html
+
+        assert "Artist Name" in html
+
+>       assert "Album Name" in html
+
+E       assert 'Album Name' in "<div style='line-height:1.25'><div style='font-size:24pt; font-weight:750; letter-spacing:1px; margin-left:36px; color:rgba(255,255,255,255);'>SPOTIFY</div><div style='margin-top:8px;'><div style='font-size:23pt; font-weight:700;'>Song Title</div><div style='margin-top:4px; font-size:18pt; font-weight:600; opacity:0.95;'>Artist Name</div></div></div>"
+
+
+
+tests\test_media_widget.py:220: AssertionError
+
+___________________________________________________________________________ test_media_widget_hides_again_when_media_disappears ___________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x1fe1c4c8400) at 0x000001FE4C482A80>, qtbot = <pytestqt.qtbot.QtBot object at 0x000001FE4C4CB790>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x000001FE4C4CB650>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_hides_again_when_media_disappears(qt_app, qtbot, thread_manager):
+
+        """Widget should hide after being visible when media goes away."""
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Song Title",
+
+            artist="Artist Name",
+
+            album="Album Name",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+        )
+
+        ctrl = _DummyController(info=info)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        w.set_thread_manager(thread_manager)
+
+        qtbot.addWidget(w)
+
+        w.resize(500, 100)
+
+    
+
+        # Start with media present
+
+        w.start()
+
+        qt_app.processEvents()
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        qt_app.processEvents()
+
+        assert w.isVisible()
+
+    
+
+        # Now simulate media disappearing
+
+        ctrl._info = None
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        qt_app.processEvents()
+
+>       assert not w.isVisible()
+
+E       assert not True
+
+E        +  where True = <built-in method isVisible of MediaWidget object at 0x000001FE1D39C780>()
+
+E        +    where <built-in method isVisible of MediaWidget object at 0x000001FE1D39C780> = <widgets.media_widget.MediaWidget(0x1fe1d04b880) at 0x000001FE1D39C780>.isVisible
+
+
+
+tests\test_media_widget.py:252: AssertionError
+
+__________________________________________________________________________ test_media_widget_decodes_artwork_and_adjusts_margins __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x1fe1c4c8400) at 0x000001FE4C482A80>, qtbot = <pytestqt.qtbot.QtBot object at 0x000001FE1BF7B950>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x000001FE1BF79DD0>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_decodes_artwork_and_adjusts_margins(qt_app, qtbot, thread_manager):
+
+        """Artwork bytes should be decoded into a pixmap and margins updated."""
+
+    
+
+        # Create a tiny in-memory PNG for artwork
+
+        img = QImage(8, 8, QImage.Format.Format_ARGB32)
+
+        img.fill(Qt.GlobalColor.red)
+
+        pm = QPixmap.fromImage(img)
+
+    
+
+        # Encode to PNG bytes using an in-memory buffer so loadFromData can decode it.
+
+        buf = QBuffer()
+
+        buf.open(QIODevice.OpenModeFlag.ReadWrite)
+
+        assert pm.save(buf, "PNG")
+
+        png_bytes = bytes(buf.data())
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Artwork Test",
+
+            artist="Artist",
+
+            album="Album",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+            artwork=png_bytes,
+
+        )
+
+    
+
+        ctrl = _DummyController(info=info)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        qtbot.addWidget(w)
+
+        w.resize(400, 120)
+
+    
+
+        w.start()
+
+        qt_app.processEvents()
+
+    
+
+        # Capture initial left margin, then refresh and ensure it increases
+
+        # when artwork is successfully decoded.
+
+        initial_margins = w.contentsMargins()
+
+    
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        qt_app.processEvents()
+
+    
+
+        updated_margins = w.contentsMargins()
+
+        assert updated_margins.left() >= initial_margins.left()
+
+        # When artwork is decoded, we expect the left margin to grow to
+
+        # accommodate the icon.
+
+>       assert updated_margins.left() > initial_margins.left()
+
+E       assert 29 > 29
+
+E        +  where 29 = <built-in method left of PySide6.QtCore.QMargins object at 0x000001FE4C413140>()
+
+E        +    where <built-in method left of PySide6.QtCore.QMargins object at 0x000001FE4C413140> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x000001FE4C413140>.left
+
+E        +  and   29 = <built-in method left of PySide6.QtCore.QMargins object at 0x000001FE4BC5D600>()
+
+E        +    where <built-in method left of PySide6.QtCore.QMargins object at 0x000001FE4BC5D600> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x000001FE4BC5D600>.left
+
+
+
+tests\test_media_widget.py:297: AssertionError
+
+-------------------------------------------------------------------------------------------- Captured log call --------------------------------------------------------------------------------------------
+
+ERROR    widgets.base_overlay_widget:base_overlay_widget.py:351 [THREAD_MANAGER] Missing ThreadManager for media during MediaWidget.start; timer-driven features disabled.
+
+__________________________________________________________________________ test_media_widget_starts_fade_in_when_artwork_appears __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x1fe1c4c8400) at 0x000001FE4C482A80>, qtbot = <pytestqt.qtbot.QtBot object at 0x000001FE1BF9D490>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x000001FE1BF9D350>
+
+
+
+    @pytest.mark.qt
+
+    def test_media_widget_starts_fade_in_when_artwork_appears(qt_app, qtbot, thread_manager):
+
+        """Artwork appearing should trigger a fade-in animation."""
+
+    
+
+        img = QImage(8, 8, QImage.Format.Format_ARGB32)
+
+        img.fill(Qt.GlobalColor.blue)
+
+        pm = QPixmap.fromImage(img)
+
+    
+
+        buf = QBuffer()
+
+        buf.open(QIODevice.OpenModeFlag.ReadWrite)
+
+        assert pm.save(buf, "PNG")
+
+        png_bytes = bytes(buf.data())
+
+    
+
+        info = mc.MediaTrackInfo(
+
+            title="Artwork Fade Test",
+
+            artist="Artist",
+
+            album="Album",
+
+            state=mc.MediaPlaybackState.PLAYING,
+
+            artwork=png_bytes,
+
+        )
+
+    
+
+        ctrl = _DummyController(info=None)
+
+        w = MediaWidget(parent=None, controller=ctrl)
+
+        w.set_thread_manager(thread_manager)
+
+        qtbot.addWidget(w)
+
+        w.resize(400, 120)
+
+    
+
+        # First refresh with no media keeps widget hidden and no artwork.
+
+        w.start()
+
+        qt_app.processEvents()
+
+        ctrl._info = None
+
+        w._refresh()  # type: ignore[attr-defined]
+
+        qt_app.processEvents()
+
+        assert not w.isVisible()
+
+    
+
+        # Now provide artwork-bearing media and refresh once; this should
+
+        # create an artwork pixmap and start a fade-in (opacity starts at 0).
+
+        ctrl._info = info
+
+        w._refresh()  # type: ignore[attr-defined]
+
+    
+
+>       assert getattr(w, "_artwork_opacity", 1.0) == 0.0
+
+E       AssertionError: assert 1.0 == 0.0
+
+E        +  where 1.0 = getattr(<widgets.media_widget.MediaWidget(0x1fe1cdcdf10) at 0x000001FE1BFA5140>, '_artwork_opacity', 1.0)
+
+
+
+tests\test_media_widget.py:340: AssertionError
+
+__________________________________________________________________________ test_display_widget_ctrl_click_routes_to_media_widget __________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x1fe1c4c8400) at 0x000001FE4C482A80>, settings_manager = <core.settings.settings_manager.SettingsManager(0x1fe1cd81520) at 0x000001FE4FA48A40>
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x000001FE1BFA5590>, monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001FE1BF69FD0>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x000001FE1BF69E50>
+
+
+
+    @pytest.mark.qt
+
+    def test_display_widget_ctrl_click_routes_to_media_widget(
+
+        qt_app, settings_manager, qtbot, monkeypatch, thread_manager
+
+    ):
+
+        """Ctrl-held click over media widget should trigger play/pause, not exit."""
+
+    
+
+        fake_info = mc.MediaTrackInfo(title="Track", state=mc.MediaPlaybackState.PLAYING)
+
+        fake_ctrl = _DummyController(info=fake_info)
+
+    
+
+        monkeypatch.setattr(media_mod, "create_media_controller", lambda: fake_ctrl)
+
+    
+
+        settings_manager.set(
+
+            "widgets",
+
+            {
+
+                "media": {
+
+                    "enabled": True,
+
+                    "position": "Bottom Left",
+
+                    "monitor": "ALL",
+
+                }
+
+            },
+
+        )
+
+    
+
+        w = DisplayWidget(
+
+            screen_index=0,
+
+            display_mode=DisplayMode.FILL,
+
+            settings_manager=settings_manager,
+
+            thread_manager=thread_manager,
+
+        )
+
+        qtbot.addWidget(w)
+
+        w.resize(800, 600)
+
+        w.show()
+
+        qt_app.processEvents()
+
+    
+
+>       assert isinstance(w.media_widget, MediaWidget)
+
+E       assert False
+
+E        +  where False = isinstance(None, MediaWidget)
+
+E        +    where None = <rendering.display_widget.DisplayWidget(0x1fe1cdcf6b0) at 0x000001FE1BF78100>.media_widget
+
+
+
+tests\test_media_widget.py:393: AssertionError
+
+_______________________________________________________________________ test_display_widget_hard_exit_click_routes_to_media_widget ________________________________________________________________________
+
+
+
+qt_app = <PySide6.QtWidgets.QApplication(0x1fe1c4c8400) at 0x000001FE4C482A80>, settings_manager = <core.settings.settings_manager.SettingsManager(0x1fe1cd81680) at 0x000001FE4FA73AC0>
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x000001FE4FD22850>, monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001FE4FD22510>
+
+thread_manager = <core.threading.manager.ThreadManager object at 0x000001FE4FD22410>
+
+
+
+    @pytest.mark.qt
+
+    def test_display_widget_hard_exit_click_routes_to_media_widget(
+
+        qt_app, settings_manager, qtbot, monkeypatch, thread_manager
+
+    ):
+
+        """Hard-exit mode should also allow media widget interaction without exit."""
+
+    
+
+        fake_info = mc.MediaTrackInfo(title="Track", state=mc.MediaPlaybackState.PLAYING)
+
+        fake_ctrl = _DummyController(info=fake_info)
+
+    
+
+        monkeypatch.setattr(mc, "create_media_controller", lambda: fake_ctrl)
+
+    
+
+        settings_manager.set(
+
+            "widgets",
+
+            {
+
+                "media": {
+
+                    "enabled": True,
+
+                    "position": "Bottom Left",
+
+                    "monitor": "ALL",
+
+                }
+
+            },
+
+        )
+
+        settings_manager.set("input.hard_exit", True)
+
+    
+
+        w = DisplayWidget(
+
+            screen_index=0,
+
+            display_mode=DisplayMode.FILL,
+
+            settings_manager=settings_manager,
+
+            thread_manager=thread_manager,
+
+        )
+
+        qtbot.addWidget(w)
+
+        w.resize(800, 600)
+
+        w.show()
+
+        qt_app.processEvents()
+
+    
+
+>       assert isinstance(w.media_widget, MediaWidget)
+
+E       assert False
+
+E        +  where False = isinstance(None, MediaWidget)
+
+E        +    where None = <rendering.display_widget.DisplayWidget(0x1fe1aceba00) at 0x000001FE4FCEDCC0>.media_widget
+
+
+
+tests\test_media_widget.py:453: AssertionError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_media_widget.py::test_media_widget_displays_metadata - assert 'Album Name' in "<div style='line-height:1.25'><div style='font-size:24pt; font-weight:750; letter-spacing:1px; margin-left:36px; color:rgba(255,255,255,255);'>SPOTIFY</div><div style='margin-top:8px;'><div style='font-size:23pt; font-weight:700;'>Song Title</div><div style='margin-top:4px; font-size:18pt; font-weight:600; opacity:0.95;'>Artist Name</div></div></div>"
+
+FAILED tests/test_media_widget.py::test_media_widget_hides_again_when_media_disappears - assert not True
+ +  where True = <built-in method isVisible of MediaWidget object at 0x000001FE1D39C780>()
+ +    where <built-in method isVisible of MediaWidget object at 0x000001FE1D39C780> = <widgets.media_widget.MediaWidget(0x1fe1d04b880) at 0x000001FE1D39C780>.isVisible
+
+
+FAILED tests/test_media_widget.py::test_media_widget_decodes_artwork_and_adjusts_margins - assert 29 > 29
+ +  where 29 = <built-in method left of PySide6.QtCore.QMargins object at 0x000001FE4C413140>()
+ +    where <built-in method left of PySide6.QtCore.QMargins object at 0x000001FE4C413140> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x000001FE4C413140>.left
+ +  and   29 = <built-in method left of PySide6.QtCore.QMargins object at 0x000001FE4BC5D600>()
+ +    where <built-in method left of PySide6.QtCore.QMargins object at 0x000001FE4BC5D600> = <PySide6.QtCore.QMargins(29, 12, 12, 12) at 0x000001FE4BC5D600>.left
+
+
+FAILED tests/test_media_widget.py::test_media_widget_starts_fade_in_when_artwork_appears - AssertionError: assert 1.0 == 0.0
+ +  where 1.0 = getattr(<widgets.media_widget.MediaWidget(0x1fe1cdcdf10) at 0x000001FE1BFA5140>, '_artwork_opacity', 1.0)
+
+
+FAILED tests/test_media_widget.py::test_display_widget_ctrl_click_routes_to_media_widget - assert False
+ +  where False = isinstance(None, MediaWidget)
+ +    where None = <rendering.display_widget.DisplayWidget(0x1fe1cdcf6b0) at 0x000001FE1BF78100>.media_widget
+
+
+FAILED tests/test_media_widget.py::test_display_widget_hard_exit_click_routes_to_media_widget - assert False
+ +  where False = isinstance(None, MediaWidget)
+ +    where None = <rendering.display_widget.DisplayWidget(0x1fe1aceba00) at 0x000001FE4FCEDCC0>.media_widget
+
+
+======================================================================================= 6 failed, 7 passed in 1.90s =======================================================================================
+

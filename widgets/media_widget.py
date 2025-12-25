@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from PySide6.QtWidgets import QWidget
 from PySide6.QtCore import QTimer, Qt, Signal, QVariantAnimation, QEasingCurve, QRect
@@ -31,6 +31,9 @@ from core.threading.manager import ThreadManager
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
 from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile, draw_rounded_rect_with_shadow
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
+
+if TYPE_CHECKING:
+    from rendering.widget_manager import WidgetManager
 
 logger = get_logger(__name__)
 
@@ -78,6 +81,7 @@ class MediaWidget(BaseOverlayWidget):
         except Exception:
             pass
 
+        self._widget_manager: Optional["WidgetManager"] = None
         self._update_timer: Optional[QTimer] = None
         self._update_timer_handle: Optional[OverlayTimerHandle] = None
         self._refresh_in_flight = False
@@ -116,11 +120,11 @@ class MediaWidget(BaseOverlayWidget):
 
         # Cached header logo metrics so paintEvent can align the Spotify glyph
         # with the rich-text SPOTIFY header.
-        self._header_logo_size: int = 0
-        self._header_logo_margin: int = 0
-        self._header_font_pt: int = self._font_size
+        self._context_menu_active: bool = False
+        self._context_menu_prewarmed: bool = False
+        self._pending_effect_invalidation: bool = False
 
-        # Cache of last track for diagnostics / interaction
+        # Central ResourceManager wiring
         self._last_info: Optional[MediaTrackInfo] = None
 
         # Fixed widget height once we have seen the first track so that
@@ -135,6 +139,9 @@ class MediaWidget(BaseOverlayWidget):
 
         # One-shot flag so we only log the first paintEvent geometry.
         self._paint_debug_logged = False
+        self._telemetry_logged_missing_tm = False
+        self._telemetry_last_visibility: Optional[bool] = None
+        self._telemetry_logged_fade_request = False
 
         self._setup_ui()
 
@@ -172,23 +179,23 @@ class MediaWidget(BaseOverlayWidget):
     
     def _update_content(self) -> None:
         """Required by BaseOverlayWidget - refresh media display."""
-        self._refresh_media()
+        self._refresh()
 
     def start(self) -> None:
         """Begin polling media controller and showing widget."""
 
         if self._enabled:
-            logger.warning("[FALLBACK] Media widget already running")
+            logger.warning("Media widget already running")
+            return
+        if not self._ensure_thread_manager("MediaWidget.start"):
             return
 
         self._enabled = True
-        # Reset state flags to ensure fresh start
-        self._refresh_in_flight = False
-        self._artwork_pixmap = None  # Force artwork refresh
-        
-        # Start the polling timer and trigger an immediate refresh. When a
-        # ThreadManager is available we go straight to the async path so
-        # WinRT/GSMTC calls never block the UI thread on startup.
+        try:
+            self.hide()
+        except Exception:
+            pass
+        self._refresh()
         self._ensure_timer()
         if self._thread_manager is not None:
             self._refresh_async()
@@ -232,6 +239,11 @@ class MediaWidget(BaseOverlayWidget):
 
     def set_thread_manager(self, thread_manager) -> None:
         self._thread_manager = thread_manager
+        if is_verbose_logging():
+            logger.debug("[MEDIA_WIDGET] ThreadManager injected: %s", type(thread_manager).__name__ if thread_manager else None)
+
+    def set_widget_manager(self, widget_manager: "WidgetManager") -> None:
+        self._widget_manager = widget_manager
     
     def set_shadow_config(self, config) -> None:
         """Store shared shadow configuration for post-fade drop shadows."""
@@ -243,6 +255,8 @@ class MediaWidget(BaseOverlayWidget):
     # ------------------------------------------------------------------
     def _ensure_timer(self) -> None:
         if self._update_timer_handle is not None:
+            return
+        if not self._ensure_thread_manager("MediaWidget._ensure_timer"):
             return
         handle = create_overlay_timer(self, 1000, self._refresh, description="MediaWidget poll")
         self._update_timer_handle = handle
@@ -592,7 +606,10 @@ class MediaWidget(BaseOverlayWidget):
         # get_current_track() call entirely. The WinRT/GSMTC API uses
         # asyncio.run_until_complete() which can block the UI thread for up to
         # 2 seconds. Better to show stale/no data than to freeze the UI.
-        if is_verbose_logging():
+        if not self._telemetry_logged_missing_tm:
+            logger.warning("[MEDIA_WIDGET] ThreadManager unavailable; skipping blocking refresh (widget hidden)")
+            self._telemetry_logged_missing_tm = True
+        elif is_verbose_logging():
             logger.debug("[MEDIA_WIDGET] No ThreadManager available, skipping blocking refresh")
         # Don't call get_current_track() synchronously - it blocks!
 
@@ -611,6 +628,7 @@ class MediaWidget(BaseOverlayWidget):
             try:
                 return self._controller.get_current_track()
             except Exception:
+                logger.debug("[MEDIA] get_current_track failed", exc_info=True)
                 if is_verbose_logging():
                     logger.debug("[MEDIA] get_current_track failed", exc_info=True)
                 return None
@@ -683,8 +701,9 @@ class MediaWidget(BaseOverlayWidget):
 
         if info is None:
             # No active media session (e.g. Spotify not playing) – hide widget
-            if is_verbose_logging():
-                logger.debug("[MEDIA_WIDGET] _update_display called with None; hiding widget")
+            last_vis = self._telemetry_last_visibility
+            if last_vis or last_vis is None:
+                logger.info("[MEDIA_WIDGET] No active media session; hiding media card")
             self._artwork_pixmap = None
             try:
                 self.hide()
@@ -692,6 +711,7 @@ class MediaWidget(BaseOverlayWidget):
                 pass
             # Notify parent to hide Spotify-related widgets
             self._notify_spotify_widgets_visibility()
+            self._telemetry_last_visibility = False
             return
 
         # Metadata: title and artist on separate lines; album is intentionally
@@ -805,6 +825,27 @@ class MediaWidget(BaseOverlayWidget):
                 self.hide()
             except Exception:
                 pass
+            if not self._telemetry_logged_fade_request:
+                logger.info("[MEDIA_WIDGET] First track snapshot captured; waiting for coordinated fade-in")
+            # Even though we keep the widget hidden for the very first
+            # snapshot to establish layout, we still need to seed the fade
+            # machinery so a second update with the same track can actually
+            # show the card. If no coordinator exists, schedule a one-shot
+            # fade immediately so we do not remain hidden forever.
+            parent = self.parent()
+            def _starter() -> None:
+                if not Shiboken.isValid(self):
+                    return
+                self._start_widget_fade_in(1500)
+                self._notify_spotify_widgets_visibility()
+                self._telemetry_last_visibility = True
+            if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
+                try:
+                    parent.request_overlay_fade_sync("media", _starter)
+                except Exception:
+                    _starter()
+            else:
+                _starter()
             return
 
         try:
@@ -885,9 +926,13 @@ class MediaWidget(BaseOverlayWidget):
                 self._start_widget_fade_in(1500)
                 # Notify Spotify widgets to show now that media is visible
                 self._notify_spotify_widgets_visibility()
+                self._telemetry_last_visibility = True
 
             if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
                 try:
+                    if is_verbose_logging() or not self._telemetry_logged_fade_request:
+                        logger.info("[MEDIA_WIDGET] Requesting coordinated fade sync")
+                        self._telemetry_logged_fade_request = True
                     parent.request_overlay_fade_sync("media", _starter)
                 except Exception:
                     _starter()
@@ -900,6 +945,7 @@ class MediaWidget(BaseOverlayWidget):
                 pass
             # Notify Spotify widgets in case they need to sync visibility
             self._notify_spotify_widgets_visibility()
+            self._telemetry_last_visibility = True
 
     # ------------------------------------------------------------------
     # Painting

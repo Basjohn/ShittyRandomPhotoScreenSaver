@@ -26,7 +26,7 @@ from datetime import datetime, timedelta
 from enum import Enum, auto
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple
-from PySide6.QtCore import QObject, Signal, QTimer, QSize
+from PySide6.QtCore import QObject, Signal, QTimer, QSize, QMetaObject, Qt, QThread
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QPixmap, QImage
 
@@ -136,7 +136,6 @@ class ScreensaverEngine(QObject):
         
         self._display_initialized: bool = False  # Still needed for display-specific init
         self._rotation_timer: Optional[QTimer] = None
-        self._rotation_timer_resource_id: Optional[str] = None
         self._current_image: Optional[ImageMetadata] = None
         self._loading_in_progress: bool = False
         self._loading_lock = threading.Lock()  # FIX: Protect loading flag from race conditions
@@ -1136,31 +1135,22 @@ class ScreensaverEngine(QObject):
         interval_ms = interval_seconds * 1000
 
         if self._rotation_timer:
-            try:
-                self._rotation_timer.stop()
-            except Exception:
-                pass
-            if self._rotation_timer_resource_id and self.resource_manager:
-                try:
-                    self.resource_manager.unregister(self._rotation_timer_resource_id, force=True)
-                except Exception:
-                    pass
-                self._rotation_timer_resource_id = None
+            self._stop_qtimer_safe(self._rotation_timer, description="Engine rotation timer (reconfigure)")
+            self._rotation_timer = None
 
-        self._rotation_timer = QTimer(self)
-        self._rotation_timer.setInterval(interval_ms)
-        self._rotation_timer.timeout.connect(self._on_rotation_timer)
-        # Register with ResourceManager
+        if not self.thread_manager:
+            logger.error("Cannot configure rotation timer without ThreadManager")
+            return
+
         try:
-            if self.resource_manager:
-                self._rotation_timer_resource_id = self.resource_manager.register_qt(
-                    self._rotation_timer,
-                    description="Engine rotation timer",
-                )
-        except Exception:
-            pass
-        
-        logger.info(f"Rotation timer configured: {interval_seconds}s")
+            self._rotation_timer = self.thread_manager.schedule_recurring(
+                interval_ms,
+                self._on_rotation_timer,
+            )
+            logger.info(f"Rotation timer configured: {interval_seconds}s")
+        except Exception as e:
+            logger.exception("Failed to configure rotation timer: %s", e)
+            self._rotation_timer = None
     
     def _subscribe_to_events(self) -> None:
         """Subscribe to relevant events."""
@@ -1264,39 +1254,12 @@ class ScreensaverEngine(QObject):
             # Stop background RSS refresh timer if present so no further
             # callbacks run after teardown begins.
             if self._rss_refresh_timer is not None:
-                try:
-                    if self._rss_refresh_timer.isActive():
-                        self._rss_refresh_timer.stop()
-                    logger.debug("RSS refresh timer stopped")
-                except RuntimeError as e:
-                    logger.debug("RSS refresh timer stop during cleanup raised: %s", e, exc_info=True)
-                except Exception as e:
-                    logger.debug("RSS refresh timer stop failed: %s", e, exc_info=True)
+                self._stop_qtimer_safe(self._rss_refresh_timer, description="Background RSS refresh timer")
                 self._rss_refresh_timer = None
             
             # Stop rotation timer (do not delete here to avoid double-delete on repeated stops)
             if self._rotation_timer:
-                try:
-                    if self._rotation_timer.isActive():
-                        self._rotation_timer.stop()
-                    logger.debug("Rotation timer stopped")
-                except RuntimeError as e:
-                    logger.debug(f"Timer stop during cleanup raised: {e}")
-                try:
-                    self._rotation_timer.deleteLater()
-                except Exception as e:
-                    logger.debug("Rotation timer deleteLater failed during stop: %s", e, exc_info=True)
-                if self._rotation_timer_resource_id and self.resource_manager:
-                    try:
-                        self.resource_manager.unregister(self._rotation_timer_resource_id, force=True)
-                    except Exception as e:
-                        logger.debug(
-                            "Failed to unregister rotation timer resource %s during stop: %s",
-                            self._rotation_timer_resource_id,
-                            e,
-                            exc_info=True,
-                        )
-                    self._rotation_timer_resource_id = None
+                self._stop_qtimer_safe(self._rotation_timer, description="Engine rotation timer")
                 self._rotation_timer = None
             
             # Clear and hide/cleanup displays
@@ -1393,6 +1356,33 @@ class ScreensaverEngine(QObject):
                     QApplication.quit()
                 except Exception as quit_error:
                     logger.error(f"Failed to quit application: {quit_error}")
+
+    def _stop_qtimer_safe(self, timer: Optional[QTimer], *, description: str) -> None:
+        """Stop/delete a QTimer on its owning thread."""
+        if timer is None:
+            return
+        try:
+            if QThread.currentThread() is timer.thread():
+                if timer.isActive():
+                    timer.stop()
+                try:
+                    timer.deleteLater()
+                except Exception:
+                    pass
+            else:
+                QMetaObject.invokeMethod(
+                    timer,
+                    "stop",
+                    Qt.ConnectionType.QueuedConnection,
+                )
+                QMetaObject.invokeMethod(
+                    timer,
+                    "deleteLater",
+                    Qt.ConnectionType.QueuedConnection,
+                )
+            logger.debug("%s stopped", description)
+        except Exception as exc:
+            logger.debug("%s stop failed: %s", description, exc, exc_info=True)
     
     def cleanup(self) -> None:
         """Clean up all resources."""

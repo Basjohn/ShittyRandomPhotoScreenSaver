@@ -179,6 +179,8 @@ class WeatherWidget(BaseOverlayWidget):
         if self._enabled:
             logger.warning("[FALLBACK] Weather widget already running")
             return
+        if not self._ensure_thread_manager("WeatherWidget.start"):
+            return
         
         if not self._location:
             error_msg = "No location configured for weather widget"

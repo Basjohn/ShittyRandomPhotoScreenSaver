@@ -114,6 +114,7 @@ class BaseOverlayWidget(QLabel):
         
         # Thread manager
         self._thread_manager: Optional["ThreadManager"] = None
+        self._inherit_thread_manager_from_parent(parent)
         
         # State
         self._enabled = False
@@ -338,6 +339,32 @@ class BaseOverlayWidget(QLabel):
     def set_thread_manager(self, manager: "ThreadManager") -> None:
         """Set thread manager for background operations."""
         self._thread_manager = manager
+    
+    def _ensure_thread_manager(self, context: str) -> bool:
+        """Verify a ThreadManager is present, logging if missing."""
+        if self._thread_manager is not None:
+            return True
+        self._inherit_thread_manager_from_parent(self.parent())
+        if self._thread_manager is not None:
+            return True
+        overlay_name = getattr(self, "_overlay_name", self.objectName() or self.__class__.__name__)
+        logger.error(
+            "[THREAD_MANAGER] Missing ThreadManager for %s during %s; timer-driven features disabled.",
+            overlay_name,
+            context,
+        )
+        return False
+
+    def _inherit_thread_manager_from_parent(self, parent: Optional[QWidget]) -> None:
+        """Best-effort inheritance of ThreadManager from the parent widget."""
+        if self._thread_manager is not None or parent is None:
+            return
+        try:
+            inherited = getattr(parent, "_thread_manager", None)
+        except Exception:
+            inherited = None
+        if inherited is not None:
+            self._thread_manager = inherited
     
     def get_thread_manager(self) -> Optional["ThreadManager"]:
         """Get thread manager."""

@@ -21,6 +21,7 @@ from core.logging.logger import get_logger
 
 
 logger = get_logger(__name__)
+_MISSING_TM_WARNING_EMITTED = False
 
 
 class OverlayTimerHandle:
@@ -122,41 +123,28 @@ def create_overlay_timer(
 
     tm = _get_thread_manager_for(widget)
 
-    # Preferred path: ThreadManager.schedule_recurring
-    if tm is not None and hasattr(tm, "schedule_recurring"):
-        try:
-            timer = tm.schedule_recurring(interval_ms, callback)
-            logger.debug(
-                "[OVERLAY_TIMER] Created ThreadManager timer %r (%s ms) for %r",
-                timer,
-                interval_ms,
-                widget,
+    if tm is None or not hasattr(tm, "schedule_recurring"):
+        widget_name = getattr(widget, "objectName", lambda: None)()
+        global _MISSING_TM_WARNING_EMITTED
+        if not _MISSING_TM_WARNING_EMITTED:
+            logger.error(
+                "[OVERLAY_TIMER] ThreadManager unavailable for widget %r (desc=%s). "
+                "All overlay timers must be scheduled via ThreadManager.",
+                widget_name or widget,
+                description,
             )
-            return OverlayTimerHandle(timer)
-        except Exception:
-            logger.debug(
-                "[OVERLAY_TIMER] schedule_recurring failed; falling back to local QTimer",
-                exc_info=True,
-            )
-
-    # Fallback: local QTimer parented to the widget
-    try:
-        timer = QTimer(widget)
-        timer.setSingleShot(False)
-        timer.setInterval(int(interval_ms))
-
-        def _invoke() -> None:
-            try:
-                callback()
-            except Exception:
-                logger.exception("[OVERLAY_TIMER] recurring callback raised")
-
-        timer.timeout.connect(_invoke)  # type: ignore[arg-type]
-        timer.start()
-        logger.debug(
-            "[OVERLAY_TIMER] Created local QTimer %r (%s ms) for %r", timer, interval_ms, widget
+            _MISSING_TM_WARNING_EMITTED = True
+        raise RuntimeError(
+            f"[OVERLAY_TIMER] ThreadManager unavailable for widget {widget_name or widget}. "
+            "All overlay timers must be scheduled via ThreadManager."
         )
-        return OverlayTimerHandle(timer)
-    except Exception:
-        logger.exception("[OVERLAY_TIMER] Failed to create timer for %r", widget)
-        return OverlayTimerHandle(None)
+
+    timer = tm.schedule_recurring(interval_ms, callback)
+    logger.debug(
+        "[OVERLAY_TIMER] Created ThreadManager timer %r (%s ms) for %r (%s)",
+        timer,
+        interval_ms,
+        widget,
+        description,
+    )
+    return OverlayTimerHandle(timer)
