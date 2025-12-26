@@ -12,7 +12,20 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     GL = None
 from PySide6.QtWidgets import QWidget, QApplication
-from PySide6.QtCore import Qt, Signal, QSize, QTimer, QEvent, QPoint
+from PySide6.QtCore import (
+    QEasingCurve,
+    QObject,
+    QPoint,
+    QRect,
+    QRegularExpression,
+    QThreadPool,
+    QTimer,
+    Qt,
+    Signal,
+    Slot,
+    QSize,
+    QEvent,
+)
 from PySide6.QtGui import (
     QPixmap,
     QPainter,
@@ -90,6 +103,9 @@ def _describe_pixmap(pm: Optional[QPixmap]) -> str:
         )
     except Exception:
         return "Pixmap(?)"
+
+
+MC_USE_SPLASH_FLAGS = True
 
 
 class DisplayWidget(QWidget):
@@ -299,7 +315,10 @@ class DisplayWidget(QWidget):
         try:
             exe0 = str(getattr(sys, "argv", [""])[0]).lower()
             if "srpss_mc" in exe0 or "srpss mc" in exe0 or "main_mc.py" in exe0:
-                flags |= Qt.WindowType.Tool
+                if MC_USE_SPLASH_FLAGS:
+                    flags |= Qt.WindowType.SplashScreen
+                else:
+                    flags |= Qt.WindowType.Tool
         except Exception:
             pass
 

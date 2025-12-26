@@ -13,15 +13,8 @@ Usage:
 from __future__ import annotations
 
 import sys
-import ctypes
-import winreg
-
-from main import main as core_main
+from main import main as core_main, parse_screensaver_args
 from core.settings.settings_manager import SettingsManager
-
-_ES_CONTINUOUS = 0x80000000
-_ES_SYSTEM_REQUIRED = 0x00000001
-_ES_DISPLAY_REQUIRED = 0x00000002
 
 
 def _inject_run_mode_arg() -> None:
@@ -39,30 +32,9 @@ def _inject_run_mode_arg() -> None:
         sys.argv.append("/s")
 
 
-def _is_srpss_configured_screensaver() -> bool:
-    try:
-        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Control Panel\\Desktop")
-        value, _ = winreg.QueryValueEx(key, "SCRNSAVE.EXE")
-        winreg.CloseKey(key)
-        if isinstance(value, str) and "srpss.scr" in value.lower():
-            return True
-    except Exception:
-        return False
-    return False
-
-
-def _set_screensaver_block(enabled: bool) -> None:
-    try:
-        flags = _ES_CONTINUOUS
-        if enabled:
-            flags |= _ES_DISPLAY_REQUIRED | _ES_SYSTEM_REQUIRED
-        ctypes.windll.kernel32.SetThreadExecutionState(flags)
-    except Exception:
-        pass
-
-
 def main() -> int:
     _inject_run_mode_arg()
+    parse_screensaver_args()
 
     try:
         mgr = SettingsManager()
@@ -70,16 +42,8 @@ def main() -> int:
     except Exception:
         pass
 
-    prevent_ss = _is_srpss_configured_screensaver()
     result = 0
-    try:
-        if prevent_ss:
-            _set_screensaver_block(True)
-        result = core_main()
-    finally:
-        if prevent_ss:
-            _set_screensaver_block(False)
-
+    result = core_main()
     return result
 
 

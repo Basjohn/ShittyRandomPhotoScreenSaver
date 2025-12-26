@@ -23204,3 +23204,8 @@ RuntimeError: SpotifyBarsGLOverlay fragment shader compile failed
 2025-12-25 22:39:10 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.782 Bars: [0.19 0.23 0.32 0.45 0.61 0.78 1.00 1.00 1.00 0.78 0.61 0.45 0.32 0.23 0.19]
 2025-12-25 22:39:11 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.120 Bars: [0.05 0.07 0.09 0.13 0.18 0.22 0.28 0.35 0.28 0.22 0.18 0.13 0.09 0.07 0.05]
 2025-12-25 22:39:12 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.475 Bars: [0.11 0.18 0.27 0.39 0.48 0.54 0.62 0.72 0.62 0.54 0.48 0.39 0.27 0.18 0.11]
+2025-12-26 00:32:10 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-26 00:32:13 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-26 00:32:13 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-26 00:32:14 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-26 00:32:14 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader

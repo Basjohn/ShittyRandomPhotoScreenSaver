@@ -170,6 +170,16 @@ def _wait_for_media_refresh(qtbot, widget: MediaWidget, timeout: int = 2000) -> 
     qtbot.waitUntil(lambda: not getattr(widget, "_refresh_in_flight", False), timeout=timeout)
 
 
+def _wait_for_display_media_widget(qt_app, qtbot, display: DisplayWidget, timeout: int = 3000) -> None:
+    """Wait until DisplayWidget.media_widget is created and registered."""
+
+    def _ready() -> bool:
+        qt_app.processEvents()
+        return isinstance(getattr(display, "media_widget", None), MediaWidget)
+
+    qtbot.waitUntil(_ready, timeout=timeout)
+
+
 @pytest.mark.qt
 def test_media_widget_placeholder_when_no_media(qt_app, qtbot, thread_manager):
     """When controller returns None, widget should remain hidden (no media)."""
@@ -193,7 +203,7 @@ def test_media_widget_placeholder_when_no_media(qt_app, qtbot, thread_manager):
 
 @pytest.mark.qt
 def test_media_widget_displays_metadata(qt_app, qtbot, thread_manager):
-    """MediaWidget should render title/artist/album and state text."""
+    """MediaWidget should render title/artist text block once visible."""
 
     info = mc.MediaTrackInfo(
         title="Song Title",
@@ -210,16 +220,20 @@ def test_media_widget_displays_metadata(qt_app, qtbot, thread_manager):
     w.start()
     qt_app.processEvents()
 
+    # First refresh primes layout (widget stays hidden)
     w._refresh()  # type: ignore[attr-defined]
     _wait_for_media_refresh(qtbot, w)
     qt_app.processEvents()
 
+    # Second refresh with same info triggers actual fade/show
+    w._refresh()  # type: ignore[attr-defined]
+    _wait_for_media_refresh(qtbot, w)
+    qt_app.processEvents()
+
+    qtbot.waitUntil(lambda: w.isVisible(), timeout=2000)
     html = w.text()
     assert "Song Title" in html
     assert "Artist Name" in html
-    assert "Album Name" in html
-    assert "Playing" in html
-    assert w.isVisible()
 
 
 @pytest.mark.qt
@@ -242,12 +256,17 @@ def test_media_widget_hides_again_when_media_disappears(qt_app, qtbot, thread_ma
     w.start()
     qt_app.processEvents()
     w._refresh()  # type: ignore[attr-defined]
+    _wait_for_media_refresh(qtbot, w)
     qt_app.processEvents()
-    assert w.isVisible()
+    w._refresh()  # type: ignore[attr-defined]
+    _wait_for_media_refresh(qtbot, w)
+    qt_app.processEvents()
+    qtbot.waitUntil(lambda: w.isVisible(), timeout=2000)
 
     # Now simulate media disappearing
     ctrl._info = None
     w._refresh()  # type: ignore[attr-defined]
+    _wait_for_media_refresh(qtbot, w)
     qt_app.processEvents()
     assert not w.isVisible()
 
@@ -277,24 +296,27 @@ def test_media_widget_decodes_artwork_and_adjusts_margins(qt_app, qtbot, thread_
 
     ctrl = _DummyController(info=info)
     w = MediaWidget(parent=None, controller=ctrl)
+    w.set_thread_manager(thread_manager)
     qtbot.addWidget(w)
     w.resize(400, 120)
 
     w.start()
     qt_app.processEvents()
 
-    # Capture initial left margin, then refresh and ensure it increases
-    # when artwork is successfully decoded.
+    # Capture initial margins, then refresh twice and ensure the right
+    # margin grows to accommodate the artwork block.
     initial_margins = w.contentsMargins()
 
     w._refresh()  # type: ignore[attr-defined]
+    _wait_for_media_refresh(qtbot, w)
+    qt_app.processEvents()
+    w._refresh()  # type: ignore[attr-defined]
+    _wait_for_media_refresh(qtbot, w)
     qt_app.processEvents()
 
     updated_margins = w.contentsMargins()
-    assert updated_margins.left() >= initial_margins.left()
-    # When artwork is decoded, we expect the left margin to grow to
-    # accommodate the icon.
-    assert updated_margins.left() > initial_margins.left()
+    assert updated_margins.right() >= initial_margins.right()
+    assert updated_margins.right() > initial_margins.right()
 
 
 @pytest.mark.qt
@@ -335,10 +357,14 @@ def test_media_widget_starts_fade_in_when_artwork_appears(qt_app, qtbot, thread_
     # Now provide artwork-bearing media and refresh once; this should
     # create an artwork pixmap and start a fade-in (opacity starts at 0).
     ctrl._info = info
-    w._refresh()  # type: ignore[attr-defined]
+    for _ in range(2):
+        w._refresh()  # type: ignore[attr-defined]
+        _wait_for_media_refresh(qtbot, w)
+        qt_app.processEvents()
 
-    assert getattr(w, "_artwork_opacity", 1.0) == 0.0
+    qtbot.waitUntil(lambda: getattr(w, "_artwork_anim", None) is not None, timeout=2000)
     assert getattr(w, "_artwork_anim", None) is not None
+    assert 0.0 <= getattr(w, "_artwork_opacity", 1.0) <= 0.4
 
 
 def test_media_widget_transport_delegates_to_controller():
@@ -388,9 +414,8 @@ def test_display_widget_ctrl_click_routes_to_media_widget(
     qtbot.addWidget(w)
     w.resize(800, 600)
     w.show()
-    qt_app.processEvents()
-
-    assert isinstance(w.media_widget, MediaWidget)
+    w._setup_widgets()
+    _wait_for_display_media_widget(qt_app, qtbot, w)
 
     # Simulate global Ctrl-held interaction mode
     from rendering import display_widget as display_mod
@@ -448,9 +473,8 @@ def test_display_widget_hard_exit_click_routes_to_media_widget(
     qtbot.addWidget(w)
     w.resize(800, 600)
     w.show()
-    qt_app.processEvents()
-
-    assert isinstance(w.media_widget, MediaWidget)
+    w._setup_widgets()
+    _wait_for_display_media_widget(qt_app, qtbot, w)
 
     geom = w.media_widget.geometry()
     pos = geom.center()

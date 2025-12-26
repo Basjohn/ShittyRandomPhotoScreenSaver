@@ -44,6 +44,8 @@ class SettingsManager(QObject):
                 if (
                     "srpss mc" in exe_name
                     or "srpss_mc" in exe_name
+                    or "srpss media center" in exe_name
+                    or "srpss_media_center" in exe_name
                     or "main_mc.py" in exe_name
                 ):
                     app_name = "Screensaver_MC"
