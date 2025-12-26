@@ -41,11 +41,12 @@ Single source of truth for architecture and key decisions.
   - Entry: `main.py`, deployed as `SRPSS.scr` / `SRPSS.exe`.
   - Uses QSettings organization `ShittyRandomPhotoScreenSaver` and application `Screensaver`.
 - Manual Controller (MC) build:
-  - Entry: `main_mc.py`, deployed as `SRPSS_MC.exe` (Nuitka) / `SRPSS MC.exe` (PyInstaller).
-  - Uses the same organization but a separate QSettings application name `Screensaver_MC` so MC configuration is isolated from the normal screensaver profile.
+  - Entry: `main_mc.py`, deployed as `SRPSS_Media_Center.exe` (Nuitka onedir) or legacy `SRPSS MC.exe` (PyInstaller onefile).
+  - Uses the same organization but a separate QSettings application name `Screensaver_MC` so MC configuration is isolated from the normal screensaver profile. Detection now includes the renamed executable stems (`srpss_media_center.exe`) so MC settings stay isolated regardless of the build artifact name.
   - At startup, forces `input.hard_exit=True` in the MC profile so mouse movement/clicks do not exit unless the user explicitly relaxes this in MC settings.
-  - While Windows is configured to use SRPSS.scr as the active screensaver, calls `SetThreadExecutionState(ES_CONTINUOUS | ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED)` for the lifetime of the MC session so the system screensaver and display sleep are suppressed only while MC is running.
-  - The fullscreen DisplayWidget window is also given the Qt.Tool flag in MC builds, keeping it out of the taskbar and the standard Alt+Tab list while remaining top-most fullscreen on all configured displays.
+  - The historical `SetThreadExecutionState()` call that suppressed the OS screensaver/display sleep during MC runs has been removed to reduce Defender heuristics; MC simply runs like any other fullscreen app and relies on the user to leave Windows power management as-is.
+  - MC builds keep their fullscreen DisplayWidget windows out of the taskbar/Alt+Tab list by applying a splash-style window flag (`Qt.SplashScreen`) instead of the previous `Qt.Tool`. This produces the same visual behaviour (frameless, top-most, hidden from switcher) while avoiding the specific `WS_EX_TOOLWINDOW` classification that Defender kept flagging. The flag is guarded by `rendering.display_widget.MC_USE_SPLASH_FLAGS` so we can revert quickly if future heuristics dislike the splash identity.
+  - MC packaging defaults to a Nuitka onedir bundle so Defender sees a single EXE plus DLL folder; when AV heuristics regress we can still fall back to the PyInstaller script (`scripts/build_mc.ps1`), but the Nuitka bundle is the primary path referenced by `scripts/SRPSS_MediaCenter_Installer.iss`.
 
 ## Image Pipeline
 1) Queue selects next `ImageMetadata`.

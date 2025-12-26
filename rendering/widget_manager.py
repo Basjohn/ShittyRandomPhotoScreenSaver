@@ -1670,8 +1670,11 @@ class WidgetManager:
             
             self.register_widget("spotify_volume", vol)
             vol.raise_()
-            vol.start()
-            logger.info("✅ Spotify volume widget started")
+            # Participate in the coordinated overlay fade by queueing the
+            # volume starter as a Spotify secondary fade. This keeps the
+            # slider behind the primary overlay wave instead of popping early.
+            self.register_spotify_secondary_fade(vol.start)
+            logger.info("✅ Spotify volume widget queued for fade sync")
             return vol
         except Exception as e:
             logger.error("Failed to create Spotify volume widget: %s", e, exc_info=True)

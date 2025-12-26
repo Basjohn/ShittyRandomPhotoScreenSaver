@@ -5789,3 +5789,5 @@
 2025-12-25 22:39:08 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=15169.3ms, frames=828, avg_fps=54.6, dt_min=0.99ms, dt_max=100.14ms, active_count=0, fps_target=60
 2025-12-25 22:39:09 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=448.3ms, frames=19, avg_fps=42.4, dt_min=11.04ms, dt_max=47.82ms, active_count=0, fps_target=60
 2025-12-25 22:39:10 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=384.4ms, frames=14, avg_fps=36.4, dt_min=10.11ms, dt_max=49.15ms, active_count=0, fps_target=60
+2025-12-26 17:14:21 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=609.5ms, frames=38, avg_fps=62.3, dt_min=7.09ms, dt_max=21.62ms, active_count=0, fps_target=60
+2025-12-26 17:14:32 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=614.8ms, frames=34, avg_fps=55.3, dt_min=14.10ms, dt_max=48.41ms, active_count=0, fps_target=60

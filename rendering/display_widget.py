@@ -25,6 +25,7 @@ from PySide6.QtCore import (
     Slot,
     QSize,
     QEvent,
+    QUrl,
 )
 from PySide6.QtGui import (
     QPixmap,
@@ -105,7 +106,9 @@ def _describe_pixmap(pm: Optional[QPixmap]) -> str:
         return "Pixmap(?)"
 
 
-MC_USE_SPLASH_FLAGS = True
+# Toggle for MC window style experiments. Leave False to use the historical
+# Qt.Tool behavior; switch to True when testing the splash-style flag.
+MC_USE_SPLASH_FLAGS = False
 
 
 class DisplayWidget(QWidget):
@@ -308,17 +311,27 @@ class DisplayWidget(QWidget):
         # Setup widget: frameless, always-on-top display window. For the MC
         # build (SRPSS_MC), also mark the window as a tool window so it does
         # not appear in the taskbar or standard Alt+Tab.
+        self._mc_window_flag_mode: Optional[str] = None
+
         flags = (
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
         )
         try:
             exe0 = str(getattr(sys, "argv", [""])[0]).lower()
-            if "srpss_mc" in exe0 or "srpss mc" in exe0 or "main_mc.py" in exe0:
+            if (
+                "srpss_mc" in exe0
+                or "srpss mc" in exe0
+                or "srpss_media_center" in exe0
+                or "srpss media center" in exe0
+                or "main_mc.py" in exe0
+            ):
                 if MC_USE_SPLASH_FLAGS:
                     flags |= Qt.WindowType.SplashScreen
+                    self._mc_window_flag_mode = "splash"
                 else:
                     flags |= Qt.WindowType.Tool
+                    self._mc_window_flag_mode = "tool"
         except Exception:
             pass
 

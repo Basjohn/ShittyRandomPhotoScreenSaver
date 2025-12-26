@@ -1,7 +1,7 @@
 # Test Suite Documentation
 
 **Purpose**: Canonical reference for all test modules, test cases, and testing procedures.  
-**Last Updated**: Dec 11, 2025 - Architecture audit fixes and test robustness improvements  
+**Last Updated**: Dec 26, 2025 - Added MC window flag regression guard  
 **Test Count**: 360+ tests across 26+ modules  
 **Pass Rate**: ~98% (known failures in timezone/settings dialog tests)  
 **Recent**: 
@@ -264,6 +264,28 @@ Get-Content test_output.log -Tail 50
 | SettingsManager | 6 | ✅ Pass | Get/set, defaults, persistence, change handlers |
 | ThreadManager | 5 | ✅ Pass | Init, IO tasks, compute tasks, stats, shutdown |
 | **Total** | **23** | **✅ 100%** | **Core framework complete** |
+
+---
+
+### 6. `tests/test_mc_window_flags.py` - MC Build Heuristic Guard
+
+**Module Purpose**: Prevent regressions to the Manual Controller (MC) build’s window styling/heuristics.  
+**Test Count**: 2 tests  
+**Status**: ✅ All passing  
+**Priority**: 🔴 High — Defender false-positive mitigation relies on these invariants.
+
+#### Tests:
+
+**`test_mc_window_uses_tool_flag()`**
+- Forces MC detection (`sys.argv = ["SRPSS_Media_Center.exe"]`) and instantiates `DisplayWidget`.
+- Asserts `MC_USE_SPLASH_FLAGS` remains `False`.
+- Verifies the created window has `Qt.WindowType.Tool` applied and never silently switches to `Qt.WindowType.SplashScreen`.
+- Guards against any future heuristic-affecting window flag tweaks slipping in unnoticed.
+
+**`test_main_build_does_not_use_tool_flag()`**
+- Spoofs the primary build executable (`sys.argv = ["SRPSS.exe"]`).
+- Ensures the normal build keeps standard top-level window flags (no `Qt.Tool` leakage).
+- Confirms the MC-specific heuristics stay isolated to the MC distribution.
 
 ---
 
