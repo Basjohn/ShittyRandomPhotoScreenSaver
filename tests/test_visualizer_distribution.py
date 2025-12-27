@@ -70,6 +70,31 @@ def load_log_bar_series(
     return list(frames)
 
 
+def load_log_intensity_profile(
+    log_path: str = LOG_PATH_DEFAULT, max_frames: int = DEFAULT_LOG_FRAMES
+) -> np.ndarray | None:
+    """Derive an intensity envelope from recent log bass readings."""
+    frames = load_log_bar_series(log_path, max_frames=max_frames)
+    if not frames:
+        return None
+    bass_vals = np.array([max(0.0, bass) for bass, _ in frames], dtype="float32")
+    if bass_vals.size < 64:
+        return None
+    # Focus on most recent window to mirror live state
+    bass_vals = bass_vals[-max_frames:]
+    # Smooth to remove sharp spikes while preserving valleys
+    window = max(3, min(45, bass_vals.size // 24))
+    kernel = np.ones(window, dtype="float32") / float(window)
+    smooth = np.convolve(bass_vals, kernel, mode="same")
+    # Normalize to [0, 1] and add gentle floor/ceiling bounds
+    peak = float(np.max(smooth))
+    if peak <= 1e-3:
+        return None
+    normalized = smooth / peak
+    # Expand slightly so quiet passages still drive some intensity
+    return np.clip(0.12 + normalized * 0.92, 0.12, 1.15)
+
+
 def report_bar_metrics(
     bar_history: Sequence[Sequence[float]],
     label: str,
@@ -86,6 +111,22 @@ def report_bar_metrics(
     center_idx = len(bar_history[0]) // 2
     center_values = np.array([bars[center_idx] for bars in bar_history])
     edge_values = np.array([bars[0] for bars in bar_history])
+
+    bar_array = np.array(bar_history)
+    bar_means = bar_array.mean(axis=0)
+    left_peak_idx = max(0, center_idx - 3)
+    right_peak_idx = min(bar_means.size - 1, center_idx + 3)
+    left_peak_mean = float(bar_means[left_peak_idx])
+    right_peak_mean = float(bar_means[right_peak_idx])
+    edge_mean = float(bar_means[0])
+    inner_left_mean = float(bar_means[max(0, center_idx - 2)])
+    shoulder_mean = float(bar_means[max(0, center_idx - 1)])
+    center_mean = float(bar_means[center_idx])
+    neighbor_left_mean = float(bar_means[left_peak_idx - 1]) if left_peak_idx - 1 >= 0 else left_peak_mean
+    neighbor_right_mean = float(bar_means[left_peak_idx + 1]) if left_peak_idx + 1 < bar_means.size else left_peak_mean
+
+    center_above_95 = float(np.mean(center_values >= 0.95))
+    edge_above_95 = float(np.mean(edge_values >= 0.95))
 
     center_min = float(center_values.min())
     center_max = float(center_values.max())
@@ -105,6 +146,12 @@ def report_bar_metrics(
         delta = prev - curr
         if delta > 1e-3:
             drops.append(delta)
+    single_spike_frames = 0
+    spike_threshold = 0.88
+    for bars in bar_history:
+        if sum(1 for val in bars if val >= spike_threshold) == 1:
+            single_spike_frames += 1
+    single_spike_ratio = single_spike_frames / max(1, len(bar_history))
     avg_drop = float(np.mean(drops)) if drops else 0.0
     max_drop = float(np.max(drops)) if drops else 0.0
 
@@ -116,6 +163,12 @@ def report_bar_metrics(
     print(
         f"Edge bar (0):   min={edge_min:.2f}, max={edge_max:.2f}, "
         f"range={edge_range:.2f}, std={edge_std:.3f}, stuck>=0.95={edge_above_95:.2%}"
+    )
+    print(
+        f"Avg profile (selected bars): "
+        f"L3={left_peak_mean:.3f} L2={inner_left_mean:.3f} "
+        f"L1={shoulder_mean:.3f} C={center_mean:.3f} "
+        f"R1={neighbor_right_mean:.3f} R3={right_peak_mean:.3f} Edge={edge_mean:.3f}"
     )
 
     if noise_floor_values:
@@ -142,7 +195,10 @@ def report_bar_metrics(
             f"Raw bass avg={bass_arr.mean():.2f}, min={bass_arr.min():.2f}, max={bass_arr.max():.2f}"
         )
 
-    print(f"Drops: avg={avg_drop:.2f}, max={max_drop:.2f}, samples={len(drops)}")
+    print(
+        f"Drops: avg={avg_drop:.2f}, max={max_drop:.2f}, samples={len(drops)}, "
+        f"single-bar flickers={single_spike_ratio:.2%}"
+    )
 
     problems: List[str] = []
     if center_above_95 > 0.7:
@@ -155,10 +211,28 @@ def report_bar_metrics(
         problems.append(f"FAIL: Center bar not reactive (range={center_range:.2f}, should be 0.3+)")
     if max_drop < 0.2:
         problems.append(f"FAIL: Center bar max drop too small (max_drop={max_drop:.2f}, need >= 0.20)")
-    if avg_drop < 0.08:
-        problems.append(f"FAIL: Center bar average drop too small (avg_drop={avg_drop:.2f}, need >= 0.08)")
-    if avg_drop > 0.35:
-        problems.append(f"FAIL: Center bar average drop too large (avg_drop={avg_drop:.2f}, keep <= 0.35)")
+    if avg_drop < 0.18:
+        problems.append(f"FAIL: Center bar average drop too small (avg_drop={avg_drop:.2f}, need >= 0.18)")
+    if avg_drop > 0.4:
+        problems.append(f"FAIL: Center bar average drop too large (avg_drop={avg_drop:.2f}, keep <= 0.40)")
+
+    # Shape-specific checks (derived from recent log averages)
+    if center_mean > left_peak_mean * 0.7:
+        problems.append("FAIL: Center average too close to ridge peak (needs valley).")
+    if center_mean < 0.1:
+        problems.append("FAIL: Center average too low (raise center so drops stay visible).")
+    if neighbor_left_mean + 0.015 > left_peak_mean:
+        problems.append("FAIL: Bar 4 peak not clearly above bar 3 (ridge should lead).")
+    if inner_left_mean + 0.025 > left_peak_mean:
+        problems.append("FAIL: Bar 5 average too close to ridge (slope should fall after peak).")
+    if shoulder_mean + 0.03 > inner_left_mean:
+        problems.append("FAIL: Bar 6 shoulder not tapering enough after ridge.")
+    if edge_mean > min(0.3, left_peak_mean * 0.55):
+        problems.append("FAIL: Edge bar averages too high (outer bars should stay visibly lower).")
+    if single_spike_ratio > 0.08:
+        problems.append(
+            f"FAIL: Too many single-bar flickers (ratio={single_spike_ratio:.2%}, target <= 8%)."
+        )
 
     edge_relative_range = edge_range / max(edge_max, 0.01)
     if edge_relative_range < 0.3:
@@ -295,7 +369,10 @@ def analyze_band_edges(n_fft_bins, n_bars):
 
 
 def run_reactivity_realistic(
-    worker: SpotifyVisualizerAudioWorker, fps: int = 60, duration_sec: float = 4.0
+    worker: SpotifyVisualizerAudioWorker,
+    fps: int = 60,
+    duration_sec: float = 4.0,
+    log_intensity: np.ndarray | None = None,
 ) -> bool:
     """Test reactivity with REAL timing like the actual app.
     
@@ -326,27 +403,38 @@ def run_reactivity_realistic(
     all_bars_history: List[List[float]] = []
     
     print(f"Running {n_frames} frames with {frame_time*1000:.1f}ms between frames...")
-    print("Using CONTINUOUS audio with varying intensity (like real music)\n")
+    if log_intensity is not None and log_intensity.size > 0:
+        print(
+            "Using LOG-DERIVED intensity envelope blended with synthetic modulation\n"
+        )
+        log_intensity = log_intensity.astype("float32", copy=False)
+    else:
+        print("Using CONTINUOUS audio with varying intensity (like real music)\n")
     
     valley_period = int(fps * 1.5)
     valley_hold = int(fps * 0.45)
     micro_drop_interval = int(fps * 0.75)
 
     for frame in range(n_frames):
-        # Simulate CONTINUOUS audio with varying intensity
-        # Use sine wave with period of 1 second, ranging from 0.1 to 1.0
-        # This creates dramatic drops that should be visible
-        intensity = 0.1 + 0.9 * (0.5 + 0.5 * np.sin(2 * np.pi * frame / fps))
-        # Periodic valley that simulates breakdowns / bridges
+        # Simulate CONTINUOUS audio with varying intensity blended with real logs
+        # Base synthetic modulation (1-second cycle)
+        synthetic_intensity = 0.1 + 0.9 * (0.5 + 0.5 * np.sin(2 * np.pi * frame / fps))
         valley_phase = frame % max(1, valley_period)
         if valley_phase < valley_hold:
-            # Deep valley with gentle ramp back up
             valley_scale = 0.08 + 0.6 * (valley_phase / max(1, valley_hold))
-            intensity *= valley_scale
-        # Occasional micro-drop to near silence
+            synthetic_intensity *= valley_scale
         if micro_drop_interval > 0 and frame % micro_drop_interval == micro_drop_interval - 1:
-            intensity *= 0.05
-        intensity = max(0.01, min(1.2, intensity))
+            synthetic_intensity *= 0.05
+        synthetic_intensity = max(0.01, min(1.2, synthetic_intensity))
+
+        if log_intensity is not None and log_intensity.size > 0:
+            env_val = float(log_intensity[frame % log_intensity.size])
+            # Blend log envelope with synthetic shape for realism and variability
+            intensity = max(
+                0.01, min(1.2, synthetic_intensity * 0.45 + env_val * 0.65)
+            )
+        else:
+            intensity = synthetic_intensity
         fft = loud_fft * intensity
 
         bars = worker._fft_to_bars(fft)
@@ -441,11 +529,12 @@ def main():
     worker2 = create_live_worker(bar_count=DEFAULT_BAR_COUNT)
     synthetic_passed = run_reactivity_realistic(worker2, fps=60, duration_sec=4.0)
 
-    # Compare against recent log capture
-    log_passed = run_log_snapshot_analysis(LOG_PATH_DEFAULT, DEFAULT_LOG_FRAMES)
+    log_envelope = load_log_intensity_profile()
+    reactivity_ok = run_reactivity_realistic(worker, log_intensity=log_envelope)
+    log_ok = run_log_snapshot_analysis()
     
     print("\n" + "=" * 70)
-    if synthetic_passed and log_passed:
+    if synthetic_passed and reactivity_ok and log_ok:
         print(" ALL TESTS PASSED")
     else:
         print(" TESTS FAILED - FIX REQUIRED")

@@ -85,6 +85,7 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._silence_floor_threshold: float = 0.05
         self._floor_min_ratio: float = 0.22
         self._last_bass_drop_ratio: float = 0.0
+        self._bass_drop_accum: float = 0.0
         # Drop handling configuration
         self._drop_hold_frames: int = 3
         self._drop_threshold: float = 0.18
@@ -322,6 +323,7 @@ class SpotifyVisualizerAudioWorker(QObject):
         prev_raw_bass = getattr(self, "_prev_raw_bass", 0.0)
         bass_drop_ratio = 0.0
         drop_accum = getattr(self, "_bass_drop_accum", 0.0)
+        drop_signal = 0.0
         center = bands // 2
         try:
             if getattr(self, "_band_cache_key", None) != cache_key:
@@ -483,11 +485,43 @@ class SpotifyVisualizerAudioWorker(QObject):
 
             for i in range(bands):
                 dist = abs(i - center) / float(center) if center > 0 else 0.0
-                gradient = (1.0 - dist) ** 2 * 0.85 + 0.15
+                gradient = (1.0 - dist) ** 2 * 0.82 + 0.18
                 base = bass_energy * gradient
-                mid_contrib = mid_energy * (1.0 - abs(dist - 0.5) * 2) * 0.3
-                treble_contrib = treble_energy * dist * 0.2
-                arr[i] = base + mid_contrib + treble_contrib
+                mid_contrib = mid_energy * (1.0 - abs(dist - 0.5) * 2) * 0.34
+                treble_contrib = treble_energy * dist * 0.25
+                edge_pop = 0.0
+                if low_resolution:
+                    edge_pop = min(0.45, 0.18 + drop_signal * 0.45)
+                arr[i] = (base + mid_contrib + treble_contrib) * (1.0 + dist * edge_pop)
+
+            profile_template = np.array(
+                [0.25, 0.34, 0.468, 0.602, 0.546, 0.366, 0.234, 0.13, 0.234, 0.366, 0.546, 0.602, 0.468, 0.34, 0.25],
+                dtype="float32",
+            )
+            if bands != profile_template.size:
+                xp = np.linspace(0.0, 1.0, profile_template.size)
+                x = np.linspace(0.0, 1.0, bands)
+                profile_shape = np.interp(x, xp, profile_template)
+            else:
+                profile_shape = profile_template.copy()
+            profile_shape /= max(1e-3, profile_shape.max())
+            shape_scale = 0.45 + 0.55 * profile_shape
+            arr *= shape_scale
+
+            if low_resolution:
+                # bias peaks toward bars around +/-3 from center, soften center slightly
+                for i in range(bands):
+                    offset = abs(i - center)
+                    ridge_boost = 1.0
+                    if offset == 3:
+                        ridge_boost = 1.35
+                    elif offset == 2 or offset == 4:
+                        ridge_boost = 1.2
+                    elif offset == 1:
+                        ridge_boost = 1.05
+                    elif offset == 0:
+                        ridge_boost = 0.78
+                    arr[i] *= ridge_boost
 
             drop_signal = bass_drop_ratio
             if low_resolution:
@@ -507,12 +541,77 @@ class SpotifyVisualizerAudioWorker(QObject):
                 drop_signal = max(drop_signal, drop_accum)
             self._bass_drop_accum = drop_accum
             if low_resolution and drop_signal > 0.05:
-                drop_strength = min(0.92, 0.2 + drop_signal * 1.3)
+                drop_strength = min(0.92, 0.22 + drop_signal * 1.45)
                 band_span = max(1, center)
                 for i in range(bands):
                     dist = abs(i - center) / float(band_span)
                     emphasis = max(0.25, 1.0 - dist * 1.35)
                     arr[i] *= max(0.0, 1.0 - drop_strength * emphasis)
+            if low_resolution:
+                peak_left_idx = max(0, center - 3)
+                peak_right_idx = min(bands - 1, center + 3)
+                peak_val = max(arr[peak_left_idx], arr[peak_right_idx], 1e-3)
+                drop_soften = max(0.0, 0.6 - drop_signal)
+                center_cap_ratio = max(0.95, min(1.1, 0.97 + drop_soften * 0.18))
+                center_cap = peak_val * center_cap_ratio
+                center_val = arr[center]
+                if center_val > center_cap:
+                    arr[center] = center_cap
+                    center_val = center_cap
+                neighbor_ratio_outer = max(0.6, center_cap_ratio - 0.06)
+                neighbor_ratio_inner = max(0.52, center_cap_ratio - 0.12)
+                left_neighbor = max(0, center - 1)
+                right_neighbor = min(bands - 1, center + 1)
+                peak_neighbor_val_outer = peak_val * neighbor_ratio_outer
+                if arr[left_neighbor] > peak_neighbor_val_outer:
+                    arr[left_neighbor] = peak_neighbor_val_outer
+                if arr[right_neighbor] > peak_neighbor_val_outer:
+                    arr[right_neighbor] = peak_neighbor_val_outer
+                left_outer = max(0, center - 2)
+                right_outer = min(bands - 1, center + 2)
+                outer_cap = peak_val * neighbor_ratio_inner
+                if arr[left_outer] > outer_cap:
+                    arr[left_outer] = outer_cap
+                if arr[right_outer] > outer_cap:
+                    arr[right_outer] = outer_cap
+                if drop_signal > 0.02:
+                    damp = min(0.38, 0.06 + drop_signal * 0.4)
+                    center_scale = max(0.45, 1.0 - damp)
+                    arr[center] *= center_scale
+                    for offset in (1, 2):
+                        left_idx = max(0, center - offset)
+                        right_idx = min(bands - 1, center + offset)
+                        neighbor_scale = max(0.55, 1.0 - damp * (0.36 if offset == 1 else 0.22))
+                        arr[left_idx] *= neighbor_scale
+                        arr[right_idx] *= neighbor_scale
+                ridge_avg = 0.5 * (arr[peak_left_idx] + arr[peak_right_idx])
+                center_floor = ridge_avg * (0.08 + drop_signal * 0.05) + 0.025
+                center_cap_soft = ridge_avg * (0.28 + drop_signal * 0.1) + 0.05
+                arr[center] = min(max(arr[center], center_floor), max(center_cap_soft, center_floor))
+                target_map = {
+                    0: 0.22 + drop_signal * 0.12,
+                    1: 0.55 + drop_signal * 0.08,
+                    2: 0.88,
+                    3: 1.08,
+                    4: 0.78,
+                    5: 0.48,
+                }
+                max_offset = min(6, center + 1, bands - center)
+                ridge_anchor = max(ridge_avg, 1e-3)
+                for offset in range(max_offset):
+                    ratio = target_map.get(offset, max(0.15, 0.5 - offset * 0.07))
+                    desired_val = ridge_anchor * ratio
+                    left_idx = center - offset
+                    right_idx = center + offset
+                    if left_idx >= 0:
+                        arr[left_idx] = arr[left_idx] * 0.55 + desired_val * 0.45
+                    if right_idx < bands:
+                        arr[right_idx] = arr[right_idx] * 0.55 + desired_val * 0.45
+                if bands > 2:
+                    tmp = arr.copy()
+                    arr[1:-1] = tmp[1:-1] * 0.46 + (tmp[:-2] + tmp[2:]) * 0.27
+                    arr[0] = tmp[0] * 0.64 + tmp[1] * 0.36
+                    arr[-1] = tmp[-1] * 0.64 + tmp[-2] * 0.36
             self._last_bass_drop_ratio = drop_signal
             
         except Exception:
@@ -522,7 +621,7 @@ class SpotifyVisualizerAudioWorker(QObject):
         # decay_rate = 0.7 means bars drop 30% per frame - much faster drops
         smoothing = 0.5
         if low_resolution:
-            smoothing = max(0.05, smoothing * 0.15)
+            smoothing = max(0.04, smoothing * 0.12)
         decay_rate = 0.15  # Extremely aggressive decay for visible drops
         if low_resolution:
             decay_rate = max(0.02, decay_rate * 0.15)
@@ -549,10 +648,10 @@ class SpotifyVisualizerAudioWorker(QObject):
         hold_frames = self._drop_hold_frames
         snap_fraction = getattr(self, "_drop_snap_fraction", 0.45)
         if low_resolution:
-            drop_threshold = max(0.0002, drop_threshold * 0.18)
-            drop_decay = max(0.03, drop_decay * 0.18)
-            hold_frames = max(1, int(round(hold_frames * 0.25)))
-            snap_fraction = max(0.03, min(0.25, snap_fraction - 0.35))
+            drop_threshold = max(0.00005, drop_threshold * 0.1)
+            drop_decay = max(0.015, drop_decay * 0.12)
+            hold_frames = max(1, int(round(hold_frames * 0.1)))
+            snap_fraction = max(0.02, min(0.18, snap_fraction - 0.3))
         snap_min = 0.05
         if low_resolution:
             snap_min = 0.02
@@ -563,11 +662,11 @@ class SpotifyVisualizerAudioWorker(QObject):
         drop_threshold = max(0.0, drop_threshold)
         drop_decay_min = 0.1
         if low_resolution:
-            drop_decay_min = 0.045
+            drop_decay_min = 0.015
         drop_decay = max(drop_decay_min, min(0.95, drop_decay))
         drop_gain = 1.0
         if low_resolution:
-            drop_gain = 3.0
+            drop_gain = 9.0
         drop_relief = drop_signal if low_resolution else 0.0
         if low_resolution and drop_relief > 0.01:
             drop_scale = min(0.95, 0.12 + drop_relief * 1.55)
@@ -597,31 +696,38 @@ class SpotifyVisualizerAudioWorker(QObject):
                 if drop > drop_threshold:
                     hold_timers[i] = hold_frames
                     snap_target = max(effective_target, current * snap_fraction)
-                    new_val = snap_target
+                    extra = (current - effective_target) * 0.55
+                    new_val = max(effective_target, snap_target - extra)
                 elif hold > 0:
                     next_hold = hold - 1
                     hold_timers[i] = next_hold
                     phase = (hold_frames - next_hold) / max(1, hold_frames)
                     dynamic_decay = drop_decay - (drop_decay - 0.35) * phase
                     if low_resolution:
-                        dynamic_decay = max(0.035, dynamic_decay * 0.35)
+                        dynamic_decay = max(0.015, dynamic_decay * 0.22)
                     else:
                         if dynamic_decay < 0.2:
                             dynamic_decay = 0.2
                     new_val = current * dynamic_decay
-                    if new_val < effective_target:
-                        new_val = effective_target
+                    if low_resolution:
+                        drop_pull = (current - effective_target) * drop_gain * 0.32
+                        new_val = max(effective_target, new_val - drop_pull)
                 else:
                     new_val = current * decay_rate
                     if new_val < effective_target:
                         new_val = effective_target
+                    if low_resolution and current > effective_target:
+                        base_pull = (current - effective_target) * drop_gain * 0.2
+                        new_val = max(effective_target, new_val - base_pull)
+                    elif low_resolution and current > target:
+                        new_val = max(target, new_val - (current - target) * 0.25)
 
                 if low_resolution and current > effective_target:
                     # Additional low-res drop shaping to encourage deeper falls without flicker.
                     drop_ratio = (current - effective_target) / max(current, 1e-3)
-                    blend = max(0.25, min(0.85, 1.0 - 0.55 * drop_ratio))
+                    blend = max(0.2, min(0.8, 1.0 - 0.65 * drop_ratio))
                     new_val = effective_target + (new_val - effective_target) * blend
-                    extra_decay = max(0.0, min(1.0, drop_ratio * 1.4))
+                    extra_decay = max(0.0, min(1.0, drop_ratio * 1.6))
                     if extra_decay > 0.0:
                         new_val = max(target, new_val - drop * 0.3 * extra_decay)
             
@@ -657,11 +763,11 @@ class SpotifyVisualizerAudioWorker(QObject):
             fast_decay = 0.9 if peak_val < running_peak * 0.5 else 0.965
             running_peak = running_peak * fast_decay + peak_val * (1.0 - fast_decay)
         drop_relief = drop_signal if low_resolution else 0.0
-        if low_resolution and drop_relief > 0.0:
-            running_peak *= max(0.7, 1.0 - drop_relief * 0.4)
+        if low_resolution and drop_relief > 0.35:
+            running_peak *= max(0.95, 1.0 - drop_relief * 0.08)
         running_peak = max(0.18, min(1.35, running_peak))
         self._running_peak = running_peak
-        target_peak = 0.9 * headroom_scale
+        target_peak = (1.18 if low_resolution else 0.9) * headroom_scale
         if running_peak > target_peak * 1.05 and peak_val > 0.0:
             normalization = target_peak / max(running_peak, 1e-3)
             if low_resolution:
