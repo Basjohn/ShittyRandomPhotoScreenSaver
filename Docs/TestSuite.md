@@ -1,14 +1,15 @@
 # Test Suite Documentation
 
 **Purpose**: Canonical reference for all test modules, test cases, and testing procedures.  
-**Last Updated**: Dec 26, 2025 - Added MC window flag regression guard  
+**Last Updated**: Dec 27, 2025 - Added Spotify visualizer floor/sensitivity regression guards  
 **Test Count**: 360+ tests across 26+ modules  
 **Pass Rate**: ~98% (known failures in timezone/settings dialog tests)  
 **Recent**: 
-- Fixed `test_perf_dt_max.py` to use median-based threshold (robust against transient system spikes)
-- Fixed `test_settings.py` - all 9 tests now pass after SettingsManager fixes
-- Fixed ClockWidget deferred callback crash with Shiboken.isValid guard
-- Architecture audit completed 12 items (see `audits/ARCHITECTURE_AUDIT_2024_12.md`)
+1. Added high-priority MC window flag regression tests (`tests/test_mc_window_flags.py`) to pin Tool vs Splash behavior for MC builds.
+2. Stabilized MediaWidget async refresh tests (`test_media_widget_starts_fade_in_when_artwork_appears`, `test_media_widget_displays_metadata`, `test_media_widget_decodes_artwork_and_adjusts_margins`) via `_run_refresh_cycles`.
+3. Added `test_media_widget_warns_when_thread_manager_missing` to assert proper logging when ThreadManager injection is skipped.
+4. Introduced `_bootstrap_display_widget_for_tests` helper and updated DisplayWidget interaction tests (`test_display_widget_ctrl_click_routes_to_media_widget`, `test_display_widget_hard_exit_click_routes_to_media_widget`) to drive InputHandler clicks deterministically.
+5. Rebuilt `tests/test_spotify_visualizer_widget.py` around deterministic FFT fixtures plus new cases covering dynamic/manual floor clamps, running-average updates, sensitivity-driven noise-floor shifts, and manual-vs-dynamic energy comparisons.
 
 ### Phase 6 Bug Fix Summary
 **All 8 Critical Bugs Fixed:**

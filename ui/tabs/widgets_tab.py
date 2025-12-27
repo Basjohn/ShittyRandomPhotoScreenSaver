@@ -835,6 +835,19 @@ class WidgetsTab(QWidget):
         spotify_vis_bar_row.addStretch()
         spotify_vis_layout.addLayout(spotify_vis_bar_row)
 
+        spotify_vis_block_row = QHBoxLayout()
+        spotify_vis_block_row.addWidget(QLabel("Audio Block Size:"))
+        self.spotify_vis_block_size = QComboBox()
+        self.spotify_vis_block_size.setMinimumWidth(140)
+        self.spotify_vis_block_size.addItem("Auto (Driver)", 0)
+        self.spotify_vis_block_size.addItem("256 samples", 256)
+        self.spotify_vis_block_size.addItem("512 samples", 512)
+        self.spotify_vis_block_size.addItem("1024 samples", 1024)
+        self.spotify_vis_block_size.currentIndexChanged.connect(self._save_settings)
+        spotify_vis_block_row.addWidget(self.spotify_vis_block_size)
+        spotify_vis_block_row.addStretch()
+        spotify_vis_layout.addLayout(spotify_vis_block_row)
+
         spotify_vis_fill_row = QHBoxLayout()
         spotify_vis_fill_row.addWidget(QLabel("Bar Fill Color:"))
         self.spotify_vis_fill_color_btn = QPushButton("Choose Color...")
@@ -895,6 +908,37 @@ class WidgetsTab(QWidget):
         )
         spotify_vis_sensitivity_slider_row.addWidget(self.spotify_vis_sensitivity_label)
         spotify_vis_layout.addLayout(spotify_vis_sensitivity_slider_row)
+
+        spotify_vis_floor_row = QHBoxLayout()
+        self.spotify_vis_dynamic_floor = QCheckBox("Dynamic Noise Floor")
+        self.spotify_vis_dynamic_floor.setToolTip(
+            "Automatically adjust the noise floor based on recent Spotify loopback energy."
+        )
+        self.spotify_vis_dynamic_floor.setChecked(True)
+        self.spotify_vis_dynamic_floor.stateChanged.connect(self._save_settings)
+        self.spotify_vis_dynamic_floor.stateChanged.connect(
+            lambda _: self._update_spotify_vis_floor_enabled_state()
+        )
+        spotify_vis_floor_row.addWidget(self.spotify_vis_dynamic_floor)
+        spotify_vis_floor_row.addStretch()
+        spotify_vis_layout.addLayout(spotify_vis_floor_row)
+
+        spotify_vis_manual_floor_row = QHBoxLayout()
+        spotify_vis_manual_floor_row.addWidget(QLabel("Manual Floor:"))
+        self.spotify_vis_manual_floor = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.spotify_vis_manual_floor.setMinimum(12)   # 0.12
+        self.spotify_vis_manual_floor.setMaximum(400)  # 4.00
+        self.spotify_vis_manual_floor.setValue(210)    # 2.10 default
+        self.spotify_vis_manual_floor.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.spotify_vis_manual_floor.setTickInterval(10)
+        self.spotify_vis_manual_floor.valueChanged.connect(self._save_settings)
+        spotify_vis_manual_floor_row.addWidget(self.spotify_vis_manual_floor)
+        self.spotify_vis_manual_floor_label = QLabel("2.10")
+        self.spotify_vis_manual_floor.valueChanged.connect(
+            lambda v: self.spotify_vis_manual_floor_label.setText(f"{v / 100.0:.2f}")
+        )
+        spotify_vis_manual_floor_row.addWidget(self.spotify_vis_manual_floor_label)
+        spotify_vis_layout.addLayout(spotify_vis_manual_floor_row)
 
         # Ghosting controls: global enable, opacity and decay speed.
         spotify_vis_ghost_enable_row = QHBoxLayout()
@@ -1620,6 +1664,12 @@ class WidgetsTab(QWidget):
             bar_count = int(spotify_vis_config.get('bar_count', 32))
             self.spotify_vis_bar_count.setValue(bar_count)
 
+            block_size_val = int(spotify_vis_config.get('audio_block_size', 0) or 0)
+            block_idx = self.spotify_vis_block_size.findData(block_size_val)
+            if block_idx < 0:
+                block_idx = 0
+            self.spotify_vis_block_size.setCurrentIndex(block_idx)
+
             recommended_raw = spotify_vis_config.get('adaptive_sensitivity', True)
             recommended = SettingsManager.to_bool(recommended_raw, True)
             self.spotify_vis_recommended.setChecked(recommended)
@@ -1633,6 +1683,18 @@ class WidgetsTab(QWidget):
             self.spotify_vis_sensitivity.setValue(sens_slider)
             self.spotify_vis_sensitivity_label.setText(f"{sens_slider / 100.0:.2f}x")
             self._update_spotify_vis_sensitivity_enabled_state()
+
+            dynamic_floor = SettingsManager.to_bool(spotify_vis_config.get('dynamic_floor', True), True)
+            self.spotify_vis_dynamic_floor.setChecked(dynamic_floor)
+            manual_floor_val = spotify_vis_config.get('manual_floor', 2.1)
+            try:
+                manual_floor_f = float(manual_floor_val)
+            except Exception:
+                manual_floor_f = 2.1
+            manual_slider = int(max(0.12, min(4.0, manual_floor_f)) * 100)
+            self.spotify_vis_manual_floor.setValue(manual_slider)
+            self.spotify_vis_manual_floor_label.setText(f"{manual_slider / 100.0:.2f}")
+            self._update_spotify_vis_floor_enabled_state()
 
             software_enabled = bool(spotify_vis_config.get('software_visualizer_enabled', False))
             self.spotify_vis_software_enabled.setChecked(software_enabled)
@@ -2028,6 +2090,7 @@ class WidgetsTab(QWidget):
             'bar_count': self.spotify_vis_bar_count.value(),
             'software_visualizer_enabled': self.spotify_vis_software_enabled.isChecked(),
             'adaptive_sensitivity': self.spotify_vis_recommended.isChecked(),
+            'audio_block_size': int(self.spotify_vis_block_size.currentData() or 0),
             'sensitivity': max(0.25, min(2.5, self.spotify_vis_sensitivity.value() / 100.0)),
             'bar_fill_color': [
                 self._spotify_vis_fill_color.red(),
@@ -2045,9 +2108,12 @@ class WidgetsTab(QWidget):
             'ghosting_enabled': self.spotify_vis_ghost_enabled.isChecked(),
             'ghost_alpha': self.spotify_vis_ghost_opacity.value() / 100.0,
             'ghost_decay': max(0.1, self.spotify_vis_ghost_decay.value() / 100.0),
+            'dynamic_floor': self.spotify_vis_dynamic_floor.isChecked(),
+            'manual_floor': max(0.12, min(4.0, self.spotify_vis_manual_floor.value() / 100.0)),
         }
 
         self._update_spotify_vis_sensitivity_enabled_state()
+        self._update_spotify_vis_floor_enabled_state()
 
         reddit_limit_text = self.reddit_items.currentText().strip()
         try:
@@ -2171,6 +2237,18 @@ class WidgetsTab(QWidget):
         try:
             self.spotify_vis_sensitivity.setEnabled(not recommended)
             self.spotify_vis_sensitivity_label.setEnabled(not recommended)
+        except Exception:
+            pass
+
+    def _update_spotify_vis_floor_enabled_state(self) -> None:
+        try:
+            dynamic = self.spotify_vis_dynamic_floor.isChecked()
+        except Exception:
+            dynamic = True
+
+        try:
+            self.spotify_vis_manual_floor.setEnabled(not dynamic)
+            self.spotify_vis_manual_floor_label.setEnabled(not dynamic)
         except Exception:
             pass
     

@@ -6,6 +6,7 @@ import os
 import time
 import math
 import threading
+import logging
 
 from PySide6.QtCore import QObject, QRect, Qt
 from PySide6.QtGui import QColor, QPainter, QPaintEvent
@@ -60,10 +61,36 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._freq_values = None  # temp buffer for frequency band values
         # Per-bar history for attack/decay dynamics
         self._bar_history = None
+        self._bar_hold_timers = None
         # Running peak tracker for normalization
         self._running_peak = 1.0
         # Timestamp of last FFT processing - used to detect pause/resume gaps
         self._last_fft_ts: float = 0.0
+        # Output scaling to keep FFT peaks controlled while allowing safe boosts
+        self._base_output_scale: float = 0.5
+        self._energy_boost: float = 0.85
+        # Floor control configuration (dynamic/manual)
+        self._use_dynamic_floor: bool = True
+        self._manual_floor: float = 2.1
+        self._min_floor: float = 0.12
+        self._max_floor: float = 4.0
+        self._raw_bass_avg: float = 2.1
+        self._dynamic_floor_ratio: float = 0.42
+        self._dynamic_floor_alpha: float = 0.15
+        self._dynamic_floor_decay_alpha: float = 0.4
+        self._applied_noise_floor: float = 2.1
+        self._floor_response: float = 0.12
+        self._floor_mid_weight: float = 0.18
+        self._floor_headroom: float = 0.18
+        self._silence_floor_threshold: float = 0.05
+        self._floor_min_ratio: float = 0.22
+        self._last_bass_drop_ratio: float = 0.0
+        # Drop handling configuration
+        self._drop_hold_frames: int = 3
+        self._drop_threshold: float = 0.18
+        self._drop_decay_fast: float = 0.6
+        self._drop_snap_fraction: float = 0.45
+        self._preferred_block_size: int = 0
 
         # Sensitivity configuration (driven from Settings UI).
         # "Recommended" uses the v1.4 baseline constants. Manual mode lets
@@ -71,6 +98,7 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._cfg_lock = threading.Lock()
         self._use_recommended: bool = True
         self._user_sensitivity: float = 1.0
+        self._frame_debug_counter: int = 0
 
     def set_sensitivity_config(self, recommended: bool, sensitivity: float) -> None:
         try:
@@ -91,6 +119,47 @@ class SpotifyVisualizerAudioWorker(QObject):
             self._use_recommended = rec
             self._user_sensitivity = sens
 
+    def set_floor_config(self, dynamic_enabled: bool, manual_floor: float) -> None:
+        try:
+            dyn = bool(dynamic_enabled)
+        except Exception:
+            dyn = True
+
+        try:
+            floor = float(manual_floor)
+        except Exception:
+            floor = 2.1
+
+        floor = max(self._min_floor, min(self._max_floor, floor))
+
+        with self._cfg_lock:
+            self._use_dynamic_floor = dyn
+            self._manual_floor = floor
+        if not dyn:
+            # Snap running average to manual value so we don't jump if user re-enables dynamic.
+            self._raw_bass_avg = floor
+
+    def set_audio_block_size(self, block_size: int) -> None:
+        try:
+            value = int(block_size)
+        except Exception:
+            value = 0
+        if value < 0:
+            value = 0
+        self._preferred_block_size = value
+
+    def set_energy_boost(self, boost: float) -> None:
+        """Adjust post-FFT energy boost factor (used for future tuning hooks)."""
+        try:
+            val = float(boost)
+        except Exception:
+            val = 1.0
+        if val < 0.5:
+            val = 0.5
+        if val > 1.8:
+            val = 1.8
+        self._energy_boost = val
+
     def is_running(self) -> bool:
         return self._running
 
@@ -108,7 +177,8 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._np = np
 
         # Create audio capture backend
-        config = AudioCaptureConfig(sample_rate=48000, channels=2, block_size=1024)
+        block_size = self._preferred_block_size if self._preferred_block_size > 0 else 0
+        config = AudioCaptureConfig(sample_rate=48000, channels=2, block_size=block_size)
         self._backend = create_audio_capture(config)
         
         if self._backend is None:
@@ -124,8 +194,22 @@ class SpotifyVisualizerAudioWorker(QObject):
                     return
                 
                 # Convert to mono float32 if needed
-                if hasattr(samples, 'ndim') and samples.ndim > 1:
-                    mono = samples.mean(axis=1).astype(np_mod.float32)
+                if hasattr(samples, "ndim") and samples.ndim > 1:
+                    arr = np_mod.asarray(samples, dtype=np_mod.float32)
+                    channel_count = arr.shape[1] if arr.ndim > 1 else 1
+                    if channel_count <= 1:
+                        mono = arr.reshape(-1)
+                    else:
+                        selected = arr
+                        if channel_count > 2:
+                            try:
+                                energy = np_mod.sum(arr * arr, axis=0)
+                                top_k = min(2, channel_count)
+                                top_idx = np_mod.argsort(energy)[-top_k:]
+                                selected = arr[:, top_idx]
+                            except Exception:
+                                selected = arr[:, :2]
+                        mono = np_mod.mean(selected, axis=1, dtype=np_mod.float32)
                 else:
                     mono = np_mod.asarray(samples, dtype=np_mod.float32)
                 
@@ -142,7 +226,9 @@ class SpotifyVisualizerAudioWorker(QObject):
                 
                 if is_verbose_logging():
                     peak = float(np_mod.max(np_mod.abs(mono))) if mono.size else 0.0
-                    logger.debug("[SPOTIFY_VIS] Audio frame: samples=%d peak=%.4f", mono.size, peak)
+                    self._frame_debug_counter += 1
+                    if self._frame_debug_counter % 60 == 1:
+                        logger.debug("[SPOTIFY_VIS][VERBOSE] loopback frame: samples=%d peak=%.4f", mono.size, peak)
             except Exception:
                 if is_verbose_logging():
                     logger.debug("[SPOTIFY_VIS] Audio callback failed", exc_info=True)
@@ -210,6 +296,8 @@ class SpotifyVisualizerAudioWorker(QObject):
         n = int(mag.size)
         if n <= 0:
             return self._get_zero_bars()
+        resolution_boost = max(0.5, min(3.0, 1024.0 / max(256.0, float(n))))
+        low_resolution = resolution_boost > 1.05
 
         try:
             # In-place log1p and power operations where possible
@@ -231,6 +319,10 @@ class SpotifyVisualizerAudioWorker(QObject):
         # Center-out frequency mapping with logarithmic binning
         # Bass in center, treble at edges - reactive with attack/decay dynamics
         cache_key = (n, bands)
+        prev_raw_bass = getattr(self, "_prev_raw_bass", 0.0)
+        bass_drop_ratio = 0.0
+        drop_accum = getattr(self, "_bass_drop_accum", 0.0)
+        center = bands // 2
         try:
             if getattr(self, "_band_cache_key", None) != cache_key:
                 min_freq_idx = 1
@@ -248,6 +340,7 @@ class SpotifyVisualizerAudioWorker(QObject):
                 self._work_bars = np.zeros(bands, dtype="float32")
                 self._freq_values = np.zeros(bands, dtype="float32")
                 self._bar_history = np.zeros(bands, dtype="float32")
+                self._bar_hold_timers = np.zeros(bands, dtype="int32")
             
             edges = self._band_edges
             if edges is None:
@@ -270,41 +363,120 @@ class SpotifyVisualizerAudioWorker(QObject):
                         freq_values[b] = np.sqrt(np.mean(band_slice ** 2))
             
             # CENTER-OUT mapping: bass in center, treble at edges
-            center = bands // 2
             
             # Get raw energy values
             raw_bass = float(np.mean(freq_values[:4])) if bands >= 4 else float(freq_values[0])
             raw_mid = float(np.mean(freq_values[4:10])) if bands >= 10 else raw_bass * 0.5
             raw_treble = float(np.mean(freq_values[10:])) if bands > 10 else raw_bass * 0.2
+            self._last_raw_bass = raw_bass
+            self._last_raw_mid = raw_mid
+            self._last_raw_treble = raw_treble
+            self._prev_raw_bass = raw_bass
+            if low_resolution and prev_raw_bass > 1e-3:
+                bass_drop_ratio = max(0.0, (prev_raw_bass - raw_bass) / prev_raw_bass)
             
             # Subtract noise floor and expand dynamic range
-            # raw_bass is typically 1.8-3.1, noise_floor controls drop threshold
-            # TUNED: noise_floor=2.1, expansion=2.8 hit 1.0, trying slightly less
-            noise_floor_base = 2.1  # v1.4 baseline
-            expansion_base = 2.5    # v1.4 baseline
+            # Adapt noise floor/expansion when FFT resolution drops (smaller block size).
+            noise_floor_base = max(0.8, 1.5 / (resolution_boost ** 0.35))
+            expansion_base = 3.6 * (resolution_boost ** 0.4)
 
             try:
                 with self._cfg_lock:
                     use_recommended = bool(self._use_recommended)
                     user_sens = float(self._user_sensitivity)
+                    use_dynamic_floor = bool(self._use_dynamic_floor)
+                    manual_floor = float(self._manual_floor)
             except Exception:
                 use_recommended = True
                 user_sens = 1.0
+                use_dynamic_floor = True
+                manual_floor = noise_floor_base
+
+            if user_sens < 0.25:
+                user_sens = 0.25
+            if user_sens > 2.5:
+                user_sens = 2.5
 
             if use_recommended:
-                noise_floor = noise_floor_base
+                base_noise_floor = noise_floor_base
                 expansion = expansion_base
             else:
-                if user_sens < 0.25:
-                    user_sens = 0.25
-                if user_sens > 2.5:
-                    user_sens = 2.5
-                noise_floor = max(0.25, noise_floor_base / user_sens)
+                base_noise_floor = max(self._min_floor, min(self._max_floor, noise_floor_base / user_sens))
                 try:
                     expansion = expansion_base * (user_sens ** 0.35)
                 except Exception:
                     expansion = expansion_base
-            
+
+            noise_floor = base_noise_floor
+            target_floor = base_noise_floor
+            if use_dynamic_floor:
+                avg = getattr(self, "_raw_bass_avg", base_noise_floor)
+                try:
+                    floor_mid_weight = float(self._floor_mid_weight)
+                except Exception:
+                    floor_mid_weight = 0.5
+                floor_mid_weight = max(0.0, min(1.0, floor_mid_weight))
+                if low_resolution:
+                    floor_mid_weight = min(0.65, floor_mid_weight + 0.12 * (resolution_boost - 1.0))
+                floor_signal = (raw_bass * (1.0 - floor_mid_weight)) + (raw_mid * floor_mid_weight)
+                try:
+                    silence_threshold = float(self._silence_floor_threshold)
+                except Exception:
+                    silence_threshold = 0.0
+                silence_threshold = max(0.0, silence_threshold)
+                if floor_signal < silence_threshold:
+                    # Treat near-silence as bass-only to prevent spurious boosts.
+                    floor_signal = raw_bass
+                try:
+                    alpha_rise = float(self._dynamic_floor_alpha)
+                except Exception:
+                    alpha_rise = 0.05
+                try:
+                    alpha_decay = float(self._dynamic_floor_decay_alpha)
+                except Exception:
+                    alpha_decay = alpha_rise
+                alpha_rise = max(0.0, min(1.0, alpha_rise))
+                alpha_decay = max(0.0, min(1.0, alpha_decay))
+                alpha = alpha_rise if floor_signal >= avg else alpha_decay
+                avg = (1.0 - alpha) * avg + alpha * floor_signal
+                self._raw_bass_avg = avg
+                dyn_ratio = getattr(self, "_dynamic_floor_ratio", 0.42)
+                if low_resolution:
+                    dyn_ratio = min(0.75, dyn_ratio * (1.0 + 0.35 * (resolution_boost - 1.0)))
+                dyn_candidate = max(
+                    self._min_floor,
+                    min(self._max_floor, avg * dyn_ratio),
+                )
+                base_target = max(self._min_floor, min(base_noise_floor, dyn_candidate))
+                target_floor = base_target
+                try:
+                    headroom = float(self._floor_headroom)
+                except Exception:
+                    headroom = 0.0
+                if headroom > 0.0:
+                    headroom = min(1.0, headroom)
+                    blended = (floor_signal * (1.0 - headroom)) + (base_target * headroom)
+                    target_floor = max(self._min_floor, min(base_noise_floor, blended))
+                drop_relief = getattr(self, "_last_bass_drop_ratio", 0.0)
+                if low_resolution and drop_relief > 0.05:
+                    target_floor = max(self._min_floor, target_floor * (1.0 - drop_relief * 0.45))
+            else:
+                target_floor = max(self._min_floor, min(self._max_floor, manual_floor))
+
+            try:
+                applied_floor = getattr(self, "_applied_noise_floor", target_floor)
+            except Exception:
+                applied_floor = target_floor
+            response = self._floor_response
+            if response < 0.05:
+                response = 0.05
+            elif response > 1.0:
+                response = 1.0
+            applied_floor = applied_floor + (target_floor - applied_floor) * response
+            self._applied_noise_floor = applied_floor
+            noise_floor = applied_floor
+            self._last_noise_floor = noise_floor
+
             bass_energy = max(0.0, (raw_bass - noise_floor) * expansion)
             mid_energy = max(0.0, (raw_mid - noise_floor * 0.4) * expansion)
             treble_energy = max(0.0, (raw_treble - noise_floor * 0.2) * expansion)
@@ -316,14 +488,44 @@ class SpotifyVisualizerAudioWorker(QObject):
                 mid_contrib = mid_energy * (1.0 - abs(dist - 0.5) * 2) * 0.3
                 treble_contrib = treble_energy * dist * 0.2
                 arr[i] = base + mid_contrib + treble_contrib
+
+            drop_signal = bass_drop_ratio
+            if low_resolution:
+                valley_signal = 0.0
+                if prev_raw_bass > 1e-3:
+                    valley_signal = max(valley_signal, max(0.0, (prev_raw_bass - raw_bass) / prev_raw_bass))
+                bass_floor_ref = max(noise_floor * 1.05, 1e-3)
+                if raw_bass < bass_floor_ref:
+                    valley_signal = max(
+                        valley_signal,
+                        min(0.9, (bass_floor_ref - raw_bass) / bass_floor_ref),
+                    )
+                drop_accum = drop_accum * 0.88 + valley_signal * 0.55
+                if valley_signal < 0.02:
+                    drop_accum *= 0.92
+                drop_accum = max(0.0, min(1.0, drop_accum))
+                drop_signal = max(drop_signal, drop_accum)
+            self._bass_drop_accum = drop_accum
+            if low_resolution and drop_signal > 0.05:
+                drop_strength = min(0.92, 0.2 + drop_signal * 1.3)
+                band_span = max(1, center)
+                for i in range(bands):
+                    dist = abs(i - center) / float(band_span)
+                    emphasis = max(0.25, 1.0 - dist * 1.35)
+                    arr[i] *= max(0.0, 1.0 - drop_strength * emphasis)
+            self._last_bass_drop_ratio = drop_signal
             
         except Exception:
             return self._get_zero_bars()
 
         # V1.2 STYLE SMOOTHING with aggressive decay for 0.1-1.0 range
         # decay_rate = 0.7 means bars drop 30% per frame - much faster drops
-        smoothing = 0.3
-        decay_rate = 0.7  # Aggressive decay for visible drops
+        smoothing = 0.5
+        if low_resolution:
+            smoothing = max(0.05, smoothing * 0.15)
+        decay_rate = 0.15  # Extremely aggressive decay for visible drops
+        if low_resolution:
+            decay_rate = max(0.02, decay_rate * 0.15)
         
         # CRITICAL: Detect pause/resume gaps (e.g., after settings dialog)
         # If more than 2 seconds have passed, reset bar_history to avoid
@@ -333,28 +535,139 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._last_fft_ts = now_ts
         
         bar_history = self._bar_history
+        hold_timers = self._bar_hold_timers
+        if hold_timers is None or hold_timers.shape[0] != bands:
+            hold_timers = np.zeros(bands, dtype="int32")
+            self._bar_hold_timers = hold_timers
         if dt > 2.0:
             # Reset bar history to current raw values after a long pause
             bar_history.fill(0.0)
+            hold_timers.fill(0)
         
+        drop_threshold = self._drop_threshold
+        drop_decay = self._drop_decay_fast
+        hold_frames = self._drop_hold_frames
+        snap_fraction = getattr(self, "_drop_snap_fraction", 0.45)
+        if low_resolution:
+            drop_threshold = max(0.0002, drop_threshold * 0.18)
+            drop_decay = max(0.03, drop_decay * 0.18)
+            hold_frames = max(1, int(round(hold_frames * 0.25)))
+            snap_fraction = max(0.03, min(0.25, snap_fraction - 0.35))
+        snap_min = 0.05
+        if low_resolution:
+            snap_min = 0.02
+        snap_max = 0.95
+        snap_fraction = max(snap_min, min(snap_max, snap_fraction))
+        if hold_frames < 1:
+            hold_frames = 1
+        drop_threshold = max(0.0, drop_threshold)
+        drop_decay_min = 0.1
+        if low_resolution:
+            drop_decay_min = 0.045
+        drop_decay = max(drop_decay_min, min(0.95, drop_decay))
+        drop_gain = 1.0
+        if low_resolution:
+            drop_gain = 3.0
+        drop_relief = drop_signal if low_resolution else 0.0
+        if low_resolution and drop_relief > 0.01:
+            drop_scale = min(0.95, 0.12 + drop_relief * 1.55)
+            span = max(1, center)
+            for i in range(bands):
+                dist = abs(i - center) / float(span)
+                emphasis = max(0.2, 1.0 - dist * 1.25)
+                arr[i] *= max(0.0, 1.0 - drop_scale * emphasis)
+
         for i in range(bands):
             target = arr[i]
             current = bar_history[i]
+            hold = hold_timers[i]
             
             if target > current:
                 # Rise quickly
                 new_val = current + (target - current) * (1.0 - smoothing * 0.5)
+                hold_timers[i] = max(hold - 1, 0)
             else:
-                # Fall with aggressive decay
-                new_val = current * decay_rate
-                if new_val < target:
-                    new_val = target
+                effective_target = target
+                if low_resolution and current > target:
+                    drop_relief = ((current - target) * 0.6) + 0.02
+                    drop_relief = min(drop_relief, max(0.0, target * 0.85))
+                    effective_target = max(0.0, target - drop_relief)
+                # Fall with aggressive decay; if drop is large trigger hold
+                drop = (current - effective_target) * drop_gain
+                if drop > drop_threshold:
+                    hold_timers[i] = hold_frames
+                    snap_target = max(effective_target, current * snap_fraction)
+                    new_val = snap_target
+                elif hold > 0:
+                    next_hold = hold - 1
+                    hold_timers[i] = next_hold
+                    phase = (hold_frames - next_hold) / max(1, hold_frames)
+                    dynamic_decay = drop_decay - (drop_decay - 0.35) * phase
+                    if low_resolution:
+                        dynamic_decay = max(0.035, dynamic_decay * 0.35)
+                    else:
+                        if dynamic_decay < 0.2:
+                            dynamic_decay = 0.2
+                    new_val = current * dynamic_decay
+                    if new_val < effective_target:
+                        new_val = effective_target
+                else:
+                    new_val = current * decay_rate
+                    if new_val < effective_target:
+                        new_val = effective_target
+
+                if low_resolution and current > effective_target:
+                    # Additional low-res drop shaping to encourage deeper falls without flicker.
+                    drop_ratio = (current - effective_target) / max(current, 1e-3)
+                    blend = max(0.25, min(0.85, 1.0 - 0.55 * drop_ratio))
+                    new_val = effective_target + (new_val - effective_target) * blend
+                    extra_decay = max(0.0, min(1.0, drop_ratio * 1.4))
+                    if extra_decay > 0.0:
+                        new_val = max(target, new_val - drop * 0.3 * extra_decay)
             
             arr[i] = new_val
             bar_history[i] = new_val
         
-        # Scale to get peaks at 1.0 without clipping everything
-        arr *= 0.8
+        # Scale to get peaks near 1.0 while allowing configurable boosts
+        scale = (self._base_output_scale or 0.8) * (self._energy_boost or 1.0)
+        if scale < 0.1:
+            scale = 0.1
+        elif scale > 1.25:
+            scale = 1.25
+        arr *= scale
+
+        # Adaptive normalization: keep long-term peaks from pinning at 1.0.
+        try:
+            peak_val = float(arr.max())
+        except Exception:
+            peak_val = 0.0
+        max_tracked_peak = 1.35
+        if peak_val > max_tracked_peak:
+            peak_val = max_tracked_peak
+        running_peak = getattr(self, "_running_peak", 0.5)
+        try:
+            floor_baseline = float(self._applied_noise_floor)
+        except Exception:
+            floor_baseline = 2.0
+        base_headroom = 0.45 + 0.1 * max(0.0, min(4.0, floor_baseline))
+        headroom_scale = max(0.7, min(1.0, base_headroom))
+        if peak_val > running_peak:
+            running_peak += (peak_val - running_peak) * 0.32
+        else:
+            fast_decay = 0.9 if peak_val < running_peak * 0.5 else 0.965
+            running_peak = running_peak * fast_decay + peak_val * (1.0 - fast_decay)
+        drop_relief = drop_signal if low_resolution else 0.0
+        if low_resolution and drop_relief > 0.0:
+            running_peak *= max(0.7, 1.0 - drop_relief * 0.4)
+        running_peak = max(0.18, min(1.35, running_peak))
+        self._running_peak = running_peak
+        target_peak = 0.9 * headroom_scale
+        if running_peak > target_peak * 1.05 and peak_val > 0.0:
+            normalization = target_peak / max(running_peak, 1e-3)
+            if low_resolution:
+                normalization *= (1.0 - min(0.22, drop_relief * 0.5))
+            arr *= normalization
+
         np.clip(arr, 0.0, 1.0, out=arr)
         
         # DEBUG: Log bar values and raw energy periodically
@@ -748,6 +1061,9 @@ class SpotifyVisualizerWidget(QWidget):
         self._spotify_playing: bool = False
         self._anchor_media: Optional[QWidget] = None
         self._has_seen_media: bool = False
+        # Legacy Spotify gating state (still tracked for telemetry/UI toggles)
+        self._last_media_state_ts: float = 0.0
+        self._media_state_logged: bool = False
 
         # Shared beat engine (single audio worker per process). We keep
         # aliases for _audio_worker/_bars_buffer/_bars_result_buffer so
@@ -1008,6 +1324,21 @@ class SpotifyVisualizerWidget(QWidget):
             state = ""
         prev = self._spotify_playing
         self._spotify_playing = state == "playing"
+        self._last_media_state_ts = time.time()
+        self._fallback_logged = False
+
+        if logger.isEnabledFor(logging.INFO):
+            try:
+                track = payload.get("track_name") or payload.get("title") or ""
+            except Exception:
+                track = ""
+            logger.info(
+                "[SPOTIFY_VIS] media_update state=%s -> playing=%s (prev=%s) track=%s",
+                state or "<unset>",
+                self._spotify_playing,
+                prev,
+                track,
+            )
 
         first_media = not self._has_seen_media
         if first_media:
@@ -1026,7 +1357,10 @@ class SpotifyVisualizerWidget(QWidget):
             except Exception:
                 pass
         
-        # Show/hide based on anchor media widget visibility
+        self.sync_visibility_with_anchor()
+
+    def sync_visibility_with_anchor(self) -> None:
+        """Show/hide based on anchor media widget visibility."""
         anchor = self._anchor_media
         if anchor is not None:
             try:
@@ -1040,9 +1374,53 @@ class SpotifyVisualizerWidget(QWidget):
             except Exception:
                 pass
         
-        if not self._spotify_playing:
-            # Drive target bars to zero; smoothing path will fade them out.
-            self._target_bars = [0.0] * self._bar_count
+    def _is_media_state_stale(self) -> bool:
+        """Return True if Spotify state has not updated within fallback timeout."""
+        last = getattr(self, "_last_media_state_ts", 0.0)
+        if last <= 0.0:
+            return True
+        try:
+            timeout = float(self._media_fallback_timeout)
+        except Exception:
+            timeout = 8.0
+        return (time.time() - last) >= max(1.0, timeout)
+
+    def _has_audio_activity(
+        self,
+        bars: List[float],
+        raw_bars: Optional[List[float]] = None,
+    ) -> bool:
+        """Heuristic to detect meaningful audio energy on the loopback feed."""
+        candidates = raw_bars if isinstance(raw_bars, list) and raw_bars else bars
+        if not isinstance(candidates, list) or not candidates:
+            return False
+        threshold = 0.01
+        try:
+            return max(candidates) >= threshold
+        except Exception:
+            return any((b or 0.0) >= threshold for b in candidates)
+
+    def _is_fallback_forced(self) -> bool:
+        return time.time() <= getattr(self, "_fallback_forced_until", 0.0)
+
+    def _update_fallback_force_state(self, audio_active: bool) -> None:
+        now = time.time()
+        if self._spotify_playing:
+            self._fallback_mismatch_start = 0.0
+            self._fallback_forced_until = 0.0
+            return
+
+        if audio_active:
+            if self._fallback_mismatch_start <= 0.0:
+                self._fallback_mismatch_start = now
+            elif (now - self._fallback_mismatch_start) >= 3.0:
+                if not self._is_fallback_forced():
+                    self._fallback_forced_until = now + 20.0
+                    logger.info(
+                        "[SPOTIFY_VIS] Forcing audio fallback for 20s (bridge reports paused but audio active)",
+                    )
+        else:
+            self._fallback_mismatch_start = 0.0
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -1431,20 +1809,10 @@ class SpotifyVisualizerWidget(QWidget):
             # The engine handles decay naturally via exponential smoothing -
             # when audio stops, raw bars go to zero and smoothed bars decay.
             smoothed = engine.get_smoothed_bars()
-            
-            # CRITICAL: Only show bars when Spotify is actually playing.
-            # The audio engine captures ALL system audio (WASAPI loopback),
-            # so we must gate the display on Spotify's playback state to
-            # avoid showing visualizations for other apps' audio.
-            # NOTE: We do NOT force zeros here - the 1-bar floor in paintEvent
-            # handles the visual minimum when Spotify IS playing. Instead we
-            # just suppress the audio-derived values when Spotify is NOT playing.
-            if not self._spotify_playing:
-                # Suppress audio-derived bars when Spotify isn't playing.
-                # This prevents other apps' audio from driving the visualizer.
-                for i in range(len(smoothed)):
-                    smoothed[i] = 0.0
-            
+
+            # Always drive the bars from audio to avoid Spotify bridge flakiness.
+            self._fallback_logged = False
+
             # Debug constant-bar mode
             if _DEBUG_CONST_BARS > 0.0:
                 const_val = max(0.0, min(1.0, _DEBUG_CONST_BARS))

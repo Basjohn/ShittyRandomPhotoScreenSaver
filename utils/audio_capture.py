@@ -12,7 +12,7 @@ from typing import Callable, Optional, Any
 import os
 import platform
 
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_verbose_logging
 
 logger = get_logger(__name__)
 
@@ -161,6 +161,8 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
         # Find loopback device
         device = self._find_loopback_device(self._pa)
         if device is None:
+            if is_verbose_logging():
+                logger.debug("[AUDIO] No WASAPI loopback device found; aborting PyAudioWPatch start")
             self._cleanup_pa()
             return False
         
@@ -171,6 +173,15 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
         except Exception:
             self._channels = 2
             self._sample_rate = 48000
+        
+        if is_verbose_logging():
+            logger.debug(
+                "[AUDIO] PyAudioWPatch selected device=%s (index=%s, channels=%s, sample_rate=%s)",
+                device.get("name", "<unknown>"),
+                device.get("index"),
+                self._channels,
+                self._sample_rate,
+            )
         
         if self._channels <= 0 or self._sample_rate <= 0:
             self._cleanup_pa()
@@ -210,10 +221,12 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
                 )
                 self._stream.start_stream()
                 self._running = True
-                logger.debug(
-                    "[AUDIO] PyAudioWPatch started: %dHz, %d channels, %d block",
-                    self._sample_rate, self._channels, block_size
-                )
+                if is_verbose_logging():
+                    logger.debug(
+                        "[AUDIO] PyAudioWPatch stream running (device=%s, block=%d)",
+                        device.get("name", "<unknown>"),
+                        block_size,
+                    )
                 return True
             except Exception as e:
                 if self._stream:
@@ -223,7 +236,8 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
                     except Exception:
                         pass
                     self._stream = None
-                logger.debug("[AUDIO] Block size %d failed: %s", block_size, e)
+                if is_verbose_logging():
+                    logger.debug("[AUDIO] Block size %d failed: %s", block_size, e)
         
         self._cleanup_pa()
         return False

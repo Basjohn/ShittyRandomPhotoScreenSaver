@@ -34259,3 +34259,413 @@ FAILED tests/test_media_widget.py::test_display_widget_hard_exit_click_routes_to
 
 ====================================================================================== 3 failed, 10 passed in 7.97s =======================================================================================
 
+
+===== pytest run 2025-12-27 20:02:00 args=['tests/test_spotify_visualizer_widget.py', '-k', 'bars_not_stuck'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collected 13 items / 12 deselected / 1 selected
+
+
+
+tests\test_spotify_visualizer_widget.py 
+F
+                                                                                                                                                            [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+______________________________________________________________________________ test_spotify_visualizer_bars_not_stuck_at_top ______________________________________________________________________________
+
+
+
+    def test_spotify_visualizer_bars_not_stuck_at_top():
+
+        try:
+
+            import numpy as np  # type: ignore[import]
+
+        except Exception:
+
+            pytest.skip("numpy not available for Spotify visualiser tests")
+
+    
+
+        buf: TripleBuffer[_AudioFrame] = TripleBuffer()
+
+        worker = SpotifyVisualizerAudioWorker(bar_count=15, buffer=buf)
+
+        worker._np = np  # type: ignore[attr-defined]
+
+    
+
+        n_samples = 2048
+
+        sample_rate = 48000
+
+        t = np.arange(n_samples, dtype=np.float32) / np.float32(sample_rate)
+
+    
+
+        bars_center = []
+
+        frames = 120
+
+        for frame in range(frames):
+
+            intensity = np.float32(0.1 + 0.9 * (0.5 + 0.5 * np.sin(np.float32(2.0 * np.pi) * np.float32(frame) / np.float32(60.0))))
+
+            env = np.exp(-t * np.float32(20.0)).astype(np.float32)
+
+            base = (np.sin(np.float32(2.0 * np.pi * 80.0) * t) * env).astype(np.float32)
+
+            samples = (base * (np.float32(0.03) * intensity)).astype(np.float32)
+
+            bars = worker.compute_bars_from_samples(samples)
+
+            if not isinstance(bars, list) or not bars:
+
+                continue
+
+            center_idx = len(bars) // 2
+
+            bars_center.append(float(bars[center_idx]))
+
+    
+
+        assert bars_center
+
+    
+
+        center_arr = np.asarray(bars_center, dtype=np.float32)
+
+        cmin = float(center_arr.min())
+
+        cmax = float(center_arr.max())
+
+        stuck_frac = float(np.mean(center_arr >= np.float32(0.98)))
+
+        crange = cmax - cmin
+
+    
+
+        assert cmax >= 0.25
+
+        assert crange >= 0.15
+
+>       assert stuck_frac <= 0.55
+
+E       assert 0.7333333333333333 <= 0.55
+
+
+
+tests\test_spotify_visualizer_widget.py:246: AssertionError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_spotify_visualizer_widget.py::test_spotify_visualizer_bars_not_stuck_at_top - assert 0.7333333333333333 <= 0.55
+
+==================================================================================== 1 failed, 12 deselected in 0.45s =====================================================================================
+
+
+===== pytest run 2025-12-27 20:02:20 args=['tests/test_spotify_visualizer_widget.py', '-k', 'bars_not_stuck', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 13 items / 12 deselected / 1 selected
+
+
+
+tests/test_spotify_visualizer_widget.py::test_spotify_visualizer_bars_not_stuck_at_top 
+FAILED                                                                                                        [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+______________________________________________________________________________ test_spotify_visualizer_bars_not_stuck_at_top ______________________________________________________________________________
+
+
+
+    def test_spotify_visualizer_bars_not_stuck_at_top():
+
+        try:
+
+            import numpy as np  # type: ignore[import]
+
+        except Exception:
+
+            pytest.skip("numpy not available for Spotify visualiser tests")
+
+    
+
+        buf: TripleBuffer[_AudioFrame] = TripleBuffer()
+
+        worker = SpotifyVisualizerAudioWorker(bar_count=15, buffer=buf)
+
+        worker._np = np  # type: ignore[attr-defined]
+
+    
+
+        n_samples = 2048
+
+        sample_rate = 48000
+
+        t = np.arange(n_samples, dtype=np.float32) / np.float32(sample_rate)
+
+    
+
+        bars_center = []
+
+        frames = 120
+
+        for frame in range(frames):
+
+            intensity = np.float32(0.1 + 0.9 * (0.5 + 0.5 * np.sin(np.float32(2.0 * np.pi) * np.float32(frame) / np.float32(60.0))))
+
+            env = np.exp(-t * np.float32(20.0)).astype(np.float32)
+
+            base = (np.sin(np.float32(2.0 * np.pi * 80.0) * t) * env).astype(np.float32)
+
+            samples = (base * (np.float32(0.03) * intensity)).astype(np.float32)
+
+            bars = worker.compute_bars_from_samples(samples)
+
+            if not isinstance(bars, list) or not bars:
+
+                continue
+
+            center_idx = len(bars) // 2
+
+            bars_center.append(float(bars[center_idx]))
+
+    
+
+        assert bars_center
+
+    
+
+        center_arr = np.asarray(bars_center, dtype=np.float32)
+
+        cmin = float(center_arr.min())
+
+        cmax = float(center_arr.max())
+
+        stuck_frac = float(np.mean(center_arr >= np.float32(0.98)))
+
+        crange = cmax - cmin
+
+    
+
+        assert cmax >= 0.25
+
+        assert crange >= 0.15
+
+>       assert stuck_frac <= 0.55
+
+E       assert 0.7333333333333333 <= 0.55
+
+
+
+tests\test_spotify_visualizer_widget.py:246: AssertionError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_spotify_visualizer_widget.py::test_spotify_visualizer_bars_not_stuck_at_top - assert 0.7333333333333333 <= 0.55
+
+==================================================================================== 1 failed, 12 deselected in 0.36s =====================================================================================
+
+
+===== pytest run 2025-12-27 20:03:27 args=['tests/test_spotify_visualizer_widget.py', '-k', 'bars_not_stuck'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collected 13 items / 12 deselected / 1 selected
+
+
+
+tests\test_spotify_visualizer_widget.py 
+F
+                                                                                                                                                            [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+______________________________________________________________________________ test_spotify_visualizer_bars_not_stuck_at_top ______________________________________________________________________________
+
+
+
+    def test_spotify_visualizer_bars_not_stuck_at_top():
+
+        try:
+
+            import numpy as np  # type: ignore[import]
+
+        except Exception:
+
+            pytest.skip("numpy not available for Spotify visualiser tests")
+
+    
+
+        buf: TripleBuffer[_AudioFrame] = TripleBuffer()
+
+        worker = SpotifyVisualizerAudioWorker(bar_count=15, buffer=buf)
+
+        worker._np = np  # type: ignore[attr-defined]
+
+    
+
+        n_samples = 2048
+
+        sample_rate = 48000
+
+        t = np.arange(n_samples, dtype=np.float32) / np.float32(sample_rate)
+
+    
+
+        bars_center = []
+
+        frames = 120
+
+        for frame in range(frames):
+
+            intensity = np.float32(0.1 + 0.9 * (0.5 + 0.5 * np.sin(np.float32(2.0 * np.pi) * np.float32(frame) / np.float32(60.0))))
+
+            env = np.exp(-t * np.float32(20.0)).astype(np.float32)
+
+            base = (np.sin(np.float32(2.0 * np.pi * 80.0) * t) * env).astype(np.float32)
+
+            samples = (base * (np.float32(0.03) * intensity)).astype(np.float32)
+
+            bars = worker.compute_bars_from_samples(samples)
+
+            if not isinstance(bars, list) or not bars:
+
+                continue
+
+            center_idx = len(bars) // 2
+
+            bars_center.append(float(bars[center_idx]))
+
+    
+
+        assert bars_center
+
+    
+
+        center_arr = np.asarray(bars_center, dtype=np.float32)
+
+        cmin = float(center_arr.min())
+
+        cmax = float(center_arr.max())
+
+        stuck_frac = float(np.mean(center_arr >= np.float32(0.98)))
+
+        crange = cmax - cmin
+
+    
+
+        assert cmax >= 0.25
+
+        assert crange >= 0.15
+
+>       assert stuck_frac <= 0.55
+
+E       assert 0.7333333333333333 <= 0.55
+
+
+
+tests\test_spotify_visualizer_widget.py:246: AssertionError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_spotify_visualizer_widget.py::test_spotify_visualizer_bars_not_stuck_at_top - assert 0.7333333333333333 <= 0.55
+
+==================================================================================== 1 failed, 12 deselected in 0.39s =====================================================================================
+
+
+===== pytest run 2025-12-27 21:54:31 args=['tests/test_visualizer_distribution.py', '-k', 'reactivity_realistic', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 0 items
+
+
+
+========================================================================================== no tests ran in 0.40s ==========================================================================================
+
+
+===== pytest run 2025-12-27 21:54:48 args=['tests/test_visualizer_distribution.py', '-k', 'reactivity_realistic', '-vv', '-s'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 0 items
+
+
+
+========================================================================================== no tests ran in 0.33s ==========================================================================================
+

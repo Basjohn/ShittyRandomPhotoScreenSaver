@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 from PySide6.QtCore import QPoint, QRect, QObject, QPointF, QEvent, QTimer
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QMouseEvent
+import engine.display_manager as display_manager_module
 
 
 class TestRedditExitLogic:
@@ -176,9 +177,32 @@ class TestDisplayManagerDeferredUrls:
     """Test deferred Reddit URL handling in DisplayManager cleanup."""
 
     @pytest.mark.qt
-    def test_cleanup_opens_pending_reddit_urls(self, qt_app, monkeypatch):
-        """DisplayManager.cleanup should open stored Reddit URLs after shutdown."""
+    def test_cleanup_defers_urls_for_helper_flush(self, qt_app, monkeypatch):
+        """DisplayManager.cleanup should collect URLs for helper-based flush."""
         from engine.display_manager import DisplayManager
+
+        helper_calls: list[str] = []
+
+        class _HelperModule:
+            def should_use_session_launcher(self) -> bool:
+                return True
+
+            def launch_url_via_user_desktop(self, url: str) -> bool:
+                helper_calls.append(url)
+                return True
+
+        monkeypatch.setattr(
+            display_manager_module,
+            "windows_url_launcher",
+            _HelperModule(),
+            raising=False,
+        )
+        monkeypatch.setattr(
+            display_manager_module,
+            "reddit_helper_bridge",
+            None,
+            raising=False,
+        )
 
         manager = DisplayManager()
         fake_display = MagicMock()
@@ -190,21 +214,13 @@ class TestDisplayManagerDeferredUrls:
 
         manager.displays = [fake_display]
 
-        opened: list[str] = []
-
-        def _fake_open(qurl):
-            opened.append(qurl.toString())
-            return True
-
-        monkeypatch.setattr(
-            "engine.display_manager.QDesktopServices.openUrl",
-            _fake_open,
-        )
-
         manager.cleanup()
 
         assert fake_display._pending_reddit_url is None
-        assert opened == ["https://example.com/pending"]
+
+        manager.flush_deferred_reddit_urls()
+
+        assert helper_calls == ["https://example.com/pending"]
 
 
 class TestDeferredRedditFlow:
@@ -219,6 +235,29 @@ class TestDeferredRedditFlow:
         from rendering.multi_monitor_coordinator import MultiMonitorCoordinator
         from engine.display_manager import DisplayManager
         import engine.display_manager as display_manager_module
+
+        helper_calls: list[str] = []
+
+        class _HelperModule:
+            def should_use_session_launcher(self) -> bool:
+                return True
+
+            def launch_url_via_user_desktop(self, url: str) -> bool:
+                helper_calls.append(url)
+                return True
+
+        monkeypatch.setattr(
+            display_manager_module,
+            "windows_url_launcher",
+            _HelperModule(),
+            raising=False,
+        )
+        monkeypatch.setattr(
+            display_manager_module,
+            "reddit_helper_bridge",
+            None,
+            raising=False,
+        )
 
         MultiMonitorCoordinator.reset()
         try:
@@ -269,30 +308,18 @@ class TestDeferredRedditFlow:
 
             assert widget._pending_reddit_url == target_url
 
-            opened: list[str] = []
-
-            def _open_on_cleanup(qurl):
-                opened.append(qurl.toString())
-                return True
-
-            monkeypatch.setattr(
-                display_manager_module.QDesktopServices,
-                "openUrl",
-                staticmethod(_open_on_cleanup),
-            )
-
             manager = DisplayManager()
             manager.displays = [widget]
 
             manager.cleanup()
             manager.flush_deferred_reddit_urls(ensure_widgets_dismissed=False)
 
-            assert opened == [target_url]
+            assert helper_calls == [target_url]
         finally:
             MultiMonitorCoordinator.reset()
 
     @pytest.mark.qt
-    def test_cleanup_waits_for_window_teardown_before_open(self, qtbot, monkeypatch):
+    def test_cleanup_waits_for_window_teardown_before_helper_launch(self, qtbot, monkeypatch):
         """Simulate Winlogon secure desktop by delaying window teardown until after event processing.
 
         DisplayManager.cleanup should not invoke QDesktopServices while display windows are still open.
@@ -316,23 +343,41 @@ class TestDeferredRedditFlow:
             def deleteLater(self):
                 QTimer.singleShot(0, lambda: setattr(self, "deleted", True))
 
+        helper_calls: list[str] = []
+
+        class _HelperModule:
+            def should_use_session_launcher(self) -> bool:
+                return True
+
+            def launch_url_via_user_desktop(self, url: str) -> bool:
+                assert display.closed and display.deleted, (
+                    "Helper launched before display windows finished closing"
+                )
+                helper_calls.append(url)
+                return True
+
+        monkeypatch.setattr(
+            display_manager_module,
+            "windows_url_launcher",
+            _HelperModule(),
+            raising=False,
+        )
+        monkeypatch.setattr(
+            display_manager_module,
+            "reddit_helper_bridge",
+            None,
+            raising=False,
+        )
+
         display = _AsyncClosingDisplay("https://example.com/secure-desktop")
         manager = DisplayManager()
         manager.displays = [display]
 
-        def _open_before_windows_gone(qurl):
-            assert display.closed and display.deleted, (
-                "Deferred Reddit URL opened before display windows finished closing"
-            )
-            return True
-
-        monkeypatch.setattr(
-            "engine.display_manager.QDesktopServices.openUrl",
-            _open_before_windows_gone,
-        )
-
         manager.cleanup()
         qtbot.wait_until(lambda: display.closed and display.deleted, timeout=1000)
+        manager.flush_deferred_reddit_urls()
+
+        assert helper_calls == ["https://example.com/secure-desktop"]
 
 
 class TestRedditHelperLauncher:
@@ -357,23 +402,12 @@ class TestRedditHelperLauncher:
                 return True
 
         helper = _Helper()
-        monkeypatch.setattr("engine.display_manager.windows_url_launcher", helper, raising=False)
-
-        open_calls: list[str] = []
-
-        def _open(qurl):
-            open_calls.append(qurl.toString())
-            return True
-
-        monkeypatch.setattr(
-            "engine.display_manager.QDesktopServices.openUrl",
-            staticmethod(_open),
-        )
+        monkeypatch.setattr(display_manager_module, "windows_url_launcher", helper, raising=False)
+        monkeypatch.setattr(display_manager_module, "reddit_helper_bridge", None, raising=False)
 
         manager.flush_deferred_reddit_urls()
 
         assert helper.launched == ["https://example.com/helper-success"]
-        assert open_calls == []  # QDesktopServices not used when helper succeeds
 
     def test_flush_falls_back_when_helper_rejects(self, qt_app, monkeypatch):
         from engine.display_manager import DisplayManager
@@ -386,11 +420,13 @@ class TestRedditHelperLauncher:
                 return True
 
             def launch_url_via_user_desktop(self, url: str) -> bool:
-                self.url = url
+                self.called = True
                 return False
 
         helper = _Helper()
-        monkeypatch.setattr("engine.display_manager.windows_url_launcher", helper, raising=False)
+        helper.called = False
+        monkeypatch.setattr(display_manager_module, "windows_url_launcher", helper, raising=False)
+        monkeypatch.setattr(display_manager_module, "reddit_helper_bridge", None, raising=False)
 
         open_calls: list[str] = []
 
@@ -405,7 +441,7 @@ class TestRedditHelperLauncher:
 
         manager.flush_deferred_reddit_urls()
 
-        assert getattr(helper, "url") == "https://example.com/helper-fallback"
+        assert helper.called is True
         assert open_calls == ["https://example.com/helper-fallback"]
 
     def test_flush_queues_when_bridge_available(self, qt_app, monkeypatch):

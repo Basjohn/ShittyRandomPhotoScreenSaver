@@ -357,9 +357,12 @@ class MediaWidget(BaseOverlayWidget):
         vis = getattr(parent, "spotify_visualizer_widget", None)
         if vis is not None:
             try:
-                if hasattr(vis, "handle_media_update"):
-                    # Trigger a visibility sync via the existing media update handler
-                    vis.handle_media_update({"state": "playing" if self.isVisible() else "stopped"})
+                if hasattr(vis, "sync_visibility_with_anchor"):
+                    vis.sync_visibility_with_anchor()
+                elif hasattr(vis, "handle_media_update"):
+                    # Legacy fallback for widgets without explicit sync helper
+                    state = "playing" if self.isVisible() else "stopped"
+                    vis.handle_media_update({"state": state})
             except Exception:
                 pass
         

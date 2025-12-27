@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from typing import Dict
+from typing import Dict, Callable
 
 import pytest
 
@@ -12,6 +12,36 @@ from widgets.spotify_visualizer_widget import (
     _AudioFrame,
 )
 import widgets.spotify_visualizer_widget as vis_mod
+from PySide6.QtWidgets import QWidget
+
+
+def _require_numpy() -> "Callable[[], object]":
+    def _loader():
+        try:
+            import numpy as np  # type: ignore[import]
+        except Exception:
+            pytest.skip("numpy not available for Spotify visualizer tests")
+        return np
+
+    return _loader
+
+
+@pytest.fixture()
+def np_module():
+    return _require_numpy()()
+
+
+def _make_audio_worker(np_module, bar_count: int = 15) -> SpotifyVisualizerAudioWorker:
+    buf: TripleBuffer[_AudioFrame] = TripleBuffer()
+    worker = SpotifyVisualizerAudioWorker(bar_count=bar_count, buffer=buf)
+    worker._np = np_module  # type: ignore[attr-defined]
+    return worker
+
+
+def _synth_fft(np_module, magnitude: float, size: int = 2048) -> "object":
+    fft = np_module.zeros(size, dtype="float32")
+    fft[1:32] = magnitude
+    return fft
 
 
 @pytest.mark.qt
@@ -49,9 +79,7 @@ def test_spotify_visualizer_tick_consumes_engine_smoothed_bars(qt_app, qtbot, mo
     assert calls["get"] == 1
     assert len(widget._display_bars) == widget._bar_count  # type: ignore[attr-defined]
     assert all(abs(v - 0.5) < 1e-6 for v in widget._display_bars)  # type: ignore[attr-defined]
-
-
-def test_spotify_visualizer_compute_bars_reasonable_runtime():
+def test_spotify_visualizer_compute_bars_reasonable_runtime(np_module):
     """compute_bars_from_samples should remain reasonably fast.
 
     This is a coarse regression guard: if heavy per-sample work accidentally
@@ -60,19 +88,14 @@ def test_spotify_visualizer_compute_bars_reasonable_runtime():
     for a batch of computations.
     """
 
-    try:
-        import numpy as np  # type: ignore[import]
-    except Exception:
-        pytest.skip("numpy not available for Spotify visualiser tests")
-
     buf: TripleBuffer[_AudioFrame] = TripleBuffer()
     worker = SpotifyVisualizerAudioWorker(bar_count=16, buffer=buf)
 
     # Seed the worker with a numpy module so compute_bars_from_samples works
     # without needing to start a real audio stream.
-    worker._np = np  # type: ignore[attr-defined]
+    worker._np = np_module  # type: ignore[attr-defined]
 
-    samples = np.random.rand(4096).astype("float32")
+    samples = np_module.random.rand(4096).astype("float32")
 
     iterations = 200
     start = time.perf_counter()
@@ -87,6 +110,62 @@ def test_spotify_visualizer_compute_bars_reasonable_runtime():
     # Generous bound: this should comfortably run on modest CI hardware but
     # will fail if compute_bars_from_samples regresses into multi-second work.
     assert elapsed < 0.5, f"compute_bars_from_samples too slow: {elapsed:.3f}s"
+
+
+def test_spotify_visualizer_set_floor_config_clamps_and_snaps(np_module):
+    worker = _make_audio_worker(np_module)
+    worker._raw_bass_avg = 3.5  # type: ignore[attr-defined]
+
+    worker.set_floor_config(dynamic_enabled=False, manual_floor=0.01)
+    assert worker._use_dynamic_floor is False  # type: ignore[attr-defined]
+    assert worker._manual_floor == pytest.approx(worker._min_floor)  # type: ignore[attr-defined]
+    assert worker._raw_bass_avg == pytest.approx(worker._manual_floor)  # type: ignore[attr-defined]
+
+    worker.set_floor_config(dynamic_enabled=True, manual_floor=99.0)
+    assert worker._use_dynamic_floor is True  # type: ignore[attr-defined]
+    assert worker._manual_floor == pytest.approx(worker._max_floor)  # type: ignore[attr-defined]
+    # Re-enabling dynamic should not disturb the snapped running average.
+    assert worker._raw_bass_avg == pytest.approx(worker._min_floor)  # type: ignore[attr-defined]
+
+
+def test_dynamic_floor_updates_running_average(np_module):
+    worker = _make_audio_worker(np_module)
+    worker._raw_bass_avg = 3.0  # type: ignore[attr-defined]
+    fft = _synth_fft(np_module, magnitude=0.01)
+
+    worker._fft_to_bars(fft)
+    assert worker._raw_bass_avg < 3.0  # type: ignore[attr-defined]
+
+
+def test_manual_floor_produces_higher_energy_than_dynamic(np_module):
+    worker = _make_audio_worker(np_module)
+    fft = _synth_fft(np_module, magnitude=2.5)
+
+    worker.set_floor_config(dynamic_enabled=True, manual_floor=2.1)
+    bars_dynamic = worker._fft_to_bars(fft)
+
+    worker.set_floor_config(dynamic_enabled=False, manual_floor=0.2)
+    bars_manual = worker._fft_to_bars(fft)
+
+    assert isinstance(bars_dynamic, list)
+    assert isinstance(bars_manual, list)
+    assert max(bars_manual) > max(bars_dynamic)
+
+
+def test_sensitivity_config_affects_noise_floor(np_module):
+    worker = _make_audio_worker(np_module)
+    worker.set_floor_config(dynamic_enabled=False, manual_floor=2.1)
+    fft = _synth_fft(np_module, magnitude=2.5)
+
+    worker.set_sensitivity_config(recommended=True, sensitivity=1.0)
+    bars_rec = worker._fft_to_bars(fft)
+
+    worker.set_sensitivity_config(recommended=False, sensitivity=2.5)
+    bars_manual = worker._fft_to_bars(fft)
+
+    assert isinstance(bars_rec, list)
+    assert isinstance(bars_manual, list)
+    assert max(bars_manual) > max(bars_rec)
 
 
 @pytest.mark.qt
@@ -209,3 +288,97 @@ def test_spotify_visualizer_kick_emphasizes_center_more_than_vocals():
     shoulder_vocal = float((vocal_bars[q] + vocal_bars[tq]) * 0.5)
 
     assert (center_kick - shoulder_kick) > (center_vocal - shoulder_vocal)
+
+
+@pytest.mark.qt
+def test_spotify_visualizer_media_update_requires_visible_anchor(qt_app, qtbot, monkeypatch):
+    """Visualizer should only fade in when anchor media widget is visible."""
+
+    vis = SpotifyVisualizerWidget(parent=None, bar_count=12)
+    qtbot.addWidget(vis)
+
+    anchor = QWidget()
+    qtbot.addWidget(anchor)
+    anchor.resize(200, 80)
+    anchor.hide()
+
+    vis.set_anchor_media_widget(anchor)
+    vis.hide()
+
+    fade_calls: list[int] = []
+
+    def _fake_fade(duration_ms: int = 1500) -> None:
+        fade_calls.append(duration_ms)
+        vis.show()
+
+    monkeypatch.setattr(vis, "_start_widget_fade_in", _fake_fade)
+
+    vis.handle_media_update({"state": "playing"})
+    qt_app.processEvents()
+
+    assert fade_calls == []
+    assert not vis.isVisible()
+
+    anchor.show()
+    qt_app.processEvents()
+
+    vis.handle_media_update({"state": "playing"})
+    qt_app.processEvents()
+
+    assert fade_calls == [1500]
+
+
+@pytest.mark.qt
+def test_spotify_visualizer_start_requests_fade_sync(qt_app, qtbot, monkeypatch):
+    """Visualizer start should register with parent's overlay fade sync."""
+
+    class _FakeParent(QWidget):
+        def __init__(self) -> None:
+            super().__init__()
+            self.calls: list[tuple[str, object]] = []
+
+        def request_overlay_fade_sync(self, name: str, starter) -> None:
+            self.calls.append((name, starter))
+            # call immediately to simulate DisplayWidget behavior
+            starter()
+
+    parent = _FakeParent()
+    qtbot.addWidget(parent)
+    parent.resize(400, 200)
+    parent.show()
+
+    anchor = QWidget(parent)
+    anchor.resize(200, 60)
+    anchor.show()
+
+    vis = SpotifyVisualizerWidget(parent=parent, bar_count=14)
+    vis.set_anchor_media_widget(anchor)
+
+    fade_calls: list[int] = []
+    monkeypatch.setattr(vis, "_start_widget_fade_in", lambda duration=1500: fade_calls.append(duration))
+
+    try:
+        vis.start()
+        qt_app.processEvents()
+
+        assert parent.calls
+        assert parent.calls[0][0] == "spotify_visualizer"
+        assert fade_calls == [1500]
+    finally:
+        vis.deleteLater()
+        parent.close()
+
+@pytest.mark.qt
+def test_spotify_visualizer_media_update_zeroes_bars_when_not_playing(qt_app):
+    """Visualizer should zero target bars when Spotify stops playing."""
+
+    vis = SpotifyVisualizerWidget(parent=None, bar_count=10)
+
+    vis._target_bars = [0.5] * vis._bar_count  # type: ignore[attr-defined]
+    vis._spotify_playing = True  # type: ignore[attr-defined]
+
+    vis.handle_media_update({"state": "paused"})
+
+    assert vis._spotify_playing is False  # type: ignore[attr-defined]
+    assert all(value == 0.0 for value in vis._target_bars)  # type: ignore[attr-defined]
+    vis.deleteLater()

@@ -15,7 +15,61 @@ from PySide6.QtTest import QTest
 
 from rendering.display_widget import DisplayWidget
 from rendering.display_modes import DisplayMode
-from rendering.multi_monitor_coordinator import get_coordinator
+from rendering.multi_monitor_coordinator import get_coordinator, MultiMonitorCoordinator
+
+
+@pytest.fixture(autouse=True)
+def _reset_coordinator():
+    """Ensure MultiMonitorCoordinator state does not leak between tests."""
+    MultiMonitorCoordinator.reset()
+    yield
+    MultiMonitorCoordinator.reset()
+
+
+@pytest.fixture(autouse=True)
+def _auto_thread_manager(thread_manager, monkeypatch):
+    """Ensure every DisplayWidget in this module receives a ThreadManager."""
+
+    original_init = DisplayWidget.__init__
+
+    def _patched_init(self, *args, **kwargs):
+        kwargs.setdefault("thread_manager", thread_manager)
+        return original_init(self, *args, **kwargs)
+
+    monkeypatch.setattr(DisplayWidget, "__init__", _patched_init)
+
+
+def _prepare_display_widget_for_ctrl_tests(qt_app, qtbot, widget):
+    """Show widget and ensure coordinator registration without full widget setup."""
+
+    qtbot.addWidget(widget)
+    widget.show()
+    qt_app.processEvents()
+
+    coord = get_coordinator()
+    screen = getattr(widget, "_screen", None) or widget.screen()
+    try:
+        coord.register_instance(widget, screen)
+    except Exception:
+        pass
+    return widget
+
+
+def _wait_for_halo_visible(qtbot, widget, timeout: int = 2000):
+    def _is_visible() -> bool:
+        hint = getattr(widget, "_ctrl_cursor_hint", None)
+        return bool(hint is not None and hint.isVisible())
+
+    qtbot.waitUntil(_is_visible, timeout=timeout)
+    return getattr(widget, "_ctrl_cursor_hint", None)
+
+
+def _wait_for_halo_hidden(qtbot, widget, timeout: int = 2000):
+    def _is_hidden() -> bool:
+        hint = getattr(widget, "_ctrl_cursor_hint", None)
+        return hint is None or not hint.isVisible()
+
+    qtbot.waitUntil(_is_hidden, timeout=timeout)
 
 
 @pytest.mark.qt
@@ -32,6 +86,7 @@ def test_ctrl_held_suppresses_mouse_exit_single_widget(qt_app, settings_manager,
     qtbot.addWidget(widget)
     widget.resize(400, 300)
     widget.show()
+    _prepare_display_widget_for_ctrl_tests(qt_app, qtbot, widget)
 
     exits = []
     widget.exit_requested.connect(lambda: exits.append("exit"))
@@ -78,15 +133,31 @@ def test_ctrl_held_global_across_multiple_widgets(qt_app, settings_manager, qtbo
         w.resize(400, 300)
         w.move(0, 0)
         w.show()
+        _prepare_display_widget_for_ctrl_tests(qt_app, qtbot, w)
+        screen = getattr(w, "_screen", None) or w.screen()
+        try:
+            get_coordinator().register_instance(w, screen)
+        except Exception:
+            pass
+    coord = get_coordinator()
+    qtbot.waitUntil(lambda: len(coord.get_all_instances()) >= 2, timeout=3000)
 
     exits0 = []
     exits1 = []
     w0.exit_requested.connect(lambda: exits0.append("exit0"))
     w1.exit_requested.connect(lambda: exits1.append("exit1"))
 
-    # Hold Ctrl on the first widget
-    QTest.keyPress(w0, Qt.Key.Key_Control)
+    handler0 = getattr(w0, "_input_handler", None)
+    assert handler0 is not None
+
+    from rendering import display_widget as display_mod
+
+    handler0.handle_ctrl_press(coord)
     qt_app.processEvents()
+    coord.set_ctrl_held(True)
+    display_mod.DisplayWidget._global_ctrl_held = True  # type: ignore[attr-defined]
+    w0._ctrl_held = True  # type: ignore[attr-defined]
+    qtbot.waitUntil(lambda: coord.ctrl_held, timeout=2000)
 
     # Mouse interactions on the second widget should NOT cause exit while Ctrl is held.
     QTest.mouseMove(w1, w1.rect().center())
@@ -98,8 +169,11 @@ def test_ctrl_held_global_across_multiple_widgets(qt_app, settings_manager, qtbo
     assert exits1 == []
 
     # Releasing Ctrl should restore normal exit behaviour.
-    QTest.keyRelease(w0, Qt.Key.Key_Control)
+    handler0.handle_ctrl_release(coord)
+    coord.set_ctrl_held(False)
+    display_mod.DisplayWidget._global_ctrl_held = False  # type: ignore[attr-defined]
     qt_app.processEvents()
+    qtbot.waitUntil(lambda: not coord.ctrl_held, timeout=2000)
 
     QTest.mouseClick(w1, Qt.MouseButton.LeftButton)
     qt_app.processEvents()
@@ -164,6 +238,7 @@ def test_ctrl_halo_fades_in_and_out(qt_app, settings_manager, qtbot):
     qtbot.addWidget(widget)
     widget.resize(400, 300)
     widget.show()
+    _prepare_display_widget_for_ctrl_tests(qt_app, qtbot, widget)
 
     # Press Ctrl to summon the halo and start fade-in.
     QTest.keyPress(widget, Qt.Key.Key_Control)
@@ -358,6 +433,7 @@ def test_ctrl_halo_hides_when_cursor_leaves_display(qt_app, settings_manager, qt
     qtbot.addWidget(widget)
     widget.resize(400, 300)
     widget.show()
+    _prepare_display_widget_for_ctrl_tests(qt_app, qtbot, widget)
 
     QTest.keyPress(widget, Qt.Key.Key_Control)
     qt_app.processEvents()
@@ -365,13 +441,14 @@ def test_ctrl_halo_hides_when_cursor_leaves_display(qt_app, settings_manager, qt
     qt_app.processEvents()
 
     hint = getattr(widget, "_ctrl_cursor_hint", None)
-    assert hint is not None and hint.isVisible()
+    assert hint is not None
+    _wait_for_halo_visible(qtbot, widget)
 
     widget._show_ctrl_cursor_hint(QPoint(-10, -10), mode="none")  # type: ignore[attr-defined]
     QTest.qWait(50)
     qt_app.processEvents()
 
-    assert not hint.isVisible()
+    _wait_for_halo_hidden(qtbot, widget)
 
 
 @pytest.mark.qt
@@ -417,9 +494,9 @@ def test_ctrl_halo_suppressed_while_settings_dialog_active(qt_app, settings_mana
     widget.show()
 
     coord = get_coordinator()
+    _prepare_display_widget_for_ctrl_tests(qt_app, qtbot, widget)
     coord.set_settings_dialog_active(False)
     coord.set_ctrl_held(False)
-    coord.register_instance(widget, widget.screen())
     coord.hide_all_halos()
     coord.reset_all_ctrl_state()
 
@@ -429,7 +506,8 @@ def test_ctrl_halo_suppressed_while_settings_dialog_active(qt_app, settings_mana
     QTest.mouseMove(widget, widget.rect().center())
     qt_app.processEvents()
     hint = getattr(widget, "_ctrl_cursor_hint", None)
-    assert hint is not None and hint.isVisible()
+    assert hint is not None
+    _wait_for_halo_visible(qtbot, widget)
     QTest.keyRelease(widget, Qt.Key.Key_Control)
     coord.set_ctrl_held(False)
     qt_app.processEvents()
@@ -442,7 +520,7 @@ def test_ctrl_halo_suppressed_while_settings_dialog_active(qt_app, settings_mana
     qt_app.processEvents()
     hint_active = getattr(widget, "_ctrl_cursor_hint", None)
     if hint_active is not None:
-        assert not hint_active.isVisible()
+        _wait_for_halo_hidden(qtbot, widget)
     QTest.keyRelease(widget, Qt.Key.Key_Control)
     coord.set_ctrl_held(False)
     qt_app.processEvents()

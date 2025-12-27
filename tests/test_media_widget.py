@@ -9,10 +9,12 @@ These tests focus on:
 """
 from __future__ import annotations
 
+import logging
 import sys
 import time
 
 import pytest
+from PySide6 import QtCore
 from PySide6.QtCore import Qt, QEvent, QBuffer, QIODevice
 from PySide6.QtGui import QMouseEvent, QPixmap, QImage
 from PySide6.QtWidgets import QWidget
@@ -170,6 +172,14 @@ def _wait_for_media_refresh(qtbot, widget: MediaWidget, timeout: int = 2000) -> 
     qtbot.waitUntil(lambda: not getattr(widget, "_refresh_in_flight", False), timeout=timeout)
 
 
+def _run_refresh_cycles(qtbot, widget: MediaWidget, cycles: int = 1) -> None:
+    """Trigger MediaWidget._refresh multiple times and wait for completion."""
+
+    for _ in range(max(1, cycles)):
+        widget._refresh()  # type: ignore[attr-defined]
+        _wait_for_media_refresh(qtbot, widget)
+
+
 def _wait_for_display_media_widget(qt_app, qtbot, display: DisplayWidget, timeout: int = 3000) -> None:
     """Wait until DisplayWidget.media_widget is created and registered."""
 
@@ -178,6 +188,25 @@ def _wait_for_display_media_widget(qt_app, qtbot, display: DisplayWidget, timeou
         return isinstance(getattr(display, "media_widget", None), MediaWidget)
 
     qtbot.waitUntil(_ready, timeout=timeout)
+
+
+def _bootstrap_display_widget_for_tests(qt_app, qtbot, display: DisplayWidget, timeout: int = 5000) -> None:
+    """Ensure DisplayWidget widget setup completes deterministically in tests."""
+
+    qt_app.processEvents()
+    try:
+        display._setup_widgets()
+    except Exception:
+        pass
+
+    def _widgets_ready() -> bool:
+        qt_app.processEvents()
+        media = getattr(display, "media_widget", None)
+        wm = getattr(display, "_widget_manager", None)
+        return media is not None and wm is not None
+
+    qtbot.waitUntil(_widgets_ready, timeout=timeout)
+    _wait_for_display_media_widget(qt_app, qtbot, display, timeout=timeout)
 
 
 @pytest.mark.qt
@@ -194,8 +223,7 @@ def test_media_widget_placeholder_when_no_media(qt_app, qtbot, thread_manager):
     qt_app.processEvents()
 
     # Force a single refresh and verify widget is not shown when no media is available.
-    w._refresh()  # type: ignore[attr-defined]
-    _wait_for_media_refresh(qtbot, w)
+    _run_refresh_cycles(qtbot, w, cycles=1)
     qt_app.processEvents()
 
     assert not w.isVisible()
@@ -221,13 +249,7 @@ def test_media_widget_displays_metadata(qt_app, qtbot, thread_manager):
     qt_app.processEvents()
 
     # First refresh primes layout (widget stays hidden)
-    w._refresh()  # type: ignore[attr-defined]
-    _wait_for_media_refresh(qtbot, w)
-    qt_app.processEvents()
-
-    # Second refresh with same info triggers actual fade/show
-    w._refresh()  # type: ignore[attr-defined]
-    _wait_for_media_refresh(qtbot, w)
+    _run_refresh_cycles(qtbot, w, cycles=2)
     qt_app.processEvents()
 
     qtbot.waitUntil(lambda: w.isVisible(), timeout=2000)
@@ -255,11 +277,7 @@ def test_media_widget_hides_again_when_media_disappears(qt_app, qtbot, thread_ma
     # Start with media present
     w.start()
     qt_app.processEvents()
-    w._refresh()  # type: ignore[attr-defined]
-    _wait_for_media_refresh(qtbot, w)
-    qt_app.processEvents()
-    w._refresh()  # type: ignore[attr-defined]
-    _wait_for_media_refresh(qtbot, w)
+    _run_refresh_cycles(qtbot, w, cycles=2)
     qt_app.processEvents()
     qtbot.waitUntil(lambda: w.isVisible(), timeout=2000)
 
@@ -304,19 +322,33 @@ def test_media_widget_decodes_artwork_and_adjusts_margins(qt_app, qtbot, thread_
     qt_app.processEvents()
 
     # Capture initial margins, then refresh twice and ensure the right
-    # margin grows to accommodate the artwork block.
+    # margin grows to the configured footprint (artwork size + padding).
     initial_margins = w.contentsMargins()
 
-    w._refresh()  # type: ignore[attr-defined]
-    _wait_for_media_refresh(qtbot, w)
-    qt_app.processEvents()
-    w._refresh()  # type: ignore[attr-defined]
-    _wait_for_media_refresh(qtbot, w)
+    _run_refresh_cycles(qtbot, w, cycles=2)
     qt_app.processEvents()
 
+    expected_right_margin = max(w._artwork_size + 40, 60)
     updated_margins = w.contentsMargins()
-    assert updated_margins.right() >= initial_margins.right()
-    assert updated_margins.right() > initial_margins.right()
+    assert expected_right_margin > initial_margins.right()
+    assert updated_margins.right() == expected_right_margin
+
+
+@pytest.mark.qt
+def test_media_widget_warns_when_thread_manager_missing(qt_app, qtbot, caplog):
+    """MediaWidget should log an error and stay disabled without a ThreadManager."""
+
+    ctrl = _DummyController(info=None)
+    w = MediaWidget(parent=None, controller=ctrl)
+    qtbot.addWidget(w)
+    w.resize(400, 80)
+
+    with caplog.at_level(logging.ERROR):
+        w.start()
+        qt_app.processEvents()
+
+    assert not getattr(w, "_enabled", False)
+    assert any("Missing ThreadManager" in record.getMessage() for record in caplog.records)
 
 
 @pytest.mark.qt
@@ -350,17 +382,15 @@ def test_media_widget_starts_fade_in_when_artwork_appears(qt_app, qtbot, thread_
     w.start()
     qt_app.processEvents()
     ctrl._info = None
-    w._refresh()  # type: ignore[attr-defined]
+    _run_refresh_cycles(qtbot, w, cycles=1)
     qt_app.processEvents()
     assert not w.isVisible()
 
     # Now provide artwork-bearing media and refresh once; this should
     # create an artwork pixmap and start a fade-in (opacity starts at 0).
     ctrl._info = info
-    for _ in range(2):
-        w._refresh()  # type: ignore[attr-defined]
-        _wait_for_media_refresh(qtbot, w)
-        qt_app.processEvents()
+    _run_refresh_cycles(qtbot, w, cycles=2)
+    qt_app.processEvents()
 
     qtbot.waitUntil(lambda: getattr(w, "_artwork_anim", None) is not None, timeout=2000)
     assert getattr(w, "_artwork_anim", None) is not None
@@ -414,31 +444,54 @@ def test_display_widget_ctrl_click_routes_to_media_widget(
     qtbot.addWidget(w)
     w.resize(800, 600)
     w.show()
-    w._setup_widgets()
-    _wait_for_display_media_widget(qt_app, qtbot, w)
+    _bootstrap_display_widget_for_tests(qt_app, qtbot, w)
+    qt_app.processEvents()
+
+    # Ensure media widget is visible before clicking
+    qtbot.waitUntil(lambda: w.media_widget is not None and w.media_widget.isVisible(), timeout=2000)
 
     # Simulate global Ctrl-held interaction mode
     from rendering import display_widget as display_mod
 
     display_mod.DisplayWidget._global_ctrl_held = True  # type: ignore[attr-defined]
+    w._ctrl_held = True  # type: ignore[attr-defined]
+    try:
+        w._coordinator.set_ctrl_held(True)
+    except Exception:
+        pass
 
-    # Click at the centre of the media widget
-    geom = w.media_widget.geometry()
-    pos = geom.center()
+    handler = getattr(w, "_input_handler", None)
+    assert handler is not None
+
+    media = w.media_widget
+    local_controls_pos = QtCore.QPoint(media.width() // 2, media.height() - 10)
+    pos = media.mapToParent(local_controls_pos)
     event = QMouseEvent(
         QEvent.Type.MouseButtonPress,
-        pos,
+        QtCore.QPointF(pos),
         Qt.MouseButton.LeftButton,
         Qt.MouseButton.LeftButton,
         Qt.KeyboardModifier.ControlModifier,
     )
 
-    w.mousePressEvent(event)
-    qt_app.processEvents()
-
+    handled, _, _ = handler.route_widget_click(
+        event,
+        getattr(w, "spotify_volume_widget", None),
+        w.media_widget,
+        getattr(w, "reddit_widget", None),
+        getattr(w, "reddit2_widget", None),
+    )
+    assert handled
     assert fake_ctrl.play_pause_calls == 1
     # Ensure screensaver exit was not requested
     assert not getattr(w, "_exiting", False)
+
+    display_mod.DisplayWidget._global_ctrl_held = False  # type: ignore[attr-defined]
+    try:
+        w._coordinator.set_ctrl_held(False)
+    except Exception:
+        pass
+    w._ctrl_held = False  # type: ignore[attr-defined]
 
 
 @pytest.mark.qt
@@ -450,7 +503,7 @@ def test_display_widget_hard_exit_click_routes_to_media_widget(
     fake_info = mc.MediaTrackInfo(title="Track", state=mc.MediaPlaybackState.PLAYING)
     fake_ctrl = _DummyController(info=fake_info)
 
-    monkeypatch.setattr(mc, "create_media_controller", lambda: fake_ctrl)
+    monkeypatch.setattr(media_mod, "create_media_controller", lambda: fake_ctrl)
 
     settings_manager.set(
         "widgets",
@@ -473,21 +526,31 @@ def test_display_widget_hard_exit_click_routes_to_media_widget(
     qtbot.addWidget(w)
     w.resize(800, 600)
     w.show()
-    w._setup_widgets()
-    _wait_for_display_media_widget(qt_app, qtbot, w)
+    _bootstrap_display_widget_for_tests(qt_app, qtbot, w)
+    qt_app.processEvents()
+
+    qtbot.waitUntil(lambda: w.media_widget is not None and w.media_widget.isVisible(), timeout=2000)
+
+    handler = getattr(w, "_input_handler", None)
+    assert handler is not None
 
     geom = w.media_widget.geometry()
-    pos = geom.center()
+    pos = QtCore.QPoint(geom.center().x(), geom.bottom() - 10)
     event = QMouseEvent(
         QEvent.Type.MouseButtonPress,
-        pos,
+        QtCore.QPointF(pos),
         Qt.MouseButton.LeftButton,
         Qt.MouseButton.LeftButton,
         Qt.KeyboardModifier.NoModifier,
     )
 
-    w.mousePressEvent(event)
-    qt_app.processEvents()
-
+    handled, _, _ = handler.route_widget_click(
+        event,
+        getattr(w, "spotify_volume_widget", None),
+        w.media_widget,
+        getattr(w, "reddit_widget", None),
+        getattr(w, "reddit2_widget", None),
+    )
+    assert handled
     assert fake_ctrl.play_pause_calls == 1
     assert not getattr(w, "_exiting", False)

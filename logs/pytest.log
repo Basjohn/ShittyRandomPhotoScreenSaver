@@ -6462,3 +6462,13 @@
 2025-12-26 00:31:28,707 - pytest_runner - INFO - pytest finished with exit code 1
 2025-12-26 00:39:06,190 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_media_widget.py', '-vv']
 2025-12-26 00:39:14,838 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-27 20:02:00,704 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', '-k', 'bars_not_stuck']
+2025-12-27 20:02:01,486 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-27 20:02:20,646 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', '-k', 'bars_not_stuck', '-vv']
+2025-12-27 20:02:21,281 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-27 20:03:27,458 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', '-k', 'bars_not_stuck']
+2025-12-27 20:03:28,166 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-27 21:54:31,587 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_visualizer_distribution.py', '-k', 'reactivity_realistic', '-vv']
+2025-12-27 21:54:32,439 - pytest_runner - INFO - pytest finished with exit code 5
+2025-12-27 21:54:47,948 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_visualizer_distribution.py', '-k', 'reactivity_realistic', '-vv', '-s']
+2025-12-27 21:54:48,641 - pytest_runner - INFO - pytest finished with exit code 5

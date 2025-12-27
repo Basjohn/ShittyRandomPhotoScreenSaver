@@ -13,19 +13,12 @@ except ImportError:  # pragma: no cover - optional dependency
     GL = None
 from PySide6.QtWidgets import QWidget, QApplication
 from PySide6.QtCore import (
-    QEasingCurve,
-    QObject,
     QPoint,
-    QRect,
-    QRegularExpression,
-    QThreadPool,
     QTimer,
     Qt,
     Signal,
-    Slot,
     QSize,
     QEvent,
-    QUrl,
 )
 from PySide6.QtGui import (
     QPixmap,
@@ -502,18 +495,33 @@ class DisplayWidget(QWidget):
         except Exception:
             pass
         try:
-            self.activateWindow()
-            try:
-                handle = self.windowHandle()
-                if handle is not None:
-                    handle.requestActivate()
-            except Exception:
-                pass
-            try:
-                self.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
-            except Exception:
+            focus_policy = self.focusPolicy()
+        except Exception:
+            focus_policy = Qt.FocusPolicy.StrongFocus
+
+        focusable = focus_policy != Qt.FocusPolicy.NoFocus
+
+        try:
+            if focusable:
+                self.activateWindow()
                 try:
-                    self.setFocus()
+                    handle = self.windowHandle()
+                    if handle is not None:
+                        handle.requestActivate()
+                except Exception:
+                    pass
+                try:
+                    self.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
+                except Exception:
+                    try:
+                        self.setFocus()
+                    except Exception:
+                        pass
+            else:
+                try:
+                    handle = self.windowHandle()
+                    if handle is not None:
+                        handle.setFlag(Qt.WindowType.WindowDoesNotAcceptFocus, True)
                 except Exception:
                     pass
         except Exception:

@@ -1711,6 +1711,14 @@ class WidgetManager:
             bar_count = int(spotify_vis_settings.get('bar_count', 32))
             vis = SpotifyVisualizerWidget(self._parent, bar_count=bar_count)
             
+            # Preferred audio block size (0=auto)
+            try:
+                block_size = int(spotify_vis_settings.get('audio_block_size', 0) or 0)
+                if hasattr(vis, 'set_audio_block_size'):
+                    vis.set_audio_block_size(block_size)
+            except Exception:
+                pass
+            
             # ThreadManager for animation tick scheduling
             if thread_manager is not None and hasattr(vis, 'set_thread_manager'):
                 try:
@@ -1798,7 +1806,19 @@ class WidgetManager:
                     vis.set_sensitivity_config(recommended, sens)
             except Exception:
                 pass
-            
+
+            # Noise floor configuration
+            try:
+                dynamic_floor = SettingsManager.to_bool(
+                    spotify_vis_settings.get('dynamic_floor', True),
+                    True,
+                )
+                manual_floor = float(spotify_vis_settings.get('manual_floor', 2.1))
+                if hasattr(vis, 'set_floor_config'):
+                    vis.set_floor_config(dynamic_floor, manual_floor)
+            except Exception:
+                pass
+
             # Shadow config
             try:
                 vis.set_shadow_config(shadows_config)

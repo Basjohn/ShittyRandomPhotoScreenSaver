@@ -118,8 +118,7 @@ class WindowsGlobalMediaController(BaseMediaController):
             # Warm up dependent WinRT namespaces so that frozen builds
             # (e.g. Nuitka onefile) include the full dependency tree.
             try:
-                import winrt.windows.foundation  # type: ignore[import]
-                import winrt.windows.foundation.collections  # type: ignore[import]
+                import winrt.windows.foundation  # type: ignore[import]  # noqa: F401
             except Exception:
                 # Absence of the foundation namespace will be handled by the
                 # main import block below, which falls back to a no-op
@@ -173,11 +172,21 @@ class WindowsGlobalMediaController(BaseMediaController):
                         logger.debug("[MEDIA] Failed to create ThreadManager for GSMTC", exc_info=True)
                         _media_tm = None
 
+        def _close_coro() -> None:
+            try:
+                close = getattr(coro, "close", None)
+                if callable(close):
+                    close()
+            except Exception:
+                pass
+
         tm = _media_tm
         if tm is None:
+            _close_coro()
             return None
 
         if getattr(tm, "_srpss_media_disabled", False):
+            _close_coro()
             return None
 
         done = threading.Event()
@@ -219,6 +228,7 @@ class WindowsGlobalMediaController(BaseMediaController):
         # Prevent piling up stuck WinRT calls: allow only one inflight query.
         inflight = getattr(tm, "_srpss_media_inflight", False)
         if inflight:
+            _close_coro()
             return None
         setattr(tm, "_srpss_media_inflight", True)
 
@@ -233,6 +243,7 @@ class WindowsGlobalMediaController(BaseMediaController):
                 )
             except Exception:
                 logger.debug("[MEDIA] Failed to submit GSMTC query task", exc_info=True)
+                _close_coro()
                 return None
 
             if not done.wait(timeout=2.5):
@@ -241,6 +252,7 @@ class WindowsGlobalMediaController(BaseMediaController):
                     setattr(tm, "_srpss_media_disabled", True)
                 except Exception:
                     pass
+                _close_coro()
                 return None
 
             return holder.get("result")
@@ -456,7 +468,9 @@ class WindowsGlobalMediaController(BaseMediaController):
             except Exception:
                 logger.debug("[MEDIA] %s failed", action_name, exc_info=True)
 
-        self._run_coroutine(_act())
+        result = self._run_coroutine(_act())
+        if isinstance(result, Exception):
+            logger.debug("[MEDIA] %s coroutine raised: %s", action_name, result, exc_info=True)
 
     def play_pause(self) -> None:  # pragma: no cover - requires winrt
         self._invoke_simple_action("play_pause", lambda s: s.try_toggle_play_pause_async())
