@@ -589,12 +589,12 @@ class SpotifyVisualizerAudioWorker(QObject):
                 center_cap_soft = ridge_avg * (0.28 + drop_signal * 0.1) + 0.05
                 arr[center] = min(max(arr[center], center_floor), max(center_cap_soft, center_floor))
                 target_map = {
-                    0: 0.22 + drop_signal * 0.12,
-                    1: 0.55 + drop_signal * 0.08,
-                    2: 0.88,
+                    0: 0.25 + drop_signal * 0.1,
+                    1: 0.53 + drop_signal * 0.07,
+                    2: 0.7,
                     3: 1.08,
-                    4: 0.78,
-                    5: 0.48,
+                    4: 0.6,
+                    5: 0.36,
                 }
                 max_offset = min(6, center + 1, bands - center)
                 ridge_anchor = max(ridge_avg, 1e-3)
@@ -1135,6 +1135,9 @@ class SpotifyVisualizerWidget(QWidget):
         self._display_bars: List[float] = [0.0] * self._bar_count
         self._target_bars: List[float] = [0.0] * self._bar_count
         self._per_bar_energy: List[float] = [0.0] * self._bar_count
+        self._visual_bars: List[float] = [0.0] * self._bar_count
+        self._visual_smoothing_tau: float = 0.055
+        self._last_visual_smooth_ts: float = 0.0
         # Base smoothing time constant in seconds; actual per-tick blend
         # factor is derived from this and the real dt between ticks so that
         # behaviour stays consistent even if tick rate changes. Slightly
@@ -1189,6 +1192,7 @@ class SpotifyVisualizerWidget(QWidget):
                     self._display_bars = [0.0] * self._bar_count
                     self._target_bars = [0.0] * self._bar_count
                     self._per_bar_energy = [0.0] * self._bar_count
+                    self._visual_bars = [0.0] * self._bar_count
                 # Test/diagnostic aliases – these reference shared state.
                 self._bars_buffer = engine._audio_buffer  # type: ignore[attr-defined]
                 self._audio_worker = engine._audio_worker  # type: ignore[attr-defined]
@@ -1815,6 +1819,56 @@ class SpotifyVisualizerWidget(QWidget):
         self._geom_bar_width = bar_width
         self._geom_seg_height = seg_height
 
+    def _apply_visual_smoothing(self, target_bars: List[float], now_ts: float) -> bool:
+        """Lightweight post-bar smoothing to calm jitter without hurting response."""
+        changed = False
+        visual = self._visual_bars
+        count = self._bar_count
+        last_ts = self._last_visual_smooth_ts
+
+        if last_ts <= 0.0 or (now_ts - last_ts) > 0.4:
+            for i in range(count):
+                val = target_bars[i] if i < len(target_bars) else 0.0
+                if i < len(visual):
+                    if abs(visual[i] - val) > 1e-4:
+                        changed = True
+                    visual[i] = val
+                else:
+                    visual.append(val)
+                    changed = True
+            self._visual_bars = visual[:count]
+            self._last_visual_smooth_ts = now_ts
+            return changed
+
+        dt = max(1e-4, now_ts - last_ts)
+        tau_rise = self._visual_smoothing_tau
+        tau_decay = tau_rise * 2.6
+        alpha_rise = 1.0 - math.exp(-dt / tau_rise)
+        alpha_decay = 1.0 - math.exp(-dt / tau_decay)
+        alpha_rise = max(0.0, min(1.0, alpha_rise))
+        alpha_decay = max(0.0, min(1.0, alpha_decay))
+
+        for i in range(count):
+            cur = visual[i] if i < len(visual) else 0.0
+            tgt = target_bars[i] if i < len(target_bars) else 0.0
+            alpha = alpha_rise if tgt >= cur else alpha_decay
+            nxt = cur + (tgt - cur) * alpha
+            if abs(nxt) < 1e-4:
+                nxt = 0.0
+            if abs(nxt - cur) > 1e-4:
+                changed = True
+            if i < len(visual):
+                visual[i] = nxt
+            else:
+                visual.append(nxt)
+
+        if len(visual) > count:
+            del visual[count:]
+
+        self._visual_bars = visual
+        self._last_visual_smooth_ts = now_ts
+        return changed
+
     def _on_tick(self) -> None:
         """Periodic UI tick - PERFORMANCE OPTIMIZED.
 
@@ -1936,6 +1990,10 @@ class SpotifyVisualizerWidget(QWidget):
                 if new_val > 0.0:
                     any_nonzero = True
                 display_bars[i] = new_val
+            
+            # Apply visual smoothing (UI/local) for calmer motion
+            if self._apply_visual_smoothing(display_bars, now_ts):
+                changed = True
             
             # Force update during decay (when bars are non-zero but Spotify stopped)
             if any_nonzero and not self._spotify_playing:

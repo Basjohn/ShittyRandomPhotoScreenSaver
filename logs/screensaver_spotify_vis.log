@@ -667,3 +667,645 @@
 2025-12-28 01:19:54 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.273 Bars: [0.26 0.36 0.58 0.80 0.75 0.49 0.24 0.13 0.24 0.49 0.75 0.80 0.58 0.36 0.26]
 2025-12-28 01:19:54 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.561 Bars: [0.29 0.40 0.67 0.96 1.00 0.75 0.44 0.29 0.44 0.75 1.00 0.96 0.67 0.40 0.29]
 2025-12-28 01:19:54 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:19 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-28 01:32:19 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.107 Bars: [0.05 0.08 0.15 0.24 0.29 0.25 0.17 0.14 0.17 0.25 0.29 0.24 0.15 0.08 0.05]
+2025-12-28 01:32:20 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.475 Bars: [0.19 0.25 0.41 0.55 0.46 0.25 0.09 0.02 0.09 0.25 0.46 0.55 0.41 0.25 0.19]
+2025-12-28 01:32:21 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.995 Bars: [0.21 0.28 0.44 0.64 0.65 0.47 0.26 0.17 0.26 0.47 0.65 0.64 0.44 0.28 0.21]
+2025-12-28 01:32:21 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.998 Bars: [0.36 0.47 0.74 1.00 1.00 0.82 0.47 0.31 0.47 0.82 1.00 1.00 0.74 0.47 0.36]
+2025-12-28 01:32:21 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=False) track=Promise
+2025-12-28 01:32:21 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=False) track=Promise
+2025-12-28 01:32:21 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:21 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:22 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:22 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.2109, max=0.9094
+2025-12-28 01:32:22 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-28 01:32:23 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:22 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.604 Bars: [0.32 0.42 0.67 0.98 1.00 0.82 0.50 0.35 0.50 0.82 1.00 0.98 0.67 0.42 0.32]
+2025-12-28 01:32:23 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.2221, max=0.8625
+2025-12-28 01:32:23 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-28 01:32:23 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:24 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:24 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:25 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:25 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.926 Bars: [0.28 0.39 0.64 0.88 0.80 0.50 0.23 0.11 0.23 0.50 0.80 0.88 0.64 0.39 0.28]
+2025-12-28 01:32:25 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:25 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:26 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.797 Bars: [0.30 0.39 0.61 0.85 0.82 0.55 0.27 0.15 0.27 0.55 0.82 0.85 0.61 0.39 0.30]
+2025-12-28 01:32:26 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.352 Bars: [0.09 0.14 0.25 0.35 0.32 0.20 0.10 0.05 0.10 0.20 0.32 0.35 0.25 0.14 0.09]
+2025-12-28 01:32:26 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:26 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.996 Bars: [0.34 0.43 0.66 0.88 0.75 0.42 0.15 0.03 0.15 0.42 0.75 0.88 0.66 0.43 0.34]
+2025-12-28 01:32:26 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:27 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.143 Bars: [0.40 0.49 0.74 1.00 1.00 0.90 0.54 0.37 0.54 0.90 1.00 1.00 0.74 0.49 0.40]
+2025-12-28 01:32:27 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.630 Bars: [0.16 0.22 0.35 0.49 0.49 0.34 0.18 0.11 0.18 0.34 0.49 0.49 0.35 0.22 0.16]
+2025-12-28 01:32:27 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:27 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.009 Bars: [0.07 0.09 0.14 0.18 0.16 0.09 0.03 0.01 0.03 0.09 0.16 0.18 0.14 0.09 0.07]
+2025-12-28 01:32:27 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:28 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.295 Bars: [0.09 0.12 0.19 0.25 0.21 0.12 0.04 0.01 0.04 0.12 0.21 0.25 0.19 0.12 0.09]
+2025-12-28 01:32:28 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.763 Bars: [0.14 0.17 0.26 0.38 0.39 0.30 0.17 0.11 0.17 0.30 0.39 0.38 0.26 0.17 0.14]
+2025-12-28 01:32:28 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:28 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.677 Bars: [0.14 0.18 0.27 0.36 0.33 0.21 0.09 0.04 0.09 0.21 0.33 0.36 0.27 0.18 0.14]
+2025-12-28 01:32:28 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:29 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.590 Bars: [0.01 0.02 0.05 0.06 0.05 0.02 0.01 0.00 0.01 0.02 0.05 0.06 0.05 0.02 0.01]
+2025-12-28 01:32:29 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.912 Bars: [0.28 0.36 0.54 0.77 0.78 0.57 0.32 0.21 0.32 0.57 0.78 0.77 0.54 0.36 0.28]
+2025-12-28 01:32:29 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:29 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=4691.7ms, frames=246, avg_fps=52.4, dt_min=11.51ms, dt_max=72.36ms, bar_count=15
+2025-12-28 01:32:29 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:29 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.759 Bars: [0.27 0.35 0.54 0.77 0.77 0.54 0.29 0.18 0.29 0.54 0.77 0.77 0.54 0.35 0.27]
+2025-12-28 01:32:30 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=5001.0ms, frames=253, avg_fps=50.6, dt_min=12.16ms, dt_max=73.48ms, bar_count=15
+2025-12-28 01:32:30 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.400 Bars: [0.00 0.00 0.01 0.01 0.01 0.01 0.00 0.00 0.00 0.01 0.01 0.01 0.01 0.00 0.00]
+2025-12-28 01:32:30 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.996 Bars: [0.37 0.48 0.73 0.96 0.82 0.45 0.16 0.03 0.16 0.45 0.82 0.96 0.73 0.48 0.37]
+2025-12-28 01:32:30 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:30 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.129 Bars: [0.40 0.52 0.82 1.00 1.00 0.91 0.53 0.35 0.53 0.91 1.00 1.00 0.82 0.52 0.40]
+2025-12-28 01:32:30 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:31 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.962 Bars: [0.20 0.26 0.40 0.54 0.50 0.31 0.14 0.07 0.14 0.31 0.50 0.54 0.40 0.26 0.20]
+2025-12-28 01:32:31 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:31 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.039 Bars: [0.20 0.27 0.44 0.66 0.70 0.54 0.33 0.23 0.33 0.54 0.70 0.66 0.44 0.27 0.20]
+2025-12-28 01:32:31 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:31 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.768 Bars: [0.20 0.27 0.42 0.55 0.47 0.26 0.09 0.02 0.09 0.26 0.47 0.55 0.42 0.27 0.20]
+2025-12-28 01:32:32 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.169 Bars: [0.23 0.30 0.48 0.70 0.75 0.58 0.35 0.24 0.35 0.58 0.75 0.70 0.48 0.30 0.23]
+2025-12-28 01:32:32 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:32 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.568 Bars: [0.32 0.41 0.64 0.90 0.91 0.65 0.36 0.22 0.36 0.65 0.91 0.90 0.64 0.41 0.32]
+2025-12-28 01:32:32 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:32 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.370 Bars: [0.41 0.51 0.77 1.00 0.87 0.49 0.17 0.03 0.17 0.49 0.87 1.00 0.77 0.51 0.41]
+2025-12-28 01:32:33 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.737 Bars: [0.21 0.26 0.39 0.53 0.51 0.35 0.18 0.10 0.18 0.35 0.51 0.53 0.39 0.26 0.21]
+2025-12-28 01:32:33 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:33 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.249 Bars: [0.27 0.34 0.52 0.71 0.67 0.43 0.20 0.10 0.20 0.43 0.67 0.71 0.52 0.34 0.27]
+2025-12-28 01:32:33 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:34 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.509 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-28 01:32:34 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.840 Bars: [0.18 0.23 0.35 0.48 0.45 0.30 0.15 0.08 0.15 0.30 0.45 0.48 0.35 0.23 0.18]
+2025-12-28 01:32:34 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:34 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.386 Bars: [0.27 0.37 0.59 0.83 0.80 0.54 0.27 0.16 0.27 0.54 0.80 0.83 0.59 0.37 0.27]
+2025-12-28 01:32:34 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=9699.8ms, frames=545, avg_fps=56.2, dt_min=11.51ms, dt_max=72.36ms, bar_count=15
+2025-12-28 01:32:34 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=15.12ms, min=-1.04ms, max=174.75ms
+2025-12-28 01:32:34 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:35 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=10020.5ms, frames=549, avg_fps=54.8, dt_min=12.01ms, dt_max=73.48ms, bar_count=15
+2025-12-28 01:32:35 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.262 Bars: [0.27 0.35 0.54 0.73 0.65 0.39 0.17 0.07 0.17 0.39 0.65 0.73 0.54 0.35 0.27]
+2025-12-28 01:32:35 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:36 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:36 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.497 Bars: [0.20 0.27 0.44 0.60 0.55 0.34 0.16 0.07 0.16 0.34 0.55 0.60 0.44 0.27 0.20]
+2025-12-28 01:32:36 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:37 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:37 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.154 Bars: [0.26 0.34 0.53 0.74 0.73 0.50 0.26 0.15 0.26 0.50 0.73 0.74 0.53 0.34 0.26]
+2025-12-28 01:32:37 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:38 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:38 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.237 Bars: [0.25 0.32 0.48 0.65 0.58 0.35 0.14 0.05 0.14 0.35 0.58 0.65 0.48 0.32 0.25]
+2025-12-28 01:32:38 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:39 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:39 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.390 Bars: [0.35 0.46 0.72 1.00 1.00 0.74 0.40 0.25 0.40 0.74 1.00 1.00 0.72 0.46 0.35]
+2025-12-28 01:32:39 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:39 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=1674.4ms, frames=58, avg_fps=34.6, dt_min=16.86ms, dt_max=96.08ms, bar_count=15
+2025-12-28 01:32:39 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=56.25ms, min=-1.50ms, max=277.61ms
+2025-12-28 01:32:40 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:40 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=2064.9ms, frames=73, avg_fps=35.4, dt_min=17.07ms, dt_max=94.40ms, bar_count=15
+2025-12-28 01:32:40 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=81.44ms, min=-0.60ms, max=277.61ms
+2025-12-28 01:32:40 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.209 Bars: [0.44 0.56 0.86 1.00 1.00 0.90 0.50 0.31 0.50 0.90 1.00 1.00 0.86 0.56 0.44]
+2025-12-28 01:32:40 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:41 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:41 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.112 Bars: [0.11 0.12 0.18 0.24 0.21 0.12 0.04 0.01 0.04 0.12 0.21 0.24 0.18 0.12 0.11]
+2025-12-28 01:32:41 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:42 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:42 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.689 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-28 01:32:42 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:43 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:43 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.602 Bars: [0.29 0.38 0.61 0.87 0.86 0.60 0.32 0.19 0.32 0.60 0.86 0.87 0.61 0.38 0.29]
+2025-12-28 01:32:43 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.802 Bars: [0.04 0.04 0.06 0.08 0.07 0.04 0.01 0.00 0.01 0.04 0.07 0.08 0.06 0.04 0.04]
+2025-12-28 01:32:43 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:43 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:44 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.962 Bars: [0.39 0.52 0.83 1.00 1.00 1.00 0.73 0.54 0.73 1.00 1.00 1.00 0.83 0.52 0.39]
+2025-12-28 01:32:44 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.503 Bars: [0.01 0.01 0.02 0.02 0.02 0.01 0.00 0.00 0.00 0.01 0.02 0.02 0.02 0.01 0.01]
+2025-12-28 01:32:44 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:44 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=1709.9ms, frames=103, avg_fps=60.2, dt_min=11.57ms, dt_max=32.35ms, bar_count=15
+2025-12-28 01:32:44 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.020 Bars: [0.36 0.47 0.75 1.00 1.00 0.75 0.40 0.24 0.40 0.75 1.00 1.00 0.75 0.47 0.36]
+2025-12-28 01:32:44 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:45 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=2096.0ms, frames=126, avg_fps=60.1, dt_min=11.11ms, dt_max=29.92ms, bar_count=15
+2025-12-28 01:32:45 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.408 Bars: [0.29 0.42 0.70 1.00 0.99 0.69 0.37 0.23 0.37 0.69 0.99 1.00 0.70 0.42 0.29]
+2025-12-28 01:32:45 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.232 Bars: [0.24 0.33 0.54 0.77 0.75 0.51 0.26 0.15 0.26 0.51 0.75 0.77 0.54 0.33 0.24]
+2025-12-28 01:32:45 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:45 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:45 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.919 Bars: [0.31 0.40 0.61 0.81 0.75 0.47 0.22 0.12 0.22 0.47 0.75 0.81 0.61 0.40 0.31]
+2025-12-28 01:32:46 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.492 Bars: [0.33 0.46 0.77 1.00 1.00 0.89 0.52 0.35 0.52 0.89 1.00 1.00 0.77 0.46 0.33]
+2025-12-28 01:32:46 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:46 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.981 Bars: [0.22 0.33 0.56 0.82 0.87 0.66 0.39 0.27 0.39 0.66 0.87 0.82 0.56 0.33 0.22]
+2025-12-28 01:32:46 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:47 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.767 Bars: [0.18 0.24 0.38 0.54 0.53 0.38 0.20 0.12 0.20 0.38 0.53 0.54 0.38 0.24 0.18]
+2025-12-28 01:32:47 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.489 Bars: [0.56 0.71 1.00 1.00 1.00 1.00 0.73 0.49 0.73 1.00 1.00 1.00 1.00 0.71 0.56]
+2025-12-28 01:32:47 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:47 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.360 Bars: [0.28 0.38 0.60 0.87 0.91 0.69 0.40 0.27 0.40 0.69 0.91 0.87 0.60 0.38 0.28]
+2025-12-28 01:32:47 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:48 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.331 Bars: [0.52 0.66 1.00 1.00 1.00 1.00 0.78 0.56 0.78 1.00 1.00 1.00 1.00 0.66 0.52]
+2025-12-28 01:32:48 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.534 Bars: [0.32 0.44 0.71 1.00 1.00 0.90 0.56 0.40 0.56 0.90 1.00 1.00 0.71 0.44 0.32]
+2025-12-28 01:32:48 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:48 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:49 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.691 Bars: [0.18 0.22 0.33 0.44 0.42 0.28 0.14 0.08 0.14 0.28 0.42 0.44 0.33 0.22 0.18]
+2025-12-28 01:32:49 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.026 Bars: [0.21 0.28 0.46 0.65 0.64 0.44 0.23 0.14 0.23 0.44 0.64 0.65 0.46 0.28 0.21]
+2025-12-28 01:32:49 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:49 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.655 Bars: [0.37 0.48 0.75 1.00 1.00 0.85 0.50 0.34 0.50 0.85 1.00 1.00 0.75 0.48 0.37]
+2025-12-28 01:32:49 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=6717.9ms, frames=406, avg_fps=60.4, dt_min=11.13ms, dt_max=40.91ms, bar_count=15
+2025-12-28 01:32:49 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:50 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.240 Bars: [0.33 0.41 0.61 0.86 0.88 0.65 0.37 0.25 0.37 0.65 0.88 0.86 0.61 0.41 0.33]
+2025-12-28 01:32:50 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=7110.9ms, frames=426, avg_fps=59.9, dt_min=11.11ms, dt_max=40.91ms, bar_count=15
+2025-12-28 01:32:50 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:51 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:51 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.992 Bars: [0.24 0.31 0.46 0.60 0.51 0.29 0.11 0.03 0.11 0.29 0.51 0.60 0.46 0.31 0.24]
+2025-12-28 01:32:51 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:52 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:52 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.353 Bars: [0.27 0.35 0.53 0.75 0.74 0.53 0.29 0.18 0.29 0.53 0.74 0.75 0.53 0.35 0.27]
+2025-12-28 01:32:52 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:53 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:53 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.389 Bars: [0.27 0.34 0.54 0.80 0.86 0.68 0.42 0.29 0.42 0.68 0.86 0.80 0.54 0.34 0.27]
+2025-12-28 01:32:53 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:54 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:54 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.468 Bars: [0.11 0.16 0.27 0.37 0.32 0.19 0.08 0.04 0.08 0.19 0.32 0.37 0.27 0.16 0.11]
+2025-12-28 01:32:54 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:54 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=1623.3ms, frames=59, avg_fps=36.3, dt_min=16.93ms, dt_max=87.21ms, bar_count=15
+2025-12-28 01:32:55 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:55 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=106.67ms, min=-1.18ms, max=277.61ms
+2025-12-28 01:32:55 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.163 Bars: [0.43 0.56 0.87 1.00 1.00 1.00 0.68 0.49 0.68 1.00 1.00 1.00 0.87 0.56 0.43]
+2025-12-28 01:32:55 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:56 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:56 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.568 Bars: [0.00 0.01 0.02 0.03 0.02 0.01 0.00 0.00 0.00 0.01 0.02 0.03 0.02 0.01 0.00]
+2025-12-28 01:32:56 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:57 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:57 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:57 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.248 Bars: [0.33 0.43 0.66 0.95 1.00 0.77 0.46 0.32 0.46 0.77 1.00 0.95 0.66 0.43 0.33]
+2025-12-28 01:32:57 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:58 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.435 Bars: [0.26 0.33 0.53 0.76 0.78 0.58 0.33 0.21 0.33 0.58 0.78 0.76 0.53 0.33 0.26]
+2025-12-28 01:32:58 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:58 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.162 Bars: [0.23 0.31 0.48 0.68 0.65 0.44 0.22 0.12 0.22 0.44 0.65 0.68 0.48 0.31 0.23]
+2025-12-28 01:32:58 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:59 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.277 Bars: [0.09 0.15 0.26 0.35 0.29 0.15 0.05 0.01 0.05 0.15 0.29 0.35 0.26 0.15 0.09]
+2025-12-28 01:32:59 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:32:59 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=1908.6ms, frames=91, avg_fps=47.7, dt_min=11.68ms, dt_max=96.79ms, bar_count=15
+2025-12-28 01:33:00 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:33:00 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=2334.5ms, frames=108, avg_fps=46.3, dt_min=11.42ms, dt_max=96.61ms, bar_count=15
+2025-12-28 01:33:00 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.604 Bars: [0.14 0.20 0.32 0.44 0.38 0.22 0.09 0.03 0.09 0.22 0.38 0.44 0.32 0.20 0.14]
+2025-12-28 01:33:00 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:33:01 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:33:01 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.455 Bars: [0.53 0.68 1.00 1.00 1.00 1.00 0.92 0.67 0.92 1.00 1.00 1.00 1.00 0.68 0.53]
+2025-12-28 01:33:01 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:33:01 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:33:02 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.763 Bars: [0.22 0.30 0.48 0.68 0.66 0.46 0.24 0.14 0.24 0.46 0.66 0.68 0.48 0.30 0.22]
+2025-12-28 01:33:02 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:33:03 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:33:03 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.947 Bars: [0.28 0.37 0.57 0.78 0.74 0.49 0.24 0.14 0.24 0.49 0.74 0.78 0.57 0.37 0.28]
+2025-12-28 01:33:03 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:33:03 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.478 Bars: [0.31 0.42 0.69 1.00 1.00 0.91 0.57 0.42 0.57 0.91 1.00 1.00 0.69 0.42 0.31]
+2025-12-28 01:33:03 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:33:04 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.059 Bars: [0.22 0.31 0.52 0.73 0.71 0.48 0.25 0.14 0.25 0.48 0.71 0.73 0.52 0.31 0.22]
+2025-12-28 01:33:04 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.384 Bars: [0.12 0.16 0.25 0.32 0.27 0.14 0.05 0.01 0.05 0.14 0.27 0.32 0.25 0.16 0.12]
+2025-12-28 01:33:04 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:33:04 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=1277.2ms, frames=76, avg_fps=59.5, dt_min=11.60ms, dt_max=47.14ms, bar_count=15
+2025-12-28 01:33:04 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.248 Bars: [0.12 0.17 0.27 0.36 0.30 0.17 0.07 0.03 0.07 0.17 0.30 0.36 0.27 0.17 0.12]
+2025-12-28 01:33:04 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:33:05 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=1701.5ms, frames=100, avg_fps=58.8, dt_min=12.01ms, dt_max=36.09ms, bar_count=15
+2025-12-28 01:33:05 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.591 Bars: [0.33 0.42 0.63 0.82 0.69 0.38 0.13 0.02 0.13 0.38 0.69 0.82 0.63 0.42 0.33]
+2025-12-28 01:36:05 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-28 01:36:05 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.418 Bars: [0.00 0.00 0.01 0.01 0.01 0.01 0.00 0.00 0.00 0.01 0.01 0.01 0.01 0.00 0.00]
+2025-12-28 01:36:06 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=False) track=Promise
+2025-12-28 01:36:06 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=False) track=Promise
+2025-12-28 01:36:07 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:07 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.2955, max=0.8952
+2025-12-28 01:36:07 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-28 01:36:07 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:07 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.028 Bars: [0.22 0.29 0.47 0.66 0.64 0.44 0.22 0.13 0.22 0.44 0.64 0.66 0.47 0.29 0.22]
+2025-12-28 01:36:07 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.1303, max=0.7983
+2025-12-28 01:36:07 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-28 01:36:08 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:08 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:09 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:09 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:10 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:10 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.403 Bars: [0.19 0.26 0.41 0.54 0.47 0.27 0.11 0.04 0.11 0.27 0.47 0.54 0.41 0.26 0.19]
+2025-12-28 01:36:10 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:10 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=945.1ms, frames=28, avg_fps=29.6, dt_min=13.64ms, dt_max=89.60ms, bar_count=15
+2025-12-28 01:36:10 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=0.50ms, min=-0.69ms, max=472.85ms
+2025-12-28 01:36:10 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=969.8ms, frames=30, avg_fps=30.9, dt_min=14.55ms, dt_max=90.67ms, bar_count=15
+2025-12-28 01:36:10 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=0.50ms, min=-1.01ms, max=477.06ms
+2025-12-28 01:36:10 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.423 Bars: [0.27 0.34 0.54 0.76 0.76 0.54 0.29 0.18 0.29 0.54 0.76 0.76 0.54 0.34 0.27]
+2025-12-28 01:36:11 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.413 Bars: [0.37 0.50 0.79 1.00 1.00 0.82 0.47 0.31 0.47 0.82 1.00 1.00 0.79 0.50 0.37]
+2025-12-28 01:36:11 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:11 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:11 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.557 Bars: [0.28 0.36 0.57 0.83 0.88 0.69 0.42 0.29 0.42 0.69 0.88 0.83 0.57 0.36 0.28]
+2025-12-28 01:36:11 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.264 Bars: [0.44 0.56 0.85 1.00 1.00 1.00 0.65 0.46 0.65 1.00 1.00 1.00 0.85 0.56 0.44]
+2025-12-28 01:36:12 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:12 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:12 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.456 Bars: [0.10 0.14 0.23 0.31 0.26 0.14 0.05 0.01 0.05 0.14 0.26 0.31 0.23 0.14 0.10]
+2025-12-28 01:36:12 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.663 Bars: [0.14 0.19 0.32 0.43 0.37 0.20 0.08 0.02 0.08 0.20 0.37 0.43 0.32 0.19 0.14]
+2025-12-28 01:36:13 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:13 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.846 Bars: [0.18 0.25 0.41 0.59 0.60 0.44 0.24 0.16 0.24 0.44 0.60 0.59 0.41 0.25 0.18]
+2025-12-28 01:36:13 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:13 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.375 Bars: [0.12 0.19 0.33 0.45 0.38 0.22 0.09 0.04 0.09 0.22 0.38 0.45 0.33 0.19 0.12]
+2025-12-28 01:36:14 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:14 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.276 Bars: [0.28 0.38 0.63 0.90 0.89 0.62 0.33 0.20 0.33 0.62 0.89 0.90 0.63 0.38 0.28]
+2025-12-28 01:36:14 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:14 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.220 Bars: [0.11 0.15 0.23 0.30 0.25 0.13 0.05 0.01 0.05 0.13 0.25 0.30 0.23 0.15 0.11]
+2025-12-28 01:36:15 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.442 Bars: [0.00 0.00 0.01 0.01 0.01 0.01 0.00 0.00 0.00 0.01 0.01 0.01 0.01 0.00 0.00]
+2025-12-28 01:36:15 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:15 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:15 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=5962.7ms, frames=322, avg_fps=54.0, dt_min=11.18ms, dt_max=89.60ms, bar_count=15
+2025-12-28 01:36:15 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=58.23ms, min=-1.00ms, max=472.85ms
+2025-12-28 01:36:15 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=5977.9ms, frames=321, avg_fps=53.7, dt_min=11.17ms, dt_max=90.67ms, bar_count=15
+2025-12-28 01:36:15 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=78.06ms, min=-1.01ms, max=477.06ms
+2025-12-28 01:36:15 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.452 Bars: [0.44 0.57 0.87 1.00 1.00 0.56 0.21 0.05 0.21 0.56 1.00 1.00 0.87 0.57 0.44]
+2025-12-28 01:36:15 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.783 Bars: [0.23 0.31 0.49 0.70 0.69 0.49 0.26 0.16 0.26 0.49 0.69 0.70 0.49 0.31 0.23]
+2025-12-28 01:36:16 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:16 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:16 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.530 Bars: [0.36 0.46 0.71 1.00 1.00 0.86 0.52 0.36 0.52 0.86 1.00 1.00 0.71 0.46 0.36]
+2025-12-28 01:36:16 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.890 Bars: [0.17 0.23 0.36 0.49 0.45 0.29 0.14 0.07 0.14 0.29 0.45 0.49 0.36 0.23 0.17]
+2025-12-28 01:36:17 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:17 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.844 Bars: [0.21 0.29 0.49 0.66 0.59 0.35 0.15 0.06 0.15 0.35 0.59 0.66 0.49 0.29 0.21]
+2025-12-28 01:36:17 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:17 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.278 Bars: [0.12 0.19 0.35 0.47 0.38 0.19 0.07 0.01 0.07 0.19 0.38 0.47 0.35 0.19 0.12]
+2025-12-28 01:36:18 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:18 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.327 Bars: [0.28 0.37 0.59 0.85 0.90 0.68 0.40 0.27 0.40 0.68 0.90 0.85 0.59 0.37 0.28]
+2025-12-28 01:36:18 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:18 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.242 Bars: [0.46 0.58 0.89 1.00 1.00 0.94 0.53 0.34 0.53 0.94 1.00 1.00 0.89 0.58 0.46]
+2025-12-28 01:36:18 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.112 Bars: [0.21 0.28 0.45 0.65 0.65 0.46 0.25 0.15 0.25 0.46 0.65 0.65 0.45 0.28 0.21]
+2025-12-28 01:36:19 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:19 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.869 Bars: [0.18 0.23 0.37 0.51 0.47 0.30 0.14 0.07 0.14 0.30 0.47 0.51 0.37 0.23 0.18]
+2025-12-28 01:36:19 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:19 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.190 Bars: [0.24 0.30 0.46 0.61 0.53 0.29 0.11 0.02 0.11 0.29 0.53 0.61 0.46 0.30 0.24]
+2025-12-28 01:36:20 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:20 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.669 Bars: [0.35 0.44 0.67 0.92 0.87 0.57 0.28 0.15 0.28 0.57 0.87 0.92 0.67 0.44 0.35]
+2025-12-28 01:36:20 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:20 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=10971.3ms, frames=618, avg_fps=56.3, dt_min=11.18ms, dt_max=89.60ms, bar_count=15
+2025-12-28 01:36:20 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=10986.0ms, frames=615, avg_fps=56.0, dt_min=11.17ms, dt_max=90.67ms, bar_count=15
+2025-12-28 01:36:20 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.280 Bars: [0.27 0.36 0.57 0.82 0.85 0.64 0.37 0.25 0.37 0.64 0.85 0.82 0.57 0.36 0.27]
+2025-12-28 01:36:21 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:21 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:21 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.839 Bars: [0.18 0.24 0.36 0.50 0.49 0.34 0.18 0.11 0.18 0.34 0.49 0.50 0.36 0.24 0.18]
+2025-12-28 01:36:22 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:22 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:22 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.645 Bars: [0.28 0.37 0.58 0.78 0.70 0.43 0.19 0.08 0.19 0.43 0.70 0.78 0.58 0.37 0.28]
+2025-12-28 01:36:23 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:23 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:24 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.980 Bars: [0.19 0.24 0.37 0.52 0.52 0.37 0.19 0.11 0.19 0.37 0.52 0.52 0.37 0.24 0.19]
+2025-12-28 01:36:24 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:24 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:25 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:25 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=36.0ms, frames=1, avg_fps=27.8, dt_min=35.97ms, dt_max=35.97ms, bar_count=15
+2025-12-28 01:36:25 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:25 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.833 Bars: [0.03 0.03 0.05 0.06 0.05 0.03 0.01 0.00 0.01 0.03 0.05 0.06 0.05 0.03 0.03]
+2025-12-28 01:36:26 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:26 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.416 Bars: [0.21 0.28 0.44 0.60 0.53 0.30 0.12 0.04 0.12 0.30 0.53 0.60 0.44 0.28 0.21]
+2025-12-28 01:36:26 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:26 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.565 Bars: [0.01 0.01 0.01 0.01 0.01 0.01 0.00 0.00 0.00 0.01 0.01 0.01 0.01 0.01 0.01]
+2025-12-28 01:36:27 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:27 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.833 Bars: [0.03 0.07 0.16 0.22 0.17 0.08 0.03 0.00 0.03 0.08 0.17 0.22 0.16 0.07 0.03]
+2025-12-28 01:36:27 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:27 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.985 Bars: [0.37 0.49 0.78 1.00 1.00 0.86 0.49 0.32 0.49 0.86 1.00 1.00 0.78 0.49 0.37]
+2025-12-28 01:36:28 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:28 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.785 Bars: [0.06 0.07 0.10 0.14 0.12 0.07 0.02 0.00 0.02 0.07 0.12 0.14 0.10 0.07 0.06]
+2025-12-28 01:36:28 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:28 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.113 Bars: [0.26 0.33 0.52 0.77 0.83 0.66 0.41 0.29 0.41 0.66 0.83 0.77 0.52 0.33 0.26]
+2025-12-28 01:36:29 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:29 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.183 Bars: [0.23 0.31 0.50 0.73 0.75 0.56 0.33 0.22 0.33 0.56 0.75 0.73 0.50 0.31 0.23]
+2025-12-28 01:36:29 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:29 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.205 Bars: [0.22 0.28 0.42 0.58 0.56 0.37 0.18 0.09 0.18 0.37 0.56 0.58 0.42 0.28 0.22]
+2025-12-28 01:36:30 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:30 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.304 Bars: [0.24 0.29 0.42 0.60 0.63 0.48 0.28 0.18 0.28 0.48 0.63 0.60 0.42 0.29 0.24]
+2025-12-28 01:36:30 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:30 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=5008.2ms, frames=297, avg_fps=59.3, dt_min=11.19ms, dt_max=43.06ms, bar_count=15
+2025-12-28 01:36:30 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=19.06ms, min=-1.00ms, max=472.85ms
+2025-12-28 01:36:30 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=5043.0ms, frames=300, avg_fps=59.5, dt_min=11.42ms, dt_max=45.42ms, bar_count=15
+2025-12-28 01:36:30 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.143 Bars: [0.35 0.44 0.67 0.95 0.98 0.73 0.41 0.26 0.41 0.73 0.98 0.95 0.67 0.44 0.35]
+2025-12-28 01:36:31 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:31 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.720 Bars: [0.36 0.45 0.68 0.95 0.93 0.64 0.33 0.18 0.33 0.64 0.93 0.95 0.68 0.45 0.36]
+2025-12-28 01:36:31 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:31 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.996 Bars: [0.03 0.03 0.04 0.06 0.05 0.03 0.01 0.00 0.01 0.03 0.05 0.06 0.04 0.03 0.03]
+2025-12-28 01:36:32 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:32 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:32 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.997 Bars: [0.06 0.07 0.10 0.13 0.12 0.07 0.02 0.00 0.02 0.07 0.12 0.13 0.10 0.07 0.06]
+2025-12-28 01:36:32 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.054 Bars: [0.17 0.20 0.29 0.41 0.41 0.30 0.16 0.09 0.16 0.30 0.41 0.41 0.29 0.20 0.17]
+2025-12-28 01:36:33 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:33 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:33 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.500 Bars: [0.04 0.05 0.07 0.10 0.10 0.07 0.04 0.02 0.04 0.07 0.10 0.10 0.07 0.05 0.04]
+2025-12-28 01:36:33 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.721 Bars: [0.10 0.11 0.16 0.22 0.20 0.12 0.05 0.02 0.05 0.12 0.20 0.22 0.16 0.11 0.10]
+2025-12-28 01:36:34 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:34 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:34 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.823 Bars: [0.15 0.18 0.27 0.40 0.46 0.40 0.26 0.19 0.26 0.40 0.46 0.40 0.27 0.18 0.15]
+2025-12-28 01:36:35 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:35 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.800 Bars: [0.12 0.14 0.21 0.28 0.26 0.17 0.07 0.03 0.07 0.17 0.26 0.28 0.21 0.14 0.12]
+2025-12-28 01:36:35 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:35 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=10020.6ms, frames=594, avg_fps=59.3, dt_min=11.18ms, dt_max=43.06ms, bar_count=15
+2025-12-28 01:36:35 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=1.50ms, min=-1.02ms, max=472.85ms
+2025-12-28 01:36:35 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=10051.5ms, frames=595, avg_fps=59.2, dt_min=11.33ms, dt_max=45.42ms, bar_count=15
+2025-12-28 01:36:35 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.612 Bars: [0.10 0.11 0.17 0.25 0.27 0.23 0.14 0.10 0.14 0.23 0.27 0.25 0.17 0.11 0.10]
+2025-12-28 01:36:36 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:36 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:37 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.623 Bars: [0.07 0.08 0.11 0.15 0.14 0.08 0.03 0.01 0.03 0.08 0.14 0.15 0.11 0.08 0.07]
+2025-12-28 01:36:37 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:37 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:38 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:38 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.511 Bars: [0.06 0.08 0.11 0.15 0.14 0.09 0.04 0.02 0.04 0.09 0.14 0.15 0.11 0.08 0.06]
+2025-12-28 01:36:38 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:39 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:39 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:39 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.439 Bars: [0.05 0.06 0.09 0.12 0.10 0.06 0.03 0.01 0.03 0.06 0.10 0.12 0.09 0.06 0.05]
+2025-12-28 01:36:40 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:40 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:40 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.467 Bars: [0.07 0.08 0.12 0.17 0.17 0.12 0.07 0.04 0.07 0.12 0.17 0.17 0.12 0.08 0.07]
+2025-12-28 01:36:40 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=366.0ms, frames=20, avg_fps=54.6, dt_min=12.24ms, dt_max=34.21ms, bar_count=15
+2025-12-28 01:36:40 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=391.0ms, frames=22, avg_fps=56.3, dt_min=11.63ms, dt_max=36.71ms, bar_count=15
+2025-12-28 01:36:40 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.369 Bars: [0.04 0.05 0.07 0.10 0.11 0.08 0.05 0.03 0.05 0.08 0.11 0.10 0.07 0.05 0.04]
+2025-12-28 01:36:41 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:41 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.206 Bars: [0.43 0.57 0.88 1.00 1.00 0.88 0.49 0.32 0.49 0.88 1.00 1.00 0.88 0.57 0.43]
+2025-12-28 01:36:41 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:41 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.118 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-28 01:36:41 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.032 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-28 01:36:42 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:42 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:42 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.044 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-28 01:36:43 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:43 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:44 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Promise
+2025-12-28 01:36:44 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:45 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:45 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:45 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=5374.9ms, frames=288, avg_fps=53.6, dt_min=11.13ms, dt_max=52.79ms, bar_count=15
+2025-12-28 01:36:45 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=5401.9ms, frames=293, avg_fps=54.2, dt_min=11.18ms, dt_max=52.27ms, bar_count=15
+2025-12-28 01:36:45 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.993 Bars: [0.33 0.41 0.62 0.89 0.94 0.72 0.43 0.28 0.43 0.72 0.94 0.89 0.62 0.41 0.33]
+2025-12-28 01:36:46 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:46 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.369 Bars: [0.23 0.29 0.45 0.64 0.66 0.49 0.28 0.18 0.28 0.49 0.66 0.64 0.45 0.29 0.23]
+2025-12-28 01:36:46 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:46 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.529 Bars: [0.25 0.32 0.51 0.72 0.72 0.52 0.28 0.17 0.28 0.52 0.72 0.72 0.51 0.32 0.25]
+2025-12-28 01:36:46 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.902 Bars: [0.28 0.34 0.51 0.68 0.59 0.33 0.12 0.02 0.12 0.33 0.59 0.68 0.51 0.34 0.28]
+2025-12-28 01:36:47 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:47 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.671 Bars: [0.29 0.36 0.55 0.81 0.86 0.68 0.41 0.28 0.41 0.68 0.86 0.81 0.55 0.36 0.29]
+2025-12-28 01:36:47 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:47 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.649 Bars: [0.48 0.60 0.91 1.00 1.00 0.70 0.31 0.13 0.31 0.70 1.00 1.00 0.91 0.60 0.48]
+2025-12-28 01:36:48 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:48 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.655 Bars: [0.28 0.37 0.58 0.82 0.81 0.57 0.30 0.18 0.30 0.57 0.81 0.82 0.58 0.37 0.28]
+2025-12-28 01:36:48 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:48 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.735 Bars: [0.29 0.35 0.53 0.76 0.80 0.61 0.35 0.23 0.35 0.61 0.80 0.76 0.53 0.35 0.29]
+2025-12-28 01:36:48 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.140 Bars: [0.19 0.24 0.36 0.52 0.54 0.41 0.23 0.15 0.23 0.41 0.54 0.52 0.36 0.24 0.19]
+2025-12-28 01:36:49 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:49 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.802 Bars: [0.32 0.39 0.59 0.87 0.97 0.79 0.50 0.35 0.50 0.79 0.97 0.87 0.59 0.39 0.32]
+2025-12-28 01:36:49 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:49 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.886 Bars: [0.03 0.04 0.06 0.07 0.06 0.04 0.01 0.00 0.01 0.04 0.06 0.07 0.06 0.04 0.03]
+2025-12-28 01:36:49 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.306 Bars: [0.21 0.25 0.36 0.51 0.51 0.37 0.20 0.12 0.20 0.37 0.51 0.51 0.36 0.25 0.21]
+2025-12-28 01:36:50 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:50 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.417 Bars: [0.24 0.28 0.40 0.54 0.49 0.29 0.12 0.04 0.12 0.29 0.49 0.54 0.40 0.28 0.24]
+2025-12-28 01:36:50 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:50 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=10382.0ms, frames=578, avg_fps=55.7, dt_min=11.12ms, dt_max=52.79ms, bar_count=15
+2025-12-28 01:36:50 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=10407.4ms, frames=585, avg_fps=56.2, dt_min=11.18ms, dt_max=52.27ms, bar_count=15
+2025-12-28 01:36:51 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.025 Bars: [0.22 0.28 0.41 0.55 0.48 0.28 0.10 0.03 0.10 0.28 0.48 0.55 0.41 0.28 0.22]
+2025-12-28 01:36:51 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:51 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:51 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.205 Bars: [0.39 0.49 0.76 1.00 1.00 0.71 0.36 0.20 0.36 0.71 1.00 1.00 0.76 0.49 0.39]
+2025-12-28 01:36:52 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:52 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:52 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.451 Bars: [0.26 0.33 0.50 0.74 0.81 0.66 0.42 0.30 0.42 0.66 0.81 0.74 0.50 0.33 0.26]
+2025-12-28 01:36:53 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:53 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:54 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.687 Bars: [0.31 0.38 0.57 0.84 0.91 0.73 0.45 0.32 0.45 0.73 0.91 0.84 0.57 0.38 0.31]
+2025-12-28 01:36:54 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:54 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:55 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:55 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.591 Bars: [0.37 0.45 0.65 0.87 0.82 0.54 0.26 0.14 0.26 0.54 0.82 0.87 0.65 0.45 0.37]
+2025-12-28 01:36:55 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:55 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=501.3ms, frames=31, avg_fps=61.8, dt_min=11.57ms, dt_max=21.09ms, bar_count=15
+2025-12-28 01:36:55 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=529.6ms, frames=31, avg_fps=58.5, dt_min=12.78ms, dt_max=27.12ms, bar_count=15
+2025-12-28 01:36:55 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=18.57ms, min=-1.08ms, max=477.06ms
+2025-12-28 01:36:55 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.421 Bars: [0.19 0.22 0.31 0.41 0.35 0.20 0.07 0.02 0.07 0.20 0.35 0.41 0.31 0.22 0.19]
+2025-12-28 01:36:56 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:56 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.370 Bars: [0.30 0.37 0.55 0.76 0.73 0.50 0.25 0.14 0.25 0.50 0.73 0.76 0.55 0.37 0.30]
+2025-12-28 01:36:56 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:56 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.728 Bars: [0.02 0.03 0.04 0.05 0.05 0.03 0.01 0.00 0.01 0.03 0.05 0.05 0.04 0.03 0.02]
+2025-12-28 01:36:57 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.562 Bars: [0.02 0.03 0.05 0.07 0.06 0.03 0.01 0.00 0.01 0.03 0.06 0.07 0.05 0.03 0.02]
+2025-12-28 01:36:57 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:57 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:57 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.642 Bars: [0.36 0.46 0.71 1.00 1.00 0.70 0.38 0.23 0.38 0.70 1.00 1.00 0.71 0.46 0.36]
+2025-12-28 01:36:57 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.695 Bars: [0.33 0.42 0.66 0.92 0.86 0.56 0.26 0.13 0.26 0.56 0.86 0.92 0.66 0.42 0.33]
+2025-12-28 01:36:58 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:58 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.188 Bars: [0.13 0.15 0.22 0.29 0.25 0.14 0.05 0.01 0.05 0.14 0.25 0.29 0.22 0.15 0.13]
+2025-12-28 01:36:58 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:58 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.553 Bars: [0.01 0.02 0.02 0.03 0.03 0.02 0.01 0.00 0.01 0.02 0.03 0.03 0.02 0.02 0.01]
+2025-12-28 01:36:59 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:59 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.999 Bars: [0.33 0.40 0.58 0.81 0.78 0.52 0.26 0.13 0.26 0.52 0.78 0.81 0.58 0.40 0.33]
+2025-12-28 01:36:59 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:36:59 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.296 Bars: [0.88 1.00 1.00 1.00 1.00 1.00 0.76 0.42 0.76 1.00 1.00 1.00 1.00 1.00 0.88]
+2025-12-28 01:37:00 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:00 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.780 Bars: [0.06 0.07 0.10 0.13 0.12 0.07 0.02 0.00 0.02 0.07 0.12 0.13 0.10 0.07 0.06]
+2025-12-28 01:37:00 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:00 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=5509.2ms, frames=333, avg_fps=60.4, dt_min=11.15ms, dt_max=36.57ms, bar_count=15
+2025-12-28 01:37:00 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=6.06ms, min=-1.50ms, max=472.85ms
+2025-12-28 01:37:00 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=5534.4ms, frames=337, avg_fps=60.9, dt_min=11.13ms, dt_max=48.59ms, bar_count=15
+2025-12-28 01:37:00 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.953 Bars: [0.38 0.45 0.65 0.85 0.73 0.40 0.15 0.03 0.15 0.40 0.73 0.85 0.65 0.45 0.38]
+2025-12-28 01:37:01 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:01 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:01 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.300 Bars: [0.30 0.40 0.64 0.88 0.83 0.55 0.27 0.15 0.27 0.55 0.83 0.88 0.64 0.40 0.30]
+2025-12-28 01:37:02 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:02 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:02 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.762 Bars: [0.08 0.09 0.13 0.18 0.16 0.09 0.03 0.01 0.03 0.09 0.16 0.18 0.13 0.09 0.08]
+2025-12-28 01:37:03 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:03 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:04 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:04 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.535 Bars: [0.33 0.42 0.63 0.84 0.72 0.41 0.15 0.04 0.15 0.41 0.72 0.84 0.63 0.42 0.33]
+2025-12-28 01:37:04 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:05 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.036 Bars: [0.21 0.27 0.43 0.59 0.55 0.35 0.16 0.08 0.16 0.35 0.55 0.59 0.43 0.27 0.21]
+2025-12-28 01:37:05 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:05 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:06 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:06 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.477 Bars: [0.03 0.04 0.05 0.07 0.07 0.04 0.02 0.01 0.02 0.04 0.07 0.07 0.05 0.04 0.03]
+2025-12-28 01:37:06 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:07 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:07 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.626 Bars: [0.41 0.46 0.61 0.77 0.68 0.40 0.17 0.07 0.17 0.40 0.68 0.77 0.61 0.46 0.41]
+2025-12-28 01:37:07 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:08 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:08 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:08 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.246 Bars: [0.40 0.51 0.80 1.00 1.00 0.89 0.51 0.34 0.51 0.89 1.00 1.00 0.80 0.51 0.40]
+2025-12-28 01:37:09 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:09 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:10 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:10 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:10 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.623 Bars: [0.06 0.07 0.10 0.12 0.11 0.06 0.02 0.00 0.02 0.06 0.11 0.12 0.10 0.07 0.06]
+2025-12-28 01:37:10 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=199.7ms, frames=3, avg_fps=15.0, dt_min=47.75ms, dt_max=86.53ms, bar_count=15
+2025-12-28 01:37:10 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=196.0ms, frames=3, avg_fps=15.3, dt_min=48.29ms, dt_max=82.89ms, bar_count=15
+2025-12-28 01:37:11 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:11 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.651 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-28 01:37:11 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:12 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:12 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.264 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-28 01:37:12 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:13 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:13 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.534 Bars: [0.63 0.79 1.00 1.00 1.00 0.75 0.27 0.06 0.27 0.75 1.00 1.00 1.00 0.79 0.63]
+2025-12-28 01:37:13 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:14 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:14 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.027 Bars: [0.27 0.32 0.44 0.61 0.61 0.44 0.23 0.14 0.23 0.44 0.61 0.61 0.44 0.32 0.27]
+2025-12-28 01:37:14 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:14 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.644 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-28 01:37:15 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:15 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.456 Bars: [0.32 0.42 0.65 0.96 1.00 0.86 0.54 0.39 0.54 0.86 1.00 0.96 0.65 0.42 0.32]
+2025-12-28 01:37:15 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:15 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.439 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-28 01:37:15 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=1554.5ms, frames=93, avg_fps=59.8, dt_min=12.07ms, dt_max=28.76ms, bar_count=15
+2025-12-28 01:37:15 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=1555.5ms, frames=93, avg_fps=59.8, dt_min=11.68ms, dt_max=28.76ms, bar_count=15
+2025-12-28 01:37:15 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=1.00ms, min=-1.50ms, max=472.85ms
+2025-12-28 01:37:15 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.659 Bars: [0.31 0.42 0.67 0.95 0.93 0.64 0.33 0.19 0.33 0.64 0.93 0.95 0.67 0.42 0.31]
+2025-12-28 01:37:16 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:16 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:37:16 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.870 Bars: [0.21 0.25 0.37 0.51 0.46 0.28 0.12 0.05 0.12 0.28 0.46 0.51 0.37 0.25 0.21]
+2025-12-28 01:43:20 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-28 01:43:20 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.452 Bars: [0.41 0.51 0.79 1.00 1.00 1.00 1.00 0.89 1.00 1.00 1.00 1.00 0.79 0.51 0.41]
+2025-12-28 01:43:21 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.463 Bars: [0.42 0.49 0.69 0.94 0.85 0.51 0.21 0.07 0.21 0.51 0.85 0.94 0.69 0.49 0.42]
+2025-12-28 01:43:22 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.993 Bars: [0.08 0.09 0.13 0.17 0.15 0.09 0.03 0.01 0.03 0.09 0.15 0.17 0.13 0.09 0.08]
+2025-12-28 01:43:22 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=False) track=Rent
+2025-12-28 01:43:22 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=False) track=Rent
+2025-12-28 01:43:22 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0763, max=0.6546
+2025-12-28 01:43:22 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-28 01:43:22 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:23 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:23 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.741 Bars: [0.07 0.08 0.12 0.16 0.14 0.08 0.03 0.01 0.03 0.08 0.14 0.16 0.12 0.08 0.07]
+2025-12-28 01:43:23 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:23 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.2647, max=0.9943
+2025-12-28 01:43:23 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-28 01:43:24 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:24 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:24 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.217 Bars: [0.21 0.26 0.39 0.56 0.56 0.40 0.21 0.13 0.21 0.40 0.56 0.56 0.39 0.26 0.21]
+2025-12-28 01:43:25 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=3287.5ms, frames=88, avg_fps=26.8, dt_min=17.44ms, dt_max=77.17ms, bar_count=15
+2025-12-28 01:43:25 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=56.19ms, min=-0.50ms, max=303.28ms
+2025-12-28 01:43:25 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:25 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:25 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=215.6ms, frames=3, avg_fps=13.9, dt_min=64.30ms, dt_max=82.98ms, bar_count=15
+2025-12-28 01:43:26 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.508 Bars: [0.29 0.36 0.55 0.79 0.78 0.54 0.28 0.16 0.28 0.54 0.78 0.79 0.55 0.36 0.29]
+2025-12-28 01:43:26 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:26 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.909 Bars: [0.19 0.23 0.34 0.47 0.44 0.28 0.13 0.06 0.13 0.28 0.44 0.47 0.34 0.23 0.19]
+2025-12-28 01:43:26 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:27 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.688 Bars: [0.30 0.38 0.58 0.86 0.91 0.70 0.41 0.28 0.41 0.70 0.91 0.86 0.58 0.38 0.30]
+2025-12-28 01:43:27 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:27 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.541 Bars: [0.28 0.35 0.54 0.78 0.82 0.61 0.35 0.24 0.35 0.61 0.82 0.78 0.54 0.35 0.28]
+2025-12-28 01:43:27 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:27 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.632 Bars: [0.33 0.41 0.62 0.93 1.00 0.81 0.51 0.37 0.51 0.81 1.00 0.93 0.62 0.41 0.33]
+2025-12-28 01:43:28 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.500 Bars: [0.50 0.58 0.81 1.00 0.91 0.50 0.18 0.03 0.18 0.50 0.91 1.00 0.81 0.58 0.50]
+2025-12-28 01:43:28 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:28 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.356 Bars: [0.27 0.34 0.51 0.76 0.84 0.68 0.43 0.31 0.43 0.68 0.84 0.76 0.51 0.34 0.27]
+2025-12-28 01:43:28 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:28 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.884 Bars: [0.42 0.52 0.77 1.00 0.97 0.60 0.26 0.11 0.26 0.60 0.97 1.00 0.77 0.52 0.42]
+2025-12-28 01:43:29 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:29 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.189 Bars: [0.41 0.49 0.72 0.98 0.89 0.54 0.22 0.08 0.22 0.54 0.89 0.98 0.72 0.49 0.41]
+2025-12-28 01:43:29 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:29 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.744 Bars: [0.16 0.21 0.32 0.41 0.33 0.17 0.06 0.01 0.06 0.17 0.33 0.41 0.32 0.21 0.16]
+2025-12-28 01:43:30 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.365 Bars: [0.20 0.25 0.37 0.50 0.42 0.23 0.08 0.01 0.08 0.23 0.42 0.50 0.37 0.25 0.20]
+2025-12-28 01:43:30 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:30 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=4897.2ms, frames=259, avg_fps=52.9, dt_min=11.51ms, dt_max=88.99ms, bar_count=15
+2025-12-28 01:43:30 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.197 Bars: [0.35 0.41 0.58 0.81 0.78 0.51 0.24 0.12 0.24 0.51 0.78 0.81 0.58 0.41 0.35]
+2025-12-28 01:43:30 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:30 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=5219.3ms, frames=277, avg_fps=53.1, dt_min=11.51ms, dt_max=82.98ms, bar_count=15
+2025-12-28 01:43:30 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.904 Bars: [0.36 0.43 0.63 0.94 1.00 0.82 0.50 0.36 0.50 0.82 1.00 0.94 0.63 0.43 0.36]
+2025-12-28 01:43:31 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.694 Bars: [0.32 0.38 0.55 0.80 0.86 0.67 0.40 0.28 0.40 0.67 0.86 0.80 0.55 0.38 0.32]
+2025-12-28 01:43:31 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:31 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:31 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.085 Bars: [0.22 0.27 0.42 0.59 0.58 0.40 0.21 0.13 0.21 0.40 0.58 0.59 0.42 0.27 0.22]
+2025-12-28 01:43:31 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.120 Bars: [0.22 0.27 0.41 0.61 0.64 0.48 0.28 0.19 0.28 0.48 0.64 0.61 0.41 0.27 0.22]
+2025-12-28 01:43:32 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:32 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.890 Bars: [0.06 0.07 0.10 0.14 0.13 0.08 0.03 0.01 0.03 0.08 0.13 0.14 0.10 0.07 0.06]
+2025-12-28 01:43:32 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:32 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.620 Bars: [0.30 0.37 0.54 0.80 0.86 0.67 0.40 0.28 0.40 0.67 0.86 0.80 0.54 0.37 0.30]
+2025-12-28 01:43:33 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.734 Bars: [0.52 0.67 1.00 1.00 1.00 1.00 0.59 0.37 0.59 1.00 1.00 1.00 1.00 0.67 0.52]
+2025-12-28 01:43:33 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:33 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:33 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.839 Bars: [0.35 0.44 0.68 1.00 1.00 0.79 0.46 0.31 0.46 0.79 1.00 1.00 0.68 0.44 0.35]
+2025-12-28 01:43:33 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.450 Bars: [0.30 0.37 0.56 0.78 0.76 0.52 0.26 0.15 0.26 0.52 0.76 0.78 0.56 0.37 0.30]
+2025-12-28 01:43:34 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.242 Bars: [0.29 0.36 0.53 0.76 0.76 0.53 0.28 0.17 0.28 0.53 0.76 0.76 0.53 0.36 0.29]
+2025-12-28 01:43:34 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:34 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:34 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.754 Bars: [0.03 0.03 0.04 0.05 0.05 0.03 0.01 0.00 0.01 0.03 0.05 0.05 0.04 0.03 0.03]
+2025-12-28 01:43:34 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.485 Bars: [0.31 0.38 0.58 0.81 0.78 0.51 0.25 0.14 0.25 0.51 0.78 0.81 0.58 0.38 0.31]
+2025-12-28 01:43:35 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:35 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=9900.9ms, frames=555, avg_fps=56.1, dt_min=11.51ms, dt_max=88.99ms, bar_count=15
+2025-12-28 01:43:35 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.021 Bars: [0.47 0.53 0.71 0.92 0.82 0.48 0.20 0.07 0.20 0.48 0.82 0.92 0.71 0.53 0.47]
+2025-12-28 01:43:35 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:35 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=10227.3ms, frames=574, avg_fps=56.1, dt_min=11.51ms, dt_max=82.98ms, bar_count=15
+2025-12-28 01:43:35 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.609 Bars: [0.05 0.06 0.08 0.11 0.09 0.05 0.02 0.00 0.02 0.05 0.09 0.11 0.08 0.06 0.05]
+2025-12-28 01:43:35 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.714 Bars: [0.06 0.07 0.10 0.14 0.12 0.07 0.02 0.00 0.02 0.07 0.12 0.14 0.10 0.07 0.06]
+2025-12-28 01:43:36 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:36 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:36 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.864 Bars: [0.35 0.42 0.63 0.93 1.00 0.82 0.51 0.36 0.51 0.82 1.00 0.93 0.63 0.42 0.35]
+2025-12-28 01:43:37 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:37 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:37 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.289 Bars: [0.47 0.59 0.90 1.00 1.00 1.00 0.85 0.64 0.85 1.00 1.00 1.00 0.90 0.59 0.47]
+2025-12-28 01:43:38 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:38 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:38 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.747 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-28 01:43:39 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:39 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:39 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.120 Bars: [0.36 0.45 0.69 0.93 0.80 0.44 0.15 0.03 0.15 0.44 0.80 0.93 0.69 0.45 0.36]
+2025-12-28 01:43:40 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:40 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=71.1ms, frames=3, avg_fps=42.2, dt_min=22.03ms, dt_max=25.02ms, bar_count=15
+2025-12-28 01:43:40 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.026 Bars: [0.07 0.07 0.10 0.14 0.12 0.07 0.03 0.00 0.03 0.07 0.12 0.14 0.10 0.07 0.07]
+2025-12-28 01:43:40 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:40 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=408.4ms, frames=23, avg_fps=56.3, dt_min=14.60ms, dt_max=29.11ms, bar_count=15
+2025-12-28 01:43:41 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.745 Bars: [0.36 0.42 0.59 0.84 0.86 0.63 0.36 0.24 0.36 0.63 0.86 0.84 0.59 0.42 0.36]
+2025-12-28 01:43:41 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:41 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.559 Bars: [0.33 0.39 0.56 0.79 0.82 0.60 0.34 0.22 0.34 0.60 0.82 0.79 0.56 0.39 0.33]
+2025-12-28 01:43:41 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:42 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.770 Bars: [0.57 0.68 0.99 1.00 1.00 0.63 0.23 0.05 0.23 0.63 1.00 1.00 0.99 0.68 0.57]
+2025-12-28 01:43:42 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:42 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.823 Bars: [0.33 0.38 0.52 0.69 0.59 0.33 0.12 0.02 0.12 0.33 0.59 0.69 0.52 0.38 0.33]
+2025-12-28 01:43:42 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:43 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.155 Bars: [0.33 0.38 0.54 0.73 0.64 0.36 0.13 0.02 0.13 0.36 0.64 0.73 0.54 0.38 0.33]
+2025-12-28 01:43:43 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:43 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.781 Bars: [0.31 0.39 0.58 0.76 0.65 0.35 0.12 0.02 0.12 0.35 0.65 0.76 0.58 0.39 0.31]
+2025-12-28 01:43:43 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:44 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.288 Bars: [0.47 0.58 0.86 1.00 1.00 0.85 0.46 0.28 0.46 0.85 1.00 1.00 0.86 0.58 0.47]
+2025-12-28 01:43:44 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:44 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:44 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.642 Bars: [0.34 0.40 0.57 0.80 0.81 0.58 0.32 0.20 0.32 0.58 0.81 0.80 0.57 0.40 0.34]
+2025-12-28 01:43:45 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.198 Bars: [0.15 0.21 0.35 0.47 0.39 0.21 0.07 0.01 0.07 0.21 0.39 0.47 0.35 0.21 0.15]
+2025-12-28 01:43:45 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:45 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=5083.2ms, frames=299, avg_fps=58.8, dt_min=11.13ms, dt_max=34.37ms, bar_count=15
+2025-12-28 01:43:45 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=19.83ms, min=-2.50ms, max=303.28ms
+2025-12-28 01:43:45 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.984 Bars: [0.17 0.20 0.29 0.42 0.45 0.34 0.20 0.13 0.20 0.34 0.45 0.42 0.29 0.20 0.17]
+2025-12-28 01:43:45 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:45 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=5409.6ms, frames=319, avg_fps=59.0, dt_min=11.26ms, dt_max=31.72ms, bar_count=15
+2025-12-28 01:43:45 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.650 Bars: [0.14 0.18 0.27 0.39 0.41 0.31 0.18 0.12 0.18 0.31 0.41 0.39 0.27 0.18 0.14]
+2025-12-28 01:43:46 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:46 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.871 Bars: [0.40 0.50 0.77 1.00 1.00 0.90 0.54 0.38 0.54 0.90 1.00 1.00 0.77 0.50 0.40]
+2025-12-28 01:43:46 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:46 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.788 Bars: [0.41 0.51 0.76 1.00 1.00 0.74 0.39 0.24 0.39 0.74 1.00 1.00 0.76 0.51 0.41]
+2025-12-28 01:43:47 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:47 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.833 Bars: [0.34 0.42 0.65 0.94 0.98 0.73 0.42 0.28 0.42 0.73 0.98 0.94 0.65 0.42 0.34]
+2025-12-28 01:43:47 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:47 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.480 Bars: [0.32 0.38 0.56 0.81 0.88 0.69 0.43 0.31 0.43 0.69 0.88 0.81 0.56 0.38 0.32]
+2025-12-28 01:43:48 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:48 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.834 Bars: [0.28 0.33 0.48 0.67 0.65 0.43 0.21 0.11 0.21 0.43 0.65 0.67 0.48 0.33 0.28]
+2025-12-28 01:43:48 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:48 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.745 Bars: [0.02 0.02 0.03 0.04 0.04 0.02 0.01 0.00 0.01 0.02 0.04 0.04 0.03 0.02 0.02]
+2025-12-28 01:43:49 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.978 Bars: [0.19 0.23 0.33 0.44 0.41 0.25 0.11 0.04 0.11 0.25 0.41 0.44 0.33 0.23 0.19]
+2025-12-28 01:43:49 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:49 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:49 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.857 Bars: [0.38 0.46 0.69 0.96 0.94 0.63 0.32 0.19 0.32 0.63 0.94 0.96 0.69 0.46 0.38]
+2025-12-28 01:43:50 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.104 Bars: [0.38 0.46 0.69 1.00 1.00 0.88 0.54 0.38 0.54 0.88 1.00 1.00 0.69 0.46 0.38]
+2025-12-28 01:43:50 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:50 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=10093.3ms, frames=596, avg_fps=59.0, dt_min=11.13ms, dt_max=38.43ms, bar_count=15
+2025-12-28 01:43:50 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.410 Bars: [0.26 0.32 0.47 0.64 0.59 0.36 0.16 0.07 0.16 0.36 0.59 0.64 0.47 0.32 0.26]
+2025-12-28 01:43:50 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:50 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=10434.4ms, frames=615, avg_fps=58.9, dt_min=11.13ms, dt_max=37.42ms, bar_count=15
+2025-12-28 01:43:50 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=47.08ms, min=-1.31ms, max=308.32ms
+2025-12-28 01:43:50 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.015 Bars: [0.18 0.24 0.38 0.53 0.48 0.29 0.12 0.05 0.12 0.29 0.48 0.53 0.38 0.24 0.18]
+2025-12-28 01:43:51 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:51 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:52 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.991 Bars: [0.18 0.21 0.28 0.34 0.28 0.14 0.05 0.01 0.05 0.14 0.28 0.34 0.28 0.21 0.18]
+2025-12-28 01:43:52 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:52 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:52 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.391 Bars: [0.26 0.32 0.48 0.66 0.62 0.40 0.18 0.09 0.18 0.40 0.62 0.66 0.48 0.32 0.26]
+2025-12-28 01:43:53 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:53 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:53 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.243 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-28 01:43:54 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:54 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:54 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.281 Bars: [0.52 0.63 0.93 1.00 1.00 0.79 0.38 0.19 0.38 0.79 1.00 1.00 0.93 0.63 0.52]
+2025-12-28 01:43:55 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:55 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=321.9ms, frames=19, avg_fps=59.0, dt_min=11.84ms, dt_max=24.73ms, bar_count=15
+2025-12-28 01:43:55 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.698 Bars: [0.15 0.19 0.31 0.44 0.41 0.27 0.13 0.07 0.13 0.27 0.41 0.44 0.31 0.19 0.15]
+2025-12-28 01:43:55 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=13.02ms, min=-2.50ms, max=303.28ms
+2025-12-28 01:43:55 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:55 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=662.2ms, frames=41, avg_fps=61.9, dt_min=13.09ms, dt_max=19.80ms, bar_count=15
+2025-12-28 01:43:55 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.892 Bars: [0.01 0.02 0.02 0.03 0.03 0.02 0.01 0.00 0.01 0.02 0.03 0.03 0.02 0.02 0.01]
+2025-12-28 01:43:56 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.090 Bars: [0.08 0.09 0.13 0.17 0.15 0.08 0.03 0.01 0.03 0.08 0.15 0.17 0.13 0.09 0.08]
+2025-12-28 01:43:56 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:56 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent
+2025-12-28 01:43:56 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.716 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-28 01:43:57 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.063 Bars: [0.06 0.07 0.09 0.13 0.11 0.07 0.03 0.01 0.03 0.07 0.11 0.13 0.09 0.07 0.06]
+2025-12-28 01:43:57 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Rent

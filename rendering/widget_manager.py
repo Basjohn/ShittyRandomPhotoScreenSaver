@@ -1762,12 +1762,12 @@ class WidgetManager:
             # Per-bar colours
             from PySide6.QtGui import QColor as _QColor
             try:
-                fill_color_data = spotify_vis_settings.get('bar_fill_color', [0, 255, 128, 230])
+                fill_color_data = spotify_vis_settings.get('bar_fill_color', [255, 255, 255, 230])
                 fr, fg, fb = fill_color_data[0], fill_color_data[1], fill_color_data[2]
                 fa = fill_color_data[3] if len(fill_color_data) > 3 else 230
                 bar_fill_qcolor = _QColor(fr, fg, fb, fa)
             except Exception:
-                bar_fill_qcolor = _QColor(0, 255, 128, 230)
+                bar_fill_qcolor = _QColor(255, 255, 255, 230)
             
             try:
                 bar_border_color_data = spotify_vis_settings.get('bar_border_color', [255, 255, 255, 230])

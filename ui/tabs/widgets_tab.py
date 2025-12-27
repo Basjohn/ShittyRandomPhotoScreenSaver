@@ -57,7 +57,7 @@ class WidgetsTab(QWidget):
         self._media_bg_color = QColor(64, 64, 64, 255)
         self._media_border_color = QColor(128, 128, 128, 255)
         # Spotify Beat Visualizer frame defaults inherit Spotify/media styling
-        self._spotify_vis_fill_color = QColor(0, 255, 128, 230)
+        self._spotify_vis_fill_color = QColor(255, 255, 255, 230)
         self._spotify_vis_border_color = QColor(255, 255, 255, 230)
         # Reddit widget frame defaults mirror Spotify/media widget styling
         self._reddit_color = QColor(255, 255, 255, 230)
