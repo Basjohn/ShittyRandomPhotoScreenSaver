@@ -249,6 +249,95 @@ class _AnimationRunMetrics:
         return max(0.0, time.time() - self.start_ts)
 
 
+@dataclass
+class _PaintMetrics:
+    """Tracks paintGL cadence and duration for transitions."""
+
+    label: str
+    slow_threshold_ms: float
+    start_ts: float = field(default_factory=time.time)
+    last_paint_ts: Optional[float] = None
+    frame_count: int = 0
+    min_dt: float = 0.0
+    max_dt: float = 0.0
+    min_duration_ms: float = 0.0
+    max_duration_ms: float = 0.0
+    slow_count: int = 0
+
+    def record(self, paint_duration_ms: float) -> Optional[float]:
+        """Record a paint duration and return dt seconds when available."""
+        now = time.time()
+        dt = None
+        if self.last_paint_ts is not None:
+            dt = now - self.last_paint_ts
+            if dt > 0.0:
+                if self.min_dt == 0.0 or dt < self.min_dt:
+                    self.min_dt = dt
+                if dt > self.max_dt:
+                    self.max_dt = dt
+        self.last_paint_ts = now
+        self.frame_count += 1
+        if self.min_duration_ms == 0.0 or paint_duration_ms < self.min_duration_ms:
+            self.min_duration_ms = paint_duration_ms
+        if paint_duration_ms > self.max_duration_ms:
+            self.max_duration_ms = paint_duration_ms
+        if paint_duration_ms > self.slow_threshold_ms:
+            self.slow_count += 1
+        return dt
+
+    def elapsed_seconds(self) -> float:
+        return max(0.0, time.time() - self.start_ts)
+
+
+@dataclass
+class _RenderTimerMetrics:
+    """Telemetry for render timer cadence."""
+
+    target_fps: int
+    interval_ms: int
+    stall_threshold_ms: float = 120.0
+    stall_factor: float = 2.5
+    start_ts: float = field(default_factory=time.time)
+    last_tick_ts: Optional[float] = None
+    frame_count: int = 0
+    min_dt: float = 0.0
+    max_dt: float = 0.0
+    stall_count: int = 0
+    last_stall_log_ts: float = 0.0
+
+    def record_tick(self) -> Optional[float]:
+        """Record a render timer tick and return dt seconds when available."""
+        now = time.time()
+        dt = None
+        if self.last_tick_ts is not None:
+            dt = now - self.last_tick_ts
+            if dt > 0.0:
+                if self.min_dt == 0.0 or dt < self.min_dt:
+                    self.min_dt = dt
+                if dt > self.max_dt:
+                    self.max_dt = dt
+                threshold_ms = max(self.stall_threshold_ms, self.interval_ms * self.stall_factor)
+                if dt * 1000.0 > threshold_ms:
+                    self.stall_count += 1
+        self.last_tick_ts = now
+        self.frame_count += 1
+        return dt
+
+    def should_log_stall(self, dt_seconds: float, cooldown_s: float = 0.5) -> bool:
+        """Return True when this tick gap should be logged as a stall."""
+        threshold_ms = max(self.stall_threshold_ms, self.interval_ms * self.stall_factor)
+        if dt_seconds * 1000.0 <= threshold_ms:
+            return False
+        now = time.time()
+        if self.last_stall_log_ts and (now - self.last_stall_log_ts) < cooldown_s:
+            return False
+        self.last_stall_log_ts = now
+        return True
+
+    def elapsed_seconds(self) -> float:
+        return max(0.0, time.time() - self.start_ts)
+
+
 class GLCompositorWidget(QOpenGLWidget):
     """Single GL compositor that renders the base image and transitions.
 
@@ -306,6 +395,10 @@ class GLCompositorWidget(QOpenGLWidget):
         # interpolates to the actual render time.
         self._render_timer: Optional[QTimer] = None
         self._render_timer_fps: int = 60  # Will be set from display refresh rate
+        self._render_timer_metrics: Optional[_RenderTimerMetrics] = None
+        self._paint_metrics: Optional[_PaintMetrics] = None
+        self._paint_slow_threshold_ms: float = 24.0
+        self._paint_warning_last_ts: float = 0.0
 
         # Animation plumbing: compositor does not own AnimationManager, but we
         # keep the current animation id so the caller can cancel if needed.
@@ -513,7 +606,13 @@ class GLCompositorWidget(QOpenGLWidget):
         self._render_timer.setTimerType(Qt.TimerType.PreciseTimer)
         self._render_timer.timeout.connect(self._on_render_tick)
         self._render_timer.start(interval_ms)
-        
+        if is_perf_metrics_enabled():
+            self._render_timer_metrics = _RenderTimerMetrics(
+                target_fps=target_fps,
+                interval_ms=interval_ms,
+            )
+        else:
+            self._render_timer_metrics = None
         logger.debug("[GL COMPOSITOR] Render timer started: display=%dHz, target=%dHz (interval=%dms)", 
                     display_hz, target_fps, interval_ms)
     
@@ -523,13 +622,17 @@ class GLCompositorWidget(QOpenGLWidget):
             self._render_timer.stop()
             self._render_timer.deleteLater()
             self._render_timer = None
+            self._finalize_render_timer_metrics()
             logger.debug("[GL COMPOSITOR] Render timer stopped")
+        else:
+            self._finalize_render_timer_metrics()
     
     def _on_render_tick(self) -> None:
         """Called by render timer to trigger a repaint.
         
         The actual progress interpolation happens in paintGL using the FrameState.
         """
+        self._record_render_timer_tick()
         if self._frame_state is not None and self._frame_state.started and not self._frame_state.completed:
             self.update()
 
@@ -622,6 +725,16 @@ class GLCompositorWidget(QOpenGLWidget):
 
     def _clear_all_transitions(self) -> None:
         """Clear all transition states."""
+        self._cancel_current_animation()
+        try:
+            self._stop_frame_pacing()
+        except Exception:
+            logger.debug("[GL COMPOSITOR] Frame pacing stop failed during clear", exc_info=True)
+        try:
+            self._release_transition_textures()
+        except Exception:
+            logger.debug("[GL COMPOSITOR] Texture release failed during clear", exc_info=True)
+        self._finalize_paint_metrics(outcome="cleared")
         self._crossfade = None
         self._slide = None
         self._wipe = None
@@ -670,6 +783,7 @@ class GLCompositorWidget(QOpenGLWidget):
                 pass
             self._current_anim_id = None
             self._finalize_animation_metrics(outcome="cancelled")
+            self._finalize_paint_metrics(outcome="cancelled")
 
     def _start_transition_animation(
         self,
@@ -686,6 +800,7 @@ class GLCompositorWidget(QOpenGLWidget):
         self._cancel_current_animation()
         duration_sec = max(0.001, duration_ms / 1000.0)
         frame_state = self._start_frame_pacing(duration_sec)
+        self._begin_paint_metrics(transition_label or "transition")
         profiled_callback = self._wrap_animation_update(
             update_callback,
             self._begin_animation_metrics(
@@ -782,6 +897,113 @@ class GLCompositorWidget(QOpenGLWidget):
             min_dt_ms,
             max_dt_ms,
             metrics.dt_spike_count,
+            metrics.target_fps,
+            outcome,
+        )
+
+    def _begin_paint_metrics(self, label: str) -> None:
+        """Start tracking paintGL cadence for the current transition."""
+        if not is_perf_metrics_enabled():
+            self._paint_metrics = None
+            return
+        self._paint_metrics = _PaintMetrics(
+            label=label,
+            slow_threshold_ms=self._paint_slow_threshold_ms,
+        )
+
+    def _record_paint_metrics(self, paint_duration_ms: float) -> None:
+        """Record a paintGL duration and optionally log warnings."""
+        if not is_perf_metrics_enabled():
+            return
+        metrics = self._paint_metrics
+        if metrics is None:
+            return
+        dt_seconds = metrics.record(paint_duration_ms)
+        now = time.time()
+        if paint_duration_ms > self._paint_slow_threshold_ms:
+            if now - self._paint_warning_last_ts > 0.5:
+                logger.warning(
+                    "[PERF] [GL PAINT] Slow paintGL %.2fms (transition=%s)",
+                    paint_duration_ms,
+                    metrics.label,
+                )
+                self._paint_warning_last_ts = now
+        if dt_seconds is not None and dt_seconds * 1000.0 > 120.0:
+            if now - self._paint_warning_last_ts > 0.5:
+                logger.warning(
+                    "[PERF] [GL PAINT] Paint gap %.2fms (transition=%s)",
+                    dt_seconds * 1000.0,
+                    metrics.label,
+                )
+                self._paint_warning_last_ts = now
+
+    def _finalize_paint_metrics(self, outcome: str = "stopped") -> None:
+        """Emit summary metrics for paintGL cadence."""
+        metrics = self._paint_metrics
+        self._paint_metrics = None
+        if metrics is None or not is_perf_metrics_enabled():
+            return
+        elapsed_s = metrics.elapsed_seconds()
+        avg_fps = (metrics.frame_count / elapsed_s) if elapsed_s > 0 else 0.0
+        min_dt_ms = metrics.min_dt * 1000.0 if metrics.min_dt > 0.0 else 0.0
+        max_dt_ms = metrics.max_dt * 1000.0 if metrics.max_dt > 0.0 else 0.0
+        logger.info(
+            "[PERF] [GL PAINT] %s metrics: frames=%d, avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, "
+            "dur_min=%.2fms, dur_max=%.2fms, slow_frames=%d, outcome=%s",
+            metrics.label.capitalize(),
+            metrics.frame_count,
+            avg_fps,
+            min_dt_ms,
+            max_dt_ms,
+            metrics.min_duration_ms,
+            metrics.max_duration_ms,
+            metrics.slow_count,
+            outcome,
+        )
+
+    def _record_render_timer_tick(self) -> None:
+        """Record render timer cadence telemetry."""
+        metrics = self._render_timer_metrics
+        if metrics is None or not is_perf_metrics_enabled():
+            return
+        dt = metrics.record_tick()
+        if dt is None:
+            return
+        if metrics.should_log_stall(dt):
+            self._log_render_timer_stall(dt, metrics)
+
+    def _log_render_timer_stall(self, dt_seconds: float, metrics: _RenderTimerMetrics) -> None:
+        """Emit a warning when render timer stalls exceed thresholds."""
+        if not is_perf_metrics_enabled():
+            return
+        anim_label = self._current_anim_metrics.name if self._current_anim_metrics else "idle"
+        logger.warning(
+            "[PERF] [GL RENDER] Render timer stall %.2fms (target=%dHz interval=%dms frames=%d anim=%s)",
+            dt_seconds * 1000.0,
+            metrics.target_fps,
+            metrics.interval_ms,
+            metrics.frame_count,
+            anim_label,
+        )
+
+    def _finalize_render_timer_metrics(self, outcome: str = "stopped") -> None:
+        """Summarize render timer cadence when it stops."""
+        metrics = self._render_timer_metrics
+        self._render_timer_metrics = None
+        if metrics is None or not is_perf_metrics_enabled():
+            return
+        elapsed_s = metrics.elapsed_seconds()
+        avg_fps = (metrics.frame_count / elapsed_s) if elapsed_s > 0 else 0.0
+        min_dt_ms = metrics.min_dt * 1000.0 if metrics.min_dt > 0.0 else 0.0
+        max_dt_ms = metrics.max_dt * 1000.0 if metrics.max_dt > 0.0 else 0.0
+        logger.info(
+            "[PERF] [GL RENDER] Timer metrics: frames=%d, avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, "
+            "stalls=%d, target=%dHz, outcome=%s",
+            metrics.frame_count,
+            avg_fps,
+            min_dt_ms,
+            max_dt_ms,
+            metrics.stall_count,
             metrics.target_fps,
             outcome,
         )
@@ -2806,10 +3028,10 @@ void main() {
         try:
             self._paintGL_impl()
         finally:
-            # Log slow paintGL calls - this ALWAYS runs regardless of which path was taken
-            _paint_elapsed = (time.time() - _paint_start) * 1000.0
-            if _paint_elapsed > 50.0 and is_perf_metrics_enabled():
-                logger.warning("[PERF] [GL COMPOSITOR] Slow paintGL: %.2fms", _paint_elapsed)
+            paint_elapsed = (time.time() - _paint_start) * 1000.0
+            self._record_paint_metrics(paint_elapsed)
+            if paint_elapsed > 50.0 and is_perf_metrics_enabled():
+                logger.warning("[PERF] [GL COMPOSITOR] Slow paintGL: %.2fms", paint_elapsed)
 
     def _try_shader_path(self, name: str, state, can_use_fn, paint_fn, target, prep_fn=None) -> bool:
         """Try to render a transition via shader path. Returns True if successful."""

@@ -34711,3 +34711,3915 @@ collected 0 items
 
 ========================================================================================== no tests ran in 0.23s ==========================================================================================
 
+
+===== pytest run 2025-12-28 18:08:31 args=['tests/test_spotify_visualizer_widget.py', '-k', 'manual_floor or sensitivity'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collected 12 items / 10 deselected / 2 selected
+
+
+
+tests\test_spotify_visualizer_widget.py 
+F
+F
+                                                                                                                                                           [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+__________________________________________________________________________ test_manual_floor_produces_higher_energy_than_dynamic __________________________________________________________________________
+
+
+
+np_module = <module 'numpy' from 'C:\\Python311\\Lib\\site-packages\\numpy\\__init__.py'>
+
+
+
+    def test_manual_floor_produces_higher_energy_than_dynamic(np_module):
+
+        worker = _make_audio_worker(np_module)
+
+        fft = _synth_fft(np_module, magnitude=2.5)
+
+    
+
+        worker.set_floor_config(dynamic_enabled=True, manual_floor=2.1)
+
+        bars_dynamic = worker._fft_to_bars(fft)
+
+    
+
+        worker.set_floor_config(dynamic_enabled=False, manual_floor=0.2)
+
+        bars_manual = worker._fft_to_bars(fft)
+
+    
+
+        assert isinstance(bars_dynamic, list)
+
+        assert isinstance(bars_manual, list)
+
+>       assert max(bars_manual) > max(bars_dynamic)
+
+E       assert 1.0 > 1.0
+
+E        +  where 1.0 = max([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, ...])
+
+E        +  and   1.0 = max([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, ...])
+
+
+
+tests\test_spotify_visualizer_widget.py:117: AssertionError
+
+_______________________________________________________________________________ test_sensitivity_config_affects_noise_floor _______________________________________________________________________________
+
+
+
+np_module = <module 'numpy' from 'C:\\Python311\\Lib\\site-packages\\numpy\\__init__.py'>
+
+
+
+    def test_sensitivity_config_affects_noise_floor(np_module):
+
+        worker = _make_audio_worker(np_module)
+
+        worker.set_floor_config(dynamic_enabled=False, manual_floor=2.1)
+
+        fft = _synth_fft(np_module, magnitude=2.5)
+
+    
+
+        worker.set_sensitivity_config(recommended=True, sensitivity=1.0)
+
+        bars_rec = worker._fft_to_bars(fft)
+
+    
+
+        worker.set_sensitivity_config(recommended=False, sensitivity=2.5)
+
+        bars_manual = worker._fft_to_bars(fft)
+
+    
+
+        assert isinstance(bars_rec, list)
+
+        assert isinstance(bars_manual, list)
+
+>       assert max(bars_manual) > max(bars_rec)
+
+E       assert 1.0 > 1.0
+
+E        +  where 1.0 = max([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, ...])
+
+E        +  and   1.0 = max([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, ...])
+
+
+
+tests\test_spotify_visualizer_widget.py:133: AssertionError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_spotify_visualizer_widget.py::test_manual_floor_produces_higher_energy_than_dynamic - assert 1.0 > 1.0
+
+FAILED tests/test_spotify_visualizer_widget.py::test_sensitivity_config_affects_noise_floor - assert 1.0 > 1.0
+
+==================================================================================== 2 failed, 10 deselected in 0.39s =====================================================================================
+
+
+===== pytest run 2025-12-28 18:08:48 args=['tests/test_spotify_visualizer_widget.py', '-k', 'manual_floor or sensitivity', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 12 items / 10 deselected / 2 selected
+
+
+
+tests/test_spotify_visualizer_widget.py::test_manual_floor_produces_higher_energy_than_dynamic 
+FAILED                                                                                                [ 50%]
+
+
+tests/test_spotify_visualizer_widget.py::test_sensitivity_config_affects_noise_floor 
+FAILED                                                                                                          [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+__________________________________________________________________________ test_manual_floor_produces_higher_energy_than_dynamic __________________________________________________________________________
+
+
+
+np_module = <module 'numpy' from 'C:\\Python311\\Lib\\site-packages\\numpy\\__init__.py'>
+
+
+
+    def test_manual_floor_produces_higher_energy_than_dynamic(np_module):
+
+        worker = _make_audio_worker(np_module)
+
+        fft = _synth_fft(np_module, magnitude=2.5)
+
+    
+
+        worker.set_floor_config(dynamic_enabled=True, manual_floor=2.1)
+
+        bars_dynamic = worker._fft_to_bars(fft)
+
+    
+
+        worker.set_floor_config(dynamic_enabled=False, manual_floor=0.2)
+
+        bars_manual = worker._fft_to_bars(fft)
+
+    
+
+        assert isinstance(bars_dynamic, list)
+
+        assert isinstance(bars_manual, list)
+
+>       assert max(bars_manual) > max(bars_dynamic)
+
+E       assert 1.0 > 1.0
+
+E        +  where 1.0 = max([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.6070854663848877, 0.27445414662361145, 0.13407500088214874, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+E        +  and   1.0 = max([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.6070855855941772, 0.27445417642593384, 0.13407501578330994, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+
+
+tests\test_spotify_visualizer_widget.py:117: AssertionError
+
+_______________________________________________________________________________ test_sensitivity_config_affects_noise_floor _______________________________________________________________________________
+
+
+
+np_module = <module 'numpy' from 'C:\\Python311\\Lib\\site-packages\\numpy\\__init__.py'>
+
+
+
+    def test_sensitivity_config_affects_noise_floor(np_module):
+
+        worker = _make_audio_worker(np_module)
+
+        worker.set_floor_config(dynamic_enabled=False, manual_floor=2.1)
+
+        fft = _synth_fft(np_module, magnitude=2.5)
+
+    
+
+        worker.set_sensitivity_config(recommended=True, sensitivity=1.0)
+
+        bars_rec = worker._fft_to_bars(fft)
+
+    
+
+        worker.set_sensitivity_config(recommended=False, sensitivity=2.5)
+
+        bars_manual = worker._fft_to_bars(fft)
+
+    
+
+        assert isinstance(bars_rec, list)
+
+        assert isinstance(bars_manual, list)
+
+>       assert max(bars_manual) > max(bars_rec)
+
+E       assert 1.0 > 1.0
+
+E        +  where 1.0 = max([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.6070854663848877, 0.27445414662361145, 0.13407500088214874, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+E        +  and   1.0 = max([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.6070855855941772, 0.27445417642593384, 0.13407501578330994, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+
+
+tests\test_spotify_visualizer_widget.py:133: AssertionError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_spotify_visualizer_widget.py::test_manual_floor_produces_higher_energy_than_dynamic - assert 1.0 > 1.0
+ +  where 1.0 = max([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.6070854663848877, 0.27445414662361145, 0.13407500088214874, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+ +  and   1.0 = max([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.6070855855941772, 0.27445417642593384, 0.13407501578330994, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+
+FAILED tests/test_spotify_visualizer_widget.py::test_sensitivity_config_affects_noise_floor - assert 1.0 > 1.0
+ +  where 1.0 = max([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.6070854663848877, 0.27445414662361145, 0.13407500088214874, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+ +  and   1.0 = max([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.6070855855941772, 0.27445417642593384, 0.13407501578330994, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+
+==================================================================================== 2 failed, 10 deselected in 0.36s =====================================================================================
+
+
+===== pytest run 2025-12-28 18:10:14 args=['tests/test_spotify_visualizer_widget.py', '-k', 'manual_floor or sensitivity', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 12 items / 10 deselected / 2 selected
+
+
+
+tests/test_spotify_visualizer_widget.py::test_manual_floor_produces_higher_energy_than_dynamic 
+PASSED                                                                                                [ 50%]
+
+
+tests/test_spotify_visualizer_widget.py::test_sensitivity_config_affects_noise_floor 
+FAILED                                                                                                          [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+_______________________________________________________________________________ test_sensitivity_config_affects_noise_floor _______________________________________________________________________________
+
+
+
+np_module = <module 'numpy' from 'C:\\Python311\\Lib\\site-packages\\numpy\\__init__.py'>
+
+
+
+    def test_sensitivity_config_affects_noise_floor(np_module):
+
+        worker = _make_audio_worker(np_module)
+
+        worker.set_floor_config(dynamic_enabled=False, manual_floor=2.1)
+
+        fft = _synth_fft(np_module, magnitude=2.5)
+
+    
+
+        worker.set_sensitivity_config(recommended=True, sensitivity=1.0)
+
+        bars_rec = worker._fft_to_bars(fft)
+
+    
+
+        worker.set_sensitivity_config(recommended=False, sensitivity=2.5)
+
+        bars_manual = worker._fft_to_bars(fft)
+
+    
+
+        assert isinstance(bars_rec, list)
+
+        assert isinstance(bars_manual, list)
+
+>       assert max(bars_manual) > max(bars_rec)
+
+E       assert 0.4761904776096344 > 0.4761904776096344
+
+E        +  where 0.4761904776096344 = max([0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.41164153814315796, 0.27445414662361145, 0.13407500088214874, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+E        +  and   0.4761904776096344 = max([0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.41164159774780273, 0.27445417642593384, 0.13407501578330994, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+
+
+tests\test_spotify_visualizer_widget.py:133: AssertionError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_spotify_visualizer_widget.py::test_sensitivity_config_affects_noise_floor - assert 0.4761904776096344 > 0.4761904776096344
+ +  where 0.4761904776096344 = max([0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.41164153814315796, 0.27445414662361145, 0.13407500088214874, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+ +  and   0.4761904776096344 = max([0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.41164159774780273, 0.27445417642593384, 0.13407501578330994, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+
+=============================================================================== 1 failed, 1 passed, 10 deselected in 0.37s ================================================================================
+
+
+===== pytest run 2025-12-28 18:10:36 args=['tests/test_spotify_visualizer_widget.py', '-k', 'manual_floor or sensitivity', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 12 items / 10 deselected / 2 selected
+
+
+
+tests/test_spotify_visualizer_widget.py::test_manual_floor_produces_higher_energy_than_dynamic 
+PASSED                                                                                                [ 50%]
+
+
+tests/test_spotify_visualizer_widget.py::test_sensitivity_config_affects_noise_floor 
+FAILED                                                                                                          [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+_______________________________________________________________________________ test_sensitivity_config_affects_noise_floor _______________________________________________________________________________
+
+
+
+np_module = <module 'numpy' from 'C:\\Python311\\Lib\\site-packages\\numpy\\__init__.py'>
+
+
+
+    def test_sensitivity_config_affects_noise_floor(np_module):
+
+        worker = _make_audio_worker(np_module)
+
+        worker.set_floor_config(dynamic_enabled=False, manual_floor=2.1)
+
+        fft = _synth_fft(np_module, magnitude=2.5)
+
+    
+
+        worker.set_sensitivity_config(recommended=True, sensitivity=1.0)
+
+        bars_rec = worker._fft_to_bars(fft)
+
+    
+
+        worker.set_sensitivity_config(recommended=False, sensitivity=2.5)
+
+        bars_manual = worker._fft_to_bars(fft)
+
+    
+
+        assert isinstance(bars_rec, list)
+
+        assert isinstance(bars_manual, list)
+
+>       assert max(bars_manual) > max(bars_rec)
+
+E       assert 0.4761904776096344 > 0.4761904776096344
+
+E        +  where 0.4761904776096344 = max([0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.41164153814315796, 0.27445414662361145, 0.13407500088214874, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+E        +  and   0.4761904776096344 = max([0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.41164159774780273, 0.27445417642593384, 0.13407501578330994, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+
+
+tests\test_spotify_visualizer_widget.py:133: AssertionError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_spotify_visualizer_widget.py::test_sensitivity_config_affects_noise_floor - assert 0.4761904776096344 > 0.4761904776096344
+ +  where 0.4761904776096344 = max([0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.41164153814315796, 0.27445414662361145, 0.13407500088214874, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+ +  and   0.4761904776096344 = max([0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.41164159774780273, 0.27445417642593384, 0.13407501578330994, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+
+=============================================================================== 1 failed, 1 passed, 10 deselected in 0.35s ================================================================================
+
+
+===== pytest run 2025-12-28 18:11:37 args=['tests/test_spotify_visualizer_widget.py', '-k', 'manual_floor or sensitivity', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 12 items / 10 deselected / 2 selected
+
+
+
+tests/test_spotify_visualizer_widget.py::test_manual_floor_produces_higher_energy_than_dynamic 
+PASSED                                                                                                [ 50%]
+
+
+tests/test_spotify_visualizer_widget.py::test_sensitivity_config_affects_noise_floor 
+FAILED                                                                                                          [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+_______________________________________________________________________________ test_sensitivity_config_affects_noise_floor _______________________________________________________________________________
+
+
+
+np_module = <module 'numpy' from 'C:\\Python311\\Lib\\site-packages\\numpy\\__init__.py'>
+
+
+
+    def test_sensitivity_config_affects_noise_floor(np_module):
+
+        worker = _make_audio_worker(np_module)
+
+        worker.set_floor_config(dynamic_enabled=False, manual_floor=2.1)
+
+        fft = _synth_fft(np_module, magnitude=2.5)
+
+    
+
+        worker.set_sensitivity_config(recommended=True, sensitivity=1.0)
+
+        bars_rec = worker._fft_to_bars(fft)
+
+    
+
+        worker.set_sensitivity_config(recommended=False, sensitivity=2.5)
+
+        bars_manual = worker._fft_to_bars(fft)
+
+    
+
+        assert isinstance(bars_rec, list)
+
+        assert isinstance(bars_manual, list)
+
+>       assert max(bars_manual) > max(bars_rec)
+
+E       assert 0.4761904776096344 > 0.4761904776096344
+
+E        +  where 0.4761904776096344 = max([0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.41164153814315796, 0.27445414662361145, 0.13407500088214874, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+E        +  and   0.4761904776096344 = max([0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.41164159774780273, 0.27445417642593384, 0.13407501578330994, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+
+
+tests\test_spotify_visualizer_widget.py:133: AssertionError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_spotify_visualizer_widget.py::test_sensitivity_config_affects_noise_floor - assert 0.4761904776096344 > 0.4761904776096344
+ +  where 0.4761904776096344 = max([0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.41164153814315796, 0.27445414662361145, 0.13407500088214874, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+ +  and   0.4761904776096344 = max([0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.4761904776096344, 0.41164159774780273, 0.27445417642593384, 0.13407501578330994, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+
+=============================================================================== 1 failed, 1 passed, 10 deselected in 0.38s ================================================================================
+
+
+===== pytest run 2025-12-28 18:15:19 args=['tests/test_spotify_visualizer_widget.py', '-k', 'manual_floor or sensitivity', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 12 items / 10 deselected / 2 selected
+
+
+
+tests/test_spotify_visualizer_widget.py::test_manual_floor_produces_higher_energy_than_dynamic 
+PASSED                                                                                                [ 50%]
+
+
+tests/test_spotify_visualizer_widget.py::test_sensitivity_config_affects_noise_floor 
+PASSED                                                                                                          [100%]
+
+
+
+
+==================================================================================== 2 passed, 10 deselected in 0.31s =====================================================================================
+
+
+===== pytest run 2025-12-28 18:15:28 args=['tests/test_spotify_visualizer_widget.py', '-k', 'manual_floor or sensitivity', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 12 items / 10 deselected / 2 selected
+
+
+
+tests/test_spotify_visualizer_widget.py::test_manual_floor_produces_higher_energy_than_dynamic 
+PASSED                                                                                                [ 50%]
+
+
+tests/test_spotify_visualizer_widget.py::test_sensitivity_config_affects_noise_floor 
+PASSED                                                                                                          [100%]
+
+
+
+
+==================================================================================== 2 passed, 10 deselected in 0.26s =====================================================================================
+
+
+===== pytest run 2025-12-28 18:24:08 args=['tests/test_spotify_visualizer_widget.py', '-k', 'manual_floor or sensitivity', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 12 items / 10 deselected / 2 selected
+
+
+
+tests/test_spotify_visualizer_widget.py::test_manual_floor_produces_higher_energy_than_dynamic 
+FAILED                                                                                                [ 50%]
+
+
+tests/test_spotify_visualizer_widget.py::test_sensitivity_config_affects_noise_floor 
+FAILED                                                                                                          [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+__________________________________________________________________________ test_manual_floor_produces_higher_energy_than_dynamic __________________________________________________________________________
+
+
+
+np_module = <module 'numpy' from 'C:\\Python311\\Lib\\site-packages\\numpy\\__init__.py'>
+
+
+
+    def test_manual_floor_produces_higher_energy_than_dynamic(np_module):
+
+        worker = _make_audio_worker(np_module)
+
+        fft = _synth_fft(np_module, magnitude=2.5)
+
+    
+
+        worker.set_floor_config(dynamic_enabled=True, manual_floor=2.1)
+
+>       bars_dynamic = worker._fft_to_bars(fft)
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+
+tests\test_spotify_visualizer_widget.py:110: 
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+widgets\spotify_visualizer_widget.py:796: in _fft_to_bars
+
+    self._apply_targeted_bar_mapping(arr, freq_values, np, center)
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+
+
+self = <widgets.spotify_visualizer_widget.SpotifyVisualizerAudioWorker(0x1fa429bccb0) at 0x000001FA72CA8CC0>
+
+arr = array([0.5049429 , 0.5049429 , 0.5049429 , 0.5049429 , 0.5049429 ,
+       0.5049429 , 0.41867658, 0.        , 0.        , 0.        ,
+       0.        , 0.        , 0.        , 0.        , 0.        ],
+      dtype=float32)
+
+
+freq_values = array([1.3105171, 1.3105171, 1.3105171, 1.3105171, 1.3105171, 1.3105171,
+       1.0866234, 0.       , 0.       , 0.       , 0.       , 0.       ,
+       0.       , 0.       , 0.       ], dtype=float32)
+
+
+np_mod = <module 'numpy' from 'C:\\Python311\\Lib\\site-packages\\numpy\\__init__.py'>, center = 7
+
+
+
+    def _apply_targeted_bar_mapping(self, arr, freq_values, np_mod, center: int) -> None:
+
+        """Overlay targeted feature envelopes while keeping the sculpted shape."""
+
+        if (
+
+            arr.size == 0
+
+            or freq_values is None
+
+            or freq_values.size == 0
+
+            or np_mod is None
+
+        ):
+
+            return
+
+    
+
+        peak = float(freq_values.max())
+
+        if peak <= 1e-6:
+
+            return
+
+    
+
+        base_shape = arr.copy()
+
+        overlay = np_mod.zeros_like(arr)
+
+    
+
+        total_bands = freq_values.size
+
+        bass_slice = freq_values[: max(2, total_bands // 7)]
+
+        vocal_slice = freq_values[total_bands // 7 : max(total_bands // 2, total_bands // 7 + 1)]
+
+        percussion_slice = freq_values[-max(2, total_bands // 5) :]
+
+    
+
+        bass_norm = self._normalize_feature_slice(np_mod, bass_slice, peak, percentile=85, exponent=0.7)
+
+        vocal_norm = self._normalize_feature_slice(np_mod, vocal_slice, peak, percentile=75, exponent=0.85)
+
+        percussion_norm = self._normalize_feature_slice(np_mod, percussion_slice, peak, percentile=92, exponent=0.6)
+
+    
+
+        bass_env = self._update_feature_env("_feature_env_bass", bass_norm, attack=0.65, release=0.25)
+
+        vocal_env = self._update_feature_env("_feature_env_vocal", vocal_norm, attack=0.7, release=0.2)
+
+        percussion_env = self._update_feature_env("_feature_env_percussion", percussion_norm, attack=0.55, release=0.3)
+
+    
+
+        bass_profile = [(-2, 0.7), (-1, 1.2), (0, 0.4), (1, 1.2), (2, 0.7)]
+
+        vocal_profile = [(-2, 0.65), (-1, 1.25), (0, 0.55), (1, 1.25), (2, 0.65)]
+
+    
+
+        self._write_centered_overlay(
+
+            overlay,
+
+            center=center,
+
+            profile=bass_profile,
+
+            energy=bass_env,
+
+            drop_floor=0.05,
+
+            peak_boost=1.3,
+
+        )
+
+        self._write_centered_overlay(
+
+            overlay,
+
+            center=center,
+
+            profile=vocal_profile,
+
+            energy=vocal_env,
+
+            drop_floor=0.04,
+
+            peak_boost=1.2,
+
+        )
+
+        self._write_edge_overlay(
+
+            overlay,
+
+            energy=percussion_env,
+
+            drop_floor=0.06,
+
+            peak_boost=1.05,
+
+        )
+
+    
+
+        base_mix = 0.25
+
+>       arr[:] = np.clip(base_shape * base_mix + overlay, 0.0, 0.98)
+
+                 ^^
+
+E       NameError: name 'np' is not defined
+
+
+
+widgets\spotify_visualizer_widget.py:879: NameError
+
+_______________________________________________________________________________ test_sensitivity_config_affects_noise_floor _______________________________________________________________________________
+
+
+
+np_module = <module 'numpy' from 'C:\\Python311\\Lib\\site-packages\\numpy\\__init__.py'>
+
+
+
+    def test_sensitivity_config_affects_noise_floor(np_module):
+
+        worker = _make_audio_worker(np_module)
+
+        worker.set_floor_config(dynamic_enabled=False, manual_floor=2.1)
+
+        fft = _synth_fft(np_module, magnitude=2.5)
+
+    
+
+        worker.set_sensitivity_config(recommended=True, sensitivity=1.0)
+
+>       bars_rec = worker._fft_to_bars(fft)
+
+                   ^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+
+tests\test_spotify_visualizer_widget.py:126: 
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+widgets\spotify_visualizer_widget.py:796: in _fft_to_bars
+
+    self._apply_targeted_bar_mapping(arr, freq_values, np, center)
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+
+
+self = <widgets.spotify_visualizer_widget.SpotifyVisualizerAudioWorker(0x1fa429bcc90) at 0x000001FA72DA4040>
+
+arr = array([0.47619048, 0.47619048, 0.47619048, 0.47619048, 0.47619048,
+       0.47619048, 0.39483634, 0.        , 0.        , 0.        ,
+       0.        , 0.        , 0.        , 0.        , 0.        ],
+      dtype=float32)
+
+
+freq_values = array([1.3105171, 1.3105171, 1.3105171, 1.3105171, 1.3105171, 1.3105171,
+       1.0866234, 0.       , 0.       , 0.       , 0.       , 0.       ,
+       0.       , 0.       , 0.       ], dtype=float32)
+
+
+np_mod = <module 'numpy' from 'C:\\Python311\\Lib\\site-packages\\numpy\\__init__.py'>, center = 7
+
+
+
+    def _apply_targeted_bar_mapping(self, arr, freq_values, np_mod, center: int) -> None:
+
+        """Overlay targeted feature envelopes while keeping the sculpted shape."""
+
+        if (
+
+            arr.size == 0
+
+            or freq_values is None
+
+            or freq_values.size == 0
+
+            or np_mod is None
+
+        ):
+
+            return
+
+    
+
+        peak = float(freq_values.max())
+
+        if peak <= 1e-6:
+
+            return
+
+    
+
+        base_shape = arr.copy()
+
+        overlay = np_mod.zeros_like(arr)
+
+    
+
+        total_bands = freq_values.size
+
+        bass_slice = freq_values[: max(2, total_bands // 7)]
+
+        vocal_slice = freq_values[total_bands // 7 : max(total_bands // 2, total_bands // 7 + 1)]
+
+        percussion_slice = freq_values[-max(2, total_bands // 5) :]
+
+    
+
+        bass_norm = self._normalize_feature_slice(np_mod, bass_slice, peak, percentile=85, exponent=0.7)
+
+        vocal_norm = self._normalize_feature_slice(np_mod, vocal_slice, peak, percentile=75, exponent=0.85)
+
+        percussion_norm = self._normalize_feature_slice(np_mod, percussion_slice, peak, percentile=92, exponent=0.6)
+
+    
+
+        bass_env = self._update_feature_env("_feature_env_bass", bass_norm, attack=0.65, release=0.25)
+
+        vocal_env = self._update_feature_env("_feature_env_vocal", vocal_norm, attack=0.7, release=0.2)
+
+        percussion_env = self._update_feature_env("_feature_env_percussion", percussion_norm, attack=0.55, release=0.3)
+
+    
+
+        bass_profile = [(-2, 0.7), (-1, 1.2), (0, 0.4), (1, 1.2), (2, 0.7)]
+
+        vocal_profile = [(-2, 0.65), (-1, 1.25), (0, 0.55), (1, 1.25), (2, 0.65)]
+
+    
+
+        self._write_centered_overlay(
+
+            overlay,
+
+            center=center,
+
+            profile=bass_profile,
+
+            energy=bass_env,
+
+            drop_floor=0.05,
+
+            peak_boost=1.3,
+
+        )
+
+        self._write_centered_overlay(
+
+            overlay,
+
+            center=center,
+
+            profile=vocal_profile,
+
+            energy=vocal_env,
+
+            drop_floor=0.04,
+
+            peak_boost=1.2,
+
+        )
+
+        self._write_edge_overlay(
+
+            overlay,
+
+            energy=percussion_env,
+
+            drop_floor=0.06,
+
+            peak_boost=1.05,
+
+        )
+
+    
+
+        base_mix = 0.25
+
+>       arr[:] = np.clip(base_shape * base_mix + overlay, 0.0, 0.98)
+
+                 ^^
+
+E       NameError: name 'np' is not defined
+
+
+
+widgets\spotify_visualizer_widget.py:879: NameError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_spotify_visualizer_widget.py::test_manual_floor_produces_higher_energy_than_dynamic - NameError: name 'np' is not defined
+
+FAILED tests/test_spotify_visualizer_widget.py::test_sensitivity_config_affects_noise_floor - NameError: name 'np' is not defined
+
+==================================================================================== 2 failed, 10 deselected in 0.61s =====================================================================================
+
+
+===== pytest run 2025-12-28 18:25:28 args=['tests/test_spotify_visualizer_widget.py', '-k', 'manual_floor or sensitivity', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 12 items / 10 deselected / 2 selected
+
+
+
+tests/test_spotify_visualizer_widget.py::test_manual_floor_produces_higher_energy_than_dynamic 
+FAILED                                                                                                [ 50%]
+
+
+tests/test_spotify_visualizer_widget.py::test_sensitivity_config_affects_noise_floor 
+FAILED                                                                                                          [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+__________________________________________________________________________ test_manual_floor_produces_higher_energy_than_dynamic __________________________________________________________________________
+
+
+
+np_module = <module 'numpy' from 'C:\\Python311\\Lib\\site-packages\\numpy\\__init__.py'>
+
+
+
+    def test_manual_floor_produces_higher_energy_than_dynamic(np_module):
+
+        worker = _make_audio_worker(np_module)
+
+        fft = _synth_fft(np_module, magnitude=2.5)
+
+    
+
+        worker.set_floor_config(dynamic_enabled=True, manual_floor=2.1)
+
+>       bars_dynamic = worker._fft_to_bars(fft)
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+
+tests\test_spotify_visualizer_widget.py:110: 
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+widgets\spotify_visualizer_widget.py:796: in _fft_to_bars
+
+    self._apply_targeted_bar_mapping(arr, freq_values, np, center)
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+
+
+self = <widgets.spotify_visualizer_widget.SpotifyVisualizerAudioWorker(0x2518317e620) at 0x00000251B2207B40>
+
+arr = array([0.5049429 , 0.5049429 , 0.5049429 , 0.5049429 , 0.5049429 ,
+       0.5049429 , 0.41867658, 0.        , 0.        , 0.        ,
+       0.        , 0.        , 0.        , 0.        , 0.        ],
+      dtype=float32)
+
+
+freq_values = array([1.3105171, 1.3105171, 1.3105171, 1.3105171, 1.3105171, 1.3105171,
+       1.0866234, 0.       , 0.       , 0.       , 0.       , 0.       ,
+       0.       , 0.       , 0.       ], dtype=float32)
+
+
+np_mod = <module 'numpy' from 'C:\\Python311\\Lib\\site-packages\\numpy\\__init__.py'>, center = 7
+
+
+
+    def _apply_targeted_bar_mapping(self, arr, freq_values, np_mod, center: int) -> None:
+
+        """Overlay targeted feature envelopes while keeping the sculpted shape."""
+
+        if (
+
+            arr.size == 0
+
+            or freq_values is None
+
+            or freq_values.size == 0
+
+            or np_mod is None
+
+        ):
+
+            return
+
+    
+
+        peak = float(freq_values.max())
+
+        if peak <= 1e-6:
+
+            return
+
+    
+
+        base_shape = arr.copy()
+
+        overlay = np_mod.zeros_like(arr)
+
+    
+
+        total_bands = freq_values.size
+
+        bass_slice = freq_values[: max(2, total_bands // 8)]
+
+        vocal_slice = freq_values[total_bands // 8 : max(total_bands // 2, total_bands // 8 + 2)]
+
+        percussion_slice = freq_values[-max(2, total_bands // 4) :]
+
+    
+
+        bass_norm = self._normalize_feature_slice(np_mod, bass_slice, peak, percentile=90, exponent=0.65)
+
+        vocal_norm = self._normalize_feature_slice(np_mod, vocal_slice, peak, percentile=78, exponent=0.8)
+
+        percussion_norm = self._normalize_feature_slice(np_mod, percussion_slice, peak, percentile=92, exponent=0.6)
+
+    
+
+        bass_env = self._update_feature_env("_feature_env_bass", bass_norm, attack=0.75, release=0.22)
+
+        vocal_env = self._update_feature_env("_feature_env_vocal", vocal_norm, attack=0.72, release=0.18)
+
+        percussion_env = self._update_feature_env("_feature_env_percussion", percussion_norm, attack=0.55, release=0.28)
+
+    
+
+        bass_profile = [(-1, 0.9), (0, 0.45), (1, 0.9)]
+
+        vocal_profile = [(-2, 0.9), (-1, 1.4), (0, 0.3), (1, 1.4), (2, 0.9)]
+
+    
+
+        self._write_centered_overlay(
+
+            overlay,
+
+            center=center,
+
+            profile=bass_profile,
+
+            energy=bass_env,
+
+            drop_floor=0.05,
+
+            peak_boost=1.35,
+
+        )
+
+        self._write_centered_overlay(
+
+            overlay,
+
+            center=center,
+
+            profile=vocal_profile,
+
+            energy=vocal_env,
+
+            drop_floor=0.04,
+
+            peak_boost=1.25,
+
+        )
+
+        self._write_edge_overlay(
+
+            overlay,
+
+            energy=percussion_env,
+
+            drop_floor=0.06,
+
+            peak_boost=1.1,
+
+        )
+
+    
+
+        base_mix = 0.4
+
+        base_component = base_shape * base_mix
+
+>       arr[:] = np_mod.clip(np.maximum(base_component, overlay), 0.0, 0.98)
+
+                             ^^
+
+E       NameError: name 'np' is not defined
+
+
+
+widgets\spotify_visualizer_widget.py:880: NameError
+
+_______________________________________________________________________________ test_sensitivity_config_affects_noise_floor _______________________________________________________________________________
+
+
+
+np_module = <module 'numpy' from 'C:\\Python311\\Lib\\site-packages\\numpy\\__init__.py'>
+
+
+
+    def test_sensitivity_config_affects_noise_floor(np_module):
+
+        worker = _make_audio_worker(np_module)
+
+        worker.set_floor_config(dynamic_enabled=False, manual_floor=2.1)
+
+        fft = _synth_fft(np_module, magnitude=2.5)
+
+    
+
+        worker.set_sensitivity_config(recommended=True, sensitivity=1.0)
+
+>       bars_rec = worker._fft_to_bars(fft)
+
+                   ^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+
+tests\test_spotify_visualizer_widget.py:126: 
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+widgets\spotify_visualizer_widget.py:796: in _fft_to_bars
+
+    self._apply_targeted_bar_mapping(arr, freq_values, np, center)
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+
+
+self = <widgets.spotify_visualizer_widget.SpotifyVisualizerAudioWorker(0x2518317ec60) at 0x00000251B23C2740>
+
+arr = array([0.47619048, 0.47619048, 0.47619048, 0.47619048, 0.47619048,
+       0.47619048, 0.39483634, 0.        , 0.        , 0.        ,
+       0.        , 0.        , 0.        , 0.        , 0.        ],
+      dtype=float32)
+
+
+freq_values = array([1.3105171, 1.3105171, 1.3105171, 1.3105171, 1.3105171, 1.3105171,
+       1.0866234, 0.       , 0.       , 0.       , 0.       , 0.       ,
+       0.       , 0.       , 0.       ], dtype=float32)
+
+
+np_mod = <module 'numpy' from 'C:\\Python311\\Lib\\site-packages\\numpy\\__init__.py'>, center = 7
+
+
+
+    def _apply_targeted_bar_mapping(self, arr, freq_values, np_mod, center: int) -> None:
+
+        """Overlay targeted feature envelopes while keeping the sculpted shape."""
+
+        if (
+
+            arr.size == 0
+
+            or freq_values is None
+
+            or freq_values.size == 0
+
+            or np_mod is None
+
+        ):
+
+            return
+
+    
+
+        peak = float(freq_values.max())
+
+        if peak <= 1e-6:
+
+            return
+
+    
+
+        base_shape = arr.copy()
+
+        overlay = np_mod.zeros_like(arr)
+
+    
+
+        total_bands = freq_values.size
+
+        bass_slice = freq_values[: max(2, total_bands // 8)]
+
+        vocal_slice = freq_values[total_bands // 8 : max(total_bands // 2, total_bands // 8 + 2)]
+
+        percussion_slice = freq_values[-max(2, total_bands // 4) :]
+
+    
+
+        bass_norm = self._normalize_feature_slice(np_mod, bass_slice, peak, percentile=90, exponent=0.65)
+
+        vocal_norm = self._normalize_feature_slice(np_mod, vocal_slice, peak, percentile=78, exponent=0.8)
+
+        percussion_norm = self._normalize_feature_slice(np_mod, percussion_slice, peak, percentile=92, exponent=0.6)
+
+    
+
+        bass_env = self._update_feature_env("_feature_env_bass", bass_norm, attack=0.75, release=0.22)
+
+        vocal_env = self._update_feature_env("_feature_env_vocal", vocal_norm, attack=0.72, release=0.18)
+
+        percussion_env = self._update_feature_env("_feature_env_percussion", percussion_norm, attack=0.55, release=0.28)
+
+    
+
+        bass_profile = [(-1, 0.9), (0, 0.45), (1, 0.9)]
+
+        vocal_profile = [(-2, 0.9), (-1, 1.4), (0, 0.3), (1, 1.4), (2, 0.9)]
+
+    
+
+        self._write_centered_overlay(
+
+            overlay,
+
+            center=center,
+
+            profile=bass_profile,
+
+            energy=bass_env,
+
+            drop_floor=0.05,
+
+            peak_boost=1.35,
+
+        )
+
+        self._write_centered_overlay(
+
+            overlay,
+
+            center=center,
+
+            profile=vocal_profile,
+
+            energy=vocal_env,
+
+            drop_floor=0.04,
+
+            peak_boost=1.25,
+
+        )
+
+        self._write_edge_overlay(
+
+            overlay,
+
+            energy=percussion_env,
+
+            drop_floor=0.06,
+
+            peak_boost=1.1,
+
+        )
+
+    
+
+        base_mix = 0.4
+
+        base_component = base_shape * base_mix
+
+>       arr[:] = np_mod.clip(np.maximum(base_component, overlay), 0.0, 0.98)
+
+                             ^^
+
+E       NameError: name 'np' is not defined
+
+
+
+widgets\spotify_visualizer_widget.py:880: NameError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_spotify_visualizer_widget.py::test_manual_floor_produces_higher_energy_than_dynamic - NameError: name 'np' is not defined
+
+FAILED tests/test_spotify_visualizer_widget.py::test_sensitivity_config_affects_noise_floor - NameError: name 'np' is not defined
+
+==================================================================================== 2 failed, 10 deselected in 0.64s =====================================================================================
+
+
+===== pytest run 2025-12-28 18:26:27 args=['tests/test_spotify_visualizer_widget.py', '-k', 'manual_floor or sensitivity', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 12 items / 10 deselected / 2 selected
+
+
+
+tests/test_spotify_visualizer_widget.py::test_manual_floor_produces_higher_energy_than_dynamic 
+FAILED                                                                                                [ 50%]
+
+
+tests/test_spotify_visualizer_widget.py::test_sensitivity_config_affects_noise_floor 
+FAILED                                                                                                          [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+__________________________________________________________________________ test_manual_floor_produces_higher_energy_than_dynamic __________________________________________________________________________
+
+
+
+np_module = <module 'numpy' from 'C:\\Python311\\Lib\\site-packages\\numpy\\__init__.py'>
+
+
+
+    def test_manual_floor_produces_higher_energy_than_dynamic(np_module):
+
+        worker = _make_audio_worker(np_module)
+
+        fft = _synth_fft(np_module, magnitude=2.5)
+
+    
+
+        worker.set_floor_config(dynamic_enabled=True, manual_floor=2.1)
+
+>       bars_dynamic = worker._fft_to_bars(fft)
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+
+tests\test_spotify_visualizer_widget.py:110: 
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+widgets\spotify_visualizer_widget.py:796: in _fft_to_bars
+
+    self._apply_targeted_bar_mapping(arr, freq_values, np, center)
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+
+
+self = <widgets.spotify_visualizer_widget.SpotifyVisualizerAudioWorker(0x257d4145ae0) at 0x00000257D4519A00>
+
+arr = array([0.5049429 , 0.5049429 , 0.5049429 , 0.5049429 , 0.5049429 ,
+       0.5049429 , 0.41867658, 0.        , 0.        , 0.        ,
+       0.        , 0.        , 0.        , 0.        , 0.        ],
+      dtype=float32)
+
+
+freq_values = array([1.3105171, 1.3105171, 1.3105171, 1.3105171, 1.3105171, 1.3105171,
+       1.0866234, 0.       , 0.       , 0.       , 0.       , 0.       ,
+       0.       , 0.       , 0.       ], dtype=float32)
+
+
+np_mod = <module 'numpy' from 'C:\\Python311\\Lib\\site-packages\\numpy\\__init__.py'>, center = 7
+
+
+
+    def _apply_targeted_bar_mapping(self, arr, freq_values, np_mod, center: int) -> None:
+
+        """Overlay targeted feature envelopes while keeping the sculpted shape."""
+
+        if (
+
+            arr.size == 0
+
+            or freq_values is None
+
+            or freq_values.size == 0
+
+            or np_mod is None
+
+        ):
+
+            return
+
+    
+
+        peak = float(freq_values.max())
+
+        if peak <= 1e-6:
+
+            return
+
+    
+
+        base_shape = arr.copy()
+
+        overlay = np_mod.zeros_like(arr)
+
+    
+
+        total_bands = freq_values.size
+
+        bass_slice = freq_values[: max(2, total_bands // 8)]
+
+        vocal_slice = freq_values[total_bands // 8 : max(total_bands // 2, total_bands // 8 + 2)]
+
+        percussion_slice = freq_values[-max(2, total_bands // 4) :]
+
+    
+
+        bass_norm = self._normalize_feature_slice(np_mod, bass_slice, peak, percentile=90, exponent=0.65)
+
+        vocal_norm = self._normalize_feature_slice(np_mod, vocal_slice, peak, percentile=78, exponent=0.8)
+
+        percussion_norm = self._normalize_feature_slice(np_mod, percussion_slice, peak, percentile=92, exponent=0.6)
+
+    
+
+        bass_env = self._update_feature_env("_feature_env_bass", bass_norm, attack=0.75, release=0.22)
+
+        vocal_env = self._update_feature_env("_feature_env_vocal", vocal_norm, attack=0.72, release=0.18)
+
+        percussion_env = self._update_feature_env("_feature_env_percussion", percussion_norm, attack=0.55, release=0.28)
+
+    
+
+        bass_profile = [(-1, 0.9), (0, 0.45), (1, 0.9)]
+
+        vocal_profile = [(-2, 0.9), (-1, 1.4), (0, 0.3), (1, 1.4), (2, 0.9)]
+
+    
+
+        self._write_centered_overlay(
+
+            overlay,
+
+            center=center,
+
+            profile=bass_profile,
+
+            energy=bass_env,
+
+            drop_floor=0.05,
+
+            peak_boost=1.35,
+
+        )
+
+        self._write_centered_overlay(
+
+            overlay,
+
+            center=center,
+
+            profile=vocal_profile,
+
+            energy=vocal_env,
+
+            drop_floor=0.04,
+
+            peak_boost=1.25,
+
+        )
+
+        self._write_edge_overlay(
+
+            overlay,
+
+            energy=percussion_env,
+
+            drop_floor=0.06,
+
+            peak_boost=1.1,
+
+        )
+
+    
+
+        base_mix = 0.4
+
+        base_component = base_shape * base_mix
+
+>       arr[:] = np_mod.clip(np.maximum(base_component, overlay), 0.0, 0.98)
+
+                             ^^
+
+E       NameError: name 'np' is not defined
+
+
+
+widgets\spotify_visualizer_widget.py:880: NameError
+
+_______________________________________________________________________________ test_sensitivity_config_affects_noise_floor _______________________________________________________________________________
+
+
+
+np_module = <module 'numpy' from 'C:\\Python311\\Lib\\site-packages\\numpy\\__init__.py'>
+
+
+
+    def test_sensitivity_config_affects_noise_floor(np_module):
+
+        worker = _make_audio_worker(np_module)
+
+        worker.set_floor_config(dynamic_enabled=False, manual_floor=2.1)
+
+        fft = _synth_fft(np_module, magnitude=2.5)
+
+    
+
+        worker.set_sensitivity_config(recommended=True, sensitivity=1.0)
+
+>       bars_rec = worker._fft_to_bars(fft)
+
+                   ^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+
+tests\test_spotify_visualizer_widget.py:126: 
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+widgets\spotify_visualizer_widget.py:796: in _fft_to_bars
+
+    self._apply_targeted_bar_mapping(arr, freq_values, np, center)
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+
+
+self = <widgets.spotify_visualizer_widget.SpotifyVisualizerAudioWorker(0x257d3fb0330) at 0x00000257D4D8F380>
+
+arr = array([0.47619048, 0.47619048, 0.47619048, 0.47619048, 0.47619048,
+       0.47619048, 0.39483634, 0.        , 0.        , 0.        ,
+       0.        , 0.        , 0.        , 0.        , 0.        ],
+      dtype=float32)
+
+
+freq_values = array([1.3105171, 1.3105171, 1.3105171, 1.3105171, 1.3105171, 1.3105171,
+       1.0866234, 0.       , 0.       , 0.       , 0.       , 0.       ,
+       0.       , 0.       , 0.       ], dtype=float32)
+
+
+np_mod = <module 'numpy' from 'C:\\Python311\\Lib\\site-packages\\numpy\\__init__.py'>, center = 7
+
+
+
+    def _apply_targeted_bar_mapping(self, arr, freq_values, np_mod, center: int) -> None:
+
+        """Overlay targeted feature envelopes while keeping the sculpted shape."""
+
+        if (
+
+            arr.size == 0
+
+            or freq_values is None
+
+            or freq_values.size == 0
+
+            or np_mod is None
+
+        ):
+
+            return
+
+    
+
+        peak = float(freq_values.max())
+
+        if peak <= 1e-6:
+
+            return
+
+    
+
+        base_shape = arr.copy()
+
+        overlay = np_mod.zeros_like(arr)
+
+    
+
+        total_bands = freq_values.size
+
+        bass_slice = freq_values[: max(2, total_bands // 8)]
+
+        vocal_slice = freq_values[total_bands // 8 : max(total_bands // 2, total_bands // 8 + 2)]
+
+        percussion_slice = freq_values[-max(2, total_bands // 4) :]
+
+    
+
+        bass_norm = self._normalize_feature_slice(np_mod, bass_slice, peak, percentile=90, exponent=0.65)
+
+        vocal_norm = self._normalize_feature_slice(np_mod, vocal_slice, peak, percentile=78, exponent=0.8)
+
+        percussion_norm = self._normalize_feature_slice(np_mod, percussion_slice, peak, percentile=92, exponent=0.6)
+
+    
+
+        bass_env = self._update_feature_env("_feature_env_bass", bass_norm, attack=0.75, release=0.22)
+
+        vocal_env = self._update_feature_env("_feature_env_vocal", vocal_norm, attack=0.72, release=0.18)
+
+        percussion_env = self._update_feature_env("_feature_env_percussion", percussion_norm, attack=0.55, release=0.28)
+
+    
+
+        bass_profile = [(-1, 0.9), (0, 0.45), (1, 0.9)]
+
+        vocal_profile = [(-2, 0.9), (-1, 1.4), (0, 0.3), (1, 1.4), (2, 0.9)]
+
+    
+
+        self._write_centered_overlay(
+
+            overlay,
+
+            center=center,
+
+            profile=bass_profile,
+
+            energy=bass_env,
+
+            drop_floor=0.05,
+
+            peak_boost=1.35,
+
+        )
+
+        self._write_centered_overlay(
+
+            overlay,
+
+            center=center,
+
+            profile=vocal_profile,
+
+            energy=vocal_env,
+
+            drop_floor=0.04,
+
+            peak_boost=1.25,
+
+        )
+
+        self._write_edge_overlay(
+
+            overlay,
+
+            energy=percussion_env,
+
+            drop_floor=0.06,
+
+            peak_boost=1.1,
+
+        )
+
+    
+
+        base_mix = 0.4
+
+        base_component = base_shape * base_mix
+
+>       arr[:] = np_mod.clip(np.maximum(base_component, overlay), 0.0, 0.98)
+
+                             ^^
+
+E       NameError: name 'np' is not defined
+
+
+
+widgets\spotify_visualizer_widget.py:880: NameError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_spotify_visualizer_widget.py::test_manual_floor_produces_higher_energy_than_dynamic - NameError: name 'np' is not defined
+
+FAILED tests/test_spotify_visualizer_widget.py::test_sensitivity_config_affects_noise_floor - NameError: name 'np' is not defined
+
+==================================================================================== 2 failed, 10 deselected in 0.63s =====================================================================================
+
+
+===== pytest run 2025-12-28 18:26:54 args=['tests/test_spotify_visualizer_widget.py', '-k', 'manual_floor or sensitivity', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 12 items / 10 deselected / 2 selected
+
+
+
+tests/test_spotify_visualizer_widget.py::test_manual_floor_produces_higher_energy_than_dynamic 
+FAILED                                                                                                [ 50%]
+
+
+tests/test_spotify_visualizer_widget.py::test_sensitivity_config_affects_noise_floor 
+FAILED                                                                                                          [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+__________________________________________________________________________ test_manual_floor_produces_higher_energy_than_dynamic __________________________________________________________________________
+
+
+
+np_module = <module 'numpy' from 'C:\\Python311\\Lib\\site-packages\\numpy\\__init__.py'>
+
+
+
+    def test_manual_floor_produces_higher_energy_than_dynamic(np_module):
+
+        worker = _make_audio_worker(np_module)
+
+        fft = _synth_fft(np_module, magnitude=2.5)
+
+    
+
+        worker.set_floor_config(dynamic_enabled=True, manual_floor=2.1)
+
+>       bars_dynamic = worker._fft_to_bars(fft)
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+
+tests\test_spotify_visualizer_widget.py:110: 
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+widgets\spotify_visualizer_widget.py:796: in _fft_to_bars
+
+    self._apply_targeted_bar_mapping(arr, freq_values, np, center)
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+
+
+self = <widgets.spotify_visualizer_widget.SpotifyVisualizerAudioWorker(0x2aa3b0ae9a0) at 0x000002AA69D29700>
+
+arr = array([0.5049429 , 0.5049429 , 0.5049429 , 0.5049429 , 0.5049429 ,
+       0.5049429 , 0.41867658, 0.        , 0.        , 0.        ,
+       0.        , 0.        , 0.        , 0.        , 0.        ],
+      dtype=float32)
+
+
+freq_values = array([1.3105171, 1.3105171, 1.3105171, 1.3105171, 1.3105171, 1.3105171,
+       1.0866234, 0.       , 0.       , 0.       , 0.       , 0.       ,
+       0.       , 0.       , 0.       ], dtype=float32)
+
+
+np_mod = <module 'numpy' from 'C:\\Python311\\Lib\\site-packages\\numpy\\__init__.py'>, center = 7
+
+
+
+    def _apply_targeted_bar_mapping(self, arr, freq_values, np_mod, center: int) -> None:
+
+        """Overlay targeted feature envelopes while keeping the sculpted shape."""
+
+        if (
+
+            arr.size == 0
+
+            or freq_values is None
+
+            or freq_values.size == 0
+
+            or np_mod is None
+
+        ):
+
+            return
+
+    
+
+        peak = float(freq_values.max())
+
+        if peak <= 1e-6:
+
+            return
+
+    
+
+        base_shape = arr.copy()
+
+        overlay = np_mod.zeros_like(arr)
+
+    
+
+        total_bands = freq_values.size
+
+        bass_slice = freq_values[: max(2, total_bands // 8)]
+
+        vocal_slice = freq_values[total_bands // 8 : max(total_bands // 2, total_bands // 8 + 2)]
+
+        percussion_slice = freq_values[-max(2, total_bands // 4) :]
+
+    
+
+        bass_norm = self._normalize_feature_slice(np_mod, bass_slice, peak, percentile=90, exponent=0.65)
+
+        vocal_norm = self._normalize_feature_slice(np_mod, vocal_slice, peak, percentile=78, exponent=0.8)
+
+        percussion_norm = self._normalize_feature_slice(np_mod, percussion_slice, peak, percentile=92, exponent=0.6)
+
+    
+
+        bass_env = self._update_feature_env("_feature_env_bass", bass_norm, attack=0.75, release=0.22)
+
+        vocal_env = self._update_feature_env("_feature_env_vocal", vocal_norm, attack=0.72, release=0.18)
+
+        percussion_env = self._update_feature_env("_feature_env_percussion", percussion_norm, attack=0.55, release=0.28)
+
+    
+
+        bass_profile = [(-1, 0.9), (0, 0.45), (1, 0.9)]
+
+        vocal_profile = [(-2, 0.9), (-1, 1.4), (0, 0.3), (1, 1.4), (2, 0.9)]
+
+    
+
+        self._write_centered_overlay(
+
+            overlay,
+
+            center=center,
+
+            profile=bass_profile,
+
+            energy=bass_env,
+
+            drop_floor=0.05,
+
+            peak_boost=1.35,
+
+        )
+
+        self._write_centered_overlay(
+
+            overlay,
+
+            center=center,
+
+            profile=vocal_profile,
+
+            energy=vocal_env,
+
+            drop_floor=0.04,
+
+            peak_boost=1.25,
+
+        )
+
+        self._write_edge_overlay(
+
+            overlay,
+
+            energy=percussion_env,
+
+            drop_floor=0.06,
+
+            peak_boost=1.1,
+
+        )
+
+    
+
+        base_mix = 0.4
+
+        base_component = base_shape * base_mix
+
+>       arr[:] = np_mod.clip(np.maximum(base_component, overlay), 0.0, 0.98)
+
+                             ^^
+
+E       NameError: name 'np' is not defined
+
+
+
+widgets\spotify_visualizer_widget.py:880: NameError
+
+_______________________________________________________________________________ test_sensitivity_config_affects_noise_floor _______________________________________________________________________________
+
+
+
+np_module = <module 'numpy' from 'C:\\Python311\\Lib\\site-packages\\numpy\\__init__.py'>
+
+
+
+    def test_sensitivity_config_affects_noise_floor(np_module):
+
+        worker = _make_audio_worker(np_module)
+
+        worker.set_floor_config(dynamic_enabled=False, manual_floor=2.1)
+
+        fft = _synth_fft(np_module, magnitude=2.5)
+
+    
+
+        worker.set_sensitivity_config(recommended=True, sensitivity=1.0)
+
+>       bars_rec = worker._fft_to_bars(fft)
+
+                   ^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+
+tests\test_spotify_visualizer_widget.py:126: 
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+widgets\spotify_visualizer_widget.py:796: in _fft_to_bars
+
+    self._apply_targeted_bar_mapping(arr, freq_values, np, center)
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+
+
+self = <widgets.spotify_visualizer_widget.SpotifyVisualizerAudioWorker(0x2aa3b034310) at 0x000002AA6ADB43C0>
+
+arr = array([0.47619048, 0.47619048, 0.47619048, 0.47619048, 0.47619048,
+       0.47619048, 0.39483634, 0.        , 0.        , 0.        ,
+       0.        , 0.        , 0.        , 0.        , 0.        ],
+      dtype=float32)
+
+
+freq_values = array([1.3105171, 1.3105171, 1.3105171, 1.3105171, 1.3105171, 1.3105171,
+       1.0866234, 0.       , 0.       , 0.       , 0.       , 0.       ,
+       0.       , 0.       , 0.       ], dtype=float32)
+
+
+np_mod = <module 'numpy' from 'C:\\Python311\\Lib\\site-packages\\numpy\\__init__.py'>, center = 7
+
+
+
+    def _apply_targeted_bar_mapping(self, arr, freq_values, np_mod, center: int) -> None:
+
+        """Overlay targeted feature envelopes while keeping the sculpted shape."""
+
+        if (
+
+            arr.size == 0
+
+            or freq_values is None
+
+            or freq_values.size == 0
+
+            or np_mod is None
+
+        ):
+
+            return
+
+    
+
+        peak = float(freq_values.max())
+
+        if peak <= 1e-6:
+
+            return
+
+    
+
+        base_shape = arr.copy()
+
+        overlay = np_mod.zeros_like(arr)
+
+    
+
+        total_bands = freq_values.size
+
+        bass_slice = freq_values[: max(2, total_bands // 8)]
+
+        vocal_slice = freq_values[total_bands // 8 : max(total_bands // 2, total_bands // 8 + 2)]
+
+        percussion_slice = freq_values[-max(2, total_bands // 4) :]
+
+    
+
+        bass_norm = self._normalize_feature_slice(np_mod, bass_slice, peak, percentile=90, exponent=0.65)
+
+        vocal_norm = self._normalize_feature_slice(np_mod, vocal_slice, peak, percentile=78, exponent=0.8)
+
+        percussion_norm = self._normalize_feature_slice(np_mod, percussion_slice, peak, percentile=92, exponent=0.6)
+
+    
+
+        bass_env = self._update_feature_env("_feature_env_bass", bass_norm, attack=0.75, release=0.22)
+
+        vocal_env = self._update_feature_env("_feature_env_vocal", vocal_norm, attack=0.72, release=0.18)
+
+        percussion_env = self._update_feature_env("_feature_env_percussion", percussion_norm, attack=0.55, release=0.28)
+
+    
+
+        bass_profile = [(-1, 0.9), (0, 0.45), (1, 0.9)]
+
+        vocal_profile = [(-2, 0.9), (-1, 1.4), (0, 0.3), (1, 1.4), (2, 0.9)]
+
+    
+
+        self._write_centered_overlay(
+
+            overlay,
+
+            center=center,
+
+            profile=bass_profile,
+
+            energy=bass_env,
+
+            drop_floor=0.05,
+
+            peak_boost=1.35,
+
+        )
+
+        self._write_centered_overlay(
+
+            overlay,
+
+            center=center,
+
+            profile=vocal_profile,
+
+            energy=vocal_env,
+
+            drop_floor=0.04,
+
+            peak_boost=1.25,
+
+        )
+
+        self._write_edge_overlay(
+
+            overlay,
+
+            energy=percussion_env,
+
+            drop_floor=0.06,
+
+            peak_boost=1.1,
+
+        )
+
+    
+
+        base_mix = 0.4
+
+        base_component = base_shape * base_mix
+
+>       arr[:] = np_mod.clip(np.maximum(base_component, overlay), 0.0, 0.98)
+
+                             ^^
+
+E       NameError: name 'np' is not defined
+
+
+
+widgets\spotify_visualizer_widget.py:880: NameError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_spotify_visualizer_widget.py::test_manual_floor_produces_higher_energy_than_dynamic - NameError: name 'np' is not defined
+
+FAILED tests/test_spotify_visualizer_widget.py::test_sensitivity_config_affects_noise_floor - NameError: name 'np' is not defined
+
+==================================================================================== 2 failed, 10 deselected in 0.57s =====================================================================================
+
+
+===== pytest run 2025-12-28 18:30:57 args=['tests/test_spotify_visualizer_widget.py', '-k', 'manual_floor or sensitivity', '-vv'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 12 items / 10 deselected / 2 selected
+
+
+
+tests/test_spotify_visualizer_widget.py::test_manual_floor_produces_higher_energy_than_dynamic 
+FAILED                                                                                                [ 50%]
+
+
+tests/test_spotify_visualizer_widget.py::test_sensitivity_config_affects_noise_floor 
+FAILED                                                                                                          [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+__________________________________________________________________________ test_manual_floor_produces_higher_energy_than_dynamic __________________________________________________________________________
+
+
+
+np_module = <module 'numpy' from 'C:\\Python311\\Lib\\site-packages\\numpy\\__init__.py'>
+
+
+
+    def test_manual_floor_produces_higher_energy_than_dynamic(np_module):
+
+        worker = _make_audio_worker(np_module)
+
+        fft = _synth_fft(np_module, magnitude=2.5)
+
+    
+
+        worker.set_floor_config(dynamic_enabled=True, manual_floor=2.1)
+
+>       bars_dynamic = worker._fft_to_bars(fft)
+
+                       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+
+tests\test_spotify_visualizer_widget.py:110: 
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+widgets\spotify_visualizer_widget.py:796: in _fft_to_bars
+
+    self._apply_targeted_bar_mapping(arr, freq_values, np, center)
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+
+
+self = <widgets.spotify_visualizer_widget.SpotifyVisualizerAudioWorker(0x1ea0afae340) at 0x000001EA39C79740>
+
+arr = array([0.5049429 , 0.5049429 , 0.5049429 , 0.5049429 , 0.5049429 ,
+       0.5049429 , 0.41867658, 0.        , 0.        , 0.        ,
+       0.        , 0.        , 0.        , 0.        , 0.        ],
+      dtype=float32)
+
+
+freq_values = array([1.3105171, 1.3105171, 1.3105171, 1.3105171, 1.3105171, 1.3105171,
+       1.0866234, 0.       , 0.       , 0.       , 0.       , 0.       ,
+       0.       , 0.       , 0.       ], dtype=float32)
+
+
+np_mod = <module 'numpy' from 'C:\\Python311\\Lib\\site-packages\\numpy\\__init__.py'>, center = 7
+
+
+
+    def _apply_targeted_bar_mapping(self, arr, freq_values, np_mod, center: int) -> None:
+
+        """Overlay targeted feature envelopes while keeping the sculpted shape."""
+
+        if (
+
+            arr.size == 0
+
+            or freq_values is None
+
+            or freq_values.size == 0
+
+            or np_mod is None
+
+        ):
+
+            return
+
+    
+
+        peak = float(freq_values.max())
+
+        if peak <= 1e-6:
+
+            return
+
+    
+
+        base_shape = arr.copy()
+
+        overlay = np_mod.zeros_like(arr)
+
+    
+
+        total_bands = freq_values.size
+
+        bass_slice = freq_values[: max(2, total_bands // 8)]
+
+        vocal_slice = freq_values[total_bands // 8 : max(total_bands // 2, total_bands // 8 + 2)]
+
+        percussion_slice = freq_values[-max(2, total_bands // 4) :]
+
+    
+
+        bass_norm = self._normalize_feature_slice(np_mod, bass_slice, peak, percentile=90, exponent=0.65)
+
+        vocal_norm = self._normalize_feature_slice(np_mod, vocal_slice, peak, percentile=78, exponent=0.8)
+
+        percussion_norm = self._normalize_feature_slice(np_mod, percussion_slice, peak, percentile=92, exponent=0.6)
+
+    
+
+        bass_env = self._update_feature_env("_feature_env_bass", bass_norm, attack=0.75, release=0.22)
+
+        vocal_env = self._update_feature_env("_feature_env_vocal", vocal_norm, attack=0.72, release=0.18)
+
+        percussion_env = self._update_feature_env("_feature_env_percussion", percussion_norm, attack=0.55, release=0.28)
+
+    
+
+        bass_profile = [(-1, 0.9), (0, 0.45), (1, 0.9)]
+
+        vocal_profile = [(-2, 0.9), (-1, 1.4), (0, 0.3), (1, 1.4), (2, 0.9)]
+
+    
+
+        self._write_centered_overlay(
+
+            overlay,
+
+            center=center,
+
+            profile=bass_profile,
+
+            energy=bass_env,
+
+            drop_floor=0.05,
+
+            peak_boost=1.35,
+
+        )
+
+        self._write_centered_overlay(
+
+            overlay,
+
+            center=center,
+
+            profile=vocal_profile,
+
+            energy=vocal_env,
+
+            drop_floor=0.04,
+
+            peak_boost=1.25,
+
+        )
+
+        self._write_edge_overlay(
+
+            overlay,
+
+            energy=percussion_env,
+
+            drop_floor=0.06,
+
+            peak_boost=1.1,
+
+        )
+
+    
+
+        base_mix = 0.4
+
+        base_component = base_shape * base_mix
+
+>       arr[:] = np_mod.clip(np.maximum(base_component, overlay), 0.0, 0.98)
+
+                             ^^
+
+E       NameError: name 'np' is not defined
+
+
+
+widgets\spotify_visualizer_widget.py:880: NameError
+
+_______________________________________________________________________________ test_sensitivity_config_affects_noise_floor _______________________________________________________________________________
+
+
+
+np_module = <module 'numpy' from 'C:\\Python311\\Lib\\site-packages\\numpy\\__init__.py'>
+
+
+
+    def test_sensitivity_config_affects_noise_floor(np_module):
+
+        worker = _make_audio_worker(np_module)
+
+        worker.set_floor_config(dynamic_enabled=False, manual_floor=2.1)
+
+        fft = _synth_fft(np_module, magnitude=2.5)
+
+    
+
+        worker.set_sensitivity_config(recommended=True, sensitivity=1.0)
+
+>       bars_rec = worker._fft_to_bars(fft)
+
+                   ^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+
+tests\test_spotify_visualizer_widget.py:126: 
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+widgets\spotify_visualizer_widget.py:796: in _fft_to_bars
+
+    self._apply_targeted_bar_mapping(arr, freq_values, np, center)
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+
+
+self = <widgets.spotify_visualizer_widget.SpotifyVisualizerAudioWorker(0x1ea0afaa8e0) at 0x000001EA3AD148C0>
+
+arr = array([0.47619048, 0.47619048, 0.47619048, 0.47619048, 0.47619048,
+       0.47619048, 0.39483634, 0.        , 0.        , 0.        ,
+       0.        , 0.        , 0.        , 0.        , 0.        ],
+      dtype=float32)
+
+
+freq_values = array([1.3105171, 1.3105171, 1.3105171, 1.3105171, 1.3105171, 1.3105171,
+       1.0866234, 0.       , 0.       , 0.       , 0.       , 0.       ,
+       0.       , 0.       , 0.       ], dtype=float32)
+
+
+np_mod = <module 'numpy' from 'C:\\Python311\\Lib\\site-packages\\numpy\\__init__.py'>, center = 7
+
+
+
+    def _apply_targeted_bar_mapping(self, arr, freq_values, np_mod, center: int) -> None:
+
+        """Overlay targeted feature envelopes while keeping the sculpted shape."""
+
+        if (
+
+            arr.size == 0
+
+            or freq_values is None
+
+            or freq_values.size == 0
+
+            or np_mod is None
+
+        ):
+
+            return
+
+    
+
+        peak = float(freq_values.max())
+
+        if peak <= 1e-6:
+
+            return
+
+    
+
+        base_shape = arr.copy()
+
+        overlay = np_mod.zeros_like(arr)
+
+    
+
+        total_bands = freq_values.size
+
+        bass_slice = freq_values[: max(2, total_bands // 8)]
+
+        vocal_slice = freq_values[total_bands // 8 : max(total_bands // 2, total_bands // 8 + 2)]
+
+        percussion_slice = freq_values[-max(2, total_bands // 4) :]
+
+    
+
+        bass_norm = self._normalize_feature_slice(np_mod, bass_slice, peak, percentile=90, exponent=0.65)
+
+        vocal_norm = self._normalize_feature_slice(np_mod, vocal_slice, peak, percentile=78, exponent=0.8)
+
+        percussion_norm = self._normalize_feature_slice(np_mod, percussion_slice, peak, percentile=92, exponent=0.6)
+
+    
+
+        bass_env = self._update_feature_env("_feature_env_bass", bass_norm, attack=0.75, release=0.22)
+
+        vocal_env = self._update_feature_env("_feature_env_vocal", vocal_norm, attack=0.72, release=0.18)
+
+        percussion_env = self._update_feature_env("_feature_env_percussion", percussion_norm, attack=0.55, release=0.28)
+
+    
+
+        bass_profile = [(-1, 0.9), (0, 0.45), (1, 0.9)]
+
+        vocal_profile = [(-2, 0.9), (-1, 1.4), (0, 0.3), (1, 1.4), (2, 0.9)]
+
+    
+
+        self._write_centered_overlay(
+
+            overlay,
+
+            center=center,
+
+            profile=bass_profile,
+
+            energy=bass_env,
+
+            drop_floor=0.05,
+
+            peak_boost=1.35,
+
+        )
+
+        self._write_centered_overlay(
+
+            overlay,
+
+            center=center,
+
+            profile=vocal_profile,
+
+            energy=vocal_env,
+
+            drop_floor=0.04,
+
+            peak_boost=1.25,
+
+        )
+
+        self._write_edge_overlay(
+
+            overlay,
+
+            energy=percussion_env,
+
+            drop_floor=0.06,
+
+            peak_boost=1.1,
+
+        )
+
+    
+
+        base_mix = 0.4
+
+        base_component = base_shape * base_mix
+
+>       arr[:] = np_mod.clip(np.maximum(base_component, overlay), 0.0, 0.98)
+
+                             ^^
+
+E       NameError: name 'np' is not defined
+
+
+
+widgets\spotify_visualizer_widget.py:880: NameError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_spotify_visualizer_widget.py::test_manual_floor_produces_higher_energy_than_dynamic - NameError: name 'np' is not defined
+
+FAILED tests/test_spotify_visualizer_widget.py::test_sensitivity_config_affects_noise_floor - NameError: name 'np' is not defined
+
+==================================================================================== 2 failed, 10 deselected in 0.49s =====================================================================================
+
+
+===== pytest run 2025-12-28 21:10:55 args=['tests/test_visualizer_distribution.py', '-v', '--tb=short'] =====
+
+============================= test session starts =============================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 0 items
+
+
+
+============================ no tests ran in 0.33s ============================
+
+
+===== pytest run 2025-12-28 21:28:31 args=['tests/test_visualizer_modes.py', '-v', '--tb=short'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 17 items
+
+
+
+tests/test_visualizer_modes.py::TestVisualizerModeEnum::test_visualizer_mode_enum_exists 
+PASSED                                                                                                      [  5%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerModeEnum::test_visualizer_mode_has_spectrum 
+PASSED                                                                                                     [ 11%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerModeEnum::test_visualizer_mode_has_waveform 
+PASSED                                                                                                     [ 17%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerModeEnum::test_visualizer_mode_has_abstract 
+PASSED                                                                                                     [ 23%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerModeEnum::test_visualizer_mode_count 
+PASSED                                                                                                            [ 29%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerWidgetModes::test_widget_default_mode_is_spectrum 
+PASSED                                                                                               [ 35%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerWidgetModes::test_set_visualization_mode_to_waveform 
+PASSED                                                                                            [ 41%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerWidgetModes::test_set_visualization_mode_to_abstract 
+PASSED                                                                                            [ 47%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerWidgetModes::test_set_visualization_mode_clears_waveform_history 
+PASSED                                                                                [ 52%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerWidgetModes::test_set_visualization_mode_clears_particles 
+FAILED                                                                                       [ 58%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerWidgetModes::test_cycle_visualization_mode 
+PASSED                                                                                                      [ 64%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerWidgetModes::test_set_same_mode_is_noop 
+PASSED                                                                                                         [ 70%]
+
+
+tests/test_visualizer_modes.py::TestWaveformModeState::test_waveform_history_initialized_empty 
+PASSED                                                                                                [ 76%]
+
+
+tests/test_visualizer_modes.py::TestWaveformModeState::test_waveform_max_samples_default 
+PASSED                                                                                                      [ 82%]
+
+
+tests/test_visualizer_modes.py::TestAbstractModeState::test_abstract_particles_initialized_empty 
+PASSED                                                                                              [ 88%]
+
+
+tests/test_visualizer_modes.py::TestAbstractModeState::test_abstract_max_particles_default 
+PASSED                                                                                                    [ 94%]
+
+
+tests/test_visualizer_modes.py::TestAbstractModeState::test_abstract_spawn_timestamp_initialized 
+PASSED                                                                                              [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+_________________________________________________________________ TestVisualizerWidgetModes.test_set_visualization_mode_clears_particles __________________________________________________________________
+
+tests\test_visualizer_modes.py:101: in test_set_visualization_mode_clears_particles
+
+    assert len(widget._abstract_particles) == 0
+
+E   AssertionError: assert 1 == 0
+
+E    +  where 1 = len([{'x': 0, 'y': 0}])
+
+E    +    where [{'x': 0, 'y': 0}] = <widgets.spotify_visualizer_widget.SpotifyVisualizerWidget(0x245f159ac40) at 0x00000245F350D580>._abstract_particles
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_visualizer_modes.py::TestVisualizerWidgetModes::test_set_visualization_mode_clears_particles - AssertionError: assert 1 == 0
+
+====================================================================================== 1 failed, 16 passed in 0.38s =======================================================================================
+
+
+===== pytest run 2025-12-28 21:28:38 args=['tests/test_visualizer_modes.py', '-v', '--tb=short'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 17 items
+
+
+
+tests/test_visualizer_modes.py::TestVisualizerModeEnum::test_visualizer_mode_enum_exists 
+PASSED                                                                                                      [  5%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerModeEnum::test_visualizer_mode_has_spectrum 
+PASSED                                                                                                     [ 11%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerModeEnum::test_visualizer_mode_has_waveform 
+PASSED                                                                                                     [ 17%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerModeEnum::test_visualizer_mode_has_abstract 
+PASSED                                                                                                     [ 23%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerModeEnum::test_visualizer_mode_count 
+PASSED                                                                                                            [ 29%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerWidgetModes::test_widget_default_mode_is_spectrum 
+PASSED                                                                                               [ 35%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerWidgetModes::test_set_visualization_mode_to_waveform 
+PASSED                                                                                            [ 41%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerWidgetModes::test_set_visualization_mode_to_abstract 
+PASSED                                                                                            [ 47%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerWidgetModes::test_set_visualization_mode_clears_waveform_history 
+PASSED                                                                                [ 52%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerWidgetModes::test_set_visualization_mode_clears_particles 
+FAILED                                                                                       [ 58%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerWidgetModes::test_cycle_visualization_mode 
+PASSED                                                                                                      [ 64%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerWidgetModes::test_set_same_mode_is_noop 
+PASSED                                                                                                         [ 70%]
+
+
+tests/test_visualizer_modes.py::TestWaveformModeState::test_waveform_history_initialized_empty 
+PASSED                                                                                                [ 76%]
+
+
+tests/test_visualizer_modes.py::TestWaveformModeState::test_waveform_max_samples_default 
+PASSED                                                                                                      [ 82%]
+
+
+tests/test_visualizer_modes.py::TestAbstractModeState::test_abstract_particles_initialized_empty 
+PASSED                                                                                              [ 88%]
+
+
+tests/test_visualizer_modes.py::TestAbstractModeState::test_abstract_max_particles_default 
+PASSED                                                                                                    [ 94%]
+
+
+tests/test_visualizer_modes.py::TestAbstractModeState::test_abstract_spawn_timestamp_initialized 
+PASSED                                                                                              [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+_________________________________________________________________ TestVisualizerWidgetModes.test_set_visualization_mode_clears_particles __________________________________________________________________
+
+tests\test_visualizer_modes.py:101: in test_set_visualization_mode_clears_particles
+
+    assert len(widget._abstract_particles) == 0
+
+E   AssertionError: assert 1 == 0
+
+E    +  where 1 = len([{'x': 0, 'y': 0}])
+
+E    +    where [{'x': 0, 'y': 0}] = <widgets.spotify_visualizer_widget.SpotifyVisualizerWidget(0x15786302840) at 0x0000015787AE5700>._abstract_particles
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_visualizer_modes.py::TestVisualizerWidgetModes::test_set_visualization_mode_clears_particles - AssertionError: assert 1 == 0
+
+====================================================================================== 1 failed, 16 passed in 0.31s =======================================================================================
+
+
+===== pytest run 2025-12-28 21:29:41 args=['tests/test_visualizer_modes.py', '-v', '--tb=short'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 17 items
+
+
+
+tests/test_visualizer_modes.py::TestVisualizerModeEnum::test_visualizer_mode_enum_exists 
+PASSED                                                                                                      [  5%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerModeEnum::test_visualizer_mode_has_spectrum 
+PASSED                                                                                                     [ 11%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerModeEnum::test_visualizer_mode_has_waveform 
+PASSED                                                                                                     [ 17%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerModeEnum::test_visualizer_mode_has_abstract 
+PASSED                                                                                                     [ 23%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerModeEnum::test_visualizer_mode_count 
+PASSED                                                                                                            [ 29%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerWidgetModes::test_widget_default_mode_is_spectrum 
+PASSED                                                                                               [ 35%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerWidgetModes::test_set_visualization_mode_to_waveform 
+PASSED                                                                                            [ 41%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerWidgetModes::test_set_visualization_mode_to_abstract 
+PASSED                                                                                            [ 47%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerWidgetModes::test_set_visualization_mode_clears_waveform_history 
+PASSED                                                                                [ 52%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerWidgetModes::test_set_visualization_mode_clears_particles 
+FAILED                                                                                       [ 58%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerWidgetModes::test_cycle_visualization_mode 
+PASSED                                                                                                      [ 64%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerWidgetModes::test_set_same_mode_is_noop 
+PASSED                                                                                                         [ 70%]
+
+
+tests/test_visualizer_modes.py::TestWaveformModeState::test_waveform_history_initialized_empty 
+PASSED                                                                                                [ 76%]
+
+
+tests/test_visualizer_modes.py::TestWaveformModeState::test_waveform_max_samples_default 
+PASSED                                                                                                      [ 82%]
+
+
+tests/test_visualizer_modes.py::TestAbstractModeState::test_abstract_particles_initialized_empty 
+PASSED                                                                                              [ 88%]
+
+
+tests/test_visualizer_modes.py::TestAbstractModeState::test_abstract_max_particles_default 
+PASSED                                                                                                    [ 94%]
+
+
+tests/test_visualizer_modes.py::TestAbstractModeState::test_abstract_spawn_timestamp_initialized 
+PASSED                                                                                              [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+_________________________________________________________________ TestVisualizerWidgetModes.test_set_visualization_mode_clears_particles __________________________________________________________________
+
+tests\test_visualizer_modes.py:94: in test_set_visualization_mode_clears_particles
+
+    assert len(widget._abstract_particles) == 0
+
+E   AssertionError: assert 1 == 0
+
+E    +  where 1 = len([{'x': 0, 'y': 0}])
+
+E    +    where [{'x': 0, 'y': 0}] = <widgets.spotify_visualizer_widget.SpotifyVisualizerWidget(0x2a851676230) at 0x000002A85253C680>._abstract_particles
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_visualizer_modes.py::TestVisualizerWidgetModes::test_set_visualization_mode_clears_particles - AssertionError: assert 1 == 0
+
+====================================================================================== 1 failed, 16 passed in 0.35s =======================================================================================
+
+
+===== pytest run 2025-12-28 21:29:47 args=['tests/test_visualizer_modes.py::TestVisualizerModeEnum', '-v'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 5 items
+
+
+
+tests/test_visualizer_modes.py::TestVisualizerModeEnum::test_visualizer_mode_enum_exists 
+PASSED                                                                                                      [ 20%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerModeEnum::test_visualizer_mode_has_spectrum 
+PASSED                                                                                                     [ 40%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerModeEnum::test_visualizer_mode_has_waveform 
+PASSED                                                                                                     [ 60%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerModeEnum::test_visualizer_mode_has_abstract 
+PASSED                                                                                                     [ 80%]
+
+
+tests/test_visualizer_modes.py::TestVisualizerModeEnum::test_visualizer_mode_count 
+PASSED                                                                                                            [100%]
+
+
+
+
+============================================================================================ 5 passed in 0.16s ============================================================================================
+
+
+===== pytest run 2025-12-28 21:33:52 args=['tests/', '-v', '--tb=short', '--ignore=tests/test_visualizer_distribution.py'] =====
+
+============================= test session starts =============================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 612 items / 4 skipped
+
+
+
+tests/test_animation.py::test_animation_manager_initialization 
+PASSED    [  0%]
+
+
+tests/test_animation.py::test_property_animation 
+PASSED                  [  0%]
+
+
+tests/test_animation.py::test_custom_animation 
+PASSED                    [  0%]
+
+
+tests/test_animation.py::test_animation_pause_resume 
+PASSED              [  0%]
+
+
+tests/test_animation.py::test_animation_cancel 
+PASSED                    [  0%]
+
+
+tests/test_animation.py::test_easing_curves 
+PASSED                       [  0%]
+
+
+tests/test_animation.py::test_animation_with_delay 
+PASSED                [  1%]
+
+
+tests/test_animation.py::test_multiple_animations 
+PASSED                 [  1%]
+
+
+tests/test_animation.py::test_cancel_all_animations 
+PASSED               [  1%]
+
+
+tests/test_animation.py::test_animation_manager_auto_stop 
+PASSED         [  1%]
+
+
+tests/test_animation.py::test_animation_manager_emits_perf_metrics 
+PASSED [  1%]
+
+
+tests/test_animation_set_target_fps.py::test_set_target_fps_updates_timer_interval 
+PASSED [  1%]
+
+
+tests/test_block_puzzle_flip.py::test_block_puzzle_creation 
+PASSED       [  2%]
+
+
+tests/test_block_puzzle_flip.py::test_block_puzzle_runs_and_labels 
+PASSED [  2%]
+
+
+tests/test_block_puzzle_flip.py::test_block_puzzle_cleanup 
+PASSED        [  2%]
+
+
+tests/test_block_puzzle_flip.py::test_block_puzzle_invalid_pixmap 
+PASSED [  2%]
+
+
+tests/test_block_puzzle_flip.py::test_block_puzzle_set_flip_duration 
+PASSED [  2%]
+
+
+tests/test_block_puzzle_flip.py::test_block_puzzle_randomization 
+PASSED  [  2%]
+
+
+tests/test_block_puzzle_flip.py::test_block_puzzle_small_widget 
+PASSED   [  3%]
+
+
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug1_clock_widget_created 
+PASSED [  3%]
+
+
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug2_set_text_color_method_exists 
+PASSED [  3%]
+
+
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug3_color_array_to_qcolor_conversion 
+FAILED [  3%]
+
+
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug4_z_order_clock_on_top 
+FAILED [  3%]
+
+
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug5_settings_retrieval_no_crash 
+PASSED [  3%]
+
+
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug6_boolean_type_conversion 
+PASSED [  4%]
+
+
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug7_position_string_to_enum 
+PASSED [  4%]
+
+
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug8_format_string_to_enum 
+PASSED [  4%]
+
+
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug9_missing_raise_call 
+FAILED [  4%]
+
+
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_clock_widget_visibility_after_setup 
+FAILED [  4%]
+
+
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_clock_widget_size_and_position 
+PASSED [  4%]
+
+
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_clock_settings_complete_integration 
+FAILED [  5%]
+
+
+tests/test_clock_widget.py::test_time_format_enum 
+PASSED                 [  5%]
+
+
+tests/test_clock_widget.py::test_clock_position_enum 
+PASSED              [  5%]
+
+
+tests/test_clock_widget.py::test_clock_creation 
+PASSED                   [  5%]
+
+
+tests/test_clock_widget.py::test_clock_start_stop 
+FAILED                 [  5%]
+
+
+tests/test_clock_widget.py::test_clock_signals 
+FAILED                    [  5%]
+
+
+tests/test_clock_widget.py::test_clock_12h_format 
+FAILED                 [  6%]
+
+
+tests/test_clock_widget.py::test_clock_24h_format 
+FAILED                 [  6%]
+
+
+tests/test_clock_widget.py::test_clock_without_seconds 
+FAILED            [  6%]
+
+
+tests/test_clock_widget.py::test_clock_with_seconds 
+FAILED               [  6%]
+
+
+tests/test_clock_widget.py::test_clock_set_time_format 
+FAILED            [  6%]
+
+
+tests/test_clock_widget.py::test_clock_set_show_seconds 
+FAILED           [  6%]
+
+
+tests/test_clock_widget.py::test_clock_all_positions 
+FAILED              [  7%]
+
+
+tests/test_clock_widget.py::test_clock_set_position 
+FAILED               [  7%]
+
+
+tests/test_clock_widget.py::test_clock_set_font_size 
+PASSED              [  7%]
+
+
+tests/test_clock_widget.py::test_clock_set_text_color 
+PASSED             [  7%]
+
+
+tests/test_clock_widget.py::test_clock_set_margin 
+PASSED                 [  7%]
+
+
+tests/test_clock_widget.py::test_clock_cleanup 
+FAILED                    [  7%]
+
+
+tests/test_clock_widget.py::test_clock_concurrent_start_prevention 
+FAILED [  8%]
+
+
+tests/test_clock_widget.py::test_clock_updates_over_time 
+FAILED          [  8%]
+
+
+tests/test_context_menu_effect_invalidation.py::test_context_menu_invalidates_effects_before_popup 
+PASSED [  8%]
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_held_suppresses_mouse_exit_single_widget 
+PASSED [  8%]
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_held_global_across_multiple_widgets 
+PASSED [  8%]
+
+
+tests/test_ctrl_interaction_mode.py::test_media_keys_do_not_exit_screensaver[16777344] 
+PASSED [  8%]
+
+
+tests/test_ctrl_interaction_mode.py::test_media_keys_do_not_exit_screensaver[16777349] 
+PASSED [  8%]
+
+
+tests/test_ctrl_interaction_mode.py::test_media_keys_do_not_exit_screensaver[16777347] 
+PASSED [  9%]
+
+
+tests/test_ctrl_interaction_mode.py::test_media_keys_do_not_exit_screensaver[16777346] 
+PASSED [  9%]
+
+
+tests/test_ctrl_interaction_mode.py::test_media_keys_do_not_exit_screensaver[16777330] 
+PASSED [  9%]
+
+
+tests/test_ctrl_interaction_mode.py::test_media_keys_do_not_exit_screensaver[16777328] 
+PASSED [  9%]
+
+
+tests/test_ctrl_interaction_mode.py::test_media_keys_do_not_exit_screensaver[16777329] 
+PASSED [  9%]
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_fades_in_and_out 
+PASSED [  9%]
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_owner_migrates_between_screens 
+PASSED [ 10%]
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_shows_without_slack_attr 
+PASSED [ 10%]
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_context_menu_active 
+PASSED [ 10%]
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_hides_when_cursor_leaves_display 
+PASSED [ 10%]
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_inactivity_timeout 
+PASSED [ 10%]
+
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_settings_dialog_active 
+FAILED [ 10%]
+
+
+tests/test_diffuse_transition.py::test_diffuse_creation 
+PASSED           [ 11%]
+
+
+tests/test_diffuse_transition.py::test_diffuse_start_no_old_image 
+PASSED [ 11%]
+
+
+tests/test_diffuse_transition.py::test_diffuse_start_with_images 
+PASSED  [ 11%]
+
+
+tests/test_diffuse_transition.py::test_diffuse_signals 
+PASSED            [ 11%]
+
+
+tests/test_diffuse_transition.py::test_diffuse_progress_range 
+PASSED     [ 11%]
+
+
+tests/test_diffuse_transition.py::test_diffuse_stop 
+PASSED               [ 11%]
+
+
+tests/test_diffuse_transition.py::test_diffuse_grid_creation 
+PASSED      [ 12%]
+
+
+tests/test_diffuse_transition.py::test_diffuse_cleanup 
+PASSED            [ 12%]
+
+
+tests/test_diffuse_transition.py::test_diffuse_invalid_pixmap 
+PASSED     [ 12%]
+
+
+tests/test_diffuse_transition.py::test_diffuse_already_running 
+PASSED    [ 12%]
+
+
+tests/test_diffuse_transition.py::test_diffuse_block_size 
+PASSED         [ 12%]
+
+
+tests/test_diffuse_transition.py::test_diffuse_small_widget 
+PASSED       [ 12%]
+
+
+tests/test_diffuse_transition.py::test_diffuse_randomization 
+PASSED      [ 13%]
+
+
+tests/test_dimming_and_interaction_fixes.py::TestDimmingOverlayAttributes::test_dimming_overlay_uses_translucent_background 
+PASSED [ 13%]
+
+
+tests/test_dimming_and_interaction_fixes.py::TestDimmingOverlayAttributes::test_dimming_overlay_opacity_calculation 
+PASSED [ 13%]
+
+
+tests/test_dimming_and_interaction_fixes.py::TestDimmingOverlayAttributes::test_dimming_overlay_opacity_clamping 
+PASSED [ 13%]
+
+
+tests/test_dimming_and_interaction_fixes.py::TestCtrlHaloAttributes::test_halo_code_uses_translucent_background 
+PASSED [ 13%]
+
+
+tests/test_dimming_and_interaction_fixes.py::TestMediaWidgetClickDetection::test_click_detection_checks_y_coordinate 
+PASSED [ 13%]
+
+
+tests/test_dimming_and_interaction_fixes.py::TestMediaWidgetClickDetection::test_controls_row_height_is_reasonable 
+PASSED [ 14%]
+
+
+tests/test_dimming_and_interaction_fixes.py::TestCrumbleShaderPerformance::test_crumble_search_range_is_reduced 
+PASSED [ 14%]
+
+
+tests/test_dimming_and_interaction_fixes.py::TestSettingsDotNotation::test_dimming_settings_use_dot_notation 
+PASSED [ 14%]
+
+
+tests/test_dimming_and_interaction_fixes.py::TestSettingsDotNotation::test_pixel_shift_settings_use_dot_notation 
+PASSED [ 14%]
+
+
+tests/test_dimming_and_interaction_fixes.py::TestSettingsDotNotation::test_context_menu_dimming_uses_dot_notation 
+PASSED [ 14%]
+
+
+tests/test_dimming_and_interaction_fixes.py::TestDimmingOverlayZOrder::test_raise_overlay_includes_dimming 
+PASSED [ 14%]
+
+
+tests/test_dimming_and_interaction_fixes.py::TestDimmingOverlayZOrder::test_raise_overlay_zorder_documented 
+PASSED [ 15%]
+
+
+tests/test_display_tab.py::TestDisplayTab::test_display_tab_creation 
+PASSED [ 15%]
+
+
+tests/test_display_tab.py::TestDisplayTab::test_display_tab_loads_settings 
+PASSED [ 15%]
+
+
+tests/test_display_tab.py::TestDisplayTab::test_display_tab_saves_monitor_selection 
+PASSED [ 15%]
+
+
+tests/test_display_tab.py::TestDisplayTab::test_display_tab_saves_display_mode 
+PASSED [ 15%]
+
+
+tests/test_display_tab.py::TestDisplayTab::test_display_tab_saves_timing 
+PASSED [ 15%]
+
+
+tests/test_display_tab.py::TestDisplayTab::test_display_tab_boolean_conversion 
+PASSED [ 16%]
+
+
+tests/test_display_tab.py::TestDisplayTab::test_display_tab_lanczos_setting 
+PASSED [ 16%]
+
+
+tests/test_display_tab.py::TestDisplayTab::test_display_tab_sharpen_setting 
+PASSED [ 16%]
+
+
+tests/test_display_tab.py::TestDisplayTab::test_display_tab_same_image_monitors 
+PASSED [ 16%]
+
+
+tests/test_display_tab.py::TestDisplayTab::test_display_tab_all_settings_persist 
+PASSED [ 16%]
+
+
+tests/test_display_tab.py::TestDisplayTab::test_display_tab_default_values 
+PASSED [ 16%]
+
+
+tests/test_display_tab.py::TestDisplayTab::test_display_tab_invalid_mode_handling 
+PASSED [ 16%]
+
+
+tests/test_display_tab.py::TestDisplayTab::test_display_tab_invalid_interval_handling 
+PASSED [ 17%]
+
+
+tests/test_display_tab.py::TestDisplayTab::test_display_tab_ui_elements_exist 
+PASSED [ 17%]
+
+
+tests/test_engine_lifecycle.py::TestEngineState::test_engine_state_enum_values 
+PASSED [ 17%]
+
+
+tests/test_engine_lifecycle.py::TestEngineState::test_initial_state_is_uninitialized 
+PASSED [ 17%]
+
+
+tests/test_engine_lifecycle.py::TestEngineState::test_running_property_false_when_not_running 
+PASSED [ 17%]
+
+
+tests/test_engine_lifecycle.py::TestEngineState::test_running_property_true_when_running 
+PASSED [ 17%]
+
+
+tests/test_engine_lifecycle.py::TestEngineState::test_initialized_property 
+PASSED [ 18%]
+
+
+tests/test_engine_lifecycle.py::TestShuttingDownProperty::test_shutting_down_false_in_running 
+PASSED [ 18%]
+
+
+tests/test_engine_lifecycle.py::TestShuttingDownProperty::test_shutting_down_false_in_reinitializing 
+PASSED [ 18%]
+
+
+tests/test_engine_lifecycle.py::TestShuttingDownProperty::test_shutting_down_true_in_stopping 
+PASSED [ 18%]
+
+
+tests/test_engine_lifecycle.py::TestShuttingDownProperty::test_shutting_down_true_in_shutting_down 
+PASSED [ 18%]
+
+
+tests/test_engine_lifecycle.py::TestShuttingDownProperty::test_shutting_down_false_in_other_states 
+PASSED [ 18%]
+
+
+tests/test_engine_lifecycle.py::TestStateTransitions::test_transition_state_success 
+PASSED [ 19%]
+
+
+tests/test_engine_lifecycle.py::TestStateTransitions::test_transition_state_invalid_source 
+PASSED [ 19%]
+
+
+tests/test_engine_lifecycle.py::TestStateTransitions::test_transition_from_shutting_down_blocked 
+PASSED [ 19%]
+
+
+tests/test_engine_lifecycle.py::TestStateTransitions::test_transition_without_expected_from 
+PASSED [ 19%]
+
+
+tests/test_engine_lifecycle.py::TestStateTransitions::test_is_state_check 
+PASSED [ 19%]
+
+
+tests/test_engine_lifecycle.py::TestStateTransitionThreadSafety::test_concurrent_state_reads 
+PASSED [ 19%]
+
+
+tests/test_engine_lifecycle.py::TestStateTransitionThreadSafety::test_concurrent_state_transitions 
+PASSED [ 20%]
+
+
+tests/test_engine_lifecycle.py::TestRSSReloadBugScenario::test_settings_change_does_not_abort_rss 
+PASSED [ 20%]
+
+
+tests/test_engine_lifecycle.py::TestRSSReloadBugScenario::test_actual_shutdown_aborts_rss 
+PASSED [ 20%]
+
+
+tests/test_engine_lifecycle.py::TestGetStats::test_get_stats_includes_state 
+PASSED [ 20%]
+
+
+tests/test_events.py::test_event_system_initialization 
+PASSED            [ 20%]
+
+
+tests/test_events.py::test_subscribe_and_publish 
+PASSED                  [ 20%]
+
+
+tests/test_events.py::test_unsubscribe 
+PASSED                            [ 21%]
+
+
+tests/test_events.py::test_priority_ordering 
+PASSED                      [ 21%]
+
+
+tests/test_events.py::test_event_filter 
+PASSED                           [ 21%]
+
+
+tests/test_events.py::test_event_history 
+PASSED                          [ 21%]
+
+
+tests/test_flicker_fix_integration.py::TestQtAllocationLimit::test_allocation_limit_increased 
+PASSED [ 21%]
+
+
+tests/test_flicker_fix_integration.py::TestQtAllocationLimit::test_large_image_can_be_allocated 
+PASSED [ 21%]
+
+
+tests/test_flicker_fix_integration.py::TestTransitionTelemetryFlow::test_transition_tracks_timing 
+FAILED [ 22%]
+
+
+tests/test_flicker_fix_integration.py::TestMultiDisplaySyncFlow::test_sync_queue_lifecycle 
+PASSED [ 22%]
+
+
+tests/test_flicker_fix_integration.py::TestMultiDisplaySyncFlow::test_sync_timeout_handling 
+PASSED [ 22%]
+
+
+tests/test_flicker_fix_integration.py::TestRegressionPrevention::test_no_process_events_in_transitions 
+PASSED [ 22%]
+
+
+tests/test_flicker_fix_integration.py::TestRegressionPrevention::test_showfullscreen_not_deferred 
+PASSED [ 22%]
+
+
+tests/test_frame_timing_workload.py::TestFrameTimingWorkload::test_slide_with_visualizer_load 
+PASSED [ 22%]
+
+
+tests/test_frame_timing_workload.py::TestFrameTimingWorkload::test_sustained_workload 
+PASSED [ 23%]
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[1080p_dpr1_primary] 
+PASSED [ 23%]
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[left_negative_origin] 
+PASSED [ 23%]
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[4k_125pct] 
+PASSED [ 23%]
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[right_4k_150pct] 
+PASSED [ 23%]
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[portrait_above_200pct] 
+PASSED [ 23%]
+
+
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[laptop_175pct] 
+PASSED [ 24%]
+
+
+tests/test_gl_compositor_blinds.py::test_gl_compositor_blinds_no_underlay_and_no_black 
+PASSED [ 24%]
+
+
+tests/test_gl_compositor_blockflip.py::test_gl_compositor_blockflip_no_underlay_and_no_black 
+PASSED [ 24%]
+
+
+tests/test_gl_compositor_blockspin.py::test_gl_compositor_blockspin_no_underlay_and_no_black 
+FAILED [ 24%]
+
+
+tests/test_gl_compositor_cleanup.py::test_gl_compositor_cleanup_idempotent_without_context 
+PASSED [ 24%]
+
+
+tests/test_gl_compositor_cleanup.py::test_gl_compositor_cleanup_releases_pipeline_when_gl_available 
+PASSED [ 24%]
+
+
+tests/test_gl_compositor_crossfade.py::test_gl_compositor_crossfade_no_underlay_and_no_black 
+PASSED [ 25%]
+
+
+tests/test_gl_compositor_diffuse.py::test_gl_compositor_diffuse_no_underlay_and_no_black 
+PASSED [ 25%]
+
+
+tests/test_gl_compositor_peel.py::test_gl_compositor_peel_no_underlay_and_no_black 
+PASSED [ 25%]
+
+
+tests/test_gl_compositor_raindrops.py::test_gl_compositor_raindrops_no_underlay_and_no_black 
+PASSED [ 25%]
+
+
+tests/test_gl_compositor_slide.py::test_gl_compositor_slide_no_underlay_and_no_black 
+PASSED [ 25%]
+
+
+tests/test_gl_compositor_transition_lifecycle.py::test_clear_all_transitions_cancels_active_animation 
+PASSED [ 25%]
+
+
+tests/test_gl_compositor_transition_lifecycle.py::test_cancel_current_transition_snaps_to_new_pixmap 
+PASSED [ 25%]
+
+
+tests/test_gl_compositor_wipe.py::test_gl_compositor_wipe_no_underlay_and_no_black[WipeDirection.LEFT_TO_RIGHT] 
+PASSED [ 26%]
+
+
+tests/test_gl_compositor_wipe.py::test_gl_compositor_wipe_no_underlay_and_no_black[WipeDirection.RIGHT_TO_LEFT] 
+PASSED [ 26%]
+
+
+tests/test_gl_compositor_wipe.py::test_gl_compositor_wipe_no_underlay_and_no_black[WipeDirection.TOP_TO_BOTTOM] 
+PASSED [ 26%]
+
+
+tests/test_gl_compositor_wipe.py::test_gl_compositor_wipe_no_underlay_and_no_black[WipeDirection.BOTTOM_TO_TOP] 
+PASSED [ 26%]
+
+
+tests/test_gl_compositor_wipe.py::test_gl_compositor_wipe_no_underlay_and_no_black[WipeDirection.DIAG_TL_BR] 
+PASSED [ 26%]
+
+
+tests/test_gl_compositor_wipe.py::test_gl_compositor_wipe_no_underlay_and_no_black[WipeDirection.DIAG_TR_BL] 
+PASSED [ 26%]
+
+
+tests/test_gl_prewarm.py::test_gl_prewarm_overlays_ready 
+PASSED          [ 27%]
+
+
+tests/test_hotkeys_no_text.py::test_hotkeys_work_with_empty_event_text 
+PASSED [ 27%]
+
+
+tests/test_image_processor.py::test_fill_mode_wider_image 
+PASSED         [ 27%]
+
+
+tests/test_image_processor.py::test_fill_mode_taller_image 
+PASSED        [ 27%]
+
+
+tests/test_image_processor.py::test_fill_mode_small_image 
+PASSED         [ 27%]
+
+
+tests/test_image_processor.py::test_fit_mode_landscape 
+PASSED            [ 27%]
+
+
+tests/test_image_processor.py::test_fit_mode_portrait 
+PASSED             [ 28%]
+
+
+tests/test_image_processor.py::test_shrink_mode_large_image 
+PASSED       [ 28%]
+
+
+tests/test_image_processor.py::test_shrink_mode_small_image 
+PASSED       [ 28%]
+
+
+tests/test_image_processor.py::test_null_image_fallback 
+PASSED           [ 28%]
+
+
+tests/test_image_processor.py::test_square_image_fill 
+PASSED             [ 28%]
+
+
+tests/test_image_processor.py::test_aspect_ratio_preservation_fit 
+PASSED [ 28%]
+
+
+tests/test_image_processor.py::test_calculate_scale_factors_fill 
+PASSED  [ 29%]
+
+
+tests/test_image_processor.py::test_calculate_scale_factors_fit 
+PASSED   [ 29%]
+
+
+tests/test_image_processor.py::test_calculate_scale_factors_shrink_no_scaling 
+PASSED [ 29%]
+
+
+tests/test_image_processor.py::test_calculate_scale_factors_shrink_with_scaling 
+PASSED [ 29%]
+
+
+tests/test_image_processor.py::test_get_crop_rect 
+PASSED                 [ 29%]
+
+
+tests/test_image_processor.py::test_display_mode_from_string 
+PASSED      [ 29%]
+
+
+tests/test_image_processor.py::test_display_mode_from_string_invalid 
+PASSED [ 30%]
+
+
+tests/test_image_processor.py::test_display_mode_str 
+PASSED              [ 30%]
+
+
+tests/test_image_processor.py::test_qimage_sync_matches_pixmap[fill] 
+PASSED [ 30%]
+
+
+tests/test_image_processor.py::test_qimage_sync_matches_pixmap[fit] 
+PASSED [ 30%]
+
+
+tests/test_image_processor.py::test_qimage_sync_matches_pixmap[shrink] 
+PASSED [ 30%]
+
+
+tests/test_image_processor.py::test_qimage_async_matches_sync[fill] 
+PASSED [ 30%]
+
+
+tests/test_image_processor.py::test_qimage_async_matches_sync[fit] 
+PASSED [ 31%]
+
+
+tests/test_image_processor.py::test_qimage_async_matches_sync[shrink] 
+PASSED [ 31%]
+
+
+tests/test_image_queue.py::test_image_queue_initialization 
+PASSED        [ 31%]
+
+
+tests/test_image_queue.py::test_add_images_no_shuffle 
+PASSED             [ 31%]
+
+
+tests/test_image_queue.py::test_add_images_with_shuffle 
+PASSED           [ 31%]
+
+
+tests/test_image_queue.py::test_next_image 
+PASSED                        [ 31%]
+
+
+tests/test_image_queue.py::test_next_multiple_images 
+PASSED              [ 32%]
+
+
+tests/test_image_queue.py::test_queue_wraparound 
+PASSED                  [ 32%]
+
+
+tests/test_image_queue.py::test_current_image 
+PASSED                     [ 32%]
+
+
+tests/test_image_queue.py::test_peek_next_image 
+PASSED                   [ 32%]
+
+
+tests/test_image_queue.py::test_history_tracking 
+PASSED                  [ 32%]
+
+
+tests/test_image_queue.py::test_history_max_size 
+PASSED                  [ 32%]
+
+
+tests/test_image_queue.py::test_is_in_recent_history 
+PASSED              [ 33%]
+
+
+tests/test_image_queue.py::test_shuffle_method 
+PASSED                    [ 33%]
+
+
+tests/test_image_queue.py::test_set_shuffle_enabled 
+PASSED               [ 33%]
+
+
+tests/test_image_queue.py::test_clear_queue 
+PASSED                       [ 33%]
+
+
+tests/test_image_queue.py::test_set_images_replaces_all 
+PASSED           [ 33%]
+
+
+tests/test_image_queue.py::test_remove_image 
+PASSED                      [ 33%]
+
+
+tests/test_image_queue.py::test_remove_nonexistent_image 
+PASSED          [ 33%]
+
+
+tests/test_image_queue.py::test_get_stats 
+PASSED                         [ 34%]
+
+
+tests/test_image_queue.py::test_empty_queue_behavior 
+PASSED              [ 34%]
+
+
+tests/test_image_queue.py::test_queue_len_and_bool 
+PASSED                [ 34%]
+
+
+tests/test_image_queue.py::test_queue_repr 
+PASSED                        [ 34%]
+
+
+tests/test_image_queue.py::test_previous_image 
+PASSED                    [ 34%]
+
+
+tests/test_image_queue.py::test_previous_with_no_history 
+PASSED          [ 34%]
+
+
+tests/test_image_queue.py::test_wraparound_preserves_shuffle 
+PASSED      [ 35%]
+
+
+tests/test_integration.py::test_engine_creation 
+PASSED                   [ 35%]
+
+
+tests/test_integration.py::test_engine_initialization 
+PASSED             [ 35%]
+
+
+tests/test_integration.py::test_engine_core_systems 
+PASSED               [ 35%]
+
+
+tests/test_integration.py::test_engine_image_queue_initialization 
+PASSED [ 35%]
+
+
+tests/test_integration.py::test_engine_display_initialization 
+PASSED     [ 35%]

@@ -162,3 +162,45 @@ def test_run_on_ui_thread_from_worker_thread(qt_app):
     assert called == [True]
     # The callback must have executed on the main Qt thread, not the worker.
     assert thread_ids[0] is qt_app.thread()
+
+
+@pytest.mark.qt_no_exception_capture
+def test_schedule_recurring_invokes_callback(qt_app):
+    """schedule_recurring should tick callbacks without requiring description."""
+    manager = ThreadManager()
+
+    ticks = []
+
+    def _tick():
+        ticks.append(time.time())
+
+    timer = manager.schedule_recurring(5, _tick)
+
+    deadline = time.time() + 0.2
+    while len(ticks) < 2 and time.time() < deadline:
+        qt_app.processEvents()
+        time.sleep(0.01)
+
+    timer.stop()
+    manager.shutdown()
+
+    assert len(ticks) >= 1
+
+
+@pytest.mark.qt_no_exception_capture
+def test_schedule_recurring_with_description(qt_app):
+    """Explicit descriptions should not change timer behaviour."""
+    manager = ThreadManager()
+    ticks = []
+
+    timer = manager.schedule_recurring(5, lambda: ticks.append(time.time()), description="test_timer")
+
+    deadline = time.time() + 0.2
+    while len(ticks) < 2 and time.time() < deadline:
+        qt_app.processEvents()
+        time.sleep(0.01)
+
+    timer.stop()
+    manager.shutdown()
+
+    assert len(ticks) >= 1

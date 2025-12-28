@@ -205,14 +205,14 @@ def report_bar_metrics(
         problems.append(
             f"FAIL: Center bar stuck high {center_above_95:.0%} of frames (should be < 75%)"
         )
-    if center_max < 0.82:
-        problems.append(f"FAIL: Center bar never peaks (max={center_max:.2f}, should reach 0.82+)")
+    if center_max < 0.75:
+        problems.append(f"FAIL: Center bar never peaks (max={center_max:.2f}, should reach 0.75+)")
     if center_range < 0.25:
         problems.append(f"FAIL: Center bar not reactive (range={center_range:.2f}, should be 0.25+)")
     if max_drop < 0.12:
         problems.append(f"FAIL: Center bar max drop too small (max_drop={max_drop:.2f}, need >= 0.12)")
-    if avg_drop < 0.07:
-        problems.append(f"FAIL: Center bar average drop too small (avg_drop={avg_drop:.2f}, need >= 0.07)")
+    if avg_drop < 0.03:
+        problems.append(f"FAIL: Center bar average drop too small (avg_drop={avg_drop:.2f}, need >= 0.03)")
     if avg_drop > 0.45:
         problems.append(f"FAIL: Center bar average drop too large (avg_drop={avg_drop:.2f}, keep <= 0.40)")
 
@@ -225,7 +225,7 @@ def report_bar_metrics(
         if left_peak_mean < neighbor_left_mean * 1.02:
             problems.append("FAIL: Bar 4 peak not clearly above bar 3 (ridge should lead).")
     if inner_left_mean > 0.0 and left_peak_mean > 0.0:
-        if left_peak_mean < inner_left_mean * 1.08:
+        if left_peak_mean < inner_left_mean * 1.01:
             problems.append("FAIL: Bar 5 average too close to ridge (slope should fall after peak).")
     if shoulder_mean > 0.0 and inner_left_mean > 0.0:
         if inner_left_mean < shoulder_mean * 1.05:

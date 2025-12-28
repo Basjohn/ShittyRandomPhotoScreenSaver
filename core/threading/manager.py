@@ -492,7 +492,14 @@ class ThreadManager:
         except Exception as e:
             logger.exception("single_shot failed: %s", e)
 
-    def schedule_recurring(self, interval_ms: int, func: Callable, *args, **kwargs) -> QTimer:
+    def schedule_recurring(
+        self,
+        interval_ms: int,
+        func: Callable,
+        *args,
+        description: Optional[str] = None,
+        **kwargs,
+    ) -> QTimer:
         """
         Schedule a recurring task on the UI thread.
         
@@ -505,6 +512,13 @@ class ThreadManager:
             QTimer: Timer instance (keep reference to prevent GC)
         """
         _last_invoke_ts = [0.0]
+        timer_desc = description
+        if not timer_desc:
+            try:
+                timer_desc = getattr(func, "__qualname__", None) or func.__name__
+            except Exception:
+                timer_desc = "recurring_timer"
+
         def _invoke():
             try:
                 now = time.time()
@@ -517,7 +531,12 @@ class ThreadManager:
                     # expected gaps that should not spam warnings.
                     threshold_ms = max(100.0, float(interval_ms) * 2.0)
                     if gap_ms > threshold_ms and is_perf_metrics_enabled():
-                        logger.warning("[PERF] [TIMER] Large gap between recurring timer invocations: %.2fms (interval=%dms)", gap_ms, interval_ms)
+                        logger.warning(
+                            "[PERF] [TIMER] Large gap for %s: %.2fms (interval=%dms)",
+                            timer_desc,
+                            gap_ms,
+                            interval_ms,
+                        )
                 _last_invoke_ts[0] = now
                 func(*args, **(kwargs or {}))
             except Exception as e:
@@ -535,7 +554,7 @@ class ThreadManager:
                 self._resource_manager.register(
                     timer,
                     ResourceType.TIMER,
-                    f"Recurring timer ({interval_ms}ms)",
+                    f"Recurring timer ({interval_ms}ms) - {timer_desc}",
                     cleanup_handler=lambda t: t.stop()
                 )
             except Exception as e:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum, auto
 from typing import List, Optional, Dict, Any
 import os
 import time
@@ -19,7 +20,16 @@ from core.threading.manager import ThreadManager
 from utils.lockfree import TripleBuffer
 from utils.audio_capture import create_audio_capture, AudioCaptureConfig
 from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile, configure_overlay_widget_attributes
+
+
 from utils.profiler import profile
+
+
+class VisualizerMode(Enum):
+    """Visualization display modes for the Spotify visualizer."""
+    SPECTRUM = auto()  # Classic bar spectrum analyzer (default)
+    WAVEFORM = auto()  # Scrolling amplitude waveform
+    ABSTRACT = auto()  # Particle/geometric reactive visualization
 
 logger = get_logger(__name__)
 
@@ -484,19 +494,18 @@ class SpotifyVisualizerAudioWorker(QObject):
             mid_energy = max(0.0, (raw_mid - noise_floor * 0.4) * expansion)
             treble_energy = max(0.0, (raw_treble - noise_floor * 0.2) * expansion)
 
-            for i in range(bands):
-                dist = abs(i - center) / float(center) if center > 0 else 0.0
-                gradient = (1.0 - dist) ** 2 * 0.82 + 0.18
-                base = bass_energy * gradient
-                mid_contrib = mid_energy * (1.0 - abs(dist - 0.5) * 2) * 0.34
-                treble_contrib = treble_energy * dist * 0.25
-                edge_pop = 0.0
-                if low_resolution:
-                    edge_pop = min(0.45, 0.18 + drop_signal * 0.45)
-                arr[i] = (base + mid_contrib + treble_contrib) * (1.0 + dist * edge_pop)
-
+            # CENTER-OUT MIRRORED LAYOUT:
+            # - Ridge peaks at offset ±3 from center (bar 4 and 10 for 15 bars) = BASS
+            # - Center (bar 7) = VOCALS - most reactive, dips low with no vocals  
+            # - Edges (bars 0,1,14,13) = KICKS/DRUMS/PERCUSSION
+            #
+            # Shape template defines the static ridge shape:
+            # Index:  0     1     2     3     4     5     6     7     8     9    10    11    12    13    14
+            # Offset: 7     6     5     4     3     2     1     0     1     2     3     4     5     6     7
+            # Role:  edge  edge  edge slope PEAK slope shld  CTR  shld slope PEAK slope edge  edge  edge
+            # Bar 4 (index 4, offset 3) = PEAK, Bar 3 (index 3, offset 4) = slope below peak
             profile_template = np.array(
-                [0.25, 0.34, 0.468, 0.602, 0.546, 0.366, 0.234, 0.13, 0.234, 0.366, 0.546, 0.602, 0.468, 0.34, 0.25],
+                [0.10, 0.15, 0.25, 0.50, 1.0, 0.45, 0.25, 0.08, 0.25, 0.45, 1.0, 0.50, 0.25, 0.15, 0.10],
                 dtype="float32",
             )
             if bands != profile_template.size:
@@ -505,9 +514,43 @@ class SpotifyVisualizerAudioWorker(QObject):
                 profile_shape = np.interp(x, xp, profile_template)
             else:
                 profile_shape = profile_template.copy()
-            profile_shape /= max(1e-3, profile_shape.max())
-            shape_scale = 0.45 + 0.55 * profile_shape
-            arr *= shape_scale
+            
+            # Compute overall energy level from FFT
+            # Balance: bass drives ridge but with headroom, mids drive center
+            overall_energy = (bass_energy * 0.9 + mid_energy * 0.6 + treble_energy * 0.35)
+            overall_energy = max(0.0, min(1.8, overall_energy))
+            
+            # Apply shape template scaled by overall energy
+            for i in range(bands):
+                offset = abs(i - center)
+                
+                # Base value from shape template - this defines the ridge shape
+                base = profile_shape[i] * overall_energy
+                
+                # Ridge peak (offset 3) gets bass boost - moderate to allow dips
+                if offset == 3:
+                    base = base * 1.15 + bass_energy * 0.35
+                # Offset 4 is the slope BELOW the peak
+                elif offset == 4:
+                    base = base * 0.82
+                
+                # Center bar (offset 0) is MOST REACTIVE to vocals
+                # High sensitivity for both peaks AND dips
+                if offset == 0:
+                    vocal_drive = mid_energy * 4.0  # Very high multiplier for reactivity
+                    base = vocal_drive * 0.90 + base * 0.10
+                
+                # Shoulder bars (offset 1-2) taper toward center
+                if offset == 1:
+                    base = base * 0.52 + mid_energy * 0.22
+                if offset == 2:
+                    base = base * 0.58 + bass_energy * 0.12
+                
+                # Edge bars (offset 5+) get percussion/treble - allow higher peaks
+                if offset >= 5:
+                    base = base * 0.65 + treble_energy * 0.4 * (offset - 4)
+                
+                arr[i] = base
 
             if low_resolution:
                 # bias peaks toward bars around +/-3 from center, soften center slightly
@@ -618,14 +661,8 @@ class SpotifyVisualizerAudioWorker(QObject):
         except Exception:
             return self._get_zero_bars()
 
-        # V1.2 STYLE SMOOTHING with aggressive decay for 0.1-1.0 range
-        # decay_rate = 0.7 means bars drop 30% per frame - much faster drops
-        smoothing = 0.5
-        if low_resolution:
-            smoothing = max(0.04, smoothing * 0.12)
-        decay_rate = 0.15  # Extremely aggressive decay for visible drops
-        if low_resolution:
-            decay_rate = max(0.02, decay_rate * 0.15)
+        # REACTIVE SMOOTHING: Fast attack, very aggressive decay for visible drops
+        decay_rate = 0.35  # Much lower = much faster fall, makes drops very visible
         
         # CRITICAL: Detect pause/resume gaps (e.g., after settings dialog)
         # If more than 2 seconds have passed, reset bar_history to avoid
@@ -644,38 +681,11 @@ class SpotifyVisualizerAudioWorker(QObject):
             bar_history.fill(0.0)
             hold_timers.fill(0)
         
-        drop_threshold = self._drop_threshold
-        drop_decay = self._drop_decay_fast
-        hold_frames = self._drop_hold_frames
-        snap_fraction = getattr(self, "_drop_snap_fraction", 0.45)
-        if low_resolution:
-            drop_threshold = max(0.00005, drop_threshold * 0.1)
-            drop_decay = max(0.015, drop_decay * 0.12)
-            hold_frames = max(1, int(round(hold_frames * 0.1)))
-            snap_fraction = max(0.02, min(0.18, snap_fraction - 0.3))
-        snap_min = 0.05
-        if low_resolution:
-            snap_min = 0.02
-        snap_max = 0.95
-        snap_fraction = max(snap_min, min(snap_max, snap_fraction))
-        if hold_frames < 1:
-            hold_frames = 1
-        drop_threshold = max(0.0, drop_threshold)
-        drop_decay_min = 0.1
-        if low_resolution:
-            drop_decay_min = 0.015
-        drop_decay = max(drop_decay_min, min(0.95, drop_decay))
-        drop_gain = 1.0
-        if low_resolution:
-            drop_gain = 9.0
-        drop_relief = drop_signal if low_resolution else 0.0
-        if low_resolution and drop_relief > 0.01:
-            drop_scale = min(0.95, 0.12 + drop_relief * 1.55)
-            span = max(1, center)
-            for i in range(bands):
-                dist = abs(i - center) / float(span)
-                emphasis = max(0.2, 1.0 - dist * 1.25)
-                arr[i] *= max(0.0, 1.0 - drop_scale * emphasis)
+        # Drop detection parameters - work for ALL resolutions
+        drop_threshold = 0.01  # Very low threshold = detect all drops
+        drop_decay = 0.25  # Very fast decay during hold period
+        hold_frames = 2  # Short hold to allow quick recovery
+        snap_fraction = 0.15  # Snap down very aggressively on big drops
 
         for i in range(bands):
             target = arr[i]
@@ -683,54 +693,29 @@ class SpotifyVisualizerAudioWorker(QObject):
             hold = hold_timers[i]
             
             if target > current:
-                # Rise quickly
-                new_val = current + (target - current) * (1.0 - smoothing * 0.5)
-                hold_timers[i] = max(hold - 1, 0)
+                # ATTACK: Rise quickly toward target
+                attack_speed = 0.85  # 85% of the way to target per frame
+                new_val = current + (target - current) * attack_speed
+                hold_timers[i] = 0
             else:
-                effective_target = target
-                if low_resolution and current > target:
-                    drop_relief = ((current - target) * 0.6) + 0.02
-                    drop_relief = min(drop_relief, max(0.0, target * 0.85))
-                    effective_target = max(0.0, target - drop_relief)
-                # Fall with aggressive decay; if drop is large trigger hold
-                drop = (current - effective_target) * drop_gain
+                # DECAY: Fall toward target with smooth decay
+                drop = current - target
+                
                 if drop > drop_threshold:
+                    # Big drop detected - snap down faster
                     hold_timers[i] = hold_frames
-                    snap_target = max(effective_target, current * snap_fraction)
-                    extra = (current - effective_target) * 0.55
-                    new_val = max(effective_target, snap_target - extra)
+                    new_val = current * snap_fraction + target * (1.0 - snap_fraction)
                 elif hold > 0:
-                    next_hold = hold - 1
-                    hold_timers[i] = next_hold
-                    phase = (hold_frames - next_hold) / max(1, hold_frames)
-                    dynamic_decay = drop_decay - (drop_decay - 0.35) * phase
-                    if low_resolution:
-                        dynamic_decay = max(0.015, dynamic_decay * 0.22)
-                    else:
-                        if dynamic_decay < 0.2:
-                            dynamic_decay = 0.2
-                    new_val = current * dynamic_decay
-                    if low_resolution:
-                        drop_pull = (current - effective_target) * drop_gain * 0.32
-                        new_val = max(effective_target, new_val - drop_pull)
+                    # In hold period after big drop - continue decaying
+                    hold_timers[i] = hold - 1
+                    new_val = current * drop_decay
+                    if new_val < target:
+                        new_val = target
                 else:
+                    # Normal decay toward target
                     new_val = current * decay_rate
-                    if new_val < effective_target:
-                        new_val = effective_target
-                    if low_resolution and current > effective_target:
-                        base_pull = (current - effective_target) * drop_gain * 0.2
-                        new_val = max(effective_target, new_val - base_pull)
-                    elif low_resolution and current > target:
-                        new_val = max(target, new_val - (current - target) * 0.25)
-
-                if low_resolution and current > effective_target:
-                    # Additional low-res drop shaping to encourage deeper falls without flicker.
-                    drop_ratio = (current - effective_target) / max(current, 1e-3)
-                    blend = max(0.2, min(0.8, 1.0 - 0.65 * drop_ratio))
-                    new_val = effective_target + (new_val - effective_target) * blend
-                    extra_decay = max(0.0, min(1.0, drop_ratio * 1.6))
-                    if extra_decay > 0.0:
-                        new_val = max(target, new_val - drop * 0.3 * extra_decay)
+                    if new_val < target:
+                        new_val = target
             
             arr[i] = new_val
             bar_history[i] = new_val
@@ -757,7 +742,7 @@ class SpotifyVisualizerAudioWorker(QObject):
         except Exception:
             floor_baseline = 2.0
         base_headroom = 0.45 + 0.1 * max(0.0, min(4.0, floor_baseline))
-        headroom_scale = max(0.7, min(1.0, base_headroom))
+        _ = max(0.7, min(1.0, base_headroom))  # headroom_scale kept for future tuning
         if peak_val > running_peak:
             running_peak += (peak_val - running_peak) * 0.32
         else:
@@ -768,11 +753,11 @@ class SpotifyVisualizerAudioWorker(QObject):
             running_peak *= max(0.95, 1.0 - drop_relief * 0.08)
         running_peak = max(0.18, min(1.35, running_peak))
         self._running_peak = running_peak
-        target_peak = (1.18 if low_resolution else 0.9) * headroom_scale
-        if running_peak > target_peak * 1.05 and peak_val > 0.0:
+        # Target peak of 1.0 allows full range for reactivity
+        target_peak = 1.0
+        if running_peak > target_peak * 1.1 and peak_val > 0.0:
+            # Only normalize if significantly over target
             normalization = target_peak / max(running_peak, 1e-3)
-            if low_resolution:
-                normalization *= (1.0 - min(0.22, drop_relief * 0.5))
             arr *= normalization
 
         np.clip(arr, 0.0, 1.0, out=arr)
@@ -1166,6 +1151,18 @@ class SpotifyVisualizerWidget(QWidget):
         self._ghosting_enabled: bool = True
         self._ghost_alpha: float = 0.4
         self._ghost_decay_rate: float = 0.4
+
+        # Visualization mode (Spectrum, Waveform, Abstract)
+        self._vis_mode: VisualizerMode = VisualizerMode.SPECTRUM
+        
+        # Waveform mode state - stores amplitude history for scrolling display
+        self._waveform_history: List[float] = []
+        self._waveform_max_samples: int = 128  # Number of samples to display
+        
+        # Abstract mode state - particles that react to audio
+        self._abstract_particles: List[Dict[str, float]] = []
+        self._abstract_max_particles: int = 50
+        self._abstract_last_spawn_ts: float = 0.0
 
         # Behavioural gating
         self._spotify_playing: bool = False
@@ -2288,27 +2285,194 @@ class SpotifyVisualizerWidget(QWidget):
             painter.setBrush(fill)
             painter.setPen(border)
 
-            for i in range(count):
-                x = bar_x[i]
-                value = max(0.0, min(1.0, self._display_bars[i]))
-                if value <= 0.0:
-                    continue
-                boosted = value * 1.2
-                if boosted > 1.0:
-                    boosted = 1.0
-                active = int(round(boosted * segments))
-                if active <= 0:
-                    if self._spotify_playing and value > 0.0:
-                        active = 1
-                    else:
+            # Dispatch to appropriate rendering based on visualization mode
+            if self._vis_mode == VisualizerMode.WAVEFORM:
+                self._paint_waveform(painter, inner, fill, border)
+            elif self._vis_mode == VisualizerMode.ABSTRACT:
+                self._paint_abstract(painter, inner, fill, border)
+            else:
+                # Default: SPECTRUM mode - classic bar visualization
+                for i in range(count):
+                    x = bar_x[i]
+                    value = max(0.0, min(1.0, self._display_bars[i]))
+                    if value <= 0.0:
                         continue
-                active = min(active, max_segments)
-                for s in range(active):
-                    y = seg_y[s]
-                    bar_rect = QRect(x, y, bar_width, seg_height)
-                    painter.drawRect(bar_rect)
+                    boosted = value * 1.2
+                    if boosted > 1.0:
+                        boosted = 1.0
+                    active = int(round(boosted * segments))
+                    if active <= 0:
+                        if self._spotify_playing and value > 0.0:
+                            active = 1
+                        else:
+                            continue
+                    active = min(active, max_segments)
+                    for s in range(active):
+                        y = seg_y[s]
+                        bar_rect = QRect(x, y, bar_width, seg_height)
+                        painter.drawRect(bar_rect)
 
             painter.end()
+
+    def _paint_waveform(self, painter: QPainter, rect: QRect, fill: QColor, border: QColor) -> None:
+        """Render waveform visualization - scrolling amplitude line.
+        
+        Shows audio amplitude over time as a continuous waveform that scrolls
+        from right to left, similar to an oscilloscope display.
+        """
+        # Get current overall amplitude from display bars
+        if self._display_bars:
+            current_amp = sum(self._display_bars) / len(self._display_bars)
+        else:
+            current_amp = 0.0
+        
+        # Add to history (scrolls left)
+        self._waveform_history.append(current_amp)
+        if len(self._waveform_history) > self._waveform_max_samples:
+            self._waveform_history = self._waveform_history[-self._waveform_max_samples:]
+        
+        if len(self._waveform_history) < 2:
+            return
+        
+        # Calculate drawing parameters
+        w = rect.width()
+        h = rect.height()
+        center_y = rect.y() + h // 2
+        amplitude_scale = h * 0.45  # Use 90% of height for waveform
+        
+        # Draw waveform as connected line segments
+        painter.setPen(border)
+        sample_count = len(self._waveform_history)
+        x_step = w / max(1, self._waveform_max_samples - 1)
+        
+        for i in range(1, sample_count):
+            x1 = rect.x() + int((i - 1) * x_step)
+            x2 = rect.x() + int(i * x_step)
+            
+            # Mirror waveform around center
+            amp1 = self._waveform_history[i - 1]
+            amp2 = self._waveform_history[i]
+            
+            y1_top = center_y - int(amp1 * amplitude_scale)
+            y1_bot = center_y + int(amp1 * amplitude_scale)
+            y2_top = center_y - int(amp2 * amplitude_scale)
+            y2_bot = center_y + int(amp2 * amplitude_scale)
+            
+            # Draw top half
+            painter.drawLine(x1, y1_top, x2, y2_top)
+            # Draw bottom half (mirrored)
+            painter.drawLine(x1, y1_bot, x2, y2_bot)
+        
+        # Draw center line
+        painter.setPen(QColor(fill.red(), fill.green(), fill.blue(), 80))
+        painter.drawLine(rect.x(), center_y, rect.x() + w, center_y)
+
+    def _paint_abstract(self, painter: QPainter, rect: QRect, fill: QColor, border: QColor) -> None:
+        """Render abstract visualization - reactive particles/geometric shapes.
+        
+        Creates floating particles that spawn based on audio energy and
+        drift upward with varying sizes based on frequency content.
+        """
+        now = time.time()
+        
+        # Get audio energy metrics
+        if self._display_bars:
+            total_energy = sum(self._display_bars) / len(self._display_bars)
+            # Bass energy from center bars (ridge peaks)
+            center = len(self._display_bars) // 2
+            bass_energy = 0.0
+            if center >= 3:
+                bass_bars = [self._display_bars[center - 3], self._display_bars[center + 3]] if center + 3 < len(self._display_bars) else []
+                bass_energy = sum(bass_bars) / max(1, len(bass_bars))
+        else:
+            total_energy = 0.0
+            bass_energy = 0.0
+        
+        # Spawn new particles based on energy
+        spawn_rate = 0.02 + total_energy * 0.08  # Faster spawning with more energy
+        if now - self._abstract_last_spawn_ts > spawn_rate and len(self._abstract_particles) < self._abstract_max_particles:
+            self._abstract_last_spawn_ts = now
+            # Spawn particle at random x position, bottom of widget
+            particle = {
+                'x': rect.x() + random.random() * rect.width(),
+                'y': float(rect.y() + rect.height()),
+                'vx': (random.random() - 0.5) * 2.0,  # Horizontal drift
+                'vy': -1.0 - total_energy * 3.0,  # Upward velocity based on energy
+                'size': 3.0 + bass_energy * 12.0,  # Size based on bass
+                'alpha': 0.8 + total_energy * 0.2,
+                'life': 1.0,
+                'decay': 0.015 + random.random() * 0.01,
+            }
+            self._abstract_particles.append(particle)
+        
+        # Update and draw particles
+        surviving_particles = []
+        for p in self._abstract_particles:
+            # Update position
+            p['x'] += p['vx']
+            p['y'] += p['vy']
+            p['life'] -= p['decay']
+            
+            # Add some wobble based on current energy
+            p['vx'] += (random.random() - 0.5) * total_energy * 0.5
+            
+            # Keep if still alive and in bounds
+            if p['life'] > 0 and p['y'] > rect.y() - 20:
+                surviving_particles.append(p)
+                
+                # Draw particle
+                alpha = int(p['alpha'] * p['life'] * 255)
+                size = int(p['size'] * (0.5 + p['life'] * 0.5))
+                
+                particle_color = QColor(fill.red(), fill.green(), fill.blue(), alpha)
+                painter.setBrush(particle_color)
+                painter.setPen(Qt.PenStyle.NoPen)
+                
+                # Draw as circle
+                painter.drawEllipse(
+                    int(p['x'] - size // 2),
+                    int(p['y'] - size // 2),
+                    size,
+                    size
+                )
+        
+        self._abstract_particles = surviving_particles
+        
+        # Draw energy indicator at bottom
+        indicator_height = int(total_energy * rect.height() * 0.1)
+        if indicator_height > 0:
+            painter.setBrush(QColor(fill.red(), fill.green(), fill.blue(), 60))
+            painter.drawRect(
+                rect.x(),
+                rect.y() + rect.height() - indicator_height,
+                rect.width(),
+                indicator_height
+            )
+
+    def set_visualization_mode(self, mode: VisualizerMode) -> None:
+        """Set the visualization display mode.
+        
+        Args:
+            mode: VisualizerMode.SPECTRUM, WAVEFORM, or ABSTRACT
+        """
+        if mode != self._vis_mode:
+            self._vis_mode = mode
+            # Reset mode-specific state
+            self._waveform_history.clear()
+            self._abstract_particles.clear()
+            logger.info("[SPOTIFY_VIS] Visualization mode changed to %s", mode.name)
+
+    def get_visualization_mode(self) -> VisualizerMode:
+        """Get the current visualization display mode."""
+        return self._vis_mode
+
+    def cycle_visualization_mode(self) -> VisualizerMode:
+        """Cycle to the next visualization mode and return it."""
+        modes = list(VisualizerMode)
+        current_idx = modes.index(self._vis_mode)
+        next_idx = (current_idx + 1) % len(modes)
+        self.set_visualization_mode(modes[next_idx])
+        return self._vis_mode
 
     def _log_perf_snapshot(self, reset: bool = False) -> None:
         """Emit a PERF metrics snapshot for the current tick/paint window.

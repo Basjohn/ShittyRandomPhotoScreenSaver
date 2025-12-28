@@ -6476,3 +6476,37 @@
 2025-12-28 01:49:54,375 - pytest_runner - INFO - pytest finished with exit code 5
 2025-12-28 01:50:24,873 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_visualizer_distribution.py']
 2025-12-28 01:50:25,411 - pytest_runner - INFO - pytest finished with exit code 5
+2025-12-28 18:08:31,230 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', '-k', 'manual_floor or sensitivity']
+2025-12-28 18:08:31,960 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-28 18:08:48,155 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', '-k', 'manual_floor or sensitivity', '-vv']
+2025-12-28 18:08:48,863 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-28 18:10:14,687 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', '-k', 'manual_floor or sensitivity', '-vv']
+2025-12-28 18:10:15,378 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-28 18:10:36,778 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', '-k', 'manual_floor or sensitivity', '-vv']
+2025-12-28 18:10:37,466 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-28 18:11:37,452 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', '-k', 'manual_floor or sensitivity', '-vv']
+2025-12-28 18:11:38,148 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-28 18:15:19,089 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', '-k', 'manual_floor or sensitivity', '-vv']
+2025-12-28 18:15:19,692 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-28 18:15:28,336 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', '-k', 'manual_floor or sensitivity', '-vv']
+2025-12-28 18:15:28,915 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-28 18:24:08,261 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', '-k', 'manual_floor or sensitivity', '-vv']
+2025-12-28 18:24:09,214 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-28 18:25:28,513 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', '-k', 'manual_floor or sensitivity', '-vv']
+2025-12-28 18:25:29,493 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-28 18:26:27,708 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', '-k', 'manual_floor or sensitivity', '-vv']
+2025-12-28 18:26:28,706 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-28 18:26:54,077 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', '-k', 'manual_floor or sensitivity', '-vv']
+2025-12-28 18:26:54,988 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-28 18:30:57,715 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_spotify_visualizer_widget.py', '-k', 'manual_floor or sensitivity', '-vv']
+2025-12-28 18:30:58,492 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-28 21:10:55,525 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_visualizer_distribution.py', '-v', '--tb=short']
+2025-12-28 21:10:56,267 - pytest_runner - INFO - pytest finished with exit code 5
+2025-12-28 21:28:31,733 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_visualizer_modes.py', '-v', '--tb=short']
+2025-12-28 21:28:32,440 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-28 21:28:37,965 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_visualizer_modes.py', '-v', '--tb=short']
+2025-12-28 21:28:38,560 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-28 21:29:41,291 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_visualizer_modes.py', '-v', '--tb=short']
+2025-12-28 21:29:41,985 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-28 21:29:47,400 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_visualizer_modes.py::TestVisualizerModeEnum', '-v']
+2025-12-28 21:29:47,836 - pytest_runner - INFO - pytest finished with exit code 0

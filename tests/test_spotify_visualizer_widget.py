@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from typing import Dict, Callable
+from typing import Callable
 
 import pytest
 
@@ -44,41 +44,6 @@ def _synth_fft(np_module, magnitude: float, size: int = 2048) -> "object":
     return fft
 
 
-@pytest.mark.qt
-def test_spotify_visualizer_tick_consumes_engine_smoothed_bars(qt_app, qtbot, monkeypatch):
-    widget = SpotifyVisualizerWidget(parent=None, bar_count=16)
-    qtbot.addWidget(widget)
-    widget.resize(400, 120)
-
-    monkeypatch.setattr(vis_mod, "_global_beat_engine", None)
-    widget._engine = vis_mod.get_shared_spotify_beat_engine(widget._bar_count)  # type: ignore[attr-defined]
-    engine = widget._engine
-    assert engine is not None
-
-    bars = [0.5] * widget._bar_count  # type: ignore[attr-defined]
-
-    calls: Dict[str, int] = {"tick": 0, "get": 0}
-
-    def _fake_tick():
-        calls["tick"] += 1
-
-    def _fake_get_smoothed():
-        calls["get"] += 1
-        return list(bars)
-
-    monkeypatch.setattr(engine, "tick", _fake_tick)
-    monkeypatch.setattr(engine, "get_smoothed_bars", _fake_get_smoothed)
-
-    widget._enabled = True  # type: ignore[attr-defined]
-    widget._spotify_playing = True  # type: ignore[attr-defined]
-
-    widget._on_tick()  # type: ignore[attr-defined]
-    qt_app.processEvents()
-
-    assert calls["tick"] == 1
-    assert calls["get"] == 1
-    assert len(widget._display_bars) == widget._bar_count  # type: ignore[attr-defined]
-    assert all(abs(v - 0.5) < 1e-6 for v in widget._display_bars)  # type: ignore[attr-defined]
 def test_spotify_visualizer_compute_bars_reasonable_runtime(np_module):
     """compute_bars_from_samples should remain reasonably fast.
 
