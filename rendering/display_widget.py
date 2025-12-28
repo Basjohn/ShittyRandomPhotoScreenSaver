@@ -1,6 +1,6 @@
 """Display widget for OpenGL/software rendered screensaver overlays."""
 from collections import defaultdict
-from typing import Optional, Iterable, Tuple, Callable, Dict, Any, List
+from typing import Optional, Iterable, Tuple, Callable, Dict, Any, List, Set
 import logging
 import time
 import weakref
@@ -55,7 +55,7 @@ from rendering.input_handler import InputHandler
 from rendering.transition_controller import TransitionController
 from rendering.image_presenter import ImagePresenter
 from rendering.multi_monitor_coordinator import get_coordinator, MultiMonitorCoordinator
-from core.logging.logger import get_logger, is_verbose_logging
+from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.logging.overlay_telemetry import record_overlay_ready
 from core.resources.manager import ResourceManager
 from core.settings.settings_manager import SettingsManager
@@ -192,6 +192,12 @@ class DisplayWidget(QWidget):
         self._current_transition: Optional[BaseTransition] = None
         self._current_transition_overlay_key: Optional[str] = None
         self._current_transition_started_at: float = 0.0
+        self._current_transition_name: Optional[str] = None
+        self._current_transition_first_run: bool = False
+        self._warmed_transition_types: Set[str] = set()
+        self._prewarmed_transition_types: Set[str] = set()
+        self._last_transition_name: Optional[str] = None
+        self._last_transition_finished_wall_ts: float = 0.0
         self._screen = None  # Store screen reference for DPI
         self._device_pixel_ratio = 1.0  # DPI scaling factor
         self._initial_mouse_pos = None  # Track mouse movement for exit
@@ -1258,6 +1264,13 @@ class DisplayWidget(QWidget):
                         except Exception:
                             pass
 
+                    self._warm_transition_if_needed(
+                        comp,
+                        transition.__class__.__name__,
+                        self.previous_pixmap,
+                        new_pixmap,
+                    )
+
                     # Store pending finish args
                     self._pending_transition_finish_args = (processed_pixmap, original_pixmap, image_path, False, None)
                     
@@ -1289,6 +1302,17 @@ class DisplayWidget(QWidget):
                         self._current_transition = transition
                         self._current_transition_overlay_key = overlay_key
                         self._current_transition_started_at = time.monotonic()
+                        self._current_transition_name = transition.__class__.__name__
+                        self._current_transition_first_run = (
+                            self._current_transition_name not in self._warmed_transition_types
+                        )
+                        if is_perf_metrics_enabled():
+                            logger.info(
+                                "[PERF] [TRANSITION] Start name=%s first_run=%s overlay=%s",
+                                self._current_transition_name,
+                                self._current_transition_first_run,
+                                overlay_key or "<none>",
+                            )
                         if overlay_key:
                             self._overlay_timeouts[overlay_key] = self._current_transition_started_at
                         # Raise widgets SYNCHRONOUSLY
@@ -1310,6 +1334,8 @@ class DisplayWidget(QWidget):
                         logger.warning("Transition failed to start, displaying immediately")
                         transition.cleanup()
                         self._current_transition = None
+                        self._current_transition_name = None
+                        self._current_transition_first_run = False
                         self._pending_transition_finish_args = None
                         use_transition = False
                 else:
@@ -1356,6 +1382,12 @@ class DisplayWidget(QWidget):
         self._current_transition_overlay_key = None
         self._current_transition_started_at = 0.0
         self._current_transition = None
+        if self._current_transition_name:
+            self._warmed_transition_types.add(self._current_transition_name)
+            self._last_transition_name = self._current_transition_name
+        self._current_transition_name = None
+        self._current_transition_first_run = False
+        self._last_transition_finished_wall_ts = time.time()
 
         # Update pixmap state
         self.current_pixmap = pan_preview or new_pixmap
@@ -1389,21 +1421,43 @@ class DisplayWidget(QWidget):
             pass
         self.update()
 
-        logger.debug("Transition completed, image displayed: %s", image_path)
+        try:
+            logger.debug("Transition completed, image displayed: %s", image_path)
+        except Exception:
+            pass
         self.image_displayed.emit(image_path)
         self._pending_transition_finish_args = None
 
-    def _start_transition_watchdog(self, overlay_key: Optional[str], transition: BaseTransition) -> None:
-        """Start transition watchdog - delegates to TransitionController if available."""
-        if self._transition_controller is not None:
-            try:
-                self._transition_controller._start_watchdog(overlay_key, transition)
-                return
-            except Exception:
-                pass
-        # Fallback: use local timer
-        self._transition_watchdog_overlay_key = overlay_key
-        self._transition_watchdog_transition = transition.__class__.__name__
+    def _warm_transition_if_needed(
+        self,
+        compositor: Optional[GLCompositorWidget],
+        transition_name: str,
+        old_pixmap: Optional[QPixmap],
+        new_pixmap: Optional[QPixmap],
+    ) -> None:
+        """Warm per-transition GL resources to avoid first-run stalls."""
+        if (
+            compositor is None
+            or transition_name in self._prewarmed_transition_types
+            or new_pixmap is None
+            or new_pixmap.isNull()
+        ):
+            return
+
+        warm_old = old_pixmap
+        if warm_old is None or warm_old.isNull():
+            warm_old = new_pixmap
+
+        try:
+            warmed = compositor.warm_transition_resources(transition_name, warm_old, new_pixmap)
+            if warmed:
+                self._prewarmed_transition_types.add(transition_name)
+        except Exception:
+            logger.debug(
+                "[GL COMPOSITOR] warm_transition_resources failed for %s",
+                transition_name,
+                exc_info=True,
+            )
 
     def _cancel_transition_watchdog(self) -> None:
         """Cancel transition watchdog."""
@@ -3370,3 +3424,30 @@ class DisplayWidget(QWidget):
             return bool(ct and ct.is_running())
         except Exception:
             return False
+
+    def get_transition_snapshot(self) -> Dict[str, Any]:
+        """Return lightweight metrics about the active transition, if any."""
+        now_wall = time.time()
+        snapshot: Dict[str, Any] = {
+            "running": False,
+            "name": None,
+            "elapsed": None,
+            "first_run": False,
+            "idle_age": None,
+            "last_transition": self._last_transition_name,
+        }
+        transition = self._current_transition
+        if transition is not None:
+            try:
+                running = transition.is_running()
+            except Exception:
+                running = False
+            if running:
+                snapshot["running"] = True
+                snapshot["name"] = self._current_transition_name
+                snapshot["first_run"] = self._current_transition_first_run
+                if self._current_transition_started_at > 0.0:
+                    snapshot["elapsed"] = max(0.0, time.monotonic() - self._current_transition_started_at)
+        if not snapshot["running"] and self._last_transition_finished_wall_ts > 0.0:
+            snapshot["idle_age"] = max(0.0, now_wall - self._last_transition_finished_wall_ts)
+        return snapshot

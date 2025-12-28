@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import os
 import time
 import math
 import threading
 import logging
+import random
 
 from PySide6.QtCore import QObject, QRect, Qt
 from PySide6.QtGui import QColor, QPainter, QPaintEvent
@@ -1231,6 +1232,9 @@ class SpotifyVisualizerWidget(QWidget):
         # screensaver exits abruptly), so logs still capture its effective
         # update/paint rate alongside compositor and animation metrics.
         self._perf_last_log_ts: Optional[float] = None
+        self._dt_spike_threshold_ms: float = 42.0
+        self._dt_spike_log_cooldown: float = 0.75
+        self._last_tick_spike_log_ts: float = 0.0
 
         # Geometry cache for paintEvent to avoid per-frame recomputation of
         # bar/segment layout. Rebuilt on resize or when bar_count/segments
@@ -1256,6 +1260,11 @@ class SpotifyVisualizerWidget(QWidget):
         # event loop.
         self._base_max_fps: float = 90.0
         self._transition_max_fps: float = 60.0
+        self._transition_hot_start_fps: float = 50.0
+        self._transition_spinup_window: float = 2.0
+        self._idle_fps_boost_delay: float = 5.0
+        self._idle_max_fps: float = 100.0
+        self._current_timer_interval_ms: int = 16
         self._last_gpu_fade_sent: float = -1.0
         self._last_gpu_geom: Optional[QRect] = None
 
@@ -1268,6 +1277,9 @@ class SpotifyVisualizerWidget(QWidget):
         # unavailable or disabled. Defaults to False so the GPU overlay
         # remains the primary path in OpenGL mode.
         self._software_visualizer_enabled: bool = False
+
+        # Tick source coordination
+        self._using_animation_ticks: bool = False
 
         self._setup_ui()
 
@@ -1283,6 +1295,8 @@ class SpotifyVisualizerWidget(QWidget):
             engine.set_thread_manager(thread_manager)
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to propagate ThreadManager to shared beat engine", exc_info=True)
+        if self._enabled:
+            self._ensure_tick_source()
 
     def set_software_visualizer_enabled(self, enabled: bool) -> None:
         """Enable or disable the QWidget-based software visualiser path.
@@ -1327,6 +1341,8 @@ class SpotifyVisualizerWidget(QWidget):
             self._anim_listener_id = listener_id
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to attach to AnimationManager", exc_info=True)
+        finally:
+            self._ensure_tick_source()
 
     def detach_from_animation_manager(self) -> None:
         am = self._animation_manager
@@ -1338,6 +1354,7 @@ class SpotifyVisualizerWidget(QWidget):
                 logger.debug("[SPOTIFY_VIS] Failed to detach from AnimationManager", exc_info=True)
         self._animation_manager = None
         self._anim_listener_id = None
+        self._ensure_tick_source()
 
     def set_shadow_config(self, config) -> None:
         self._shadow_config = config
@@ -1566,8 +1583,11 @@ class SpotifyVisualizerWidget(QWidget):
         if self._thread_manager is not None and self._bars_timer is None:
             try:
                 self._bars_timer = self._thread_manager.schedule_recurring(16, self._on_tick)
+                self._current_timer_interval_ms = 16
             except Exception:
                 self._bars_timer = None
+        elif self._animation_manager is not None and self._anim_listener_id is not None:
+            self._using_animation_ticks = True
 
         # Coordinate the visualiser card fade-in with the primary overlay
         # group so it joins the main wave on this display. Only show if the
@@ -1630,6 +1650,7 @@ class SpotifyVisualizerWidget(QWidget):
         except Exception:
             pass
         self._bars_timer = None
+        self._using_animation_ticks = False
 
         # Emit a concise PERF summary for this widget's activity during the
         # last enabled period so we can see its effective update/paint rate
@@ -1869,6 +1890,82 @@ class SpotifyVisualizerWidget(QWidget):
         self._last_visual_smooth_ts = now_ts
         return changed
 
+    def _get_transition_context(self, parent: Optional[QWidget]) -> Dict[str, Any]:
+        """Return lightweight transition metrics from the parent DisplayWidget."""
+        ctx: Dict[str, Any] = {
+            "running": False,
+            "name": None,
+            "elapsed": None,
+            "first_run": False,
+            "idle_age": None,
+        }
+        if parent is None:
+            return ctx
+        snapshot = None
+        if hasattr(parent, "get_transition_snapshot"):
+            try:
+                snapshot = parent.get_transition_snapshot()
+            except Exception:
+                snapshot = None
+        if isinstance(snapshot, dict):
+            ctx.update(snapshot)
+        elif hasattr(parent, "has_running_transition") and parent.has_running_transition():
+            ctx["running"] = True
+            ctx["name"] = None
+            ctx["elapsed"] = None
+        return ctx
+
+    def _resolve_max_fps(self, transition_ctx: Dict[str, Any]) -> float:
+        """Determine the FPS cap based on transition activity."""
+        max_fps = self._base_max_fps
+        if transition_ctx.get("running"):
+            elapsed = float(transition_ctx.get("elapsed") or 0.0)
+            if elapsed <= self._transition_spinup_window:
+                max_fps = self._transition_hot_start_fps
+            else:
+                max_fps = self._transition_max_fps
+        else:
+            idle_age = transition_ctx.get("idle_age")
+            if idle_age is not None and idle_age >= self._idle_fps_boost_delay:
+                max_fps = min(self._idle_max_fps, self._base_max_fps + 10.0)
+        return max(15.0, float(max_fps))
+
+    def _update_timer_interval(self, max_fps: float) -> None:
+        """Retune the ThreadManager recurring timer interval if needed."""
+        interval_ms = max(4, int(round(1000.0 / max_fps)))
+        self._current_timer_interval_ms = interval_ms
+        if interval_ms == self._current_timer_interval_ms:
+            return
+        # Add a tiny jitter so we don't align perfectly with compositor vsync.
+        jitter = random.randint(0, 2) if interval_ms >= 8 else 0
+        new_interval = interval_ms + jitter
+        timer = self._bars_timer
+        if timer is not None:
+            try:
+                timer.setInterval(new_interval)
+                self._current_timer_interval_ms = new_interval
+            except Exception:
+                pass
+
+    def _log_tick_spike(self, dt: float, transition_ctx: Dict[str, Any]) -> None:
+        """Log dt spikes with surrounding transition context."""
+        now = time.time()
+        if (now - self._last_tick_spike_log_ts) < self._dt_spike_log_cooldown:
+            return
+        self._last_tick_spike_log_ts = now
+        running = transition_ctx.get("running")
+        name = transition_ctx.get("name")
+        elapsed = transition_ctx.get("elapsed")
+        idle_age = transition_ctx.get("idle_age")
+        logger.warning(
+            "[PERF] [SPOTIFY_VIS] Tick dt spike %.2fms (running=%s name=%s elapsed=%s idle_age=%s)",
+            dt * 1000.0,
+            running,
+            name or "<none>",
+            f"{elapsed:.2f}" if isinstance(elapsed, (int, float)) else "<n/a>",
+            f"{idle_age:.2f}" if isinstance(idle_age, (int, float)) else "<n/a>",
+        )
+
     def _on_tick(self) -> None:
         """Periodic UI tick - PERFORMANCE OPTIMIZED.
 
@@ -1893,21 +1990,22 @@ class SpotifyVisualizerWidget(QWidget):
             return
 
         now_ts = time.time()
-
-        # PERFORMANCE: FPS cap at the START - skip all work if rate-limited
-        # This is critical because _on_tick is called by multiple sources
-        max_fps = self._base_max_fps
         parent = self.parent()
-        if parent is not None and hasattr(parent, "has_running_transition"):
-            if parent.has_running_transition():
-                max_fps = self._transition_max_fps
+        transition_ctx = self._get_transition_context(parent)
+        max_fps = self._resolve_max_fps(transition_ctx)
+        self._update_timer_interval(max_fps)
 
         min_dt = 1.0 / max_fps if max_fps > 0.0 else 0.0
         last = self._last_update_ts
-        if last >= 0.0 and (now_ts - last) < min_dt:
+        dt_since_last = 0.0
+        if last >= 0.0:
+            dt_since_last = now_ts - last
+        if last >= 0.0 and dt_since_last < min_dt:
             # Rate limited - skip this tick entirely
             return
         self._last_update_ts = now_ts
+        if dt_since_last * 1000.0 >= self._dt_spike_threshold_ms:
+            self._log_tick_spike(dt_since_last, transition_ctx)
 
         # PERFORMANCE: Inline PERF metrics with gap filtering
         if is_perf_metrics_enabled():

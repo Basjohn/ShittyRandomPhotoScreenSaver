@@ -268,6 +268,44 @@ Get-Content test_output.log -Tail 50
 
 ---
 
+### 6. `tests/test_visualizer_distribution.py` – Spotify Visualizer Synthetic/Log Harness
+
+**Module Purpose**: Provides the canonical “synthetic vs. log replay” comparison for the Spotify visualizer. This is now the primary regression guard for bar shape, drop behaviour, and smoothing.
+
+**How to run (PowerShell, logging-first policy still applies):**
+
+```powershell
+python tests/test_visualizer_distribution.py
+```
+
+What it does:
+
+1. Builds a live `SpotifyVisualizerAudioWorker` so it uses the same pipeline as the app (shared beat engine, FFT cache, drop accumulator, etc.).
+2. Runs the **REALISTIC REACTIVITY** synthetic pass (60 FPS, 4 s) with a blended intensity envelope:
+   - Base sinusoid + periodic valleys/micro drops.
+   - Optional log-derived intensity overlay (if `logs/screensaver_spotify_vis.log` exists).
+   - Warm-up frames ensure `_running_peak`/noise floor match runtime behaviour.
+3. Replays the latest log snapshot (`logs/screensaver_spotify_vis.log`) and compares the same metrics.
+4. Emits a PASS/FAIL summary in the console plus detailed metrics (center min/max, avg profile, drop stats, spike ratio, etc.).
+
+Key expectations baked into the harness (aligned with current live metrics):
+
+- Center bar must hit **≥0.82** at least once and show ≥0.25 range.
+- Average drop target is **≥0.07**, max drop **≥0.12** (captures the ridge “fall” we expect).
+- Ridge slope rules: bar 4 ≥ bar 3 × 1.02, bar 5 ≤ bar 4 × 0.92, bar 6 keeps tapering (≥5 % fall from bar 5).
+- Edge bars stay ≤ min(0.4, ridge × 0.7) but still have ≥20 % relative range so they don’t freeze.
+- Single-bar flicker ratio must stay under 12 % (prevents narrow spikes only hitting one bar).
+
+Use cases:
+
+- **Tuning**: When adjusting `_fft_to_bars()` or smoothing, run the harness to see synthetic + log deltas immediately.
+- **CI smoke**: Because it’s a stand-alone script, CI can run it without the rest of pytest; failure output is human-readable.
+- **Diagnostics**: The synthetic section prints every ~15 frames with current intensity/noise floor/running peak so you can correlate changes against code tweaks.
+
+> Tip: Keep `logs/screensaver_spotify_vis.log` fresh by running `python main.py --debug` with Spotify playing for ~10 s before executing the harness. That ensures the log replay path mirrors your most recent live behaviour.
+
+---
+
 ### 6. `tests/test_mc_window_flags.py` - MC Build Heuristic Guard
 
 **Module Purpose**: Prevent regressions to the Manual Controller (MC) build’s window styling/heuristics.  

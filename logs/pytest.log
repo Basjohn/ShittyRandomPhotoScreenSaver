@@ -6472,3 +6472,7 @@
 2025-12-27 21:54:32,439 - pytest_runner - INFO - pytest finished with exit code 5
 2025-12-27 21:54:47,948 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_visualizer_distribution.py', '-k', 'reactivity_realistic', '-vv', '-s']
 2025-12-27 21:54:48,641 - pytest_runner - INFO - pytest finished with exit code 5
+2025-12-28 01:49:53,635 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_visualizer_distribution.py']
+2025-12-28 01:49:54,375 - pytest_runner - INFO - pytest finished with exit code 5
+2025-12-28 01:50:24,873 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_visualizer_distribution.py']
+2025-12-28 01:50:25,411 - pytest_runner - INFO - pytest finished with exit code 5

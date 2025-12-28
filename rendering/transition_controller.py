@@ -101,6 +101,26 @@ class TransitionController(QObject):
         """Get the current running transition."""
         return self._current_transition
     
+    def get_active_transition_name(self) -> Optional[str]:
+        """Return the active transition's class name, if any."""
+        transition = self._current_transition
+        if transition is None:
+            return None
+        try:
+            return transition.__class__.__name__
+        except Exception:
+            return None
+    
+    def get_active_transition_elapsed_s(self) -> Optional[float]:
+        """Return seconds since the current transition started, if running."""
+        transition = self._current_transition
+        if transition is None or self._transition_started_at <= 0.0:
+            return None
+        try:
+            return max(0.0, time.monotonic() - self._transition_started_at)
+        except Exception:
+            return None
+    
     @property
     def is_running(self) -> bool:
         """Check if a transition is currently running."""

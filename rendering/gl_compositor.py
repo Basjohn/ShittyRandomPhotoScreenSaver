@@ -13,7 +13,8 @@ compositor over time.
 from __future__ import annotations
 
 from dataclasses import dataclass, field  # Still needed for _GLPipelineState
-from typing import Optional, Callable
+from typing import Dict, Optional, Callable
+
 import ctypes
 import time
 
@@ -200,6 +201,54 @@ class _GLPipelineState:
     initialized: bool = False
 
 
+@dataclass
+class _AnimationRunMetrics:
+    """Lightweight animation tick telemetry for compositor-driven transitions."""
+
+    name: str
+    duration_ms: int
+    target_fps: int
+    dt_spike_threshold_ms: float
+    start_ts: float = field(default_factory=time.time)
+    last_tick_ts: Optional[float] = None
+    frame_count: int = 0
+    min_dt: float = 0.0
+    max_dt: float = 0.0
+    last_progress: float = 0.0
+    dt_spike_count: int = 0
+    last_spike_log_ts: float = 0.0
+
+    def record_tick(self, progress: float) -> Optional[float]:
+        """Record an animation tick and return dt in seconds if available."""
+        now = time.time()
+        dt = None
+        if self.last_tick_ts is not None:
+            dt = now - self.last_tick_ts
+            if dt > 0.0:
+                if self.min_dt == 0.0 or dt < self.min_dt:
+                    self.min_dt = dt
+                if dt > self.max_dt:
+                    self.max_dt = dt
+        self.last_tick_ts = now
+        self.last_progress = progress
+        self.frame_count += 1
+        return dt
+
+    def should_log_spike(self, dt: float, cooldown_s: float = 0.4) -> bool:
+        """Return True when this dt exceeds the spike threshold and cooldown."""
+        if dt * 1000.0 < self.dt_spike_threshold_ms:
+            return False
+        now = time.time()
+        if self.last_spike_log_ts and (now - self.last_spike_log_ts) < cooldown_s:
+            return False
+        self.last_spike_log_ts = now
+        self.dt_spike_count += 1
+        return True
+
+    def elapsed_seconds(self) -> float:
+        return max(0.0, time.time() - self.start_ts)
+
+
 class GLCompositorWidget(QOpenGLWidget):
     """Single GL compositor that renders the base image and transitions.
 
@@ -264,6 +313,8 @@ class GLCompositorWidget(QOpenGLWidget):
         self._current_anim_id: Optional[str] = None
         # Default easing is QUAD_IN_OUT; callers can override per-transition.
         self._current_easing: EasingCurve = EasingCurve.QUAD_IN_OUT
+        self._current_anim_metrics: Optional[_AnimationRunMetrics] = None
+        self._anim_dt_spike_threshold_ms: float = 72.0
 
         # Phase 1 GLSL pipeline scaffolding. The actual OpenGL resource
         # creation is deferred to initializeGL so that a valid context is
@@ -325,8 +376,8 @@ class GLCompositorWidget(QOpenGLWidget):
         self._spotify_vis_enabled: bool = False
         self._spotify_vis_rect: Optional[QRect] = None
         self._spotify_vis_bars = None
-        self._spotify_vis_bar_count: int = 0
-        self._spotify_vis_segments: int = 0
+        self._spotify_vis_bar_count: int = 10
+        self._spotify_vis_segments: int = 5
         self._spotify_vis_fill_color: Optional[QColor] = None
         self._spotify_vis_border_color: Optional[QColor] = None
         self._spotify_vis_fade: float = 0.0
@@ -336,6 +387,22 @@ class GLCompositorWidget(QOpenGLWidget):
         # This ensures proper compositing without Z-order issues.
         self._dimming_enabled: bool = False
         self._dimming_opacity: float = 0.0  # 0.0-1.0
+
+        # Mapping of transition controller class names to shader program keys.
+        self._transition_program_map: Dict[str, str] = {
+            "GLCompositorCrossfadeTransition": GLProgramCache.CROSSFADE,
+            "GLCompositorSlideTransition": GLProgramCache.SLIDE,
+            "GLCompositorWipeTransition": GLProgramCache.WIPE,
+            "GLCompositorBlockFlipTransition": GLProgramCache.BLOCK_FLIP,
+            "GLCompositorBlindsTransition": GLProgramCache.BLINDS,
+            "GLCompositorDiffuseTransition": GLProgramCache.DIFFUSE,
+            "GLCompositorPeelTransition": GLProgramCache.PEEL,
+            "GLCompositorBlockSpinTransition": GLProgramCache.WARP,  # Uses warp helpers for card flip
+            "GLCompositorRainDropsTransition": GLProgramCache.RAINDROPS,
+            "GLCompositorWarpTransition": GLProgramCache.WARP,
+            "GLCompositorCrumbleTransition": GLProgramCache.CRUMBLE,
+            "GLCompositorParticleTransition": GLProgramCache.PARTICLE,
+        }
 
     # ------------------------------------------------------------------
     # Public API used by DisplayWidget / transitions
@@ -567,6 +634,7 @@ class GLCompositorWidget(QOpenGLWidget):
         self._raindrops = None
         self._crumble = None
         self._particle = None
+        self._finalize_animation_metrics(outcome="cleared")
 
     def _handle_no_old_image(self, new_pixmap: QPixmap, on_finished: Optional[Callable[[], None]], name: str) -> bool:
         """Handle case where there's no old image - show new image immediately. Returns True if handled."""
@@ -601,6 +669,7 @@ class GLCompositorWidget(QOpenGLWidget):
             except Exception:
                 pass
             self._current_anim_id = None
+            self._finalize_animation_metrics(outcome="cancelled")
 
     def _start_transition_animation(
         self,
@@ -609,6 +678,7 @@ class GLCompositorWidget(QOpenGLWidget):
         animation_manager: AnimationManager,
         update_callback: Callable[[float], None],
         on_complete: Callable[[], None],
+        transition_label: Optional[str] = None,
     ) -> str:
         """Start a transition animation and return the animation ID."""
         self._animation_manager = animation_manager
@@ -616,15 +686,105 @@ class GLCompositorWidget(QOpenGLWidget):
         self._cancel_current_animation()
         duration_sec = max(0.001, duration_ms / 1000.0)
         frame_state = self._start_frame_pacing(duration_sec)
+        profiled_callback = self._wrap_animation_update(
+            update_callback,
+            self._begin_animation_metrics(
+                transition_label or "transition",
+                duration_ms,
+                animation_manager,
+            ),
+        )
         anim_id = animation_manager.animate_custom(
             duration=duration_sec,
             easing=easing,
-            update_callback=update_callback,
+            update_callback=profiled_callback,
             on_complete=on_complete,
             frame_state=frame_state,
         )
         self._current_anim_id = anim_id
         return anim_id
+
+    def _begin_animation_metrics(
+        self,
+        transition_label: str,
+        duration_ms: int,
+        animation_manager: AnimationManager,
+    ) -> Optional[_AnimationRunMetrics]:
+        """Start tracking per-frame dt metrics for the active animation."""
+        if not is_perf_metrics_enabled():
+            self._current_anim_metrics = None
+            return None
+        target_fps = getattr(animation_manager, "fps", 60)
+        metrics = _AnimationRunMetrics(
+            name=transition_label,
+            duration_ms=int(duration_ms),
+            target_fps=int(target_fps or 60),
+            dt_spike_threshold_ms=self._anim_dt_spike_threshold_ms,
+        )
+        self._current_anim_metrics = metrics
+        return metrics
+
+    def _wrap_animation_update(
+        self,
+        update_callback: Callable[[float], None],
+        metrics: Optional[_AnimationRunMetrics],
+    ) -> Callable[[float], None]:
+        """Wrap the animation update callback to record timing metrics."""
+        if metrics is None:
+            return update_callback
+
+        def _instrumented(progress: float, *, _inner=update_callback) -> None:
+            dt = metrics.record_tick(progress)
+            if dt is not None and metrics.should_log_spike(dt):
+                self._log_animation_spike(metrics, dt)
+            _inner(progress)
+
+        return _instrumented
+
+    def _log_animation_spike(
+        self,
+        metrics: _AnimationRunMetrics,
+        dt_seconds: float,
+    ) -> None:
+        """Log a dt spike with transition context."""
+        if not is_perf_metrics_enabled():
+            return
+        dt_ms = dt_seconds * 1000.0
+        logger.warning(
+            "[PERF] [GL ANIM] Tick dt spike %.2fms (name=%s frame=%d progress=%.2f target_fps=%d)",
+            dt_ms,
+            metrics.name,
+            metrics.frame_count,
+            metrics.last_progress,
+            metrics.target_fps,
+        )
+
+    def _finalize_animation_metrics(self, outcome: str) -> None:
+        """Emit summary metrics for the last animation run."""
+        metrics = self._current_anim_metrics
+        self._current_anim_metrics = None
+        if metrics is None or not is_perf_metrics_enabled():
+            return
+
+        elapsed_s = metrics.elapsed_seconds()
+        duration_ms = elapsed_s * 1000.0
+        avg_fps = (metrics.frame_count / elapsed_s) if elapsed_s > 0 else 0.0
+        min_dt_ms = metrics.min_dt * 1000.0 if metrics.min_dt > 0.0 else 0.0
+        max_dt_ms = metrics.max_dt * 1000.0 if metrics.max_dt > 0.0 else 0.0
+
+        logger.info(
+            "[PERF] [GL ANIM] %s metrics: duration=%.1fms, frames=%d, avg_fps=%.1f, "
+            "dt_min=%.2fms, dt_max=%.2fms, spikes=%d, target_fps=%d, outcome=%s",
+            metrics.name.capitalize(),
+            duration_ms,
+            metrics.frame_count,
+            avg_fps,
+            min_dt_ms,
+            max_dt_ms,
+            metrics.dt_spike_count,
+            metrics.target_fps,
+            outcome,
+        )
 
     def _complete_transition(
         self,
@@ -637,6 +797,7 @@ class GLCompositorWidget(QOpenGLWidget):
         try:
             self._profiler.complete(name, viewport_size=(self.width(), self.height()))
             self._stop_frame_pacing()
+            self._finalize_animation_metrics(outcome="complete")
             if release_textures:
                 try:
                     self._release_transition_textures()
@@ -661,6 +822,223 @@ class GLCompositorWidget(QOpenGLWidget):
                     logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
         except Exception as e:
             logger.debug("[GL COMPOSITOR] %s complete handler failed: %s", name.capitalize(), e, exc_info=True)
+
+    def _ensure_gl_pipeline_ready(self) -> bool:
+        """Ensure the GLSL pipeline is initialised and ready for use."""
+        if gl is None or self._gl_disabled_for_session:
+            return False
+        if self._gl_pipeline is not None and self._gl_pipeline.initialized:
+            return True
+
+        try:
+            self.makeCurrent()
+        except Exception:
+            return False
+
+        try:
+            if self._gl_pipeline is None:
+                self._gl_pipeline = _GLPipelineState()
+                self._use_shaders = False
+                self._gl_disabled_for_session = False
+            self._init_gl_pipeline()
+            return self._gl_pipeline is not None and self._gl_pipeline.initialized
+        except Exception:
+            logger.debug("[GL COMPOSITOR] Failed to initialise GL pipeline", exc_info=True)
+            return False
+        finally:
+            try:
+                self.doneCurrent()
+            except Exception:
+                pass
+
+    def _with_temp_state(self, attr_name: str, state, prep_fn: Callable[[], bool]) -> bool:
+        """Assign a temporary state, invoke prep_fn, then restore the original state."""
+        original = getattr(self, attr_name, None)
+        setattr(self, attr_name, state)
+        try:
+            return prep_fn()
+        finally:
+            setattr(self, attr_name, original)
+
+    def _estimate_grid_dimensions(self, reference_pixmap: QPixmap, min_cols: int = 4) -> tuple[int, int]:
+        """Estimate reasonable grid dimensions for warmup based on widget size/aspect."""
+        width = max(1, self.width())
+        height = max(1, self.height())
+        if width <= 1 or height <= 1:
+            width = max(width, reference_pixmap.width())
+            height = max(height, reference_pixmap.height())
+
+        cols = max(min_cols, int(round(width / 320.0)))
+        rows = max(2, int(round(cols * (height / float(max(1, width))))))
+        return cols, rows
+
+    def _warm_transition_state(
+        self,
+        transition_name: str,
+        old_pixmap: Optional[QPixmap],
+        new_pixmap: QPixmap,
+    ) -> bool:
+        """Prime transition-specific state so heavy prep work is done before first run."""
+        warm_old = old_pixmap or new_pixmap
+        if warm_old is None or warm_old.isNull() or new_pixmap.isNull():
+            return False
+
+        warmers: Dict[str, Callable[[QPixmap, QPixmap], bool]] = {
+            "GLCompositorBlockFlipTransition": self._warm_blockflip_state,
+            "GLCompositorBlockSpinTransition": self._warm_blockspin_state,
+            "GLCompositorBlindsTransition": self._warm_blinds_state,
+            "GLCompositorDiffuseTransition": self._warm_diffuse_state,
+            "GLCompositorPeelTransition": self._warm_peel_state,
+            "GLCompositorWarpTransition": self._warm_warp_state,
+            "GLCompositorRainDropsTransition": self._warm_raindrops_state,
+            "GLCompositorCrumbleTransition": self._warm_crumble_state,
+            "GLCompositorParticleTransition": self._warm_particle_state,
+        }
+
+        warmer = warmers.get(transition_name)
+        if warmer is None or gl is None or self._gl_disabled_for_session:
+            return True
+
+        try:
+            self.makeCurrent()
+        except Exception:
+            return False
+
+        try:
+            self._ensure_texture_manager()
+            return warmer(warm_old, new_pixmap)
+        except Exception:
+            logger.debug(
+                "[GL COMPOSITOR] Transition state warmup failed for %s",
+                transition_name,
+                exc_info=True,
+            )
+            return False
+        finally:
+            try:
+                self.doneCurrent()
+            except Exception:
+                pass
+
+    def _warm_blockflip_state(self, old_pixmap: QPixmap, new_pixmap: QPixmap) -> bool:
+        cols, rows = self._estimate_grid_dimensions(new_pixmap, min_cols=6)
+        state = BlockFlipState(
+            old_pixmap=old_pixmap,
+            new_pixmap=new_pixmap,
+            cols=cols,
+            rows=rows,
+            region=None,
+            direction=SlideDirection.LEFT,
+        )
+        return self._with_temp_state("_blockflip", state, self._prepare_blockflip_textures)
+
+    def _warm_blockspin_state(self, old_pixmap: QPixmap, new_pixmap: QPixmap) -> bool:
+        state = BlockSpinState(
+            old_pixmap=old_pixmap,
+            new_pixmap=new_pixmap,
+            direction=SlideDirection.LEFT,
+        )
+        return self._with_temp_state("_blockspin", state, self._prepare_blockspin_textures)
+
+    def _warm_blinds_state(self, old_pixmap: QPixmap, new_pixmap: QPixmap) -> bool:
+        cols, rows = self._estimate_grid_dimensions(new_pixmap, min_cols=8)
+        state = BlindsState(
+            old_pixmap=old_pixmap,
+            new_pixmap=new_pixmap,
+            cols=cols,
+            rows=rows,
+        )
+        return self._with_temp_state("_blinds", state, self._prepare_blinds_textures)
+
+    def _warm_diffuse_state(self, old_pixmap: QPixmap, new_pixmap: QPixmap) -> bool:
+        cols, rows = self._estimate_grid_dimensions(new_pixmap, min_cols=8)
+        state = DiffuseState(
+            old_pixmap=old_pixmap,
+            new_pixmap=new_pixmap,
+            cols=cols,
+            rows=rows,
+            shape_mode=0,
+        )
+        return self._with_temp_state("_diffuse", state, self._prepare_diffuse_textures)
+
+    def _warm_peel_state(self, old_pixmap: QPixmap, new_pixmap: QPixmap) -> bool:
+        state = PeelState(
+            old_pixmap=old_pixmap,
+            new_pixmap=new_pixmap,
+            direction=SlideDirection.LEFT,
+            strips=8,
+        )
+        return self._with_temp_state("_peel", state, self._prepare_peel_textures)
+
+    def _warm_warp_state(self, old_pixmap: QPixmap, new_pixmap: QPixmap) -> bool:
+        state = WarpState(old_pixmap=old_pixmap, new_pixmap=new_pixmap)
+        return self._with_temp_state("_warp", state, self._prepare_warp_textures)
+
+    def _warm_raindrops_state(self, old_pixmap: QPixmap, new_pixmap: QPixmap) -> bool:
+        state = RaindropsState(old_pixmap=old_pixmap, new_pixmap=new_pixmap)
+        return self._with_temp_state("_raindrops", state, self._prepare_raindrops_textures)
+
+    def _warm_crumble_state(self, old_pixmap: QPixmap, new_pixmap: QPixmap) -> bool:
+        state = CrumbleState(
+            old_pixmap=old_pixmap,
+            new_pixmap=new_pixmap,
+            seed=0.0,
+            piece_count=8.0,
+            crack_complexity=1.0,
+            mosaic_mode=False,
+            weight_mode=0.0,
+        )
+        return self._with_temp_state("_crumble", state, self._prepare_crumble_textures)
+
+    def _warm_particle_state(self, old_pixmap: QPixmap, new_pixmap: QPixmap) -> bool:
+        state = ParticleState(
+            old_pixmap=old_pixmap,
+            new_pixmap=new_pixmap,
+        )
+        return self._with_temp_state("_particle", state, self._prepare_particle_textures)
+
+    def _ensure_texture_manager(self) -> GLTextureManager:
+        if self._texture_manager is None:
+            self._texture_manager = GLTextureManager()
+        return self._texture_manager
+
+    def _warm_pixmap_textures(
+        self,
+        old_pixmap: Optional[QPixmap],
+        new_pixmap: Optional[QPixmap],
+    ) -> bool:
+        """Upload/cache the provided pixmaps so textures are ready when needed."""
+        if gl is None or self._gl_disabled_for_session:
+            return False
+
+        if (old_pixmap is None or old_pixmap.isNull()) and (new_pixmap is None or new_pixmap.isNull()):
+            return False
+
+        try:
+            self.makeCurrent()
+        except Exception:
+            return False
+
+        try:
+            manager = self._ensure_texture_manager()
+            if not manager.is_initialized() and not manager.initialize():
+                return False
+
+            success = True
+
+            if old_pixmap is not None and not old_pixmap.isNull():
+                success = bool(manager.get_or_create_texture(old_pixmap)) and success
+            if new_pixmap is not None and not new_pixmap.isNull():
+                success = bool(manager.get_or_create_texture(new_pixmap)) and success
+            return success
+        except Exception:
+            logger.debug("[GL COMPOSITOR] Failed to warm pixmap textures", exc_info=True)
+            return False
+        finally:
+            try:
+                self.doneCurrent()
+            except Exception:
+                pass
 
     def start_crossfade(
         self,
@@ -717,6 +1095,7 @@ class GLCompositorWidget(QOpenGLWidget):
             duration_ms, easing, animation_manager,
             self._on_warp_update,
             lambda: self._on_warp_complete(on_finished),
+            transition_label="warp",
         )
 
     def start_raindrops(
@@ -751,6 +1130,7 @@ class GLCompositorWidget(QOpenGLWidget):
             duration_ms, easing, animation_manager,
             self._on_raindrops_update,
             lambda: self._on_raindrops_complete(on_finished),
+            transition_label="raindrops",
         )
 
     # NOTE: start_shuffle_shader() and start_shooting_stars() removed - these transitions are retired.
@@ -783,6 +1163,7 @@ class GLCompositorWidget(QOpenGLWidget):
             duration_ms, easing, animation_manager,
             self._on_wipe_update,
             lambda: self._on_wipe_complete(on_finished),
+            transition_label="wipe",
         )
 
     def start_slide(
@@ -820,6 +1201,7 @@ class GLCompositorWidget(QOpenGLWidget):
             duration_ms, easing, animation_manager,
             self._on_slide_update,
             lambda: self._on_slide_complete(on_finished),
+            transition_label="slide",
         )
 
     def start_peel(
@@ -854,6 +1236,7 @@ class GLCompositorWidget(QOpenGLWidget):
             duration_ms, easing, animation_manager,
             self._on_peel_update,
             lambda: self._on_peel_complete(on_finished),
+            transition_label="peel",
         )
 
     def start_block_flip(
@@ -902,6 +1285,7 @@ class GLCompositorWidget(QOpenGLWidget):
             duration_ms, easing, animation_manager,
             _blockflip_profiled_update,
             lambda: self._on_blockflip_complete(on_finished),
+            transition_label="blockflip",
         )
 
     def start_block_spin(
@@ -934,6 +1318,7 @@ class GLCompositorWidget(QOpenGLWidget):
             duration_ms, easing, animation_manager,
             self._on_blockspin_update,
             lambda: self._on_blockspin_complete(on_finished),
+            transition_label="blockspin",
         )
 
     def start_diffuse(
@@ -987,6 +1372,7 @@ class GLCompositorWidget(QOpenGLWidget):
             duration_ms, easing, animation_manager,
             _diffuse_profiled_update,
             lambda: self._on_diffuse_complete(on_finished),
+            transition_label="diffuse",
         )
 
     def start_blinds(
@@ -1033,6 +1419,7 @@ class GLCompositorWidget(QOpenGLWidget):
             duration_ms, easing, animation_manager,
             _blinds_profiled_update,
             lambda: self._on_blinds_complete(on_finished),
+            transition_label="blinds",
         )
 
     def start_crumble(
@@ -1081,6 +1468,7 @@ class GLCompositorWidget(QOpenGLWidget):
             duration_ms, easing, animation_manager,
             _crumble_update,
             lambda: self._on_crumble_complete(on_finished),
+            transition_label="crumble",
         )
 
     def start_particle(
@@ -1163,6 +1551,7 @@ class GLCompositorWidget(QOpenGLWidget):
             duration_ms, easing, animation_manager,
             _particle_update,
             lambda: self._on_particle_complete(on_finished),
+            transition_label="particle",
         )
 
     # ------------------------------------------------------------------
@@ -1986,58 +2375,46 @@ void main() {
         not affect the caller.
         """
 
-        if gl is None or self._gl_disabled_for_session:
-            return
-        if old_pixmap is None and (new_pixmap is None or new_pixmap.isNull()):
+        if not self._ensure_gl_pipeline_ready():
             return
 
-        # Ensure pipeline exists before touching GL resources.
-        if self._gl_pipeline is None:
-            try:
-                self.makeCurrent()
-            except Exception:
-                return
-            try:
-                try:
-                    self._gl_pipeline = _GLPipelineState()
-                    self._use_shaders = False
-                    self._gl_disabled_for_session = False
-                    self._init_gl_pipeline()
-                except Exception:
-                    logger.debug("[GL COMPOSITOR] warm_shader_textures failed to init pipeline", exc_info=True)
-                    return
-            finally:
-                try:
-                    self.doneCurrent()
-                except Exception:
-                    pass
+        self._warm_pixmap_textures(old_pixmap, new_pixmap)
 
-        if self._gl_pipeline is None or not self._gl_pipeline.initialized:
-            return
+    def warm_transition_resources(
+        self,
+        transition_name: str,
+        old_pixmap: Optional[QPixmap],
+        new_pixmap: Optional[QPixmap],
+    ) -> bool:
+        """Warm shader program + textures for a specific transition type."""
+        if new_pixmap is None or new_pixmap.isNull():
+            return False
 
-        try:
-            self.makeCurrent()
-        except Exception:
-            return
+        warm_old = old_pixmap
+        if warm_old is None or warm_old.isNull():
+            warm_old = new_pixmap
 
-        try:
-            if self._texture_manager is None:
-                return
+        if not self._ensure_gl_pipeline_ready():
+            return False
+
+        program_key = self._transition_program_map.get(transition_name)
+        if program_key:
             try:
-                if old_pixmap is not None and not old_pixmap.isNull():
-                    self._texture_manager.get_or_create_texture(old_pixmap)
+                cache = get_program_cache()
+                if not cache.is_compiled(program_key):
+                    cache.get_program(program_key)
             except Exception:
-                logger.debug("[GL COMPOSITOR] warm_shader_textures failed for old pixmap", exc_info=True)
-            try:
-                if new_pixmap is not None and not new_pixmap.isNull():
-                    self._texture_manager.get_or_create_texture(new_pixmap)
-            except Exception:
-                logger.debug("[GL COMPOSITOR] warm_shader_textures failed for new pixmap", exc_info=True)
-        finally:
-            try:
-                self.doneCurrent()
-            except Exception:
-                pass
+                logger.debug(
+                    "[GL COMPOSITOR] Failed to precompile shader program for %s",
+                    transition_name,
+                    exc_info=True,
+                )
+
+        textures_ready = self._warm_pixmap_textures(warm_old, new_pixmap)
+        state_ready = textures_ready and self._warm_transition_state(transition_name, warm_old, new_pixmap)
+        if not state_ready:
+            logger.debug("[GL COMPOSITOR] Transition warmup incomplete for %s", transition_name)
+        return state_ready
 
     # NOTE: PBO and texture upload methods moved to GLTextureManager
     # See rendering/gl_programs/texture_manager.py
