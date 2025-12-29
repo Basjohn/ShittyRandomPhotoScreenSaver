@@ -2986,3 +2986,469 @@
 2025-12-29 04:49:19 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.959 Bars: [0.43 0.41 0.47 0.95 1.00 1.00 0.63 0.56 0.63 1.00 1.00 0.95 0.47 0.41 0.43]
 2025-12-29 04:49:19 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
 2025-12-29 04:49:20 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.137 Bars: [0.04 0.14 0.40 1.00 1.00 1.00 0.72 0.62 0.72 1.00 1.00 1.00 0.40 0.14 0.04]
+2025-12-29 05:03:05 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2025-12-29 05:03:05 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 279.93ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:06 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 112.38ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:07 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:07 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:07 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 276.11ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:07 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 277.11ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:07 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:07 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:08 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-29 05:03:08 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-29 05:03:08 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:08 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-29 05:03:08 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-29 05:03:08 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 49.04ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:08 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 48.54ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:08 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:09 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 73.48ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:09 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 73.48ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:09 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:10 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:10 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.03ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:10 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.04ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:10 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=3192.5ms, frames=96, avg_fps=30.1, dt_min=12.78ms, dt_max=86.29ms, bar_count=15
+2025-12-29 05:03:10 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=1.00ms, min=-1.50ms, max=278.43ms
+2025-12-29 05:03:10 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:10 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:10 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=3495.9ms, frames=107, avg_fps=30.6, dt_min=11.57ms, dt_max=85.29ms, bar_count=15
+2025-12-29 05:03:10 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=30.47ms, min=-0.56ms, max=283.95ms
+2025-12-29 05:03:11 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:11 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:12 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 597.66ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:12 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 597.66ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:12 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:12 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:13 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:13 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:14 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 47.59ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:14 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 46.66ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:14 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:14 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:15 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 45.28ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:15 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 44.30ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:15 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:15 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=2973.0ms, frames=164, avg_fps=55.2, dt_min=14.69ms, dt_max=50.29ms, bar_count=15
+2025-12-29 05:03:15 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:15 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=3282.4ms, frames=181, avg_fps=55.1, dt_min=14.65ms, dt_max=51.29ms, bar_count=15
+2025-12-29 05:03:16 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 44.88ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:16 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 57.98ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:16 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:16 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:17 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:17 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:18 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:18 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:19 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 341.84ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:19 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 341.34ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:20 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 65.74ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:20 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 65.74ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:20 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:20 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:21 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.88ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:21 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 45.42ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:21 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:21 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:22 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-29 05:03:22 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-29 05:03:22 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:22 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] Shader bars snapshot: count=15, min=0.0000, max=0.0000
+2025-12-29 05:03:22 - widgets.spotify_bars_gl_overlay - DEBUG    - [SPOTIFY_VIS] paintGL path: shader
+2025-12-29 05:03:22 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.55ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:22 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.60ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:22 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:23 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 63.86ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:23 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 64.90ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:23 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Speeding
+2025-12-29 05:03:23 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=False) track=Speeding
+2025-12-29 05:03:24 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.631 Bars: [0.05 0.13 0.33 0.83 1.00 0.95 0.57 0.50 0.57 0.95 1.00 0.83 0.33 0.13 0.05]
+2025-12-29 05:03:24 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 47.06ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:24 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 47.58ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2025-12-29 05:03:24 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=False) track=Speeding
+2025-12-29 05:03:24 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:24 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=5010.3ms, frames=186, avg_fps=37.1, dt_min=12.44ms, dt_max=89.37ms, bar_count=15
+2025-12-29 05:03:24 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.913 Bars: [0.04 0.10 0.26 0.64 0.87 0.69 0.40 0.35 0.40 0.69 0.87 0.64 0.26 0.10 0.04]
+2025-12-29 05:03:24 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=5008.5ms, frames=188, avg_fps=37.5, dt_min=12.44ms, dt_max=86.76ms, bar_count=15
+2025-12-29 05:03:25 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.778 Bars: [0.44 0.38 0.38 0.69 0.91 0.74 0.45 0.40 0.45 0.74 0.91 0.69 0.38 0.38 0.44]
+2025-12-29 05:03:25 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:25 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.795 Bars: [0.19 0.21 0.29 0.61 0.83 0.66 0.39 0.35 0.39 0.66 0.83 0.61 0.29 0.21 0.19]
+2025-12-29 05:03:25 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:26 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.486 Bars: [0.04 0.13 0.34 0.88 1.00 0.98 0.57 0.50 0.57 0.98 1.00 0.88 0.34 0.13 0.04]
+2025-12-29 05:03:26 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.236 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2025-12-29 05:03:26 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:26 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.748 Bars: [0.51 0.43 0.39 0.66 0.86 0.69 0.42 0.38 0.42 0.69 0.86 0.66 0.39 0.43 0.51]
+2025-12-29 05:03:26 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:27 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.953 Bars: [0.04 0.10 0.27 0.69 0.94 0.76 0.46 0.42 0.46 0.76 0.94 0.69 0.27 0.10 0.04]
+2025-12-29 05:03:27 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:27 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.431 Bars: [0.16 0.17 0.26 0.55 0.73 0.59 0.36 0.34 0.36 0.59 0.73 0.55 0.26 0.17 0.16]
+2025-12-29 05:03:27 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:28 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.837 Bars: [0.21 0.24 0.36 0.79 1.00 0.85 0.51 0.46 0.51 0.85 1.00 0.79 0.36 0.24 0.21]
+2025-12-29 05:03:28 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.52ms (running=True name=GLCompositorCrumbleTransition elapsed=0.12 idle_age=<n/a>)
+2025-12-29 05:03:28 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.62ms (running=True name=GLCompositorCrumbleTransition elapsed=0.05 idle_age=<n/a>)
+2025-12-29 05:03:28 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:28 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.734 Bars: [0.83 0.66 0.48 0.63 0.80 0.63 0.38 0.34 0.38 0.63 0.80 0.63 0.48 0.66 0.83]
+2025-12-29 05:03:28 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:29 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.03ms (running=True name=GLCompositorCrumbleTransition elapsed=1.14 idle_age=<n/a>)
+2025-12-29 05:03:29 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.32ms (running=True name=GLCompositorCrumbleTransition elapsed=1.27 idle_age=<n/a>)
+2025-12-29 05:03:29 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:29 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:29 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=10039.5ms, frames=438, avg_fps=43.6, dt_min=12.19ms, dt_max=89.37ms, bar_count=15
+2025-12-29 05:03:29 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=155.96ms, min=-1.50ms, max=382.61ms
+2025-12-29 05:03:29 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=10035.7ms, frames=437, avg_fps=43.5, dt_min=11.82ms, dt_max=86.76ms, bar_count=15
+2025-12-29 05:03:29 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=155.96ms, min=-1.02ms, max=382.61ms
+2025-12-29 05:03:30 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.49ms (running=True name=GLCompositorCrumbleTransition elapsed=1.95 idle_age=<n/a>)
+2025-12-29 05:03:30 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.374 Bars: [0.04 0.12 0.31 0.81 1.00 0.93 0.56 0.50 0.56 0.93 1.00 0.81 0.31 0.12 0.04]
+2025-12-29 05:03:30 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 45.64ms (running=True name=GLCompositorCrumbleTransition elapsed=2.19 idle_age=<n/a>)
+2025-12-29 05:03:30 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:30 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:30 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 46.98ms (running=True name=GLCompositorCrumbleTransition elapsed=2.73 idle_age=<n/a>)
+2025-12-29 05:03:31 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.631 Bars: [0.05 0.13 0.35 0.91 1.00 1.00 0.62 0.54 0.62 1.00 1.00 0.91 0.35 0.13 0.05]
+2025-12-29 05:03:31 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:31 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.43ms (running=True name=GLCompositorCrumbleTransition elapsed=3.48 idle_age=<n/a>)
+2025-12-29 05:03:31 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 50.94ms (running=True name=GLCompositorCrumbleTransition elapsed=3.56 idle_age=<n/a>)
+2025-12-29 05:03:31 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:32 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.765 Bars: [0.23 0.26 0.41 0.94 1.00 1.00 0.60 0.53 0.60 1.00 1.00 0.94 0.41 0.26 0.23]
+2025-12-29 05:03:32 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 54.53ms (running=True name=GLCompositorCrumbleTransition elapsed=4.41 idle_age=<n/a>)
+2025-12-29 05:03:32 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:32 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 51.25ms (running=True name=GLCompositorCrumbleTransition elapsed=4.56 idle_age=<n/a>)
+2025-12-29 05:03:32 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:33 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.555 Bars: [0.04 0.11 0.31 0.80 1.00 0.91 0.55 0.49 0.55 0.91 1.00 0.80 0.31 0.11 0.04]
+2025-12-29 05:03:33 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 46.03ms (running=True name=GLCompositorCrumbleTransition elapsed=5.33 idle_age=<n/a>)
+2025-12-29 05:03:33 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:33 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:33 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 50.13ms (running=True name=GLCompositorCrumbleTransition elapsed=5.56 idle_age=<n/a>)
+2025-12-29 05:03:33 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.171 Bars: [0.19 0.22 0.32 0.71 0.96 0.77 0.46 0.42 0.46 0.77 0.96 0.71 0.32 0.22 0.19]
+2025-12-29 05:03:34 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 46.91ms (running=True name=GLCompositorCrumbleTransition elapsed=6.38 idle_age=<n/a>)
+2025-12-29 05:03:34 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:34 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:34 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.360 Bars: [0.11 0.20 0.45 1.00 1.00 1.00 0.83 0.73 0.83 1.00 1.00 1.00 0.45 0.20 0.11]
+2025-12-29 05:03:34 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.48ms (running=True name=GLCompositorCrumbleTransition elapsed=6.56 idle_age=<n/a>)
+2025-12-29 05:03:34 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=15041.6ms, frames=611, avg_fps=40.6, dt_min=12.19ms, dt_max=89.37ms, bar_count=15
+2025-12-29 05:03:34 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=18.13ms, min=-1.50ms, max=382.61ms
+2025-12-29 05:03:34 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=15038.3ms, frames=614, avg_fps=40.8, dt_min=11.82ms, dt_max=86.76ms, bar_count=15
+2025-12-29 05:03:34 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=18.69ms, min=-1.03ms, max=382.61ms
+2025-12-29 05:03:35 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:35 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 49.42ms (running=True name=GLCompositorCrumbleTransition elapsed=7.67 idle_age=<n/a>)
+2025-12-29 05:03:35 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 49.42ms (running=True name=GLCompositorCrumbleTransition elapsed=7.55 idle_age=<n/a>)
+2025-12-29 05:03:35 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:35 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.835 Bars: [0.05 0.12 0.31 0.77 1.00 0.85 0.52 0.48 0.52 0.85 1.00 0.77 0.31 0.12 0.05]
+2025-12-29 05:03:36 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:36 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.97ms (running=True name=GLCompositorCrumbleTransition elapsed=8.34 idle_age=<n/a>)
+2025-12-29 05:03:36 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.98ms (running=True name=GLCompositorCrumbleTransition elapsed=8.47 idle_age=<n/a>)
+2025-12-29 05:03:36 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:36 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.237 Bars: [0.06 0.15 0.37 0.95 1.00 1.00 0.66 0.58 0.66 1.00 1.00 0.95 0.37 0.15 0.06]
+2025-12-29 05:03:37 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:37 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.01ms (running=True name=GLCompositorCrumbleTransition elapsed=9.59 idle_age=<n/a>)
+2025-12-29 05:03:37 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.06ms (running=True name=GLCompositorCrumbleTransition elapsed=9.47 idle_age=<n/a>)
+2025-12-29 05:03:37 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.449 Bars: [0.18 0.22 0.36 0.84 1.00 0.94 0.57 0.51 0.57 0.94 1.00 0.84 0.36 0.22 0.18]
+2025-12-29 05:03:37 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:38 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:38 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 44.32ms (running=True name=GLCompositorCrumbleTransition elapsed=10.31 idle_age=<n/a>)
+2025-12-29 05:03:38 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 46.33ms (running=True name=GLCompositorCrumbleTransition elapsed=10.44 idle_age=<n/a>)
+2025-12-29 05:03:38 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.602 Bars: [0.03 0.04 0.07 0.15 0.21 0.17 0.10 0.09 0.10 0.17 0.21 0.15 0.07 0.04 0.03]
+2025-12-29 05:03:38 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:39 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 47.06ms (running=True name=GLCompositorCrumbleTransition elapsed=11.30 idle_age=<n/a>)
+2025-12-29 05:03:39 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 47.06ms (running=True name=GLCompositorCrumbleTransition elapsed=11.42 idle_age=<n/a>)
+2025-12-29 05:03:39 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:39 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:39 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.576 Bars: [0.01 0.02 0.06 0.15 0.21 0.17 0.10 0.09 0.10 0.17 0.21 0.15 0.06 0.02 0.01]
+2025-12-29 05:03:39 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=20055.2ms, frames=793, avg_fps=39.5, dt_min=12.19ms, dt_max=89.37ms, bar_count=15
+2025-12-29 05:03:39 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=20050.4ms, frames=795, avg_fps=39.7, dt_min=11.82ms, dt_max=86.76ms, bar_count=15
+2025-12-29 05:03:40 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 51.74ms (running=True name=GLCompositorCrumbleTransition elapsed=12.16 idle_age=<n/a>)
+2025-12-29 05:03:40 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 54.33ms (running=False name=<none> elapsed=<n/a> idle_age=0.05)
+2025-12-29 05:03:40 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:40 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.159 Bars: [0.82 0.67 0.54 0.82 1.00 0.86 0.53 0.49 0.53 0.86 1.00 0.82 0.54 0.67 0.82]
+2025-12-29 05:03:40 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:41 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.529 Bars: [0.16 0.21 0.38 0.91 1.00 1.00 0.65 0.57 0.65 1.00 1.00 0.91 0.38 0.21 0.16]
+2025-12-29 05:03:41 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:41 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.508 Bars: [0.26 0.28 0.39 0.86 1.00 0.98 0.59 0.52 0.59 0.98 1.00 0.86 0.39 0.28 0.26]
+2025-12-29 05:03:41 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:42 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.154 Bars: [0.04 0.11 0.29 0.74 1.00 0.86 0.54 0.49 0.54 0.86 1.00 0.74 0.29 0.11 0.04]
+2025-12-29 05:03:42 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.385 Bars: [0.16 0.21 0.36 0.83 1.00 0.94 0.57 0.51 0.57 0.94 1.00 0.83 0.36 0.21 0.16]
+2025-12-29 05:03:42 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:42 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:42 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.322 Bars: [0.04 0.09 0.22 0.54 0.72 0.58 0.36 0.33 0.36 0.58 0.72 0.54 0.22 0.09 0.04]
+2025-12-29 05:03:43 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 63.07ms (running=True name=GLCompositorDiffuseTransition elapsed=0.00 idle_age=<n/a>)
+2025-12-29 05:03:43 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 63.58ms (running=False name=<none> elapsed=<n/a> idle_age=2.64)
+2025-12-29 05:03:43 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.700 Bars: [0.23 0.26 0.38 0.85 1.00 0.97 0.58 0.52 0.58 0.97 1.00 0.85 0.38 0.26 0.23]
+2025-12-29 05:03:43 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:43 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:44 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.54ms (running=True name=GLCompositorDiffuseTransition elapsed=1.08 idle_age=<n/a>)
+2025-12-29 05:03:44 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 45.40ms (running=True name=GLCompositorDiffuseTransition elapsed=1.22 idle_age=<n/a>)
+2025-12-29 05:03:44 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.339 Bars: [0.04 0.11 0.29 0.75 1.00 0.86 0.52 0.46 0.52 0.86 1.00 0.75 0.29 0.11 0.04]
+2025-12-29 05:03:44 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:44 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:44 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=25083.0ms, frames=1025, avg_fps=40.9, dt_min=11.13ms, dt_max=89.37ms, bar_count=15
+2025-12-29 05:03:44 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=25080.2ms, frames=1029, avg_fps=41.0, dt_min=11.12ms, dt_max=86.76ms, bar_count=15
+2025-12-29 05:03:45 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.59ms (running=True name=GLCompositorDiffuseTransition elapsed=2.22 idle_age=<n/a>)
+2025-12-29 05:03:45 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.017 Bars: [0.04 0.14 0.38 1.00 1.00 1.00 0.72 0.64 0.72 1.00 1.00 1.00 0.38 0.14 0.04]
+2025-12-29 05:03:45 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.30ms (running=True name=GLCompositorDiffuseTransition elapsed=2.31 idle_age=<n/a>)
+2025-12-29 05:03:45 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:45 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:46 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.304 Bars: [0.05 0.13 0.32 0.81 1.00 0.93 0.55 0.49 0.55 0.93 1.00 0.81 0.32 0.13 0.05]
+2025-12-29 05:03:46 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.22ms (running=True name=GLCompositorDiffuseTransition elapsed=3.45 idle_age=<n/a>)
+2025-12-29 05:03:46 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:46 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.86ms (running=True name=GLCompositorDiffuseTransition elapsed=3.34 idle_age=<n/a>)
+2025-12-29 05:03:46 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:47 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.838 Bars: [0.05 0.13 0.35 0.91 1.00 1.00 0.62 0.54 0.62 1.00 1.00 0.91 0.35 0.13 0.05]
+2025-12-29 05:03:47 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.631 Bars: [0.05 0.13 0.32 0.82 1.00 0.92 0.56 0.51 0.56 0.92 1.00 0.82 0.32 0.13 0.05]
+2025-12-29 05:03:47 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:47 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:47 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.067 Bars: [0.04 0.10 0.28 0.70 0.97 0.78 0.46 0.42 0.46 0.78 0.97 0.70 0.28 0.10 0.04]
+2025-12-29 05:03:48 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.328 Bars: [0.04 0.14 0.39 1.00 1.00 1.00 0.73 0.65 0.73 1.00 1.00 1.00 0.39 0.14 0.04]
+2025-12-29 05:03:48 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:48 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 55.33ms (running=True name=GLCompositorRainDropsTransition elapsed=0.14 idle_age=<n/a>)
+2025-12-29 05:03:48 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 56.94ms (running=True name=GLCompositorRainDropsTransition elapsed=0.00 idle_age=<n/a>)
+2025-12-29 05:03:48 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:49 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.811 Bars: [0.04 0.13 0.35 0.93 1.00 1.00 0.64 0.57 0.64 1.00 1.00 0.93 0.35 0.13 0.04]
+2025-12-29 05:03:49 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.38ms (running=True name=GLCompositorRainDropsTransition elapsed=0.92 idle_age=<n/a>)
+2025-12-29 05:03:49 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:49 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 58.76ms (running=True name=GLCompositorRainDropsTransition elapsed=1.14 idle_age=<n/a>)
+2025-12-29 05:03:49 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:49 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=30099.7ms, frames=1234, avg_fps=41.0, dt_min=11.12ms, dt_max=89.37ms, bar_count=15
+2025-12-29 05:03:49 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=21.36ms, min=-1.50ms, max=382.61ms
+2025-12-29 05:03:49 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=30096.4ms, frames=1238, avg_fps=41.1, dt_min=11.12ms, dt_max=86.76ms, bar_count=15
+2025-12-29 05:03:49 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=21.36ms, min=-1.30ms, max=382.61ms
+2025-12-29 05:03:50 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.812 Bars: [0.04 0.13 0.36 0.95 1.00 1.00 0.66 0.59 0.66 1.00 1.00 0.95 0.36 0.13 0.04]
+2025-12-29 05:03:50 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 45.82ms (running=True name=GLCompositorRainDropsTransition elapsed=1.83 idle_age=<n/a>)
+2025-12-29 05:03:50 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 47.83ms (running=True name=GLCompositorRainDropsTransition elapsed=1.97 idle_age=<n/a>)
+2025-12-29 05:03:50 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:50 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:51 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.843 Bars: [0.04 0.13 0.36 0.95 1.00 1.00 0.64 0.56 0.64 1.00 1.00 0.95 0.36 0.13 0.04]
+2025-12-29 05:03:51 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.53ms (running=True name=GLCompositorRainDropsTransition elapsed=3.12 idle_age=<n/a>)
+2025-12-29 05:03:51 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:51 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 61.27ms (running=True name=GLCompositorRainDropsTransition elapsed=2.98 idle_age=<n/a>)
+2025-12-29 05:03:51 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:52 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.803 Bars: [0.55 0.46 0.41 0.66 0.87 0.71 0.43 0.39 0.43 0.71 0.87 0.66 0.41 0.46 0.55]
+2025-12-29 05:03:52 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 47.48ms (running=True name=GLCompositorRainDropsTransition elapsed=3.83 idle_age=<n/a>)
+2025-12-29 05:03:52 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 48.62ms (running=True name=GLCompositorRainDropsTransition elapsed=3.97 idle_age=<n/a>)
+2025-12-29 05:03:52 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:52 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:53 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.508 Bars: [0.04 0.12 0.31 0.81 1.00 0.92 0.54 0.48 0.54 0.92 1.00 0.81 0.31 0.12 0.04]
+2025-12-29 05:03:53 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.64ms (running=True name=GLCompositorRainDropsTransition elapsed=4.97 idle_age=<n/a>)
+2025-12-29 05:03:53 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 49.08ms (running=True name=GLCompositorRainDropsTransition elapsed=4.97 idle_age=<n/a>)
+2025-12-29 05:03:53 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:53 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:54 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.274 Bars: [0.85 0.69 0.54 0.80 1.00 0.85 0.51 0.46 0.51 0.85 1.00 0.80 0.54 0.69 0.85]
+2025-12-29 05:03:54 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 66.35ms (running=True name=GLCompositorRainDropsTransition elapsed=6.14 idle_age=<n/a>)
+2025-12-29 05:03:54 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 67.85ms (running=True name=GLCompositorRainDropsTransition elapsed=6.00 idle_age=<n/a>)
+2025-12-29 05:03:54 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:54 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:54 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.122 Bars: [0.04 0.10 0.28 0.72 1.00 0.80 0.48 0.42 0.48 0.80 1.00 0.72 0.28 0.10 0.04]
+2025-12-29 05:03:55 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=35108.3ms, frames=1414, avg_fps=40.3, dt_min=11.12ms, dt_max=89.37ms, bar_count=15
+2025-12-29 05:03:55 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=35111.7ms, frames=1409, avg_fps=40.1, dt_min=11.12ms, dt_max=86.76ms, bar_count=15
+2025-12-29 05:03:55 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:55 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.640 Bars: [0.04 0.13 0.35 0.91 1.00 1.00 0.65 0.58 0.65 1.00 1.00 0.91 0.35 0.13 0.04]
+2025-12-29 05:03:55 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 52.73ms (running=True name=GLCompositorRainDropsTransition elapsed=7.38 idle_age=<n/a>)
+2025-12-29 05:03:55 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 53.24ms (running=True name=GLCompositorRainDropsTransition elapsed=7.23 idle_age=<n/a>)
+2025-12-29 05:03:55 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:56 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:56 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.756 Bars: [0.29 0.30 0.42 0.91 1.00 1.00 0.65 0.59 0.65 1.00 1.00 0.91 0.42 0.30 0.29]
+2025-12-29 05:03:56 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 70.38ms (running=True name=GLCompositorRainDropsTransition elapsed=8.23 idle_age=<n/a>)
+2025-12-29 05:03:56 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:56 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 74.82ms (running=True name=GLCompositorRainDropsTransition elapsed=8.39 idle_age=<n/a>)
+2025-12-29 05:03:57 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.666 Bars: [0.04 0.13 0.35 0.91 1.00 1.00 0.65 0.58 0.65 1.00 1.00 0.91 0.35 0.13 0.04]
+2025-12-29 05:03:57 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:57 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 50.05ms (running=True name=GLCompositorRainDropsTransition elapsed=9.38 idle_age=<n/a>)
+2025-12-29 05:03:57 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 58.53ms (running=True name=GLCompositorRainDropsTransition elapsed=9.23 idle_age=<n/a>)
+2025-12-29 05:03:57 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:58 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.605 Bars: [0.23 0.26 0.39 0.89 1.00 1.00 0.61 0.54 0.61 1.00 1.00 0.89 0.39 0.26 0.23]
+2025-12-29 05:03:58 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:58 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 48.28ms (running=True name=GLCompositorRainDropsTransition elapsed=10.23 idle_age=<n/a>)
+2025-12-29 05:03:58 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 61.91ms (running=True name=GLCompositorRainDropsTransition elapsed=10.38 idle_age=<n/a>)
+2025-12-29 05:03:58 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:59 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.616 Bars: [0.04 0.12 0.33 0.87 1.00 1.00 0.63 0.56 0.63 1.00 1.00 0.87 0.33 0.12 0.04]
+2025-12-29 05:03:59 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.02ms (running=True name=GLCompositorRainDropsTransition elapsed=11.12 idle_age=<n/a>)
+2025-12-29 05:03:59 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 44.05ms (running=True name=GLCompositorRainDropsTransition elapsed=10.98 idle_age=<n/a>)
+2025-12-29 05:03:59 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:03:59 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.253 Bars: [0.86 0.69 0.54 0.81 1.00 0.86 0.52 0.47 0.52 0.86 1.00 0.81 0.54 0.69 0.86]
+2025-12-29 05:03:59 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:00 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=40132.1ms, frames=1595, avg_fps=39.7, dt_min=11.12ms, dt_max=89.37ms, bar_count=15
+2025-12-29 05:04:00 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=40128.2ms, frames=1587, avg_fps=39.5, dt_min=11.12ms, dt_max=86.76ms, bar_count=15
+2025-12-29 05:04:00 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:00 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.262 Bars: [0.04 0.11 0.29 0.75 1.00 0.84 0.50 0.45 0.50 0.84 1.00 0.75 0.29 0.11 0.04]
+2025-12-29 05:04:00 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 65.37ms (running=False name=<none> elapsed=<n/a> idle_age=0.07)
+2025-12-29 05:04:00 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 66.40ms (running=True name=GLCompositorRainDropsTransition elapsed=12.11 idle_age=<n/a>)
+2025-12-29 05:04:00 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:01 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.670 Bars: [0.05 0.10 0.24 0.59 0.80 0.66 0.42 0.38 0.42 0.66 0.80 0.59 0.24 0.10 0.05]
+2025-12-29 05:04:01 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.780 Bars: [0.29 0.30 0.42 0.92 1.00 1.00 0.62 0.55 0.62 1.00 1.00 0.92 0.42 0.30 0.29]
+2025-12-29 05:04:01 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:01 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:01 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.184 Bars: [0.04 0.11 0.29 0.73 1.00 0.82 0.49 0.44 0.49 0.82 1.00 0.73 0.29 0.11 0.04]
+2025-12-29 05:04:02 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 45.30ms (running=True name=GLCompositorBlockFlipTransition elapsed=0.00 idle_age=<n/a>)
+2025-12-29 05:04:02 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 51.19ms (running=True name=GLCompositorBlockFlipTransition elapsed=0.19 idle_age=<n/a>)
+2025-12-29 05:04:02 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:02 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:03 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.50ms (running=True name=GLCompositorBlockFlipTransition elapsed=0.89 idle_age=<n/a>)
+2025-12-29 05:04:03 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.533 Bars: [0.04 0.11 0.31 0.80 1.00 0.91 0.54 0.49 0.54 0.91 1.00 0.80 0.31 0.11 0.04]
+2025-12-29 05:04:03 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 56.23ms (running=True name=GLCompositorBlockFlipTransition elapsed=1.55 idle_age=<n/a>)
+2025-12-29 05:04:03 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:03 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 52.72ms (running=True name=GLCompositorBlockFlipTransition elapsed=1.66 idle_age=<n/a>)
+2025-12-29 05:04:03 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:04 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.967 Bars: [0.04 0.10 0.27 0.69 0.95 0.78 0.48 0.44 0.48 0.78 0.95 0.69 0.27 0.10 0.04]
+2025-12-29 05:04:04 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.59ms (running=True name=GLCompositorBlockFlipTransition elapsed=2.55 idle_age=<n/a>)
+2025-12-29 05:04:04 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:04 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 47.95ms (running=True name=GLCompositorBlockFlipTransition elapsed=2.45 idle_age=<n/a>)
+2025-12-29 05:04:04 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.586 Bars: [0.04 0.12 0.34 0.88 1.00 1.00 0.59 0.52 0.59 1.00 1.00 0.88 0.34 0.12 0.04]
+2025-12-29 05:04:04 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:05 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=45144.8ms, frames=1798, avg_fps=39.8, dt_min=11.12ms, dt_max=89.37ms, bar_count=15
+2025-12-29 05:04:05 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=139.37ms, min=-2.03ms, max=382.61ms
+2025-12-29 05:04:05 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=45144.1ms, frames=1785, avg_fps=39.5, dt_min=11.12ms, dt_max=86.76ms, bar_count=15
+2025-12-29 05:04:05 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=142.37ms, min=-1.51ms, max=382.61ms
+2025-12-29 05:04:05 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.689 Bars: [0.06 0.13 0.31 0.75 1.00 0.84 0.53 0.49 0.53 0.84 1.00 0.75 0.31 0.13 0.06]
+2025-12-29 05:04:05 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 46.47ms (running=True name=GLCompositorBlockFlipTransition elapsed=3.41 idle_age=<n/a>)
+2025-12-29 05:04:05 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 49.55ms (running=True name=GLCompositorBlockFlipTransition elapsed=3.55 idle_age=<n/a>)
+2025-12-29 05:04:05 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:05 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:06 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.301 Bars: [0.90 0.73 0.56 0.82 1.00 0.87 0.53 0.47 0.53 0.87 1.00 0.82 0.56 0.73 0.90]
+2025-12-29 05:04:06 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 45.31ms (running=True name=GLCompositorBlockFlipTransition elapsed=4.41 idle_age=<n/a>)
+2025-12-29 05:04:06 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 45.78ms (running=True name=GLCompositorBlockFlipTransition elapsed=4.55 idle_age=<n/a>)
+2025-12-29 05:04:06 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:06 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:07 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.535 Bars: [0.07 0.14 0.34 0.87 1.00 1.00 0.59 0.52 0.59 1.00 1.00 0.87 0.34 0.14 0.07]
+2025-12-29 05:04:07 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:07 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.946 Bars: [0.07 0.16 0.39 1.00 1.00 1.00 0.70 0.61 0.70 1.00 1.00 1.00 0.39 0.16 0.07]
+2025-12-29 05:04:07 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 54.42ms (running=False name=<none> elapsed=<n/a> idle_age=0.60)
+2025-12-29 05:04:07 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 55.97ms (running=False name=<none> elapsed=<n/a> idle_age=0.73)
+2025-12-29 05:04:07 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:08 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.961 Bars: [0.05 0.14 0.37 0.97 1.00 1.00 0.66 0.57 0.66 1.00 1.00 0.97 0.37 0.14 0.05]
+2025-12-29 05:04:08 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:08 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 45.12ms (running=False name=<none> elapsed=<n/a> idle_age=1.72)
+2025-12-29 05:04:08 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 46.12ms (running=False name=<none> elapsed=<n/a> idle_age=1.59)
+2025-12-29 05:04:08 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:09 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.450 Bars: [0.26 0.28 0.38 0.82 1.00 0.93 0.56 0.50 0.56 0.93 1.00 0.82 0.38 0.28 0.26]
+2025-12-29 05:04:09 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:09 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.508 Bars: [0.33 0.33 0.43 0.91 1.00 1.00 0.64 0.57 0.64 1.00 1.00 0.91 0.43 0.33 0.33]
+2025-12-29 05:04:09 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 53.80ms (running=False name=<none> elapsed=<n/a> idle_age=2.73)
+2025-12-29 05:04:09 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 54.33ms (running=False name=<none> elapsed=<n/a> idle_age=2.60)
+2025-12-29 05:04:09 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:10 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=50145.9ms, frames=2027, avg_fps=40.4, dt_min=11.12ms, dt_max=89.37ms, bar_count=15
+2025-12-29 05:04:10 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=0.52ms, min=-2.03ms, max=382.61ms
+2025-12-29 05:04:10 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=50157.9ms, frames=2017, avg_fps=40.2, dt_min=11.12ms, dt_max=86.76ms, bar_count=15
+2025-12-29 05:04:10 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=31.34ms, min=-1.51ms, max=382.61ms
+2025-12-29 05:04:10 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.045 Bars: [0.39 0.39 0.48 1.00 1.00 1.00 0.70 0.62 0.70 1.00 1.00 1.00 0.48 0.39 0.39]
+2025-12-29 05:04:10 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:10 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:10 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.09ms (running=False name=<none> elapsed=<n/a> idle_age=3.63)
+2025-12-29 05:04:10 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 45.13ms (running=False name=<none> elapsed=<n/a> idle_age=3.76)
+2025-12-29 05:04:10 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.351 Bars: [0.23 0.22 0.27 0.52 0.69 0.56 0.36 0.34 0.36 0.56 0.69 0.52 0.27 0.22 0.23]
+2025-12-29 05:04:11 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.787 Bars: [0.19 0.24 0.42 1.00 1.00 1.00 0.70 0.62 0.70 1.00 1.00 1.00 0.42 0.24 0.19]
+2025-12-29 05:04:11 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:11 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 51.90ms (running=False name=<none> elapsed=<n/a> idle_age=4.73)
+2025-12-29 05:04:11 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 51.43ms (running=False name=<none> elapsed=<n/a> idle_age=4.60)
+2025-12-29 05:04:11 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:12 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.093 Bars: [0.23 0.26 0.39 0.85 1.00 0.92 0.52 0.46 0.52 0.92 1.00 0.85 0.39 0.26 0.23]
+2025-12-29 05:04:12 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:12 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.321 Bars: [0.00 0.00 0.01 0.02 0.03 0.02 0.01 0.01 0.01 0.02 0.03 0.02 0.01 0.00 0.00]
+2025-12-29 05:04:12 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.79ms (running=False name=<none> elapsed=<n/a> idle_age=5.72)
+2025-12-29 05:04:12 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.79ms (running=False name=<none> elapsed=<n/a> idle_age=5.59)
+2025-12-29 05:04:12 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:13 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.120 Bars: [0.07 0.11 0.24 0.53 0.70 0.54 0.33 0.30 0.33 0.54 0.70 0.53 0.24 0.11 0.07]
+2025-12-29 05:04:13 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:13 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:13 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 44.55ms (running=False name=<none> elapsed=<n/a> idle_age=6.63)
+2025-12-29 05:04:13 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 47.72ms (running=False name=<none> elapsed=<n/a> idle_age=6.76)
+2025-12-29 05:04:13 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.777 Bars: [0.04 0.13 0.34 0.89 1.00 0.99 0.57 0.50 0.57 0.99 1.00 0.89 0.34 0.13 0.04]
+2025-12-29 05:04:14 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.021 Bars: [0.08 0.13 0.29 0.70 0.97 0.78 0.47 0.42 0.47 0.78 0.97 0.70 0.29 0.13 0.08]
+2025-12-29 05:04:14 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:14 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:14 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.302 Bars: [0.40 0.35 0.33 0.54 0.69 0.55 0.33 0.30 0.33 0.55 0.69 0.54 0.33 0.35 0.40]
+2025-12-29 05:04:15 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=55159.8ms, frames=2284, avg_fps=41.4, dt_min=10.21ms, dt_max=86.76ms, bar_count=15
+2025-12-29 05:04:15 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=55164.6ms, frames=2292, avg_fps=41.5, dt_min=10.17ms, dt_max=89.37ms, bar_count=15
+2025-12-29 05:04:15 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:15 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.685 Bars: [0.04 0.12 0.34 0.89 1.00 1.00 0.62 0.55 0.62 1.00 1.00 0.89 0.34 0.12 0.04]
+2025-12-29 05:04:15 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:16 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.515 Bars: [0.12 0.16 0.30 0.67 0.90 0.73 0.46 0.43 0.46 0.73 0.90 0.67 0.30 0.16 0.12]
+2025-12-29 05:04:16 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:16 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.662 Bars: [0.38 0.36 0.42 0.85 1.00 0.95 0.58 0.52 0.58 0.95 1.00 0.85 0.42 0.36 0.38]
+2025-12-29 05:04:16 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 55.77ms (running=False name=<none> elapsed=<n/a> idle_age=9.62)
+2025-12-29 05:04:16 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 55.77ms (running=False name=<none> elapsed=<n/a> idle_age=9.75)
+2025-12-29 05:04:16 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:17 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:17 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 50.11ms (running=True name=GLCompositorBlockSpinTransition elapsed=0.69 idle_age=<n/a>)
+2025-12-29 05:04:17 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 51.10ms (running=True name=GLCompositorBlockSpinTransition elapsed=0.84 idle_age=<n/a>)
+2025-12-29 05:04:17 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:18 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.616 Bars: [0.01 0.02 0.05 0.12 0.16 0.13 0.08 0.07 0.08 0.13 0.16 0.12 0.05 0.02 0.01]
+2025-12-29 05:04:18 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.95ms (running=True name=GLCompositorBlockSpinTransition elapsed=1.47 idle_age=<n/a>)
+2025-12-29 05:04:18 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 44.49ms (running=True name=GLCompositorBlockSpinTransition elapsed=1.64 idle_age=<n/a>)
+2025-12-29 05:04:18 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:18 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:19 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.789 Bars: [0.07 0.12 0.27 0.65 0.89 0.72 0.44 0.40 0.44 0.72 0.89 0.65 0.27 0.12 0.07]
+2025-12-29 05:04:19 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.27ms (running=True name=GLCompositorBlockSpinTransition elapsed=2.23 idle_age=<n/a>)
+2025-12-29 05:04:19 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.16ms (running=True name=GLCompositorBlockSpinTransition elapsed=2.45 idle_age=<n/a>)
+2025-12-29 05:04:19 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:19 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:20 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=60166.3ms, frames=2487, avg_fps=41.3, dt_min=10.04ms, dt_max=89.37ms, bar_count=15
+2025-12-29 05:04:20 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=60162.0ms, frames=2484, avg_fps=41.3, dt_min=10.03ms, dt_max=86.76ms, bar_count=15
+2025-12-29 05:04:20 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.501 Bars: [0.01 0.01 0.03 0.07 0.09 0.07 0.04 0.04 0.04 0.07 0.09 0.07 0.03 0.01 0.01]
+2025-12-29 05:04:20 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 45.42ms (running=True name=GLCompositorBlockSpinTransition elapsed=3.33 idle_age=<n/a>)
+2025-12-29 05:04:20 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:20 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 46.90ms (running=True name=GLCompositorBlockSpinTransition elapsed=3.72 idle_age=<n/a>)
+2025-12-29 05:04:20 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:21 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.823 Bars: [0.59 0.52 0.52 0.97 1.00 1.00 0.65 0.58 0.65 1.00 1.00 0.97 0.52 0.52 0.59]
+2025-12-29 05:04:21 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.64ms (running=True name=GLCompositorBlockSpinTransition elapsed=4.56 idle_age=<n/a>)
+2025-12-29 05:04:21 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:21 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.89ms (running=True name=GLCompositorBlockSpinTransition elapsed=4.52 idle_age=<n/a>)
+2025-12-29 05:04:21 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:21 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.346 Bars: [0.04 0.12 0.32 0.83 1.00 0.94 0.58 0.52 0.58 0.94 1.00 0.83 0.32 0.12 0.04]
+2025-12-29 05:04:22 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 46.06ms (running=True name=GLCompositorBlockSpinTransition elapsed=5.33 idle_age=<n/a>)
+2025-12-29 05:04:22 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 46.06ms (running=True name=GLCompositorBlockSpinTransition elapsed=5.48 idle_age=<n/a>)
+2025-12-29 05:04:22 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:22 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.064 Bars: [0.26 0.29 0.45 1.00 1.00 1.00 0.72 0.64 0.72 1.00 1.00 1.00 0.45 0.29 0.26]
+2025-12-29 05:04:22 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:23 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 46.56ms (running=True name=GLCompositorBlockSpinTransition elapsed=6.20 idle_age=<n/a>)
+2025-12-29 05:04:23 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 48.11ms (running=True name=GLCompositorBlockSpinTransition elapsed=6.36 idle_age=<n/a>)
+2025-12-29 05:04:23 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:23 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.543 Bars: [0.05 0.11 0.28 0.69 0.93 0.73 0.43 0.38 0.43 0.73 0.93 0.69 0.28 0.11 0.05]
+2025-12-29 05:04:23 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:24 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 44.07ms (running=True name=GLCompositorBlockSpinTransition elapsed=7.34 idle_age=<n/a>)
+2025-12-29 05:04:24 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 46.62ms (running=True name=GLCompositorBlockSpinTransition elapsed=7.52 idle_age=<n/a>)
+2025-12-29 05:04:24 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:24 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.647 Bars: [0.06 0.13 0.32 0.81 1.00 0.91 0.55 0.49 0.55 0.91 1.00 0.81 0.32 0.13 0.06]
+2025-12-29 05:04:24 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:25 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=65186.1ms, frames=2667, avg_fps=40.9, dt_min=10.03ms, dt_max=86.76ms, bar_count=15
+2025-12-29 05:04:25 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=1.15ms, min=-1.57ms, max=382.61ms
+2025-12-29 05:04:25 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=65192.0ms, frames=2662, avg_fps=40.8, dt_min=10.04ms, dt_max=89.37ms, bar_count=15
+2025-12-29 05:04:25 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.699 Bars: [0.10 0.16 0.33 0.78 1.00 0.85 0.52 0.48 0.52 0.85 1.00 0.78 0.33 0.16 0.10]
+2025-12-29 05:04:25 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:25 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 45.92ms (running=True name=GLCompositorBlockSpinTransition elapsed=8.64 idle_age=<n/a>)
+2025-12-29 05:04:25 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.65ms (running=True name=GLCompositorBlockSpinTransition elapsed=8.52 idle_age=<n/a>)
+2025-12-29 05:04:25 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:26 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.159 Bars: [0.05 0.10 0.26 0.61 0.81 0.65 0.40 0.37 0.40 0.65 0.81 0.61 0.26 0.10 0.05]
+2025-12-29 05:04:26 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:26 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:26 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.134 Bars: [0.30 0.30 0.37 0.78 1.00 0.88 0.54 0.49 0.54 0.88 1.00 0.78 0.37 0.30 0.30]
+2025-12-29 05:04:27 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 49.40ms (running=True name=GLCompositorDiffuseTransition elapsed=0.14 idle_age=<n/a>)
+2025-12-29 05:04:27 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 48.38ms (running=True name=GLCompositorDiffuseTransition elapsed=0.00 idle_age=<n/a>)
+2025-12-29 05:04:27 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.918 Bars: [0.04 0.13 0.36 0.97 1.00 1.00 0.67 0.59 0.67 1.00 1.00 0.97 0.36 0.13 0.04]
+2025-12-29 05:04:27 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:27 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:27 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 49.88ms (running=True name=GLCompositorDiffuseTransition elapsed=0.94 idle_age=<n/a>)
+2025-12-29 05:04:27 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 50.12ms (running=True name=GLCompositorDiffuseTransition elapsed=0.80 idle_age=<n/a>)
+2025-12-29 05:04:28 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.236 Bars: [0.09 0.12 0.21 0.47 0.61 0.48 0.28 0.25 0.28 0.48 0.61 0.47 0.21 0.12 0.09]
+2025-12-29 05:04:28 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:28 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 51.25ms (running=True name=GLCompositorDiffuseTransition elapsed=1.83 idle_age=<n/a>)
+2025-12-29 05:04:28 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:28 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 53.68ms (running=True name=GLCompositorDiffuseTransition elapsed=1.75 idle_age=<n/a>)
+2025-12-29 05:04:29 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 59.08ms (running=True name=GLCompositorDiffuseTransition elapsed=2.64 idle_age=<n/a>)
+2025-12-29 05:04:29 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 61.10ms (running=True name=GLCompositorDiffuseTransition elapsed=2.50 idle_age=<n/a>)
+2025-12-29 05:04:29 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:29 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.917 Bars: [0.15 0.19 0.33 0.76 1.00 0.85 0.51 0.46 0.51 0.85 1.00 0.76 0.33 0.19 0.15]
+2025-12-29 05:04:29 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:30 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=70195.4ms, frames=2851, avg_fps=40.6, dt_min=10.03ms, dt_max=86.76ms, bar_count=15
+2025-12-29 05:04:30 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=70216.1ms, frames=2847, avg_fps=40.5, dt_min=10.04ms, dt_max=89.37ms, bar_count=15
+2025-12-29 05:04:30 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.662 Bars: [0.12 0.18 0.35 0.86 1.00 0.99 0.59 0.53 0.59 0.99 1.00 0.86 0.35 0.18 0.12]
+2025-12-29 05:04:30 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.92ms (running=True name=GLCompositorDiffuseTransition elapsed=3.28 idle_age=<n/a>)
+2025-12-29 05:04:30 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 70.28ms (running=False name=<none> elapsed=<n/a> idle_age=0.07)
+2025-12-29 05:04:30 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:30 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:30 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.663 Bars: [0.04 0.12 0.32 0.83 1.00 0.94 0.57 0.51 0.57 0.94 1.00 0.83 0.32 0.12 0.04]
+2025-12-29 05:04:31 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.742 Bars: [0.10 0.14 0.28 0.66 0.89 0.72 0.44 0.40 0.44 0.72 0.89 0.66 0.28 0.14 0.10]
+2025-12-29 05:04:31 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:31 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.423 Bars: [0.46 0.44 0.53 1.00 1.00 1.00 0.77 0.69 0.77 1.00 1.00 1.00 0.53 0.44 0.46]
+2025-12-29 05:04:31 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:32 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.084 Bars: [0.13 0.17 0.31 0.72 0.98 0.81 0.50 0.46 0.50 0.81 0.98 0.72 0.31 0.17 0.13]
+2025-12-29 05:04:32 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=playing -> playing=True (prev=True) track=Speeding
+2025-12-29 05:04:32 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.804 Bars: [0.77 0.64 0.54 0.85 1.00 0.91 0.57 0.52 0.57 0.91 1.00 0.85 0.54 0.64 0.77]

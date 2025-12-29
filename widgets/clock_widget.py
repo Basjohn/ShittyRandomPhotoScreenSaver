@@ -532,36 +532,45 @@ class ClockWidget(BaseOverlayWidget):
         edge_margin = self._margin
         pos = self._clock_position
         
+        # For analogue mode without background, compensate for internal numeral padding
+        # so the visual clock face aligns with other widgets at the same margin
+        pad_compensate_x = 0
+        pad_compensate_y = 0
+        if self._display_mode == "analog" and not self._show_background:
+            left_pad, top_pad, bottom_margin, _ = self._compute_analog_padding()
+            pad_compensate_x = left_pad
+            pad_compensate_y = top_pad
+        
         if pos == ClockPosition.TOP_LEFT:
-            x = edge_margin
-            y = edge_margin
+            x = edge_margin - pad_compensate_x
+            y = edge_margin - pad_compensate_y
         elif pos == ClockPosition.TOP_CENTER:
             x = (parent_width - widget_width) // 2
-            y = edge_margin
+            y = edge_margin - pad_compensate_y
         elif pos == ClockPosition.TOP_RIGHT:
-            x = parent_width - widget_width - edge_margin
-            y = edge_margin
+            x = parent_width - widget_width - edge_margin + pad_compensate_x
+            y = edge_margin - pad_compensate_y
         elif pos == ClockPosition.MIDDLE_LEFT:
-            x = edge_margin
+            x = edge_margin - pad_compensate_x
             y = (parent_height - widget_height) // 2
         elif pos == ClockPosition.CENTER:
             x = (parent_width - widget_width) // 2
             y = (parent_height - widget_height) // 2
         elif pos == ClockPosition.MIDDLE_RIGHT:
-            x = parent_width - widget_width - edge_margin
+            x = parent_width - widget_width - edge_margin + pad_compensate_x
             y = (parent_height - widget_height) // 2
         elif pos == ClockPosition.BOTTOM_LEFT:
-            x = edge_margin
-            y = parent_height - widget_height - edge_margin
+            x = edge_margin - pad_compensate_x
+            y = parent_height - widget_height - edge_margin + pad_compensate_y
         elif pos == ClockPosition.BOTTOM_CENTER:
             x = (parent_width - widget_width) // 2
-            y = parent_height - widget_height - edge_margin
+            y = parent_height - widget_height - edge_margin + pad_compensate_y
         elif pos == ClockPosition.BOTTOM_RIGHT:
-            x = parent_width - widget_width - edge_margin
-            y = parent_height - widget_height - edge_margin
+            x = parent_width - widget_width - edge_margin + pad_compensate_x
+            y = parent_height - widget_height - edge_margin + pad_compensate_y
         else:
-            x = edge_margin
-            y = edge_margin
+            x = edge_margin - pad_compensate_x
+            y = edge_margin - pad_compensate_y
         
         self.move(x, y)
         
@@ -788,15 +797,31 @@ class ClockWidget(BaseOverlayWidget):
             self.setContentsMargins(padding_left, padding_top, padding_right, padding_bottom)
         else:
             # Transparent background (default)
-            self.setStyleSheet(f"""
-                QLabel {{
-                    color: rgba({self._text_color.red()}, {self._text_color.green()}, 
-                               {self._text_color.blue()}, {self._text_color.alpha()});
-                    background-color: transparent;
-                    padding: 6px 28px 6px 21px;
-                }}
-            """)
-            self.setContentsMargins(0, 0, 0, 0)
+            if self._display_mode == "analog":
+                # Analogue mode without background: use symmetric padding
+                # so the clock face is centered within the widget bounds
+                padding_left, padding_top, padding_bottom, _ = self._compute_analog_padding()
+                padding_right = padding_left
+                self.setStyleSheet(f"""
+                    QLabel {{
+                        color: rgba({self._text_color.red()}, {self._text_color.green()}, 
+                                   {self._text_color.blue()}, {self._text_color.alpha()});
+                        background-color: transparent;
+                        padding: {padding_top}px {padding_right}px {padding_bottom}px {padding_left}px;
+                    }}
+                """)
+                self.setContentsMargins(padding_left, padding_top, padding_right, padding_bottom)
+            else:
+                # Digital mode without background: use asymmetric padding for text alignment
+                self.setStyleSheet(f"""
+                    QLabel {{
+                        color: rgba({self._text_color.red()}, {self._text_color.green()}, 
+                                   {self._text_color.blue()}, {self._text_color.alpha()});
+                        background-color: transparent;
+                        padding: 6px 28px 6px 21px;
+                    }}
+                """)
+                self.setContentsMargins(0, 0, 0, 0)
     
     def paintEvent(self, event: QPaintEvent) -> None:
         """Custom paint for analogue mode; fall back to QLabel for digital."""

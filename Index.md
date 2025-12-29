@@ -246,7 +246,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - `calculate_widget_collision()`: Check if two widget rects overlap
   - `calculate_stack_offset()`: Calculate offset for widget stacking
 - widgets/clock_widget.py
-  - Digital/analogue clock widget extending `BaseOverlayWidget`. Supports three instances (Clock 1/2/3) with per-monitor selection, independent timezones, optional seconds/timezone labels, analogue numerals toggle, subtle vs "Intense Analogue Shadows" mode (doubles drop-shadow opacity/size), digital/analogue display modes, and 9 position options (Top/Middle/Bottom × Left/Center/Right).
+  - Digital/analogue clock widget extending `BaseOverlayWidget`. Supports three instances (Clock 1/2/3) with per-monitor selection, independent timezones, optional seconds/timezone labels, analogue numerals toggle, subtle vs "Intense Analogue Shadows" mode (doubles drop-shadow opacity/size), digital/analogue display modes, and 9 position options (Top/Middle/Bottom × Left/Center/Right). Analogue mode without background compensates for numeral padding to align with other widgets at the same margin.
 - widgets/weather_widget.py
   - Weather widget extending `BaseOverlayWidget`. Per-monitor selection via settings (ALL or 1/2/3). Features optional forecast line (tomorrow's min/max temp and condition, 8pt smaller than base font), configurable margin from screen edge. Uses Title Case for location and condition display. Supports 9 position options (Top/Middle/Bottom × Left/Center/Right). Planned QPainter-based iconography.
 - widgets/media_widget.py

@@ -847,7 +847,9 @@ class WidgetManager:
                 except Exception:
                     pass
             try:
-                self._run_spotify_secondary_fades(base_delay_ms=150)
+                # Delay secondary fades by 500ms so they start after primary overlays
+                # are well into their 1500ms fade-in animation
+                self._run_spotify_secondary_fades(base_delay_ms=500)
             except Exception:
                 pass
 
@@ -897,9 +899,10 @@ class WidgetManager:
         expected = self._overlay_fade_expected
 
         # If no primary overlays are coordinated or already started, run with delay
+        # Use 500ms delay to match the coordinated secondary fade timing
         if not expected or self._overlay_fade_started:
             try:
-                QTimer.singleShot(150, starter)
+                QTimer.singleShot(500, starter)
             except Exception:
                 try:
                     starter()

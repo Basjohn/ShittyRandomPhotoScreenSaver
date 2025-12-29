@@ -1020,7 +1020,7 @@ class RedditWidget(BaseOverlayWidget):
         else:
             self._hover_timer.stop()
 
-        self._hover_timer.start(2000)
+        self._hover_timer.start(1000)
 
     def _show_title_tooltip(self) -> None:
         if not self._hover_title:

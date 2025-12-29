@@ -60,7 +60,7 @@ class ScreensaverTrayIcon(QSystemTrayIcon):
         if not tray_icon.isNull():
             self.setIcon(tray_icon)
 
-        self.setToolTip("ShittyRandomPhotoScreenSaver")
+        self.setToolTip("SRPSS")
 
         # Build a small context menu and apply the dark theme so it
         # matches other context menus styled in dark.qss.
