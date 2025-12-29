@@ -56,9 +56,10 @@ def test_clock_creation(qapp, parent_widget):
     assert clock.is_running() is False
 
 
-def test_clock_start_stop(qapp, parent_widget):
+def test_clock_start_stop(qapp, parent_widget, thread_manager):
     """Test starting and stopping clock."""
     clock = ClockWidget(parent=parent_widget)
+    clock._thread_manager = thread_manager  # Inject thread manager
     parent_widget.show()  # Show parent so child visibility works
     
     assert clock.is_running() is False
@@ -72,9 +73,10 @@ def test_clock_start_stop(qapp, parent_widget):
     assert clock.isVisible() is False
 
 
-def test_clock_signals(qapp, parent_widget, qtbot):
+def test_clock_signals(qapp, parent_widget, qtbot, thread_manager):
     """Test clock signals."""
     clock = ClockWidget(parent=parent_widget)
+    clock._thread_manager = thread_manager  # Inject thread manager
     
     time_updates = []
     clock.time_updated.connect(lambda t: time_updates.append(t))
@@ -89,13 +91,14 @@ def test_clock_signals(qapp, parent_widget, qtbot):
     clock.stop()
 
 
-def test_clock_12h_format(qapp, parent_widget):
+def test_clock_12h_format(qapp, parent_widget, thread_manager):
     """Test 12-hour format."""
     clock = ClockWidget(
         parent=parent_widget,
         time_format=TimeFormat.TWELVE_HOUR,
         show_seconds=True
     )
+    clock._thread_manager = thread_manager  # Inject thread manager
     
     clock.start()
     text = clock.text()
@@ -108,13 +111,14 @@ def test_clock_12h_format(qapp, parent_widget):
     clock.stop()
 
 
-def test_clock_24h_format(qapp, parent_widget):
+def test_clock_24h_format(qapp, parent_widget, thread_manager):
     """Test 24-hour format."""
     clock = ClockWidget(
         parent=parent_widget,
         time_format=TimeFormat.TWENTY_FOUR_HOUR,
         show_seconds=True
     )
+    clock._thread_manager = thread_manager  # Inject thread manager
     
     clock.start()
     text = clock.text()
@@ -128,12 +132,13 @@ def test_clock_24h_format(qapp, parent_widget):
     clock.stop()
 
 
-def test_clock_without_seconds(qapp, parent_widget):
+def test_clock_without_seconds(qapp, parent_widget, thread_manager):
     """Test clock without seconds."""
     clock = ClockWidget(
         parent=parent_widget,
         show_seconds=False
     )
+    clock._thread_manager = thread_manager  # Inject thread manager
     
     clock.start()
     text = clock.text()
@@ -144,12 +149,13 @@ def test_clock_without_seconds(qapp, parent_widget):
     clock.stop()
 
 
-def test_clock_with_seconds(qapp, parent_widget):
+def test_clock_with_seconds(qapp, parent_widget, thread_manager):
     """Test clock with seconds."""
     clock = ClockWidget(
         parent=parent_widget,
         show_seconds=True
     )
+    clock._thread_manager = thread_manager  # Inject thread manager
     
     clock.start()
     text = clock.text()
@@ -160,9 +166,10 @@ def test_clock_with_seconds(qapp, parent_widget):
     clock.stop()
 
 
-def test_clock_set_time_format(qapp, parent_widget):
+def test_clock_set_time_format(qapp, parent_widget, thread_manager):
     """Test setting time format."""
     clock = ClockWidget(parent=parent_widget, time_format=TimeFormat.TWELVE_HOUR)
+    clock._thread_manager = thread_manager
     
     clock.start()
     
@@ -179,9 +186,10 @@ def test_clock_set_time_format(qapp, parent_widget):
     clock.stop()
 
 
-def test_clock_set_show_seconds(qapp, parent_widget):
+def test_clock_set_show_seconds(qapp, parent_widget, thread_manager):
     """Test setting show seconds."""
     clock = ClockWidget(parent=parent_widget, show_seconds=True)
+    clock._thread_manager = thread_manager
     
     clock.start()
     assert clock.text().count(':') == 2
@@ -195,7 +203,7 @@ def test_clock_set_show_seconds(qapp, parent_widget):
     clock.stop()
 
 
-def test_clock_all_positions(qapp, parent_widget):
+def test_clock_all_positions(qapp, parent_widget, thread_manager):
     """Test all clock positions."""
     parent_widget.show()  # Show parent so child visibility works
     
@@ -210,6 +218,7 @@ def test_clock_all_positions(qapp, parent_widget):
     
     for position in positions:
         clock = ClockWidget(parent=parent_widget, position=position)
+        clock._thread_manager = thread_manager
         clock.start()
         
         # Check position is set
@@ -222,9 +231,10 @@ def test_clock_all_positions(qapp, parent_widget):
         clock.stop()
 
 
-def test_clock_set_position(qapp, parent_widget):
+def test_clock_set_position(qapp, parent_widget, thread_manager):
     """Test changing clock position."""
     clock = ClockWidget(parent=parent_widget, position=ClockPosition.TOP_LEFT)
+    clock._thread_manager = thread_manager
     
     clock.start()
     old_x, old_y = clock.x(), clock.y()
@@ -272,9 +282,10 @@ def test_clock_set_margin(qapp, parent_widget):
     assert clock._margin == ClockWidget.DEFAULT_MARGIN
 
 
-def test_clock_cleanup(qapp, parent_widget):
+def test_clock_cleanup(qapp, parent_widget, thread_manager):
     """Test clock cleanup."""
     clock = ClockWidget(parent=parent_widget)
+    clock._thread_manager = thread_manager
     
     clock.start()
     assert clock.is_running() is True
@@ -284,9 +295,10 @@ def test_clock_cleanup(qapp, parent_widget):
     assert clock._timer is None
 
 
-def test_clock_concurrent_start_prevention(qapp, parent_widget):
+def test_clock_concurrent_start_prevention(qapp, parent_widget, thread_manager):
     """Test that starting when already running is handled."""
     clock = ClockWidget(parent=parent_widget)
+    clock._thread_manager = thread_manager
     
     clock.start()
     assert clock.is_running() is True
@@ -298,9 +310,10 @@ def test_clock_concurrent_start_prevention(qapp, parent_widget):
     clock.stop()
 
 
-def test_clock_updates_over_time(qapp, parent_widget, qtbot):
+def test_clock_updates_over_time(qapp, parent_widget, qtbot, thread_manager):
     """Test that clock updates multiple times."""
     clock = ClockWidget(parent=parent_widget, show_seconds=True)
+    clock._thread_manager = thread_manager
     
     time_updates = []
     clock.time_updated.connect(lambda t: time_updates.append(t))

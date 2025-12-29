@@ -1,5 +1,0 @@
-ERROR: usage: -c [options] [file_or_dir] [file_or_dir] [...]
--c: error: unrecognized arguments: --max-logs 20 --pytest-args
-  inifile: F:\Programming\Apps\ShittyRandomPhotoScreenSaver\pytest.ini
-  rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
-

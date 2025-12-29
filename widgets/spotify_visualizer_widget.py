@@ -1493,10 +1493,35 @@ class SpotifyVisualizerWidget(QWidget):
                     # Media widget became visible - show visualizer
                     self._start_widget_fade_in(1500)
                 elif not anchor_visible and self.isVisible():
-                    # Media widget hidden - hide visualizer
+                    # Media widget hidden - hide visualizer and clear GL overlay
                     self.hide()
+                    self._clear_gl_overlay()
             except Exception:
                 pass
+    
+    def _clear_gl_overlay(self) -> None:
+        """Clear the GL bars overlay when visualizer hides."""
+        parent = self.parent()
+        if parent is not None:
+            # Clear the SpotifyBarsGLOverlay by pushing an invisible state
+            overlay = getattr(parent, "_spotify_bars_overlay", None)
+            if overlay is not None and hasattr(overlay, "set_state"):
+                try:
+                    from PySide6.QtCore import QRect
+                    from PySide6.QtGui import QColor
+                    overlay.set_state(
+                        QRect(0, 0, 0, 0),
+                        [],
+                        0,
+                        0,
+                        QColor(0, 0, 0, 0),
+                        QColor(0, 0, 0, 0),
+                        0.0,
+                        False,
+                        visible=False,
+                    )
+                except Exception:
+                    pass
         
     def _is_media_state_stale(self) -> bool:
         """Return True if Spotify state has not updated within fallback timeout."""

@@ -242,7 +242,7 @@ class WidgetsTab(QWidget):
         self.clock_position = QComboBox()
         self.clock_position.addItems([
             "Top Left", "Top Center", "Top Right",
-            "Center",
+            "Middle Left", "Center", "Middle Right",
             "Bottom Left", "Bottom Center", "Bottom Right"
         ])
         self.clock_position.currentTextChanged.connect(self._save_settings)
@@ -475,8 +475,9 @@ class WidgetsTab(QWidget):
         weather_pos_row.addWidget(QLabel("Position:"))
         self.weather_position = QComboBox()
         self.weather_position.addItems([
-            "Top Left", "Top Right",
-            "Bottom Left", "Bottom Right"
+            "Top Left", "Top Center", "Top Right",
+            "Middle Left", "Center", "Middle Right",
+            "Bottom Left", "Bottom Center", "Bottom Right"
         ])
         self.weather_position.currentTextChanged.connect(self._save_settings)
         self.weather_position.currentTextChanged.connect(self._update_stack_status)
@@ -595,6 +596,19 @@ class WidgetsTab(QWidget):
         )
         weather_border_opacity_row.addWidget(self.weather_border_opacity_label)
         weather_layout.addLayout(weather_border_opacity_row)
+
+        # Margin from screen edge
+        weather_margin_row = QHBoxLayout()
+        weather_margin_row.addWidget(QLabel("Margin:"))
+        self.weather_margin = QSpinBox()
+        self.weather_margin.setRange(0, 200)
+        self.weather_margin.setValue(20)
+        self.weather_margin.setSuffix(" px")
+        self.weather_margin.setToolTip("Distance from screen edge in pixels")
+        self.weather_margin.valueChanged.connect(self._save_settings)
+        weather_margin_row.addWidget(self.weather_margin)
+        weather_margin_row.addStretch()
+        weather_layout.addLayout(weather_margin_row)
         
         self._weather_container = QWidget()
         weather_container_layout = QVBoxLayout(self._weather_container)
@@ -626,8 +640,9 @@ class WidgetsTab(QWidget):
         media_pos_row.addWidget(QLabel("Position:"))
         self.media_position = QComboBox()
         self.media_position.addItems([
-            "Top Left", "Top Right",
-            "Bottom Left", "Bottom Right",
+            "Top Left", "Top Center", "Top Right",
+            "Middle Left", "Center", "Middle Right",
+            "Bottom Left", "Bottom Center", "Bottom Right",
         ])
         self.media_position.currentTextChanged.connect(self._save_settings)
         self.media_position.currentTextChanged.connect(self._update_stack_status)
@@ -1043,8 +1058,9 @@ class WidgetsTab(QWidget):
         reddit_pos_row.addWidget(QLabel("Position:"))
         self.reddit_position = QComboBox()
         self.reddit_position.addItems([
-            "Top Left", "Top Right",
-            "Bottom Left", "Bottom Right",
+            "Top Left", "Top Center", "Top Right",
+            "Middle Left", "Center", "Middle Right",
+            "Bottom Left", "Bottom Center", "Bottom Right",
         ])
         self.reddit_position.currentTextChanged.connect(self._save_settings)
         self.reddit_position.currentTextChanged.connect(self._update_stack_status)
@@ -1204,7 +1220,7 @@ class WidgetsTab(QWidget):
         reddit2_row.addWidget(self.reddit2_items)
         reddit2_row.addWidget(QLabel("Position:"))
         self.reddit2_position = QComboBox()
-        self.reddit2_position.addItems(["Top Left", "Top Right", "Bottom Left", "Bottom Right"])
+        self.reddit2_position.addItems(["Top Left", "Top Center", "Top Right", "Middle Left", "Center", "Middle Right", "Bottom Left", "Bottom Center", "Bottom Right"])
         self.reddit2_position.setMaximumWidth(120)
         self.reddit2_position.currentTextChanged.connect(self._save_settings)
         self.reddit2_position.currentTextChanged.connect(self._update_stack_status)
@@ -1364,6 +1380,7 @@ class WidgetsTab(QWidget):
                 getattr(self, 'weather_bg_color_btn', None),
                 getattr(self, 'weather_border_color_btn', None),
                 getattr(self, 'weather_border_opacity', None),
+                getattr(self, 'weather_margin', None),
                 getattr(self, 'media_enabled', None),
                 getattr(self, 'media_position', None),
                 getattr(self, 'media_monitor_combo', None),
@@ -1579,6 +1596,8 @@ class WidgetsTab(QWidget):
             border_opacity_pct = int(weather_config.get('border_opacity', 0.8) * 100)
             self.weather_border_opacity.setValue(border_opacity_pct)
             self.weather_border_opacity_label.setText(f"{border_opacity_pct}%")
+            # Margin
+            self.weather_margin.setValue(weather_config.get('margin', 20))
             # Monitor selection
             w_monitor_sel = weather_config.get('monitor', 'ALL')
             w_mon_text = str(w_monitor_sel) if isinstance(w_monitor_sel, (int, str)) else 'ALL'
@@ -2041,6 +2060,7 @@ class WidgetsTab(QWidget):
             'position': self.weather_position.currentText(),
             'font_family': self.weather_font_combo.currentFont().family(),
             'font_size': self.weather_font_size.value(),
+            'margin': self.weather_margin.value(),
             'show_forecast': self.weather_show_forecast.isChecked(),
             'show_background': self.weather_show_background.isChecked(),
             'bg_opacity': self.weather_bg_opacity.value() / 100.0,

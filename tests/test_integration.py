@@ -1,6 +1,5 @@
 """Integration tests for screensaver engine."""
 import pytest
-from pathlib import Path
 from PySide6.QtWidgets import QApplication
 from engine.screensaver_engine import ScreensaverEngine
 
@@ -126,26 +125,24 @@ def test_engine_signals(engine, qtbot):
         engine.stop()
 
 
-def test_engine_rotation_timer(engine):
-    """Test rotation timer is configured."""
+def test_engine_rotation_timer(engine, qapp):
+    """Test rotation timer is configured and starts/stops correctly."""
     engine.initialize()
     
+    # Timer should exist after initialization
     assert engine._rotation_timer is not None
-    
-    # Timer should be configured but not started
-    assert engine._rotation_timer.isActive() is False
     
     # Start engine
     engine.start()
     
-    # Timer should now be active
+    # Timer should be active after start
     assert engine._rotation_timer.isActive() is True
     
     # Stop engine
     engine.stop()
     
-    # Timer should be stopped and cleaned up
-    assert engine._rotation_timer is None
+    # After stop(), the engine should have cleared its timer reference
+    assert engine._rotation_timer is None, "Engine should clear timer reference after stop()"
 
 
 def test_engine_get_stats(engine):

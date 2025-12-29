@@ -32,12 +32,14 @@ logger = get_logger(__name__)
 class OverlayPosition(Enum):
     """Standard overlay widget positions."""
     TOP_LEFT = "top_left"
-    TOP_RIGHT = "top_right"
-    BOTTOM_LEFT = "bottom_left"
-    BOTTOM_RIGHT = "bottom_right"
     TOP_CENTER = "top_center"
-    BOTTOM_CENTER = "bottom_center"
+    TOP_RIGHT = "top_right"
+    MIDDLE_LEFT = "middle_left"
     CENTER = "center"
+    MIDDLE_RIGHT = "middle_right"
+    BOTTOM_LEFT = "bottom_left"
+    BOTTOM_CENTER = "bottom_center"
+    BOTTOM_RIGHT = "bottom_right"
     
     @classmethod
     def from_string(cls, value: str) -> "OverlayPosition":

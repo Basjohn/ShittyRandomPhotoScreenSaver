@@ -6510,3 +6510,78 @@
 2025-12-28 21:29:41,985 - pytest_runner - INFO - pytest finished with exit code 1
 2025-12-28 21:29:47,400 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_visualizer_modes.py::TestVisualizerModeEnum', '-v']
 2025-12-28 21:29:47,836 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-28 21:33:51,939 - pytest_runner - INFO - pytest.py starting with args: ['tests/', '-v', '--tb=short', '--ignore=tests/test_visualizer_distribution.py']
+2025-12-28 21:41:33,685 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-28 21:41:41,826 - pytest_runner - INFO - pytest.py starting with args: ['tests/', '--tb=short', '--ignore=tests/test_visualizer_distribution.py', '-q']
+2025-12-28 21:49:51,903 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-28 21:49:58,900 - pytest_runner - INFO - pytest.py starting with args: ['tests/', '--tb=short', '--ignore=tests/test_visualizer_distribution.py', '-q']
+2025-12-28 21:59:04,350 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-28 21:59:15,667 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_events.py', 'tests/test_resources.py', 'tests/test_settings.py', 'tests/test_threading.py', '-v', '--tb=short']
+2025-12-28 21:59:16,872 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-28 22:07:59,686 - pytest_runner - INFO - pytest.py starting with args: ['tests/', '--ignore=tests/test_rss_source.py', '--ignore=tests/test_visualizer_distribution.py', '-q', '--tb=no']
+2025-12-28 22:16:51,002 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-28 22:16:58,755 - pytest_runner - INFO - pytest.py starting with args: ['tests/', '--ignore=tests/test_rss_source.py', '--ignore=tests/test_visualizer_distribution.py', '-q', '--tb=no']
+2025-12-28 22:17:42,698 - pytest_runner - INFO - pytest.py starting with args: ['tests/', '--ignore=tests/test_rss_source.py', '--ignore=tests/test_visualizer_distribution.py', '--ignore=tests/test_gl_compositor_crossfade.py', '-q', '--tb=line', '--timeout=30']
+2025-12-28 22:17:42,980 - pytest_runner - INFO - pytest finished with exit code 4
+2025-12-28 22:17:59,572 - pytest_runner - INFO - pytest.py starting with args: ['--ignore=tests/test_rss_source.py', '--ignore=tests/test_visualizer_distribution.py', '-x', '--timeout=60']
+2025-12-28 22:17:59,888 - pytest_runner - INFO - pytest finished with exit code 4
+2025-12-28 22:20:37,891 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_painter_shadow.py::TestShadowConfig::test_from_settings_enabled_string', 'tests/test_overlay_ready_state.py::TestDisplayWidgetOverlayDiagnostics::test_handle_screen_change_updates_geometry_and_dpi', 'tests/test_gl_compositor_blockspin.py', 'tests/test_flicker_fix_integration.py::TestTransitionTelemetryFlow::test_transition_tracks_timing', 'tests/test_integration.py::test_engine_rotation_timer', '-v', '--tb=short']
+2025-12-28 22:21:13,813 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-28 22:21:19,335 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_painter_shadow.py::TestShadowConfig::test_from_settings_enabled_string', 'tests/test_overlay_ready_state.py::TestDisplayWidgetOverlayDiagnostics::test_handle_screen_change_updates_geometry_and_dpi', '-v', '--tb=short']
+2025-12-28 22:21:20,230 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-28 22:21:37,193 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_painter_shadow.py', 'tests/test_overlay_ready_state.py', 'tests/test_integration.py::test_engine_rotation_timer', '-v', '--tb=short']
+2025-12-28 22:21:51,442 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_painter_shadow.py', 'tests/test_overlay_ready_state.py', '-v', '--maxfail=3']
+2025-12-28 22:22:17,783 - pytest_runner - INFO - pytest.py starting with args: ['tests/', '--ignore=tests/test_rss_source.py', '--ignore=tests/test_visualizer_distribution.py', '-q', '--tb=line', '--maxfail=10']
+2025-12-28 22:27:28,656 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_painter_shadow.py', '-v', '--tb=short']
+2025-12-28 22:27:34,685 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_painter_shadow.py', '--timeout=30', '-v']
+2025-12-28 22:27:34,928 - pytest_runner - INFO - pytest finished with exit code 4
+2025-12-28 22:37:08,511 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_integration.py::test_engine_rotation_timer', '-v', '--tb=short']
+2025-12-28 22:37:40,035 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-28 22:37:46,137 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_integration.py::test_engine_rotation_timer', '-v', '--tb=long']
+2025-12-28 22:38:13,168 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-28 22:38:22,947 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_integration.py::test_engine_rotation_timer', '-v', '--timeout=30']
+2025-12-28 22:38:23,196 - pytest_runner - INFO - pytest finished with exit code 4
+2025-12-28 22:39:40,290 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_integration.py::test_engine_rotation_timer', '-v', '--timeout=30']
+2025-12-28 22:39:40,592 - pytest_runner - INFO - pytest finished with exit code 4
+2025-12-28 22:39:47,028 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_integration.py', '-v', '--timeout=60', '--maxfail=3']
+2025-12-28 22:39:47,288 - pytest_runner - INFO - pytest finished with exit code 4
+2025-12-28 22:46:31,531 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_integration.py::test_engine_rotation_timer', '-v', '--tb=short']
+2025-12-28 22:47:10,125 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-28 22:47:34,554 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_integration.py', '-v', '--tb=short', '--cache-clear']
+2025-12-28 22:53:00,248 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-28 22:53:10,657 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_integration.py', '-v', '--cache-clear', '--maxfail=3']
+2025-12-28 22:56:03,606 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_integration.py::test_engine_rotation_timer', '-v', '--tb=short']
+2025-12-28 22:56:07,301 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-28 22:56:19,453 - pytest_runner - INFO - pytest.py starting with args: ['tests/', '--ignore=tests/test_rss_source.py', '-v', '--maxfail=10', '--timeout=120']
+2025-12-28 22:56:19,737 - pytest_runner - INFO - pytest finished with exit code 4
+2025-12-28 22:57:12,949 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_integration.py::test_engine_rotation_timer', '-v', '--tb=short']
+2025-12-28 22:57:16,189 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-28 22:57:32,571 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_integration.py::test_engine_rotation_timer', '-v', '--tb=long']
+2025-12-28 22:57:35,783 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-28 22:57:48,308 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_integration.py::test_engine_rotation_timer', '-v', '--tb=short']
+2025-12-28 22:57:52,026 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-28 22:57:59,489 - pytest_runner - INFO - pytest.py starting with args: ['tests/', '--ignore=tests/test_rss_source.py', '-v', '--tb=line', '--maxfail=10']
+2025-12-28 22:58:45,734 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_integration.py', 'tests/test_events.py', 'tests/test_settings.py', 'tests/test_threading.py', 'tests/test_clock_widget.py', '-v', '--tb=line']
+2025-12-28 23:04:12,293 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-28 23:17:50,717 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_clock_widget.py', 'tests/test_integration.py', '-v', '--tb=line', '-x']
+2025-12-28 23:23:52,414 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-28 23:24:00,710 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_clock_widget.py', 'tests/test_integration.py', '-v', '--tb=short']
+2025-12-28 23:29:07,002 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-28 23:29:18,688 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_clock_widget.py', 'tests/test_integration.py', '-v', '--tb=short']
+2025-12-28 23:34:19,723 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-28 23:34:25,818 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_clock_widget.py', 'tests/test_integration.py', '--tb=line', '-q']
+2025-12-28 23:38:44,646 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-28 23:38:50,543 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_clock_widget.py', 'tests/test_integration.py', '-q']
+2025-12-28 23:44:20,685 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-28 23:44:26,726 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_clock_widget.py', 'tests/test_integration.py']
+2025-12-28 23:49:14,494 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-28 23:56:04,473 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_clock_widget.py', 'tests/test_weather_widget.py', '-v', '-x', '--tb=short']
+2025-12-28 23:56:09,408 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-28 23:56:15,995 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_clock_widget.py']
+2025-12-28 23:56:20,747 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-29 04:24:27,789 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_weather_widget.py', 'tests/test_media_widget.py']
+2025-12-29 04:24:30,694 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-29 04:24:46,707 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_weather_widget.py', '-v', '--tb=short']
+2025-12-29 04:24:47,461 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-29 04:24:56,236 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_weather_widget.py', '-v', '--tb=short']
+2025-12-29 04:24:56,971 - pytest_runner - INFO - pytest finished with exit code 1

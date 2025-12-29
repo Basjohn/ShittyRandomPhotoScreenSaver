@@ -32,8 +32,13 @@ _CACHE_FILE = Path(os.path.expanduser("~")) / ".srpss_last_weather.json"
 class WeatherPosition(Enum):
     """Weather widget position on screen."""
     TOP_LEFT = "top_left"
+    TOP_CENTER = "top_center"
     TOP_RIGHT = "top_right"
+    MIDDLE_LEFT = "middle_left"
+    CENTER = "center"
+    MIDDLE_RIGHT = "middle_right"
     BOTTOM_LEFT = "bottom_left"
+    BOTTOM_CENTER = "bottom_center"
     BOTTOM_RIGHT = "bottom_right"
 
 
@@ -543,9 +548,9 @@ class WeatherWidget(BaseOverlayWidget):
             if forecast:
                 self._forecast_data = forecast
 
-            # Uppercase presentation for emphasis (city & condition)
-            location_display = str(location).upper()
-            condition_display = str(condition).upper()
+            # Title Case presentation for readability
+            location_display = str(location).title()
+            condition_display = str(condition).title()
             
             # Relative sizing (forecast is 12pt smaller than base font)
             city_pt = max(6, self._font_size + 2)
@@ -596,11 +601,26 @@ class WeatherWidget(BaseOverlayWidget):
         if pos == WeatherPosition.TOP_LEFT:
             x = edge_margin
             y = edge_margin
+        elif pos == WeatherPosition.TOP_CENTER:
+            x = (parent_width - widget_width) // 2
+            y = edge_margin
         elif pos == WeatherPosition.TOP_RIGHT:
             x = parent_width - widget_width - edge_margin
             y = edge_margin
+        elif pos == WeatherPosition.MIDDLE_LEFT:
+            x = edge_margin
+            y = (parent_height - widget_height) // 2
+        elif pos == WeatherPosition.CENTER:
+            x = (parent_width - widget_width) // 2
+            y = (parent_height - widget_height) // 2
+        elif pos == WeatherPosition.MIDDLE_RIGHT:
+            x = parent_width - widget_width - edge_margin
+            y = (parent_height - widget_height) // 2
         elif pos == WeatherPosition.BOTTOM_LEFT:
             x = edge_margin
+            y = parent_height - widget_height - edge_margin
+        elif pos == WeatherPosition.BOTTOM_CENTER:
+            x = (parent_width - widget_width) // 2
             y = parent_height - widget_height - edge_margin
         elif pos == WeatherPosition.BOTTOM_RIGHT:
             x = parent_width - widget_width - edge_margin

@@ -38,6 +38,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - `get_default_settings()`: Returns canonical defaults dict used by SettingsManager and UI
   - `PRESERVE_ON_RESET`: Set of keys to preserve during reset (user-specific data)
   - `get_flat_defaults()`: Flattened dot-notation defaults for validation
+  - **Dec 2025**: `analog_shadow_intense` now defaults to True for dramatic analogue clock shadows
 - core/animation/animator.py
   - AnimationManager and easing types
   - Animation class with optional FrameState for decoupled rendering
@@ -245,13 +246,13 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - `calculate_widget_collision()`: Check if two widget rects overlap
   - `calculate_stack_offset()`: Calculate offset for widget stacking
 - widgets/clock_widget.py
-  - Digital/analogue clock widget extending `BaseOverlayWidget`. Supports three instances (Clock 1/2/3) with per-monitor selection, independent timezones, optional seconds/timezone labels, analogue numerals toggle, subtle vs “Intense Analogue Shadows” mode (doubles drop-shadow opacity/size), and digital/analogue display modes.
+  - Digital/analogue clock widget extending `BaseOverlayWidget`. Supports three instances (Clock 1/2/3) with per-monitor selection, independent timezones, optional seconds/timezone labels, analogue numerals toggle, subtle vs "Intense Analogue Shadows" mode (doubles drop-shadow opacity/size), digital/analogue display modes, and 9 position options (Top/Middle/Bottom × Left/Center/Right).
 - widgets/weather_widget.py
-  - Weather widget extending `BaseOverlayWidget`. Per-monitor selection via settings (ALL or 1/2/3). Features optional forecast line (tomorrow's min/max temp and condition, 8pt smaller than base font). Planned QPainter-based iconography.
+  - Weather widget extending `BaseOverlayWidget`. Per-monitor selection via settings (ALL or 1/2/3). Features optional forecast line (tomorrow's min/max temp and condition, 8pt smaller than base font), configurable margin from screen edge. Uses Title Case for location and condition display. Supports 9 position options (Top/Middle/Bottom × Left/Center/Right). Planned QPainter-based iconography.
 - widgets/media_widget.py
-  - Spotify/media overlay widget extending `BaseOverlayWidget`. Driven by `core/media/media_controller.py`; per-monitor selection via `widgets.media`, corner positioning, background frame, and monochrome transport controls (Prev/Play/Pause/Next) over track metadata. Artwork uses a square frame for album covers and adapts to non-square thumbnails.
+  - Spotify/media overlay widget extending `BaseOverlayWidget`. Driven by `core/media/media_controller.py`; per-monitor selection via `widgets.media`, 9 position options (Top/Middle/Bottom × Left/Center/Right), background frame, and monochrome transport controls (Prev/Play/Pause/Next) over track metadata. Uses Title Case for track title and artist display. Artwork uses a square frame for album covers and adapts to non-square thumbnails.
 - widgets/reddit_widget.py
-  - Reddit overlay widget extending `BaseOverlayWidget`. Shows top posts from a configured subreddit with 4-, 10-, or 20-item layouts (20-item mode for ultra-wide displays), per-monitor selection via `widgets.reddit`, shared overlay fade-in coordination, and click-through to the system browser.
+  - Reddit overlay widget extending `BaseOverlayWidget`. Shows top posts from a configured subreddit with 4-, 10-, or 20-item layouts (20-item mode for ultra-wide displays), per-monitor selection via `widgets.reddit`, 9 position options (Top/Middle/Bottom × Left/Center/Right), shared overlay fade-in coordination, and click-through to the system browser.
   - **Reddit link handling (2024-12-17)**: Smart A/B/C logic based on primary display coverage:
     - Case A: Primary covered + hard_exit → Exit immediately, bring browser to foreground
     - Case B: Primary covered + Ctrl held → Exit immediately, bring browser to foreground
@@ -260,6 +261,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - Supports a second instance (`reddit2_widget`) via `widgets.reddit2.*` settings with independent subreddit/position/display but inheriting all styling from Reddit 1.
 - widgets/spotify_visualizer_widget.py
    - Spotify Beat Visualizer widget and background audio worker. Captures loopback audio via a shared `_SpotifyBeatEngine` (single process-wide engine), publishes raw mono frames into a lock-free `TripleBuffer`, performs FFT/band mapping on the COMPUTE pool (not UI thread), and exposes pre-smoothed bar magnitudes plus a derived GPU fade factor to the bar overlay.
+   - **Dec 2025**: Added `_clear_gl_overlay()` to properly clear GL bars when Spotify closes (sync_visibility_with_anchor).
    - **Visualizer tuning (v1.243+)**: Uses noise floor subtraction (`noise_floor=2.1`) and dynamic range expansion (`expansion=2.5`) to achieve 0.02-1.0 bar range with reactive drops. V1.2-style smoothing (`smoothing=0.3`, `decay_rate=0.7`) provides aggressive 30% per-frame decay for visible drops while maintaining fast attack. Center-out gradient (`(1-dist)²*0.85+0.15`) ensures bass in center, treble at edges. See `audits/VISUALIZER_DEBUG.md` for tuning history.
    - **Floor controls**: `set_floor_config(dynamic_enabled, manual_floor)` drives dynamic noise floor averaging (ratio 1.05, alpha 0.05) with manual override clamped to 0.12–4.00. Manual selection snaps internal running average to avoid re-enable jumps.
    - The QWidget owns the Spotify-style card, primary overlay fade, and drop shadow; bars are drawn by a dedicated `SpotifyBarsGLOverlay` QOpenGLWidget overlay created and managed by `DisplayWidget`, with a software (CPU) fallback path controlled by `widgets.spotify_visualizer.software_visualizer_enabled` when the renderer backend is set to Software. Bars only animate while the normalized media state is PLAYING; when Spotify is paused or stopped the beat engine decays targets to zero and the overlay's 1-segment idle floor produces a flat single-row baseline. Card fade participates in the primary overlay wave, while the bar field uses a delayed secondary fade computed from the shared `ShadowFadeProfile` progress so the visualiser never pops in or shows stray green pixels.

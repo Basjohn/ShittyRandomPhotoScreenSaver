@@ -117,8 +117,9 @@ class FrameState:
         time_since_sample = render_time - curr.timestamp
         
         # Limit extrapolation to avoid wild overshoots
-        # Max extrapolation: 100ms ahead (allows for timer jitter up to 100ms)
-        time_since_sample = min(time_since_sample, 0.1)
+        # Max extrapolation: 125ms ahead (allows for timer jitter up to 125ms)
+        # Increased from 100ms based on perf logs showing occasional 125ms spikes
+        time_since_sample = min(time_since_sample, 0.125)
         
         extrapolated = curr.progress + velocity * time_since_sample
         

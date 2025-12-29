@@ -970,12 +970,14 @@ class WidgetManager:
 
         position_map = {
             'Top Left': ClockPosition.TOP_LEFT,
-            'Top Right': ClockPosition.TOP_RIGHT,
             'Top Center': ClockPosition.TOP_CENTER,
+            'Top Right': ClockPosition.TOP_RIGHT,
+            'Middle Left': ClockPosition.MIDDLE_LEFT,
             'Center': ClockPosition.CENTER,
+            'Middle Right': ClockPosition.MIDDLE_RIGHT,
             'Bottom Left': ClockPosition.BOTTOM_LEFT,
-            'Bottom Right': ClockPosition.BOTTOM_RIGHT,
             'Bottom Center': ClockPosition.BOTTOM_CENTER,
+            'Bottom Right': ClockPosition.BOTTOM_RIGHT,
         }
 
         raw_format = _resolve_style('format', '12h')
@@ -1126,8 +1128,13 @@ class WidgetManager:
 
         weather_position_map = {
             'Top Left': WeatherPosition.TOP_LEFT,
+            'Top Center': WeatherPosition.TOP_CENTER,
             'Top Right': WeatherPosition.TOP_RIGHT,
+            'Middle Left': WeatherPosition.MIDDLE_LEFT,
+            'Center': WeatherPosition.CENTER,
+            'Middle Right': WeatherPosition.MIDDLE_RIGHT,
             'Bottom Left': WeatherPosition.BOTTOM_LEFT,
+            'Bottom Center': WeatherPosition.BOTTOM_CENTER,
             'Bottom Right': WeatherPosition.BOTTOM_RIGHT,
         }
         position = weather_position_map.get(position_str, WeatherPosition.TOP_LEFT)
@@ -1174,6 +1181,13 @@ class WidgetManager:
 
             show_forecast = SettingsManager.to_bool(weather_settings.get('show_forecast', False), False)
             widget.set_show_forecast(show_forecast)
+
+            # Apply margin setting
+            margin = weather_settings.get('margin', 20)
+            try:
+                widget.set_margin(int(margin))
+            except Exception:
+                pass
 
             try:
                 if hasattr(widget, "set_shadow_config"):
@@ -1236,8 +1250,13 @@ class WidgetManager:
 
         media_position_map = {
             'Top Left': MediaPosition.TOP_LEFT,
+            'Top Center': MediaPosition.TOP_CENTER,
             'Top Right': MediaPosition.TOP_RIGHT,
+            'Middle Left': MediaPosition.MIDDLE_LEFT,
+            'Center': MediaPosition.CENTER,
+            'Middle Right': MediaPosition.MIDDLE_RIGHT,
             'Bottom Left': MediaPosition.BOTTOM_LEFT,
+            'Bottom Center': MediaPosition.BOTTOM_CENTER,
             'Bottom Right': MediaPosition.BOTTOM_RIGHT,
         }
         position = media_position_map.get(position_str, MediaPosition.BOTTOM_LEFT)
@@ -1398,8 +1417,13 @@ class WidgetManager:
 
         reddit_position_map = {
             'Top Left': RedditPosition.TOP_LEFT,
+            'Top Center': RedditPosition.TOP_CENTER,
             'Top Right': RedditPosition.TOP_RIGHT,
+            'Middle Left': RedditPosition.MIDDLE_LEFT,
+            'Center': RedditPosition.CENTER,
+            'Middle Right': RedditPosition.MIDDLE_RIGHT,
             'Bottom Left': RedditPosition.BOTTOM_LEFT,
+            'Bottom Center': RedditPosition.BOTTOM_CENTER,
             'Bottom Right': RedditPosition.BOTTOM_RIGHT,
         }
         position = reddit_position_map.get(position_str, RedditPosition.BOTTOM_RIGHT)

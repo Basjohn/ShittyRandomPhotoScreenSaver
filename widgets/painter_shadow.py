@@ -103,7 +103,11 @@ class ShadowConfig:
             return cls(enabled=False)
         
         try:
-            enabled = bool(config.get("enabled", True))
+            enabled_val = config.get("enabled", True)
+            if isinstance(enabled_val, str):
+                enabled = enabled_val.lower() not in ("false", "0", "no", "off", "")
+            else:
+                enabled = bool(enabled_val)
         except Exception:
             enabled = True
             
