@@ -9,24 +9,83 @@ Provides common functionality for all screensaver overlay widgets including:
 - Thread manager integration
 - Pixel shift support
 - Size calculation for stacking/collision detection
+- **Lifecycle management** with states (CREATED, INITIALIZED, ACTIVE, HIDDEN, DESTROYED)
+- **ResourceManager integration** for proper cleanup
 """
 from __future__ import annotations
 
+import threading
 from abc import abstractmethod
-from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
+from enum import Enum, auto
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from PySide6.QtCore import QPoint, QRect, QSize, Signal
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import QLabel, QWidget
 
 from core.logging.logger import get_logger
+from core.resources.manager import ResourceManager
+from core.resources.types import ResourceType
 from widgets.shadow_utils import apply_widget_shadow, configure_overlay_widget_attributes
 
 if TYPE_CHECKING:
     from core.threading.manager import ThreadManager
 
 logger = get_logger(__name__)
+
+
+class WidgetLifecycleState(Enum):
+    """Standard widget lifecycle states.
+    
+    State transitions:
+        CREATED → INITIALIZED → ACTIVE ⇄ HIDDEN → DESTROYED
+    
+    Valid transitions:
+        - CREATED → INITIALIZED (via initialize())
+        - INITIALIZED → ACTIVE (via activate())
+        - ACTIVE → HIDDEN (via deactivate())
+        - HIDDEN → ACTIVE (via activate())
+        - ACTIVE → DESTROYED (via cleanup())
+        - HIDDEN → DESTROYED (via cleanup())
+        - INITIALIZED → DESTROYED (via cleanup())
+    
+    Invalid transitions:
+        - DESTROYED → any state (terminal)
+        - CREATED → ACTIVE (must initialize first)
+        - CREATED → HIDDEN (must initialize first)
+    """
+    CREATED = auto()       # Widget instantiated but not initialized
+    INITIALIZED = auto()   # Resources allocated, ready to activate
+    ACTIVE = auto()        # Visible and updating
+    HIDDEN = auto()        # Not visible but alive, can reactivate
+    DESTROYED = auto()     # Cleaned up, terminal state
+
+
+# Valid state transitions map
+_VALID_TRANSITIONS: Dict[WidgetLifecycleState, set] = {
+    WidgetLifecycleState.CREATED: {
+        WidgetLifecycleState.INITIALIZED,
+        WidgetLifecycleState.DESTROYED,  # Allow direct cleanup from CREATED
+    },
+    WidgetLifecycleState.INITIALIZED: {
+        WidgetLifecycleState.ACTIVE,
+        WidgetLifecycleState.DESTROYED,
+    },
+    WidgetLifecycleState.ACTIVE: {
+        WidgetLifecycleState.HIDDEN,
+        WidgetLifecycleState.DESTROYED,
+    },
+    WidgetLifecycleState.HIDDEN: {
+        WidgetLifecycleState.ACTIVE,
+        WidgetLifecycleState.DESTROYED,
+    },
+    WidgetLifecycleState.DESTROYED: set(),  # Terminal state
+}
+
+
+def is_valid_lifecycle_transition(old_state: WidgetLifecycleState, new_state: WidgetLifecycleState) -> bool:
+    """Check if a lifecycle state transition is valid."""
+    return new_state in _VALID_TRANSITIONS.get(old_state, set())
 
 
 class OverlayPosition(Enum):
@@ -52,9 +111,11 @@ class OverlayPosition(Enum):
 
 class BaseOverlayWidget(QLabel):
     """
-    Base class for all overlay widgets.
+    Base class for all overlay widgets with lifecycle management.
     
     Provides common functionality:
+    - **Lifecycle management** with states (CREATED, INITIALIZED, ACTIVE, HIDDEN, DESTROYED)
+    - **ResourceManager integration** for proper cleanup
     - Font family/size management
     - Text color management
     - Background frame with opacity and border
@@ -63,8 +124,18 @@ class BaseOverlayWidget(QLabel):
     - Thread manager integration
     - Widget size calculation for stacking
     
+    Lifecycle Methods:
+    - initialize() - Allocate resources, transition to INITIALIZED
+    - activate() - Show widget and start updates, transition to ACTIVE
+    - deactivate() - Hide widget and stop updates, transition to HIDDEN
+    - cleanup() - Clean up all resources, transition to DESTROYED (terminal)
+    
     Subclasses should:
     - Call super().__init__() with parent and position
+    - Override _initialize_impl() for resource allocation
+    - Override _activate_impl() for activation logic (start timers, etc.)
+    - Override _deactivate_impl() for deactivation logic (stop timers, etc.)
+    - Override _cleanup_impl() for cleanup logic
     - Override _update_content() for content updates
     - Override _calculate_content_size() for size hints
     - Call _apply_base_styling() in their _setup_ui()
@@ -92,6 +163,14 @@ class BaseOverlayWidget(QLabel):
     ):
         super().__init__(parent)
         
+        # =====================================================================
+        # LIFECYCLE MANAGEMENT
+        # =====================================================================
+        self._lifecycle_state = WidgetLifecycleState.CREATED
+        self._lifecycle_lock = threading.Lock()
+        self._resource_manager: Optional[ResourceManager] = None
+        self._registered_resource_ids: List[str] = []
+        
         # Position and layout
         self._position = position
         self._margin = self.DEFAULT_MARGIN
@@ -113,12 +192,13 @@ class BaseOverlayWidget(QLabel):
         # Shadow
         self._shadow_config: Optional[Dict[str, Any]] = None
         self._has_faded_in = False
+        self._intense_shadow = False  # Intensified shadow styling
         
         # Thread manager
         self._thread_manager: Optional["ThreadManager"] = None
         self._inherit_thread_manager_from_parent(parent)
         
-        # State
+        # State (legacy - use lifecycle state instead)
         self._enabled = False
         self._pixel_shift_offset = QPoint(0, 0)
         
@@ -322,17 +402,34 @@ class BaseOverlayWidget(QLabel):
         """Set shadow configuration."""
         self._shadow_config = config
         if config and self._has_faded_in:
-            apply_widget_shadow(self, config, has_background_frame=self._show_background)
+            apply_widget_shadow(self, config, has_background_frame=self._show_background, intense=self._intense_shadow)
     
     def get_shadow_config(self) -> Optional[Dict[str, Any]]:
         """Get current shadow configuration."""
         return self._shadow_config
     
+    def set_intense_shadow(self, intense: bool) -> None:
+        """Enable or disable intensified shadow styling.
+        
+        When enabled, shadows have doubled blur radius, increased opacity,
+        and larger offset for dramatic visual effect on large displays.
+        
+        Args:
+            intense: True to enable intense shadows
+        """
+        self._intense_shadow = bool(intense)
+        if self._shadow_config and self._has_faded_in:
+            apply_widget_shadow(self, self._shadow_config, has_background_frame=self._show_background, intense=self._intense_shadow)
+    
+    def get_intense_shadow(self) -> bool:
+        """Get whether intense shadow styling is enabled."""
+        return self._intense_shadow
+    
     def on_fade_complete(self) -> None:
         """Called when fade-in animation completes. Apply shadow."""
         self._has_faded_in = True
         if self._shadow_config:
-            apply_widget_shadow(self, self._shadow_config, has_background_frame=self._show_background)
+            apply_widget_shadow(self, self._shadow_config, has_background_frame=self._show_background, intense=self._intense_shadow)
     
     # -------------------------------------------------------------------------
     # Thread Manager Integration
@@ -447,6 +544,308 @@ class BaseOverlayWidget(QLabel):
     def set_overlay_name(self, name: str) -> None:
         """Set overlay name."""
         self._overlay_name = name
+    
+    # -------------------------------------------------------------------------
+    # LIFECYCLE MANAGEMENT
+    # -------------------------------------------------------------------------
+    
+    def get_lifecycle_state(self) -> WidgetLifecycleState:
+        """Get current lifecycle state (thread-safe)."""
+        with self._lifecycle_lock:
+            return self._lifecycle_state
+    
+    def is_lifecycle_initialized(self) -> bool:
+        """Check if widget has been initialized."""
+        with self._lifecycle_lock:
+            return self._lifecycle_state in (
+                WidgetLifecycleState.INITIALIZED,
+                WidgetLifecycleState.ACTIVE,
+                WidgetLifecycleState.HIDDEN,
+            )
+    
+    def is_lifecycle_active(self) -> bool:
+        """Check if widget is in ACTIVE state."""
+        with self._lifecycle_lock:
+            return self._lifecycle_state == WidgetLifecycleState.ACTIVE
+    
+    def is_lifecycle_destroyed(self) -> bool:
+        """Check if widget has been destroyed."""
+        with self._lifecycle_lock:
+            return self._lifecycle_state == WidgetLifecycleState.DESTROYED
+    
+    def _transition_lifecycle_state(self, new_state: WidgetLifecycleState) -> bool:
+        """
+        Attempt to transition to a new lifecycle state.
+        
+        Args:
+            new_state: Target state
+            
+        Returns:
+            True if transition was valid and completed, False otherwise
+        """
+        with self._lifecycle_lock:
+            old_state = self._lifecycle_state
+            if not is_valid_lifecycle_transition(old_state, new_state):
+                logger.warning(
+                    f"[LIFECYCLE] Invalid transition for {self._overlay_name}: "
+                    f"{old_state.name} → {new_state.name}"
+                )
+                return False
+            
+            self._lifecycle_state = new_state
+            logger.debug(
+                f"[LIFECYCLE] {self._overlay_name}: {old_state.name} → {new_state.name}"
+            )
+            return True
+    
+    def set_resource_manager(self, manager: ResourceManager) -> None:
+        """Set the ResourceManager for this widget."""
+        self._resource_manager = manager
+    
+    def get_resource_manager(self) -> Optional[ResourceManager]:
+        """Get the ResourceManager for this widget."""
+        return self._resource_manager
+    
+    def _register_resource(self, resource: Any, description: str) -> Optional[str]:
+        """
+        Register a resource with the ResourceManager.
+        
+        Args:
+            resource: Resource to register
+            description: Human-readable description
+            
+        Returns:
+            Resource ID if registered, None if no ResourceManager
+        """
+        if self._resource_manager is None:
+            return None
+        try:
+            resource_id = self._resource_manager.register(
+                resource,
+                ResourceType.GUI_COMPONENT,
+                description=f"{self._overlay_name}: {description}",
+            )
+            self._registered_resource_ids.append(resource_id)
+            return resource_id
+        except Exception as e:
+            logger.warning(f"[LIFECYCLE] Failed to register resource: {e}")
+            return None
+    
+    def initialize(self) -> bool:
+        """
+        Initialize widget resources. Call once after construction.
+        
+        Transitions: CREATED → INITIALIZED
+        
+        Returns:
+            True if initialization succeeded, False otherwise
+        """
+        with self._lifecycle_lock:
+            if self._lifecycle_state != WidgetLifecycleState.CREATED:
+                logger.warning(
+                    f"[LIFECYCLE] Cannot initialize {self._overlay_name} from state "
+                    f"{self._lifecycle_state.name}"
+                )
+                return False
+        
+        try:
+            # Call subclass initialization
+            self._initialize_impl()
+            
+            # Transition state
+            if not self._transition_lifecycle_state(WidgetLifecycleState.INITIALIZED):
+                return False
+            
+            logger.info(f"[LIFECYCLE] {self._overlay_name} initialized")
+            return True
+        except Exception as e:
+            logger.error(
+                f"[LIFECYCLE] Initialization failed for {self._overlay_name}: {e}",
+                exc_info=True
+            )
+            return False
+    
+    def activate(self) -> bool:
+        """
+        Activate widget (show and start updates).
+        
+        Transitions: INITIALIZED → ACTIVE, HIDDEN → ACTIVE
+        
+        Returns:
+            True if activation succeeded, False otherwise
+        """
+        with self._lifecycle_lock:
+            if self._lifecycle_state not in (
+                WidgetLifecycleState.INITIALIZED,
+                WidgetLifecycleState.HIDDEN,
+            ):
+                logger.warning(
+                    f"[LIFECYCLE] Cannot activate {self._overlay_name} from state "
+                    f"{self._lifecycle_state.name}"
+                )
+                return False
+        
+        try:
+            # Call subclass activation
+            self._activate_impl()
+            
+            # Transition state
+            if not self._transition_lifecycle_state(WidgetLifecycleState.ACTIVE):
+                return False
+            
+            # Update legacy state
+            self._enabled = True
+            
+            logger.info(f"[LIFECYCLE] {self._overlay_name} activated")
+            return True
+        except Exception as e:
+            logger.error(
+                f"[LIFECYCLE] Activation failed for {self._overlay_name}: {e}",
+                exc_info=True
+            )
+            return False
+    
+    def deactivate(self) -> bool:
+        """
+        Deactivate widget (hide and stop updates).
+        
+        Transitions: ACTIVE → HIDDEN
+        
+        Returns:
+            True if deactivation succeeded, False otherwise
+        """
+        with self._lifecycle_lock:
+            if self._lifecycle_state != WidgetLifecycleState.ACTIVE:
+                logger.warning(
+                    f"[LIFECYCLE] Cannot deactivate {self._overlay_name} from state "
+                    f"{self._lifecycle_state.name}"
+                )
+                return False
+        
+        try:
+            # Call subclass deactivation
+            self._deactivate_impl()
+            
+            # Transition state
+            if not self._transition_lifecycle_state(WidgetLifecycleState.HIDDEN):
+                return False
+            
+            # Update legacy state
+            self._enabled = False
+            
+            # Hide widget
+            self.hide()
+            
+            logger.info(f"[LIFECYCLE] {self._overlay_name} deactivated")
+            return True
+        except Exception as e:
+            logger.error(
+                f"[LIFECYCLE] Deactivation failed for {self._overlay_name}: {e}",
+                exc_info=True
+            )
+            return False
+    
+    def cleanup(self) -> None:
+        """
+        Clean up all resources. Widget is unusable after this.
+        
+        Transitions: any → DESTROYED (terminal)
+        
+        This method is idempotent - calling it multiple times is safe.
+        """
+        with self._lifecycle_lock:
+            if self._lifecycle_state == WidgetLifecycleState.DESTROYED:
+                logger.debug(f"[LIFECYCLE] {self._overlay_name} already destroyed")
+                return
+            
+            current_state = self._lifecycle_state
+        
+        try:
+            # Deactivate if active
+            if current_state == WidgetLifecycleState.ACTIVE:
+                try:
+                    self._deactivate_impl()
+                except Exception as e:
+                    logger.warning(f"[LIFECYCLE] Deactivation during cleanup failed: {e}")
+            
+            # Call subclass cleanup
+            try:
+                self._cleanup_impl()
+            except Exception as e:
+                logger.warning(f"[LIFECYCLE] Cleanup impl failed: {e}")
+            
+            # Clean up registered resources
+            if self._resource_manager is not None:
+                for resource_id in self._registered_resource_ids:
+                    try:
+                        self._resource_manager.unregister(resource_id, force=True)
+                    except Exception as e:
+                        logger.debug(f"[LIFECYCLE] Resource unregister failed: {e}")
+                self._registered_resource_ids.clear()
+            
+            # Transition to destroyed
+            with self._lifecycle_lock:
+                self._lifecycle_state = WidgetLifecycleState.DESTROYED
+            
+            # Update legacy state
+            self._enabled = False
+            
+            logger.info(f"[LIFECYCLE] {self._overlay_name} destroyed")
+            
+            # Schedule Qt deletion
+            try:
+                self.deleteLater()
+            except Exception:
+                pass
+                
+        except Exception as e:
+            logger.error(
+                f"[LIFECYCLE] Cleanup failed for {self._overlay_name}: {e}",
+                exc_info=True
+            )
+            # Force state to destroyed even on error
+            with self._lifecycle_lock:
+                self._lifecycle_state = WidgetLifecycleState.DESTROYED
+    
+    # -------------------------------------------------------------------------
+    # Lifecycle Implementation Hooks (Override in Subclasses)
+    # -------------------------------------------------------------------------
+    
+    def _initialize_impl(self) -> None:
+        """
+        Subclass initialization logic. Override to allocate resources.
+        
+        Called by initialize() after state validation.
+        Raise an exception to indicate initialization failure.
+        """
+        pass
+    
+    def _activate_impl(self) -> None:
+        """
+        Subclass activation logic. Override to start timers, show widget, etc.
+        
+        Called by activate() after state validation.
+        Raise an exception to indicate activation failure.
+        """
+        pass
+    
+    def _deactivate_impl(self) -> None:
+        """
+        Subclass deactivation logic. Override to stop timers, hide widget, etc.
+        
+        Called by deactivate() after state validation.
+        Raise an exception to indicate deactivation failure.
+        """
+        pass
+    
+    def _cleanup_impl(self) -> None:
+        """
+        Subclass cleanup logic. Override to release resources.
+        
+        Called by cleanup() before ResourceManager cleanup.
+        Should be idempotent - may be called multiple times.
+        """
+        pass
     
     # -------------------------------------------------------------------------
     # Abstract Methods

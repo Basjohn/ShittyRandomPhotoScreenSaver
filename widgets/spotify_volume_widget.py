@@ -155,6 +155,76 @@ class SpotifyVolumeWidget(QWidget):
             pass
         self.hide()
 
+    # ------------------------------------------------------------------
+    # Lifecycle Implementation Hooks
+    # ------------------------------------------------------------------
+    
+    def _initialize_impl(self) -> None:
+        """Initialize volume widget resources (lifecycle hook)."""
+        logger.debug("[LIFECYCLE] SpotifyVolumeWidget initialized")
+    
+    def _activate_impl(self) -> None:
+        """Activate volume widget (lifecycle hook)."""
+        if not self._controller.is_available():
+            logger.debug("[LIFECYCLE] SpotifyVolumeWidget controller unavailable")
+            return
+        
+        self._ensure_flush_timer()
+        
+        # Read initial volume
+        if self._thread_manager is not None:
+            def _do_read():
+                return self._controller.get_volume()
+            
+            def _on_result(result):
+                val = None
+                try:
+                    if getattr(result, "success", False):
+                        val = getattr(result, "result", None)
+                except Exception:
+                    pass
+                if isinstance(val, float):
+                    ThreadManager.run_on_ui_thread(self._apply_volume, val)
+            
+            try:
+                self._thread_manager.submit_io_task(_do_read, callback=_on_result)
+            except Exception:
+                pass
+        else:
+            try:
+                current = self._controller.get_volume()
+                if isinstance(current, float):
+                    self._apply_volume(current)
+            except Exception:
+                pass
+        
+        logger.debug("[LIFECYCLE] SpotifyVolumeWidget activated")
+    
+    def _deactivate_impl(self) -> None:
+        """Deactivate volume widget (lifecycle hook)."""
+        if self._flush_timer is not None:
+            try:
+                self._flush_timer.stop()
+            except Exception:
+                pass
+        self._pending_volume = None
+        logger.debug("[LIFECYCLE] SpotifyVolumeWidget deactivated")
+    
+    def _cleanup_impl(self) -> None:
+        """Clean up volume widget resources (lifecycle hook)."""
+        self._deactivate_impl()
+        if self._flush_timer is not None:
+            try:
+                self._flush_timer.deleteLater()
+            except Exception:
+                pass
+            self._flush_timer = None
+        logger.debug("[LIFECYCLE] SpotifyVolumeWidget cleaned up")
+
+    # ------------------------------------------------------------------
+    # Legacy Lifecycle Methods (for backward compatibility)
+    # ------------------------------------------------------------------
+
     def start(self) -> None:
         """Initialise volume from the controller when available."""
 

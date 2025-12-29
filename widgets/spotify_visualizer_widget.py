@@ -1561,7 +1561,72 @@ class SpotifyVisualizerWidget(QWidget):
             self._fallback_mismatch_start = 0.0
 
     # ------------------------------------------------------------------
-    # Lifecycle
+    # Lifecycle Implementation Hooks
+    # ------------------------------------------------------------------
+    
+    def _initialize_impl(self) -> None:
+        """Initialize visualizer resources (lifecycle hook)."""
+        logger.debug("[LIFECYCLE] SpotifyVisualizerWidget initialized")
+    
+    def _activate_impl(self) -> None:
+        """Activate visualizer - start audio capture (lifecycle hook)."""
+        # Start audio capture via the shared beat engine
+        try:
+            engine = get_shared_spotify_beat_engine(self._bar_count)
+            self._engine = engine
+            if self._thread_manager is not None:
+                engine.set_thread_manager(self._thread_manager)
+            engine.acquire()
+            engine.ensure_started()
+        except Exception:
+            logger.debug("[LIFECYCLE] Failed to start shared beat engine", exc_info=True)
+        
+        # Start dedicated timer for continuous visualizer updates
+        if self._thread_manager is not None and self._bars_timer is None:
+            try:
+                self._bars_timer = self._thread_manager.schedule_recurring(16, self._on_tick)
+                self._current_timer_interval_ms = 16
+            except Exception:
+                self._bars_timer = None
+        
+        logger.debug("[LIFECYCLE] SpotifyVisualizerWidget activated")
+    
+    def _deactivate_impl(self) -> None:
+        """Deactivate visualizer - stop audio capture (lifecycle hook)."""
+        try:
+            engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
+        except Exception:
+            engine = None
+        if engine is not None:
+            try:
+                engine.release()
+            except Exception:
+                logger.debug("[LIFECYCLE] Failed to release shared beat engine", exc_info=True)
+        
+        try:
+            self.detach_from_animation_manager()
+        except Exception:
+            pass
+        
+        if self._bars_timer is not None:
+            try:
+                self._bars_timer.stop()
+            except Exception:
+                pass
+            self._bars_timer = None
+        self._using_animation_ticks = False
+        
+        self._log_perf_snapshot(reset=True)
+        logger.debug("[LIFECYCLE] SpotifyVisualizerWidget deactivated")
+    
+    def _cleanup_impl(self) -> None:
+        """Clean up visualizer resources (lifecycle hook)."""
+        self._deactivate_impl()
+        self._engine = None
+        logger.debug("[LIFECYCLE] SpotifyVisualizerWidget cleaned up")
+
+    # ------------------------------------------------------------------
+    # Legacy Lifecycle Methods (for backward compatibility)
     # ------------------------------------------------------------------
 
     def start(self) -> None:

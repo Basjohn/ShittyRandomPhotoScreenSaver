@@ -56,6 +56,11 @@ def configure_overlay_widget_attributes(widget: QWidget) -> None:
 # and to the animated shadow fade so visuals stay consistent.
 SHADOW_SIZE_MULTIPLIER: float = 1.2
 
+# Intense shadow multipliers - doubles the shadow effect for dramatic styling
+INTENSE_SHADOW_BLUR_MULTIPLIER: float = 2.0
+INTENSE_SHADOW_OPACITY_MULTIPLIER: float = 1.8
+INTENSE_SHADOW_OFFSET_MULTIPLIER: float = 1.5
+
 
 def _to_bool(value: Any, default: bool = False) -> bool:
     """Lightweight bool normalisation for local config fields.
@@ -85,6 +90,7 @@ def apply_widget_shadow(
     config: Mapping[str, Any] | None,
     *,
     has_background_frame: bool,
+    intense: bool = False,
 ) -> None:
     """Apply or remove a drop shadow on an overlay widget.
 
@@ -95,6 +101,9 @@ def apply_widget_shadow(
             a solid background/frame (e.g. clock/WeatherWidget
             ``show_background=True``), which uses the stronger
             ``frame_opacity``; otherwise the lighter ``text_opacity``.
+        intense: If True, applies intensified shadow styling with
+            doubled blur radius, increased opacity, and larger offset
+            for dramatic visual effect on large displays.
     """
 
     if config is None:
@@ -154,6 +163,18 @@ def apply_widget_shadow(
         blur_radius = max(0, int(blur_radius * SHADOW_SIZE_MULTIPLIER))
     except Exception:
         pass
+
+    # Apply intense shadow multipliers if enabled
+    if intense:
+        try:
+            blur_radius = int(blur_radius * INTENSE_SHADOW_BLUR_MULTIPLIER)
+            dx = int(dx * INTENSE_SHADOW_OFFSET_MULTIPLIER)
+            dy = int(dy * INTENSE_SHADOW_OFFSET_MULTIPLIER)
+            # Increase opacity for intense shadows
+            base_opacity = min(1.0, base_opacity * INTENSE_SHADOW_OPACITY_MULTIPLIER)
+            color = QColor(r, g, b, int(a * base_opacity))
+        except Exception:
+            pass
 
     if isinstance(existing_effect, QGraphicsDropShadowEffect):
         effect = existing_effect

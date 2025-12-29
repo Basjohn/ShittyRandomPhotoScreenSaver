@@ -14,6 +14,7 @@ Single source of truth for architecture and key decisions.
 - ResourceManager tracks Qt objects for deterministic cleanup; includes QPixmap/QImage pooling to reduce GC pressure.
 - SettingsManager provides dot-notation access, persisted across runs.
 - WidgetManager (extracted from DisplayWidget) handles overlay widget lifecycle, Z-order, rate-limited raises, and QGraphicsEffect invalidation.
+- WidgetFactoryRegistry (`rendering/widget_factories.py`) provides centralized widget creation via factory pattern (ClockWidgetFactory, WeatherWidgetFactory, MediaWidgetFactory, RedditWidgetFactory, SpotifyVisualizerFactory, SpotifyVolumeFactory).
 - InputHandler (extracted from DisplayWidget) handles all user input including mouse/keyboard events, context menu triggers, and exit gestures.
 - TransitionController (extracted from DisplayWidget) manages transition lifecycle including watchdog timeout handling.
 - ImagePresenter (extracted from DisplayWidget) manages pixmap lifecycle.
@@ -23,6 +24,7 @@ Single source of truth for architecture and key decisions.
 - GLTextureManager (per-compositor instance) handles texture upload, caching (LRU), and PBO pooling. Changed from singleton because OpenGL textures are context-specific.
 - GLTransitionRenderer (extracted from GLCompositor) centralizes shader and QPainter transition rendering.
 - GLErrorHandler (singleton) implements session-level fallback policy (Group A→B→C) with software GL detection.
+- GLStateManager (`rendering/gl_state_manager.py`) provides centralized GL context state management with validated state transitions (UNINITIALIZED→INITIALIZING→READY/ERROR→DESTROYING→DESTROYED), thread-safe access, callbacks, and recovery tracking. Integrated into GLCompositorWidget and SpotifyBarsGLOverlay.
 - TransitionStateManager (extracted from GLCompositor) manages per-transition state with change notifications.
 - BeatEngine (extracted from SpotifyVisualizerWidget) handles FFT processing and bar smoothing on COMPUTE pool.
 
@@ -247,6 +249,23 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
 - SST files contain a top-level object with `settings_version` (int), `application` (str, currently informational) and `snapshot` (mapping). The `snapshot` map mirrors the nested schema above: top-level `widgets` and `transitions` sections plus nested `display`, `timing`, `input`, `sources`, and any future sections represented by dotted keys.
 - Import is merge‑by‑default: values from the snapshot overwrite the current profile where they overlap, but keys that do not exist in the snapshot are preserved. A full restore is therefore "Reset To Defaults" followed by "Import Settings…".
 
+## Settings Type Safety (Dec 2025)
+- Type-safe settings dataclass models in `core/settings/models.py` provide IDE autocompletion and runtime validation.
+- Enums: `DisplayMode` (fill/fit/shrink), `TransitionType` (all transition types), `WidgetPosition` (9 positions).
+- Core models: `DisplaySettings`, `TransitionSettings`, `InputSettings`, `CacheSettings`, `SourceSettings`.
+- Widget models: `ShadowSettings`, `ClockWidgetSettings`, `WeatherWidgetSettings`, `MediaWidgetSettings`, `RedditWidgetSettings`.
+- Container: `AppSettings` aggregates all settings sections with `from_settings(SettingsManager)` factory method.
+- Each model has `to_dict()` for serialization back to flat keys.
+- **22 unit tests** in `tests/test_settings_models.py`.
+
+## Intense Shadows (Dec 2025)
+- Optional "Intense Shadows" styling for all overlay widgets with dramatic visual effect.
+- Multipliers in `widgets/shadow_utils.py`: blur 2.0x, opacity 1.8x, offset 1.5x.
+- `BaseOverlayWidget.set_intense_shadow(bool)` method for all widgets.
+- Clock widget has separate `analog_shadow_intense` and `digital_shadow_intense` options.
+- Settings: `widgets.clock.digital_shadow_intense`, `widgets.weather.intense_shadow`, `widgets.media.intense_shadow`, `widgets.reddit.intense_shadow`.
+- Applied via `WidgetManager` during widget creation.
+
 ## Thread Safety & Centralization
 - All business logic threading goes via `ThreadManager` where available.
 - Overlay widgets and engine-level timers (image rotation + background RSS refresh) must obtain timers via `ThreadManager.schedule_recurring`; the legacy raw `QTimer` fallback has been removed and widgets now log/abort startup when no manager is injected.
@@ -268,13 +287,14 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
 
 ### Widget Overlay Behaviour (canonical reference)
 
-- Overlay widgets (clock/weather/media/Reddit) extend `BaseOverlayWidget` (`widgets/base_overlay_widget.py`) which provides:
+- Overlay widgets (clock/weather/media/Reddit/Spotify) extend `BaseOverlayWidget` (`widgets/base_overlay_widget.py`) which provides:
   - Common font/color/background/shadow/position management
   - Pixel shift support via `_pixel_shift_offset` and `apply_pixel_shift()`
   - Thread manager integration via `set_thread_manager()`
   - Size calculation helpers for stacking/collision detection
   - Widget-specific position enums (ClockPosition, WeatherPosition, MediaPosition, RedditPosition) support 9 positions: Top Left/Center/Right, Middle Left/Center/Right, Bottom Left/Center/Right
   - Position enums are stored separately from the base class `OverlayPosition` for type safety
+  - **Lifecycle State Machine (Dec 2025)**: `WidgetLifecycleState` enum (CREATED→INITIALIZED→ACTIVE⇄HIDDEN→DESTROYED) with validated transitions via `is_valid_lifecycle_transition()`. Public methods `initialize()`, `activate()`, `deactivate()`, `cleanup()` drive state changes and invoke subclass hooks (`_initialize_impl`, `_activate_impl`, `_deactivate_impl`, `_cleanup_impl`). Thread-safe state access via `_lifecycle_lock`. ResourceManager integration for automatic resource cleanup. All 6 overlay widgets (Clock, Weather, Media, Reddit, SpotifyVisualizer, SpotifyVolume) implement lifecycle hooks while preserving backward-compatible `start()`/`stop()` methods.
 - Overlay widgets follow the patterns defined in `Docs/10_WIDGET_GUIDELINES.md` for:
   - Card styling and typography.
   - Coordinated fade/shadow application via `ShadowFadeProfile` and the

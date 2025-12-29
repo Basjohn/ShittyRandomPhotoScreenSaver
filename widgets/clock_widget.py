@@ -116,12 +116,17 @@ class ClockWidget(BaseOverlayWidget):
         # Optional analogue-only drop shadow under the clock face and hands.
         self._analog_face_shadow: bool = True
         self._analog_shadow_intense: bool = False
+        # Digital clock intense shadow (uses base class QGraphicsDropShadowEffect)
+        self._digital_shadow_intense: bool = False
 
         # Last timestamp used for analogue rendering.
         self._current_dt: Optional[datetime] = None
         
         # Setup widget
         self._setup_ui()
+        
+        # Track if we've been initialized via lifecycle
+        self._lifecycle_initialized = False
         
         logger.debug(f"ClockWidget created (format={time_format.value}, "
                     f"position={position.value}, seconds={show_seconds}, "
@@ -163,6 +168,80 @@ class ClockWidget(BaseOverlayWidget):
     def _update_content(self) -> None:
         """Required by BaseOverlayWidget - update clock display."""
         self._update_time()
+    
+    # -------------------------------------------------------------------------
+    # Lifecycle Implementation Hooks
+    # -------------------------------------------------------------------------
+    
+    def _initialize_impl(self) -> None:
+        """Initialize clock resources (lifecycle hook)."""
+        self._lifecycle_initialized = True
+        logger.debug("[LIFECYCLE] ClockWidget initialized")
+    
+    def _activate_impl(self) -> None:
+        """Activate clock - start timer and show widget (lifecycle hook)."""
+        if not self._ensure_thread_manager("ClockWidget._activate_impl"):
+            raise RuntimeError("ThreadManager not available")
+        
+        # Update immediately
+        self._update_time()
+        
+        # Start recurring updates
+        handle = create_overlay_timer(self, 1000, self._update_time, description="ClockWidget tick")
+        self._timer_handle = handle
+        self._timer = getattr(handle, "_timer", None)
+        
+        # Start fade-in
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
+            try:
+                overlay_name = getattr(self, "_overlay_name", "clock")
+                parent.request_overlay_fade_sync(overlay_name, lambda: self._start_widget_fade_in(1500))
+            except Exception:
+                self._start_widget_fade_in(1500)
+        else:
+            self._start_widget_fade_in(1500)
+        
+        logger.debug("[LIFECYCLE] ClockWidget activated")
+    
+    def _deactivate_impl(self) -> None:
+        """Deactivate clock - stop timer and hide widget (lifecycle hook)."""
+        if self._timer_handle is not None:
+            try:
+                self._timer_handle.stop()
+            except Exception:
+                pass
+            self._timer_handle = None
+        
+        if self._timer is not None:
+            try:
+                self._timer.stop()
+                self._timer.deleteLater()
+            except RuntimeError:
+                pass
+            self._timer = None
+        
+        logger.debug("[LIFECYCLE] ClockWidget deactivated")
+    
+    def _cleanup_impl(self) -> None:
+        """Clean up clock resources (lifecycle hook)."""
+        # Stop timer if still running
+        self._deactivate_impl()
+        
+        # Clean up timezone label
+        if self._tz_label is not None:
+            try:
+                self._tz_label.deleteLater()
+            except Exception:
+                pass
+            self._tz_label = None
+        
+        self._lifecycle_initialized = False
+        logger.debug("[LIFECYCLE] ClockWidget cleaned up")
+    
+    # -------------------------------------------------------------------------
+    # Legacy Start/Stop Methods (for backward compatibility)
+    # -------------------------------------------------------------------------
     
     def start(self) -> None:
         """Start clock updates."""
@@ -666,6 +745,17 @@ class ClockWidget(BaseOverlayWidget):
         self._analog_shadow_intense = bool(intense)
         if self._display_mode == "analog":
             self.update()
+
+    def set_digital_shadow_intense(self, intense: bool) -> None:
+        """Enable or disable the intensified digital clock shadow styling.
+        
+        When enabled, the QGraphicsDropShadowEffect has doubled blur radius,
+        increased opacity, and larger offset for dramatic visual effect.
+        """
+        self._digital_shadow_intense = bool(intense)
+        # Use base class intense shadow for digital mode
+        if self._display_mode == "digital":
+            self.set_intense_shadow(intense)
 
     def set_font_family(self, family: str) -> None:
         """Set font family - override to use bold weight and update tz label."""

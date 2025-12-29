@@ -66,6 +66,7 @@ from rendering.gl_programs.geometry_manager import GLGeometryManager
 from rendering.gl_programs.texture_manager import GLTextureManager
 from rendering.gl_transition_renderer import GLTransitionRenderer
 from rendering.gl_error_handler import get_gl_error_handler
+from rendering.gl_state_manager import GLStateManager, GLContextState
 
 
 def _get_peel_program():
@@ -423,6 +424,9 @@ class GLCompositorWidget(QOpenGLWidget):
         
         # Centralized error handler for session-level fallback policy
         self._error_handler = get_gl_error_handler()
+        
+        # Centralized GL state manager for robust state tracking
+        self._gl_state = GLStateManager(f"compositor_{id(self)}")
         
         # Per-compositor texture manager - textures are NOT shared between GL contexts
         # so each display's compositor needs its own texture manager
@@ -1980,6 +1984,10 @@ class GLCompositorWidget(QOpenGLWidget):
         OpenGL is available, but all drawing still goes through QPainter until
         later phases explicitly enable the shader path.
         """
+        # Transition to INITIALIZING state
+        if not self._gl_state.transition(GLContextState.INITIALIZING):
+            logger.warning("[GL COMPOSITOR] Failed to transition to INITIALIZING state")
+            return
 
         try:
             ctx = self.context()
@@ -2038,12 +2046,19 @@ class GLCompositorWidget(QOpenGLWidget):
             self._use_shaders = False
             self._gl_disabled_for_session = False
             self._init_gl_pipeline()
-        except Exception:
+            
+            # Transition to READY state on success
+            if self._gl_pipeline and self._gl_pipeline.initialized:
+                self._gl_state.transition(GLContextState.READY)
+            else:
+                self._gl_state.transition(GLContextState.ERROR, "Pipeline initialization failed")
+        except Exception as e:
             # If initialization fails at this stage, we simply log and keep
             # using the existing QPainter-only path. Higher levels can decide
             # to disable GL transitions for the session based on this signal
             # in later phases when shader-backed effects are wired.
             logger.debug("[GL COMPOSITOR] initializeGL failed", exc_info=True)
+            self._gl_state.transition(GLContextState.ERROR, str(e))
 
     def _init_gl_pipeline(self) -> None:
         if self._gl_disabled_for_session:
@@ -2215,10 +2230,31 @@ class GLCompositorWidget(QOpenGLWidget):
                 pass
 
     def cleanup(self) -> None:
+        """Clean up GL resources and transition to DESTROYED state."""
+        # Transition to DESTROYING state
+        self._gl_state.transition(GLContextState.DESTROYING)
         try:
             self._cleanup_gl_pipeline()
         except Exception:
             logger.debug("[GL COMPOSITOR] cleanup() failed", exc_info=True)
+        finally:
+            # Transition to DESTROYED state
+            self._gl_state.transition(GLContextState.DESTROYED)
+    
+    def is_gl_ready(self) -> bool:
+        """Check if GL context is ready for rendering.
+        
+        Uses the centralized GLStateManager for robust state checking.
+        """
+        return self._gl_state.is_ready()
+    
+    def get_gl_state(self) -> GLContextState:
+        """Get current GL context state."""
+        return self._gl_state.get_state()
+    
+    def get_gl_error_info(self) -> tuple:
+        """Get GL error information if in error state."""
+        return self._gl_state.get_error_info()
 
     def _create_card_flip_program(self) -> int:
         """Compile and link the basic textured card-flip shader program."""

@@ -232,6 +232,60 @@ class RedditWidget(BaseOverlayWidget):
         """Required by BaseOverlayWidget - refresh reddit display."""
         self._fetch_feed()
 
+    # -------------------------------------------------------------------------
+    # Lifecycle Implementation Hooks
+    # -------------------------------------------------------------------------
+    
+    def _initialize_impl(self) -> None:
+        """Initialize reddit resources (lifecycle hook)."""
+        logger.debug("[LIFECYCLE] RedditWidget initialized")
+    
+    def _activate_impl(self) -> None:
+        """Activate reddit widget - start fetching (lifecycle hook)."""
+        if not self._ensure_thread_manager("RedditWidget._activate_impl"):
+            raise RuntimeError("ThreadManager not available")
+        
+        self._schedule_timer()
+        self._fetch_feed()
+        logger.debug("[LIFECYCLE] RedditWidget activated")
+    
+    def _deactivate_impl(self) -> None:
+        """Deactivate reddit widget - stop fetching (lifecycle hook)."""
+        if self._update_timer_handle is not None:
+            try:
+                self._update_timer_handle.stop()
+            except Exception:
+                pass
+            self._update_timer_handle = None
+        
+        if self._update_timer is not None:
+            try:
+                self._update_timer.stop()
+                self._update_timer.deleteLater()
+            except Exception:
+                pass
+            self._update_timer = None
+        
+        self._posts.clear()
+        self._row_hit_rects.clear()
+        logger.debug("[LIFECYCLE] RedditWidget deactivated")
+    
+    def _cleanup_impl(self) -> None:
+        """Clean up reddit resources (lifecycle hook)."""
+        self._deactivate_impl()
+        if self._hover_timer is not None:
+            try:
+                self._hover_timer.stop()
+                self._hover_timer.deleteLater()
+            except Exception:
+                pass
+            self._hover_timer = None
+        logger.debug("[LIFECYCLE] RedditWidget cleaned up")
+    
+    # -------------------------------------------------------------------------
+    # Legacy Start/Stop Methods (for backward compatibility)
+    # -------------------------------------------------------------------------
+
     def start(self) -> None:
         """Start fetching Reddit posts."""
         if self._enabled:

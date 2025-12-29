@@ -186,6 +186,56 @@ class MediaWidget(BaseOverlayWidget):
         """Required by BaseOverlayWidget - refresh media display."""
         self._refresh()
 
+    # -------------------------------------------------------------------------
+    # Lifecycle Implementation Hooks
+    # -------------------------------------------------------------------------
+    
+    def _initialize_impl(self) -> None:
+        """Initialize media resources (lifecycle hook)."""
+        logger.debug("[LIFECYCLE] MediaWidget initialized")
+    
+    def _activate_impl(self) -> None:
+        """Activate media widget - start polling (lifecycle hook)."""
+        if not self._ensure_thread_manager("MediaWidget._activate_impl"):
+            raise RuntimeError("ThreadManager not available")
+        
+        self._refresh()
+        self._ensure_timer()
+        if self._thread_manager is not None:
+            self._refresh_async()
+        
+        logger.debug("[LIFECYCLE] MediaWidget activated")
+    
+    def _deactivate_impl(self) -> None:
+        """Deactivate media widget - stop polling (lifecycle hook)."""
+        if self._update_timer_handle is not None:
+            try:
+                self._update_timer_handle.stop()
+            except Exception:
+                pass
+            self._update_timer_handle = None
+        
+        if self._update_timer is not None:
+            try:
+                self._update_timer.stop()
+                self._update_timer.deleteLater()
+            except RuntimeError:
+                pass
+            self._update_timer = None
+        
+        logger.debug("[LIFECYCLE] MediaWidget deactivated")
+    
+    def _cleanup_impl(self) -> None:
+        """Clean up media resources (lifecycle hook)."""
+        self._deactivate_impl()
+        self._artwork_pixmap = None
+        self._last_info = None
+        logger.debug("[LIFECYCLE] MediaWidget cleaned up")
+    
+    # -------------------------------------------------------------------------
+    # Legacy Start/Stop Methods (for backward compatibility)
+    # -------------------------------------------------------------------------
+
     def start(self) -> None:
         """Begin polling media controller and showing widget."""
 

@@ -201,6 +201,105 @@ class WeatherWidget(BaseOverlayWidget):
         if self._cached_data:
             self._update_display(self._cached_data)
     
+    # -------------------------------------------------------------------------
+    # Lifecycle Implementation Hooks
+    # -------------------------------------------------------------------------
+    
+    def _initialize_impl(self) -> None:
+        """Initialize weather resources (lifecycle hook)."""
+        # Load any persisted cache
+        self._load_persisted_cache()
+        logger.debug("[LIFECYCLE] WeatherWidget initialized")
+    
+    def _activate_impl(self) -> None:
+        """Activate weather widget - start updates (lifecycle hook)."""
+        if not self._ensure_thread_manager("WeatherWidget._activate_impl"):
+            raise RuntimeError("ThreadManager not available")
+        
+        if not self._location:
+            raise ValueError("No location configured for weather widget")
+        
+        # Display cached data if available
+        if self._is_cache_valid():
+            self._update_display(self._cached_data)
+            self._has_displayed_valid_data = True
+        
+        # Start periodic updates
+        self._fetch_weather()
+        interval_ms = 30 * 60 * 1000
+        handle = create_overlay_timer(self, interval_ms, self._fetch_weather, description="WeatherWidget refresh")
+        self._update_timer_handle = handle
+        self._update_timer = getattr(handle, "_timer", None)
+        
+        # Fade in
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
+            try:
+                parent.request_overlay_fade_sync("weather", lambda: self._fade_in())
+            except Exception:
+                self._fade_in()
+        else:
+            self._fade_in()
+        
+        logger.debug("[LIFECYCLE] WeatherWidget activated")
+    
+    def _deactivate_impl(self) -> None:
+        """Deactivate weather widget - stop updates (lifecycle hook)."""
+        # Stop timers
+        if self._update_timer_handle is not None:
+            try:
+                self._update_timer_handle.stop()
+            except Exception:
+                pass
+            self._update_timer_handle = None
+        
+        if self._update_timer is not None:
+            try:
+                self._update_timer.stop()
+                self._update_timer.deleteLater()
+            except RuntimeError:
+                pass
+            self._update_timer = None
+        
+        if self._retry_timer:
+            try:
+                self._retry_timer.stop()
+                self._retry_timer.deleteLater()
+            except RuntimeError:
+                pass
+            self._retry_timer = None
+        
+        if self._icon_timer_handle is not None:
+            try:
+                self._icon_timer_handle.stop()
+            except Exception:
+                pass
+            self._icon_timer_handle = None
+        
+        # Stop fetch thread
+        if self._fetch_thread:
+            try:
+                if self._fetch_thread.isRunning():
+                    self._fetch_thread.quit()
+                    self._fetch_thread.wait()
+            except Exception:
+                pass
+            self._fetch_thread = None
+            self._fetcher = None
+        
+        logger.debug("[LIFECYCLE] WeatherWidget deactivated")
+    
+    def _cleanup_impl(self) -> None:
+        """Clean up weather resources (lifecycle hook)."""
+        self._deactivate_impl()
+        self._cached_data = None
+        self._cache_time = None
+        logger.debug("[LIFECYCLE] WeatherWidget cleaned up")
+    
+    # -------------------------------------------------------------------------
+    # Legacy Start/Stop Methods (for backward compatibility)
+    # -------------------------------------------------------------------------
+    
     def start(self) -> None:
         """Start weather updates."""
         if self._enabled:

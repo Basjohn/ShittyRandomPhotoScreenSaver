@@ -10,6 +10,7 @@ from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from rendering.gl_format import apply_widget_surface_format
+from rendering.gl_state_manager import GLStateManager, GLContextState
 from OpenGL import GL as gl
 
 
@@ -101,6 +102,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # Pre-allocated uniform buffers to reduce GC pressure (avoid per-frame allocation)
         self._bars_buffer: np.ndarray = np.zeros(64, dtype="float32")
         self._peaks_buffer: np.ndarray = np.zeros(64, dtype="float32")
+        
+        # Centralized GL state manager for robust state tracking
+        self._gl_state = GLStateManager(f"spotify_bars_{id(self)}")
 
     # ------------------------------------------------------------------
     # Public API
@@ -359,6 +363,18 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                           _geom_elapsed, _show_elapsed, _update_elapsed)
 
     # ------------------------------------------------------------------
+    # GL State Management Helpers
+    # ------------------------------------------------------------------
+    
+    def is_gl_ready(self) -> bool:
+        """Check if GL context is ready for rendering."""
+        return self._gl_state.is_ready()
+    
+    def get_gl_state(self) -> GLContextState:
+        """Get current GL context state."""
+        return self._gl_state.get_state()
+
+    # ------------------------------------------------------------------
     # QOpenGLWidget hooks
     # ------------------------------------------------------------------
 
@@ -368,11 +384,18 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         Any failure here is treated as non-fatal – the widget will fall back
         to the QPainter implementation in paintGL.
         """
+        # Transition to INITIALIZING state
+        if not self._gl_state.transition(GLContextState.INITIALIZING):
+            logger.warning("[SPOTIFY_VIS] Failed to transition to INITIALIZING state")
+            return
 
         try:
             self._init_gl_pipeline()
-        except Exception:
+            # Transition to READY state on success
+            self._gl_state.transition(GLContextState.READY)
+        except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to initialise GL pipeline for SpotifyBarsGLOverlay", exc_info=True)
+            self._gl_state.transition(GLContextState.ERROR, str(e))
         
         # Mark GL as initialized so paintGL knows it's safe to render
         self._gl_initialized = True

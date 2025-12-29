@@ -11,6 +11,9 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - **COMPLETE**: gl_compositor.py reduced from 4416 → 2179 lines (50.6% reduction)
   - Extracted: GLProgramCache, GLGeometryManager, GLTextureManager, GLTransitionRenderer, GLErrorHandler
   - Per-compositor instances for GLGeometryManager and GLTextureManager (OpenGL VAOs/textures are context-specific)
+- audits/COMPREHENSIVE_ARCHITECTURE_AUDIT_2025.md
+  - **Dec 2025**: Widget Lifecycle Management, GL State Management, Widget Factories, Settings Type Safety, Widget Positioning, Intense Shadows
+  - 129 unit tests across 5 new test files
 
 ## Core Managers
 - core/threading/manager.py
@@ -39,6 +42,14 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - `PRESERVE_ON_RESET`: Set of keys to preserve during reset (user-specific data)
   - `get_flat_defaults()`: Flattened dot-notation defaults for validation
   - **Dec 2025**: `analog_shadow_intense` now defaults to True for dramatic analogue clock shadows
+- core/settings/models.py
+  - **Type-safe settings dataclass models** for IDE autocompletion and validation
+  - `DisplayMode`, `TransitionType`, `WidgetPosition`: Enums for type-safe settings values
+  - `DisplaySettings`, `TransitionSettings`, `InputSettings`, `CacheSettings`, `SourceSettings`: Core settings models
+  - `ShadowSettings`, `ClockWidgetSettings`, `WeatherWidgetSettings`, `MediaWidgetSettings`, `RedditWidgetSettings`: Widget settings models
+  - `AccessibilitySettings`, `AppSettings`: Accessibility and container models
+  - Each model has `from_settings(SettingsManager)` and `to_dict()` methods
+  - **22 unit tests** in `tests/test_settings_models.py`
 - core/animation/animator.py
   - AnimationManager and easing types
   - Animation class with optional FrameState for decoupled rendering
@@ -154,6 +165,12 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - `GLErrorState`: Dataclass tracking GL error state for fallback decisions.
   - **Features**: Software GL detection, shader failure tracking, capability demotion logging.
   - **Singleton**: `get_gl_error_handler()` returns shared instance.
+- rendering/gl_state_manager.py
+  - `GLStateManager`: Centralized GL context state management with validated state transitions.
+  - `GLContextState`: Enum for GL context states (UNINITIALIZED, INITIALIZING, READY, ERROR, CONTEXT_LOST, DESTROYING, DESTROYED).
+  - `GLStateGuard`: Context manager for safe GL operations with automatic error handling.
+  - **Features (Dec 2025)**: Thread-safe state access, state change callbacks, transition history for debugging, error recovery tracking, statistics.
+  - **Integration**: Used by `GLCompositorWidget` for robust GL lifecycle management.
 - rendering/gl_profiler.py
   - `TransitionProfiler`: centralized profiling helper for GL compositor transitions. Tracks frame timing, min/max frame durations, and emits PERF logs. All compositor transitions (Slide, Wipe, Peel, BlockSpin, Warp, Raindrops, BlockFlip, Diffuse, Blinds) now use this single profiler instance instead of per-transition profiling fields.
 - rendering/transition_state.py
@@ -167,6 +184,18 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - `WidgetManager`: Extracted from DisplayWidget. Manages overlay widget lifecycle, positioning, visibility, Z-order, rate-limited raise operations, and effect invalidation.
   - **Phase E Enhancement (2025-12-16)**: Added `invalidate_overlay_effects()`, `_recreate_effect()`, `schedule_effect_invalidation()` for centralized QGraphicsEffect cache-busting
   - **Fade coordination**: `request_overlay_fade_sync()`, `register_spotify_secondary_fade()`, `reset_fade_coordination()`
+  - **Lifecycle Integration (Dec 2025)**: Added `initialize_widget()`, `activate_widget()`, `deactivate_widget()`, `cleanup_widget()` and batch methods for new lifecycle system
+- rendering/widget_positioner.py
+  - `WidgetPositioner`: Centralized widget positioning logic extracted from WidgetManager
+  - `PositionAnchor`: Enum for 9 standard widget positions (TOP_LEFT, CENTER, BOTTOM_RIGHT, etc.)
+  - `PositionConfig`, `WidgetBounds`: Dataclasses for positioning configuration
+  - Position calculation, collision detection, stacking logic, relative positioning
+  - **21 unit tests** in `tests/test_widget_positioner.py`
+- rendering/widget_factories.py
+  - `WidgetFactory`: Abstract base class for widget factories with shadow config extraction.
+  - `ClockWidgetFactory`, `WeatherWidgetFactory`, `MediaWidgetFactory`, `RedditWidgetFactory`, `SpotifyVisualizerFactory`, `SpotifyVolumeFactory`: Concrete factories for each widget type.
+  - `WidgetFactoryRegistry`: Central registry for widget factories with `create_widget()` method.
+  - **Features (Dec 2025)**: Extracts widget creation logic from WidgetManager for better SRP, testability, and extensibility.
 - rendering/input_handler.py
   - `InputHandler`: Extracted from DisplayWidget. Handles all user input including mouse/keyboard events, context menu triggers, and exit gestures.
   - **Phase E Enhancement (2025-12-16)**: Provides single choke point for context menu open/close triggers for deterministic effect invalidation ordering.
@@ -244,11 +273,15 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - widgets/base_overlay_widget.py
   - `BaseOverlayWidget`: Abstract base class for all overlay widgets. Provides common functionality for font/color/background/shadow/position management, pixel shift support, thread manager integration, and size calculation for stacking/collision detection.
   - `OverlayPosition`: Enum for standard widget positions (TOP_LEFT, TOP_RIGHT, etc.)
+  - `WidgetLifecycleState`: Enum for widget lifecycle states (CREATED, INITIALIZED, ACTIVE, HIDDEN, DESTROYED)
+  - `is_valid_lifecycle_transition()`: Validate state transitions
+  - **Lifecycle Management (Dec 2025)**: Full lifecycle state machine with `initialize()`, `activate()`, `deactivate()`, `cleanup()` methods. Thread-safe state access via `_lifecycle_lock`. ResourceManager integration for automatic resource cleanup.
   - `calculate_widget_collision()`: Check if two widget rects overlap
   - `calculate_stack_offset()`: Calculate offset for widget stacking
 - widgets/clock_widget.py
   - Digital/analogue clock widget extending `BaseOverlayWidget`. Supports three instances (Clock 1/2/3) with per-monitor selection, independent timezones, optional seconds/timezone labels, analogue numerals toggle, subtle vs "Intense Analogue Shadows" mode (doubles drop-shadow opacity/size), digital/analogue display modes, and 9 position options (Top/Middle/Bottom × Left/Center/Right).
   - **Visual Offset Alignment**: `_compute_analog_visual_offset()` calculates precise offset from widget bounds to visual content (XII numeral or clock face edge) so analogue clocks without backgrounds align correctly with other widgets at the same margin. Handles all scenarios: with/without background, with/without numerals, with/without timezone.
+  - **Lifecycle (Dec 2025)**: Implements `_initialize_impl()`, `_activate_impl()`, `_deactivate_impl()`, `_cleanup_impl()` hooks for new lifecycle system.
 - widgets/weather_widget.py
   - Weather widget extending `BaseOverlayWidget`. Per-monitor selection via settings (ALL or 1/2/3). Features optional forecast line (tomorrow's min/max temp and condition, 8pt smaller than base font), configurable margin from screen edge. Uses Title Case for location and condition display. Supports 9 position options (Top/Middle/Bottom × Left/Center/Right). Planned QPainter-based iconography.
 - widgets/media_widget.py

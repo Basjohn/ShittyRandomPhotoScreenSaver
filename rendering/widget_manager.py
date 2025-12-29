@@ -25,6 +25,7 @@ from widgets.reddit_widget import RedditWidget, RedditPosition
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 from widgets.spotify_volume_widget import SpotifyVolumeWidget
 from widgets.shadow_utils import apply_widget_shadow
+from rendering.widget_positioner import WidgetPositioner, PositionAnchor
 
 if TYPE_CHECKING:
     from rendering.display_widget import DisplayWidget
@@ -85,6 +86,9 @@ class WidgetManager:
         self._overlay_fade_started: bool = False
         self._overlay_fade_timeout: Optional[QTimer] = None
         self._spotify_secondary_fade_starters: List[Callable[[], None]] = []
+        
+        # Widget positioning (Dec 2025)
+        self._positioner = WidgetPositioner()
         
         logger.debug("[WIDGET_MANAGER] Initialized")
     
@@ -457,9 +461,225 @@ class WidgetManager:
                 pass
             self._raise_timer = None
         
+        # Use lifecycle cleanup for widgets that support it
+        for name, widget in list(self._widgets.items()):
+            if widget is not None:
+                try:
+                    if hasattr(widget, 'cleanup') and callable(widget.cleanup):
+                        widget.cleanup()
+                except Exception:
+                    logger.debug("[WIDGET_MANAGER] Failed to cleanup %s", name, exc_info=True)
+        
         self._widgets.clear()
         self._fade_callbacks.clear()
         logger.debug("[WIDGET_MANAGER] Cleanup complete")
+
+    # =========================================================================
+    # Lifecycle Integration (Dec 2025)
+    # =========================================================================
+
+    def initialize_widget(self, name: str) -> bool:
+        """Initialize a widget using the new lifecycle system.
+        
+        Args:
+            name: Name of the widget to initialize
+            
+        Returns:
+            True if widget was initialized successfully
+        """
+        widget = self._widgets.get(name)
+        if widget is None:
+            return False
+        
+        try:
+            if hasattr(widget, 'initialize') and callable(widget.initialize):
+                widget.initialize()
+                logger.debug("[LIFECYCLE] Widget %s initialized via WidgetManager", name)
+                return True
+        except Exception:
+            logger.debug("[LIFECYCLE] Failed to initialize %s", name, exc_info=True)
+        return False
+
+    def activate_widget(self, name: str) -> bool:
+        """Activate a widget using the new lifecycle system.
+        
+        Args:
+            name: Name of the widget to activate
+            
+        Returns:
+            True if widget was activated successfully
+        """
+        widget = self._widgets.get(name)
+        if widget is None:
+            return False
+        
+        try:
+            if hasattr(widget, 'activate') and callable(widget.activate):
+                widget.activate()
+                logger.debug("[LIFECYCLE] Widget %s activated via WidgetManager", name)
+                return True
+        except Exception:
+            logger.debug("[LIFECYCLE] Failed to activate %s", name, exc_info=True)
+        return False
+
+    def deactivate_widget(self, name: str) -> bool:
+        """Deactivate a widget using the new lifecycle system.
+        
+        Args:
+            name: Name of the widget to deactivate
+            
+        Returns:
+            True if widget was deactivated successfully
+        """
+        widget = self._widgets.get(name)
+        if widget is None:
+            return False
+        
+        try:
+            if hasattr(widget, 'deactivate') and callable(widget.deactivate):
+                widget.deactivate()
+                logger.debug("[LIFECYCLE] Widget %s deactivated via WidgetManager", name)
+                return True
+        except Exception:
+            logger.debug("[LIFECYCLE] Failed to deactivate %s", name, exc_info=True)
+        return False
+
+    def cleanup_widget(self, name: str) -> bool:
+        """Cleanup a widget using the new lifecycle system.
+        
+        Args:
+            name: Name of the widget to cleanup
+            
+        Returns:
+            True if widget was cleaned up successfully
+        """
+        widget = self._widgets.get(name)
+        if widget is None:
+            return False
+        
+        try:
+            if hasattr(widget, 'cleanup') and callable(widget.cleanup):
+                widget.cleanup()
+                logger.debug("[LIFECYCLE] Widget %s cleaned up via WidgetManager", name)
+                return True
+        except Exception:
+            logger.debug("[LIFECYCLE] Failed to cleanup %s", name, exc_info=True)
+        return False
+
+    def initialize_all_widgets(self) -> int:
+        """Initialize all managed widgets using the new lifecycle system.
+        
+        Returns:
+            Number of widgets successfully initialized
+        """
+        count = 0
+        for name in list(self._widgets.keys()):
+            if self.initialize_widget(name):
+                count += 1
+        logger.debug("[LIFECYCLE] Initialized %d widgets", count)
+        return count
+
+    def activate_all_widgets(self) -> int:
+        """Activate all managed widgets using the new lifecycle system.
+        
+        Returns:
+            Number of widgets successfully activated
+        """
+        count = 0
+        for name in list(self._widgets.keys()):
+            if self.activate_widget(name):
+                count += 1
+        logger.debug("[LIFECYCLE] Activated %d widgets", count)
+        return count
+
+    def deactivate_all_widgets(self) -> int:
+        """Deactivate all managed widgets using the new lifecycle system.
+        
+        Returns:
+            Number of widgets successfully deactivated
+        """
+        count = 0
+        for name in list(self._widgets.keys()):
+            if self.deactivate_widget(name):
+                count += 1
+        logger.debug("[LIFECYCLE] Deactivated %d widgets", count)
+        return count
+
+    def get_widget_lifecycle_state(self, name: str) -> Optional[str]:
+        """Get the lifecycle state of a widget.
+        
+        Args:
+            name: Name of the widget
+            
+        Returns:
+            Lifecycle state name or None if widget not found or doesn't support lifecycle
+        """
+        widget = self._widgets.get(name)
+        if widget is None:
+            return None
+        
+        try:
+            if hasattr(widget, '_lifecycle_state'):
+                state = widget._lifecycle_state
+                if hasattr(state, 'name'):
+                    return state.name
+                return str(state)
+        except Exception:
+            pass
+        return None
+
+    def get_all_lifecycle_states(self) -> Dict[str, str]:
+        """Get lifecycle states of all managed widgets.
+        
+        Returns:
+            Dict mapping widget name to lifecycle state name
+        """
+        states = {}
+        for name in self._widgets.keys():
+            state = self.get_widget_lifecycle_state(name)
+            if state is not None:
+                states[name] = state
+        return states
+
+    # =========================================================================
+    # Widget Positioning (Dec 2025)
+    # =========================================================================
+
+    def set_container_size(self, width: int, height: int) -> None:
+        """Set the container size for widget positioning.
+        
+        Args:
+            width: Container width in pixels
+            height: Container height in pixels
+        """
+        from PySide6.QtCore import QSize
+        self._positioner.set_container_size(QSize(width, height))
+
+    def get_positioner(self) -> WidgetPositioner:
+        """Get the widget positioner for advanced positioning operations."""
+        return self._positioner
+
+    def position_widget_by_anchor(self, name: str, anchor: PositionAnchor, margin: int = 20) -> bool:
+        """Position a widget using the centralized positioner.
+        
+        Args:
+            name: Name of the widget to position
+            anchor: Position anchor (e.g., TOP_LEFT, BOTTOM_RIGHT)
+            margin: Margin from screen edge
+            
+        Returns:
+            True if widget was positioned successfully
+        """
+        widget = self._widgets.get(name)
+        if widget is None:
+            return False
+        
+        try:
+            self._positioner.position_widget(widget, anchor, margin_x=margin, margin_y=margin)
+            return True
+        except Exception:
+            logger.debug("[POSITIONER] Failed to position %s", name, exc_info=True)
+        return False
 
     # =========================================================================
     # Phase E: Effect Invalidation (Cache Corruption Mitigation)
@@ -1063,6 +1283,14 @@ class WidgetManager:
                 pass
 
             try:
+                digital_intense_val = _resolve_style('digital_shadow_intense', False)
+                digital_intense = SettingsManager.to_bool(digital_intense_val, False)
+                if hasattr(clock, 'set_digital_shadow_intense'):
+                    clock.set_digital_shadow_intense(digital_intense)
+            except Exception:
+                pass
+
+            try:
                 if hasattr(clock, "set_shadow_config"):
                     clock.set_shadow_config(shadows_config)
                 else:
@@ -1189,6 +1417,13 @@ class WidgetManager:
             margin = weather_settings.get('margin', 20)
             try:
                 widget.set_margin(int(margin))
+            except Exception:
+                pass
+
+            try:
+                intense_shadow = SettingsManager.to_bool(weather_settings.get('intense_shadow', False), False)
+                if hasattr(widget, 'set_intense_shadow'):
+                    widget.set_intense_shadow(intense_shadow)
             except Exception:
                 pass
 
@@ -1340,6 +1575,13 @@ class WidgetManager:
                 widget.set_background_border(2, border_qcolor)
 
             try:
+                intense_shadow = SettingsManager.to_bool(media_settings.get('intense_shadow', False), False)
+                if hasattr(widget, 'set_intense_shadow'):
+                    widget.set_intense_shadow(intense_shadow)
+            except Exception:
+                pass
+
+            try:
                 if hasattr(widget, "set_shadow_config"):
                     widget.set_shadow_config(shadows_config)
                 else:
@@ -1487,6 +1729,14 @@ class WidgetManager:
             # Item limit
             try:
                 widget.set_item_limit(limit_val)
+            except Exception:
+                pass
+
+            # Intense shadow
+            try:
+                intense_shadow = SettingsManager.to_bool(style_source.get('intense_shadow', False), False)
+                if hasattr(widget, 'set_intense_shadow'):
+                    widget.set_intense_shadow(intense_shadow)
             except Exception:
                 pass
 
