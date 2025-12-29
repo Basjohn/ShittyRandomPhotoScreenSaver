@@ -8,13 +8,15 @@ from PySide6.QtCore import Qt, QRect
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
-from core.logging.logger import get_logger, is_perf_metrics_enabled
+from core.logging.logger import get_logger, get_throttled_logger, is_perf_metrics_enabled
 from rendering.gl_format import apply_widget_surface_format
 from rendering.gl_state_manager import GLStateManager, GLContextState
 from OpenGL import GL as gl
 
 
 logger = get_logger(__name__)
+# Throttled logger for high-frequency debug messages (max 1/second)
+_throttled_logger = get_throttled_logger(__name__, max_per_second=1.0)
 
 
 class SpotifyBarsGLOverlay(QOpenGLWidget):

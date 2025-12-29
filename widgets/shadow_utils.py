@@ -56,10 +56,11 @@ def configure_overlay_widget_attributes(widget: QWidget) -> None:
 # and to the animated shadow fade so visuals stay consistent.
 SHADOW_SIZE_MULTIPLIER: float = 1.2
 
-# Intense shadow multipliers - doubles the shadow effect for dramatic styling
-INTENSE_SHADOW_BLUR_MULTIPLIER: float = 2.0
-INTENSE_SHADOW_OPACITY_MULTIPLIER: float = 1.8
-INTENSE_SHADOW_OFFSET_MULTIPLIER: float = 1.5
+# Intense shadow multipliers - dramatically enhanced shadow effect
+# These values are tuned to match the analogue clock's intense shadow styling
+INTENSE_SHADOW_BLUR_MULTIPLIER: float = 3.0      # 3x blur for soft, dramatic glow
+INTENSE_SHADOW_OPACITY_MULTIPLIER: float = 2.5   # 2.5x opacity for visibility
+INTENSE_SHADOW_OFFSET_MULTIPLIER: float = 2.0    # 2x offset for depth
 
 
 def _to_bool(value: Any, default: bool = False) -> bool:
@@ -170,9 +171,11 @@ def apply_widget_shadow(
             blur_radius = int(blur_radius * INTENSE_SHADOW_BLUR_MULTIPLIER)
             dx = int(dx * INTENSE_SHADOW_OFFSET_MULTIPLIER)
             dy = int(dy * INTENSE_SHADOW_OFFSET_MULTIPLIER)
-            # Increase opacity for intense shadows
-            base_opacity = min(1.0, base_opacity * INTENSE_SHADOW_OPACITY_MULTIPLIER)
-            color = QColor(r, g, b, int(a * base_opacity))
+            # Increase opacity significantly for intense shadows - ensure minimum visibility
+            # For text-only widgets, boost from ~0.3 to ~0.75; for framed, from ~0.7 to ~1.0
+            base_opacity = min(1.0, max(0.6, base_opacity * INTENSE_SHADOW_OPACITY_MULTIPLIER))
+            # Use full alpha channel for maximum shadow visibility
+            color = QColor(r, g, b, int(255 * base_opacity))
         except Exception:
             pass
 

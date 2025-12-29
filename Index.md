@@ -12,8 +12,8 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - Extracted: GLProgramCache, GLGeometryManager, GLTextureManager, GLTransitionRenderer, GLErrorHandler
   - Per-compositor instances for GLGeometryManager and GLTextureManager (OpenGL VAOs/textures are context-specific)
 - audits/COMPREHENSIVE_ARCHITECTURE_AUDIT_2025.md
-  - **Dec 2025**: Widget Lifecycle Management, GL State Management, Widget Factories, Settings Type Safety, Widget Positioning, Intense Shadows
-  - 129 unit tests across 5 new test files
+  - **Dec 2025**: Widget Lifecycle Management, GL State Management, Widget Factories, Settings Type Safety, Widget Positioning, Intense Shadows, Log Throttling
+  - 147 unit tests across 6 test files
 
 ## Core Managers
 - core/threading/manager.py

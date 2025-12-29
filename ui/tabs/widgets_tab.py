@@ -232,6 +232,13 @@ class WidgetsTab(QWidget):
         self.clock_analog_shadow_intense.stateChanged.connect(self._save_settings)
         clock_layout.addWidget(self.clock_analog_shadow_intense)
 
+        self.clock_digital_shadow_intense = QCheckBox("Intense Digital Shadows")
+        self.clock_digital_shadow_intense.setToolTip(
+            "Doubles digital clock shadow blur, opacity, and offset for dramatic effect on large displays."
+        )
+        self.clock_digital_shadow_intense.stateChanged.connect(self._save_settings)
+        clock_layout.addWidget(self.clock_digital_shadow_intense)
+
         self.clock_show_numerals = QCheckBox("Show Hour Numerals (Analogue)")
         self.clock_show_numerals.stateChanged.connect(self._save_settings)
         clock_layout.addWidget(self.clock_show_numerals)
@@ -539,6 +546,14 @@ class WidgetsTab(QWidget):
         self.weather_show_forecast.stateChanged.connect(self._save_settings)
         self.weather_show_forecast.stateChanged.connect(self._update_stack_status)
         weather_layout.addWidget(self.weather_show_forecast)
+
+        # Intense shadow
+        self.weather_intense_shadow = QCheckBox("Intense Shadows")
+        self.weather_intense_shadow.setToolTip(
+            "Doubles shadow blur, opacity, and offset for dramatic effect on large displays."
+        )
+        self.weather_intense_shadow.stateChanged.connect(self._save_settings)
+        weather_layout.addWidget(self.weather_intense_shadow)
         
         # Background frame
         self.weather_show_background = QCheckBox("Show Background Frame")
@@ -709,6 +724,14 @@ class WidgetsTab(QWidget):
         self.media_show_background = QCheckBox("Show Background Frame")
         self.media_show_background.stateChanged.connect(self._save_settings)
         media_layout.addWidget(self.media_show_background)
+
+        # Intense shadow
+        self.media_intense_shadow = QCheckBox("Intense Shadows")
+        self.media_intense_shadow.setToolTip(
+            "Doubles shadow blur, opacity, and offset for dramatic effect on large displays."
+        )
+        self.media_intense_shadow.stateChanged.connect(self._save_settings)
+        media_layout.addWidget(self.media_intense_shadow)
 
         media_opacity_row = QHBoxLayout()
         media_opacity_row.addWidget(QLabel("Background Opacity:"))
@@ -1145,6 +1168,14 @@ class WidgetsTab(QWidget):
         self.reddit_show_background.stateChanged.connect(self._save_settings)
         reddit_layout.addWidget(self.reddit_show_background)
 
+        # Intense shadow
+        self.reddit_intense_shadow = QCheckBox("Intense Shadows")
+        self.reddit_intense_shadow.setToolTip(
+            "Doubles shadow blur, opacity, and offset for dramatic effect on large displays."
+        )
+        self.reddit_intense_shadow.stateChanged.connect(self._save_settings)
+        reddit_layout.addWidget(self.reddit_intense_shadow)
+
         self.reddit_show_separators = QCheckBox("Show separator lines between posts")
         self.reddit_show_separators.stateChanged.connect(self._save_settings)
         reddit_layout.addWidget(self.reddit_show_separators)
@@ -1491,6 +1522,10 @@ class WidgetsTab(QWidget):
             intense_shadow_val = clock_config.get('analog_shadow_intense', False)
             intense_shadow = SettingsManager.to_bool(intense_shadow_val, False)
             self.clock_analog_shadow_intense.setChecked(intense_shadow)
+
+            digital_intense_val = clock_config.get('digital_shadow_intense', False)
+            digital_intense = SettingsManager.to_bool(digital_intense_val, False)
+            self.clock_digital_shadow_intense.setChecked(digital_intense)
             
             position = clock_config.get('position', 'Top Right')
             index = self.clock_position.findText(position)
@@ -1592,6 +1627,9 @@ class WidgetsTab(QWidget):
             self.weather_font_combo.setCurrentFont(QFont(weather_config.get('font_family', 'Segoe UI')))
             self.weather_font_size.setValue(weather_config.get('font_size', 24))
             self.weather_show_forecast.setChecked(weather_config.get('show_forecast', False))
+            self.weather_intense_shadow.setChecked(
+                SettingsManager.to_bool(weather_config.get('intense_shadow', False), False)
+            )
             self.weather_show_background.setChecked(weather_config.get('show_background', False))
             weather_opacity_pct = int(weather_config.get('bg_opacity', 0.9) * 100)
             self.weather_bg_opacity.setValue(weather_opacity_pct)
@@ -1636,6 +1674,9 @@ class WidgetsTab(QWidget):
             self.media_font_size.setValue(media_config.get('font_size', 20))
             self.media_margin.setValue(media_config.get('margin', 20))
             self.media_show_background.setChecked(media_config.get('show_background', False))
+            self.media_intense_shadow.setChecked(
+                SettingsManager.to_bool(media_config.get('intense_shadow', False), False)
+            )
             media_opacity_pct = int(media_config.get('bg_opacity', 0.9) * 100)
             self.media_bg_opacity.setValue(media_opacity_pct)
             self.media_bg_opacity_label.setText(f"{media_opacity_pct}%")
@@ -1845,6 +1886,9 @@ class WidgetsTab(QWidget):
 
             show_bg_reddit = SettingsManager.to_bool(reddit_config.get('show_background', True), True)
             self.reddit_show_background.setChecked(show_bg_reddit)
+            self.reddit_intense_shadow.setChecked(
+                SettingsManager.to_bool(reddit_config.get('intense_shadow', False), False)
+            )
             show_separators_val = reddit_config.get('show_separators', True)
             show_separators = SettingsManager.to_bool(show_separators_val, True)
             self.reddit_show_separators.setChecked(show_separators)
@@ -2069,6 +2113,7 @@ class WidgetsTab(QWidget):
             'show_numerals': self.clock_show_numerals.isChecked(),
             'analog_face_shadow': self.clock_analog_shadow.isChecked(),
             'analog_shadow_intense': self.clock_analog_shadow_intense.isChecked(),
+            'digital_shadow_intense': self.clock_digital_shadow_intense.isChecked(),
         }
         # Monitor selection save: 'ALL' or int
         cmon_text = self.clock_monitor_combo.currentText()
@@ -2083,6 +2128,7 @@ class WidgetsTab(QWidget):
             'font_size': self.weather_font_size.value(),
             'margin': self.weather_margin.value(),
             'show_forecast': self.weather_show_forecast.isChecked(),
+            'intense_shadow': self.weather_intense_shadow.isChecked(),
             'show_background': self.weather_show_background.isChecked(),
             'bg_opacity': self.weather_bg_opacity.value() / 100.0,
             'color': [self._weather_color.red(), self._weather_color.green(), 
@@ -2103,6 +2149,7 @@ class WidgetsTab(QWidget):
             'font_size': self.media_font_size.value(),
             'margin': self.media_margin.value(),
             'show_background': self.media_show_background.isChecked(),
+            'intense_shadow': self.media_intense_shadow.isChecked(),
             'bg_opacity': self.media_bg_opacity.value() / 100.0,
             'color': [self._media_color.red(), self._media_color.green(),
                       self._media_color.blue(), self._media_color.alpha()],
@@ -2174,6 +2221,7 @@ class WidgetsTab(QWidget):
             'font_size': self.reddit_font_size.value(),
             'margin': self.reddit_margin.value(),
             'show_background': self.reddit_show_background.isChecked(),
+            'intense_shadow': self.reddit_intense_shadow.isChecked(),
             'show_separators': self.reddit_show_separators.isChecked(),
             'bg_opacity': self.reddit_bg_opacity.value() / 100.0,
             'color': [

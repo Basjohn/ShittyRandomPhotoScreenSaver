@@ -884,6 +884,11 @@ class DisplayWidget(QWidget):
             for attr_name, widget in created.items():
                 setattr(self, attr_name, widget)
             logger.info("WidgetManager created %d widgets", len(created))
+            
+            # Initialize all widgets via lifecycle system (Dec 2025)
+            initialized_count = self._widget_manager.initialize_all_widgets()
+            if initialized_count > 0:
+                logger.debug("[LIFECYCLE] Initialized %d widgets via lifecycle system", initialized_count)
         else:
             logger.warning("No WidgetManager available - widgets will not be created")
             return
@@ -2396,6 +2401,15 @@ class DisplayWidget(QWidget):
             self._coordinator.uninstall_event_filter(self)
         except Exception:
             pass
+        
+        # Cleanup widgets via lifecycle system (Dec 2025)
+        if self._widget_manager is not None:
+            try:
+                self._widget_manager.cleanup()
+                logger.debug("[LIFECYCLE] WidgetManager cleanup complete")
+            except Exception:
+                logger.debug("[LIFECYCLE] WidgetManager cleanup failed", exc_info=True)
+        
         super().closeEvent(event)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:

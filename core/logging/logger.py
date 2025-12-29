@@ -789,6 +789,145 @@ def get_logger(name: str) -> logging.Logger:
     return logging.getLogger(actual)
 
 
+class ThrottledLogger:
+    """Rate-limited logger for high-frequency log points.
+    
+    Wraps a standard logger and limits how often messages are emitted.
+    Useful for hot paths like animation frames, visualizer ticks, etc.
+    
+    Usage:
+        throttled = ThrottledLogger(logger, max_per_second=1.0)
+        # In hot loop:
+        throttled.debug("Frame %d", frame_num)  # Only logs ~1/second
+    
+    Features:
+        - Per-message rate limiting (based on message template)
+        - Configurable rate (messages per second)
+        - Optional sampling mode (log 1 in N messages)
+        - Thread-safe
+        - Tracks suppressed count for diagnostics
+    """
+    
+    def __init__(
+        self,
+        logger: logging.Logger,
+        max_per_second: float = 1.0,
+        sample_rate: int = 0,
+    ):
+        """Initialize throttled logger.
+        
+        Args:
+            logger: Underlying logger to wrap
+            max_per_second: Maximum messages per second (0 = unlimited)
+            sample_rate: If > 0, log 1 in N messages instead of rate limiting
+        """
+        self._logger = logger
+        self._max_per_second = max(0.0, float(max_per_second))
+        self._sample_rate = max(0, int(sample_rate))
+        self._lock = threading.Lock()
+        # Track last emit time per message template
+        self._last_emit: dict[str, float] = {}
+        # Track call count for sampling mode
+        self._call_count: dict[str, int] = {}
+        # Track suppressed messages for diagnostics
+        self._suppressed_count: int = 0
+        self._emitted_count: int = 0
+    
+    def _should_emit(self, msg: str) -> bool:
+        """Check if message should be emitted based on throttling rules."""
+        import time
+        
+        with self._lock:
+            # Sampling mode: log 1 in N
+            if self._sample_rate > 0:
+                count = self._call_count.get(msg, 0) + 1
+                self._call_count[msg] = count
+                if count % self._sample_rate == 1:
+                    self._emitted_count += 1
+                    return True
+                self._suppressed_count += 1
+                return False
+            
+            # Rate limiting mode
+            if self._max_per_second <= 0:
+                self._emitted_count += 1
+                return True  # Unlimited
+            
+            now = time.monotonic()
+            min_interval = 1.0 / self._max_per_second
+            last = self._last_emit.get(msg, 0.0)
+            
+            if now - last >= min_interval:
+                self._last_emit[msg] = now
+                self._emitted_count += 1
+                return True
+            
+            self._suppressed_count += 1
+            return False
+    
+    def debug(self, msg: str, *args, **kwargs) -> None:
+        """Log debug message with throttling."""
+        if self._should_emit(msg):
+            self._logger.debug(msg, *args, **kwargs)
+    
+    def info(self, msg: str, *args, **kwargs) -> None:
+        """Log info message with throttling."""
+        if self._should_emit(msg):
+            self._logger.info(msg, *args, **kwargs)
+    
+    def warning(self, msg: str, *args, **kwargs) -> None:
+        """Log warning message (never throttled)."""
+        self._emitted_count += 1
+        self._logger.warning(msg, *args, **kwargs)
+    
+    def error(self, msg: str, *args, **kwargs) -> None:
+        """Log error message (never throttled)."""
+        self._emitted_count += 1
+        self._logger.error(msg, *args, **kwargs)
+    
+    def critical(self, msg: str, *args, **kwargs) -> None:
+        """Log critical message (never throttled)."""
+        self._emitted_count += 1
+        self._logger.critical(msg, *args, **kwargs)
+    
+    @property
+    def suppressed_count(self) -> int:
+        """Get count of suppressed messages."""
+        with self._lock:
+            return self._suppressed_count
+    
+    @property
+    def emitted_count(self) -> int:
+        """Get count of emitted messages."""
+        with self._lock:
+            return self._emitted_count
+    
+    def reset_counts(self) -> None:
+        """Reset suppressed and emitted counts."""
+        with self._lock:
+            self._suppressed_count = 0
+            self._emitted_count = 0
+            self._call_count.clear()
+
+
+def get_throttled_logger(
+    name: str,
+    max_per_second: float = 1.0,
+    sample_rate: int = 0,
+) -> ThrottledLogger:
+    """Get a throttled logger instance.
+    
+    Args:
+        name: Logger name (same as get_logger)
+        max_per_second: Maximum messages per second per unique message
+        sample_rate: If > 0, log 1 in N messages instead of rate limiting
+    
+    Returns:
+        ThrottledLogger wrapping the named logger
+    """
+    return ThrottledLogger(get_logger(name), max_per_second, sample_rate)
+
+
 def is_verbose_logging() -> bool:
     """Return True when verbose debug logging is enabled globally."""
 
