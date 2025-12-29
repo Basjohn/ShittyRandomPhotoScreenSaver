@@ -58,6 +58,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._border_color: QColor = QColor(255, 255, 255, 255)
         self._fade: float = 0.0
         self._playing: bool = False
+        
+        # Visualization mode: only 'spectrum' supported
+        self._vis_mode: str = 'spectrum'
 
         # Ghosting configuration – whether trailing segments are drawn and
         # how strong they appear relative to the main bar border colour. The
@@ -117,12 +120,15 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         ghosting_enabled: bool = True,
         ghost_alpha: float = 0.4,
         ghost_decay: float = -1.0,
+        vis_mode: str = "spectrum",
     ) -> None:
         """Update overlay bar state and geometry.
 
         ``rect`` is specified in the parent ``DisplayWidget`` coordinate space
         and should usually be the geometry of the associated
         ``SpotifyVisualizerWidget``.
+        
+        ``vis_mode`` is kept for compatibility but only 'spectrum' is supported.
         """
 
         if not visible:
@@ -133,6 +139,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             # renders nothing.
             self.update()  # Trigger repaint to clear the bars
             return
+
+        # Only spectrum mode is supported
+        self._vis_mode = 'spectrum'
 
         # Apply ghost configuration up-front so it is visible to both the
         # peak-envelope update and the shader path. When ghosting is
@@ -470,6 +479,7 @@ void main() {
     float fb_height = height * dpr;
     vec2 fragCoord = vec2(gl_FragCoord.x / dpr, (fb_height - gl_FragCoord.y) / dpr);
 
+    // ========== SPECTRUM MODE ==========
     float margin_x = 8.0;
     float margin_y = 6.0;
     float gap = 2.0;

@@ -1511,6 +1511,7 @@ class DisplayWidget(QWidget):
         ghosting_enabled=True,
         ghost_alpha=0.4,
         ghost_decay=-1.0,
+        vis_mode="spectrum",
     ):
         vis = getattr(self, "spotify_visualizer_widget", None)
         if vis is None:
@@ -1574,6 +1575,7 @@ class DisplayWidget(QWidget):
                 ghosting_enabled=ghosting_enabled,
                 ghost_alpha=ghost_alpha,
                 ghost_decay=ghost_decay,
+                vis_mode=vis_mode,
             )
             pixel_shift_manager = getattr(self, "_pixel_shift_manager", None)
             if pixel_shift_manager is not None and hasattr(pixel_shift_manager, "update_original_position"):

@@ -11,7 +11,7 @@ import os
 import json
 from PySide6.QtWidgets import QWidget
 from PySide6.QtCore import QTimer, Qt, Signal, QThread, QObject
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QPainter, QPen, QColor, QFontMetrics
 from shiboken6 import Shiboken
 
 from core.logging.logger import get_logger
@@ -154,6 +154,9 @@ class WeatherWidget(BaseOverlayWidget):
         self._show_forecast = False
         self._forecast_data: Optional[str] = None
         
+        # Separator line position (set during _update_display)
+        self._separator_y: Optional[int] = None
+        
         # Setup UI
         self._setup_ui()
         
@@ -173,6 +176,25 @@ class WeatherWidget(BaseOverlayWidget):
         # Weather uses normal weight font
         font = QFont(self._font_family, self._font_size, QFont.Weight.Normal)
         self.setFont(font)
+    
+    def paintEvent(self, event) -> None:
+        """Override to draw separator line between weather and forecast."""
+        # Let base class draw the text
+        super().paintEvent(event)
+        
+        # Draw separator line if forecast is shown
+        if self._separator_y is not None and self._show_forecast and self._forecast_data:
+            painter = QPainter(self)
+            try:
+                pen = QPen(QColor(255, 255, 255, 153))  # 60% opacity white
+                pen.setWidth(1)
+                painter.setPen(pen)
+                # Draw horizontal line from left padding to right edge minus padding
+                x1 = self._padding_left
+                x2 = self.width() - self._padding_right
+                painter.drawLine(x1, self._separator_y, x2, self._separator_y)
+            finally:
+                painter.end()
     
     def _update_content(self) -> None:
         """Required by BaseOverlayWidget - update weather display."""
@@ -565,8 +587,15 @@ class WeatherWidget(BaseOverlayWidget):
 
             # Optional forecast line (italic, smaller)
             forecast_html = ""
+            self._separator_y = None  # Reset separator position
             if self._show_forecast and self._forecast_data:
-                forecast_html = f"<div style='font-size:{forecast_pt}pt; font-style:italic; font-weight:400;'>{self._forecast_data}</div>"
+                # Calculate separator Y position based on city + details height
+                city_fm = QFontMetrics(QFont(self._font_family, city_pt, QFont.Weight.Bold))
+                details_fm = QFontMetrics(QFont(self._font_family, details_pt, QFont.Weight.Normal))
+                # Separator with minimal padding - middle ground
+                self._separator_y = self._padding_top + city_fm.height() + details_fm.height() + 6
+                # Top margin on forecast to maintain spacing
+                forecast_html = f"<div style='margin-top: 6px; font-size:{forecast_pt}pt; font-style:italic; font-weight:400;'>{self._forecast_data}</div>"
 
             html = (
                 f"<div style='line-height:1.0'>"

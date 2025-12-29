@@ -1426,7 +1426,9 @@ class MediaWidget(BaseOverlayWidget):
 
             # Centre play/pause gets a slightly heavier weight and full white
             # to stand out just enough without drifting in position.
-            font_centre = QFont(self._font_family, controls_font, QFont.Weight.Bold)
+            # Use smaller font for pause "||" since it's two characters vs one for play
+            pause_font_size = controls_font - 2 if centre_sym == "||" else controls_font
+            font_centre = QFont(self._font_family, pause_font_size, QFont.Weight.Bold)
             painter.setFont(font_centre)
             pen.setColor(active_color)
             painter.setPen(pen)

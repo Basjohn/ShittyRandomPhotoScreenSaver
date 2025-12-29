@@ -8,6 +8,7 @@ import logging
 import os
 import sys
 import tempfile
+import threading
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -102,12 +103,97 @@ class ColoredFormatter(logging.Formatter):
         return super().format(record)
 
 
+class DeduplicatingRotatingFileHandler(RotatingFileHandler):
+    """Rotating file handler that suppresses consecutive duplicate log lines.
+    
+    Thread-safe line-by-line deduplication for file logs. When consecutive
+    identical messages are detected, they are collapsed with a count:
+    "[N duplicates suppressed]"
+    
+    This significantly reduces log file size without losing information.
+    """
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._lock = threading.Lock()
+        self._last_message: str | None = None
+        self._suppress_count: int = 0
+        self._last_record: logging.LogRecord | None = None
+    
+    def emit(self, record: logging.LogRecord) -> None:
+        """Emit a record with deduplication."""
+        try:
+            # Get the formatted message
+            msg_text = record.getMessage()
+            
+            with self._lock:
+                # Always emit WARNING+ immediately
+                if record.levelno >= logging.WARNING:
+                    self._flush_suppression()
+                    super().emit(record)
+                    self._last_message = None
+                    self._suppress_count = 0
+                    self._last_record = None
+                    return
+                
+                # First message or different from last
+                if self._last_message is None or msg_text != self._last_message:
+                    self._flush_suppression()
+                    super().emit(record)
+                    self._last_message = msg_text
+                    self._suppress_count = 0
+                    self._last_record = record
+                else:
+                    # Duplicate detected - increment counter
+                    self._suppress_count += 1
+                    if self._last_record is None:
+                        self._last_record = record
+        except Exception:
+            self.handleError(record)
+    
+    def _flush_suppression(self) -> None:
+        """Flush any pending suppression count."""
+        if self._suppress_count > 0 and self._last_record is not None:
+            # Create a summary record
+            msg = f"[{self._suppress_count} duplicates suppressed]"
+            summary = logging.LogRecord(
+                self._last_record.name,
+                self._last_record.levelno,
+                self._last_record.pathname,
+                self._last_record.lineno,
+                msg,
+                args=None,
+                exc_info=None,
+            )
+            summary.created = self._last_record.created
+            summary.msecs = self._last_record.msecs
+            summary.relativeCreated = self._last_record.relativeCreated
+            summary.thread = self._last_record.thread
+            summary.threadName = self._last_record.threadName
+            summary.process = self._last_record.process
+            summary.processName = self._last_record.processName
+            
+            # Emit the suppression summary
+            super().emit(summary)
+            
+            self._suppress_count = 0
+            self._last_record = None
+    
+    def close(self) -> None:
+        """Close handler and flush any pending suppression."""
+        try:
+            with self._lock:
+                self._flush_suppression()
+        finally:
+            super().close()
+
+
 class SuppressingStreamHandler(logging.StreamHandler):
     """Stream handler that suppresses consecutive duplicate sources.
 
     Repeated DEBUG/INFO lines from the same logger/level are collapsed into a
-    single summary line like "[N Suppressed: CHECK LOG]" while file logs
-    remain unaffected.
+    single summary line like "[N Suppressed: CHECK screensaver_verbose.log]"
+    while file logs remain unaffected.
     """
 
     def __init__(self, *args, **kwargs):
@@ -238,7 +324,7 @@ class SuppressingStreamHandler(logging.StreamHandler):
             except Exception:
                 avg_suffix = ""
 
-        msg = f"[{self._suppress_count} Suppressed: CHECK LOG{avg_suffix}]"
+        msg = f"[{self._suppress_count} Suppressed: CHECK screensaver_verbose.log{avg_suffix}]"
         summary = logging.LogRecord(
             last.name,
             last.levelno,
@@ -501,11 +587,11 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     
-    # File handler with rotation (cap keeps individual log files bounded
-    # while a separate PERF log captures detailed metrics).
-    main_handler = RotatingFileHandler(
+    # File handler with rotation and deduplication (1MB cap with line-by-line
+    # duplicate suppression keeps logs small and readable).
+    main_handler = DeduplicatingRotatingFileHandler(
         log_file,
-        maxBytes=5 * 1024 * 1024,
+        maxBytes=1 * 1024 * 1024,  # 1MB
         backupCount=5,
         encoding='utf-8'
     )
@@ -547,9 +633,9 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
     # the "[PERF]" tag. This keeps performance summaries readable even when
     # the main log is busy with other diagnostics.
     perf_log_file = log_dir / "screensaver_perf.log"
-    perf_handler = RotatingFileHandler(
+    perf_handler = DeduplicatingRotatingFileHandler(
         perf_log_file,
-        maxBytes=5 * 1024 * 1024,
+        maxBytes=1 * 1024 * 1024,  # 1MB
         backupCount=5,
         encoding='utf-8',
     )
@@ -559,9 +645,9 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
     root_logger.addHandler(perf_handler)
 
     spotify_vis_log_file = log_dir / "screensaver_spotify_vis.log"
-    spotify_vis_handler = RotatingFileHandler(
+    spotify_vis_handler = DeduplicatingRotatingFileHandler(
         spotify_vis_log_file,
-        maxBytes=5 * 1024 * 1024,
+        maxBytes=1 * 1024 * 1024,  # 1MB
         backupCount=5,
         encoding='utf-8',
     )
@@ -571,9 +657,9 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
     root_logger.addHandler(spotify_vis_handler)
 
     spotify_vol_log_file = log_dir / "screensaver_spotify_vol.log"
-    spotify_vol_handler = RotatingFileHandler(
+    spotify_vol_handler = DeduplicatingRotatingFileHandler(
         spotify_vol_log_file,
-        maxBytes=5 * 1024 * 1024,
+        maxBytes=1 * 1024 * 1024,  # 1MB
         backupCount=5,
         encoding='utf-8',
     )
@@ -582,18 +668,20 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
     spotify_vol_handler.addFilter(SpotifyVolLogFilter())
     root_logger.addHandler(spotify_vol_handler)
     
-    # Verbose debug log - captures ALL DEBUG/INFO without suppression.
+    # Verbose debug log - captures ALL DEBUG/INFO with deduplication.
     # This is the "messy" log for deep debugging when console suppression
-    # hides important details. Double size limit to accommodate volume.
+    # hides important details. Now with 1MB limit and deduplication.
     # Log types summary:
-    #   1. screensaver.log - Main log (INFO+, no PERF, console mirrors this)
-    #   2. screensaver_verbose.log - Full DEBUG/INFO without suppression
+    #   1. screensaver.log - Main log (INFO+, no PERF, no Spotify)
+    #   2. screensaver_verbose.log - Full DEBUG/INFO with deduplication
     #   3. screensaver_perf.log - PERF metrics only
+    #   4. screensaver_spotify_vis.log - Spotify visualizer logs
+    #   5. screensaver_spotify_vol.log - Spotify volume logs
     if debug_enabled:
         verbose_log_file = log_dir / "screensaver_verbose.log"
-        verbose_handler = RotatingFileHandler(
+        verbose_handler = DeduplicatingRotatingFileHandler(
             verbose_log_file,
-            maxBytes=10 * 1024 * 1024,  # 10MB - double size for verbose
+            maxBytes=1 * 1024 * 1024,  # 1MB with deduplication
             backupCount=3,
             encoding='utf-8',
         )

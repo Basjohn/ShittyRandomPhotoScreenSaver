@@ -838,12 +838,14 @@ class WidgetsTab(QWidget):
         spotify_vis_enable_row.addWidget(self.spotify_vis_software_enabled)
         spotify_vis_layout.addLayout(spotify_vis_enable_row)
 
+
         spotify_vis_bar_row = QHBoxLayout()
         spotify_vis_bar_row.addWidget(QLabel("Bar Count:"))
         self.spotify_vis_bar_count = QSpinBox()
         self.spotify_vis_bar_count.setRange(8, 96)
         self.spotify_vis_bar_count.setValue(32)
         self.spotify_vis_bar_count.setAccelerated(True)
+        self.spotify_vis_bar_count.setToolTip("Number of frequency bars to display (8-96)")
         self.spotify_vis_bar_count.valueChanged.connect(self._save_settings)
         spotify_vis_bar_row.addWidget(self.spotify_vis_bar_count)
         spotify_vis_bar_row.addWidget(QLabel("bars"))
@@ -1029,6 +1031,9 @@ class WidgetsTab(QWidget):
         reddit_layout.addWidget(reddit_info)
 
         self.reddit_exit_on_click = QCheckBox("Exit screensaver when Reddit links are opened")
+        self.reddit_exit_on_click.setToolTip(
+            "When enabled, clicking a Reddit link will exit the screensaver and open the link in your browser."
+        )
         self.reddit_exit_on_click.stateChanged.connect(self._save_settings)
         reddit_layout.addWidget(self.reddit_exit_on_click)
 
@@ -1037,6 +1042,7 @@ class WidgetsTab(QWidget):
         reddit_sub_row.addWidget(QLabel("Subreddit:"))
         self.reddit_subreddit = QLineEdit()
         self.reddit_subreddit.setPlaceholderText("e.g. wallpapers")
+        self.reddit_subreddit.setToolTip("Enter the subreddit name (without r/ prefix)")
         self.reddit_subreddit.textChanged.connect(self._save_settings)
         reddit_sub_row.addWidget(self.reddit_subreddit)
         reddit_layout.addLayout(reddit_sub_row)
@@ -1047,6 +1053,7 @@ class WidgetsTab(QWidget):
         self.reddit_items = QComboBox()
         # Expose 4/10/20 item modes (legacy configs <=5 map to the 4-item option).
         self.reddit_items.addItems(["4", "10", "20"])
+        self.reddit_items.setToolTip("Number of Reddit posts to display in the widget")
         self.reddit_items.currentTextChanged.connect(self._save_settings)
         self.reddit_items.currentTextChanged.connect(self._update_stack_status)
         reddit_items_row.addWidget(self.reddit_items)
@@ -1062,6 +1069,7 @@ class WidgetsTab(QWidget):
             "Middle Left", "Center", "Middle Right",
             "Bottom Left", "Bottom Center", "Bottom Right",
         ])
+        self.reddit_position.setToolTip("Screen position for the Reddit widget (9-grid layout)")
         self.reddit_position.currentTextChanged.connect(self._save_settings)
         self.reddit_position.currentTextChanged.connect(self._update_stack_status)
         reddit_pos_row.addWidget(self.reddit_position)
@@ -1076,6 +1084,7 @@ class WidgetsTab(QWidget):
         reddit_disp_row.addWidget(QLabel("Display:"))
         self.reddit_monitor_combo = QComboBox()
         self.reddit_monitor_combo.addItems(["ALL", "1", "2", "3"])
+        self.reddit_monitor_combo.setToolTip("Which monitor(s) to show the Reddit widget on")
         self.reddit_monitor_combo.currentTextChanged.connect(self._save_settings)
         self.reddit_monitor_combo.currentTextChanged.connect(self._update_stack_status)
         reddit_disp_row.addWidget(self.reddit_monitor_combo)
@@ -1088,6 +1097,7 @@ class WidgetsTab(QWidget):
         self.reddit_font_combo = QFontComboBox()
         self.reddit_font_combo.setCurrentFont("Segoe UI")
         self.reddit_font_combo.setMinimumWidth(220)
+        self.reddit_font_combo.setToolTip("Font family for Reddit post titles")
         self.reddit_font_combo.currentFontChanged.connect(self._save_settings)
         reddit_font_family_row.addWidget(self.reddit_font_combo)
         reddit_font_family_row.addStretch()
@@ -1100,6 +1110,7 @@ class WidgetsTab(QWidget):
         self.reddit_font_size.setRange(10, 72)
         self.reddit_font_size.setValue(18)
         self.reddit_font_size.setAccelerated(True)
+        self.reddit_font_size.setToolTip("Font size for Reddit post titles (10-72px)")
         self.reddit_font_size.valueChanged.connect(self._save_settings)
         self.reddit_font_size.valueChanged.connect(self._update_stack_status)
         reddit_font_row.addWidget(self.reddit_font_size)
@@ -1318,6 +1329,13 @@ class WidgetsTab(QWidget):
                 border-right: 4px solid transparent;
                 border-top: 6px solid #ffffff;
                 margin-bottom: 2px;
+            }
+            QToolTip {
+                background-color: #1e1e1e;
+                color: #ffffff;
+                border: 1px solid #ffffff;
+                padding: 6px;
+                font-size: 12px;
             }
             """
         )
@@ -1680,6 +1698,9 @@ class WidgetsTab(QWidget):
             # Load Spotify Beat Visualizer settings
             spotify_vis_config = widgets.get('spotify_visualizer', {})
             self.spotify_vis_enabled.setChecked(spotify_vis_config.get('enabled', False))
+            
+            # Mode selection removed - only spectrum mode supported
+            
             bar_count = int(spotify_vis_config.get('bar_count', 32))
             self.spotify_vis_bar_count.setValue(bar_count)
 
@@ -2107,6 +2128,7 @@ class WidgetsTab(QWidget):
 
         spotify_vis_config = {
             'enabled': self.spotify_vis_enabled.isChecked(),
+            'mode': 'spectrum',  # Only spectrum mode supported
             'bar_count': self.spotify_vis_bar_count.value(),
             'software_visualizer_enabled': self.spotify_vis_software_enabled.isChecked(),
             'adaptive_sensitivity': self.spotify_vis_recommended.isChecked(),
@@ -2129,6 +2151,7 @@ class WidgetsTab(QWidget):
             'ghost_alpha': self.spotify_vis_ghost_opacity.value() / 100.0,
             'ghost_decay': max(0.1, self.spotify_vis_ghost_decay.value() / 100.0),
             'dynamic_floor': self.spotify_vis_dynamic_floor.isChecked(),
+            'dynamic_range_enabled': self.spotify_vis_dynamic_floor.isChecked(),
             'manual_floor': max(0.12, min(4.0, self.spotify_vis_manual_floor.value() / 100.0)),
         }
 

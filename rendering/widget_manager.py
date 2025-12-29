@@ -1834,6 +1834,14 @@ class WidgetManager:
             except Exception:
                 pass
 
+            # Visualization mode (only spectrum supported)
+            try:
+                if hasattr(vis, 'set_visualization_mode'):
+                    from widgets.spotify_visualizer_widget import VisualizerMode
+                    vis.set_visualization_mode(VisualizerMode.SPECTRUM)
+            except Exception:
+                pass
+
             # Noise floor configuration
             try:
                 dynamic_floor = SettingsManager.to_bool(

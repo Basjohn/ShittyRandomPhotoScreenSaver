@@ -27,9 +27,7 @@ from utils.profiler import profile
 
 class VisualizerMode(Enum):
     """Visualization display modes for the Spotify visualizer."""
-    SPECTRUM = auto()  # Classic bar spectrum analyzer (default)
-    WAVEFORM = auto()  # Scrolling amplitude waveform
-    ABSTRACT = auto()  # Particle/geometric reactive visualization
+    SPECTRUM = auto()  # Classic bar spectrum analyzer (only supported mode)
 
 logger = get_logger(__name__)
 
@@ -1154,15 +1152,6 @@ class SpotifyVisualizerWidget(QWidget):
 
         # Visualization mode (Spectrum, Waveform, Abstract)
         self._vis_mode: VisualizerMode = VisualizerMode.SPECTRUM
-        
-        # Waveform mode state - stores amplitude history for scrolling display
-        self._waveform_history: List[float] = []
-        self._waveform_max_samples: int = 128  # Number of samples to display
-        
-        # Abstract mode state - particles that react to audio
-        self._abstract_particles: List[Dict[str, float]] = []
-        self._abstract_max_particles: int = 50
-        self._abstract_last_spawn_ts: float = 0.0
 
         # Behavioural gating
         self._spotify_playing: bool = False
@@ -2147,6 +2136,9 @@ class SpotifyVisualizerWidget(QWidget):
             should_push = changed or fade_changed or first_frame or geom_changed
             if should_push:
                 _gpu_push_start = time.time()
+                # Only spectrum mode is supported
+                mode_str = 'spectrum'
+                
                 used_gpu = parent.push_spotify_visualizer_frame(
                     bars=list(self._display_bars),
                     bar_count=self._bar_count,
@@ -2158,6 +2150,7 @@ class SpotifyVisualizerWidget(QWidget):
                     ghosting_enabled=self._ghosting_enabled,
                     ghost_alpha=self._ghost_alpha,
                     ghost_decay=self._ghost_decay_rate,
+                    vis_mode=mode_str,
                 )
                 _gpu_push_elapsed = (time.time() - _gpu_push_start) * 1000.0
                 if _gpu_push_elapsed > 20.0 and is_perf_metrics_enabled():
@@ -2310,14 +2303,8 @@ class SpotifyVisualizerWidget(QWidget):
             painter.setBrush(fill)
             painter.setPen(border)
 
-            # Dispatch to appropriate rendering based on visualization mode
-            if self._vis_mode == VisualizerMode.WAVEFORM:
-                self._paint_waveform(painter, inner, fill, border)
-            elif self._vis_mode == VisualizerMode.ABSTRACT:
-                self._paint_abstract(painter, inner, fill, border)
-            else:
-                # Default: SPECTRUM mode - classic bar visualization
-                for i in range(count):
+            # SPECTRUM mode - classic bar visualization
+            for i in range(count):
                     x = bar_x[i]
                     value = max(0.0, min(1.0, self._display_bars[i]))
                     if value <= 0.0:
@@ -2339,152 +2326,14 @@ class SpotifyVisualizerWidget(QWidget):
 
             painter.end()
 
-    def _paint_waveform(self, painter: QPainter, rect: QRect, fill: QColor, border: QColor) -> None:
-        """Render waveform visualization - scrolling amplitude line.
-        
-        Shows audio amplitude over time as a continuous waveform that scrolls
-        from right to left, similar to an oscilloscope display.
-        """
-        # Get current overall amplitude from display bars
-        if self._display_bars:
-            current_amp = sum(self._display_bars) / len(self._display_bars)
-        else:
-            current_amp = 0.0
-        
-        # Add to history (scrolls left)
-        self._waveform_history.append(current_amp)
-        if len(self._waveform_history) > self._waveform_max_samples:
-            self._waveform_history = self._waveform_history[-self._waveform_max_samples:]
-        
-        if len(self._waveform_history) < 2:
-            return
-        
-        # Calculate drawing parameters
-        w = rect.width()
-        h = rect.height()
-        center_y = rect.y() + h // 2
-        amplitude_scale = h * 0.45  # Use 90% of height for waveform
-        
-        # Draw waveform as connected line segments
-        painter.setPen(border)
-        sample_count = len(self._waveform_history)
-        x_step = w / max(1, self._waveform_max_samples - 1)
-        
-        for i in range(1, sample_count):
-            x1 = rect.x() + int((i - 1) * x_step)
-            x2 = rect.x() + int(i * x_step)
-            
-            # Mirror waveform around center
-            amp1 = self._waveform_history[i - 1]
-            amp2 = self._waveform_history[i]
-            
-            y1_top = center_y - int(amp1 * amplitude_scale)
-            y1_bot = center_y + int(amp1 * amplitude_scale)
-            y2_top = center_y - int(amp2 * amplitude_scale)
-            y2_bot = center_y + int(amp2 * amplitude_scale)
-            
-            # Draw top half
-            painter.drawLine(x1, y1_top, x2, y2_top)
-            # Draw bottom half (mirrored)
-            painter.drawLine(x1, y1_bot, x2, y2_bot)
-        
-        # Draw center line
-        painter.setPen(QColor(fill.red(), fill.green(), fill.blue(), 80))
-        painter.drawLine(rect.x(), center_y, rect.x() + w, center_y)
-
-    def _paint_abstract(self, painter: QPainter, rect: QRect, fill: QColor, border: QColor) -> None:
-        """Render abstract visualization - reactive particles/geometric shapes.
-        
-        Creates floating particles that spawn based on audio energy and
-        drift upward with varying sizes based on frequency content.
-        """
-        now = time.time()
-        
-        # Get audio energy metrics
-        if self._display_bars:
-            total_energy = sum(self._display_bars) / len(self._display_bars)
-            # Bass energy from center bars (ridge peaks)
-            center = len(self._display_bars) // 2
-            bass_energy = 0.0
-            if center >= 3:
-                bass_bars = [self._display_bars[center - 3], self._display_bars[center + 3]] if center + 3 < len(self._display_bars) else []
-                bass_energy = sum(bass_bars) / max(1, len(bass_bars))
-        else:
-            total_energy = 0.0
-            bass_energy = 0.0
-        
-        # Spawn new particles based on energy
-        spawn_rate = 0.02 + total_energy * 0.08  # Faster spawning with more energy
-        if now - self._abstract_last_spawn_ts > spawn_rate and len(self._abstract_particles) < self._abstract_max_particles:
-            self._abstract_last_spawn_ts = now
-            # Spawn particle at random x position, bottom of widget
-            particle = {
-                'x': rect.x() + random.random() * rect.width(),
-                'y': float(rect.y() + rect.height()),
-                'vx': (random.random() - 0.5) * 2.0,  # Horizontal drift
-                'vy': -1.0 - total_energy * 3.0,  # Upward velocity based on energy
-                'size': 3.0 + bass_energy * 12.0,  # Size based on bass
-                'alpha': 0.8 + total_energy * 0.2,
-                'life': 1.0,
-                'decay': 0.015 + random.random() * 0.01,
-            }
-            self._abstract_particles.append(particle)
-        
-        # Update and draw particles
-        surviving_particles = []
-        for p in self._abstract_particles:
-            # Update position
-            p['x'] += p['vx']
-            p['y'] += p['vy']
-            p['life'] -= p['decay']
-            
-            # Add some wobble based on current energy
-            p['vx'] += (random.random() - 0.5) * total_energy * 0.5
-            
-            # Keep if still alive and in bounds
-            if p['life'] > 0 and p['y'] > rect.y() - 20:
-                surviving_particles.append(p)
-                
-                # Draw particle
-                alpha = int(p['alpha'] * p['life'] * 255)
-                size = int(p['size'] * (0.5 + p['life'] * 0.5))
-                
-                particle_color = QColor(fill.red(), fill.green(), fill.blue(), alpha)
-                painter.setBrush(particle_color)
-                painter.setPen(Qt.PenStyle.NoPen)
-                
-                # Draw as circle
-                painter.drawEllipse(
-                    int(p['x'] - size // 2),
-                    int(p['y'] - size // 2),
-                    size,
-                    size
-                )
-        
-        self._abstract_particles = surviving_particles
-        
-        # Draw energy indicator at bottom
-        indicator_height = int(total_energy * rect.height() * 0.1)
-        if indicator_height > 0:
-            painter.setBrush(QColor(fill.red(), fill.green(), fill.blue(), 60))
-            painter.drawRect(
-                rect.x(),
-                rect.y() + rect.height() - indicator_height,
-                rect.width(),
-                indicator_height
-            )
-
     def set_visualization_mode(self, mode: VisualizerMode) -> None:
         """Set the visualization display mode.
         
         Args:
-            mode: VisualizerMode.SPECTRUM, WAVEFORM, or ABSTRACT
+            mode: VisualizerMode.SPECTRUM (only supported mode)
         """
         if mode != self._vis_mode:
             self._vis_mode = mode
-            # Reset mode-specific state
-            self._waveform_history.clear()
-            self._abstract_particles.clear()
             logger.info("[SPOTIFY_VIS] Visualization mode changed to %s", mode.name)
 
     def get_visualization_mode(self) -> VisualizerMode:
