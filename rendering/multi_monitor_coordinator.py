@@ -190,7 +190,8 @@ class MultiMonitorCoordinator(QObject):
         Attempt to claim focus ownership for a DisplayWidget.
         
         Returns:
-            True if focus was claimed (first caller wins)
+            True if focus was claimed (first caller wins, but can be re-claimed
+            if current owner is not visible or has an unavailable screen)
         """
         with self._state_lock:
             current = self._focus_owner_ref() if self._focus_owner_ref else None
@@ -199,19 +200,54 @@ class MultiMonitorCoordinator(QObject):
                 logger.debug("[MULTI_MONITOR] Focus claimed by screen %s", 
                              widget.screen_index)
                 return True
-            try:
-                if not getattr(current, "isVisible", lambda: True)():
-                    self._focus_owner_ref = weakref.ref(widget)
-                    logger.debug(
-                        "[MULTI_MONITOR] Focus re-claimed by screen %s (previous owner not visible)",
-                        widget.screen_index,
-                    )
-                    return True
-            except Exception:
-                # If visibility probing fails, treat the owner as stale.
-                self._focus_owner_ref = weakref.ref(widget)
+            
+            # Already the owner
+            if current is widget:
                 return True
-            return current is widget
+            
+            # Check if current owner should yield focus
+            should_yield = False
+            try:
+                # Yield if current owner is not visible
+                if not getattr(current, "isVisible", lambda: True)():
+                    should_yield = True
+                    logger.debug(
+                        "[MULTI_MONITOR] Focus owner screen %s not visible",
+                        getattr(current, "screen_index", "?"),
+                    )
+            except Exception:
+                should_yield = True
+            
+            if not should_yield:
+                try:
+                    # Yield if current owner's screen is not available
+                    current_screen = getattr(current, "_screen", None)
+                    if current_screen is None:
+                        should_yield = True
+                        logger.debug(
+                            "[MULTI_MONITOR] Focus owner screen %s has no screen object",
+                            getattr(current, "screen_index", "?"),
+                        )
+                    elif hasattr(current_screen, "geometry"):
+                        geom = current_screen.geometry()
+                        if geom is None or not geom.isValid() or geom.width() <= 0:
+                            should_yield = True
+                            logger.debug(
+                                "[MULTI_MONITOR] Focus owner screen %s has invalid geometry",
+                                getattr(current, "screen_index", "?"),
+                            )
+                except Exception:
+                    pass
+            
+            if should_yield:
+                self._focus_owner_ref = weakref.ref(widget)
+                logger.debug(
+                    "[MULTI_MONITOR] Focus re-claimed by screen %s",
+                    widget.screen_index,
+                )
+                return True
+            
+            return False
     
     def release_focus(self, widget: "DisplayWidget") -> None:
         """Release focus ownership if held by the given widget."""

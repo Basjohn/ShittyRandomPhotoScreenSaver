@@ -50401,3 +50401,1653 @@ FAILED tests/test_weather_widget.py::test_weather_concurrent_start_prevention - 
 
 ====================================================================================== 6 failed, 15 passed in 0.42s =======================================================================================
 
+
+===== pytest run 2025-12-29 05:19:39 args=['tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation', 'tests/test_clock_widget.py::test_analog_clock_visual_offset_zero_with_background', 'tests/test_clock_widget.py::test_digital_clock_visual_offset_zero', 'tests/test_clock_widget.py::test_analog_clock_margin_alignment', '-v'] =====
+
+============================= test session starts =============================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 4 items
+
+
+
+tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation 
+FAILED [ 25%]
+
+
+tests/test_clock_widget.py::test_analog_clock_visual_offset_zero_with_background 
+FAILED [ 50%]
+
+
+tests/test_clock_widget.py::test_digital_clock_visual_offset_zero 
+FAILED [ 75%]
+
+
+tests/test_clock_widget.py::test_analog_clock_margin_alignment 
+FAILED    [100%]
+
+
+
+
+================================== FAILURES ===================================
+
+_________________ test_analog_clock_visual_offset_calculation _________________
+
+
+
+qapp = <PySide6.QtWidgets.QApplication(0x205546f6d70) at 0x0000020555A60280>
+
+parent_widget = <PySide6.QtWidgets.QWidget(0x20554418390) at 0x0000020555A60140>
+
+
+
+    def test_analog_clock_visual_offset_calculation(qapp, parent_widget):
+
+        """Test that analogue clock without background calculates visual offset correctly."""
+
+>       clock = ClockWidget(
+
+            parent=parent_widget,
+
+            position=ClockPosition.TOP_RIGHT,
+
+            display_mode="analog",
+
+        )
+
+E       TypeError: ClockWidget.__init__() got an unexpected keyword argument 'display_mode'
+
+
+
+tests\test_clock_widget.py:334: TypeError
+
+____________ test_analog_clock_visual_offset_zero_with_background _____________
+
+
+
+qapp = <PySide6.QtWidgets.QApplication(0x205546f6d70) at 0x0000020555A60280>
+
+parent_widget = <PySide6.QtWidgets.QWidget(0x20554418870) at 0x0000020555F3CB00>
+
+
+
+    def test_analog_clock_visual_offset_zero_with_background(qapp, parent_widget):
+
+        """Test that analogue clock with background has zero visual offset."""
+
+>       clock = ClockWidget(
+
+            parent=parent_widget,
+
+            position=ClockPosition.TOP_RIGHT,
+
+            display_mode="analog",
+
+        )
+
+E       TypeError: ClockWidget.__init__() got an unexpected keyword argument 'display_mode'
+
+
+
+tests\test_clock_widget.py:360: TypeError
+
+____________________ test_digital_clock_visual_offset_zero ____________________
+
+
+
+qapp = <PySide6.QtWidgets.QApplication(0x205546f6d70) at 0x0000020555A60280>
+
+parent_widget = <PySide6.QtWidgets.QWidget(0x20554419b90) at 0x000002055605E9C0>
+
+
+
+    def test_digital_clock_visual_offset_zero(qapp, parent_widget):
+
+        """Test that digital clock has zero visual offset."""
+
+>       clock = ClockWidget(
+
+            parent=parent_widget,
+
+            position=ClockPosition.TOP_RIGHT,
+
+            display_mode="digital",
+
+        )
+
+E       TypeError: ClockWidget.__init__() got an unexpected keyword argument 'display_mode'
+
+
+
+tests\test_clock_widget.py:380: TypeError
+
+_____________________ test_analog_clock_margin_alignment ______________________
+
+
+
+qapp = <PySide6.QtWidgets.QApplication(0x205546f6d70) at 0x0000020555A60280>
+
+parent_widget = <PySide6.QtWidgets.QWidget(0x20554419470) at 0x0000020556600180>
+
+
+
+    def test_analog_clock_margin_alignment(qapp, parent_widget):
+
+        """Test that analogue clock without background aligns correctly with margin.
+
+    
+
+        When positioned at TOP_RIGHT with margin=20, the visual top of the clock
+
+        (XII numeral) should be at y=20, not the widget bounds.
+
+        """
+
+        margin = 20
+
+>       clock = ClockWidget(
+
+            parent=parent_widget,
+
+            position=ClockPosition.TOP_RIGHT,
+
+            display_mode="analog",
+
+            margin=margin,
+
+        )
+
+E       TypeError: ClockWidget.__init__() got an unexpected keyword argument 'display_mode'
+
+
+
+tests\test_clock_widget.py:405: TypeError
+
+=========================== short test summary info ===========================
+
+FAILED tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation
+
+FAILED tests/test_clock_widget.py::test_analog_clock_visual_offset_zero_with_background
+
+FAILED tests/test_clock_widget.py::test_digital_clock_visual_offset_zero - Ty...
+
+FAILED tests/test_clock_widget.py::test_analog_clock_margin_alignment - TypeE...
+
+============================== 4 failed in 0.43s ==============================
+
+
+===== pytest run 2025-12-29 05:19:50 args=['tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation', '-v'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 1 item
+
+
+
+tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation 
+FAILED                                                                                                                       [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+_______________________________________________________________________________ test_analog_clock_visual_offset_calculation _______________________________________________________________________________
+
+
+
+qapp = <PySide6.QtWidgets.QApplication(0x200668b4d90) at 0x00000200675C8F00>, parent_widget = <PySide6.QtWidgets.QWidget(0x200665dbd30) at 0x00000200675C8EC0>
+
+
+
+    def test_analog_clock_visual_offset_calculation(qapp, parent_widget):
+
+        """Test that analogue clock without background calculates visual offset correctly."""
+
+>       clock = ClockWidget(
+
+            parent=parent_widget,
+
+            position=ClockPosition.TOP_RIGHT,
+
+            display_mode="analog",
+
+        )
+
+E       TypeError: ClockWidget.__init__() got an unexpected keyword argument 'display_mode'
+
+
+
+tests\test_clock_widget.py:334: TypeError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation - TypeError: ClockWidget.__init__() got an unexpected keyword argument 'display_mode'
+
+============================================================================================ 1 failed in 0.31s ============================================================================================
+
+
+===== pytest run 2025-12-29 05:20:04 args=['tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation', '-v', '--tb=short'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 1 item
+
+
+
+tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation 
+FAILED                                                                                                                       [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+_______________________________________________________________________________ test_analog_clock_visual_offset_calculation _______________________________________________________________________________
+
+tests\test_clock_widget.py:334: in test_analog_clock_visual_offset_calculation
+
+    clock = ClockWidget(
+
+E   TypeError: ClockWidget.__init__() got an unexpected keyword argument 'display_mode'
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation - TypeError: ClockWidget.__init__() got an unexpected keyword argument 'display_mode'
+
+============================================================================================ 1 failed in 0.27s ============================================================================================
+
+
+===== pytest run 2025-12-29 05:20:15 args=['tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation', '-v'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 1 item
+
+
+
+tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation 
+FAILED                                                                                                                       [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+_______________________________________________________________________________ test_analog_clock_visual_offset_calculation _______________________________________________________________________________
+
+
+
+qapp = <PySide6.QtWidgets.QApplication(0x27aa9763be0) at 0x0000027AAA3DCD40>, parent_widget = <PySide6.QtWidgets.QWidget(0x27aa98a1660) at 0x0000027AAA3DCC80>
+
+
+
+    def test_analog_clock_visual_offset_calculation(qapp, parent_widget):
+
+        """Test that analogue clock without background calculates visual offset correctly."""
+
+>       clock = ClockWidget(
+
+            parent=parent_widget,
+
+            position=ClockPosition.TOP_RIGHT,
+
+            display_mode="analog",
+
+        )
+
+E       TypeError: ClockWidget.__init__() got an unexpected keyword argument 'display_mode'
+
+
+
+tests\test_clock_widget.py:334: TypeError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation - TypeError: ClockWidget.__init__() got an unexpected keyword argument 'display_mode'
+
+============================================================================================ 1 failed in 0.27s ============================================================================================
+
+
+===== pytest run 2025-12-29 05:20:26 args=['tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation', '-v'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 1 item
+
+
+
+tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation 
+FAILED                                                                                                                       [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+_______________________________________________________________________________ test_analog_clock_visual_offset_calculation _______________________________________________________________________________
+
+
+
+qapp = <PySide6.QtWidgets.QApplication(0x1b7041568f0) at 0x000001B704D9CD40>, parent_widget = <PySide6.QtWidgets.QWidget(0x1b7034276b0) at 0x000001B704D9CC80>
+
+
+
+    def test_analog_clock_visual_offset_calculation(qapp, parent_widget):
+
+        """Test that analogue clock without background calculates visual offset correctly."""
+
+>       clock = ClockWidget(
+
+            parent=parent_widget,
+
+            position=ClockPosition.TOP_RIGHT,
+
+            display_mode="analog",
+
+        )
+
+E       TypeError: ClockWidget.__init__() got an unexpected keyword argument 'display_mode'
+
+
+
+tests\test_clock_widget.py:334: TypeError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation - TypeError: ClockWidget.__init__() got an unexpected keyword argument 'display_mode'
+
+============================================================================================ 1 failed in 0.33s ============================================================================================
+
+
+===== pytest run 2025-12-29 05:21:53 args=['tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation', 'tests/test_clock_widget.py::test_analog_clock_margin_alignment', '-v'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 2 items
+
+
+
+tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation 
+PASSED                                                                                                                       [ 50%]
+
+
+tests/test_clock_widget.py::test_analog_clock_margin_alignment 
+PASSED                                                                                                                                [100%]
+
+
+
+
+============================================================================================ 2 passed in 0.38s ============================================================================================
+
+
+===== pytest run 2025-12-29 05:22:10 args=['tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation', 'tests/test_clock_widget.py::test_analog_clock_visual_offset_zero_with_background', 'tests/test_clock_widget.py::test_digital_clock_visual_offset_zero', 'tests/test_clock_widget.py::test_analog_clock_margin_alignment', '-v'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 4 items
+
+
+
+tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation 
+PASSED                                                                                                                       [ 25%]
+
+
+tests/test_clock_widget.py::test_analog_clock_visual_offset_zero_with_background 
+PASSED                                                                                                              [ 50%]
+
+
+tests/test_clock_widget.py::test_digital_clock_visual_offset_zero 
+PASSED                                                                                                                             [ 75%]
+
+
+tests/test_clock_widget.py::test_analog_clock_margin_alignment 
+PASSED                                                                                                                                [100%]
+
+
+
+
+============================================================================================ 4 passed in 0.41s ============================================================================================
+
+
+===== pytest run 2025-12-29 05:24:39 args=['tests/test_scrollwheel_volume.py::test_spotify_volume_widget_uses_coordinated_fade_sync', '-v'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 1 item
+
+
+
+tests/test_scrollwheel_volume.py::test_spotify_volume_widget_uses_coordinated_fade_sync 
+PASSED                                                                                                       [100%]
+
+
+tests/test_scrollwheel_volume.py::test_spotify_volume_widget_uses_coordinated_fade_sync ERROR                                                                                                        [100%]
+
+
+
+
+================================================================================================= ERRORS ==================================================================================================
+
+_______________________________________________________________ ERROR at teardown of test_spotify_volume_widget_uses_coordinated_fade_sync ________________________________________________________________
+
+
+
+item = <Function test_spotify_volume_widget_uses_coordinated_fade_sync>
+
+
+
+    @pytest.hookimpl(wrapper=True, trylast=True)
+
+    def pytest_runtest_teardown(item):
+
+        """
+
+        Hook called after each test tear down, to process any pending events and
+
+        avoiding leaking events to the next test. Also, if exceptions have
+
+        been captured during fixtures teardown, fail the test.
+
+        """
+
+        _process_events()
+
+>       _close_widgets(item)
+
+
+
+C:\Python311\Lib\site-packages\pytestqt\plugin.py:203: 
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+
+
+item = <Function test_spotify_volume_widget_uses_coordinated_fade_sync>
+
+
+
+    def _close_widgets(item: pytest.Item) -> None:
+
+        """
+
+        Close all widgets registered in the pytest item.
+
+        """
+
+        widgets = getattr(item, "qt_widgets", None)
+
+        if widgets:
+
+            for w, before_close_func in item.qt_widgets:  # type: ignore[attr-defined]
+
+                w = w()
+
+                if w is not None:
+
+                    if before_close_func is not None:
+
+                        before_close_func(w)
+
+>                   w.close()
+
+E                   RuntimeError: Internal C++ object (SpotifyVolumeWidget) already deleted.
+
+
+
+C:\Python311\Lib\site-packages\pytestqt\qtbot.py:808: RuntimeError
+
+========================================================================================= short test summary info =========================================================================================
+
+ERROR tests/test_scrollwheel_volume.py::test_spotify_volume_widget_uses_coordinated_fade_sync - RuntimeError: Internal C++ object (SpotifyVolumeWidget) already deleted.
+
+======================================================================================= 1 passed, 1 error in 0.60s ========================================================================================
+
+
+===== pytest run 2025-12-29 05:26:59 args=['tests/test_pixel_shift.py', '-v'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 9 items
+
+
+
+tests/test_pixel_shift.py::test_pixel_shift_manager_creation 
+PASSED                                                                                                                                  [ 11%]
+
+
+tests/test_pixel_shift.py::test_pixel_shift_max_drift_constant 
+PASSED                                                                                                                                [ 22%]
+
+
+tests/test_pixel_shift.py::test_pixel_shift_calculate_next_offset_from_center 
+FAILED                                                                                                                 [ 33%]
+
+
+tests/test_pixel_shift.py::test_pixel_shift_no_immediate_shift_back 
+PASSED                                                                                                                           [ 44%]
+
+
+tests/test_pixel_shift.py::test_pixel_shift_respects_max_drift 
+PASSED                                                                                                                                [ 55%]
+
+
+tests/test_pixel_shift.py::test_pixel_shift_drifts_back_at_max 
+PASSED                                                                                                                                [ 66%]
+
+
+tests/test_pixel_shift.py::test_pixel_shift_outward_bias_statistics 
+PASSED                                                                                                                           [ 77%]
+
+
+tests/test_pixel_shift.py::test_pixel_shift_widget_registration 
+PASSED                                                                                                                               [ 88%]
+
+
+tests/test_pixel_shift.py::test_pixel_shift_applies_offset_to_widgets 
+PASSED                                                                                                                         [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+___________________________________________________________________________ test_pixel_shift_calculate_next_offset_from_center ____________________________________________________________________________
+
+
+
+pixel_shift_manager = <widgets.pixel_shift_manager.PixelShiftManager object at 0x0000026517394310>
+
+
+
+    def test_pixel_shift_calculate_next_offset_from_center(pixel_shift_manager):
+
+        """Test that first shift moves away from center."""
+
+        manager = pixel_shift_manager
+
+        manager._offset_x = 0
+
+        manager._offset_y = 0
+
+    
+
+        # Run multiple times to check statistical behavior
+
+        outward_count = 0
+
+        for _ in range(100):
+
+            manager._offset_x = 0
+
+            manager._offset_y = 0
+
+            new_x, new_y = manager._calculate_next_offset()
+
+            # From center, any movement is outward
+
+            if abs(new_x) + abs(new_y) > 0:
+
+                outward_count += 1
+
+    
+
+        # Should almost always move outward from center
+
+>       assert outward_count >= 95, f"Expected mostly outward movement, got {outward_count}/100"
+
+E       AssertionError: Expected mostly outward movement, got 77/100
+
+E       assert 77 >= 95
+
+
+
+tests\test_pixel_shift.py:49: AssertionError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_pixel_shift.py::test_pixel_shift_calculate_next_offset_from_center - AssertionError: Expected mostly outward movement, got 77/100
+
+======================================================================================= 1 failed, 8 passed in 0.78s =======================================================================================
+
+
+===== pytest run 2025-12-29 05:27:40 args=['tests/test_pixel_shift.py', '-v'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 9 items
+
+
+
+tests/test_pixel_shift.py::test_pixel_shift_manager_creation 
+PASSED                                                                                                                                  [ 11%]
+
+
+tests/test_pixel_shift.py::test_pixel_shift_max_drift_constant 
+PASSED                                                                                                                                [ 22%]
+
+
+tests/test_pixel_shift.py::test_pixel_shift_calculate_next_offset_from_center 
+PASSED                                                                                                                 [ 33%]
+
+
+tests/test_pixel_shift.py::test_pixel_shift_no_immediate_shift_back 
+PASSED                                                                                                                           [ 44%]
+
+
+tests/test_pixel_shift.py::test_pixel_shift_respects_max_drift 
+PASSED                                                                                                                                [ 55%]
+
+
+tests/test_pixel_shift.py::test_pixel_shift_drifts_back_at_max 
+PASSED                                                                                                                                [ 66%]
+
+
+tests/test_pixel_shift.py::test_pixel_shift_outward_bias_statistics 
+PASSED                                                                                                                           [ 77%]
+
+
+tests/test_pixel_shift.py::test_pixel_shift_widget_registration 
+PASSED                                                                                                                               [ 88%]
+
+
+tests/test_pixel_shift.py::test_pixel_shift_applies_offset_to_widgets 
+PASSED                                                                                                                         [100%]
+
+
+
+
+============================================================================================ 9 passed in 0.45s ============================================================================================
+
+
+===== pytest run 2025-12-29 05:30:09 args=['tests/test_multi_monitor_focus.py', '-v'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 9 items
+
+
+
+tests/test_multi_monitor_focus.py::test_first_display_claims_focus 
+PASSED                                                                                                                            [ 11%]
+
+
+tests/test_multi_monitor_focus.py::test_second_display_cannot_claim_focus_normally 
+PASSED                                                                                                            [ 22%]
+
+
+tests/test_multi_monitor_focus.py::test_display_can_reclaim_own_focus 
+PASSED                                                                                                                         [ 33%]
+
+
+tests/test_multi_monitor_focus.py::test_focus_reclaimed_when_owner_not_visible 
+PASSED                                                                                                                [ 44%]
+
+
+tests/test_multi_monitor_focus.py::test_focus_reclaimed_when_owner_screen_unavailable 
+PASSED                                                                                                         [ 55%]
+
+
+tests/test_multi_monitor_focus.py::test_focus_reclaimed_when_owner_screen_has_invalid_geometry 
+PASSED                                                                                                [ 66%]
+
+
+tests/test_multi_monitor_focus.py::test_release_focus 
+PASSED                                                                                                                                         [ 77%]
+
+
+tests/test_multi_monitor_focus.py::test_release_focus_only_affects_owner 
+PASSED                                                                                                                      [ 88%]
+
+
+tests/test_multi_monitor_focus.py::test_is_focus_owner 
+PASSED                                                                                                                                        [100%]
+
+
+
+
+============================================================================================ 9 passed in 0.15s ============================================================================================
+
+
+===== pytest run 2025-12-29 05:30:56 args=['tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation', 'tests/test_clock_widget.py::test_analog_clock_margin_alignment', 'tests/test_scrollwheel_volume.py::test_spotify_volume_widget_uses_coordinated_fade_sync', 'tests/test_pixel_shift.py::test_pixel_shift_no_immediate_shift_back', 'tests/test_multi_monitor_focus.py::test_focus_reclaimed_when_owner_screen_unavailable', '-v'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 5 items
+
+
+
+tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation 
+PASSED                                                                                                                       [ 20%]
+
+
+tests/test_clock_widget.py::test_analog_clock_margin_alignment 
+PASSED                                                                                                                                [ 40%]
+
+
+tests/test_scrollwheel_volume.py::test_spotify_volume_widget_uses_coordinated_fade_sync 
+PASSED                                                                                                       [ 60%]
+
+
+tests/test_scrollwheel_volume.py::test_spotify_volume_widget_uses_coordinated_fade_sync ERROR                                                                                                        [ 60%]
+
+
+tests/test_pixel_shift.py::test_pixel_shift_no_immediate_shift_back 
+ERROR                                                                                                                            [ 80%]
+
+
+tests/test_multi_monitor_focus.py::test_focus_reclaimed_when_owner_screen_unavailable 
+PASSED                                                                                                         [100%]
+
+
+
+
+================================================================================================= ERRORS ==================================================================================================
+
+_______________________________________________________________ ERROR at teardown of test_spotify_volume_widget_uses_coordinated_fade_sync ________________________________________________________________
+
+
+
+item = <Function test_spotify_volume_widget_uses_coordinated_fade_sync>
+
+
+
+    @pytest.hookimpl(wrapper=True, trylast=True)
+
+    def pytest_runtest_teardown(item):
+
+        """
+
+        Hook called after each test tear down, to process any pending events and
+
+        avoiding leaking events to the next test. Also, if exceptions have
+
+        been captured during fixtures teardown, fail the test.
+
+        """
+
+        _process_events()
+
+>       _close_widgets(item)
+
+
+
+C:\Python311\Lib\site-packages\pytestqt\plugin.py:203: 
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+
+
+item = <Function test_spotify_volume_widget_uses_coordinated_fade_sync>
+
+
+
+    def _close_widgets(item: pytest.Item) -> None:
+
+        """
+
+        Close all widgets registered in the pytest item.
+
+        """
+
+        widgets = getattr(item, "qt_widgets", None)
+
+        if widgets:
+
+            for w, before_close_func in item.qt_widgets:  # type: ignore[attr-defined]
+
+                w = w()
+
+                if w is not None:
+
+                    if before_close_func is not None:
+
+                        before_close_func(w)
+
+>                   w.close()
+
+E                   RuntimeError: Internal C++ object (SpotifyVolumeWidget) already deleted.
+
+
+
+C:\Python311\Lib\site-packages\pytestqt\qtbot.py:808: RuntimeError
+
+_______________________________________________________________________ ERROR at setup of test_pixel_shift_no_immediate_shift_back ________________________________________________________________________
+
+
+
+item = <Function test_pixel_shift_no_immediate_shift_back>
+
+
+
+    @pytest.hookimpl(wrapper=True, tryfirst=True)
+
+    def pytest_runtest_setup(item):
+
+        """
+
+        Hook called after before test setup starts, to start capturing exceptions
+
+        as early as possible.
+
+        """
+
+        capture_enabled = _is_exception_capture_enabled(item)
+
+        if capture_enabled:
+
+            item.qt_exception_capture_manager = _QtExceptionCaptureManager()
+
+            item.qt_exception_capture_manager.start()
+
+>       result = yield
+
+                 ^^^^^
+
+E       AssertionError: previous item was not torn down properly
+
+
+
+C:\Python311\Lib\site-packages\pytestqt\plugin.py:178: AssertionError
+
+========================================================================================= short test summary info =========================================================================================
+
+ERROR tests/test_scrollwheel_volume.py::test_spotify_volume_widget_uses_coordinated_fade_sync - RuntimeError: Internal C++ object (SpotifyVolumeWidget) already deleted.
+
+ERROR tests/test_pixel_shift.py::test_pixel_shift_no_immediate_shift_back - AssertionError: previous item was not torn down properly
+
+======================================================================================= 4 passed, 2 errors in 0.76s =======================================================================================
+
+
+===== pytest run 2025-12-29 05:47:16 args=['tests/test_clock_widget.py::test_analog_clock_without_numerals_visual_offset', 'tests/test_clock_widget.py::test_analog_clock_with_timezone_visual_offset', 'tests/test_clock_widget.py::test_analog_clock_all_scenarios_have_valid_offset', '-v'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 3 items
+
+
+
+tests/test_clock_widget.py::test_analog_clock_without_numerals_visual_offset 
+FAILED                                                                                                                  [ 33%]
+
+
+tests/test_clock_widget.py::test_analog_clock_with_timezone_visual_offset 
+FAILED                                                                                                                     [ 66%]
+
+
+tests/test_clock_widget.py::test_analog_clock_all_scenarios_have_valid_offset 
+FAILED                                                                                                                 [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+____________________________________________________________________________ test_analog_clock_without_numerals_visual_offset _____________________________________________________________________________
+
+
+
+qapp = <PySide6.QtWidgets.QApplication(0x23e7dc0a7e0) at 0x0000023E7E3E1000>, parent_widget = <PySide6.QtWidgets.QWidget(0x23e7d8e3270) at 0x0000023E7E1ED200>
+
+
+
+    def test_analog_clock_without_numerals_visual_offset(qapp, parent_widget):
+
+        """Test visual offset when numerals are hidden.
+
+    
+
+        Without numerals, the clock face edge is the visual boundary,
+
+        so offset should be smaller than with numerals.
+
+        """
+
+        clock = ClockWidget(
+
+            parent=parent_widget,
+
+            position=ClockPosition.TOP_RIGHT,
+
+        )
+
+        clock.set_display_mode("analog")
+
+        clock.set_show_background(False)
+
+        clock.set_show_numerals(False)
+
+        clock.resize(200, 200)
+
+        parent_widget.show()
+
+        clock.show()
+
+    
+
+        offset_x, offset_y = clock._compute_analog_visual_offset()
+
+    
+
+        # Without numerals, offset should be non-zero but smaller
+
+        assert offset_x > 0, "Should have some X offset for clock face"
+
+        assert offset_y > 0, "Should have some Y offset for clock face"
+
+    
+
+        # Now enable numerals and check offset is larger
+
+        clock.set_show_numerals(True)
+
+        offset_x_with_numerals, offset_y_with_numerals = clock._compute_analog_visual_offset()
+
+    
+
+        # With numerals, offset should be larger (numerals extend beyond face)
+
+>       assert offset_x_with_numerals > offset_x, "Numeral offset should be larger in X"
+
+E       AssertionError: Numeral offset should be larger in X
+
+E       assert 13 > 15
+
+
+
+tests\test_clock_widget.py:464: AssertionError
+
+______________________________________________________________________________ test_analog_clock_with_timezone_visual_offset ______________________________________________________________________________
+
+
+
+qapp = <PySide6.QtWidgets.QApplication(0x23e7dc0a7e0) at 0x0000023E7E3E1000>, parent_widget = <PySide6.QtWidgets.QWidget(0x23e7df50f90) at 0x0000023E7E79A600>
+
+
+
+    def test_analog_clock_with_timezone_visual_offset(qapp, parent_widget):
+
+        """Test that timezone display doesn't affect visual offset calculation.
+
+    
+
+        Timezone is at the bottom, so it shouldn't affect top/left visual offset.
+
+        """
+
+        clock = ClockWidget(
+
+            parent=parent_widget,
+
+            position=ClockPosition.TOP_RIGHT,
+
+        )
+
+        clock.set_display_mode("analog")
+
+        clock.set_show_background(False)
+
+        clock.resize(200, 220)
+
+        parent_widget.show()
+
+        clock.show()
+
+    
+
+        # Get offset without timezone
+
+        clock.set_show_timezone(False)
+
+        offset_without_tz = clock._compute_analog_visual_offset()
+
+    
+
+        # Get offset with timezone
+
+        clock.set_show_timezone(True)
+
+        offset_with_tz = clock._compute_analog_visual_offset()
+
+    
+
+        # Timezone shouldn't affect top/left offset
+
+>       assert offset_without_tz == offset_with_tz, (
+
+            "Timezone should not affect visual offset calculation"
+
+        )
+
+E       AssertionError: Timezone should not affect visual offset calculation
+
+E       assert (13, 41) == (13, 29)
+
+E         
+
+E         At index 1 diff: 41 != 29
+
+E         
+
+E         Full diff:
+
+E           (
+
+E               13,
+
+E         -     29,
+
+E         +     41,
+
+E           )
+
+
+
+tests\test_clock_widget.py:494: AssertionError
+
+____________________________________________________________________________ test_analog_clock_all_scenarios_have_valid_offset ____________________________________________________________________________
+
+
+
+qapp = <PySide6.QtWidgets.QApplication(0x23e7dc0a7e0) at 0x0000023E7E3E1000>, parent_widget = <PySide6.QtWidgets.QWidget(0x23e7df4e8f0) at 0x0000023E7E813580>
+
+
+
+    def test_analog_clock_all_scenarios_have_valid_offset(qapp, parent_widget):
+
+        """Test all combinations of settings produce valid offsets.
+
+    
+
+        Scenarios:
+
+        1. With background (should be 0,0)
+
+        2. Without background + with numerals
+
+        3. Without background + without numerals
+
+        4. With/without timezone (shouldn't affect offset)
+
+        """
+
+        clock = ClockWidget(
+
+            parent=parent_widget,
+
+            position=ClockPosition.TOP_RIGHT,
+
+        )
+
+        clock.set_display_mode("analog")
+
+        clock.resize(200, 220)
+
+        parent_widget.show()
+
+        clock.show()
+
+    
+
+        # Scenario 1: With background
+
+        clock.set_show_background(True)
+
+        offset = clock._compute_analog_visual_offset()
+
+        assert offset == (0, 0), "With background should have zero offset"
+
+    
+
+        # Scenario 2: Without background + with numerals
+
+        clock.set_show_background(False)
+
+        clock.set_show_numerals(True)
+
+        offset = clock._compute_analog_visual_offset()
+
+        assert offset[0] > 0 and offset[1] > 0, "Should have positive offset with numerals"
+
+    
+
+        # Scenario 3: Without background + without numerals
+
+        clock.set_show_background(False)
+
+        clock.set_show_numerals(False)
+
+        offset = clock._compute_analog_visual_offset()
+
+        assert offset[0] > 0 and offset[1] > 0, "Should have positive offset without numerals"
+
+    
+
+        # Scenario 4: Timezone variations (test both with and without numerals)
+
+        for show_numerals in [True, False]:
+
+            clock.set_show_numerals(show_numerals)
+
+            clock.set_show_timezone(False)
+
+            offset_no_tz = clock._compute_analog_visual_offset()
+
+    
+
+            clock.set_show_timezone(True)
+
+            offset_with_tz = clock._compute_analog_visual_offset()
+
+    
+
+>           assert offset_no_tz == offset_with_tz, (
+
+                f"Timezone should not affect offset (numerals={show_numerals})"
+
+            )
+
+E           AssertionError: Timezone should not affect offset (numerals=True)
+
+E           assert (13, 41) == (13, 29)
+
+E             
+
+E             At index 1 diff: 41 != 29
+
+E             
+
+E             Full diff:
+
+E               (
+
+E                   13,
+
+E             -     29,
+
+E             +     41,
+
+E               )
+
+
+
+tests\test_clock_widget.py:545: AssertionError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_clock_widget.py::test_analog_clock_without_numerals_visual_offset - AssertionError: Numeral offset should be larger in X
+
+FAILED tests/test_clock_widget.py::test_analog_clock_with_timezone_visual_offset - AssertionError: Timezone should not affect visual offset calculation
+
+FAILED tests/test_clock_widget.py::test_analog_clock_all_scenarios_have_valid_offset - AssertionError: Timezone should not affect offset (numerals=True)
+
+============================================================================================ 3 failed in 0.69s ============================================================================================
+
+
+===== pytest run 2025-12-29 05:48:11 args=['tests/test_clock_widget.py::test_analog_clock_without_numerals_visual_offset', 'tests/test_clock_widget.py::test_analog_clock_with_timezone_visual_offset', 'tests/test_clock_widget.py::test_analog_clock_all_scenarios_have_valid_offset', '-v'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 3 items
+
+
+
+tests/test_clock_widget.py::test_analog_clock_without_numerals_visual_offset 
+PASSED                                                                                                                  [ 33%]
+
+
+tests/test_clock_widget.py::test_analog_clock_with_timezone_visual_offset 
+FAILED                                                                                                                     [ 66%]
+
+
+tests/test_clock_widget.py::test_analog_clock_all_scenarios_have_valid_offset 
+FAILED                                                                                                                 [100%]
+
+
+
+
+================================================================================================ FAILURES =================================================================================================
+
+______________________________________________________________________________ test_analog_clock_with_timezone_visual_offset ______________________________________________________________________________
+
+
+
+qapp = <PySide6.QtWidgets.QApplication(0x28fa7cfecc0) at 0x0000028FA8399680>, parent_widget = <PySide6.QtWidgets.QWidget(0x28fa8069d70) at 0x0000028FA8901540>
+
+
+
+    def test_analog_clock_with_timezone_visual_offset(qapp, parent_widget):
+
+        """Test that timezone display doesn't affect visual offset calculation.
+
+    
+
+        Timezone is at the bottom, so it shouldn't affect top/left visual offset.
+
+        """
+
+        clock = ClockWidget(
+
+            parent=parent_widget,
+
+            position=ClockPosition.TOP_RIGHT,
+
+        )
+
+        clock.set_display_mode("analog")
+
+        clock.set_show_background(False)
+
+        clock.resize(200, 220)
+
+        parent_widget.show()
+
+        clock.show()
+
+    
+
+        # Get offset without timezone
+
+        clock.set_show_timezone(False)
+
+        offset_without_tz = clock._compute_analog_visual_offset()
+
+    
+
+        # Get offset with timezone
+
+        clock.set_show_timezone(True)
+
+        offset_with_tz = clock._compute_analog_visual_offset()
+
+    
+
+        # Timezone shouldn't affect top/left offset
+
+>       assert offset_without_tz == offset_with_tz, (
+
+            "Timezone should not affect visual offset calculation"
+
+        )
+
+E       AssertionError: Timezone should not affect visual offset calculation
+
+E       assert (13, 41) == (13, 29)
+
+E         
+
+E         At index 1 diff: 41 != 29
+
+E         
+
+E         Full diff:
+
+E           (
+
+E               13,
+
+E         -     29,
+
+E         +     41,
+
+E           )
+
+
+
+tests\test_clock_widget.py:497: AssertionError
+
+____________________________________________________________________________ test_analog_clock_all_scenarios_have_valid_offset ____________________________________________________________________________
+
+
+
+qapp = <PySide6.QtWidgets.QApplication(0x28fa7cfecc0) at 0x0000028FA8399680>, parent_widget = <PySide6.QtWidgets.QWidget(0x28fa806af70) at 0x0000028FA85A9540>
+
+
+
+    def test_analog_clock_all_scenarios_have_valid_offset(qapp, parent_widget):
+
+        """Test all combinations of settings produce valid offsets.
+
+    
+
+        Scenarios:
+
+        1. With background (should be 0,0)
+
+        2. Without background + with numerals
+
+        3. Without background + without numerals
+
+        4. With/without timezone (shouldn't affect offset)
+
+        """
+
+        clock = ClockWidget(
+
+            parent=parent_widget,
+
+            position=ClockPosition.TOP_RIGHT,
+
+        )
+
+        clock.set_display_mode("analog")
+
+        clock.resize(200, 220)
+
+        parent_widget.show()
+
+        clock.show()
+
+    
+
+        # Scenario 1: With background
+
+        clock.set_show_background(True)
+
+        offset = clock._compute_analog_visual_offset()
+
+        assert offset == (0, 0), "With background should have zero offset"
+
+    
+
+        # Scenario 2: Without background + with numerals
+
+        clock.set_show_background(False)
+
+        clock.set_show_numerals(True)
+
+        offset = clock._compute_analog_visual_offset()
+
+        assert offset[0] > 0 and offset[1] > 0, "Should have positive offset with numerals"
+
+    
+
+        # Scenario 3: Without background + without numerals
+
+        clock.set_show_background(False)
+
+        clock.set_show_numerals(False)
+
+        offset = clock._compute_analog_visual_offset()
+
+        assert offset[0] > 0 and offset[1] > 0, "Should have positive offset without numerals"
+
+    
+
+        # Scenario 4: Timezone variations (test both with and without numerals)
+
+        for show_numerals in [True, False]:
+
+            clock.set_show_numerals(show_numerals)
+
+            clock.set_show_timezone(False)
+
+            offset_no_tz = clock._compute_analog_visual_offset()
+
+    
+
+            clock.set_show_timezone(True)
+
+            offset_with_tz = clock._compute_analog_visual_offset()
+
+    
+
+>           assert offset_no_tz == offset_with_tz, (
+
+                f"Timezone should not affect offset (numerals={show_numerals})"
+
+            )
+
+E           AssertionError: Timezone should not affect offset (numerals=True)
+
+E           assert (13, 41) == (13, 29)
+
+E             
+
+E             At index 1 diff: 41 != 29
+
+E             
+
+E             Full diff:
+
+E               (
+
+E                   13,
+
+E             -     29,
+
+E             +     41,
+
+E               )
+
+
+
+tests\test_clock_widget.py:548: AssertionError
+
+========================================================================================= short test summary info =========================================================================================
+
+FAILED tests/test_clock_widget.py::test_analog_clock_with_timezone_visual_offset - AssertionError: Timezone should not affect visual offset calculation
+
+FAILED tests/test_clock_widget.py::test_analog_clock_all_scenarios_have_valid_offset - AssertionError: Timezone should not affect offset (numerals=True)
+
+======================================================================================= 2 failed, 1 passed in 0.64s =======================================================================================
+
+
+===== pytest run 2025-12-29 05:49:09 args=['tests/test_clock_widget.py::test_analog_clock_without_numerals_visual_offset', 'tests/test_clock_widget.py::test_analog_clock_with_timezone_visual_offset', 'tests/test_clock_widget.py::test_analog_clock_all_scenarios_have_valid_offset', '-v'] =====
+
+=========================================================================================== test session starts ===========================================================================================
+
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+
+cachedir: .pytest_cache
+
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+
+configfile: pytest.ini
+
+plugins: qt-4.5.0
+
+collecting ... 
+collected 3 items
+
+
+
+tests/test_clock_widget.py::test_analog_clock_without_numerals_visual_offset 
+PASSED                                                                                                                  [ 33%]
+
+
+tests/test_clock_widget.py::test_analog_clock_with_timezone_visual_offset 
+PASSED                                                                                                                     [ 66%]
+
+
+tests/test_clock_widget.py::test_analog_clock_all_scenarios_have_valid_offset 
+PASSED                                                                                                                 [100%]
+
+
+
+
+============================================================================================ 3 passed in 0.44s ============================================================================================
+

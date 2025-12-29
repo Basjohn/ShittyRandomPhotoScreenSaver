@@ -184,6 +184,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - **Phase 5 (2025-12-16)**: Replaces scattered class-level variables with proper coordination layer.
   - **Responsibilities**: Ctrl-held state, halo ownership, focus ownership, event filter management, instance registry
   - **Signals**: `ctrl_held_changed`, `halo_owner_changed`
+  - **Focus Re-claiming (Dec 2025)**: `claim_focus()` now allows secondary displays to claim focus when current owner is not visible or has unavailable screen (monitor off). Fixes MC build keyboard input on display 2 when display 1's monitor is unavailable.
   - **Thread Safety**: All state access protected by lock for safe cross-thread queries
 
 ## Transitions
@@ -246,7 +247,8 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - `calculate_widget_collision()`: Check if two widget rects overlap
   - `calculate_stack_offset()`: Calculate offset for widget stacking
 - widgets/clock_widget.py
-  - Digital/analogue clock widget extending `BaseOverlayWidget`. Supports three instances (Clock 1/2/3) with per-monitor selection, independent timezones, optional seconds/timezone labels, analogue numerals toggle, subtle vs "Intense Analogue Shadows" mode (doubles drop-shadow opacity/size), digital/analogue display modes, and 9 position options (Top/Middle/Bottom × Left/Center/Right). Analogue mode without background compensates for numeral padding to align with other widgets at the same margin.
+  - Digital/analogue clock widget extending `BaseOverlayWidget`. Supports three instances (Clock 1/2/3) with per-monitor selection, independent timezones, optional seconds/timezone labels, analogue numerals toggle, subtle vs "Intense Analogue Shadows" mode (doubles drop-shadow opacity/size), digital/analogue display modes, and 9 position options (Top/Middle/Bottom × Left/Center/Right).
+  - **Visual Offset Alignment**: `_compute_analog_visual_offset()` calculates precise offset from widget bounds to visual content (XII numeral or clock face edge) so analogue clocks without backgrounds align correctly with other widgets at the same margin. Handles all scenarios: with/without background, with/without numerals, with/without timezone.
 - widgets/weather_widget.py
   - Weather widget extending `BaseOverlayWidget`. Per-monitor selection via settings (ALL or 1/2/3). Features optional forecast line (tomorrow's min/max temp and condition, 8pt smaller than base font), configurable margin from screen edge. Uses Title Case for location and condition display. Supports 9 position options (Top/Middle/Bottom × Left/Center/Right). Planned QPainter-based iconography.
 - widgets/media_widget.py
@@ -268,11 +270,13 @@ A living map of modules, purposes, and key classes. Keep this up to date.
  - widgets/spotify_bars_gl_overlay.py
    - GLSL/VAO Spotify bars overlay with DPI-aware geometry, per-bar peak envelope and 1-segment floor, rendering the main bar stack plus a configurable ghost trail driven by a decaying peak value. Uses the bar border colour for ghost segments with a vertical alpha falloff, respects `ghosting_enabled`, `ghost_alpha`, and `ghost_decay` from `widgets.spotify_visualizer.*` settings, and consumes the GPU fade factor from `SpotifyVisualizerWidget` so opacity ramps in after the card fade using the same `ShadowFadeProfile` timing.
 - widgets/spotify_volume_widget.py
-  - Spotify-only vertical volume slider paired with the media card; gated on a Spotify GSMTC session and participating in the secondary Spotify fade wave via a GPU fade factor derived from the visualiser card’s `ShadowFadeProfile` progress so it fades in slightly after the card while respecting the same hard-exit / Ctrl interaction gating as the media widget.
+  - Spotify-only vertical volume slider paired with the media card; gated on a Spotify GSMTC session.
+  - **Coordinated Fade (Dec 2025)**: Now uses `request_overlay_fade_sync()` to participate in primary overlay fade wave, fading in simultaneously with other widgets instead of using delayed secondary fade. Ensures smooth, coordinated appearance.
 - widgets/dimming_overlay.py
    - `DimmingOverlay`: Legacy widget-based dimming overlay (kept for fallback/testing). Primary runtime dimming is implemented in the GL compositor (`GLCompositorWidget.set_dimming`).
  - widgets/pixel_shift_manager.py
    - `PixelShiftManager`: Manages periodic 1px shifts of overlay widgets for burn-in prevention. Maximum drift of 4px in any direction with automatic drift-back. Defers during transitions.
+   - **Outward Bias (Dec 2025)**: `_calculate_next_offset()` now biases toward outward movement (80% probability) to prevent immediate shift-back behavior. Only ~5% chance to move inward when not at max drift, creating natural drift patterns.
  - widgets/context_menu.py
    - `ScreensaverContextMenu`: Dark-themed right-click context menu matching settings dialog styling. Provides Previous/Next image, transition selection submenu, Settings, Background Dimming toggle, Hard Exit Mode toggle, and Exit. Uses monochromatic icons and app-owned dark theme (no Windows accent bleed). Activated by right-click in hard exit mode or Ctrl+right-click in normal mode. Lazy-initialized by DisplayWidget for performance.
  - widgets/cursor_halo.py

@@ -194,32 +194,42 @@ class SpotifyVolumeWidget(QWidget):
                 current = None
             if isinstance(current, float):
                 self._apply_volume(current)
-            self._start_widget_fade_in(1500)
-            return
+        else:
+            def _do_read() -> Optional[float]:
+                return self._controller.get_volume()
 
-        def _do_read() -> Optional[float]:
-            return self._controller.get_volume()
+            def _on_result(result) -> None:
+                def _apply(val: Optional[float]) -> None:
+                    if isinstance(val, float):
+                        self._apply_volume(val)
 
-        def _on_result(result) -> None:
-            def _apply(val: Optional[float]) -> None:
-                if isinstance(val, float):
-                    self._apply_volume(val)
+                val: Optional[float] = None
+                try:
+                    if getattr(result, "success", False):
+                        val = getattr(result, "result", None)
+                except Exception:
+                    val = None
+                ThreadManager.run_on_ui_thread(_apply, val)
 
-            val: Optional[float] = None
             try:
-                if getattr(result, "success", False):
-                    val = getattr(result, "result", None)
+                self._thread_manager.submit_io_task(_do_read, callback=_on_result)
             except Exception:
-                val = None
-            ThreadManager.run_on_ui_thread(_apply, val)
+                logger.debug("[SPOTIFY_VOL] Failed to schedule initial volume read", exc_info=True)
 
-        try:
-            self._thread_manager.submit_io_task(_do_read, callback=_on_result)
-        except Exception:
-            logger.debug("[SPOTIFY_VOL] Failed to schedule initial volume read", exc_info=True)
-        # Start fade-in once the initial read has been scheduled; the callback
-        # will update the visual level as soon as it completes.
-        self._start_widget_fade_in(1500)
+        # Participate in coordinated overlay fade sync like other widgets
+        def _starter() -> None:
+            if not self._enabled:
+                return
+            self._start_widget_fade_in(1500)
+
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
+            try:
+                parent.request_overlay_fade_sync("spotify_volume", _starter)
+            except Exception:
+                _starter()
+        else:
+            _starter()
 
     def stop(self) -> None:
         if not self._enabled:

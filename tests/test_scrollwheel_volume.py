@@ -5,6 +5,49 @@ from PySide6.QtWidgets import QWidget
 
 
 @pytest.mark.qt
+def test_spotify_volume_widget_uses_coordinated_fade_sync(qtbot, monkeypatch):
+    """Test that volume widget participates in coordinated overlay fade sync.
+    
+    The volume widget should call request_overlay_fade_sync on its parent
+    when start() is called, so it fades in simultaneously with other overlays.
+    """
+    from widgets.spotify_volume_widget import SpotifyVolumeWidget
+    
+    # Create a mock parent that tracks fade sync requests
+    fade_sync_requests = []
+    
+    class MockParent(QWidget):
+        def request_overlay_fade_sync(self, name, starter):
+            fade_sync_requests.append((name, starter))
+    
+    parent = MockParent()
+    qtbot.addWidget(parent)
+    parent.resize(800, 600)
+    parent.show()
+    
+    vol = SpotifyVolumeWidget(parent)
+    qtbot.addWidget(vol)
+    
+    # Mock the controller to be available
+    monkeypatch.setattr(vol._controller, "is_available", lambda: True)
+    monkeypatch.setattr(vol._controller, "get_volume", lambda: 0.5)
+    
+    # Call start
+    vol.start()
+    
+    # Should have registered with parent's fade sync
+    assert len(fade_sync_requests) == 1, "Volume widget should request fade sync"
+    assert fade_sync_requests[0][0] == "spotify_volume", "Should register as 'spotify_volume'"
+    
+    # The starter callback should be callable
+    starter = fade_sync_requests[0][1]
+    assert callable(starter), "Starter should be callable"
+    
+    vol.stop()
+    # Don't call cleanup() - let qtbot handle widget deletion to avoid C++ object issues
+
+
+@pytest.mark.qt
 def test_spotify_volume_widget_handle_wheel_clamps_and_schedules(qtbot, monkeypatch):
     from widgets.spotify_volume_widget import SpotifyVolumeWidget
 

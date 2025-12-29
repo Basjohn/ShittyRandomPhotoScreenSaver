@@ -6585,3 +6585,33 @@
 2025-12-29 04:24:47,461 - pytest_runner - INFO - pytest finished with exit code 1
 2025-12-29 04:24:56,236 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_weather_widget.py', '-v', '--tb=short']
 2025-12-29 04:24:56,971 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-29 05:19:39,735 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation', 'tests/test_clock_widget.py::test_analog_clock_visual_offset_zero_with_background', 'tests/test_clock_widget.py::test_digital_clock_visual_offset_zero', 'tests/test_clock_widget.py::test_analog_clock_margin_alignment', '-v']
+2025-12-29 05:19:40,513 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-29 05:19:50,542 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation', '-v']
+2025-12-29 05:19:51,181 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-29 05:20:04,759 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation', '-v', '--tb=short']
+2025-12-29 05:20:05,367 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-29 05:20:15,844 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation', '-v']
+2025-12-29 05:20:16,424 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-29 05:20:26,360 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation', '-v']
+2025-12-29 05:20:26,979 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-29 05:21:53,160 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation', 'tests/test_clock_widget.py::test_analog_clock_margin_alignment', '-v']
+2025-12-29 05:21:53,885 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-29 05:22:10,312 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation', 'tests/test_clock_widget.py::test_analog_clock_visual_offset_zero_with_background', 'tests/test_clock_widget.py::test_digital_clock_visual_offset_zero', 'tests/test_clock_widget.py::test_analog_clock_margin_alignment', '-v']
+2025-12-29 05:22:11,020 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-29 05:24:39,500 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_scrollwheel_volume.py::test_spotify_volume_widget_uses_coordinated_fade_sync', '-v']
+2025-12-29 05:24:40,459 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-29 05:26:59,622 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_pixel_shift.py', '-v']
+2025-12-29 05:27:00,932 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-29 05:27:39,944 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_pixel_shift.py', '-v']
+2025-12-29 05:27:40,752 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-29 05:30:09,417 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_multi_monitor_focus.py', '-v']
+2025-12-29 05:30:09,928 - pytest_runner - INFO - pytest finished with exit code 0
+2025-12-29 05:30:56,477 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_clock_widget.py::test_analog_clock_visual_offset_calculation', 'tests/test_clock_widget.py::test_analog_clock_margin_alignment', 'tests/test_scrollwheel_volume.py::test_spotify_volume_widget_uses_coordinated_fade_sync', 'tests/test_pixel_shift.py::test_pixel_shift_no_immediate_shift_back', 'tests/test_multi_monitor_focus.py::test_focus_reclaimed_when_owner_screen_unavailable', '-v']
+2025-12-29 05:30:57,654 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-29 05:47:16,723 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_clock_widget.py::test_analog_clock_without_numerals_visual_offset', 'tests/test_clock_widget.py::test_analog_clock_with_timezone_visual_offset', 'tests/test_clock_widget.py::test_analog_clock_all_scenarios_have_valid_offset', '-v']
+2025-12-29 05:47:17,858 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-29 05:48:11,082 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_clock_widget.py::test_analog_clock_without_numerals_visual_offset', 'tests/test_clock_widget.py::test_analog_clock_with_timezone_visual_offset', 'tests/test_clock_widget.py::test_analog_clock_all_scenarios_have_valid_offset', '-v']
+2025-12-29 05:48:12,092 - pytest_runner - INFO - pytest finished with exit code 1
+2025-12-29 05:49:09,662 - pytest_runner - INFO - pytest.py starting with args: ['tests/test_clock_widget.py::test_analog_clock_without_numerals_visual_offset', 'tests/test_clock_widget.py::test_analog_clock_with_timezone_visual_offset', 'tests/test_clock_widget.py::test_analog_clock_all_scenarios_have_valid_offset', '-v']
+2025-12-29 05:49:10,422 - pytest_runner - INFO - pytest finished with exit code 0

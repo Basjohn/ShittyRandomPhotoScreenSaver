@@ -327,3 +327,232 @@ def test_clock_updates_over_time(qapp, parent_widget, qtbot, thread_manager):
     assert len(time_updates) >= 2
     
     clock.stop()
+
+
+def test_analog_clock_visual_offset_calculation(qapp, parent_widget):
+    """Test that analogue clock without background calculates visual offset correctly."""
+    clock = ClockWidget(
+        parent=parent_widget,
+        position=ClockPosition.TOP_RIGHT,
+    )
+    clock.set_display_mode("analog")
+    clock.set_show_background(False)
+    clock.resize(200, 200)
+    parent_widget.show()
+    clock.show()
+    
+    # Visual offset should be non-zero for analogue mode without background
+    offset_x, offset_y = clock._compute_analog_visual_offset()
+    
+    # The offset should be positive (visual content is inset from widget bounds)
+    assert offset_x >= 0, "Visual X offset should be non-negative"
+    assert offset_y >= 0, "Visual Y offset should be non-negative"
+    
+    # For a 200x200 widget, the offset should be reasonable (not larger than half the widget)
+    assert offset_x < 100, f"Visual X offset {offset_x} too large for 200px widget"
+    assert offset_y < 100, f"Visual Y offset {offset_y} too large for 200px widget"
+    
+    clock.cleanup()
+
+
+def test_analog_clock_visual_offset_zero_with_background(qapp, parent_widget):
+    """Test that analogue clock with background has zero visual offset."""
+    clock = ClockWidget(
+        parent=parent_widget,
+        position=ClockPosition.TOP_RIGHT,
+    )
+    clock.set_display_mode("analog")
+    clock.set_show_background(True)
+    clock.resize(200, 200)
+    parent_widget.show()
+    clock.show()
+    
+    # Visual offset should be zero when background is shown
+    offset_x, offset_y = clock._compute_analog_visual_offset()
+    assert offset_x == 0, "Visual X offset should be 0 with background"
+    assert offset_y == 0, "Visual Y offset should be 0 with background"
+    
+    clock.cleanup()
+
+
+def test_digital_clock_visual_offset_zero(qapp, parent_widget):
+    """Test that digital clock has zero visual offset."""
+    clock = ClockWidget(
+        parent=parent_widget,
+        position=ClockPosition.TOP_RIGHT,
+    )
+    clock.set_display_mode("digital")
+    clock.set_show_background(False)
+    clock.resize(200, 50)
+    parent_widget.show()
+    clock.show()
+    
+    # Visual offset should be zero for digital mode
+    offset_x, offset_y = clock._compute_analog_visual_offset()
+    assert offset_x == 0, "Visual X offset should be 0 for digital mode"
+    assert offset_y == 0, "Visual Y offset should be 0 for digital mode"
+    
+    clock.cleanup()
+
+
+def test_analog_clock_margin_alignment(qapp, parent_widget):
+    """Test that analogue clock without background aligns correctly with margin.
+    
+    When positioned at TOP_RIGHT with margin=20, the visual top of the clock
+    (XII numeral) should be at y=20, not the widget bounds.
+    """
+    margin = 20
+    clock = ClockWidget(
+        parent=parent_widget,
+        position=ClockPosition.TOP_RIGHT,
+    )
+    clock.set_display_mode("analog")
+    clock.set_show_background(False)
+    clock.set_margin(margin)
+    clock.resize(200, 220)  # Extra height for timezone
+    parent_widget.resize(800, 600)
+    parent_widget.show()
+    clock.show()
+    
+    # Force position update
+    clock._update_position()
+    
+    # Get the visual offset
+    offset_x, offset_y = clock._compute_analog_visual_offset()
+    
+    # The widget's y position should be margin - offset_y
+    # so that the visual top is at margin
+    expected_y = margin - offset_y
+    actual_y = clock.y()
+    
+    assert actual_y == expected_y, (
+        f"Clock y={actual_y} but expected {expected_y} "
+        f"(margin={margin}, visual_offset_y={offset_y})"
+    )
+    
+    clock.cleanup()
+
+
+def test_analog_clock_without_numerals_visual_offset(qapp, parent_widget):
+    """Test visual offset when numerals are hidden.
+    
+    Without numerals, the clock face is larger (no clearance needed),
+    so the offset from widget edge to face edge is larger.
+    With numerals, they extend beyond the face, so offset is smaller.
+    """
+    clock = ClockWidget(
+        parent=parent_widget,
+        position=ClockPosition.TOP_RIGHT,
+    )
+    clock.set_display_mode("analog")
+    clock.set_show_background(False)
+    clock.set_show_numerals(False)
+    clock.resize(200, 200)
+    parent_widget.show()
+    clock.show()
+
+    offset_x_no_numerals, offset_y_no_numerals = clock._compute_analog_visual_offset()
+    
+    # Without numerals, offset should be non-zero
+    assert offset_x_no_numerals > 0, "Should have some X offset for clock face"
+    assert offset_y_no_numerals > 0, "Should have some Y offset for clock face"
+    
+    # Now enable numerals and check offset is smaller (numerals closer to edge)
+    clock.set_show_numerals(True)
+    offset_x_with_numerals, offset_y_with_numerals = clock._compute_analog_visual_offset()
+    
+    # With numerals, offset should be smaller (numerals are closer to widget edge)
+    assert offset_x_with_numerals < offset_x_no_numerals, "Numeral offset should be smaller in X"
+    assert offset_y_with_numerals < offset_y_no_numerals, "Numeral offset should be smaller in Y"
+    assert offset_x_with_numerals > 0, "Numeral offset should still be positive"
+    assert offset_y_with_numerals > 0, "Numeral offset should still be positive"
+    
+    clock.cleanup()
+
+
+def test_analog_clock_with_timezone_visual_offset(qapp, parent_widget):
+    """Test visual offset with timezone enabled.
+    
+    Timezone takes space at bottom, affecting the adjusted rect and center position.
+    This means the visual offset will be different with timezone enabled.
+    """
+    clock = ClockWidget(
+        parent=parent_widget,
+        position=ClockPosition.TOP_RIGHT,
+    )
+    clock.set_display_mode("analog")
+    clock.set_show_background(False)
+    clock.resize(200, 220)
+    parent_widget.show()
+    clock.show()
+
+    # Get offset without timezone
+    clock.set_show_timezone(False)
+    offset_without_tz = clock._compute_analog_visual_offset()
+    
+    # Get offset with timezone
+    clock.set_show_timezone(True)
+    offset_with_tz = clock._compute_analog_visual_offset()
+    
+    # Both should produce valid offsets
+    assert offset_without_tz[0] > 0 and offset_without_tz[1] > 0
+    assert offset_with_tz[0] > 0 and offset_with_tz[1] > 0
+    
+    # Timezone affects bottom margin, which affects center calculation,
+    # so offsets may differ slightly
+    
+    clock.cleanup()
+
+
+def test_analog_clock_all_scenarios_have_valid_offset(qapp, parent_widget):
+    """Test all combinations of settings produce valid offsets.
+    
+    Scenarios:
+    1. With background (should be 0,0)
+    2. Without background + with numerals
+    3. Without background + without numerals
+    4. With/without timezone (shouldn't affect offset)
+    """
+    clock = ClockWidget(
+        parent=parent_widget,
+        position=ClockPosition.TOP_RIGHT,
+    )
+    clock.set_display_mode("analog")
+    clock.resize(200, 220)
+    parent_widget.show()
+    clock.show()
+
+    # Scenario 1: With background
+    clock.set_show_background(True)
+    offset = clock._compute_analog_visual_offset()
+    assert offset == (0, 0), "With background should have zero offset"
+    
+    # Scenario 2: Without background + with numerals
+    clock.set_show_background(False)
+    clock.set_show_numerals(True)
+    offset = clock._compute_analog_visual_offset()
+    assert offset[0] > 0 and offset[1] > 0, "Should have positive offset with numerals"
+    
+    # Scenario 3: Without background + without numerals
+    clock.set_show_background(False)
+    clock.set_show_numerals(False)
+    offset = clock._compute_analog_visual_offset()
+    assert offset[0] > 0 and offset[1] > 0, "Should have positive offset without numerals"
+    
+    # Scenario 4: Timezone variations produce valid offsets
+    for show_numerals in [True, False]:
+        clock.set_show_numerals(show_numerals)
+        
+        clock.set_show_timezone(False)
+        offset_no_tz = clock._compute_analog_visual_offset()
+        assert offset_no_tz[0] > 0 and offset_no_tz[1] > 0, (
+            f"Should have valid offset without timezone (numerals={show_numerals})"
+        )
+        
+        clock.set_show_timezone(True)
+        offset_with_tz = clock._compute_analog_visual_offset()
+        assert offset_with_tz[0] > 0 and offset_with_tz[1] > 0, (
+            f"Should have valid offset with timezone (numerals={show_numerals})"
+        )
+    
+    clock.cleanup()

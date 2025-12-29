@@ -281,8 +281,11 @@ class PixelShiftManager:
         
         The algorithm:
         1. If at or near max drift, bias toward drifting back
-        2. Otherwise, pick a random direction
+        2. Otherwise, bias toward continuing outward (away from center)
         3. Move 1px in that direction
+        
+        This prevents immediate shift-back by biasing toward outward movement
+        until we hit the max drift boundary.
         """
         # Possible directions: up, down, left, right, and diagonals
         directions = [
@@ -299,6 +302,7 @@ class PixelShiftManager:
         # Calculate distance from center
         dist_x = abs(self._offset_x)
         dist_y = abs(self._offset_y)
+        total_dist = dist_x + dist_y
         
         # If we're at max drift in any direction, we must drift back
         if dist_x >= self.MAX_DRIFT or dist_y >= self.MAX_DRIFT:
@@ -324,20 +328,47 @@ class PixelShiftManager:
             dx, dy = random.choice(valid_dirs)
             return (self._offset_x + dx, self._offset_y + dy)
         
-        # Not at max drift - pick a random direction
-        # But filter out directions that would exceed max drift
-        valid_dirs = []
+        # Not at max drift - bias toward continuing outward (away from center)
+        # This prevents immediate shift-back behavior
+        outward_dirs = []
+        neutral_dirs = []
+        inward_dirs = []
+        
         for dx, dy in directions:
             new_x = self._offset_x + dx
             new_y = self._offset_y + dy
-            if abs(new_x) <= self.MAX_DRIFT and abs(new_y) <= self.MAX_DRIFT:
-                valid_dirs.append((dx, dy))
+            if abs(new_x) > self.MAX_DRIFT or abs(new_y) > self.MAX_DRIFT:
+                continue  # Would exceed max drift
+            
+            new_dist = abs(new_x) + abs(new_y)
+            if new_dist > total_dist:
+                outward_dirs.append((dx, dy))
+            elif new_dist == total_dist:
+                neutral_dirs.append((dx, dy))
+            else:
+                inward_dirs.append((dx, dy))
         
-        if not valid_dirs:
-            return (self._offset_x, self._offset_y)
+        # Strongly prefer outward movement, then neutral, then inward
+        # This creates a natural drift pattern that doesn't immediately reverse
+        if outward_dirs:
+            # 80% chance to continue outward
+            if random.random() < 0.8:
+                return (self._offset_x + random.choice(outward_dirs)[0],
+                        self._offset_y + random.choice(outward_dirs)[1])
         
-        dx, dy = random.choice(valid_dirs)
-        return (self._offset_x + dx, self._offset_y + dy)
+        if neutral_dirs:
+            # 15% chance for neutral (perpendicular) movement
+            if random.random() < 0.75:
+                dx, dy = random.choice(neutral_dirs)
+                return (self._offset_x + dx, self._offset_y + dy)
+        
+        # Only 5% chance to move inward when not at max drift
+        if inward_dirs:
+            dx, dy = random.choice(inward_dirs)
+            return (self._offset_x + dx, self._offset_y + dy)
+        
+        # Fallback: stay in place
+        return (self._offset_x, self._offset_y)
     
     def _apply_offset(self) -> None:
         """Apply the current offset to all registered widgets."""

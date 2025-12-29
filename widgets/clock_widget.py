@@ -532,45 +532,40 @@ class ClockWidget(BaseOverlayWidget):
         edge_margin = self._margin
         pos = self._clock_position
         
-        # For analogue mode without background, compensate for internal numeral padding
-        # so the visual clock face aligns with other widgets at the same margin
-        pad_compensate_x = 0
-        pad_compensate_y = 0
-        if self._display_mode == "analog" and not self._show_background:
-            left_pad, top_pad, bottom_margin, _ = self._compute_analog_padding()
-            pad_compensate_x = left_pad
-            pad_compensate_y = top_pad
+        # For analogue mode without background, compensate for the visual offset
+        # so the clock face aligns with other widgets at the same margin
+        visual_offset_x, visual_offset_y = self._compute_analog_visual_offset()
         
         if pos == ClockPosition.TOP_LEFT:
-            x = edge_margin - pad_compensate_x
-            y = edge_margin - pad_compensate_y
+            x = edge_margin - visual_offset_x
+            y = edge_margin - visual_offset_y
         elif pos == ClockPosition.TOP_CENTER:
             x = (parent_width - widget_width) // 2
-            y = edge_margin - pad_compensate_y
+            y = edge_margin - visual_offset_y
         elif pos == ClockPosition.TOP_RIGHT:
-            x = parent_width - widget_width - edge_margin + pad_compensate_x
-            y = edge_margin - pad_compensate_y
+            x = parent_width - widget_width - edge_margin + visual_offset_x
+            y = edge_margin - visual_offset_y
         elif pos == ClockPosition.MIDDLE_LEFT:
-            x = edge_margin - pad_compensate_x
+            x = edge_margin - visual_offset_x
             y = (parent_height - widget_height) // 2
         elif pos == ClockPosition.CENTER:
             x = (parent_width - widget_width) // 2
             y = (parent_height - widget_height) // 2
         elif pos == ClockPosition.MIDDLE_RIGHT:
-            x = parent_width - widget_width - edge_margin + pad_compensate_x
+            x = parent_width - widget_width - edge_margin + visual_offset_x
             y = (parent_height - widget_height) // 2
         elif pos == ClockPosition.BOTTOM_LEFT:
-            x = edge_margin - pad_compensate_x
-            y = parent_height - widget_height - edge_margin + pad_compensate_y
+            x = edge_margin - visual_offset_x
+            y = parent_height - widget_height - edge_margin + visual_offset_y
         elif pos == ClockPosition.BOTTOM_CENTER:
             x = (parent_width - widget_width) // 2
-            y = parent_height - widget_height - edge_margin + pad_compensate_y
+            y = parent_height - widget_height - edge_margin + visual_offset_y
         elif pos == ClockPosition.BOTTOM_RIGHT:
-            x = parent_width - widget_width - edge_margin + pad_compensate_x
-            y = parent_height - widget_height - edge_margin + pad_compensate_y
+            x = parent_width - widget_width - edge_margin + visual_offset_x
+            y = parent_height - widget_height - edge_margin + visual_offset_y
         else:
-            x = edge_margin - pad_compensate_x
-            y = edge_margin - pad_compensate_y
+            x = edge_margin - visual_offset_x
+            y = edge_margin - visual_offset_y
         
         self.move(x, y)
         
@@ -1061,6 +1056,68 @@ class ClockWidget(BaseOverlayWidget):
         if self._show_timezone:
             bottom_margin += tz_font_size + max(4, vertical_padding // 2)
         return horizontal_padding, vertical_padding, bottom_margin, tz_font_size
+
+    def _compute_analog_visual_offset(self) -> tuple[int, int]:
+        """Calculate the offset from widget bounds to the visual top-left of the clock.
+        
+        When the analogue clock has no background, the widget bounds include padding.
+        This method calculates where the visual content actually appears:
+        - With numerals: offset to XII numeral position
+        - Without numerals: offset to clock face edge
+        
+        Returns:
+            (x_offset, y_offset): Distance from widget (0,0) to visual clock edge
+        """
+        if self._display_mode != "analog" or self._show_background:
+            return (0, 0)
+        
+        # Get the adjusted rect used for painting
+        left_pad, top_pad, bottom_margin, _ = self._compute_analog_padding()
+        widget_rect = self.rect()
+        rect = widget_rect.adjusted(left_pad, top_pad, -left_pad, -bottom_margin)
+        side = min(rect.width(), rect.height())
+        if side <= 0:
+            return (0, 0)
+        
+        center_x = rect.x() + rect.width() // 2
+        center_y = rect.y() + rect.height() // 2
+        
+        # If numerals are hidden, the clock face itself is the visual boundary
+        if not self._show_numerals:
+            # Calculate radius without numeral clearance
+            radius = side // 2
+            # Visual boundary is at the clock face edge
+            visual_top = center_y - radius
+            visual_left = center_x - radius
+            return (max(0, visual_left), max(0, visual_top))
+        
+        # With numerals: calculate offset to numeral positions
+        # Calculate numeral metrics (same as in paintEvent)
+        numeral_pt = max(8, min(int(self._font_size * 0.25), max(9, side // 18)))
+        from PySide6.QtGui import QFontMetrics, QFont
+        numeral_font = QFont(self._font_family, numeral_pt)
+        numeral_metrics = QFontMetrics(numeral_font)
+        numeral_height = numeral_metrics.height()
+        
+        # Calculate radius and numeral radius (same as in paintEvent)
+        numeral_clearance = numeral_height + max(6, numeral_height // 3)
+        radius = side // 2 - numeral_clearance
+        if radius <= 0:
+            return (0, 0)
+        
+        numeral_pull_in = max(2, numeral_height // 3) - 5
+        numeral_radius = radius + numeral_height - numeral_pull_in
+        
+        # XII numeral is at angle -90°, so ty = center_y - numeral_radius
+        # Text is drawn at ty + th // 4, so top of text is at ty - th * 0.75
+        visual_top = center_y - numeral_radius - int(numeral_height * 0.75)
+        
+        # IX numeral is at angle 180°, so tx = center_x - numeral_radius
+        # Text is drawn centered, so left edge is at tx - tw/2
+        # For simplicity, use numeral_radius as the visual left offset
+        visual_left = center_x - numeral_radius - numeral_height // 2
+        
+        return (max(0, visual_left), max(0, visual_top))
     
     def cleanup(self) -> None:
         """Clean up resources."""

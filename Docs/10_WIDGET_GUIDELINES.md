@@ -86,7 +86,38 @@ widget:
 
 ---
 
-## 3. Header & Logo Alignment Rules
+## 3. Visual Offset & Margin Alignment
+
+**Clock Widget Positioning (Analogue Mode)**
+
+When positioning overlay widgets, the visual content must align with the specified margins, not the widget bounds. The clock widget demonstrates this with `_compute_analog_visual_offset()`:
+
+- **With background**: No offset needed (0, 0) - background defines visual boundary
+- **Without background + with numerals**: Offset to XII numeral position (numerals are the visual boundary)
+- **Without background + without numerals**: Offset to clock face edge (face is the visual boundary)
+- **Timezone setting**: Affects bottom margin but is correctly handled in padding calculations
+
+The offset is applied in `_update_position()` by adjusting the widget's position:
+```python
+x = edge_margin - visual_offset_x
+y = edge_margin - visual_offset_y
+```
+
+This ensures the **visual content** (not widget bounds) aligns with other widgets at the same margin.
+
+**Testing Requirements**
+
+All positioning scenarios must be tested:
+1. With/without background
+2. With/without numerals
+3. With/without timezone
+4. All position combinations (9-grid)
+
+See `tests/test_clock_widget.py` for comprehensive examples.
+
+---
+
+## 4. Header & Logo Alignment Rules
 
 The Spotify widget defines the canonical header behaviour:
 
