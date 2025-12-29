@@ -26,6 +26,7 @@ from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 from widgets.spotify_volume_widget import SpotifyVolumeWidget
 from widgets.shadow_utils import apply_widget_shadow
 from rendering.widget_positioner import WidgetPositioner, PositionAnchor
+from rendering.widget_factories import WidgetFactoryRegistry
 
 if TYPE_CHECKING:
     from rendering.display_widget import DisplayWidget
@@ -90,7 +91,53 @@ class WidgetManager:
         # Widget positioning (Dec 2025)
         self._positioner = WidgetPositioner()
         
+        # Widget factory registry (Dec 2025) - for simplified widget creation
+        self._factory_registry: Optional[WidgetFactoryRegistry] = None
+        
         logger.debug("[WIDGET_MANAGER] Initialized")
+    
+    def set_factory_registry(
+        self, 
+        settings: SettingsManager, 
+        thread_manager: Optional["ThreadManager"] = None
+    ) -> None:
+        """
+        Initialize the widget factory registry.
+        
+        Args:
+            settings: SettingsManager for widget configuration
+            thread_manager: Optional ThreadManager for background operations
+        """
+        self._factory_registry = WidgetFactoryRegistry(settings, thread_manager)
+        logger.debug("[WIDGET_MANAGER] Factory registry initialized")
+    
+    def create_widget_from_factory(
+        self,
+        widget_type: str,
+        config: Dict[str, Any],
+    ) -> Optional[QWidget]:
+        """
+        Create a widget using the factory registry.
+        
+        This is a simplified creation method that delegates to the factory.
+        For complex widget creation with full settings resolution, use the
+        specific create_*_widget methods.
+        
+        Args:
+            widget_type: Type of widget ('clock', 'weather', 'media', 'reddit', etc.)
+            config: Widget configuration dict
+            
+        Returns:
+            Created widget or None if creation failed
+        """
+        if self._factory_registry is None:
+            logger.warning("[WIDGET_MANAGER] Factory registry not initialized")
+            return None
+        
+        widget = self._factory_registry.create_widget(widget_type, self._parent, config)
+        if widget:
+            self.register_widget(widget_type, widget)
+        return widget
     
     def register_widget(self, name: str, widget: QWidget) -> None:
         """

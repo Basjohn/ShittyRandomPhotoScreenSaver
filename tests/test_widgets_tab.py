@@ -56,7 +56,7 @@ class TestWidgetsTab:
         assert tab.weather_position.currentText() == "Top Left"
         loc = tab.weather_location.text()
         assert isinstance(loc, str) and loc
-        assert tab.weather_show_forecast.isChecked() is False
+        assert tab.weather_show_forecast.isChecked() is True  # Default is True per defaults.py
         assert tab.weather_show_background.isChecked() is True
         assert tab.weather_bg_opacity.value() == 70
 

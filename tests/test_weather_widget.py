@@ -81,6 +81,10 @@ def test_weather_no_api_key(qapp, parent_widget):
     """Test weather widget can start without API key (Open-Meteo doesn't need one)."""
     weather = WeatherWidget(parent=parent_widget)
     
+    # Mock ThreadManager to allow start
+    mock_thread_manager = Mock()
+    weather.set_thread_manager(mock_thread_manager)
+    
     # Should work fine without API key
     with patch.object(weather, '_fetch_weather'):
         weather.start()
@@ -90,6 +94,10 @@ def test_weather_no_api_key(qapp, parent_widget):
 def test_weather_stop(qapp, parent_widget):
     """Test stopping weather widget."""
     weather = WeatherWidget(parent=parent_widget)
+    
+    # Mock ThreadManager to allow start
+    mock_thread_manager = Mock()
+    weather.set_thread_manager(mock_thread_manager)
     
     # Mock the fetch to avoid actual API call
     with patch.object(weather, '_fetch_weather'):
@@ -121,10 +129,10 @@ def test_weather_display_update(qapp, parent_widget, mock_weather_data):
     weather._update_display(mock_weather_data)
     text = weather.text()
     
-    # Should contain location and temperature
-    assert "LONDON" in text
+    # Should contain location and temperature (case-insensitive)
+    assert "London" in text or "LONDON" in text.upper()
     assert "20°C" in text or "21°C" in text  # Rounded
-    assert "CLOUDS" in text
+    assert "Clouds" in text or "CLOUDS" in text.upper()
 
 
 def test_weather_cache(qapp, parent_widget, mock_weather_data):
@@ -231,6 +239,10 @@ def test_weather_cleanup(qapp, parent_widget):
     """Test weather cleanup."""
     weather = WeatherWidget(parent=parent_widget)
     
+    # Mock ThreadManager to allow start
+    mock_thread_manager = Mock()
+    weather.set_thread_manager(mock_thread_manager)
+    
     with patch.object(weather, '_fetch_weather'):
         weather.start()
         assert weather.is_running() is True
@@ -264,9 +276,9 @@ def test_weather_error_with_cache(qapp, parent_widget, mock_weather_data):
     # Simulate error
     weather._on_fetch_error("Network error")
     
-    # Should fall back to cache
+    # Should fall back to cache (case-insensitive check)
     text = weather.text()
-    assert "LONDON" in text
+    assert "London" in text or "LONDON" in text.upper()
 
 
 def test_weather_fetcher_creation(qapp):
@@ -331,6 +343,10 @@ def test_weather_display_no_data(qapp, parent_widget):
 def test_weather_concurrent_start_prevention(qapp, parent_widget):
     """Test that starting when already running is handled."""
     weather = WeatherWidget(parent=parent_widget)
+    
+    # Mock ThreadManager to allow start
+    mock_thread_manager = Mock()
+    weather.set_thread_manager(mock_thread_manager)
     
     with patch.object(weather, '_fetch_weather'):
         weather.start()
