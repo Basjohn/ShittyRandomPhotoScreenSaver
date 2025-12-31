@@ -11,18 +11,78 @@ import tempfile
 import threading
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import Optional
 
+
+# Detect frozen/Nuitka builds up-front so we can default to silent logging
+# unless explicitly re-enabled.
+try:
+    import builtins as _builtins  # type: ignore
+except Exception:  # pragma: no cover - fallback during exotic import failures
+    _builtins = None
+
+
+def _detect_frozen_environment() -> bool:
+    """Best-effort detection of compiled/frozen runtime."""
+    if bool(getattr(sys, "frozen", False)):
+        return True
+
+    if globals().get("__compiled__", False):
+        return True
+
+    if _builtins is not None and bool(getattr(_builtins, "__compiled__", False)):
+        return True
+
+    main_mod = sys.modules.get("__main__")
+    if main_mod is not None and bool(getattr(main_mod, "__compiled__", False)):
+        return True
+
+    exe_path = Path(getattr(sys, "executable", "") or "")
+    exe_name = exe_path.name.lower()
+    if exe_name and exe_name not in ("python.exe", "pythonw.exe"):
+        if exe_name.startswith("srpss"):
+            return True
+    return False
+
+
+_IS_FROZEN: bool = _detect_frozen_environment()
 
 _VERBOSE: bool = False
 # PERF metrics default to False for production builds. Script mode (development)
 # can enable via SRPSS_PERF_METRICS=1 env var; Nuitka builds use .perf.cfg files.
 _PERF_METRICS_ENABLED: bool = False
+# Logging defaults to disabled for frozen builds unless explicitly enabled via
+# env vars or .logging.cfg files next to the executable.
+_LOGGING_DISABLED: bool = _IS_FROZEN
 # Base directory for logs and related artefacts. This is initialised to the
 # project root by default and updated by setup_logging() for frozen builds so
 # helpers like get_log_dir() always point at the effective runtime location.
 _BASE_DIR: Path = Path(__file__).parent.parent.parent
 _FORCED_LOG_DIR: Path | None = None
 _ACTIVE_LOG_DIR: Path | None = None
+
+def _parse_bool_token(value: Optional[str]) -> Optional[bool]:
+    """Parse a string token into a boolean or None if indeterminate."""
+    if value is None:
+        return None
+    lowered = value.strip().lower()
+    if lowered in {"1", "true", "on", "yes", "enable", "enabled"}:
+        return True
+    if lowered in {"0", "false", "off", "no", "disable", "disabled"}:
+        return False
+    return None
+
+
+def _read_bool_flag_file(path: Path) -> Optional[bool]:
+    """Read a boolean flag from the given path."""
+    try:
+        if not path.exists():
+            return None
+        raw = path.read_text(encoding="utf-8").strip()
+        return _parse_bool_token(raw)
+    except Exception:
+        return None
+
 
 _env_perf = os.getenv("SRPSS_PERF_METRICS")
 if _env_perf is not None:
@@ -43,6 +103,33 @@ if _env_log_dir:
         _FORCED_LOG_DIR = candidate
     except Exception:
         _FORCED_LOG_DIR = None
+
+
+def _determine_logging_disabled(exe_path: Path | None) -> bool:
+    """Decide whether logging should be disabled for this runtime."""
+    logging_disabled = _LOGGING_DISABLED
+
+    if exe_path:
+        if not logging_disabled:
+            # Frozen builds default to logging disabled unless explicitly re-enabled.
+            logging_disabled = True
+        logging_cfg = exe_path.parent / f"{exe_path.stem}.logging.cfg"
+        cfg_value = _read_bool_flag_file(logging_cfg)
+        if cfg_value is not None:
+            # File stores "1" to enable logging, "0" to disable.
+            logging_disabled = not cfg_value
+
+    env_disable = _parse_bool_token(os.getenv("SRPSS_DISABLE_LOGS"))
+    if env_disable is True:
+        logging_disabled = True
+    elif env_disable is False:
+        logging_disabled = False
+
+    env_force = _parse_bool_token(os.getenv("SRPSS_FORCE_LOGS"))
+    if env_force is True:
+        logging_disabled = False
+
+    return logging_disabled
 
 
 class ColoredFormatter(logging.Formatter):
@@ -533,25 +620,24 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
         nuitka_compiled = bool(getattr(_builtins, "__compiled__", False))
 
         exe_path = Path(getattr(_sys, "executable", "") or "")
+        exe_path_valid: Path | None = exe_path if exe_path.exists() else None
+
         if frozen or nuitka_compiled:
-            if exe_path.exists():
-                base_dir = exe_path.parent
+            if exe_path_valid is not None:
+                base_dir = exe_path_valid.parent
                 try:
-                    cfg_name = exe_path.stem + ".perf.cfg"
-                    cfg_path = exe_path.parent / cfg_name
-                    if cfg_path.exists():
-                        raw = cfg_path.read_text(encoding="utf-8").strip().lower()
-                        if raw in ("0", "false", "off", "no"):
-                            _PERF_METRICS_ENABLED = False
-                        elif raw in ("1", "true", "on", "yes"):
-                            _PERF_METRICS_ENABLED = True
+                    cfg_name = exe_path_valid.stem + ".perf.cfg"
+                    cfg_path = exe_path_valid.parent / cfg_name
+                    cfg_value = _read_bool_flag_file(cfg_path)
+                    if cfg_value is not None:
+                        _PERF_METRICS_ENABLED = cfg_value
                 except Exception:
                     # On any failure, keep existing _PERF_METRICS_ENABLED value.
                     pass
                 try:
                     if forced_dir is None:
-                        log_cfg_name = exe_path.stem + ".logdir.cfg"
-                        log_cfg_path = exe_path.parent / log_cfg_name
+                        log_cfg_name = exe_path_valid.stem + ".logdir.cfg"
+                        log_cfg_path = exe_path_valid.parent / log_cfg_name
                         if log_cfg_path.exists():
                             raw_dir = log_cfg_path.read_text(encoding="utf-8").strip()
                             if raw_dir:
@@ -561,8 +647,14 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
                                 forced_dir = candidate
                 except Exception:
                     forced_dir = forced_dir
+        else:
+            exe_path_valid = None
     except Exception:
-        pass
+        exe_path_valid = None
+
+    logging_disabled = _determine_logging_disabled(exe_path_valid)
+    global _LOGGING_DISABLED
+    _LOGGING_DISABLED = logging_disabled
 
     # Persist the resolved base_dir so helpers like get_log_dir() can return
     # a consistent location for logs and profiling artefacts.
@@ -571,6 +663,19 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
         _FORCED_LOG_DIR = forced_dir
     else:
         _FORCED_LOG_DIR = None
+
+    if logging_disabled and not debug_enabled:
+        _ACTIVE_LOG_DIR = None
+        root = logging.getLogger()
+        for handler in list(root.handlers):
+            try:
+                handler.close()
+            except Exception:
+                pass
+            root.removeHandler(handler)
+        root.addHandler(logging.NullHandler())
+        root.setLevel(logging.CRITICAL + 10)
+        return
 
     log_dir = _select_log_dir(forced_dir, base_dir)
     

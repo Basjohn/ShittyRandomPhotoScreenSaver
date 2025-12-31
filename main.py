@@ -4,6 +4,11 @@ ShittyRandomPhotoScreenSaver - Main Entry Point
 Windows screensaver application that displays photos with transitions.
 """
 import sys
+
+try:
+    import builtins as _builtins  # type: ignore[attr-defined]
+except Exception:  # pragma: no cover - very early in startup
+    _builtins = None
 import os
 import gc
 import shutil
@@ -74,6 +79,15 @@ class ScreensaverMode(Enum):
     PREVIEW = "preview"  # /p <hwnd> - Preview in settings window
 
 
+def _is_frozen_build() -> bool:
+    """Return True when running from a compiled/frozen executable."""
+    if bool(getattr(sys, "frozen", False)):
+        return True
+    if _builtins is not None and bool(getattr(_builtins, "__compiled__", False)):
+        return True
+    return False
+
+
 def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     """
     Parse Windows screensaver command-line arguments.
@@ -97,7 +111,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
 
     # Detect whether we are running as a frozen executable (.exe/.scr)
     # or as a plain Python script.
-    is_frozen = bool(getattr(sys, 'frozen', False))
+    is_frozen = _is_frozen_build()
 
     # Default mode depends on environment:
     #  - Script runs (python main.py) default to RUN for convenience.
@@ -161,7 +175,7 @@ def is_script_mode() -> bool:
     """
     # PyInstaller and similar bundlers set sys.frozen on the runtime
     # executable; treat any such environment as non-script.
-    if bool(getattr(sys, 'frozen', False)):
+    if _is_frozen_build():
         return False
 
     # Check if running from a .py file or if __file__ exists
