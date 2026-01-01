@@ -262,7 +262,7 @@ class WeatherWidget(BaseOverlayWidget):
             try:
                 self._retry_timer.stop()
                 self._retry_timer.deleteLater()
-            except RuntimeError:
+            except Exception:
                 pass
             self._retry_timer = None
         
@@ -807,7 +807,7 @@ class WeatherWidget(BaseOverlayWidget):
         """Fade the widget in via ShadowFadeProfile, then attach the shared drop shadow.
 
         The ShadowFadeProfile helper drives the opacity/shadow staging for the
-        card. On failure we fall back to an immediate show and, if configured,
+        card. On failure we fall back to an immediate show and, if available,
         a direct call to apply_widget_shadow.
         """
 
@@ -819,20 +819,8 @@ class WeatherWidget(BaseOverlayWidget):
             )
         except Exception:
             # Fallback: just show and, if available, apply the shared shadow.
-            logger.debug("[WEATHER] _fade_in fallback path triggered", exc_info=True)
             try:
                 self.show()
+                apply_widget_shadow(self, self._shadow_config)
             except Exception:
-                pass
-            if self._shadow_config is not None:
-                try:
-                    apply_widget_shadow(
-                        self,
-                        self._shadow_config,
-                        has_background_frame=self._show_background,
-                    )
-                except Exception:
-                    logger.debug(
-                        "[WEATHER] Failed to apply widget shadow in fallback path",
-                        exc_info=True,
-                    )
+                self.show()

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional
+from enum import Enum, auto
+from typing import List, Optional, Dict, Any
 import os
 import time
 import math
 import threading
+import logging
+import random
 
 from PySide6.QtCore import QObject, QRect, Qt
 from PySide6.QtGui import QColor, QPainter, QPaintEvent
@@ -17,7 +20,14 @@ from core.threading.manager import ThreadManager
 from utils.lockfree import TripleBuffer
 from utils.audio_capture import create_audio_capture, AudioCaptureConfig
 from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile, configure_overlay_widget_attributes
+
+
 from utils.profiler import profile
+
+
+class VisualizerMode(Enum):
+    """Visualization display modes for the Spotify visualizer."""
+    SPECTRUM = auto()  # Classic bar spectrum analyzer (only supported mode)
 
 logger = get_logger(__name__)
 
@@ -60,56 +70,105 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._freq_values = None  # temp buffer for frequency band values
         # Per-bar history for attack/decay dynamics
         self._bar_history = None
+        self._bar_hold_timers = None
         # Running peak tracker for normalization
         self._running_peak = 1.0
         # Timestamp of last FFT processing - used to detect pause/resume gaps
         self._last_fft_ts: float = 0.0
+        # Output scaling to keep FFT peaks controlled while allowing safe boosts
+        self._base_output_scale: float = 0.5
+        self._energy_boost: float = 0.85
+        # Floor control configuration (dynamic/manual)
+        self._use_dynamic_floor: bool = True
+        self._manual_floor: float = 2.1
+        self._min_floor: float = 0.12
+        self._max_floor: float = 4.0
+        self._raw_bass_avg: float = 2.1
+        self._dynamic_floor_ratio: float = 0.42
+        self._dynamic_floor_alpha: float = 0.15
+        self._dynamic_floor_decay_alpha: float = 0.4
+        self._applied_noise_floor: float = 2.1
+        self._floor_response: float = 0.12
+        self._floor_mid_weight: float = 0.18
+        self._floor_headroom: float = 0.18
+        self._silence_floor_threshold: float = 0.05
+        self._floor_min_ratio: float = 0.22
+        self._last_bass_drop_ratio: float = 0.0
+        self._bass_drop_accum: float = 0.0
+        # Drop handling configuration
+        self._drop_hold_frames: int = 3
+        self._drop_threshold: float = 0.18
+        self._drop_decay_fast: float = 0.6
+        self._drop_snap_fraction: float = 0.45
+        self._preferred_block_size: int = 0
 
-        # Sensitivity configuration (set from UI/settings via DisplayWidget).
+        # Sensitivity configuration (driven from Settings UI).
+        # "Recommended" uses the v1.4 baseline constants. Manual mode lets
+        # the user scale sensitivity relative to that baseline.
         self._cfg_lock = threading.Lock()
-        self._adaptive_sensitivity: bool = True
+        self._use_recommended: bool = True
         self._user_sensitivity: float = 1.0
+        self._frame_debug_counter: int = 0
 
-    def set_sensitivity_config(self, adaptive: bool, sensitivity: float) -> None:
+    def set_sensitivity_config(self, recommended: bool, sensitivity: float) -> None:
         try:
-            a = bool(adaptive)
+            rec = bool(recommended)
         except Exception:
-            a = True
-        try:
-            s = float(sensitivity)
-        except Exception:
-            s = 1.0
-        if s < 0.25:
-            s = 0.25
-        if s > 2.5:
-            s = 2.5
-        try:
-            with self._cfg_lock:
-                self._adaptive_sensitivity = a
-                self._user_sensitivity = s
-        except Exception:
-            pass
+            rec = True
 
-    def reset_state(self) -> None:
         try:
-            self._running_peak = 1.0
+            sens = float(sensitivity)
         except Exception:
-            pass
+            sens = 1.0
+        if sens < 0.25:
+            sens = 0.25
+        if sens > 2.5:
+            sens = 2.5
+
+        with self._cfg_lock:
+            self._use_recommended = rec
+            self._user_sensitivity = sens
+
+    def set_floor_config(self, dynamic_enabled: bool, manual_floor: float) -> None:
         try:
-            self._last_fft_ts = 0.0
+            dyn = bool(dynamic_enabled)
         except Exception:
-            pass
+            dyn = True
+
         try:
-            if self._bar_history is not None:
-                self._bar_history.fill(0.0)
+            floor = float(manual_floor)
         except Exception:
-            pass
-        for key in ("_raw_bass_peak_env", "_low_amp_floor_mode_until", "_last_audio_boost_gain"):
-            try:
-                if hasattr(self, key):
-                    setattr(self, key, 0.0)
-            except Exception:
-                pass
+            floor = 2.1
+
+        floor = max(self._min_floor, min(self._max_floor, floor))
+
+        with self._cfg_lock:
+            self._use_dynamic_floor = dyn
+            self._manual_floor = floor
+        if not dyn:
+            # Snap running average to manual value so we don't jump if user re-enables dynamic.
+            self._raw_bass_avg = floor
+
+    def set_audio_block_size(self, block_size: int) -> None:
+        try:
+            value = int(block_size)
+        except Exception:
+            value = 0
+        if value < 0:
+            value = 0
+        self._preferred_block_size = value
+
+    def set_energy_boost(self, boost: float) -> None:
+        """Adjust post-FFT energy boost factor (used for future tuning hooks)."""
+        try:
+            val = float(boost)
+        except Exception:
+            val = 1.0
+        if val < 0.5:
+            val = 0.5
+        if val > 1.8:
+            val = 1.8
+        self._energy_boost = val
 
     def is_running(self) -> bool:
         return self._running
@@ -128,7 +187,8 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._np = np
 
         # Create audio capture backend
-        config = AudioCaptureConfig(sample_rate=48000, channels=2, block_size=1024)
+        block_size = self._preferred_block_size if self._preferred_block_size > 0 else 0
+        config = AudioCaptureConfig(sample_rate=48000, channels=2, block_size=block_size)
         self._backend = create_audio_capture(config)
         
         if self._backend is None:
@@ -144,30 +204,22 @@ class SpotifyVisualizerAudioWorker(QObject):
                     return
                 
                 # Convert to mono float32 if needed
-                if hasattr(samples, 'ndim') and samples.ndim > 1:
-                    try:
-                        ch = int(getattr(samples, "shape", (0, 0))[1])
-                    except Exception:
-                        ch = 0
-
-                    if ch <= 1:
-                        mono = samples.reshape(-1).astype(np_mod.float32)
-                    elif ch == 2:
-                        mono = samples.mean(axis=1).astype(np_mod.float32)
+                if hasattr(samples, "ndim") and samples.ndim > 1:
+                    arr = np_mod.asarray(samples, dtype=np_mod.float32)
+                    channel_count = arr.shape[1] if arr.ndim > 1 else 1
+                    if channel_count <= 1:
+                        mono = arr.reshape(-1)
                     else:
-                        # For 5.1/7.1 loopback devices, most channels may be
-                        # silent. Averaging across all channels can dilute the
-                        # signal significantly. Instead, take the loudest
-                        # channels (by RMS) and average those.
-                        try:
-                            rms = np_mod.sqrt(np_mod.mean(samples * samples, axis=0))
-                            idx = np_mod.argsort(rms)
-                            # Two loudest channels.
-                            i0 = int(idx[-1])
-                            i1 = int(idx[-2]) if ch >= 2 else i0
-                            mono = ((samples[:, i0] + samples[:, i1]) * 0.5).astype(np_mod.float32)
-                        except Exception:
-                            mono = samples[:, 0].astype(np_mod.float32)
+                        selected = arr
+                        if channel_count > 2:
+                            try:
+                                energy = np_mod.sum(arr * arr, axis=0)
+                                top_k = min(2, channel_count)
+                                top_idx = np_mod.argsort(energy)[-top_k:]
+                                selected = arr[:, top_idx]
+                            except Exception:
+                                selected = arr[:, :2]
+                        mono = np_mod.mean(selected, axis=1, dtype=np_mod.float32)
                 else:
                     mono = np_mod.asarray(samples, dtype=np_mod.float32)
                 
@@ -184,7 +236,9 @@ class SpotifyVisualizerAudioWorker(QObject):
                 
                 if is_verbose_logging():
                     peak = float(np_mod.max(np_mod.abs(mono))) if mono.size else 0.0
-                    logger.debug("[SPOTIFY_VIS] Audio frame: samples=%d peak=%.4f", mono.size, peak)
+                    self._frame_debug_counter += 1
+                    if self._frame_debug_counter % 60 == 1:
+                        logger.debug("[SPOTIFY_VIS][VERBOSE] loopback frame: samples=%d peak=%.4f", mono.size, peak)
             except Exception:
                 if is_verbose_logging():
                     logger.debug("[SPOTIFY_VIS] Audio callback failed", exc_info=True)
@@ -252,6 +306,8 @@ class SpotifyVisualizerAudioWorker(QObject):
         n = int(mag.size)
         if n <= 0:
             return self._get_zero_bars()
+        resolution_boost = max(0.5, min(3.0, 1024.0 / max(256.0, float(n))))
+        low_resolution = resolution_boost > 1.05
 
         try:
             # In-place log1p and power operations where possible
@@ -273,6 +329,11 @@ class SpotifyVisualizerAudioWorker(QObject):
         # Center-out frequency mapping with logarithmic binning
         # Bass in center, treble at edges - reactive with attack/decay dynamics
         cache_key = (n, bands)
+        prev_raw_bass = getattr(self, "_prev_raw_bass", 0.0)
+        bass_drop_ratio = 0.0
+        drop_accum = getattr(self, "_bass_drop_accum", 0.0)
+        drop_signal = 0.0
+        center = bands // 2
         try:
             if getattr(self, "_band_cache_key", None) != cache_key:
                 min_freq_idx = 1
@@ -290,6 +351,7 @@ class SpotifyVisualizerAudioWorker(QObject):
                 self._work_bars = np.zeros(bands, dtype="float32")
                 self._freq_values = np.zeros(bands, dtype="float32")
                 self._bar_history = np.zeros(bands, dtype="float32")
+                self._bar_hold_timers = np.zeros(bands, dtype="int32")
             
             edges = self._band_edges
             if edges is None:
@@ -312,97 +374,293 @@ class SpotifyVisualizerAudioWorker(QObject):
                         freq_values[b] = np.sqrt(np.mean(band_slice ** 2))
             
             # CENTER-OUT mapping: bass in center, treble at edges
-            center = bands // 2
             
             # Get raw energy values
-            sub_end = 2 if bands >= 2 else 1
-            kick_end = 6 if bands >= 6 else max(sub_end + 1, bands)
-            mid_end = 11 if bands >= 11 else max(kick_end + 1, bands)
-
-            raw_sub = float(np.mean(freq_values[:sub_end])) if bands > 0 else 0.0
-            raw_kick = float(np.mean(freq_values[sub_end:kick_end])) if kick_end > sub_end else raw_sub
-            raw_mid = float(np.mean(freq_values[kick_end:mid_end])) if mid_end > kick_end else raw_kick
-            raw_treble = float(np.mean(freq_values[mid_end:])) if bands > mid_end else raw_mid * 0.2
-            raw_bass = raw_kick
-
-            # Subtract noise floor and expand dynamic range.
-            noise_floor = 2.1
-            expansion = 2.5
+            raw_bass = float(np.mean(freq_values[:4])) if bands >= 4 else float(freq_values[0])
+            raw_mid = float(np.mean(freq_values[4:10])) if bands >= 10 else raw_bass * 0.5
+            raw_treble = float(np.mean(freq_values[10:])) if bands > 10 else raw_bass * 0.2
+            self._last_raw_bass = raw_bass
+            self._last_raw_mid = raw_mid
+            self._last_raw_treble = raw_treble
+            self._prev_raw_bass = raw_bass
+            if low_resolution and prev_raw_bass > 1e-3:
+                bass_drop_ratio = max(0.0, (prev_raw_bass - raw_bass) / prev_raw_bass)
+            
+            # Subtract noise floor and expand dynamic range
+            # Adapt noise floor/expansion when FFT resolution drops (smaller block size).
+            noise_floor_base = max(0.8, 1.5 / (resolution_boost ** 0.35))
+            expansion_base = 3.6 * (resolution_boost ** 0.4)
 
             try:
                 with self._cfg_lock:
-                    adaptive_mode = bool(self._adaptive_sensitivity)
+                    use_recommended = bool(self._use_recommended)
                     user_sens = float(self._user_sensitivity)
+                    use_dynamic_floor = bool(self._use_dynamic_floor)
+                    manual_floor = float(self._manual_floor)
             except Exception:
-                adaptive_mode = True
+                use_recommended = True
                 user_sens = 1.0
+                use_dynamic_floor = True
+                manual_floor = noise_floor_base
 
-            if adaptive_mode:
-                try:
-                    last_gain = float(getattr(self, "_last_audio_boost_gain", 1.0) or 1.0)
-                except Exception:
-                    last_gain = 1.0
-                try:
-                    now_ts = time.time()
-                    low_amp_until = float(getattr(self, "_low_amp_floor_mode_until", 0.0) or 0.0)
-                except Exception:
-                    now_ts = time.time()
-                    low_amp_until = 0.0
-                if now_ts < low_amp_until:
-                    try:
-                        env = float(getattr(self, "_raw_bass_peak_env", 0.0) or 0.0)
-                    except Exception:
-                        env = 0.0
-                    if env <= 0.0:
-                        env = raw_bass
-                    else:
-                        env = max(raw_bass, env * 0.995)
-                    try:
-                        self._raw_bass_peak_env = env
-                    except Exception:
-                        pass
-                    noise_floor = max(0.25, min(2.1, env * 0.70))
-                if last_gain > 1.01:
-                    try:
-                        scale = min(2.0, math.sqrt(max(1.0, last_gain)))
-                    except Exception:
-                        scale = 1.0
-                    if scale > 1.0:
-                        noise_floor = max(0.25, noise_floor / scale)
+            if user_sens < 0.25:
+                user_sens = 0.25
+            if user_sens > 2.5:
+                user_sens = 2.5
+
+            if use_recommended:
+                base_noise_floor = noise_floor_base
+                expansion = expansion_base
             else:
-                # Manual sensitivity mode: reduce floor and slightly increase
-                # expansion. This helps users tune response to vocals/kicks
-                # without switching to per-frame normalization.
-                if user_sens < 0.25:
-                    user_sens = 0.25
-                if user_sens > 2.5:
-                    user_sens = 2.5
-                noise_floor = max(0.25, noise_floor / user_sens)
+                base_noise_floor = max(self._min_floor, min(self._max_floor, noise_floor_base / user_sens))
                 try:
-                    expansion = expansion * (user_sens ** 0.35)
+                    expansion = expansion_base * (user_sens ** 0.35)
                 except Exception:
-                    pass
+                    expansion = expansion_base
 
-            bass_energy = max(0.0, (raw_sub - noise_floor * 1.10) * expansion)
-            kick_energy = max(0.0, (raw_kick - noise_floor * 0.65) * expansion)
-            mid_energy = max(0.0, (raw_mid - noise_floor * 0.35) * expansion)
-            treble_energy = max(0.0, (raw_treble - noise_floor * 0.20) * expansion)
+            noise_floor = base_noise_floor
+            target_floor = base_noise_floor
+            if use_dynamic_floor:
+                avg = getattr(self, "_raw_bass_avg", base_noise_floor)
+                try:
+                    floor_mid_weight = float(self._floor_mid_weight)
+                except Exception:
+                    floor_mid_weight = 0.5
+                floor_mid_weight = max(0.0, min(1.0, floor_mid_weight))
+                if low_resolution:
+                    floor_mid_weight = min(0.65, floor_mid_weight + 0.12 * (resolution_boost - 1.0))
+                floor_signal = (raw_bass * (1.0 - floor_mid_weight)) + (raw_mid * floor_mid_weight)
+                try:
+                    silence_threshold = float(self._silence_floor_threshold)
+                except Exception:
+                    silence_threshold = 0.0
+                silence_threshold = max(0.0, silence_threshold)
+                if floor_signal < silence_threshold:
+                    # Treat near-silence as bass-only to prevent spurious boosts.
+                    floor_signal = raw_bass
+                try:
+                    alpha_rise = float(self._dynamic_floor_alpha)
+                except Exception:
+                    alpha_rise = 0.05
+                try:
+                    alpha_decay = float(self._dynamic_floor_decay_alpha)
+                except Exception:
+                    alpha_decay = alpha_rise
+                alpha_rise = max(0.0, min(1.0, alpha_rise))
+                alpha_decay = max(0.0, min(1.0, alpha_decay))
+                alpha = alpha_rise if floor_signal >= avg else alpha_decay
+                avg = (1.0 - alpha) * avg + alpha * floor_signal
+                self._raw_bass_avg = avg
+                dyn_ratio = getattr(self, "_dynamic_floor_ratio", 0.42)
+                if low_resolution:
+                    dyn_ratio = min(0.75, dyn_ratio * (1.0 + 0.35 * (resolution_boost - 1.0)))
+                dyn_candidate = max(
+                    self._min_floor,
+                    min(self._max_floor, avg * dyn_ratio),
+                )
+                base_target = max(self._min_floor, min(base_noise_floor, dyn_candidate))
+                target_floor = base_target
+                try:
+                    headroom = float(self._floor_headroom)
+                except Exception:
+                    headroom = 0.0
+                if headroom > 0.0:
+                    headroom = min(1.0, headroom)
+                    blended = (floor_signal * (1.0 - headroom)) + (base_target * headroom)
+                    target_floor = max(self._min_floor, min(base_noise_floor, blended))
+                drop_relief = getattr(self, "_last_bass_drop_ratio", 0.0)
+                if low_resolution and drop_relief > 0.05:
+                    target_floor = max(self._min_floor, target_floor * (1.0 - drop_relief * 0.45))
+            else:
+                target_floor = max(self._min_floor, min(self._max_floor, manual_floor))
+
+            try:
+                applied_floor = getattr(self, "_applied_noise_floor", target_floor)
+            except Exception:
+                applied_floor = target_floor
+            response = self._floor_response
+            if response < 0.05:
+                response = 0.05
+            elif response > 1.0:
+                response = 1.0
+            applied_floor = applied_floor + (target_floor - applied_floor) * response
+            self._applied_noise_floor = applied_floor
+            noise_floor = applied_floor
+            self._last_noise_floor = noise_floor
+
+            bass_energy = max(0.0, (raw_bass - noise_floor) * expansion)
+            mid_energy = max(0.0, (raw_mid - noise_floor * 0.4) * expansion)
+            treble_energy = max(0.0, (raw_treble - noise_floor * 0.2) * expansion)
+
+            # CENTER-OUT MIRRORED LAYOUT:
+            # - Ridge peaks at offset ±3 from center (bar 4 and 10 for 15 bars) = BASS
+            # - Center (bar 7) = VOCALS - most reactive, dips low with no vocals  
+            # - Edges (bars 0,1,14,13) = KICKS/DRUMS/PERCUSSION
+            #
+            # Shape template defines the static ridge shape:
+            # Index:  0     1     2     3     4     5     6     7     8     9    10    11    12    13    14
+            # Offset: 7     6     5     4     3     2     1     0     1     2     3     4     5     6     7
+            # Role:  edge  edge  edge slope PEAK slope shld  CTR  shld slope PEAK slope edge  edge  edge
+            # Bar 4 (index 4, offset 3) = PEAK, Bar 3 (index 3, offset 4) = slope below peak
+            profile_template = np.array(
+                [0.10, 0.15, 0.25, 0.50, 1.0, 0.45, 0.25, 0.08, 0.25, 0.45, 1.0, 0.50, 0.25, 0.15, 0.10],
+                dtype="float32",
+            )
+            if bands != profile_template.size:
+                xp = np.linspace(0.0, 1.0, profile_template.size)
+                x = np.linspace(0.0, 1.0, bands)
+                profile_shape = np.interp(x, xp, profile_template)
+            else:
+                profile_shape = profile_template.copy()
             
+            # Compute overall energy level from FFT
+            # Balance: bass drives ridge but with headroom, mids drive center
+            overall_energy = (bass_energy * 0.9 + mid_energy * 0.6 + treble_energy * 0.35)
+            overall_energy = max(0.0, min(1.8, overall_energy))
+            
+            # Apply shape template scaled by overall energy
             for i in range(bands):
-                dist = abs(i - center) / float(center) if center > 0 else 0.0
-                gradient = (1.0 - dist) ** 2 * 0.85 + 0.15
-                base = ((bass_energy * 0.25) + (kick_energy * 0.75)) * gradient
-                mid_contrib = mid_energy * (1.0 - abs(dist - 0.45) * 2) * 0.45
-                treble_contrib = treble_energy * dist * 0.35
-                arr[i] = base + mid_contrib + treble_contrib
+                offset = abs(i - center)
+                
+                # Base value from shape template - this defines the ridge shape
+                base = profile_shape[i] * overall_energy
+                
+                # Ridge peak (offset 3) gets bass boost - moderate to allow dips
+                if offset == 3:
+                    base = base * 1.15 + bass_energy * 0.35
+                # Offset 4 is the slope BELOW the peak
+                elif offset == 4:
+                    base = base * 0.82
+                
+                # Center bar (offset 0) is MOST REACTIVE to vocals
+                # High sensitivity for both peaks AND dips
+                if offset == 0:
+                    vocal_drive = mid_energy * 4.0  # Very high multiplier for reactivity
+                    base = vocal_drive * 0.90 + base * 0.10
+                
+                # Shoulder bars (offset 1-2) taper toward center
+                if offset == 1:
+                    base = base * 0.52 + mid_energy * 0.22
+                if offset == 2:
+                    base = base * 0.58 + bass_energy * 0.12
+                
+                # Edge bars (offset 5+) get percussion/treble - allow higher peaks
+                if offset >= 5:
+                    base = base * 0.65 + treble_energy * 0.4 * (offset - 4)
+                
+                arr[i] = base
+
+            if low_resolution:
+                # bias peaks toward bars around +/-3 from center, soften center slightly
+                for i in range(bands):
+                    offset = abs(i - center)
+                    ridge_boost = 1.0
+                    if offset == 3:
+                        ridge_boost = 1.35
+                    elif offset == 2 or offset == 4:
+                        ridge_boost = 1.2
+                    elif offset == 1:
+                        ridge_boost = 1.05
+                    elif offset == 0:
+                        ridge_boost = 0.78
+                    arr[i] *= ridge_boost
+
+            drop_signal = bass_drop_ratio
+            if low_resolution:
+                valley_signal = 0.0
+                if prev_raw_bass > 1e-3:
+                    valley_signal = max(valley_signal, max(0.0, (prev_raw_bass - raw_bass) / prev_raw_bass))
+                bass_floor_ref = max(noise_floor * 1.05, 1e-3)
+                if raw_bass < bass_floor_ref:
+                    valley_signal = max(
+                        valley_signal,
+                        min(0.9, (bass_floor_ref - raw_bass) / bass_floor_ref),
+                    )
+                drop_accum = drop_accum * 0.88 + valley_signal * 0.55
+                if valley_signal < 0.02:
+                    drop_accum *= 0.92
+                drop_accum = max(0.0, min(1.0, drop_accum))
+                drop_signal = max(drop_signal, drop_accum)
+            self._bass_drop_accum = drop_accum
+            if low_resolution and drop_signal > 0.05:
+                drop_strength = min(0.92, 0.22 + drop_signal * 1.45)
+                band_span = max(1, center)
+                for i in range(bands):
+                    dist = abs(i - center) / float(band_span)
+                    emphasis = max(0.25, 1.0 - dist * 1.35)
+                    arr[i] *= max(0.0, 1.0 - drop_strength * emphasis)
+            if low_resolution:
+                peak_left_idx = max(0, center - 3)
+                peak_right_idx = min(bands - 1, center + 3)
+                peak_val = max(arr[peak_left_idx], arr[peak_right_idx], 1e-3)
+                drop_soften = max(0.0, 0.6 - drop_signal)
+                center_cap_ratio = max(0.95, min(1.1, 0.97 + drop_soften * 0.18))
+                center_cap = peak_val * center_cap_ratio
+                center_val = arr[center]
+                if center_val > center_cap:
+                    arr[center] = center_cap
+                    center_val = center_cap
+                neighbor_ratio_outer = max(0.6, center_cap_ratio - 0.06)
+                neighbor_ratio_inner = max(0.52, center_cap_ratio - 0.12)
+                left_neighbor = max(0, center - 1)
+                right_neighbor = min(bands - 1, center + 1)
+                peak_neighbor_val_outer = peak_val * neighbor_ratio_outer
+                if arr[left_neighbor] > peak_neighbor_val_outer:
+                    arr[left_neighbor] = peak_neighbor_val_outer
+                if arr[right_neighbor] > peak_neighbor_val_outer:
+                    arr[right_neighbor] = peak_neighbor_val_outer
+                left_outer = max(0, center - 2)
+                right_outer = min(bands - 1, center + 2)
+                outer_cap = peak_val * neighbor_ratio_inner
+                if arr[left_outer] > outer_cap:
+                    arr[left_outer] = outer_cap
+                if arr[right_outer] > outer_cap:
+                    arr[right_outer] = outer_cap
+                if drop_signal > 0.02:
+                    damp = min(0.38, 0.06 + drop_signal * 0.4)
+                    center_scale = max(0.45, 1.0 - damp)
+                    arr[center] *= center_scale
+                    for offset in (1, 2):
+                        left_idx = max(0, center - offset)
+                        right_idx = min(bands - 1, center + offset)
+                        neighbor_scale = max(0.55, 1.0 - damp * (0.36 if offset == 1 else 0.22))
+                        arr[left_idx] *= neighbor_scale
+                        arr[right_idx] *= neighbor_scale
+                ridge_avg = 0.5 * (arr[peak_left_idx] + arr[peak_right_idx])
+                center_floor = ridge_avg * (0.08 + drop_signal * 0.05) + 0.025
+                center_cap_soft = ridge_avg * (0.28 + drop_signal * 0.1) + 0.05
+                arr[center] = min(max(arr[center], center_floor), max(center_cap_soft, center_floor))
+                target_map = {
+                    0: 0.25 + drop_signal * 0.1,
+                    1: 0.53 + drop_signal * 0.07,
+                    2: 0.7,
+                    3: 1.08,
+                    4: 0.6,
+                    5: 0.36,
+                }
+                max_offset = min(6, center + 1, bands - center)
+                ridge_anchor = max(ridge_avg, 1e-3)
+                for offset in range(max_offset):
+                    ratio = target_map.get(offset, max(0.15, 0.5 - offset * 0.07))
+                    desired_val = ridge_anchor * ratio
+                    left_idx = center - offset
+                    right_idx = center + offset
+                    if left_idx >= 0:
+                        arr[left_idx] = arr[left_idx] * 0.55 + desired_val * 0.45
+                    if right_idx < bands:
+                        arr[right_idx] = arr[right_idx] * 0.55 + desired_val * 0.45
+                if bands > 2:
+                    tmp = arr.copy()
+                    arr[1:-1] = tmp[1:-1] * 0.46 + (tmp[:-2] + tmp[2:]) * 0.27
+                    arr[0] = tmp[0] * 0.64 + tmp[1] * 0.36
+                    arr[-1] = tmp[-1] * 0.64 + tmp[-2] * 0.36
+            self._last_bass_drop_ratio = drop_signal
             
         except Exception:
             return self._get_zero_bars()
 
-        # V1.2 STYLE SMOOTHING with aggressive decay for 0.1-1.0 range
-        # decay_rate = 0.7 means bars drop 30% per frame - much faster drops
-        smoothing = 0.3
-        decay_rate = 0.7  # Aggressive decay for visible drops
+        # REACTIVE SMOOTHING: Fast attack, very aggressive decay for visible drops
+        decay_rate = 0.35  # Much lower = much faster fall, makes drops very visible
         
         # CRITICAL: Detect pause/resume gaps (e.g., after settings dialog)
         # If more than 2 seconds have passed, reset bar_history to avoid
@@ -412,95 +670,108 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._last_fft_ts = now_ts
         
         bar_history = self._bar_history
+        hold_timers = self._bar_hold_timers
+        if hold_timers is None or hold_timers.shape[0] != bands:
+            hold_timers = np.zeros(bands, dtype="int32")
+            self._bar_hold_timers = hold_timers
         if dt > 2.0:
             # Reset bar history to current raw values after a long pause
             bar_history.fill(0.0)
-
-        if dt <= 0.0:
-            dt = 1.0 / 60.0
-        elif dt > 0.05:
-            dt = 0.05
-
-        tau_rise = 0.045
-        tau_decay = 0.12
-        try:
-            alpha_rise = 1.0 - math.exp(-dt / tau_rise)
-        except Exception:
-            alpha_rise = 1.0
-        try:
-            alpha_decay = 1.0 - math.exp(-dt / tau_decay)
-        except Exception:
-            alpha_decay = 0.15
-        try:
-            alpha_rise_floor = 1.0 - float(smoothing) * 0.5
-        except Exception:
-            alpha_rise_floor = 0.85
-        if alpha_rise_floor < 0.0:
-            alpha_rise_floor = 0.0
-        if alpha_rise_floor > 1.0:
-            alpha_rise_floor = 1.0
-        try:
-            alpha_decay_floor = 1.0 - float(decay_rate)
-        except Exception:
-            alpha_decay_floor = 0.3
-        if alpha_decay_floor < 0.0:
-            alpha_decay_floor = 0.0
-        if alpha_decay_floor > 1.0:
-            alpha_decay_floor = 1.0
-        if alpha_rise < 0.0:
-            alpha_rise = 0.0
-        if alpha_rise > 1.0:
-            alpha_rise = 1.0
-        if alpha_rise < alpha_rise_floor:
-            alpha_rise = alpha_rise_floor
-        if alpha_decay < 0.0:
-            alpha_decay = 0.0
-        if alpha_decay > 1.0:
-            alpha_decay = 1.0
-        if alpha_decay < alpha_decay_floor:
-            alpha_decay = alpha_decay_floor
+            hold_timers.fill(0)
+        
+        # Drop detection parameters - work for ALL resolutions
+        drop_threshold = 0.01  # Very low threshold = detect all drops
+        drop_decay = 0.25  # Very fast decay during hold period
+        hold_frames = 2  # Short hold to allow quick recovery
+        snap_fraction = 0.15  # Snap down very aggressively on big drops
 
         for i in range(bands):
-            try:
-                target = float(arr[i])
-            except Exception:
-                target = 0.0
-            try:
-                current = float(bar_history[i])
-            except Exception:
-                current = 0.0
-
+            target = arr[i]
+            current = bar_history[i]
+            hold = hold_timers[i]
+            
             if target > current:
-                new_val = current + (target - current) * alpha_rise
+                # ATTACK: Rise quickly toward target
+                attack_speed = 0.85  # 85% of the way to target per frame
+                new_val = current + (target - current) * attack_speed
+                hold_timers[i] = 0
             else:
-                new_val = current + (target - current) * alpha_decay
+                # DECAY: Fall toward target with smooth decay
+                drop = current - target
+                
+                if drop > drop_threshold:
+                    # Big drop detected - snap down faster
+                    hold_timers[i] = hold_frames
+                    new_val = current * snap_fraction + target * (1.0 - snap_fraction)
+                elif hold > 0:
+                    # In hold period after big drop - continue decaying
+                    hold_timers[i] = hold - 1
+                    new_val = current * drop_decay
+                    if new_val < target:
+                        new_val = target
+                else:
+                    # Normal decay toward target
+                    new_val = current * decay_rate
+                    if new_val < target:
+                        new_val = target
+            
+            arr[i] = new_val
+            bar_history[i] = new_val
+        
+        # Scale to get peaks near 1.0 while allowing configurable boosts
+        scale = (self._base_output_scale or 0.8) * (self._energy_boost or 1.0)
+        if scale < 0.1:
+            scale = 0.1
+        elif scale > 1.25:
+            scale = 1.25
+        arr *= scale
 
-            if new_val < 0.0:
-                new_val = 0.0
+        # Adaptive normalization: keep long-term peaks from pinning at 1.0.
+        try:
+            peak_val = float(arr.max())
+        except Exception:
+            peak_val = 0.0
+        max_tracked_peak = 1.35
+        if peak_val > max_tracked_peak:
+            peak_val = max_tracked_peak
+        running_peak = getattr(self, "_running_peak", 0.5)
+        try:
+            floor_baseline = float(self._applied_noise_floor)
+        except Exception:
+            floor_baseline = 2.0
+        base_headroom = 0.45 + 0.1 * max(0.0, min(4.0, floor_baseline))
+        _ = max(0.7, min(1.0, base_headroom))  # headroom_scale kept for future tuning
+        if peak_val > running_peak:
+            running_peak += (peak_val - running_peak) * 0.32
+        else:
+            fast_decay = 0.9 if peak_val < running_peak * 0.5 else 0.965
+            running_peak = running_peak * fast_decay + peak_val * (1.0 - fast_decay)
+        drop_relief = drop_signal if low_resolution else 0.0
+        if low_resolution and drop_relief > 0.35:
+            running_peak *= max(0.95, 1.0 - drop_relief * 0.08)
+        running_peak = max(0.18, min(1.35, running_peak))
+        self._running_peak = running_peak
+        # Target peak of 1.0 allows full range for reactivity
+        target_peak = 1.0
+        if running_peak > target_peak * 1.1 and peak_val > 0.0:
+            # Only normalize if significantly over target
+            normalization = target_peak / max(running_peak, 1e-3)
+            arr *= normalization
 
-            try:
-                arr[i] = new_val
-                bar_history[i] = new_val
-            except Exception:
-                pass
-
-        # Scale to get peaks at 1.0 without clipping everything
-        arr *= 0.8
         np.clip(arr, 0.0, 1.0, out=arr)
-
+        
         # DEBUG: Log bar values and raw energy periodically
-        if is_verbose_logging():
-            if not hasattr(self, '_debug_counter'):
-                self._debug_counter = 0
-            self._debug_counter += 1
-            if self._debug_counter % 30 == 1:
-                try:
-                    bar_str = " ".join(f"{v:.2f}" for v in arr)
-                    raw_bass = float(np.mean(freq_values[:4])) if len(freq_values) >= 4 else 0.0
-                    logger.debug("[SPOTIFY_VIS] raw_bass=%.3f bars=[%s]", raw_bass, bar_str)
-                except Exception:
-                    pass
-
+        if not hasattr(self, '_debug_counter'):
+            self._debug_counter = 0
+        self._debug_counter += 1
+        if self._debug_counter % 30 == 1:
+            import logging
+            logger = logging.getLogger(__name__)
+            bar_str = " ".join(f"{v:.2f}" for v in arr)
+            # Log raw values to understand the range
+            raw_bass = float(np.mean(freq_values[:4])) if len(freq_values) >= 4 else 0.0
+            logger.info(f"[DEBUG] raw_bass={raw_bass:.3f} Bars: [{bar_str}]")
+        
         # tolist() still allocates, but this is unavoidable for the return type
         return arr.tolist()
 
@@ -524,6 +795,31 @@ class SpotifyVisualizerAudioWorker(QObject):
                 mono = mono.astype("float32", copy=False)
             except Exception:
                 pass
+
+            # Measure peak once (used for both silence detection and optional gain).
+            try:
+                peak_raw = float(np_mod.abs(mono).max()) if getattr(mono, "size", 0) > 0 else 0.0
+            except Exception:
+                peak_raw = 0.0
+
+            # Input gain calibration (cheap): some loopback backends provide
+            # normalized float samples in [-1..1]. v1.4 tuning expects a higher
+            # RMS range (raw_bass ~ 1.8-3.1) so we lift low-amplitude inputs,
+            # but cap gain to avoid pinning bars at 1.0.
+            # NOTE: Keep this conservative so synthetic test signals and quiet
+            # audio don't become permanently clipped.
+            if 0.05 <= peak_raw <= 5.0:
+                try:
+                    target_peak = 1.6
+                    gain = target_peak / max(peak_raw, 1e-6)
+                    if gain < 1.0:
+                        gain = 1.0
+                    if gain > 2.8:
+                        gain = 2.8
+                    if gain != 1.0:
+                        mono = mono * gain
+                except Exception:
+                    pass
             size = getattr(mono, "size", 0)
             if size <= 0:
                 return None
@@ -532,65 +828,8 @@ class SpotifyVisualizerAudioWorker(QObject):
             # Treat very low overall amplitude as silence and return zeros so
             # we don't amplify numerical noise into full-height bars when
             # audio stops.
-            try:
-                peak_raw = float(np_mod.abs(mono).max()) if size > 0 else 0.0
-            except Exception:
-                peak_raw = 0.0
             if peak_raw < 1e-3:
                 return self._get_zero_bars()
-
-            # Boost-only gain stage for low-amplitude loopback streams.
-            #
-            # We track a slowly-decaying peak envelope so gain does NOT
-            # normalize each frame (which would kill drops/gains). Instead,
-            # we only boost when the long-term peak is low.
-            try:
-                rp = float(getattr(self, "_running_peak", 0.0) or 0.0)
-            except Exception:
-                rp = 0.0
-            if rp <= 0.0:
-                rp = peak_raw
-            else:
-                # Decay controls how quickly gain ramps up when the track is
-                # quiet. Faster decay = more sensitivity at average levels.
-                rp = max(peak_raw, rp * 0.985)
-            try:
-                self._running_peak = rp
-            except Exception:
-                pass
-
-            # Target peak chosen to bring the derived FFT energy back into
-            # the historical tuning range without clipping.
-            target_peak = 0.35
-            max_gain = 60.0
-            gain = 1.0
-            if rp > 1e-6 and rp < target_peak:
-                gain = min(max_gain, target_peak / rp)
-                if gain < 1.0:
-                    gain = 1.0
-            try:
-                self._last_audio_boost_gain = float(gain)
-            except Exception:
-                pass
-            if gain > 1.0:
-                try:
-                    mono = mono * gain
-                    # Guard against runaway values; loopback should be [-1, 1].
-                    np_mod.clip(mono, -1.0, 1.0, out=mono)
-                except Exception:
-                    pass
-                try:
-                    with self._cfg_lock:
-                        adaptive_mode = bool(self._adaptive_sensitivity)
-                except Exception:
-                    adaptive_mode = True
-                if adaptive_mode:
-                    try:
-                        # Keep low-amplitude floor adaptation enabled briefly so
-                        # the visualizer remains responsive between occasional peaks.
-                        self._low_amp_floor_mode_until = time.time() + 10.0
-                    except Exception:
-                        pass
 
             fft = np_mod.fft.rfft(mono)
             np_mod.abs(fft, out=fft)  # In-place abs
@@ -607,6 +846,7 @@ class SpotifyVisualizerAudioWorker(QObject):
                     bars = bars[:target]
             # bars already clamped in _fft_to_bars, no need for extra list comprehension
             return bars
+
         except Exception:
             if is_verbose_logging():
                 logger.debug("[SPOTIFY_VIS] compute_bars_from_samples failed", exc_info=True)
@@ -617,7 +857,7 @@ class _SpotifyBeatEngine(QObject):
     """Shared beat engine with integrated smoothing.
     
     Smoothing is performed here (on COMPUTE pool callback) rather than in the
-    widget's UI thread tick, reducing UI thread load significantly.
+    UI thread tick, reducing UI thread load significantly.
     """
     
     def __init__(self, bar_count: int) -> None:
@@ -639,38 +879,17 @@ class _SpotifyBeatEngine(QObject):
 
     def set_thread_manager(self, thread_manager: Optional[ThreadManager]) -> None:
         self._thread_manager = thread_manager
-
-    def set_sensitivity_config(self, adaptive: bool, sensitivity: float) -> None:
-        try:
-            w = getattr(self, "_audio_worker", None)
-            if w is not None and hasattr(w, "set_sensitivity_config"):
-                w.set_sensitivity_config(adaptive, sensitivity)
-        except Exception:
-            pass
     
     def set_smoothing(self, tau: float) -> None:
         """Set the base smoothing time constant."""
         self._smoothing_tau = max(0.05, float(tau))
-
-    def reset_state(self) -> None:
-        try:
-            self._latest_bars = None
-        except Exception:
-            pass
-        try:
-            self._smoothed_bars = [0.0] * self._bar_count
-        except Exception:
-            pass
-        try:
-            self._last_smooth_ts = -1.0
-        except Exception:
-            pass
-        try:
-            if hasattr(self, "_audio_worker") and hasattr(self._audio_worker, "reset_state"):
-                self._audio_worker.reset_state()
-        except Exception:
-            pass
     
+    def set_sensitivity_config(self, recommended: bool, sensitivity: float) -> None:
+        try:
+            self._audio_worker.set_sensitivity_config(recommended, sensitivity)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to apply sensitivity config", exc_info=True)
+
     def _apply_smoothing(self, target_bars: List[float]) -> List[float]:
         """Apply time-based exponential smoothing to bars.
         
@@ -679,18 +898,17 @@ class _SpotifyBeatEngine(QObject):
         now_ts = time.time()
         last_ts = self._last_smooth_ts
         dt = max(0.0, now_ts - last_ts) if last_ts >= 0.0 else 0.0
-        self._last_smooth_ts = now_ts
         
         # CRITICAL: Reset smoothing state after a long pause (e.g., settings dialog)
-        # A gap > 2 seconds indicates a pause/resume scenario
-        if dt <= 0.0 or dt > 2.0:
+        # A gap > 2 seconds indicates a pause/resume scenario.
+        if dt > 2.0 or dt <= 0.0:
             # First frame, no time elapsed, or long pause - just copy raw values
             self._smoothed_bars = list(target_bars)
             return self._smoothed_bars
         
         base_tau = self._smoothing_tau
         tau_rise = base_tau * 0.35  # Fast attack
-        tau_decay = base_tau * 1.8
+        tau_decay = base_tau * 3.0  # Slow decay
         alpha_rise = 1.0 - math.exp(-dt / tau_rise)
         alpha_decay = 1.0 - math.exp(-dt / tau_decay)
         alpha_rise = max(0.0, min(1.0, alpha_rise))
@@ -755,7 +973,7 @@ class _SpotifyBeatEngine(QObject):
             now_ts = time.time()
             dt = max(0.0, now_ts - last_smooth_ts) if last_smooth_ts >= 0.0 else 0.0
             
-            # CRITICAL: If dt is too large (e.g., after settings dialog pause),
+            # CRITICAL: If dt is too large (e.g., after settings dialog),
             # reset smoothing state to avoid erratic behavior from huge alpha values.
             # A gap > 2 seconds indicates a pause/resume scenario.
             if dt > 2.0 or dt <= 0.0:
@@ -763,7 +981,7 @@ class _SpotifyBeatEngine(QObject):
             
             base_tau = smoothing_tau
             tau_rise = base_tau * 0.35
-            tau_decay = base_tau * 1.8
+            tau_decay = base_tau * 3.0
             alpha_rise = 1.0 - math.exp(-dt / tau_rise)
             alpha_decay = 1.0 - math.exp(-dt / tau_decay)
             alpha_rise = max(0.0, min(1.0, alpha_rise))
@@ -901,6 +1119,9 @@ class SpotifyVisualizerWidget(QWidget):
         self._display_bars: List[float] = [0.0] * self._bar_count
         self._target_bars: List[float] = [0.0] * self._bar_count
         self._per_bar_energy: List[float] = [0.0] * self._bar_count
+        self._visual_bars: List[float] = [0.0] * self._bar_count
+        self._visual_smoothing_tau: float = 0.055
+        self._last_visual_smooth_ts: float = 0.0
         # Base smoothing time constant in seconds; actual per-tick blend
         # factor is derived from this and the real dt between ticks so that
         # behaviour stays consistent even if tick rate changes. Slightly
@@ -929,15 +1150,16 @@ class SpotifyVisualizerWidget(QWidget):
         self._ghost_alpha: float = 0.4
         self._ghost_decay_rate: float = 0.4
 
+        # Visualization mode (Spectrum, Waveform, Abstract)
+        self._vis_mode: VisualizerMode = VisualizerMode.SPECTRUM
+
         # Behavioural gating
-        self._spotify_playing_raw: bool = False
         self._spotify_playing: bool = False
-        self._spotify_playing_last_true_ts: float = 0.0
-        self._spotify_playing_hold_s: float = 0.25
-        self._spotify_playing_gate_last_ts: float = -1.0
         self._anchor_media: Optional[QWidget] = None
         self._has_seen_media: bool = False
-        self._last_track_sig: Optional[tuple] = None
+        # Legacy Spotify gating state (still tracked for telemetry/UI toggles)
+        self._last_media_state_ts: float = 0.0
+        self._media_state_logged: bool = False
 
         # Shared beat engine (single audio worker per process). We keep
         # aliases for _audio_worker/_bars_buffer/_bars_result_buffer so
@@ -957,6 +1179,7 @@ class SpotifyVisualizerWidget(QWidget):
                     self._display_bars = [0.0] * self._bar_count
                     self._target_bars = [0.0] * self._bar_count
                     self._per_bar_energy = [0.0] * self._bar_count
+                    self._visual_bars = [0.0] * self._bar_count
                 # Test/diagnostic aliases – these reference shared state.
                 self._bars_buffer = engine._audio_buffer  # type: ignore[attr-defined]
                 self._audio_worker = engine._audio_worker  # type: ignore[attr-defined]
@@ -995,6 +1218,9 @@ class SpotifyVisualizerWidget(QWidget):
         # screensaver exits abruptly), so logs still capture its effective
         # update/paint rate alongside compositor and animation metrics.
         self._perf_last_log_ts: Optional[float] = None
+        self._dt_spike_threshold_ms: float = 42.0
+        self._dt_spike_log_cooldown: float = 0.75
+        self._last_tick_spike_log_ts: float = 0.0
 
         # Geometry cache for paintEvent to avoid per-frame recomputation of
         # bar/segment layout. Rebuilt on resize or when bar_count/segments
@@ -1020,7 +1246,13 @@ class SpotifyVisualizerWidget(QWidget):
         # event loop.
         self._base_max_fps: float = 90.0
         self._transition_max_fps: float = 60.0
+        self._transition_hot_start_fps: float = 50.0
+        self._transition_spinup_window: float = 2.0
+        self._idle_fps_boost_delay: float = 5.0
+        self._idle_max_fps: float = 100.0
+        self._current_timer_interval_ms: int = 16
         self._last_gpu_fade_sent: float = -1.0
+        self._last_gpu_geom: Optional[QRect] = None
 
         # When GPU overlay rendering is available, we disable the
         # widget's own bar drawing and instead push frames up to the
@@ -1031,6 +1263,9 @@ class SpotifyVisualizerWidget(QWidget):
         # unavailable or disabled. Defaults to False so the GPU overlay
         # remains the primary path in OpenGL mode.
         self._software_visualizer_enabled: bool = False
+
+        # Tick source coordination
+        self._using_animation_ticks: bool = False
 
         self._setup_ui()
 
@@ -1046,15 +1281,8 @@ class SpotifyVisualizerWidget(QWidget):
             engine.set_thread_manager(thread_manager)
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to propagate ThreadManager to shared beat engine", exc_info=True)
-
-    def set_sensitivity_config(self, adaptive: bool, sensitivity: float) -> None:
-        engine = self._engine
-        if engine is None:
-            return
-        try:
-            engine.set_sensitivity_config(adaptive, sensitivity)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to apply sensitivity config", exc_info=True)
+        if self._enabled:
+            self._ensure_tick_source()
 
     def set_software_visualizer_enabled(self, enabled: bool) -> None:
         """Enable or disable the QWidget-based software visualiser path.
@@ -1099,6 +1327,8 @@ class SpotifyVisualizerWidget(QWidget):
             self._anim_listener_id = listener_id
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to attach to AnimationManager", exc_info=True)
+        finally:
+            self._ensure_tick_source()
 
     def detach_from_animation_manager(self) -> None:
         am = self._animation_manager
@@ -1110,6 +1340,7 @@ class SpotifyVisualizerWidget(QWidget):
                 logger.debug("[SPOTIFY_VIS] Failed to detach from AnimationManager", exc_info=True)
         self._animation_manager = None
         self._anim_listener_id = None
+        self._ensure_tick_source()
 
     def set_shadow_config(self, config) -> None:
         self._shadow_config = config
@@ -1204,27 +1435,23 @@ class SpotifyVisualizerWidget(QWidget):
             state = str(payload.get("state", "")).lower()
         except Exception:
             state = ""
-        try:
-            prev_raw = bool(self._spotify_playing_raw)
-        except Exception:
-            prev_raw = False
-        raw_playing = state == "playing"
-        self._spotify_playing_raw = raw_playing
-        if raw_playing:
-            try:
-                self._spotify_playing_last_true_ts = time.time()
-            except Exception:
-                pass
+        prev = self._spotify_playing
+        self._spotify_playing = state == "playing"
+        self._last_media_state_ts = time.time()
+        self._fallback_logged = False
 
-        try:
-            title = str(payload.get("title") or "")
-        except Exception:
-            title = ""
-        try:
-            artist = str(payload.get("artist") or "")
-        except Exception:
-            artist = ""
-        sig = (title.strip(), artist.strip())
+        if logger.isEnabledFor(logging.INFO):
+            try:
+                track = payload.get("track_name") or payload.get("title") or ""
+            except Exception:
+                track = ""
+            logger.info(
+                "[SPOTIFY_VIS] media_update state=%s -> playing=%s (prev=%s) track=%s",
+                state or "<unset>",
+                self._spotify_playing,
+                prev,
+                track,
+            )
 
         first_media = not self._has_seen_media
         if first_media:
@@ -1232,35 +1459,21 @@ class SpotifyVisualizerWidget(QWidget):
             # so later calls can focus purely on bar gating.
             self._has_seen_media = True
 
-        try:
-            track_changed = bool(sig != self._last_track_sig and any(sig))
-        except Exception:
-            track_changed = False
-        try:
-            self._last_track_sig = sig
-        except Exception:
-            pass
-
-        if (not prev_raw and raw_playing) or track_changed:
-            try:
-                engine = self._engine
-                if engine is not None and hasattr(engine, "reset_state"):
-                    engine.reset_state()
-            except Exception:
-                pass
-
         if is_verbose_logging():
             try:
                 logger.debug(
                     "[SPOTIFY_VIS] handle_media_update: state=%r (prev_playing=%s, now_playing=%s)",
                     state,
-                    prev_raw,
-                    raw_playing,
+                    prev,
+                    self._spotify_playing,
                 )
             except Exception:
                 pass
         
-        # Show/hide based on anchor media widget visibility
+        self.sync_visibility_with_anchor()
+
+    def sync_visibility_with_anchor(self) -> None:
+        """Show/hide based on anchor media widget visibility."""
         anchor = self._anchor_media
         if anchor is not None:
             try:
@@ -1269,17 +1482,151 @@ class SpotifyVisualizerWidget(QWidget):
                     # Media widget became visible - show visualizer
                     self._start_widget_fade_in(1500)
                 elif not anchor_visible and self.isVisible():
-                    # Media widget hidden - hide visualizer
+                    # Media widget hidden - hide visualizer and clear GL overlay
                     self.hide()
+                    self._clear_gl_overlay()
             except Exception:
                 pass
+    
+    def _clear_gl_overlay(self) -> None:
+        """Clear the GL bars overlay when visualizer hides."""
+        parent = self.parent()
+        if parent is not None:
+            # Clear the SpotifyBarsGLOverlay by pushing an invisible state
+            overlay = getattr(parent, "_spotify_bars_overlay", None)
+            if overlay is not None and hasattr(overlay, "set_state"):
+                try:
+                    from PySide6.QtCore import QRect
+                    from PySide6.QtGui import QColor
+                    overlay.set_state(
+                        QRect(0, 0, 0, 0),
+                        [],
+                        0,
+                        0,
+                        QColor(0, 0, 0, 0),
+                        QColor(0, 0, 0, 0),
+                        0.0,
+                        False,
+                        visible=False,
+                    )
+                except Exception:
+                    pass
         
-        if not raw_playing:
-            # Drive target bars to zero; smoothing path will fade them out.
-            self._target_bars = [0.0] * self._bar_count
+    def _is_media_state_stale(self) -> bool:
+        """Return True if Spotify state has not updated within fallback timeout."""
+        last = getattr(self, "_last_media_state_ts", 0.0)
+        if last <= 0.0:
+            return True
+        try:
+            timeout = float(self._media_fallback_timeout)
+        except Exception:
+            timeout = 8.0
+        return (time.time() - last) >= max(1.0, timeout)
+
+    def _has_audio_activity(
+        self,
+        bars: List[float],
+        raw_bars: Optional[List[float]] = None,
+    ) -> bool:
+        """Heuristic to detect meaningful audio energy on the loopback feed."""
+        candidates = raw_bars if isinstance(raw_bars, list) and raw_bars else bars
+        if not isinstance(candidates, list) or not candidates:
+            return False
+        threshold = 0.01
+        try:
+            return max(candidates) >= threshold
+        except Exception:
+            return any((b or 0.0) >= threshold for b in candidates)
+
+    def _is_fallback_forced(self) -> bool:
+        return time.time() <= getattr(self, "_fallback_forced_until", 0.0)
+
+    def _update_fallback_force_state(self, audio_active: bool) -> None:
+        now = time.time()
+        if self._spotify_playing:
+            self._fallback_mismatch_start = 0.0
+            self._fallback_forced_until = 0.0
+            return
+
+        if audio_active:
+            if self._fallback_mismatch_start <= 0.0:
+                self._fallback_mismatch_start = now
+            elif (now - self._fallback_mismatch_start) >= 3.0:
+                if not self._is_fallback_forced():
+                    self._fallback_forced_until = now + 20.0
+                    logger.info(
+                        "[SPOTIFY_VIS] Forcing audio fallback for 20s (bridge reports paused but audio active)",
+                    )
+        else:
+            self._fallback_mismatch_start = 0.0
 
     # ------------------------------------------------------------------
-    # Lifecycle
+    # Lifecycle Implementation Hooks
+    # ------------------------------------------------------------------
+    
+    def _initialize_impl(self) -> None:
+        """Initialize visualizer resources (lifecycle hook)."""
+        logger.debug("[LIFECYCLE] SpotifyVisualizerWidget initialized")
+    
+    def _activate_impl(self) -> None:
+        """Activate visualizer - start audio capture (lifecycle hook)."""
+        # Start audio capture via the shared beat engine
+        try:
+            engine = get_shared_spotify_beat_engine(self._bar_count)
+            self._engine = engine
+            if self._thread_manager is not None:
+                engine.set_thread_manager(self._thread_manager)
+            engine.acquire()
+            engine.ensure_started()
+        except Exception:
+            logger.debug("[LIFECYCLE] Failed to start shared beat engine", exc_info=True)
+        
+        # Start dedicated timer for continuous visualizer updates
+        if self._thread_manager is not None and self._bars_timer is None:
+            try:
+                self._bars_timer = self._thread_manager.schedule_recurring(16, self._on_tick)
+                self._current_timer_interval_ms = 16
+            except Exception:
+                self._bars_timer = None
+        
+        logger.debug("[LIFECYCLE] SpotifyVisualizerWidget activated")
+    
+    def _deactivate_impl(self) -> None:
+        """Deactivate visualizer - stop audio capture (lifecycle hook)."""
+        try:
+            engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
+        except Exception:
+            engine = None
+        if engine is not None:
+            try:
+                engine.release()
+            except Exception:
+                logger.debug("[LIFECYCLE] Failed to release shared beat engine", exc_info=True)
+        
+        try:
+            self.detach_from_animation_manager()
+        except Exception:
+            pass
+        
+        if self._bars_timer is not None:
+            try:
+                self._bars_timer.stop()
+            except Exception:
+                pass
+            self._bars_timer = None
+        self._using_animation_ticks = False
+        
+        self._log_perf_snapshot(reset=True)
+        logger.debug("[LIFECYCLE] SpotifyVisualizerWidget deactivated")
+    
+    def _cleanup_impl(self) -> None:
+        """Clean up visualizer resources (lifecycle hook)."""
+        self._deactivate_impl()
+        self._engine = None
+        logger.debug("[LIFECYCLE] SpotifyVisualizerWidget cleaned up")
+
+    # ------------------------------------------------------------------
+    # Legacy Lifecycle Methods (for backward compatibility)
     # ------------------------------------------------------------------
 
     def start(self) -> None:
@@ -1312,8 +1659,11 @@ class SpotifyVisualizerWidget(QWidget):
         if self._thread_manager is not None and self._bars_timer is None:
             try:
                 self._bars_timer = self._thread_manager.schedule_recurring(16, self._on_tick)
+                self._current_timer_interval_ms = 16
             except Exception:
                 self._bars_timer = None
+        elif self._animation_manager is not None and self._anim_listener_id is not None:
+            self._using_animation_ticks = True
 
         # Coordinate the visualiser card fade-in with the primary overlay
         # group so it joins the main wave on this display. Only show if the
@@ -1376,6 +1726,7 @@ class SpotifyVisualizerWidget(QWidget):
         except Exception:
             pass
         self._bars_timer = None
+        self._using_animation_ticks = False
 
         # Emit a concise PERF summary for this widget's activity during the
         # last enabled period so we can see its effective update/paint rate
@@ -1530,10 +1881,25 @@ class SpotifyVisualizerWidget(QWidget):
 
         gap = 2
         total_gap = gap * (count - 1) if count > 1 else 0
-        bar_width = max(1, int((inner.width() - total_gap) / max(1, count)))
-        # Small horizontal offset so the bar field aligns visually with the
-        # card frame and matches the GL overlay geometry.
-        x0 = inner.left() + 5
+        bars_inset = 5
+        bar_region_width = inner.width() - (bars_inset * 2)
+        if bar_region_width <= 0:
+            self._geom_cache_rect = inner
+            self._geom_cache_bar_count = count
+            self._geom_cache_segments = segments
+            self._geom_bar_x = []
+            self._geom_seg_y = []
+            self._geom_bar_width = 0
+            self._geom_seg_height = 0
+            return
+
+        usable_width = max(0, bar_region_width - total_gap)
+        bar_width = max(1, int(usable_width / max(1, count)))
+        span = bar_width * count + total_gap
+        remaining = max(0, bar_region_width - span)
+        # Center the bar field horizontally within the usable region so rounding
+        # differences never bias to the right.
+        x0 = inner.left() + bars_inset + (remaining // 2)
         bar_x = [x0 + i * (bar_width + gap) for i in range(count)]
 
         seg_gap = 1
@@ -1549,6 +1915,132 @@ class SpotifyVisualizerWidget(QWidget):
         self._geom_seg_y = seg_y
         self._geom_bar_width = bar_width
         self._geom_seg_height = seg_height
+
+    def _apply_visual_smoothing(self, target_bars: List[float], now_ts: float) -> bool:
+        """Lightweight post-bar smoothing to calm jitter without hurting response."""
+        changed = False
+        visual = self._visual_bars
+        count = self._bar_count
+        last_ts = self._last_visual_smooth_ts
+
+        if last_ts <= 0.0 or (now_ts - last_ts) > 0.4:
+            for i in range(count):
+                val = target_bars[i] if i < len(target_bars) else 0.0
+                if i < len(visual):
+                    if abs(visual[i] - val) > 1e-4:
+                        changed = True
+                    visual[i] = val
+                else:
+                    visual.append(val)
+                    changed = True
+            self._visual_bars = visual[:count]
+            self._last_visual_smooth_ts = now_ts
+            return changed
+
+        dt = max(1e-4, now_ts - last_ts)
+        tau_rise = self._visual_smoothing_tau
+        tau_decay = tau_rise * 2.6
+        alpha_rise = 1.0 - math.exp(-dt / tau_rise)
+        alpha_decay = 1.0 - math.exp(-dt / tau_decay)
+        alpha_rise = max(0.0, min(1.0, alpha_rise))
+        alpha_decay = max(0.0, min(1.0, alpha_decay))
+
+        for i in range(count):
+            cur = visual[i] if i < len(visual) else 0.0
+            tgt = target_bars[i] if i < len(target_bars) else 0.0
+            alpha = alpha_rise if tgt >= cur else alpha_decay
+            nxt = cur + (tgt - cur) * alpha
+            if abs(nxt) < 1e-4:
+                nxt = 0.0
+            if abs(nxt - cur) > 1e-4:
+                changed = True
+            if i < len(visual):
+                visual[i] = nxt
+            else:
+                visual.append(nxt)
+
+        if len(visual) > count:
+            del visual[count:]
+
+        self._visual_bars = visual
+        self._last_visual_smooth_ts = now_ts
+        return changed
+
+    def _get_transition_context(self, parent: Optional[QWidget]) -> Dict[str, Any]:
+        """Return lightweight transition metrics from the parent DisplayWidget."""
+        ctx: Dict[str, Any] = {
+            "running": False,
+            "name": None,
+            "elapsed": None,
+            "first_run": False,
+            "idle_age": None,
+        }
+        if parent is None:
+            return ctx
+        snapshot = None
+        if hasattr(parent, "get_transition_snapshot"):
+            try:
+                snapshot = parent.get_transition_snapshot()
+            except Exception:
+                snapshot = None
+        if isinstance(snapshot, dict):
+            ctx.update(snapshot)
+        elif hasattr(parent, "has_running_transition") and parent.has_running_transition():
+            ctx["running"] = True
+            ctx["name"] = None
+            ctx["elapsed"] = None
+        return ctx
+
+    def _resolve_max_fps(self, transition_ctx: Dict[str, Any]) -> float:
+        """Determine the FPS cap based on transition activity."""
+        max_fps = self._base_max_fps
+        if transition_ctx.get("running"):
+            elapsed = float(transition_ctx.get("elapsed") or 0.0)
+            if elapsed <= self._transition_spinup_window:
+                max_fps = self._transition_hot_start_fps
+            else:
+                max_fps = self._transition_max_fps
+        else:
+            idle_age = transition_ctx.get("idle_age")
+            if idle_age is not None and idle_age >= self._idle_fps_boost_delay:
+                max_fps = min(self._idle_max_fps, self._base_max_fps + 10.0)
+        return max(15.0, float(max_fps))
+
+    def _update_timer_interval(self, max_fps: float) -> None:
+        """Retune the ThreadManager recurring timer interval if needed."""
+        interval_ms = max(4, int(round(1000.0 / max_fps)))
+        self._current_timer_interval_ms = interval_ms
+        if interval_ms == self._current_timer_interval_ms:
+            return
+        # Add a tiny jitter so we don't align perfectly with compositor vsync.
+        jitter = random.randint(0, 2) if interval_ms >= 8 else 0
+        new_interval = interval_ms + jitter
+        timer = self._bars_timer
+        if timer is not None:
+            try:
+                timer.setInterval(new_interval)
+                self._current_timer_interval_ms = new_interval
+            except Exception:
+                pass
+
+    def _log_tick_spike(self, dt: float, transition_ctx: Dict[str, Any]) -> None:
+        """Log dt spikes with surrounding transition context."""
+        now = time.time()
+        if (now - self._last_tick_spike_log_ts) < self._dt_spike_log_cooldown:
+            return
+        self._last_tick_spike_log_ts = now
+        running = transition_ctx.get("running")
+        name = transition_ctx.get("name")
+        elapsed = transition_ctx.get("elapsed")
+        idle_age = transition_ctx.get("idle_age")
+        logger.warning(
+            "[PERF] [SPOTIFY_VIS] Tick dt spike %.2fms (running=%s name=%s elapsed=%s idle_age=%s)",
+            dt * 1000.0,
+            running,
+            name or "<none>",
+            f"{elapsed:.2f}" if isinstance(elapsed, (int, float)) else "<n/a>",
+            f"{idle_age:.2f}" if isinstance(idle_age, (int, float)) else "<n/a>",
+        )
 
     def _on_tick(self) -> None:
         """Periodic UI tick - PERFORMANCE OPTIMIZED.
@@ -1574,49 +2066,22 @@ class SpotifyVisualizerWidget(QWidget):
             return
 
         now_ts = time.time()
-
-        raw_playing = False
-        try:
-            raw_playing = bool(self._spotify_playing_raw)
-        except Exception:
-            raw_playing = False
-
-        if not self._has_seen_media:
-            raw_playing = False
-
-        effective_playing = raw_playing
-        if not effective_playing:
-            try:
-                last_true = float(self._spotify_playing_last_true_ts)
-            except Exception:
-                last_true = 0.0
-            if last_true > 0.0:
-                try:
-                    hold = float(self._spotify_playing_hold_s)
-                except Exception:
-                    hold = 0.25
-                if hold > 0.0 and (now_ts - last_true) <= hold:
-                    effective_playing = True
-
-        try:
-            self._spotify_playing = bool(effective_playing)
-        except Exception:
-            self._spotify_playing = bool(effective_playing)
-
-        # PERFORMANCE: FPS cap at the START - skip all work if rate-limited
-        # This is critical because _on_tick is called by multiple sources
-        max_fps = self._base_max_fps
         parent = self.parent()
-        if parent is not None and hasattr(parent, "has_running_transition"):
-            if parent.has_running_transition():
-                max_fps = self._transition_max_fps
+        transition_ctx = self._get_transition_context(parent)
+        max_fps = self._resolve_max_fps(transition_ctx)
+        self._update_timer_interval(max_fps)
 
         min_dt = 1.0 / max_fps if max_fps > 0.0 else 0.0
         last = self._last_update_ts
-        if last >= 0.0 and (now_ts - last) < min_dt:
+        dt_since_last = 0.0
+        if last >= 0.0:
+            dt_since_last = now_ts - last
+        if last >= 0.0 and dt_since_last < min_dt:
             # Rate limited - skip this tick entirely
             return
         self._last_update_ts = now_ts
+        if dt_since_last * 1000.0 >= self._dt_spike_threshold_ms:
+            self._log_tick_spike(dt_since_last, transition_ctx)
 
         # PERFORMANCE: Inline PERF metrics with gap filtering
         if is_perf_metrics_enabled():
@@ -1678,18 +2143,10 @@ class SpotifyVisualizerWidget(QWidget):
             # The engine handles decay naturally via exponential smoothing -
             # when audio stops, raw bars go to zero and smoothed bars decay.
             smoothed = engine.get_smoothed_bars()
-            
-            last_gate_ts = self._spotify_playing_gate_last_ts
-            if last_gate_ts < 0.0:
-                dt_gate = 1.0 / 60.0
-            else:
-                dt_gate = now_ts - last_gate_ts
-            self._spotify_playing_gate_last_ts = now_ts
-            if dt_gate <= 0.0:
-                dt_gate = 1.0 / 60.0
-            elif dt_gate > 0.05:
-                dt_gate = 0.05
-            
+
+            # Always drive the bars from audio to avoid Spotify bridge flakiness.
+            self._fallback_logged = False
+
             # Debug constant-bar mode
             if _DEBUG_CONST_BARS > 0.0:
                 const_val = max(0.0, min(1.0, _DEBUG_CONST_BARS))
@@ -1700,25 +2157,7 @@ class SpotifyVisualizerWidget(QWidget):
             display_bars = self._display_bars
             any_nonzero = False
             for i in range(bar_count):
-                if effective_playing:
-                    new_val = smoothed[i] if i < len(smoothed) else 0.0
-                else:
-                    try:
-                        cur = float(display_bars[i])
-                    except Exception:
-                        cur = 0.0
-                    tau_stop = 0.25
-                    try:
-                        alpha_stop = 1.0 - math.exp(-dt_gate / tau_stop)
-                    except Exception:
-                        alpha_stop = 0.1
-                    if alpha_stop < 0.0:
-                        alpha_stop = 0.0
-                    if alpha_stop > 1.0:
-                        alpha_stop = 1.0
-                    new_val = cur + (0.0 - cur) * alpha_stop
-                    if abs(new_val) < 1e-3:
-                        new_val = 0.0
+                new_val = smoothed[i] if i < len(smoothed) else 0.0
                 old_val = display_bars[i] if i < len(display_bars) else 0.0
                 if abs(new_val - old_val) > 1e-4:
                     changed = True
@@ -1726,8 +2165,12 @@ class SpotifyVisualizerWidget(QWidget):
                     any_nonzero = True
                 display_bars[i] = new_val
             
+            # Apply visual smoothing (UI/local) for calmer motion
+            if self._apply_visual_smoothing(display_bars, now_ts):
+                changed = True
+            
             # Force update during decay (when bars are non-zero but Spotify stopped)
-            if any_nonzero and not effective_playing:
+            if any_nonzero and not self._spotify_playing:
                 changed = True
 
         # Always push at least one frame so the visualiser baseline is
@@ -1741,6 +2184,13 @@ class SpotifyVisualizerWidget(QWidget):
         # When DisplayWidget exposes a GPU overlay path, prefer
         # that and disable CPU bar drawing once it succeeds.
         if parent is not None and hasattr(parent, "push_spotify_visualizer_frame"):
+            try:
+                current_geom = self.geometry()
+            except Exception:
+                current_geom = None
+            last_geom = self._last_gpu_geom
+            geom_changed = last_geom is None or (current_geom is not None and current_geom != last_geom)
+
             fade = self._get_gpu_fade_factor(now_ts)
             prev_fade = self._last_gpu_fade_sent
             self._last_gpu_fade_sent = fade
@@ -1748,9 +2198,12 @@ class SpotifyVisualizerWidget(QWidget):
                 fade_changed = True
                 need_card_update = True
 
-            should_push = changed or fade_changed or first_frame
+            should_push = changed or fade_changed or first_frame or geom_changed
             if should_push:
                 _gpu_push_start = time.time()
+                # Only spectrum mode is supported
+                mode_str = 'spectrum'
+                
                 used_gpu = parent.push_spotify_visualizer_frame(
                     bars=list(self._display_bars),
                     bar_count=self._bar_count,
@@ -1762,6 +2215,7 @@ class SpotifyVisualizerWidget(QWidget):
                     ghosting_enabled=self._ghosting_enabled,
                     ghost_alpha=self._ghost_alpha,
                     ghost_decay=self._ghost_decay_rate,
+                    vis_mode=mode_str,
                 )
                 _gpu_push_elapsed = (time.time() - _gpu_push_start) * 1000.0
                 if _gpu_push_elapsed > 20.0 and is_perf_metrics_enabled():
@@ -1770,6 +2224,12 @@ class SpotifyVisualizerWidget(QWidget):
             if used_gpu:
                 self._has_pushed_first_frame = True
                 self._cpu_bars_enabled = False
+                try:
+                    if current_geom is None:
+                        current_geom = self.geometry()
+                    self._last_gpu_geom = QRect(current_geom)
+                except Exception:
+                    self._last_gpu_geom = None
                 # Card/background/shadow still repaint via stylesheet
                 # Only request QWidget repaint when fade changes
                 if need_card_update:
@@ -1908,27 +2368,50 @@ class SpotifyVisualizerWidget(QWidget):
             painter.setBrush(fill)
             painter.setPen(border)
 
+            # SPECTRUM mode - classic bar visualization
             for i in range(count):
-                x = bar_x[i]
-                value = max(0.0, min(1.0, self._display_bars[i]))
-                if value <= 0.0:
-                    continue
-                boosted = value * 1.2
-                if boosted > 1.0:
-                    boosted = 1.0
-                active = int(round(boosted * segments))
-                if active <= 0:
-                    if self._spotify_playing and value > 0.0:
-                        active = 1
-                    else:
+                    x = bar_x[i]
+                    value = max(0.0, min(1.0, self._display_bars[i]))
+                    if value <= 0.0:
                         continue
-                active = min(active, max_segments)
-                for s in range(active):
-                    y = seg_y[s]
-                    bar_rect = QRect(x, y, bar_width, seg_height)
-                    painter.drawRect(bar_rect)
+                    boosted = value * 1.2
+                    if boosted > 1.0:
+                        boosted = 1.0
+                    active = int(round(boosted * segments))
+                    if active <= 0:
+                        if self._spotify_playing and value > 0.0:
+                            active = 1
+                        else:
+                            continue
+                    active = min(active, max_segments)
+                    for s in range(active):
+                        y = seg_y[s]
+                        bar_rect = QRect(x, y, bar_width, seg_height)
+                        painter.drawRect(bar_rect)
 
             painter.end()
+
+    def set_visualization_mode(self, mode: VisualizerMode) -> None:
+        """Set the visualization display mode.
+        
+        Args:
+            mode: VisualizerMode.SPECTRUM (only supported mode)
+        """
+        if mode != self._vis_mode:
+            self._vis_mode = mode
+            logger.info("[SPOTIFY_VIS] Visualization mode changed to %s", mode.name)
+
+    def get_visualization_mode(self) -> VisualizerMode:
+        """Get the current visualization display mode."""
+        return self._vis_mode
+
+    def cycle_visualization_mode(self) -> VisualizerMode:
+        """Cycle to the next visualization mode and return it."""
+        modes = list(VisualizerMode)
+        current_idx = modes.index(self._vis_mode)
+        next_idx = (current_idx + 1) % len(modes)
+        self.set_visualization_mode(modes[next_idx])
+        return self._vis_mode
 
     def _log_perf_snapshot(self, reset: bool = False) -> None:
         """Emit a PERF metrics snapshot for the current tick/paint window.

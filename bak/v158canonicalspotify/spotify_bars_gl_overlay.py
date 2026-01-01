@@ -8,12 +8,15 @@ from PySide6.QtCore import Qt, QRect
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
-from core.logging.logger import get_logger, is_perf_metrics_enabled
+from core.logging.logger import get_logger, get_throttled_logger, is_perf_metrics_enabled
 from rendering.gl_format import apply_widget_surface_format
+from rendering.gl_state_manager import GLStateManager, GLContextState
 from OpenGL import GL as gl
 
 
 logger = get_logger(__name__)
+# Throttled logger for high-frequency debug messages (max 1/second)
+_throttled_logger = get_throttled_logger(__name__, max_per_second=1.0)
 
 
 class SpotifyBarsGLOverlay(QOpenGLWidget):
@@ -58,6 +61,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._border_color: QColor = QColor(255, 255, 255, 255)
         self._fade: float = 0.0
         self._playing: bool = False
+        
+        # Visualization mode: only 'spectrum' supported
+        self._vis_mode: str = 'spectrum'
 
         # Ghosting configuration – whether trailing segments are drawn and
         # how strong they appear relative to the main bar border colour. The
@@ -98,6 +104,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # Pre-allocated uniform buffers to reduce GC pressure (avoid per-frame allocation)
         self._bars_buffer: np.ndarray = np.zeros(64, dtype="float32")
         self._peaks_buffer: np.ndarray = np.zeros(64, dtype="float32")
+        
+        # Centralized GL state manager for robust state tracking
+        self._gl_state = GLStateManager(f"spotify_bars_{id(self)}")
 
     # ------------------------------------------------------------------
     # Public API
@@ -117,12 +126,15 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         ghosting_enabled: bool = True,
         ghost_alpha: float = 0.4,
         ghost_decay: float = -1.0,
+        vis_mode: str = "spectrum",
     ) -> None:
         """Update overlay bar state and geometry.
 
         ``rect`` is specified in the parent ``DisplayWidget`` coordinate space
         and should usually be the geometry of the associated
         ``SpotifyVisualizerWidget``.
+        
+        ``vis_mode`` is kept for compatibility but only 'spectrum' is supported.
         """
 
         if not visible:
@@ -133,6 +145,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             # renders nothing.
             self.update()  # Trigger repaint to clear the bars
             return
+
+        # Only spectrum mode is supported
+        self._vis_mode = 'spectrum'
 
         # Apply ghost configuration up-front so it is visible to both the
         # peak-envelope update and the shader path. When ghosting is
@@ -350,6 +365,18 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                           _geom_elapsed, _show_elapsed, _update_elapsed)
 
     # ------------------------------------------------------------------
+    # GL State Management Helpers
+    # ------------------------------------------------------------------
+    
+    def is_gl_ready(self) -> bool:
+        """Check if GL context is ready for rendering."""
+        return self._gl_state.is_ready()
+    
+    def get_gl_state(self) -> GLContextState:
+        """Get current GL context state."""
+        return self._gl_state.get_state()
+
+    # ------------------------------------------------------------------
     # QOpenGLWidget hooks
     # ------------------------------------------------------------------
 
@@ -359,11 +386,18 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         Any failure here is treated as non-fatal – the widget will fall back
         to the QPainter implementation in paintGL.
         """
+        # Transition to INITIALIZING state
+        if not self._gl_state.transition(GLContextState.INITIALIZING):
+            logger.warning("[SPOTIFY_VIS] Failed to transition to INITIALIZING state")
+            return
 
         try:
             self._init_gl_pipeline()
-        except Exception:
+            # Transition to READY state on success
+            self._gl_state.transition(GLContextState.READY)
+        except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to initialise GL pipeline for SpotifyBarsGLOverlay", exc_info=True)
+            self._gl_state.transition(GLContextState.ERROR, str(e))
         
         # Mark GL as initialized so paintGL knows it's safe to render
         self._gl_initialized = True
@@ -372,6 +406,16 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # Skip rendering until initializeGL has completed to avoid
         # uninitialized buffer artifacts (green dots on first frame)
         if not self._gl_initialized:
+            return
+        
+        if not self._enabled:
+            return
+
+        try:
+            fade = float(self._fade)
+        except Exception:
+            fade = 0.0
+        if fade <= 0.0:
             return
 
         rect = self.rect()
@@ -386,16 +430,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             gl.glClear(gl.GL_COLOR_BUFFER_BIT)
         except Exception:
             pass
-
-        if not self._enabled:
-            return
-
-        try:
-            fade = float(self._fade)
-        except Exception:
-            fade = 0.0
-        if fade <= 0.0:
-            return
 
         # Prefer the shader path when available; fall back to QPainter when
         # the GL program or buffers are not ready or fail at runtime.
@@ -470,10 +504,12 @@ void main() {
     float fb_height = height * dpr;
     vec2 fragCoord = vec2(gl_FragCoord.x / dpr, (fb_height - gl_FragCoord.y) / dpr);
 
+    // ========== SPECTRUM MODE ==========
     float margin_x = 8.0;
     float margin_y = 6.0;
     float gap = 2.0;
     float seg_gap = 1.0;
+    float bars_inset = 5.0;
 
     // Match QWidget geometry: inner rect is rect.adjusted(margin_x, margin_y,
     // -margin_x, -margin_y). For a logical rect starting at (0, 0) this
@@ -495,19 +531,32 @@ void main() {
         discard;
     }
 
-    float bars_left = inner_left + 5.0;
-    float total_gap = gap * float(u_bar_count - 1);
-    float bar_width = (inner_width - total_gap) / float(u_bar_count);
-    bar_width = floor(bar_width);
+    float bar_region_width = inner_width - (bars_inset * 2.0);
+    if (bar_region_width <= 0.0) {
+        discard;
+    }
+
+    int bar_count_int = max(u_bar_count, 1);
+    float bar_count = float(bar_count_int);
+    float total_gap = gap * float(bar_count_int - 1);
+    float usable_width = bar_region_width - total_gap;
+    if (usable_width <= 0.0) {
+        discard;
+    }
+
+    float bar_width = floor(usable_width / bar_count);
     if (bar_width < 1.0) {
         discard;
     }
+
+    float span = bar_width * bar_count + total_gap;
+    float remaining = max(0.0, bar_region_width - span);
+    float bars_left = inner_left + bars_inset + floor(remaining * 0.5);
 
     float x_rel = fragCoord.x - bars_left;
     if (x_rel < 0.0) {
         discard;
     }
-    float span = float(u_bar_count) * bar_width + total_gap;
     if (x_rel >= span) {
         discard;
     }

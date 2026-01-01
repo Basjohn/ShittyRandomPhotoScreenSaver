@@ -284,6 +284,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - **Lifecycle (Dec 2025)**: Implements `_initialize_impl()`, `_activate_impl()`, `_deactivate_impl()`, `_cleanup_impl()` hooks for new lifecycle system.
 - widgets/weather_widget.py
   - Weather widget extending `BaseOverlayWidget`. Per-monitor selection via settings (ALL or 1/2/3). Features optional forecast line (tomorrow's min/max temp and condition, 8pt smaller than base font), configurable margin from screen edge. Uses Title Case for location and condition display. Supports 9 position options (Top/Middle/Bottom × Left/Center/Right). Planned QPainter-based iconography.
+  - Background fetch runs exclusively via ThreadManager IO (no raw QThread fallback); periodic refresh uses overlay timer helper; retries via single-shot timers on failure.
 - widgets/media_widget.py
   - Spotify/media overlay widget extending `BaseOverlayWidget`. Driven by `core/media/media_controller.py`; per-monitor selection via `widgets.media`, 9 position options (Top/Middle/Bottom × Left/Center/Right), background frame, and monochrome transport controls (Prev/Play/Pause/Next) over track metadata. Uses Title Case for track title and artist display. Artwork uses a square frame for album covers and adapts to non-square thumbnails.
 - widgets/reddit_widget.py

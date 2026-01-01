@@ -27,6 +27,9 @@ temp/
 settings/
 docs/
 logs/
+bak/
+archive/
+docs/
 *.log
 
 # IDE and editor files
