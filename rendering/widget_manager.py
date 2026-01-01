@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Callable, Dict, List, Optional, Set, TYPE_CHECKING
+from typing import Any, Callable, Dict, List, Optional, Set, TYPE_CHECKING, Mapping
 
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QWidget, QGraphicsDropShadowEffect, QGraphicsOpacityEffect
@@ -23,6 +23,7 @@ from widgets.reddit_widget import RedditWidget, RedditPosition
 # Gmail widget archived - see archive/gmail_feature/RESTORE_GMAIL.md
 # from widgets.gmail_widget import GmailWidget, GmailPosition
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
+from core.settings.models import SpotifyVisualizerSettings, MediaWidgetSettings, RedditWidgetSettings
 from widgets.spotify_volume_widget import SpotifyVolumeWidget
 from widgets.shadow_utils import apply_widget_shadow
 from rendering.widget_positioner import WidgetPositioner, PositionAnchor
@@ -93,6 +94,9 @@ class WidgetManager:
         
         # Widget factory registry (Dec 2025) - for simplified widget creation
         self._factory_registry: Optional[WidgetFactoryRegistry] = None
+
+        # Settings manager wiring for live updates (Spotify VIS etc.)
+        self._settings_manager: Optional[SettingsManager] = None
         
         logger.debug("[WIDGET_MANAGER] Initialized")
     
@@ -254,6 +258,211 @@ class WidgetManager:
             except Exception:
                 pass
         return False
+
+    # =========================================================================
+    # Settings integration
+    # =========================================================================
+
+    def _attach_settings_manager(self, settings_manager: SettingsManager) -> None:
+        """Subscribe to settings changes for live widget updates."""
+        if settings_manager is None:
+            return
+        if self._settings_manager is settings_manager:
+            return
+        self._detach_settings_manager()
+        self._settings_manager = settings_manager
+        try:
+            settings_manager.settings_changed.connect(self._handle_settings_changed)
+        except Exception:
+            logger.debug("[WIDGET_MANAGER] Failed to connect settings_changed signal", exc_info=True)
+
+    def _detach_settings_manager(self) -> None:
+        """Disconnect previously attached settings manager, if any."""
+        if self._settings_manager is None:
+            return
+        try:
+            self._settings_manager.settings_changed.disconnect(self._handle_settings_changed)
+        except Exception:
+            pass
+        finally:
+            self._settings_manager = None
+
+    def _handle_settings_changed(self, key: str, value: object) -> None:
+        """React to settings changes for live widget updates."""
+        try:
+            setting_key = str(key) if key is not None else ""
+        except Exception:
+            setting_key = ""
+        if not setting_key:
+            return
+
+        try:
+            logger.debug("[WIDGET_MANAGER][SETTINGS] key=%s payload_type=%s", setting_key, type(value).__name__)
+        except Exception:
+            pass
+
+        if setting_key == 'widgets':
+            widgets_payload: Optional[Mapping[str, Any]] = value if isinstance(value, Mapping) else None
+            self._refresh_spotify_visualizer_config(widgets_payload)
+            self._refresh_media_config(widgets_payload)
+            self._refresh_reddit_configs(widgets_payload)
+            return
+
+        if setting_key.startswith('widgets.spotify_visualizer'):
+            self._refresh_spotify_visualizer_config()
+            return
+
+        if setting_key.startswith('widgets.media'):
+            self._refresh_media_config()
+            return
+
+        if setting_key.startswith('widgets.reddit'):
+            self._refresh_reddit_configs()
+            return
+
+    def _log_spotify_vis_config(self, context: str, cfg: Mapping[str, Any]) -> None:
+        """Emit a single structured log line for Spotify VIS config rewires."""
+        try:
+            logger.info(
+                "[SPOTIFY_VIS][CFG] %s adaptive=%s sensitivity=%.3f dynamic=%s manual=%.3f",
+                context,
+                cfg.get('adaptive_sensitivity'),
+                float(cfg.get('sensitivity', 0.0)),
+                cfg.get('dynamic_floor'),
+                float(cfg.get('manual_floor', 0.0)),
+            )
+        except Exception:
+            logger.debug("[SPOTIFY_VIS][CFG] %s %s", context, cfg, exc_info=True)
+
+    def _refresh_spotify_visualizer_config(self, widgets_config: Optional[Mapping[str, Any]] = None) -> None:
+        """Apply latest Spotify VIS sensitivity / floor settings to the live widget."""
+        vis = self._widgets.get('spotify_visualizer') or self._widgets.get('spotify_visualizer_widget')
+        if vis is None or not hasattr(vis, 'set_sensitivity_config'):
+            return
+
+        cfg = widgets_config
+        if cfg is None:
+            if self._settings_manager is None:
+                return
+            cfg = self._settings_manager.get('widgets', {}) or {}
+        if not isinstance(cfg, Mapping):
+            return
+
+        spotify_cfg = cfg.get('spotify_visualizer', {})
+        if not isinstance(spotify_cfg, Mapping):
+            return
+
+        model = SpotifyVisualizerSettings.from_mapping(spotify_cfg)
+        self._log_spotify_vis_config("refresh", spotify_cfg)
+
+        # Sensitivity (adaptive or manual multiplier)
+        try:
+            recommended = SettingsManager.to_bool(model.adaptive_sensitivity, True)
+            sens_raw = float(model.sensitivity)
+            sensitivity = max(0.25, min(2.5, sens_raw))
+            vis.set_sensitivity_config(recommended, sensitivity)
+        except Exception:
+            logger.debug("[WIDGET_MANAGER] Failed to reapply Spotify sensitivity config", exc_info=True)
+
+        # Noise floor (dynamic/manual)
+        try:
+            dynamic_floor = SettingsManager.to_bool(model.dynamic_floor, True)
+            manual_floor = float(model.manual_floor)
+            vis.set_floor_config(dynamic_floor, manual_floor)
+        except Exception:
+            logger.debug("[WIDGET_MANAGER] Failed to reapply Spotify floor config", exc_info=True)
+
+    def _refresh_media_config(self, widgets_config: Optional[Mapping[str, Any]] = None) -> None:
+        """Apply latest media settings to the live media widget (colors/volume flag)."""
+        media_widget = self._widgets.get('media_widget') or self._widgets.get('media')
+        if media_widget is None:
+            return
+
+        cfg = widgets_config
+        if cfg is None:
+            if self._settings_manager is None:
+                return
+            cfg = self._settings_manager.get('widgets', {}) or {}
+        if not isinstance(cfg, Mapping):
+            return
+
+        media_cfg = cfg.get('media', {})
+        if not isinstance(media_cfg, Mapping):
+            return
+
+        model = MediaWidgetSettings.from_mapping(media_cfg)
+
+        try:
+            if hasattr(media_widget, 'set_text_color'):
+                media_widget.set_text_color(parse_color_to_qcolor(model.color))
+        except Exception:
+            logger.debug("[WIDGET_MANAGER] Failed to reapply media text color", exc_info=True)
+
+        try:
+            if hasattr(media_widget, 'set_background_color'):
+                media_widget.set_background_color(parse_color_to_qcolor(model.bg_color))
+            if hasattr(media_widget, 'set_background_opacity'):
+                media_widget.set_background_opacity(float(model.background_opacity))
+            if hasattr(media_widget, 'set_background_border'):
+                border_qcolor = parse_color_to_qcolor(model.border_color, opacity_override=model.border_opacity)
+                if border_qcolor:
+                    media_widget.set_background_border(2, border_qcolor)
+        except Exception:
+            logger.debug("[WIDGET_MANAGER] Failed to reapply media background/border", exc_info=True)
+
+        try:
+            if hasattr(media_widget, 'set_show_controls'):
+                media_widget.set_show_controls(SettingsManager.to_bool(model.show_controls, True))
+            if hasattr(media_widget, 'set_show_header_frame'):
+                media_widget.set_show_header_frame(SettingsManager.to_bool(model.show_header_frame, True))
+        except Exception:
+            logger.debug("[WIDGET_MANAGER] Failed to reapply media controls/header", exc_info=True)
+
+    def _refresh_reddit_configs(self, widgets_config: Optional[Mapping[str, Any]] = None) -> None:
+        """Apply latest reddit settings to live reddit widgets (reddit, reddit2)."""
+        targets = [('reddit', self._widgets.get('reddit_widget')), ('reddit2', self._widgets.get('reddit2_widget'))]
+        if all(w is None for _, w in targets):
+            return
+
+        cfg = widgets_config
+        if cfg is None:
+            if self._settings_manager is None:
+                return
+            cfg = self._settings_manager.get('widgets', {}) or {}
+        if not isinstance(cfg, Mapping):
+            return
+
+        for key, widget in targets:
+            if widget is None:
+                continue
+            reddit_cfg = cfg.get(key, {})
+            if not isinstance(reddit_cfg, Mapping):
+                continue
+            model = RedditWidgetSettings.from_mapping(reddit_cfg, prefix=f"widgets.{key}")
+
+            try:
+                if hasattr(widget, 'set_font_family'):
+                    widget.set_font_family(model.font_family)
+                if hasattr(widget, 'set_font_size'):
+                    widget.set_font_size(int(model.font_size))
+                if hasattr(widget, 'set_text_color'):
+                    widget.set_text_color(parse_color_to_qcolor(model.color))
+                if hasattr(widget, 'set_show_background'):
+                    widget.set_show_background(SettingsManager.to_bool(model.show_background, True))
+                if hasattr(widget, 'set_show_separators'):
+                    widget.set_show_separators(SettingsManager.to_bool(model.show_separators, True))
+                if hasattr(widget, 'set_background_color'):
+                    widget.set_background_color(parse_color_to_qcolor(model.background_color))
+                if hasattr(widget, 'set_background_opacity'):
+                    widget.set_background_opacity(float(model.background_opacity))
+                if hasattr(widget, 'set_background_border'):
+                    border_qcolor = parse_color_to_qcolor(model.border_color, opacity_override=model.border_opacity)
+                    if border_qcolor:
+                        widget.set_background_border(2, border_qcolor)
+                if hasattr(widget, 'set_margin'):
+                    widget.set_margin(int(model.margin))
+            except Exception:
+                logger.debug("[WIDGET_MANAGER] Failed to reapply reddit config for %s", key, exc_info=True)
     
     def show_widget(self, name: str) -> bool:
         """
@@ -501,6 +710,7 @@ class WidgetManager:
     
     def cleanup(self) -> None:
         """Clean up all managed widgets."""
+        self._detach_settings_manager()
         if self._raise_timer is not None:
             try:
                 self._raise_timer.stop()
@@ -1511,27 +1721,28 @@ class WidgetManager:
             Created MediaWidget or None if disabled
         """
         media_settings = widgets_config.get('media', {}) if isinstance(widgets_config, dict) else {}
-        media_enabled = SettingsManager.to_bool(media_settings.get('enabled', False), False)
-        media_monitor_sel = media_settings.get('monitor', 'ALL')
-        
+        media_model = MediaWidgetSettings.from_mapping(media_settings if isinstance(media_settings, Mapping) else {})
+        enabled = SettingsManager.to_bool(media_model.enabled, False)
+        monitor_sel = media_model.monitor
         try:
-            show_on_this = (media_monitor_sel == 'ALL') or (int(media_monitor_sel) == (screen_index + 1))
+            show_on_this = (monitor_sel == 'ALL') or (int(monitor_sel) == (screen_index + 1))
         except Exception:
             show_on_this = False
 
-        if not (media_enabled and show_on_this):
+        if not (enabled and show_on_this):
             return None
 
         self.add_expected_overlay("media")
 
-        position_str = media_settings.get('position', 'Bottom Left')
-        font_size = media_settings.get('font_size', 20)
-        margin = media_settings.get('margin', 20)
+        position_val = media_model.position.value if isinstance(media_model.position, MediaPosition) else str(media_model.position)
+        position_str = position_val.replace('_', ' ').title()
+        font_size = media_model.font_size
+        margin = getattr(media_model, "margin", 20)
         color = media_settings.get('color', [255, 255, 255, 230])
-        artwork_size = media_settings.get('artwork_size', 100)
+        artwork_size = media_model.artwork_size
         rounded_artwork = SettingsManager.to_bool(media_settings.get('rounded_artwork_border', True), True)
-        show_controls = SettingsManager.to_bool(media_settings.get('show_controls', True), True)
-        show_header_frame = SettingsManager.to_bool(media_settings.get('show_header_frame', True), True)
+        show_controls = SettingsManager.to_bool(media_model.show_controls, True)
+        show_header_frame = SettingsManager.to_bool(media_model.show_header_frame, True)
 
         media_position_map = {
             'Top Left': MediaPosition.TOP_LEFT,
@@ -1555,7 +1766,7 @@ class WidgetManager:
                 except Exception:
                     pass
 
-            font_family = media_settings.get('font_family', 'Segoe UI')
+            font_family = media_model.font_family
             if hasattr(widget, 'set_font_family'):
                 widget.set_font_family(font_family)
 
@@ -1596,7 +1807,7 @@ class WidgetManager:
             if qcolor:
                 widget.set_text_color(qcolor)
 
-            show_background = SettingsManager.to_bool(media_settings.get('show_background', True), True)
+            show_background = SettingsManager.to_bool(media_model.show_background, True)
             widget.set_show_background(show_background)
 
             bg_color_data = media_settings.get('bg_color', [64, 64, 64, 255])
@@ -1605,16 +1816,15 @@ class WidgetManager:
                 widget.set_background_color(bg_qcolor)
 
             try:
-                bg_opacity = float(media_settings.get('bg_opacity', 0.9))
+                bg_opacity = float(media_model.background_opacity)
             except Exception:
                 bg_opacity = 0.9
             widget.set_background_opacity(bg_opacity)
 
             # Border color and opacity
             border_color_data = media_settings.get('border_color', [128, 128, 128, 255])
-            border_opacity = media_settings.get('border_opacity', 0.8)
             try:
-                bo = float(border_opacity)
+                bo = float(media_settings.get('border_opacity', 0.8))
             except Exception:
                 bo = 0.8
             border_qcolor = parse_color_to_qcolor(border_color_data, opacity_override=bo)
@@ -1622,7 +1832,7 @@ class WidgetManager:
                 widget.set_background_border(2, border_qcolor)
 
             try:
-                intense_shadow = SettingsManager.to_bool(media_settings.get('intense_shadow', False), False)
+                intense_shadow = SettingsManager.to_bool(media_model.intense_shadow, False)
                 if hasattr(widget, 'set_intense_shadow'):
                     widget.set_intense_shadow(intense_shadow)
             except Exception:
@@ -1668,59 +1878,62 @@ class WidgetManager:
         Returns:
             Created RedditWidget or None if disabled
         """
-        reddit_settings = widgets_config.get(settings_key, {}) if isinstance(widgets_config, dict) else {}
-        reddit_enabled = SettingsManager.to_bool(reddit_settings.get('enabled', False), False)
-        reddit_monitor_sel = reddit_settings.get('monitor', 'ALL')
-        
         try:
-            show_on_this = (reddit_monitor_sel == 'ALL') or (int(reddit_monitor_sel) == (screen_index + 1))
-        except Exception:
-            show_on_this = False
+            reddit_settings = widgets_config.get(settings_key, {}) if isinstance(widgets_config, dict) else {}
+            base_model = RedditWidgetSettings.from_mapping(base_reddit_settings if isinstance(base_reddit_settings, Mapping) else {})
+            reddit_model = RedditWidgetSettings.from_mapping(reddit_settings if isinstance(reddit_settings, Mapping) else {})
+            reddit_enabled = SettingsManager.to_bool(reddit_model.enabled, False)
+            reddit_monitor_sel = reddit_model.monitor
+            
+            try:
+                show_on_this = (reddit_monitor_sel == 'ALL') or (int(reddit_monitor_sel) == (screen_index + 1))
+            except Exception:
+                show_on_this = False
 
-        if not (reddit_enabled and show_on_this):
-            return None
+            if not (reddit_enabled and show_on_this):
+                return None
 
-        self.add_expected_overlay(settings_key)
+            self.add_expected_overlay(settings_key)
 
-        # For reddit2, inherit styling from reddit1 (base_reddit_settings)
-        style_source = base_reddit_settings if (settings_key == 'reddit2' and base_reddit_settings) else reddit_settings
+            # For reddit2, inherit styling from reddit1 (base_reddit_settings)
+            style_model = base_model if (settings_key == 'reddit2' and base_reddit_settings) else reddit_model
 
-        position_str = reddit_settings.get('position', 'Bottom Right')
-        subreddit = reddit_settings.get('subreddit', 'wallpapers') or 'wallpapers'
-        
-        # Styling from style_source (reddit1 for reddit2, own settings for reddit1)
-        font_size = style_source.get('font_size', 14)
-        margin = style_source.get('margin', 20)
-        color = style_source.get('color', [255, 255, 255, 230])
-        bg_color_data = style_source.get('bg_color', [35, 35, 35, 255])
-        border_color_data = style_source.get('border_color', [255, 255, 255, 255])
-        border_opacity = style_source.get('border_opacity', 1.0)
-        show_background = SettingsManager.to_bool(style_source.get('show_background', True), True)
-        show_separators = SettingsManager.to_bool(style_source.get('show_separators', True), True)
-        bg_opacity = style_source.get('bg_opacity', 1.0)
-        font_family = style_source.get('font_family', 'Segoe UI')
-        
-        # Limit comes from own settings
-        try:
-            limit_val = int(reddit_settings.get('limit', 10))
-        except Exception:
-            limit_val = 10
-        limit_val = max(4, min(limit_val, 25))
+            position_val = reddit_model.position.value if isinstance(reddit_model.position, RedditPosition) else str(reddit_model.position)
+            position_str = position_val.replace('_', ' ').title()
+            subreddit = reddit_model.subreddit or 'wallpapers'
+            
+            # Styling from style_model (reddit1 for reddit2, own settings for reddit1)
+            font_size = style_model.font_size
+            margin = getattr(style_model, "margin", 20)
+            color = reddit_settings.get('color', [255, 255, 255, 230])
+            bg_color_data = reddit_settings.get('bg_color', [35, 35, 35, 255])
+            border_color_data = reddit_settings.get('border_color', [255, 255, 255, 255])
+            border_opacity = reddit_settings.get('border_opacity', 1.0)
+            show_background = SettingsManager.to_bool(style_model.show_background, True)
+            show_separators = SettingsManager.to_bool(style_model.show_separators, True)
+            bg_opacity = reddit_settings.get('bg_opacity', 1.0)
+            font_family = style_model.font_family
+            
+            # Limit comes from own settings
+            try:
+                limit_val = int(reddit_settings.get('limit', 10))
+            except Exception:
+                limit_val = 10
+            limit_val = max(4, min(limit_val, 25))
 
-        reddit_position_map = {
-            'Top Left': RedditPosition.TOP_LEFT,
-            'Top Center': RedditPosition.TOP_CENTER,
-            'Top Right': RedditPosition.TOP_RIGHT,
-            'Middle Left': RedditPosition.MIDDLE_LEFT,
-            'Center': RedditPosition.CENTER,
-            'Middle Right': RedditPosition.MIDDLE_RIGHT,
-            'Bottom Left': RedditPosition.BOTTOM_LEFT,
-            'Bottom Center': RedditPosition.BOTTOM_CENTER,
-            'Bottom Right': RedditPosition.BOTTOM_RIGHT,
-        }
-        position = reddit_position_map.get(position_str, RedditPosition.BOTTOM_RIGHT)
+            reddit_position_map = {
+                'Top Left': RedditPosition.TOP_LEFT,
+                'Top Center': RedditPosition.TOP_CENTER,
+                'Top Right': RedditPosition.TOP_RIGHT,
+                'Middle Left': RedditPosition.MIDDLE_LEFT,
+                'Center': RedditPosition.CENTER,
+                'Middle Right': RedditPosition.MIDDLE_RIGHT,
+                'Bottom Left': RedditPosition.BOTTOM_LEFT,
+                'Bottom Center': RedditPosition.BOTTOM_CENTER,
+                'Bottom Right': RedditPosition.BOTTOM_RIGHT,
+            }
+            position = reddit_position_map.get(position_str, RedditPosition.BOTTOM_RIGHT)
 
-        try:
             widget = RedditWidget(self._parent, subreddit=subreddit, position=position)
 
             if thread_manager is not None and hasattr(widget, "set_thread_manager"):
@@ -1781,7 +1994,7 @@ class WidgetManager:
 
             # Intense shadow
             try:
-                intense_shadow = SettingsManager.to_bool(style_source.get('intense_shadow', False), False)
+                intense_shadow = SettingsManager.to_bool(style_model.intense_shadow, False)
                 if hasattr(widget, 'set_intense_shadow'):
                     widget.set_intense_shadow(intense_shadow)
             except Exception:
@@ -1812,8 +2025,6 @@ class WidgetManager:
             logger.error("Failed to create %s widget: %s", settings_key, e, exc_info=True)
             return None
 
-    # Gmail widget creation method removed - archived in archive/gmail_feature/
-
     def setup_all_widgets(
         self,
         settings_manager: SettingsManager,
@@ -1837,6 +2048,8 @@ class WidgetManager:
         if not settings_manager:
             logger.warning("No settings_manager provided - widgets will not be created")
             return {}
+
+        self._attach_settings_manager(settings_manager)
 
         logger.debug("Setting up overlay widgets for screen %d", screen_index)
 
@@ -1872,9 +2085,9 @@ class WidgetManager:
             created['weather_widget'] = widget
 
         # Create media widget
-        widget = self.create_media_widget(widgets_config, shadows_config, screen_index, thread_manager)
-        if widget:
-            created['media_widget'] = widget
+        media_widget = self.create_media_widget(widgets_config, shadows_config, screen_index, thread_manager)
+        if media_widget:
+            created['media_widget'] = media_widget
 
         # Create reddit widgets (reddit2 inherits styling from reddit1)
         base_reddit_settings = widgets_config.get('reddit', {}) if isinstance(widgets_config, dict) else {}
@@ -1934,9 +2147,10 @@ class WidgetManager:
             return None
         
         media_settings = widgets_config.get('media', {}) if isinstance(widgets_config, dict) else {}
-        spotify_volume_enabled = SettingsManager.to_bool(media_settings.get('spotify_volume_enabled', True), True)
+        media_model = MediaWidgetSettings.from_mapping(media_settings if isinstance(media_settings, Mapping) else {})
+        spotify_volume_enabled = SettingsManager.to_bool(media_model.spotify_volume_enabled, True)
         
-        media_monitor_sel = media_settings.get('monitor', 'ALL')
+        media_monitor_sel = media_model.monitor
         try:
             show_on_this = (media_monitor_sel == 'ALL') or (int(media_monitor_sel) == (screen_index + 1))
         except Exception:
@@ -1967,10 +2181,10 @@ class WidgetManager:
                 pass
             
             # Inherit media card background and border colours
-            bg_color_data = media_settings.get('bg_color', [64, 64, 64, 255])
+            bg_color_data = media_model.bg_color
             bg_qcolor = parse_color_to_qcolor(bg_color_data)
-            border_color_data = media_settings.get('border_color', [128, 128, 128, 255])
-            border_opacity = media_settings.get('border_opacity', 0.8)
+            border_color_data = media_model.border_color
+            border_opacity = media_model.border_opacity
             try:
                 bo = float(border_opacity)
             except Exception:
@@ -1979,7 +2193,7 @@ class WidgetManager:
             
             try:
                 from PySide6.QtGui import QColor as _QColor
-                fill_color_data = media_settings.get('spotify_volume_fill_color', [255, 255, 255, 230])
+                fill_color_data = media_model.spotify_volume_fill_color or [255, 255, 255, 230]
                 try:
                     fr, fg, fb = fill_color_data[0], fill_color_data[1], fill_color_data[2]
                     fa = fill_color_data[3] if len(fill_color_data) > 3 else 230
@@ -2018,7 +2232,8 @@ class WidgetManager:
         
         media_settings = widgets_config.get('media', {}) if isinstance(widgets_config, dict) else {}
         spotify_vis_settings = widgets_config.get('spotify_visualizer', {}) if isinstance(widgets_config, dict) else {}
-        spotify_vis_enabled = SettingsManager.to_bool(spotify_vis_settings.get('enabled', False), False)
+        model = SpotifyVisualizerSettings.from_mapping(spotify_vis_settings if isinstance(spotify_vis_settings, Mapping) else {})
+        spotify_vis_enabled = SettingsManager.to_bool(model.enabled, False)
         
         media_monitor_sel = media_settings.get('monitor', 'ALL')
         try:
@@ -2030,14 +2245,16 @@ class WidgetManager:
             return None
         
         self.add_expected_overlay("spotify_visualizer")
-        
+
         try:
-            bar_count = int(spotify_vis_settings.get('bar_count', 32))
+            bar_count = int(model.bar_count)
             vis = SpotifyVisualizerWidget(self._parent, bar_count=bar_count)
+
+            self._log_spotify_vis_config("create", spotify_vis_settings)
             
             # Preferred audio block size (0=auto)
             try:
-                block_size = int(spotify_vis_settings.get('audio_block_size', 0) or 0)
+                block_size = int(model.audio_block_size or 0)
                 if hasattr(vis, 'set_audio_block_size'):
                     vis.set_audio_block_size(block_size)
             except Exception:
@@ -2114,9 +2331,9 @@ class WidgetManager:
             
             # Ghosting configuration
             try:
-                ghost_enabled = SettingsManager.to_bool(spotify_vis_settings.get('ghosting_enabled', True), True)
-                ghost_alpha = float(spotify_vis_settings.get('ghost_alpha', 0.4))
-                ghost_decay = max(0.0, float(spotify_vis_settings.get('ghost_decay', 0.4)))
+                ghost_enabled = SettingsManager.to_bool(model.ghosting_enabled, True)
+                ghost_alpha = float(model.ghost_alpha)
+                ghost_decay = max(0.0, float(model.ghost_decay))
                 if hasattr(vis, 'set_ghost_config'):
                     vis.set_ghost_config(ghost_enabled, ghost_alpha, ghost_decay)
             except Exception:
@@ -2124,8 +2341,8 @@ class WidgetManager:
             
             # Sensitivity configuration
             try:
-                recommended = SettingsManager.to_bool(spotify_vis_settings.get('adaptive_sensitivity', True), True)
-                sens = max(0.25, min(2.5, float(spotify_vis_settings.get('sensitivity', 1.0))))
+                recommended = SettingsManager.to_bool(model.adaptive_sensitivity, True)
+                sens = max(0.25, min(2.5, float(model.sensitivity)))
                 if hasattr(vis, 'set_sensitivity_config'):
                     vis.set_sensitivity_config(recommended, sens)
             except Exception:
@@ -2141,11 +2358,8 @@ class WidgetManager:
 
             # Noise floor configuration
             try:
-                dynamic_floor = SettingsManager.to_bool(
-                    spotify_vis_settings.get('dynamic_floor', True),
-                    True,
-                )
-                manual_floor = float(spotify_vis_settings.get('manual_floor', 2.1))
+                dynamic_floor = SettingsManager.to_bool(model.dynamic_floor, True)
+                manual_floor = float(model.manual_floor)
                 if hasattr(vis, 'set_floor_config'):
                     vis.set_floor_config(dynamic_floor, manual_floor)
             except Exception:

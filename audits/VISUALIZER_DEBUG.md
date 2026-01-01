@@ -39,9 +39,11 @@ Key points:
    - `raw_bass = mean(freq_values[:4])`
    - `raw_mid = mean(freq_values[4:10])`
    - `raw_treble = mean(freq_values[10:])`
-4. **Dynamic noise floor**:
-   - Recommended mode: `noise_floor_base = max(0.8, 1.5 / (resolution_boost ** 0.35))`.
-   - Dynamic floor uses running averages, floor ratios, plus drop relief so bars don’t vanish when bass collapses.
+4. **Adaptive (former “Recommended”) sensitivity + dynamic floor**:
+   - Adaptive mode now pins to a manual-equivalent multiplier of `~0.285×` so the baseline sits close to the manual settings users actually run. The multiplier auto-dampens when Windows drops FFT resolution (resolution_boost > 1) and lifts slightly when we get higher-resolution buffers, but the core target stays near 0.28× to guarantee deeper drops without touching manual sliders.
+   - In adaptive mode we compute:  
+     `base_noise_floor = clamp(noise_floor_base / auto_multiplier)` and `expansion = expansion_base * max(0.55, auto_multiplier ** 0.35)`. Manual mode still divides by the user slider (0.25–2.5×), so export/import snapshots continue to behave identically.
+   - Dynamic floor uses the same running averages, floor ratios, plus drop relief so bars don’t vanish when bass collapses.
 5. **Gradient + template**:
    - Base gradient `(1 - dist)^2 * 0.82 + 0.18`.
    - Template array `profile_template` (ridge at ±3) stretched to bar_count, scaled 0.45–1.0 and multiplied in.

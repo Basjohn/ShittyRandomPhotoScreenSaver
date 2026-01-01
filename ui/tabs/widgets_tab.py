@@ -5,7 +5,7 @@ Allows users to configure overlay widgets:
 - Clock widget (enable, position, format, size, font, style)
 - Weather widget (enable, position, location, API key, size, font, style)
 """
-from typing import Optional
+from typing import Optional, Dict, Any
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QSpinBox, QGroupBox, QCheckBox, QLineEdit, QPushButton,
@@ -45,6 +45,8 @@ class WidgetsTab(QWidget):
         super().__init__(parent)
         
         self._settings = settings
+        self._current_subtab = 0
+        self._scroll_area: Optional[QScrollArea] = None
         self._clock_color = QColor(255, 255, 255, 230)
         self._weather_color = QColor(255, 255, 255, 230)
         self._clock_border_color = QColor(128, 128, 128, 255)
@@ -75,6 +77,7 @@ class WidgetsTab(QWidget):
         """Setup tab UI with scroll area."""
         # Create scroll area
         scroll = QScrollArea(self)
+        self._scroll_area = scroll
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
@@ -922,9 +925,9 @@ class WidgetsTab(QWidget):
         spotify_vis_layout.addLayout(spotify_vis_border_opacity_row)
 
         spotify_vis_sensitivity_row = QHBoxLayout()
-        self.spotify_vis_recommended = QCheckBox("Recommended")
+        self.spotify_vis_recommended = QCheckBox("Adaptive")
         self.spotify_vis_recommended.setToolTip(
-            "When enabled, the visualizer uses the recommended (v1.4) sensitivity baseline. Disable to adjust manually."
+            "When enabled, the visualizer uses the adaptive (v1.4) sensitivity baseline. Disable to adjust manually."
         )
         self.spotify_vis_recommended.stateChanged.connect(self._save_settings)
         self.spotify_vis_recommended.stateChanged.connect(lambda _: self._update_spotify_vis_sensitivity_enabled_state())
@@ -1376,6 +1379,7 @@ class WidgetsTab(QWidget):
 
     def _on_subtab_changed(self, subtab_id: int) -> None:
         """Show/hide widget sections based on selected subtab."""
+        self._current_subtab = int(subtab_id)
         try:
             self._clocks_container.setVisible(subtab_id == 0)
             self._weather_container.setVisible(subtab_id == 1)
@@ -1384,6 +1388,37 @@ class WidgetsTab(QWidget):
         except Exception:
             # If containers are not yet initialized, ignore
             pass
+
+    def get_view_state(self) -> Dict[str, Any]:
+        state: Dict[str, Any] = {"subtab": int(getattr(self, "_current_subtab", 0))}
+        scroll = getattr(self, "_scroll_area", None)
+        if scroll is not None:
+            try:
+                state["scroll"] = int(scroll.verticalScrollBar().value())
+            except Exception:
+                pass
+        return state
+
+    def restore_view_state(self, state: Dict[str, Any]) -> None:
+        if not isinstance(state, dict):
+            return
+        subtab = state.get("subtab")
+        try:
+            subtab_id = int(subtab)
+        except (TypeError, ValueError):
+            subtab_id = 0
+        button = self._subtab_group.button(subtab_id)
+        if button is not None:
+            button.setChecked(True)
+            self._on_subtab_changed(subtab_id)
+        scroll_value = state.get("scroll")
+        if scroll_value is not None:
+            scroll = getattr(self, "_scroll_area", None)
+            if scroll is not None:
+                try:
+                    scroll.verticalScrollBar().setValue(int(scroll_value))
+                except Exception:
+                    pass
     
     def _load_settings(self) -> None:
         """Load settings from settings manager."""

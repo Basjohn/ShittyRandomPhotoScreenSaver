@@ -5,16 +5,13 @@ Features gorgeous UI with:
 - Custom title bar (no native window border)
 - Drop shadow effect
 - Resizable window
-- Animated tab switching
-- Dark theme
-- Modern, polished design
 """
-from typing import Optional
+from typing import Dict, Optional, Any
 from pathlib import Path
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QWidget, QPushButton,
     QLabel, QStackedWidget, QGraphicsDropShadowEffect, QSizeGrip,
-    QSizePolicy, QFileDialog, QMenu,
+    QSizePolicy, QFileDialog, QMenu, QScrollArea,
 )
 from PySide6.QtCore import Qt, QPoint, Signal, QUrl, QTimer
 from PySide6.QtGui import QFont, QColor, QPixmap, QDesktopServices, QPainter, QPen, QGuiApplication
@@ -279,12 +276,40 @@ class SettingsDialog(QDialog):
         self._is_maximized = False
         self._drag_pos = QPoint()
         self._dragging = False
+        self._tab_scroll_cache: Dict[str, int] = {}
+        self._suppress_scroll_capture: bool = False
+        self._tab_keys = [
+            "sources",
+            "display",
+            "transitions",
+            "widgets",
+            "accessibility",
+            "about",
+        ]
+        self._tab_state_cache: Dict[str, Dict[str, Any]] = {}
+        stored_scroll = self._settings.get('ui.last_tab_scroll', {})
+        if isinstance(stored_scroll, dict):
+            for key, value in stored_scroll.items():
+                try:
+                    self._tab_scroll_cache[str(key)] = int(value)
+                except Exception:
+                    logger.debug("Invalid stored scroll position for %s: %r", key, value)
+        self._tab_scroll_widgets: Dict[int, Optional[QScrollArea]] = {}
+        stored_states = self._settings.get('ui.tab_state', {})
+        if isinstance(stored_states, dict):
+            for key, value in stored_states.items():
+                if isinstance(value, dict):
+                    try:
+                        self._tab_state_cache[str(key)] = dict(value)
+                    except Exception:
+                        logger.debug("Invalid stored tab state for %s", key)
         
         self._setup_window()
         self._load_theme()
         self._setup_ui()
         self._connect_signals()
         self._restore_geometry()
+        self._restore_last_tab_selection()
         
         logger.info("Settings dialog created")
     
@@ -663,6 +688,12 @@ class SettingsDialog(QDialog):
         self.content_stack.addWidget(self.widgets_tab)
         self.content_stack.addWidget(self.accessibility_tab)
         self.content_stack.addWidget(self.about_tab)
+        self._register_tab_scroll_area(0, self.sources_tab)
+        self._register_tab_scroll_area(1, self.display_tab)
+        self._register_tab_scroll_area(2, self.transitions_tab)
+        self._register_tab_scroll_area(3, self.widgets_tab)
+        self._register_tab_scroll_area(4, self.accessibility_tab)
+        self._register_tab_scroll_area(5, self.about_tab)
         
         content_layout.addWidget(sidebar)
         content_layout.addWidget(self.content_stack, 1)
@@ -1067,13 +1098,20 @@ class SettingsDialog(QDialog):
         self.accessibility_tab_btn.clicked.connect(lambda: self._switch_tab(4))
         self.about_tab_btn.clicked.connect(lambda: self._switch_tab(5))
     
-    def _switch_tab(self, index: int) -> None:
+    def _switch_tab(self, index: int, animate: bool = True) -> None:
         """
         Switch to tab with animation.
         
         Args:
             index: Tab index
         """
+        previous_index = self.content_stack.currentIndex()
+        if previous_index >= 0:
+            if not self._suppress_scroll_capture:
+                self._remember_scroll_for_tab(previous_index)
+            self._capture_tab_view_state(previous_index)
+        if index < 0 or index >= len(self.tab_buttons):
+            return
         # Uncheck all buttons
         for btn in self.tab_buttons:
             btn.setChecked(False)
@@ -1083,13 +1121,9 @@ class SettingsDialog(QDialog):
         
         # Get widgets
         old_widget = self.content_stack.currentWidget()
-        # Create simple fade animation using AnimationManager
-        def fade_out_complete():
-            # Switch to new widget
-            self.content_stack.setCurrentIndex(index)
-            new_widget = self.content_stack.currentWidget()
-
-            if index == 5:  # About tab
+        def _after_switch():
+            current_widget = self.content_stack.currentWidget()
+            if index == 5:
                 try:
                     self._about_last_card_width = 0
                 except Exception:
@@ -1098,29 +1132,175 @@ class SettingsDialog(QDialog):
                     self._update_about_header_images()
                 except Exception:
                     pass
-
-            # Fade in new widget
+            self._restore_tab_view_state(index, current_widget)
+            self._restore_scroll_for_tab(index, current_widget)
+            self._save_last_tab(index)
+            logger.debug(f"Switched to tab {index}")
+        if animate and old_widget is not None:
+            def fade_out_complete():
+                self.content_stack.setCurrentIndex(index)
+                # Fade in new widget
+                new_widget = self.content_stack.currentWidget()
+                self._animations.animate_property(
+                    target=new_widget,
+                    property_name='windowOpacity',
+                    start_value=0.0,
+                    end_value=1.0,
+                    duration=0.15
+                )
+                self._animations.start()
+                _after_switch()
+            # Fade out old widget
             self._animations.animate_property(
-                target=new_widget,
+                target=old_widget,
                 property_name='windowOpacity',
-                start_value=0.0,
-                end_value=1.0,
-                duration=0.15
+                start_value=1.0,
+                end_value=0.0,
+                duration=0.15,
+                on_complete=fade_out_complete
             )
             self._animations.start()
-        
-        # Fade out old widget
-        self._animations.animate_property(
-            target=old_widget,
-            property_name='windowOpacity',
-            start_value=1.0,
-            end_value=0.0,
-            duration=0.15,
-            on_complete=fade_out_complete
-        )
-        self._animations.start()
-        
-        logger.debug(f"Switched to tab {index}")
+        else:
+            self.content_stack.setCurrentIndex(index)
+            _after_switch()
+
+    def _register_tab_scroll_area(self, index: int, tab_widget: QWidget) -> None:
+        """Associate a scroll area with a tab for persistence."""
+        if index < 0:
+            return
+        scroll: Optional[QScrollArea]
+        if isinstance(tab_widget, QScrollArea):
+            scroll = tab_widget
+        else:
+            scroll = tab_widget.findChild(QScrollArea)
+        self._tab_scroll_widgets[index] = scroll
+
+    def _capture_tab_view_state(self, index: int) -> None:
+        if index < 0:
+            return
+        widget = self.content_stack.widget(index)
+        if widget is None:
+            return
+        getter = getattr(widget, "get_view_state", None)
+        if not callable(getter):
+            return
+        try:
+            view_state = getter()
+        except Exception:
+            logger.debug("Failed to capture view state for tab %s", index, exc_info=True)
+            return
+        key = self._tab_key_for_index(index)
+        if view_state in (None, {}):
+            entry = dict(self._tab_state_cache.get(key, {}))
+            if 'view_state' in entry:
+                entry.pop('view_state')
+            if entry:
+                self._tab_state_cache[key] = entry
+            elif key in self._tab_state_cache:
+                self._tab_state_cache.pop(key, None)
+            self._save_tab_state_cache()
+            return
+        entry = dict(self._tab_state_cache.get(key, {}))
+        entry['view_state'] = view_state
+        self._tab_state_cache[key] = entry
+        self._save_tab_state_cache()
+
+    def _restore_tab_view_state(self, index: int, widget: Optional[QWidget]) -> None:
+        if widget is None or index < 0:
+            return
+        key = self._tab_key_for_index(index)
+        entry = self._tab_state_cache.get(key, {})
+        view_state = entry.get('view_state')
+        if not view_state:
+            return
+        restorer = getattr(widget, "restore_view_state", None)
+        if not callable(restorer):
+            return
+        try:
+            restorer(view_state)
+        except Exception:
+            logger.debug("Failed to restore view state for tab %s", key, exc_info=True)
+
+    def _save_tab_state_cache(self) -> None:
+        try:
+            self._settings.set('ui.tab_state', dict(self._tab_state_cache))
+            self._settings.save()
+        except Exception:
+            logger.debug("Failed to persist tab state cache", exc_info=True)
+
+    def _tab_key_for_index(self, index: int) -> str:
+        if 0 <= index < len(self._tab_keys):
+            return self._tab_keys[index]
+        return f"tab_{index}"
+
+    def _remember_scroll_for_tab(self, index: int) -> None:
+        scroll = self._tab_scroll_widgets.get(index)
+        if scroll is None:
+            return
+        try:
+            value = scroll.verticalScrollBar().value()
+        except Exception:
+            return
+        key = self._tab_key_for_index(index)
+        self._tab_scroll_cache[key] = value
+        try:
+            self._settings.set('ui.last_tab_scroll', dict(self._tab_scroll_cache))
+            self._settings.save()
+        except Exception:
+            logger.debug("Failed to persist tab scroll positions", exc_info=True)
+
+    def _restore_scroll_for_tab(self, index: int, widget: Optional[QWidget]) -> None:
+        if index < 0:
+            return
+        if self._tab_scroll_widgets.get(index) is None and widget is not None:
+            self._register_tab_scroll_area(index, widget)
+        scroll = self._tab_scroll_widgets.get(index)
+        if scroll is None:
+            return
+        key = self._tab_key_for_index(index)
+        value = self._tab_scroll_cache.get(key, 0)
+        scrollbar = scroll.verticalScrollBar()
+        try:
+            self._suppress_scroll_capture = True
+            scrollbar.setValue(value)
+        except Exception:
+            logger.debug("Failed to restore scroll for tab %s", key, exc_info=True)
+        finally:
+            self._suppress_scroll_capture = False
+
+    def _save_last_tab(self, index: int) -> None:
+        if index < 0:
+            return
+        try:
+            self._settings.set('ui.last_tab_index', int(index))
+            self._settings.save()
+        except Exception:
+            logger.debug("Failed to persist last tab index", exc_info=True)
+
+    def _restore_last_tab_selection(self) -> None:
+        stored = self._settings.get('ui.last_tab_index', 0)
+        try:
+            index = int(stored)
+        except Exception:
+            index = 0
+        if index < 0 or index >= len(self.tab_buttons):
+            index = 0
+        self._suppress_scroll_capture = True
+        try:
+            self._switch_tab(index, animate=False)
+        finally:
+            self._suppress_scroll_capture = False
+
+    def closeEvent(self, event):
+        try:
+            current_index = self.content_stack.currentIndex()
+            if current_index >= 0:
+                self._capture_tab_view_state(current_index)
+                if not self._suppress_scroll_capture:
+                    self._remember_scroll_for_tab(current_index)
+        except Exception:
+            logger.debug("Failed to capture tab state on close", exc_info=True)
+        super().closeEvent(event)
 
     def _on_reset_to_defaults_clicked(self) -> None:
         """Reset all application settings back to defaults and show a styled notice."""

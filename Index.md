@@ -46,10 +46,10 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - **Type-safe settings dataclass models** for IDE autocompletion and validation
   - `DisplayMode`, `TransitionType`, `WidgetPosition`: Enums for type-safe settings values
   - `DisplaySettings`, `TransitionSettings`, `InputSettings`, `CacheSettings`, `SourceSettings`: Core settings models
-  - `ShadowSettings`, `ClockWidgetSettings`, `WeatherWidgetSettings`, `MediaWidgetSettings`, `RedditWidgetSettings`: Widget settings models
+  - `ShadowSettings`, `ClockWidgetSettings`, `WeatherWidgetSettings`, `MediaWidgetSettings`, `RedditWidgetSettings`, `SpotifyVisualizerSettings`: Widget settings models (media/reddit/Spotify use typed models for both creation and live refresh)
   - `AccessibilitySettings`, `AppSettings`: Accessibility and container models
-  - Each model has `from_settings(SettingsManager)` and `to_dict()` methods
-  - **22 unit tests** in `tests/test_settings_models.py`
+  - Each model has `from_settings(SettingsManager)`, `from_mapping()`, and `to_dict()` methods so both `SettingsManager` and UI dictionaries share one schema
+  - **36 unit tests** now cover serialization plus WidgetManager refresh + scrollwheel volume behaviour (`tests/test_settings_models.py`, `tests/test_widget_manager_refresh.py`, `tests/test_scrollwheel_volume.py`)
 - core/animation/animator.py
   - AnimationManager and easing types
   - Animation class with optional FrameState for decoupled rendering

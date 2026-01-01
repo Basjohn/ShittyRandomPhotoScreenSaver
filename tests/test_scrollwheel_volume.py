@@ -2,6 +2,28 @@ import pytest
 from PySide6.QtCore import QPoint, QPointF, Qt
 from PySide6.QtGui import QWheelEvent
 from PySide6.QtWidgets import QWidget
+from shiboken6 import Shiboken
+
+
+def _safe_close(widget) -> None:
+    """Detach widget safely before pytest-qt closes it to avoid double deletes."""
+    if widget is None:
+        return
+    try:
+        if not Shiboken.isValid(widget):
+            return
+    except Exception:
+        return
+    try:
+        widget.setParent(None)
+    except RuntimeError:
+        pass
+
+
+def _register_volume_widget(qtbot, widget):
+    widget.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False)
+    qtbot.addWidget(widget, before_close_func=_safe_close)
+    return widget
 
 
 @pytest.mark.qt
@@ -24,35 +46,37 @@ def test_spotify_volume_widget_uses_coordinated_fade_sync(qtbot, monkeypatch):
     qtbot.addWidget(parent)
     parent.resize(800, 600)
     parent.show()
-    
+
     vol = SpotifyVolumeWidget(parent)
-    qtbot.addWidget(vol)
-    
-    # Mock the controller to be available
-    monkeypatch.setattr(vol._controller, "is_available", lambda: True)
-    monkeypatch.setattr(vol._controller, "get_volume", lambda: 0.5)
-    
-    # Call start
-    vol.start()
-    
-    # Should have registered with parent's fade sync
-    assert len(fade_sync_requests) == 1, "Volume widget should request fade sync"
-    assert fade_sync_requests[0][0] == "spotify_volume", "Should register as 'spotify_volume'"
-    
-    # The starter callback should be callable
-    starter = fade_sync_requests[0][1]
-    assert callable(starter), "Starter should be callable"
-    
-    vol.stop()
-    # Don't call cleanup() - let qtbot handle widget deletion to avoid C++ object issues
+    vol.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False)
+
+    try:
+        # Mock the controller to be available
+        monkeypatch.setattr(vol._controller, "is_available", lambda: True)
+        monkeypatch.setattr(vol._controller, "get_volume", lambda: 0.5)
+        
+        # Call start
+        vol.start()
+        # Should have registered with parent's fade sync
+        assert len(fade_sync_requests) == 1, "Volume widget should request fade sync"
+        assert fade_sync_requests[0][0] == "spotify_volume", "Should register as 'spotify_volume'"
+        
+        # The starter callback should be callable
+        starter = fade_sync_requests[0][1]
+        assert callable(starter), "Starter should be callable"
+    finally:
+        try:
+            vol.setParent(None)
+            vol.deleteLater()
+        except Exception:
+            pass
 
 
 @pytest.mark.qt
 def test_spotify_volume_widget_handle_wheel_clamps_and_schedules(qtbot, monkeypatch):
     from widgets.spotify_volume_widget import SpotifyVolumeWidget
-
     vol = SpotifyVolumeWidget()
-    qtbot.addWidget(vol)
+    vol.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False)
     vol.setGeometry(0, 0, 32, 180)
     vol.show()
     qtbot.wait(1)
@@ -70,19 +94,26 @@ def test_spotify_volume_widget_handle_wheel_clamps_and_schedules(qtbot, monkeypa
     monkeypatch.setattr(vol, "_apply_volume_and_broadcast", _fake_apply)
     monkeypatch.setattr(vol, "_schedule_set_volume", _fake_schedule)
 
-    vol._volume = 0.95
-    assert vol.handle_wheel(QPoint(10, 10), 120)
-    assert applied_levels[-1] <= 1.0
-    assert scheduled_levels[-1] == applied_levels[-1]
+    try:
+        vol._volume = 0.95
+        assert vol.handle_wheel(QPoint(10, 10), 120)
+        assert applied_levels[-1] <= 1.0
+        assert scheduled_levels[-1] == applied_levels[-1]
 
-    vol._volume = 0.02
-    assert vol.handle_wheel(QPoint(10, 170), -120)
-    assert applied_levels[-1] >= 0.0
+        vol._volume = 0.02
+        assert vol.handle_wheel(QPoint(10, 170), -120)
+        assert applied_levels[-1] >= 0.0
 
-    vol.hide()
-    assert not vol.handle_wheel(QPoint(0, 0), 120)
-    vol.show()
-    assert not vol.handle_wheel(QPoint(0, 0), 0)
+        vol.hide()
+        assert not vol.handle_wheel(QPoint(0, 0), 120)
+        vol.show()
+        assert not vol.handle_wheel(QPoint(0, 0), 0)
+    finally:
+        try:
+            vol.setParent(None)
+            vol.deleteLater()
+        except Exception:
+            pass
 
 
 @pytest.mark.qt

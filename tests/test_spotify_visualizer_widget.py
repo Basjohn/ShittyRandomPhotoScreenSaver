@@ -133,6 +133,64 @@ def test_sensitivity_config_affects_noise_floor(np_module):
     assert max(bars_manual) > max(bars_rec)
 
 
+class _FakeEngine:
+    def __init__(self) -> None:
+        self._audio_buffer = object()
+        self._audio_worker = object()
+        self._bars_result_buffer = object()
+        self.last_floor_config = (True, 2.1)
+        self.last_sensitivity_config = (True, 1.0)
+        self.thread_manager = None
+        self.acquired = 0
+        self.started = 0
+
+    def set_floor_config(self, dyn: bool, floor: float) -> None:
+        self.last_floor_config = (dyn, floor)
+
+    def set_sensitivity_config(self, recommended: bool, sensitivity: float) -> None:
+        self.last_sensitivity_config = (recommended, sensitivity)
+
+    def set_thread_manager(self, thread_manager) -> None:
+        self.thread_manager = thread_manager
+
+    def acquire(self) -> None:
+        self.acquired += 1
+
+    def release(self) -> None:
+        self.acquired = max(0, self.acquired - 1)
+
+    def ensure_started(self) -> None:
+        self.started += 1
+
+
+@pytest.mark.qt
+def test_spotify_visualizer_replays_config_on_start(qt_app, qtbot, monkeypatch):
+    """Ensure manual floor/sensitivity get replayed to the shared engine when starting."""
+
+    fake_engine = _FakeEngine()
+
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=12)
+    qtbot.addWidget(widget)
+
+    widget.set_floor_config(dynamic_enabled=False, manual_floor=0.3)
+    widget.set_sensitivity_config(recommended=False, sensitivity=2.4)
+
+    # Simulate the engine forgetting the config before start (e.g., after restart).
+    fake_engine.last_floor_config = (True, 2.1)
+    fake_engine.last_sensitivity_config = (True, 1.0)
+
+    widget.start()
+    qt_app.processEvents()
+
+    assert fake_engine.last_floor_config == (False, 0.3)
+    assert fake_engine.last_sensitivity_config == (False, 2.4)
+
 @pytest.mark.qt
 def test_spotify_visualizer_widgets_share_audio_engine(qt_app, qtbot):
     widget1 = SpotifyVisualizerWidget(parent=None, bar_count=16)

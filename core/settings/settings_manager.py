@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 from PySide6.QtCore import QSettings, QObject, Signal
 from core.logging.logger import get_logger, is_verbose_logging
+from core.settings.models import SpotifyVisualizerSettings
 
 logger = get_logger('SettingsManager')
 
@@ -417,6 +418,20 @@ class SettingsManager(QObject):
             logger.debug("Setting changed: %s: %r -> %r", key, old_value, value)
         else:
             logger.debug("Setting changed: %s", key)
+
+    def set_many(self, values: Mapping[str, Any]) -> None:
+        """Set multiple settings in one call."""
+        for k, v in values.items():
+            self.set(k, v)
+
+    # Typed helpers -----------------------------------------------------
+    def get_spotify_visualizer_settings(self) -> SpotifyVisualizerSettings:
+        """Return typed settings for the Spotify visualizer widget."""
+        return SpotifyVisualizerSettings.from_settings(self)
+
+    def set_spotify_visualizer_settings(self, model: SpotifyVisualizerSettings) -> None:
+        """Persist Spotify visualizer settings from a typed model."""
+        self.set_many(model.to_dict())
     
     def save(self) -> None:
         """Force save settings to persistent storage."""

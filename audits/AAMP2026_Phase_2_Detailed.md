@@ -27,6 +27,71 @@ Status: Planning-only (no code). Spec.md remains current-state. Main audit refer
 - [ ] Outputs: bins handle + ghost envelopes; generation/ts metadata.
 - [ ] Must satisfy visualizer triple-buffer expectations and dt_max independence (non-blocking UI poll).
 - [ ] Synthetic test baseline (from Phase 0 guardrail) rerun after workerization.
+- [ ] Preserve dynamic floor pipeline (floor_mid_weight, dynamic_floor_ratio, headroom/hardness, silence thresholds) plus sensitivity/decay tuning knobs (`set_sensitivity_config`, `_apply_smoothing` tau/alpha choices) so workerized path matches current resilience to app audio changes.
+- [ ] Preserve current FFT math + smoothing semantics (Spotify visualizer) before migrating. Reference snapshot:
+
+```python
+# widgets/spotify_visualizer_widget.py:_fft_to_bars (excerpt)
+np.log1p(mag, out=mag)
+np.power(mag, 1.2, out=mag)
+if n > 4:
+    if self._smooth_kernel is None:
+        self._smooth_kernel = np.array([0.25, 0.5, 0.25], dtype="float32")
+    mag = np.convolve(mag, self._smooth_kernel, mode="same")
+...
+if use_recommended:
+    auto = float(getattr(self, "_recommended_sensitivity_multiplier", 0.285))
+    auto = max(0.25, min(2.5, auto))
+    if resolution_boost > 1.0:
+        damp = min(0.4, (resolution_boost - 1.0) * 0.55)
+        auto = max(0.25, auto * (1.0 - damp))
+    else:
+        boost = min(0.25, (1.0 - resolution_boost) * 0.4)
+        auto = min(2.5, auto * (1.0 + boost))
+    base_noise_floor = max(self._min_floor, min(self._max_floor, noise_floor_base / auto))
+    expansion = expansion_base * max(0.55, auto ** 0.35)
+else:
+    base_noise_floor = max(self._min_floor, min(self._max_floor, noise_floor_base / user_sens))
+...
+profile_template = np.array(
+    [0.10, 0.15, 0.25, 0.50, 1.0, 0.45, 0.25, 0.08,
+     0.25, 0.45, 1.0, 0.50, 0.25, 0.15, 0.10],
+    dtype="float32",
+)
+for i in range(bands):
+    offset = abs(i - center)
+    base = profile_shape[i] * overall_energy
+    if offset == 3:
+        base = base * 1.15 + bass_energy * 0.35
+    elif offset == 4:
+        base = base * 0.82
+    if offset == 0:
+        vocal_drive = mid_energy * 4.0
+        base = vocal_drive * 0.90 + base * 0.10
+    ...
+```
+
+```python
+# widgets/spotify_visualizer_widget.py:_SpotifyBeatEngine._apply_smoothing (excerpt)
+dt = max(0.0, now_ts - last_ts) if last_ts >= 0.0 else 0.0
+if dt > 2.0 or dt <= 0.0:
+    self._smoothed_bars = list(target_bars)
+    return self._smoothed_bars
+
+base_tau = self._smoothing_tau
+tau_rise = base_tau * 0.35  # Fast attack
+tau_decay = base_tau * 3.0  # Slow decay
+alpha_rise = 1.0 - math.exp(-dt / tau_rise)
+alpha_decay = 1.0 - math.exp(-dt / tau_decay)
+
+for i in range(bar_count):
+    cur = smoothed[i] if i < len(smoothed) else 0.0
+    tgt = target_bars[i] if i < len(target_bars) else 0.0
+    alpha = alpha_rise if tgt >= cur else alpha_decay
+    smoothed[i] = cur + (tgt - cur) * alpha
+```
+
+This code must be preserved (or reimplemented deterministically) inside the FFT worker to avoid fidelity loss; capture a `/bak/widgets/spotify_visualizer_widget.py` snapshot before moving logic.
 
 ## 5) Transition Precompute Worker
 - [ ] Inputs: `{transition_type, params, duration, direction_history, seed}`.

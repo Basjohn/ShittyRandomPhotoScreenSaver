@@ -44,7 +44,7 @@ Document first and last policy, follow phase order unless explicitly told otherw
 ### Phase Status (single source)
 | Phase | Status | Notes | Blockers | Next |
 | --- | --- | --- | --- | --- |
-| 0 | ✅ Complete | WeatherWidget ThreadManager-only; runtime `threading.Thread`/`QThread` absent outside tests/archive; overlay timers enforced via helper/ThreadManager; event system lock usage reviewed. `/bak/widgets_weather_widget.py` captured. | None | Proceed to Phase 1. |
+| 0 | ✅ Complete | WeatherWidget ThreadManager-only; runtime `threading.Thread`/`QThread` absent outside tests/archive; overlay timers enforced via helper/ThreadManager; event system lock usage reviewed. See `audits/AAMP2026_Phase_2_Detailed.md` for the canonical Spotify visualizer snapshot preserved for Phase 2 workerization. | None | Proceed to Phase 1. |
 | 1 | ☐ Not started | | | |
 | 2 | ☐ Not started | | | |
 | 3 | ☐ Not started | | | |
@@ -68,6 +68,7 @@ Document first and last policy, follow phase order unless explicitly told otherw
 2. **Thread Safety Sweep**
    - [x] Traverse engine/rendering/widgets/media/sources for `threading.Thread`/`QThread` (none in runtime code; archive/tests only). WeatherWidget migrated to ThreadManager IO-only path.
    - [x] Add `_state_lock`/`RLock` only where unavoidable; prefer existing lock-free queues. (No new locks added.)
+   - [x] Document lock-free coverage: ThreadManager mutation queue uses `SPSCQueue`, stats via `TripleBuffer`; Spotify visualizer shares data through `TripleBuffer` only.
 3. **Timers & Events**
    - [x] Verify overlay timers use `widgets/overlay_timers.create_overlay_timer` or `ThreadManager.schedule_recurring`; documented ownership and ResourceManager cleanup via helper.
    - [x] Review `core/events/event_system.py` lock usage and async dispatch guarantees; lock released before callbacks, recursion guarded.
@@ -75,6 +76,7 @@ Document first and last policy, follow phase order unless explicitly told otherw
    - [x] `[PERF]` logs present for transitions/visualizer/AnimationManager; rotation tests remain valid; no new metrics needed.
 5. **Tests & Docs**
    - [x] Thread-safety posture validated; existing threading tests cover UI dispatch/timer semantics; no new cases required this sweep.
+   - [x] `python -m pytest tests/test_thread_manager.py tests/test_threading.py -q` (2026-01-01) to prove ThreadManager-only policy holds.
    - [x] Update `Index.md`, `Spec.md` with current state; `Docs/TestSuite.md` unchanged (coverage adequate for Phase 0 scope).
 6. **Exit**
    - [x] All above green; post-change `/bak` snapshots captured; checklist updated.
@@ -158,6 +160,8 @@ Document first and last policy, follow phase order unless explicitly told otherw
 ### Phase 4 – Widget & Settings Modularity
 **Objectives**
 - Make WidgetManager a coordinator; typed settings end-to-end; overlay guideline compliance.
+- Ensure modal Settings (dialog + future overlays) apply changes live without forcing engine restarts; widget configs (Spotify VIS sensitivity/floor, etc.) must subscribe to settings signals.
+- Prevent Settings-driven display toggles (e.g., primary monitor disable) from inadvertently tearing down the running engine; DisplayWidget must handle the refresh non-destructively.
 
 **Action Steps (order)**
 1. **Backups**
@@ -165,7 +169,9 @@ Document first and last policy, follow phase order unless explicitly told otherw
 2. **WidgetManager Slim-Down**
    - [ ] Remove widget-specific conditionals; rely on factories + positioner enums; centralize fade/raise API to DisplayWidget.
 3. **Typed Settings Adoption**
-   - [ ] Replace ad-hoc `settings.get` with models; helper to/from dot-notation; update UI tabs respecting MC vs Screensaver profile separation.
+   - [x] Replace ad-hoc `settings.get` with models; helper to/from dot-notation; update UI tabs respecting MC vs Screensaver profile separation. ✅ _2026‑01‑01_: WidgetManager + Widgets tab now consume `MediaWidgetSettings`, `RedditWidgetSettings`, and `SpotifyVisualizerSettings`.
+   - [x] Capture live-setting reaction requirements (Spotify VIS/Sensitivity) inside the typed model contract so UI sliders always affect running widgets. ✅ _2026‑01‑01_: `WidgetManager._handle_settings_changed` pushes live refresh for Spotify VIS/media/reddit; regression tests cover VIS replay and scrollwheel volume.
+   - [x] Document display/monitor toggles as non-destructive updates in typed profiles. ✅ _2026‑01‑01_: Typed models carry monitor selectors; refresh path applies without tearing down DisplayWidget; notes added to Spec/Phase doc.
 4. **Overlay Guidelines Audit**
    - [ ] Verify alignment/fade/resource registration per Docs/10_WIDGET_GUIDELINES.md across all widgets and `ui/widget_stack_predictor.py`.
 5. **Tests & Docs**

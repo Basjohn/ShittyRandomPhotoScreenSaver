@@ -49,10 +49,15 @@ class SpotifyVisualizerAudioWorker(QObject):
     publishes raw mono samples into a lock-free TripleBuffer for UI consumption.
     """
 
-    def __init__(self, bar_count: int, buffer: TripleBuffer[_AudioFrame], parent: Optional[QObject] = None) -> None:
+    def __init__(
+        self,
+        bar_count: int = 32,
+        buffer: Optional[TripleBuffer[_AudioFrame]] = None,
+        parent: Optional[QWidget] = None,
+    ) -> None:
         super().__init__(parent)
         self._bar_count = max(1, int(bar_count))
-        self._buffer = buffer
+        self._buffer = buffer if buffer is not None else TripleBuffer[_AudioFrame]()
         self._running: bool = False
         self._backend = None  # AudioCaptureBackend instance
         self._np = None
@@ -84,7 +89,8 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._min_floor: float = 0.12
         self._max_floor: float = 4.0
         self._raw_bass_avg: float = 2.1
-        self._dynamic_floor_ratio: float = 0.42
+        # Slightly higher dynamic floor baseline (10% harder to peak).
+        self._dynamic_floor_ratio: float = 0.462
         self._dynamic_floor_alpha: float = 0.15
         self._dynamic_floor_decay_alpha: float = 0.4
         self._applied_noise_floor: float = 2.1
@@ -109,6 +115,13 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._use_recommended: bool = True
         self._user_sensitivity: float = 1.0
         self._frame_debug_counter: int = 0
+        # Logging throttling for floor diagnostics
+        self._floor_log_last_ts: float = 0.0
+        self._floor_log_last_mode: Optional[str] = None
+        self._floor_log_last_applied: float = -1.0
+        self._floor_log_last_manual: float = -1.0
+        # Recommended-mode tuning uses a fixed manual-equivalent sensitivity multiplier.
+        self._recommended_sensitivity_multiplier: float = 0.285  # ~manual 0.28x for deeper drops
 
     def set_sensitivity_config(self, recommended: bool, sensitivity: float) -> None:
         try:
@@ -128,6 +141,7 @@ class SpotifyVisualizerAudioWorker(QObject):
         with self._cfg_lock:
             self._use_recommended = rec
             self._user_sensitivity = sens
+        self._last_sensitivity_config = (rec, sens)
 
     def set_floor_config(self, dynamic_enabled: bool, manual_floor: float) -> None:
         try:
@@ -145,9 +159,17 @@ class SpotifyVisualizerAudioWorker(QObject):
         with self._cfg_lock:
             self._use_dynamic_floor = dyn
             self._manual_floor = floor
+        self._last_floor_config = (dyn, floor)
         if not dyn:
             # Snap running average to manual value so we don't jump if user re-enables dynamic.
             self._raw_bass_avg = floor
+        try:
+            engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
+            if engine is not None:
+                engine.set_floor_config(dyn, floor)
+                self._last_floor_config = (dyn, floor)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to propagate floor config to shared engine", exc_info=True)
 
     def set_audio_block_size(self, block_size: int) -> None:
         try:
@@ -409,8 +431,20 @@ class SpotifyVisualizerAudioWorker(QObject):
                 user_sens = 2.5
 
             if use_recommended:
-                base_noise_floor = noise_floor_base
-                expansion = expansion_base
+                auto_multiplier = float(getattr(self, "_recommended_sensitivity_multiplier", 0.38))
+                auto_multiplier = max(0.25, min(2.5, auto_multiplier))
+                if resolution_boost > 1.0:
+                    damp = min(0.4, (resolution_boost - 1.0) * 0.55)
+                    auto_multiplier = max(0.25, auto_multiplier * (1.0 - damp))
+                else:
+                    boost = min(0.25, (1.0 - resolution_boost) * 0.4)
+                    auto_multiplier = min(2.5, auto_multiplier * (1.0 + boost))
+                base_noise_floor = max(
+                    self._min_floor,
+                    min(self._max_floor, noise_floor_base / auto_multiplier),
+                )
+                exp_factor = max(0.55, auto_multiplier ** 0.35)
+                expansion = expansion_base * exp_factor
             else:
                 base_noise_floor = max(self._min_floor, min(self._max_floor, noise_floor_base / user_sens))
                 try:
@@ -420,6 +454,7 @@ class SpotifyVisualizerAudioWorker(QObject):
 
             noise_floor = base_noise_floor
             target_floor = base_noise_floor
+            mode = "dynamic" if use_dynamic_floor else "manual"
             if use_dynamic_floor:
                 avg = getattr(self, "_raw_bass_avg", base_noise_floor)
                 try:
@@ -483,10 +518,20 @@ class SpotifyVisualizerAudioWorker(QObject):
                 response = 0.05
             elif response > 1.0:
                 response = 1.0
+
             applied_floor = applied_floor + (target_floor - applied_floor) * response
             self._applied_noise_floor = applied_floor
             noise_floor = applied_floor
             self._last_noise_floor = noise_floor
+            self._maybe_log_floor_state(
+                mode=mode,
+                applied_floor=noise_floor,
+                manual_floor=manual_floor,
+                raw_bass=raw_bass,
+                raw_mid=raw_mid,
+                raw_treble=raw_treble,
+                expansion=expansion,
+            )
 
             bass_energy = max(0.0, (raw_bass - noise_floor) * expansion)
             mid_energy = max(0.0, (raw_mid - noise_floor * 0.4) * expansion)
@@ -775,6 +820,66 @@ class SpotifyVisualizerAudioWorker(QObject):
         # tolist() still allocates, but this is unavoidable for the return type
         return arr.tolist()
 
+    def _maybe_log_floor_state(
+        self,
+        *,
+        mode: str,
+        applied_floor: float,
+        manual_floor: float,
+        raw_bass: float,
+        raw_mid: float,
+        raw_treble: float,
+        expansion: float,
+    ) -> None:
+        """Throttled logging for noise-floor diagnostics."""
+        try:
+            now = time.time()
+        except Exception:
+            return
+
+        last_ts = getattr(self, "_floor_log_last_ts", 0.0) or 0.0
+        last_mode = getattr(self, "_floor_log_last_mode", None)
+        last_applied = getattr(self, "_floor_log_last_applied", -1.0)
+        last_manual = getattr(self, "_floor_log_last_manual", -1.0)
+
+        def _changed(a: float, b: float, threshold: float = 0.05) -> bool:
+            try:
+                return abs(float(a) - float(b)) > threshold
+            except Exception:
+                return True
+
+        state_changed = (
+            last_mode != mode
+            or _changed(applied_floor, last_applied)
+            or _changed(manual_floor, last_manual)
+        )
+
+        throttle = 5.0
+        if not state_changed and last_ts and (now - last_ts) < throttle:
+            return
+
+        try:
+            logger.info(
+                "[SPOTIFY_VIS][FLOOR] mode=%s applied=%.3f manual=%.3f bass=%.3f mid=%.3f treble=%.3f expansion=%.3f",
+                mode,
+                float(applied_floor),
+                float(manual_floor),
+                float(raw_bass),
+                float(raw_mid),
+                float(raw_treble),
+                float(expansion),
+            )
+        except Exception:
+            return
+        finally:
+            try:
+                self._floor_log_last_ts = now
+                self._floor_log_last_mode = mode
+                self._floor_log_last_applied = applied_floor
+                self._floor_log_last_manual = manual_floor
+            except Exception:
+                pass
+
     def compute_bars_from_samples(self, samples) -> Optional[List[float]]:
         """Compute visualizer bars from audio samples.
         
@@ -846,7 +951,6 @@ class SpotifyVisualizerAudioWorker(QObject):
                     bars = bars[:target]
             # bars already clamped in _fft_to_bars, no need for extra list comprehension
             return bars
-
         except Exception:
             if is_verbose_logging():
                 logger.debug("[SPOTIFY_VIS] compute_bars_from_samples failed", exc_info=True)
@@ -889,6 +993,12 @@ class _SpotifyBeatEngine(QObject):
             self._audio_worker.set_sensitivity_config(recommended, sensitivity)
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to apply sensitivity config", exc_info=True)
+    
+    def set_floor_config(self, dynamic_enabled: bool, manual_floor: float) -> None:
+        try:
+            self._audio_worker.set_floor_config(dynamic_enabled, manual_floor)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to apply floor config", exc_info=True)
 
     def _apply_smoothing(self, target_bars: List[float]) -> List[float]:
         """Apply time-based exponential smoothing to bars.
@@ -1166,6 +1276,8 @@ class SpotifyVisualizerWidget(QWidget):
         # existing tests and diagnostics continue to function, but all
         # heavy work is centralised in the engine.
         self._engine: Optional[_SpotifyBeatEngine] = get_shared_spotify_beat_engine(self._bar_count)
+        self._last_floor_config = (True, 2.1)
+        self._last_sensitivity_config = (True, 1.0)
         try:
             engine = self._engine
             if engine is not None:
@@ -1269,6 +1381,28 @@ class SpotifyVisualizerWidget(QWidget):
 
         self._setup_ui()
 
+    def _replay_engine_config(self, engine: Optional[_SpotifyBeatEngine]) -> None:
+        """Ensure the shared engine reflects the last applied widget config."""
+        if engine is None:
+            return
+        try:
+            floor_dyn, floor_value = self._last_floor_config
+        except Exception:
+            floor_dyn, floor_value = True, 2.1
+        try:
+            sens_rec, sens_value = self._last_sensitivity_config
+        except Exception:
+            sens_rec, sens_value = True, 1.0
+
+        try:
+            engine.set_floor_config(floor_dyn, floor_value)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to replay floor config", exc_info=True)
+        try:
+            engine.set_sensitivity_config(sens_rec, sens_value)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to replay sensitivity config", exc_info=True)
+
     # ------------------------------------------------------------------
     # Public configuration
     # ------------------------------------------------------------------
@@ -1279,10 +1413,44 @@ class SpotifyVisualizerWidget(QWidget):
             engine = get_shared_spotify_beat_engine(self._bar_count)
             self._engine = engine
             engine.set_thread_manager(thread_manager)
+            self._replay_engine_config(engine)
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to propagate ThreadManager to shared beat engine", exc_info=True)
         if self._enabled:
             self._ensure_tick_source()
+
+    def apply_floor_config(self, dynamic_enabled: bool, manual_floor: float) -> None:
+        """Public hook for tests/UI to set floor config on the widget."""
+        self._last_floor_config = (bool(dynamic_enabled), float(manual_floor))
+        try:
+            engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
+        except Exception:
+            engine = None
+        if engine is not None:
+            try:
+                engine.set_floor_config(dynamic_enabled, manual_floor)
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to push floor config via apply_floor_config", exc_info=True)
+
+    # Backwards-compat alias for legacy callers/tests
+    def set_floor_config(self, dynamic_enabled: bool, manual_floor: float) -> None:
+        self.apply_floor_config(dynamic_enabled, manual_floor)
+
+    def apply_sensitivity_config(self, recommended: bool, sensitivity: float) -> None:
+        """Public hook for tests/UI to set sensitivity config on the widget."""
+        self._last_sensitivity_config = (bool(recommended), float(sensitivity))
+        try:
+            engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
+        except Exception:
+            engine = None
+        if engine is not None:
+            try:
+                engine.set_sensitivity_config(recommended, sensitivity)
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to push sensitivity config via apply_sensitivity_config", exc_info=True)
+
+    def set_sensitivity_config(self, recommended: bool, sensitivity: float) -> None:
+        self.apply_sensitivity_config(recommended, sensitivity)
 
     def set_software_visualizer_enabled(self, enabled: bool) -> None:
         """Enable or disable the QWidget-based software visualiser path.
@@ -1577,6 +1745,7 @@ class SpotifyVisualizerWidget(QWidget):
             if self._thread_manager is not None:
                 engine.set_thread_manager(self._thread_manager)
             engine.acquire()
+            self._replay_engine_config(engine)
             engine.ensure_started()
         except Exception:
             logger.debug("[LIFECYCLE] Failed to start shared beat engine", exc_info=True)
@@ -1648,6 +1817,7 @@ class SpotifyVisualizerWidget(QWidget):
             if self._thread_manager is not None:
                 engine.set_thread_manager(self._thread_manager)
             engine.acquire()
+            self._replay_engine_config(engine)
             engine.ensure_started()
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to start shared beat engine", exc_info=True)

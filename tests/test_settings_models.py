@@ -25,6 +25,7 @@ from core.settings.models import (
     WeatherWidgetSettings,
     MediaWidgetSettings,
     RedditWidgetSettings,
+    SpotifyVisualizerSettings,
     AccessibilitySettings,
     AppSettings,
 )
@@ -286,6 +287,89 @@ class TestMediaWidgetSettings:
         assert settings.artwork_size == 200
         assert settings.show_controls is True
 
+    def test_round_trip_from_settings_and_to_dict(self):
+        """Ensure loading from settings and writing back preserves values."""
+        backing = {
+            "widgets.media.enabled": True,
+            "widgets.media.monitor": "2",
+            "widgets.media.position": "bottom_left",
+            "widgets.media.font_family": "Segoe UI",
+            "widgets.media.font_size": 22,
+            "widgets.media.text_color": "#ff00ff",
+            "widgets.media.show_background": False,
+            "widgets.media.background_color": "#101010",
+            "widgets.media.background_opacity": 0.8,
+            "widgets.media.show_controls": False,
+            "widgets.media.show_header_frame": False,
+            "widgets.media.artwork_size": 180,
+            "widgets.media.intense_shadow": True,
+            "widgets.media.margin": 12,
+            "widgets.media.border_color": [1, 2, 3, 4],
+            "widgets.media.border_opacity": 0.4,
+            "widgets.media.color": [9, 8, 7, 6],
+            "widgets.media.bg_color": [5, 6, 7, 8],
+            "widgets.media.rounded_artwork_border": False,
+            "widgets.media.spotify_volume_enabled": False,
+            "widgets.media.spotify_volume_fill_color": [10, 11, 12, 13],
+        }
+        stub = MagicMock()
+        stub.get.side_effect = lambda key, default=None: backing.get(key, default)
+
+        model = MediaWidgetSettings.from_settings(stub)
+        out = model.to_dict()
+
+        assert out == backing
+
+    def test_from_mapping_accepts_plain_keys(self):
+        """Ensure from_mapping can read plain section dicts (non-dotted)."""
+        plain = {
+            "enabled": True,
+            "monitor": "ALL",
+            "position": "center",
+            "font_family": "Inter",
+            "font_size": 18,
+            "text_color": "#ffffff",
+            "show_background": True,
+            "background_color": "#000000",
+            "background_opacity": 0.4,
+            "show_controls": True,
+            "show_header_frame": True,
+            "artwork_size": 160,
+            "intense_shadow": False,
+            "margin": 14,
+            "border_color": [10, 20, 30, 40],
+            "border_opacity": 0.7,
+            "color": [200, 201, 202, 128],
+            "bg_color": [11, 22, 33, 44],
+            "rounded_artwork_border": True,
+            "spotify_volume_enabled": True,
+            "spotify_volume_fill_color": [1, 2, 3, 4],
+        }
+
+        model = MediaWidgetSettings.from_mapping(plain)
+
+        assert model.enabled is True
+        assert model.monitor == "ALL"
+        assert model.position == WidgetPosition.CENTER
+        assert model.font_family == "Inter"
+        assert model.font_size == 18
+        assert model.text_color == "#ffffff"
+        assert model.show_background is True
+        assert model.background_color == "#000000"
+        assert model.background_opacity == 0.4
+        assert model.show_controls is True
+        assert model.show_header_frame is True
+        assert model.artwork_size == 160
+        assert model.intense_shadow is False
+        assert model.margin == 14
+        assert model.border_color == [10, 20, 30, 40]
+        assert model.border_opacity == 0.7
+        assert model.color == [200, 201, 202, 128]
+        assert model.bg_color == [11, 22, 33, 44]
+        assert model.rounded_artwork_border is True
+        assert model.spotify_volume_enabled is True
+        assert model.spotify_volume_fill_color == [1, 2, 3, 4]
+
 
 class TestRedditWidgetSettings:
     """Test RedditWidgetSettings dataclass."""
@@ -299,6 +383,142 @@ class TestRedditWidgetSettings:
         assert settings.subreddit == "technology"
         assert settings.item_limit == 10
 
+    def test_round_trip_from_settings_and_to_dict(self):
+        """Ensure loading from settings and writing back preserves values."""
+        backing = {
+            "widgets.reddit.enabled": True,
+            "widgets.reddit.monitor": "1",
+            "widgets.reddit.position": "bottom_center",
+            "widgets.reddit.subreddit": "wallpapers",
+            "widgets.reddit.item_limit": 20,
+            "widgets.reddit.font_family": "Segoe UI",
+            "widgets.reddit.font_size": 16,
+            "widgets.reddit.text_color": "#123456",
+            "widgets.reddit.show_background": False,
+            "widgets.reddit.background_color": "#111111",
+            "widgets.reddit.background_opacity": 0.6,
+            "widgets.reddit.show_separators": False,
+            "widgets.reddit.intense_shadow": True,
+            "widgets.reddit.margin": 15,
+            "widgets.reddit.border_color": [1, 2, 3, 255],
+            "widgets.reddit.border_opacity": 0.5,
+            "widgets.reddit.color": [5, 6, 7, 8],
+        }
+        stub = MagicMock()
+        stub.get.side_effect = lambda key, default=None: backing.get(key, default)
+
+        model = RedditWidgetSettings.from_settings(stub)
+        out = model.to_dict()
+
+        assert out == backing
+
+    def test_from_mapping_accepts_plain_keys(self):
+        """Ensure from_mapping can read plain section dicts (non-dotted)."""
+        plain = {
+            "enabled": True,
+            "monitor": "ALL",
+            "position": "top_right",
+            "subreddit": "pics",
+            "item_limit": 4,
+            "font_family": "Inter",
+            "font_size": 20,
+            "text_color": "#ffffff",
+            "show_background": True,
+            "background_color": "#000000",
+            "background_opacity": 0.4,
+            "show_separators": False,
+            "intense_shadow": False,
+            "margin": 9,
+            "border_color": [9, 9, 9, 9],
+            "border_opacity": 0.9,
+            "color": [1, 2, 3, 4],
+        }
+
+        model = RedditWidgetSettings.from_mapping(plain)
+
+        assert model.enabled is True
+        assert model.monitor == "ALL"
+        assert model.position == WidgetPosition.TOP_RIGHT
+        assert model.subreddit == "pics"
+        assert model.item_limit == 4
+        assert model.font_family == "Inter"
+        assert model.font_size == 20
+        assert model.text_color == "#ffffff"
+        assert model.show_background is True
+        assert model.background_color == "#000000"
+        assert model.background_opacity == 0.4
+        assert model.show_separators is False
+        assert model.intense_shadow is False
+        assert model.margin == 9
+        assert model.border_color == [9, 9, 9, 9]
+        assert model.border_opacity == 0.9
+        assert model.color == [1, 2, 3, 4]
+
+
+class TestSpotifyVisualizerSettings:
+    """Test SpotifyVisualizerSettings dataclass."""
+
+    def test_round_trip_from_settings_and_to_dict(self):
+        """Ensure loading from settings and writing back preserves values."""
+        backing = {
+            "widgets.spotify_visualizer.enabled": True,
+            "widgets.spotify_visualizer.monitor": "2",
+            "widgets.spotify_visualizer.bar_count": 48,
+            "widgets.spotify_visualizer.audio_block_size": 512,
+            "widgets.spotify_visualizer.ghosting_enabled": False,
+            "widgets.spotify_visualizer.ghost_alpha": 0.25,
+            "widgets.spotify_visualizer.ghost_decay": 0.55,
+            "widgets.spotify_visualizer.adaptive_sensitivity": False,
+            "widgets.spotify_visualizer.sensitivity": 2.2,
+            "widgets.spotify_visualizer.dynamic_floor": False,
+            "widgets.spotify_visualizer.manual_floor": 1.7,
+            "widgets.spotify_visualizer.dynamic_range_enabled": True,
+            "widgets.spotify_visualizer.mode": "spectrum",
+            "widgets.spotify_visualizer.software_visualizer_enabled": True,
+        }
+        stub = MagicMock()
+        stub.get.side_effect = lambda key, default=None: backing.get(key, default)
+
+        model = SpotifyVisualizerSettings.from_settings(stub)
+        out = model.to_dict()
+
+        assert out == backing
+
+    def test_from_mapping_accepts_plain_keys(self):
+        """Ensure from_mapping can read plain section dicts (non-dotted)."""
+        plain = {
+            "enabled": True,
+            "monitor": "ALL",
+            "bar_count": 24,
+            "audio_block_size": 256,
+            "ghosting_enabled": True,
+            "ghost_alpha": 0.6,
+            "ghost_decay": 0.4,
+            "adaptive_sensitivity": True,
+            "sensitivity": 1.3,
+            "dynamic_floor": False,
+            "manual_floor": 1.1,
+            "dynamic_range_enabled": False,
+            "mode": "spectrum",
+            "software_visualizer_enabled": False,
+        }
+
+        model = SpotifyVisualizerSettings.from_mapping(plain)
+
+        assert model.enabled is True
+        assert model.monitor == "ALL"
+        assert model.bar_count == 24
+        assert model.audio_block_size == 256
+        assert model.ghosting_enabled is True
+        assert model.ghost_alpha == 0.6
+        assert model.ghost_decay == 0.4
+        assert model.adaptive_sensitivity is True
+        assert model.sensitivity == 1.3
+        assert model.dynamic_floor is False
+        assert model.manual_floor == 1.1
+        assert model.dynamic_range_enabled is False
+        assert model.mode == "spectrum"
+        assert model.software_visualizer_enabled is False
 
 # ---------------------------------------------------------------------------
 # AccessibilitySettings Tests

@@ -4,7 +4,7 @@ Allows users to configure image sources:
 - Folder sources (browse and add)
 - RSS/JSON feed sources (add/edit/remove)
 """
-from typing import Optional
+from typing import Optional, Dict, Any
 from pathlib import Path
 import tempfile
 from urllib.parse import urlparse, urlunparse
@@ -205,6 +205,9 @@ class SourcesTab(QWidget):
         layout.addWidget(rss_group)
         
         layout.addStretch()
+
+        self._folder_section = folder_group
+        self._rss_section = rss_group
         
         scroll.setWidget(content)
         outer = QVBoxLayout(self)
