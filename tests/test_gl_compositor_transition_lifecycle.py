@@ -18,6 +18,24 @@ from rendering.gl_compositor import GLCompositorWidget
 from tests._gl_test_utils import solid_pixmap
 
 
+class DummySettings:
+    def __init__(self, data=None):
+        self._data = data or {}
+
+    def get(self, key, default=None):
+        if key in self._data:
+            return self._data[key]
+        if "." in key:
+            cur = self._data
+            for part in key.split("."):
+                if isinstance(cur, dict) and part in cur:
+                    cur = cur[part]
+                else:
+                    return default
+            return cur
+        return default
+
+
 def _setup_compositor(monkeypatch) -> tuple[QWidget, GLCompositorWidget]:
     """Create a GLCompositorWidget with frame pacing patched out."""
     parent = QWidget()
@@ -67,6 +85,36 @@ def test_clear_all_transitions_cancels_active_animation(qt_app, monkeypatch):
 
     anim_mgr.cancel_all()
     anim_mgr.stop()
+
+
+@pytest.mark.qt_no_exception_capture
+def test_gl_prewarm_initializes_shared_compositor(qtbot):
+    """GL prewarm should create a shared compositor that can make the GL context current."""
+    from rendering.display_widget import DisplayWidget
+    from rendering.display_modes import DisplayMode
+
+    settings = DummySettings(
+        {
+            "display.hw_accel": True,
+            "widgets": {"clock": {"enabled": False}},
+        }
+    )
+
+    widget = DisplayWidget(screen_index=0, display_mode=DisplayMode.FILL, settings_manager=settings)
+    qtbot.addWidget(widget)
+
+    widget.show_on_screen()
+    qtbot.wait(800)
+
+    comp = getattr(widget, "_gl_compositor", None)
+    assert isinstance(comp, GLCompositorWidget), "GL compositor should exist after prewarm"
+
+    try:
+        comp.makeCurrent()
+    except Exception:
+        pytest.skip("GL context not available for GLCompositorWidget prewarm")
+    finally:
+        widget.close()
 
 
 @pytest.mark.qt_no_exception_capture

@@ -1,16 +1,17 @@
-"""Integration performance test - runs actual app components.
+"""Integration performance harness – runs actual app components manually.
 
-This test runs the REAL visualizer and transitions to measure actual dt_max.
-It identifies which component is causing UI thread blocks.
+This is intentionally excluded from pytest discovery. Invoke it directly when
+profiling dt_max under realistic workloads:
 
-Run with: python pytest.py tests/test_perf_integration.py -v -s
-Or directly: python tests/test_perf_integration.py
+    python tools/perf_integration_harness.py
+
+It drives the real visualizer and transition paths to identify which component
+is causing UI thread blocks while logging the timing metrics below.
 """
 import os
 import sys
 import time
 import gc
-import threading
 from typing import Optional, List
 from dataclasses import dataclass, field
 
@@ -22,7 +23,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from PySide6.QtWidgets import QApplication, QWidget
 from PySide6.QtCore import QTimer, Qt
-from PySide6.QtGui import QPixmap, QImage, QColor
 
 from core.threading.manager import ThreadManager
 from core.animation.animator import AnimationManager
@@ -181,10 +181,7 @@ class VisualizerTest:
     
     def start(self, parent: QWidget, thread_manager: ThreadManager) -> None:
         try:
-            from widgets.spotify_visualizer_widget import (
-                SpotifyVisualizerWidget,
-                get_shared_spotify_beat_engine,
-            )
+            from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
             
             self._widget = SpotifyVisualizerWidget(parent)
             self._widget.setGeometry(20, 20, 300, 150)
@@ -282,8 +279,6 @@ class VisualizerWithGLOverlayTest:
     def start(self, parent: QWidget, thread_manager: ThreadManager) -> None:
         try:
             from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
-            from PySide6.QtCore import QRect
-            from PySide6.QtGui import QColor
             
             # Create the GL overlay directly
             self._overlay = SpotifyBarsGLOverlay(parent)
@@ -662,8 +657,6 @@ class FullAppSimulationTest:
             from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
             from widgets.media_widget import MediaWidget
             from core.media.media_controller import create_media_controller
-            from PySide6.QtCore import QRect
-            from PySide6.QtGui import QColor
             
             # Create 2 visualizers
             for i in range(2):

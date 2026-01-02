@@ -17,15 +17,13 @@ Notes
 
 from __future__ import annotations
 
+from typing import List
+
 import pytest
 from PySide6.QtWidgets import QApplication, QWidget
-from PySide6.QtGui import QPixmap, QImage
+from PySide6.QtGui import QPixmap, QImage, QColor, QPalette
 from PySide6.QtCore import Qt
-
-pytest.skip(
-    "Legacy GL overlay visual regression tests removed; superseded by compositor-based tests.",
-    allow_module_level=True,
-)
+from PySide6.QtTest import QTest
 
 
 @pytest.fixture
@@ -59,7 +57,6 @@ def _fraction_dark_pixels(img: QImage, threshold: int = 16) -> float:
     dark = 0
     total = img.width() * img.height()
     for y in range(img.height()):
-        scan_line = img.scanLine(y)
         # Each pixel is 4 bytes (BGRA or ARGB depending on platform), but we can
         # just use pixel() for clarity at this scale; the images are tiny.
         for x in range(img.width()):
@@ -70,6 +67,35 @@ def _fraction_dark_pixels(img: QImage, threshold: int = 16) -> float:
     if total == 0:
         return 1.0
     return dark / float(total)
+
+
+def _fraction_matching_color(img: QImage, color: QColor, tolerance: int = 16) -> float:
+    """Return fraction of pixels approximately matching the given colour."""
+    if img.isNull():
+        return 0.0
+
+    if img.format() not in (QImage.Format.Format_ARGB32, QImage.Format.Format_RGB32):
+        img = img.convertToFormat(QImage.Format.Format_ARGB32)
+
+    target_r = color.red()
+    target_g = color.green()
+    target_b = color.blue()
+
+    match = 0
+    total = img.width() * img.height()
+    for y in range(img.height()):
+        for x in range(img.width()):
+            c = img.pixelColor(x, y)
+            if (
+                abs(c.red() - target_r) <= tolerance
+                and abs(c.green() - target_g) <= tolerance
+                and abs(c.blue() - target_b) <= tolerance
+            ):
+                match += 1
+
+    if total == 0:
+        return 0.0
+    return match / float(total)
 
 
 @pytest.mark.qt_no_exception_capture
@@ -115,6 +141,107 @@ class TestGLFadeOverlayNoBlack:
             assert frac_dark_mid < 0.3, f"Mid GL fade frame too dark: {frac_dark_mid:.2%} dark"
         finally:
             widget.close()
+
+
+@pytest.mark.qt_no_exception_capture
+@pytest.mark.parametrize(
+    "transition_cls, overlay_attr",
+    [
+        pytest.param(
+            "transitions.gl_crossfade_transition.GLCrossfadeTransition",
+            "_srpss_gl_xfade_overlay",
+            id="GLCrossfade",
+        ),
+        pytest.param(
+            "transitions.gl_slide_transition.GLSlideTransition",
+            "_srpss_gl_slide_overlay",
+            id="GLSlide",
+        ),
+    ],
+)
+def test_display_widget_gl_transitions_cover_underlay(qapp, transition_cls, overlay_attr):
+    """DisplayWidget should not expose underlay or blank frames during GL transition."""
+    from rendering.display_widget import DisplayWidget
+    from rendering.display_modes import DisplayMode
+
+    parent = QWidget()
+    parent.resize(96, 96)
+    palette = parent.palette()
+    magenta = QColor(Qt.GlobalColor.magenta)
+    palette.setColor(QPalette.ColorRole.Window, magenta)
+    parent.setAutoFillBackground(True)
+    parent.setPalette(palette)
+    parent.show()
+
+    widget = DisplayWidget(0, DisplayMode.FILL, None, parent)
+    widget.setGeometry(0, 0, 96, 96)
+    widget.show()
+    QTest.qWait(50)
+
+    old_pm = _solid_pixmap(96, 96, Qt.GlobalColor.red)
+    new_pm = _solid_pixmap(96, 96, Qt.GlobalColor.blue)
+    widget.previous_pixmap = old_pm
+    widget.current_pixmap = new_pm
+
+    module_name, cls_name = transition_cls.rsplit(".", 1)
+    mod = __import__(module_name, fromlist=[cls_name])
+    cls = getattr(mod, cls_name)
+    transition = cls(duration_ms=400)
+
+    try:
+        transition.set_resource_manager(getattr(widget, "_resource_manager", None))
+    except Exception:
+        pass
+
+    try:
+        started = transition.start(old_pm, new_pm, widget)
+    except Exception:
+        started = False
+    if not started:
+        pytest.skip(f"{cls_name} could not be started in this environment")
+
+    overlay = None
+    for _ in range(40):
+        qapp.processEvents()
+        overlay = getattr(widget, overlay_attr, None)
+        if overlay is not None:
+            break
+        QTest.qWait(15)
+
+    if overlay is None:
+        pytest.skip(f"Overlay {overlay_attr} was not created for {cls_name}")
+
+    try:
+        overlay.makeCurrent()
+    except Exception:
+        pytest.skip(f"GL context not available for {cls_name}")
+
+    frames: List[QImage] = []
+    for _ in range(15):
+        qapp.processEvents()
+        frames.append(parent.grab().toImage())
+        QTest.qWait(15)
+
+    try:
+        transition.stop()
+    except Exception:
+        pass
+    try:
+        transition.cleanup()
+    except Exception:
+        pass
+
+    for img in frames:
+        underlay_fraction = _fraction_matching_color(img, magenta, tolerance=16)
+        dark_fraction = _fraction_dark_pixels(img, threshold=16)
+
+        assert (
+            underlay_fraction < 0.05
+        ), f"Underlay leak detected ({underlay_fraction:.2%}) for {cls_name}"
+
+        assert (
+            dark_fraction < 0.7
+        ), f"Blank/very dark frame detected ({dark_fraction:.2%}) for {cls_name}"
 
 
 @pytest.mark.qt_no_exception_capture

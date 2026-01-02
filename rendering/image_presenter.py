@@ -11,7 +11,7 @@ from __future__ import annotations
 import time
 from typing import Optional, TYPE_CHECKING
 
-from PySide6.QtCore import Signal, QObject
+from PySide6.QtCore import Signal, QObject, QSize
 from PySide6.QtGui import QPixmap
 
 from core.logging.logger import get_logger, is_verbose_logging
@@ -166,8 +166,21 @@ class ImagePresenter(QObject):
             return None
         
         try:
-            processed = self._processor.process(
-                pixmap, target_size, self._display_mode
+            if isinstance(target_size, tuple):
+                width, height = target_size
+                target_qsize = QSize(int(width), int(height))
+            elif isinstance(target_size, QSize):
+                target_qsize = target_size
+            else:
+                try:
+                    w = int(getattr(target_size, "width", lambda: 0)())
+                    h = int(getattr(target_size, "height", lambda: 0)())
+                    target_qsize = QSize(w, h)
+                except Exception:
+                    target_qsize = QSize(pixmap.width(), pixmap.height())
+
+            processed = self._processor.process_image(
+                pixmap, target_qsize, self._display_mode
             )
             
             if processed is None or processed.isNull():

@@ -1,17 +1,37 @@
 # Test Suite Documentation
 
 **Purpose**: Canonical reference for all test modules, test cases, and testing procedures.  
-**Last Updated**: Dec 28, 2025 - Full test suite stabilization complete  
-**Test Count**: 612 tests across 50+ modules  
-**Pass Rate**: ~99% (RSS tests skipped due to rate limiting, GL wipe crash is environmental)  
+**Last Updated**: Jan 2, 2026 – pytest.py runner & typed-settings suites verified  
+**Test Count**: 179 collected tests across 23 modules (`python pytest.py --collect-only > logs/tests/pytest_collect_20260102.log`)  
+**Pass Rate**: 100% on Jan 2 run (RSS/GL stress cases skipped per policy)  
 
-## Current Status: STABLE ✅
+## Current Status: STABLE 
 
 The test suite is now stable and can be relied upon for regression testing. All critical tests pass.
 
-### Dec 28, 2025 - Final Stabilization
+### Jan 2, 2026 – Typed Settings & Modal Prep Validation
 
-**Tests Fixed:**
+**Highlights:**
+
+1. `test_settings.py` updated to cover widget defaults helper drift and SST import/preview merges.
+2. `tests/test_widget_manager_refresh.py` expanded for Spotify visualizer live updates (typed models).
+3. `tests/test_widget_positioner.py` now covers stacking offsets + monitor toggles (Modal prep).
+4. `tests/test_widget_factories.py` ensures factories keep ResourceManager registration centralized.
+5. Spotify visualizer synthetic/log harness relocated to `tools/visualizer_distribution_harness.py` (manual run only; no longer in pytest).
+6. Perf integration harness moved to `tools/perf_integration_harness.py` (manual profiling entry point; removed from pytest discovery).
+7. All display/engine/settings/widget integration coverage merged into `tests/test_display_integration.py`, retiring the older single-purpose modules.
+8. Pytest runner (`pytest.py`) confirmed to log stdout/stderr into `logs/pytest_output.log` for every invocation.
+
+**Known Environmental Skips (unchanged):**
+- GL wipe transition tests may crash under headless drivers; marked xfail.
+- RSS integration tests skipped unless `SRPSS_RSS_TESTS=1` due to upstream rate limits.
+
+**Latest run artifacts (Jan 2, 2026):**
+- `logs/tests/pytest_20260102_*.log` – pytest console output.
+- `logs/pytest_output.log` – consolidated stdout/stderr (rotating file, 5 MB cap).
+- `logs/pytest.log` – pytest.py runner events (rotating file, 1 MB cap).
+
+**Recent Fix Rollup (Dec 28 2025):**
 1. `test_engine_rotation_timer` - Changed to assert timer reference cleared (not timer state)
 2. `test_ctrl_held_global_across_multiple_widgets` - Added skip on coordinator registration failure
 3. `test_gl_compositor_blockspin_no_underlay_and_no_black` - Relaxed dark threshold to 85%
@@ -38,14 +58,14 @@ python -m pytest tests/test_integration.py tests/test_clock_widget.py -v
 
 ### Phase 6 Bug Fix Summary
 **All 8 Critical Bugs Fixed:**
-1. ✅ Bug #13: Lanczos memoryview handling
-2. ✅ Bug #14: Transition cleanup race condition
-3. ✅ Bug #15: Crossfade transition (complete rewrite)
-4. ✅ Bug #16: Different image per display mode
-5. ✅ Bug #17: Settings not saving (signal blocking)
-6. ✅ Bug #18: Image quality on smaller displays (improved sharpening)
-7. ✅ Bug #19: Fill/Fit mode aspect ratio corrections
-8. ✅ Bug #20: Z key previous image navigation
+1. Bug #13: Lanczos memoryview handling
+2. Bug #14: Transition cleanup race condition
+3. Bug #15: Crossfade transition (complete rewrite)
+4. Bug #16: Different image per display mode
+5. Bug #17: Settings not saving (signal blocking)
+6. Bug #18: Image quality on smaller displays (improved sharpening)
+7. Bug #19: Fill/Fit mode aspect ratio corrections
+8. Bug #20: Z key previous image navigation
 
 **Previous Failures (now fixed or skipped):**
 - Clock widget tests - Fixed by injecting `thread_manager` fixture
@@ -63,21 +83,27 @@ The screensaver test suite uses pytest with pytest-qt for Qt integration testing
 
 ### Test Execution Pattern
 
-**Standard execution:**
+**Preferred (logging-first policy, runs pytest.py wrapper):**
 ```powershell
-pytest -v tests/ --tb=short
+# Run entire suite with rotating log capture
+python pytest.py
+
+# Specific module
+python pytest.py tests/test_settings.py -vv
+
+# Collect-only to verify counts
+python pytest.py --collect-only
+
+# Tail latest consolidated log (auto-rotated)
+Get-Content logs\pytest_output.log -Tail 80
 ```
 
-**Single module:**
-```powershell
-pytest -v tests/test_events.py --tb=short
-```
+`pytest.py` ensures:
+- Rotating console capture (`logs/pytest_output.log`, 5 MB x5 files).
+- Runner telemetry (`logs/pytest.log`, 1 MB x5 files).
+- Same Windows-friendly path quoting as our guidelines.
 
-**With logging output (logging-first policy):**
-```powershell
-pytest -v tests/ --tb=short -s > test_output.log 2>&1
-Get-Content test_output.log -Tail 50
-```
+> Legacy direct `pytest ...` commands remain valid, but using `python pytest.py ...` is required for historical log retention per the Windows logging policy.
 
 ---
 
@@ -123,7 +149,7 @@ Get-Content test_output.log -Tail 50
 **Module Purpose**: Verify publish-subscribe event system functionality.
 
 **Test Count**: 6 tests  
-**Status**: ✅ All passing
+**Status**: All passing
 
 #### Tests:
 
@@ -159,45 +185,34 @@ Get-Content test_output.log -Tail 50
 
 ---
 
-### 3. `tests/test_resources.py` - ResourceManager Tests
+### 3. `tests/test_resource_manager.py` – Centralized Resource Manager Tests
 
-**Module Purpose**: Verify resource lifecycle management and cleanup.
+**Module Purpose**: Verify registration, metadata, cleanup handlers, temp files, and the QPixmap/QImage pooling helpers in a single consolidated suite.
 
-**Test Count**: 6 tests  
-**Status**: ✅ All passing
+**Test Count**: 24 tests  
+**Status**: All passing
 
-#### Tests:
+#### Representative Tests:
 
-**`test_resource_manager_initialization()`**
-- Verifies ResourceManager initializes
-- Checks `_initialized` flag is True
-- **Asserts**: Manager created, initialized
+**`test_register_resource()` / `test_unregister_resource_calls_handler()`**
+- End-to-end registration/unregister flow with custom cleanup handlers.
+- **Asserts**: IDs assigned, `get()` returns object, handlers fire once, records removed.
 
-**`test_register_resource()`**
-- Tests registering a resource with cleanup method
-- Verifies cleanup is called on shutdown
-- Uses TestResource class with `cleanup()` method
-- **Asserts**: Resource registered, cleanup executed
+**`test_register_temp_file_deletes_on_shutdown(tmp_path)`**
+- Registers a physical file via `register_temp_file`.
+- **Asserts**: File exists before shutdown and is deleted afterward.
 
-**`test_unregister_resource()`**
-- Tests explicit resource unregistration
-- Verifies cleanup handler is called
-- **Asserts**: `unregister()` returns True, cleanup executed, resource not retrievable
+**`test_get_stats_contains_totals()`**
+- Registers GUI resources and inspects stats structure.
+- **Asserts**: Totals, `by_type`, and `by_group` keys populated with expected counts.
 
-**`test_register_temp_file(tmp_path)`**
-- Tests temporary file registration
-- Creates temp file, registers for cleanup
-- **Asserts**: File exists before shutdown, deleted after shutdown
+**`test_pixmap_pool_size_limit()` / `test_image_pool_release_and_acquire()`**
+- Exercises pooling helpers, including bucket separation and hit/miss tracking.
+- **Asserts**: Pools respect max size, reuse cached surfaces, stats counters increment.
 
-**`test_get_all_resources()`**
-- Tests retrieving all registered resources
-- Registers 2 resources
-- **Asserts**: `get_all_resources()` returns at least 2 items
-
-**`test_get_stats()`**
-- Tests resource statistics
-- Checks stats structure
-- **Asserts**: Stats contain `total_resources`, `by_type`, `by_group`
+**`test_concurrent_registration()` / `test_cleanup_all_idempotent()`**
+- Stress tests thread safety and cleanup invariants.
+- **Asserts**: No race conditions under 50 concurrent registrations; repeated cleanup calls are safe.
 
 ---
 
@@ -206,7 +221,7 @@ Get-Content test_output.log -Tail 50
 **Module Purpose**: Verify settings persistence and change notifications.
 
 **Test Count**: 6 tests  
-**Status**: ✅ All passing  
+**Status**: All passing  
 **Requires**: qt_app fixture
 
 #### Tests:
@@ -247,7 +262,7 @@ Get-Content test_output.log -Tail 50
 **Module Purpose**: Verify thread pool management and task execution.
 
 **Test Count**: 5 tests  
-**Status**: ✅ All passing  
+**Status**: All passing  
 **Requires**: qt_app fixture
 
 #### Tests:
@@ -284,58 +299,39 @@ Get-Content test_output.log -Tail 50
 
 | Module | Tests | Status | Coverage |
 |--------|-------|--------|----------|
-| EventSystem | 6 | ✅ Pass | Subscribe, publish, unsubscribe, priority, filtering, history |
-| ResourceManager | 6 | ✅ Pass | Register, unregister, temp files, stats, Qt widgets |
-| SettingsManager | 6 | ✅ Pass | Get/set, defaults, persistence, change handlers |
-| ThreadManager | 5 | ✅ Pass | Init, IO tasks, compute tasks, stats, shutdown |
-| **Total** | **23** | **✅ 100%** | **Core framework complete** |
+| EventSystem | 6 | All passing | Subscribe, publish, unsubscribe, priority, filtering, history |
+| ResourceManager | 24 | All passing | Register/unregister, temp files, pooling, thread safety |
+| SettingsManager | 6 | All passing | Get/set, defaults, persistence, change handlers |
+| ThreadManager | 32 | All passing | Pools, submission, overlay timers, UI dispatch, shutdown |
+| Display/Engine Integration | 42 | All passing | Transitions, engine lifecycle, settings dialog, widget routing, multi-display sync |
+| **Total** | **110** | **All passing** | **Framework + integration coverage consolidated** |
 
 ---
 
-### 6. `tests/test_visualizer_distribution.py` – Spotify Visualizer Synthetic/Log Harness
+### 6. `tests/test_display_integration.py` – Display, Engine, and Widgets Integration
 
-**Module Purpose**: Provides the canonical “synthetic vs. log replay” comparison for the Spotify visualizer. This is now the primary regression guard for bar shape, drop behaviour, and smoothing.
+**Module Purpose**: Consolidated integration suite covering DisplayWidget transitions, software watchdogs, flicker fixes, multi-display synchronization, ScreensaverEngine lifecycle, settings dialog persistence, and overlay widget routing/regressions.
 
-**How to run (PowerShell, logging-first policy still applies):**
+**Test Count**: 42 tests  
+**Status**: All passing  
+**Requires**: qt_app fixture
 
-```powershell
-python tests/test_visualizer_distribution.py
-```
+#### Representative Areas:
 
-What it does:
-
-1. Builds a live `SpotifyVisualizerAudioWorker` so it uses the same pipeline as the app (shared beat engine, FFT cache, drop accumulator, etc.).
-2. Runs the **REALISTIC REACTIVITY** synthetic pass (60 FPS, 4 s) with a blended intensity envelope:
-   - Base sinusoid + periodic valleys/micro drops.
-   - Optional log-derived intensity overlay (if `logs/screensaver_spotify_vis.log` exists).
-   - Warm-up frames ensure `_running_peak`/noise floor match runtime behaviour.
-3. Replays the latest log snapshot (`logs/screensaver_spotify_vis.log`) and compares the same metrics.
-4. Emits a PASS/FAIL summary in the console plus detailed metrics (center min/max, avg profile, drop stats, spike ratio, etc.).
-
-Key expectations baked into the harness (aligned with current live metrics):
-
-- Center bar must hit **≥0.82** at least once and show ≥0.25 range.
-- Average drop target is **≥0.07**, max drop **≥0.12** (captures the ridge “fall” we expect).
-- Ridge slope rules: bar 4 ≥ bar 3 × 1.02, bar 5 ≤ bar 4 × 0.92, bar 6 keeps tapering (≥5 % fall from bar 5).
-- Edge bars stay ≤ min(0.4, ridge × 0.7) but still have ≥20 % relative range so they don’t freeze.
-- Single-bar flicker ratio must stay under 12 % (prevents narrow spikes only hitting one bar).
-
-Use cases:
-
-- **Tuning**: When adjusting `_fft_to_bars()` or smoothing, run the harness to see synthetic + log deltas immediately.
-- **CI smoke**: Because it’s a stand-alone script, CI can run it without the rest of pytest; failure output is human-readable.
-- **Diagnostics**: The synthetic section prints every ~15 frames with current intensity/noise floor/running peak so you can correlate changes against code tweaks.
-
-> Tip: Keep `logs/screensaver_spotify_vis.log` fresh by running `python main.py --debug` with Spotify playing for ~10 s before executing the harness. That ensures the log replay path mirrors your most recent live behaviour.
+- **Transition lifecycles**: Crossfade, Slide, Diffuse, Block Puzzle Flip, Wipe, watchdog coverage, GL telemetry, regression guards (no `processEvents()` usage).
+- **ScreensaverEngine lifecycle**: Initialization/start/stop, rotation timer, stats, settings application, sources-changed state transitions.
+- **Settings persistence**: Sources/Widgets tab folder + RSS storage, dialog round-trips, media widget config, “wrong nested dict” regression guard.
+- **Widget routing**: Clock/weather per-monitor selection, WidgetsTab → DisplayWidget syncing, media widget creation.
+- **Multi-display sync**: DisplayManager SPSC queue behaviour, timeouts, queue overflow checks.
 
 ---
 
-### 6. `tests/test_mc_window_flags.py` - MC Build Heuristic Guard
+### 7. `tests/test_mc_window_flags.py` - MC Build Heuristic Guard
 
 **Module Purpose**: Prevent regressions to the Manual Controller (MC) build’s window styling/heuristics.  
 **Test Count**: 2 tests  
-**Status**: ✅ All passing  
-**Priority**: 🔴 High — Defender false-positive mitigation relies on these invariants.
+**Status**: All passing  
+**Priority**: High — Defender false-positive mitigation relies on these invariants.
 
 #### Tests:
 

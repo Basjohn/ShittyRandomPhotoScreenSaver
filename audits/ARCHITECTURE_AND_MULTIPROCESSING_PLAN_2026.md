@@ -200,7 +200,7 @@ Document first and last policy, follow phase order unless explicitly told otherw
 4. **Backups**
    - [ ] `/bak` snapshots for every important module touched; include short README per snapshot.
 5. **Audit Continuity**
-   - [ ] Keep `/audits/v1_2 ROADMAP.md` and this file as the only live trackers (no duplicates).
+   - [ ] Keep this file and the per-phase detailed planners as the only live trackers (no duplicate roadmap docs).
 
 ---
 

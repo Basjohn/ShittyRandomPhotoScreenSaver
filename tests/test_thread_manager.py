@@ -20,6 +20,8 @@ from core.threading.manager import (
     TaskResult,
     Task,
 )
+from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
+from PySide6.QtCore import QObject, QThread, qInstallMessageHandler
 
 
 class TestThreadManagerInit:
@@ -389,3 +391,153 @@ class TestThreadPoolType:
         """Test pool type enum values."""
         assert ThreadPoolType.IO.value == "io"
         assert ThreadPoolType.COMPUTE.value == "compute"
+
+
+class TestOverlayTimerIntegration:
+    """Overlay timer tests now live with ThreadManager assertions."""
+
+    class _DummyWidget(QObject):
+        def __init__(self, parent: QObject | None = None) -> None:
+            super().__init__(parent)
+            self._thread_manager: ThreadManager | None = None
+
+    def test_overlay_timer_uses_thread_manager_when_available(self):
+        widget = self._DummyWidget()
+        manager = ThreadManager()
+        widget._thread_manager = manager  # type: ignore[attr-defined]
+
+        calls = []
+
+        def _cb() -> None:
+            calls.append("fire")
+
+        handle = create_overlay_timer(widget, 10, _cb, description="test")
+        assert isinstance(handle, OverlayTimerHandle)
+
+        # schedule_recurring inserts a real timer; just ensure manager recorded it.
+        time.sleep(0.05)
+        assert handle.is_active()
+        handle.stop()
+        assert not handle.is_active()
+        manager.shutdown()
+
+    def test_overlay_timer_missing_thread_manager_raises(self):
+        widget = self._DummyWidget()
+
+        with pytest.raises(RuntimeError):
+            create_overlay_timer(widget, 5, lambda: None, description="missing")
+
+    @pytest.mark.qt
+    def test_overlay_timer_stop_is_safe_from_other_threads(self, qt_app):
+        """Stopping overlay timers from non-UI threads should not emit Qt warnings."""
+        messages: list[str] = []
+
+        def _handler(mode, context, message):  # type: ignore[override]
+            try:
+                messages.append(str(message))
+            except Exception:
+                pass
+
+        previous = qInstallMessageHandler(_handler)
+        try:
+            widget = self._DummyWidget()
+            manager = ThreadManager()
+            widget._thread_manager = manager  # type: ignore[attr-defined]
+
+            handle = create_overlay_timer(widget, 10, lambda: None, description="cross-thread-stop-test")
+            assert handle.is_active()
+
+            t = threading.Thread(target=handle.stop)
+            t.start()
+            t.join(timeout=2.0)
+            qt_app.processEvents()
+        finally:
+            qInstallMessageHandler(previous)
+            manager.shutdown()
+
+        assert not any("Timers cannot be stopped from another thread" in m for m in messages)
+
+
+class TestUiThreadDispatch:
+    """run_on_ui_thread helper coverage."""
+
+    def test_run_on_ui_thread_from_ui_thread(self, qt_app):
+        """Executing from UI thread should run synchronously."""
+        called = []
+        thread_ids = []
+
+        def _fn():
+            called.append(True)
+            thread_ids.append(QThread.currentThread())
+
+        ThreadManager.run_on_ui_thread(_fn)
+
+        assert called == [True]
+        assert thread_ids[0] is qt_app.thread()
+
+    def test_run_on_ui_thread_from_worker_thread(self, qt_app):
+        """Worker threads should dispatch back to Qt main thread."""
+        called = []
+        thread_ids = []
+
+        def _fn():
+            called.append(True)
+            thread_ids.append(QThread.currentThread())
+
+        def _worker():
+            ThreadManager.run_on_ui_thread(_fn)
+
+        t = threading.Thread(target=_worker)
+        t.start()
+
+        deadline = time.time() + 2.0
+        while not called and time.time() < deadline:
+            qt_app.processEvents()
+            time.sleep(0.01)
+
+        t.join(timeout=1.0)
+
+        assert called == [True]
+        assert thread_ids[0] is qt_app.thread()
+
+
+class TestRecurringTimers:
+    """schedule_recurring helper tests."""
+
+    @pytest.mark.qt_no_exception_capture
+    def test_schedule_recurring_invokes_callback(self, qt_app):
+        manager = ThreadManager()
+        ticks: list[float] = []
+
+        timer = manager.schedule_recurring(5, lambda: ticks.append(time.time()))
+
+        deadline = time.time() + 0.2
+        while len(ticks) < 2 and time.time() < deadline:
+            qt_app.processEvents()
+            time.sleep(0.01)
+
+        timer.stop()
+        manager.shutdown()
+
+        assert len(ticks) >= 1
+
+    @pytest.mark.qt_no_exception_capture
+    def test_schedule_recurring_respects_description(self, qt_app):
+        manager = ThreadManager()
+        ticks: list[float] = []
+
+        timer = manager.schedule_recurring(
+            5,
+            lambda: ticks.append(time.time()),
+            description="test_timer",
+        )
+
+        deadline = time.time() + 0.2
+        while len(ticks) < 2 and time.time() < deadline:
+            qt_app.processEvents()
+            time.sleep(0.01)
+
+        timer.stop()
+        manager.shutdown()
+
+        assert len(ticks) >= 1

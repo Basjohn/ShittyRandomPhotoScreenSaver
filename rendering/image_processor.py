@@ -52,7 +52,7 @@ class ImageProcessor:
             sharpen,
         )
         return QPixmap.fromImage(processed_qimage)
-    
+
     @staticmethod
     def _scale_pixmap(pixmap: QPixmap, width: int, height: int, use_lanczos: bool = False, sharpen: bool = False) -> QPixmap:
         """

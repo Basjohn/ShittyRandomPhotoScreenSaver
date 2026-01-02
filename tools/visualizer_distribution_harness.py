@@ -1,6 +1,6 @@
 """
-Test script to visualize FFT bar distribution.
-Generates synthetic audio signals and shows the resulting bar heights.
+Spotify visualizer FFT distribution harness.
+Relocated from tests/ so it no longer runs under pytest.
 """
 # ruff: noqa: E402
 from __future__ import annotations
@@ -270,10 +270,10 @@ def generate_test_signal(
 ) -> np.ndarray:
     """Generate various test signals."""
     t = np.arange(n_samples) / sample_rate
-    
+
     if signal_type == "white_noise":
         return np.random.randn(n_samples).astype("float32")
-    
+
     elif signal_type == "pink_noise":
         # Pink noise has equal energy per octave (1/f spectrum)
         white = np.fft.rfft(np.random.randn(n_samples))
@@ -281,38 +281,38 @@ def generate_test_signal(
         freqs[0] = 1  # Avoid division by zero
         pink = white / np.sqrt(freqs)
         return np.fft.irfft(pink).astype("float32")
-    
+
     elif signal_type == "bass_heavy":
         # Strong bass (60Hz) + some mids
-        return (np.sin(2 * np.pi * 60 * t) * 0.8 + 
+        return (np.sin(2 * np.pi * 60 * t) * 0.8 +
                 np.sin(2 * np.pi * 200 * t) * 0.3 +
                 np.sin(2 * np.pi * 1000 * t) * 0.1).astype("float32")
-    
+
     elif signal_type == "mid_heavy":
         # Strong mids (500Hz, 1kHz, 2kHz)
-        return (np.sin(2 * np.pi * 500 * t) * 0.5 + 
+        return (np.sin(2 * np.pi * 500 * t) * 0.5 +
                 np.sin(2 * np.pi * 1000 * t) * 0.8 +
                 np.sin(2 * np.pi * 2000 * t) * 0.5).astype("float32")
-    
+
     elif signal_type == "treble_heavy":
         # Strong highs (4kHz, 8kHz, 12kHz)
-        return (np.sin(2 * np.pi * 4000 * t) * 0.5 + 
+        return (np.sin(2 * np.pi * 4000 * t) * 0.5 +
                 np.sin(2 * np.pi * 8000 * t) * 0.8 +
                 np.sin(2 * np.pi * 12000 * t) * 0.5).astype("float32")
-    
+
     elif signal_type == "full_spectrum":
         # Equal energy across spectrum - scaled to match real audio
         signal = np.zeros(n_samples)
         for freq in [60, 120, 250, 500, 1000, 2000, 4000, 8000, 12000]:
             signal += np.sin(2 * np.pi * freq * t) * 0.03
         return signal.astype("float32")
-    
+
     elif signal_type == "kick_drum":
         # Simulated kick: low freq burst
         # Scale down to match real Spotify audio levels
         envelope = np.exp(-t * 20)
         return (np.sin(2 * np.pi * 60 * t) * envelope * 0.15).astype("float32")
-    
+
     return np.zeros(n_samples, dtype="float32")
 
 
@@ -321,25 +321,25 @@ def visualize_bars(bars, title="", width=60):
     print(f"\n{'='*width}")
     print(f" {title}")
     print(f"{'='*width}")
-    
+
     # Show bar indices
     indices = "".join(f"{i:>3}" for i in range(len(bars)))
     print(f"Bar#: {indices}")
-    
+
     # Show bar values
     values = "".join(f"{v:>3.0f}" for v in [b*100 for b in bars])
     print(f"Val%: {values}")
-    
+
     # ASCII bar chart (horizontal) - use ASCII chars for Windows compatibility
     max_bar_width = width - 10
     for i, bar in enumerate(bars):
         bar_len = int(bar * max_bar_width)
         bar_str = "#" * bar_len + "." * (max_bar_width - bar_len)
         print(f"[{i:2d}] {bar_str} {bar:.2f}")
-    
+
     # Summary stats
     print(f"\nStats: min={min(bars):.2f}, max={max(bars):.2f}, mean={np.mean(bars):.2f}")
-    
+
     # Distribution analysis
     left_third = bars[:len(bars)//3]
     mid_third = bars[len(bars)//3:2*len(bars)//3]
@@ -357,17 +357,17 @@ def analyze_band_edges(n_fft_bins, n_bars):
         n_bars + 1,
         dtype="float32"
     ).astype("int32")
-    
+
     print(f"\n{'='*60}")
     print(f" Band Edge Analysis (FFT bins: {n_fft_bins}, Bars: {n_bars})")
     print(f"{'='*60}")
-    
+
     for b in range(n_bars):
         start = int(log_edges[b])
         end = int(log_edges[b + 1])
         count = end - start
         print(f"Bar {b:2d}: bins {start:4d}-{end:4d} ({count:3d} bins)")
-    
+
     return log_edges
 
 
@@ -378,33 +378,33 @@ def run_reactivity_realistic(
     log_intensity: np.ndarray | None = None,
 ) -> bool:
     """Test reactivity with REAL timing like the actual app.
-    
+
     This test simulates CONTINUOUS audio like real music:
     1. Runs at actual FPS with real time.sleep() delays
     2. Uses CONTINUOUS signal (always has audio, varying levels)
     3. Tracks variance to detect "stuck" bars
     4. Reports PASS/FAIL based on actual requirements
-    
+
     KEY INSIGHT: Real music ALWAYS has a peak. The problem is that
     normalizing by peak means center is ALWAYS 1.0.
     """
     print(f"\n{'='*60}")
     print(f" REALISTIC REACTIVITY TEST ({fps} FPS, {duration_sec}s)")
     print(f"{'='*60}")
-    
+
     # Generate base signal
     loud_samples = generate_test_signal("kick_drum")
     loud_fft = np.abs(np.fft.rfft(loud_samples))
-    
+
     frame_time = 1.0 / fps
     n_frames = int(duration_sec * fps)
-    
+
     # Track bar values over time
     raw_bass_values: List[float] = []
     noise_floor_values: List[float] = []
     running_peak_values: List[float] = []
     all_bars_history: List[List[float]] = []
-    
+
     print(f"Running {n_frames} frames with {frame_time*1000:.1f}ms between frames...")
     if log_intensity is not None and log_intensity.size > 0:
         print(
@@ -413,7 +413,7 @@ def run_reactivity_realistic(
         log_intensity = log_intensity.astype("float32", copy=False)
     else:
         print("Using CONTINUOUS audio with varying intensity (like real music)\n")
-    
+
     valley_period = int(fps * 1.25)
     valley_hold = int(fps * 0.32)
     micro_drop_interval = int(fps * 0.85)
@@ -449,11 +449,11 @@ def run_reactivity_realistic(
         fft = loud_fft * (intensity ** 1.05) * intensity_gain
 
         bars = worker._fft_to_bars(fft)
-        
+
         center_val = bars[7] if len(bars) > 7 else (bars[len(bars) // 2] if bars else 0.0)
         edge_val = bars[0] if bars else 0.0
         all_bars_history.append(list(bars))
-        
+
         # Debug: print every 15 frames to see variation
         if frame % 15 == 0:
             nf = getattr(worker, "_last_noise_floor", None)
@@ -463,13 +463,13 @@ def run_reactivity_realistic(
                 f"center={center_val:.3f}, edge={edge_val:.3f}, "
                 f"noise_floor={nf:.2f} rp={rp:.2f}"
             )
-        
+
         # Real timing delay
         raw_bass_values.append(float(getattr(worker, "_last_raw_bass", 0.0)))
         noise_floor_values.append(float(getattr(worker, "_last_noise_floor", 0.0)))
         running_peak_values.append(float(getattr(worker, "_running_peak", 0.0)))
         time.sleep(frame_time)
-    
+
     return report_bar_metrics(
         bar_history=all_bars_history,
         label="REALISTIC REACTIVITY (synthetic)",
@@ -517,25 +517,25 @@ def main():
     print("=" * 70)
     print(" SPOTIFY VISUALIZER FFT DISTRIBUTION TEST")
     print("=" * 70)
-    
+
     worker = create_live_worker(bar_count=DEFAULT_BAR_COUNT)
-    
+
     # Analyze band edges first
     fft_bins = (DEFAULT_BLOCK_SIZE // 2) + 1
     analyze_band_edges(fft_bins, DEFAULT_BAR_COUNT)
-    
+
     # Test with different signals (quick visual check)
     test_signals = [
         "kick_drum",
         "full_spectrum",
     ]
-    
+
     for signal_type in test_signals:
         samples = generate_test_signal(signal_type)
         fft = np.abs(np.fft.rfft(samples))
         bars = worker._fft_to_bars(fft)
         visualize_bars(bars, f"Signal: {signal_type}")
-    
+
     # REALISTIC reactivity test with real timing
     worker2 = create_live_worker(bar_count=DEFAULT_BAR_COUNT)
     synthetic_passed = run_reactivity_realistic(worker2, fps=60, duration_sec=4.0)
@@ -543,7 +543,7 @@ def main():
     log_envelope = load_log_intensity_profile()
     reactivity_ok = run_reactivity_realistic(worker, log_intensity=log_envelope)
     log_ok = run_log_snapshot_analysis()
-    
+
     print("\n" + "=" * 70)
     if synthetic_passed and reactivity_ok and log_ok:
         print(" ALL TESTS PASSED")

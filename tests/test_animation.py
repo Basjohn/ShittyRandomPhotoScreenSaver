@@ -361,3 +361,35 @@ def test_animation_manager_emits_perf_metrics(qt_app, caplog):
 
     messages = [r.message for r in caplog.records]
     assert any("[PERF] [ANIM] AnimationManager metrics" in m for m in messages)
+
+
+def test_animation_manager_set_target_fps_updates_timer_interval(qt_app):
+    """Changing target FPS should update the underlying timer interval."""
+    am = AnimationManager(fps=60)
+    try:
+        assert am.fps == 60
+        before_interval = am._timer.interval()
+        assert before_interval in (16, 17)
+
+        am.set_target_fps(120)
+        assert am.fps == 120
+        after_interval = am._timer.interval()
+        assert after_interval in (8, 9)
+
+        anim_id = am.animate_custom(
+            duration=0.05,
+            easing=EasingCurve.LINEAR,
+            update_callback=lambda progress: progress,
+        )
+
+        start = time.time()
+        from PySide6.QtCore import QCoreApplication
+
+        while am.get_active_count() > 0 and (time.time() - start) < 1.0:
+            QCoreApplication.processEvents()
+            time.sleep(0.005)
+
+        assert am.get_active_count() == 0
+        assert not am.is_running(anim_id)
+    finally:
+        am.cleanup()

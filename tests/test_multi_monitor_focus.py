@@ -1,6 +1,6 @@
-"""Tests for multi-monitor focus coordination."""
+"""Tests for multi-monitor focus coordination and geometry handling."""
 import pytest
-from unittest.mock import MagicMock, PropertyMock
+from unittest.mock import MagicMock
 from PySide6.QtCore import QRect
 
 from rendering.multi_monitor_coordinator import MultiMonitorCoordinator
@@ -9,6 +9,7 @@ from rendering.multi_monitor_coordinator import MultiMonitorCoordinator
 @pytest.fixture
 def coordinator():
     """Create a fresh coordinator for each test."""
+    coord = MultiMonitorCoordinator()
     MultiMonitorCoordinator.reset()
     coord = MultiMonitorCoordinator.instance()
     yield coord

@@ -994,3 +994,22 @@
 2026-01-02 00:51:10 - widgets.spotify_visualizer_widget - INFO     - [2 duplicates suppressed]
 2026-01-02 00:51:12 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker stopped
 2026-01-02 00:51:12 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=28254.4ms, frames=1350, avg_fps=47.8, dt_min=10.85ms, dt_max=74.99ms, bar_count=19
+2026-01-02 21:06:39 - rendering.widget_manager       - INFO     - [SPOTIFY_VIS][CFG] create adaptive=True sensitivity=0.250 dynamic=True manual=1.900
+2026-01-02 21:06:40 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker started (PyAudioWPatchBackend, 48000Hz, 6 channels)
+2026-01-02 21:06:40 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 96.37ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2026-01-02 21:06:41 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Youngblood
+2026-01-02 21:06:41 - widgets.spotify_visualizer_widget - INFO     - [1 duplicates suppressed]
+2026-01-02 21:06:42 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 62.41ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2026-01-02 21:06:43 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Youngblood
+2026-01-02 21:06:43 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.90ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2026-01-02 21:06:44 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Youngblood
+2026-01-02 21:06:44 - widgets.spotify_visualizer_widget - INFO     - [1 duplicates suppressed]
+2026-01-02 21:06:45 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=4192.4ms, frames=201, avg_fps=47.9, dt_min=11.70ms, dt_max=62.41ms, bar_count=19
+2026-01-02 21:06:45 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=73.96ms, min=-1.00ms, max=154.64ms
+2026-01-02 21:06:46 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Youngblood
+2026-01-02 21:06:46 - widgets.spotify_visualizer_widget - INFO     - [4 duplicates suppressed]
+2026-01-02 21:06:50 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=9199.8ms, frames=508, avg_fps=55.2, dt_min=11.70ms, dt_max=62.41ms, bar_count=19
+2026-01-02 21:06:50 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.84ms (running=True name=GLCompositorCrossfadeTransition elapsed=0.23 idle_age=<n/a>)
+2026-01-02 21:06:51 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] media_update state=paused -> playing=False (prev=False) track=Youngblood
+2026-01-02 21:06:51 - widgets.spotify_visualizer_widget - INFO     - [SPOTIFY_VIS] Audio worker stopped
+2026-01-02 21:06:51 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=10249.7ms, frames=550, avg_fps=53.7, dt_min=11.70ms, dt_max=62.41ms, bar_count=19

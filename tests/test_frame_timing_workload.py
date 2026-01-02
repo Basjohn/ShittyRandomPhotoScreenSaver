@@ -5,16 +5,22 @@ and measures dt_max to detect UI thread blocking.
 
 Run with: python pytest.py tests/test_frame_timing_workload.py -v
 """
-import time
-import pytest
-from typing import List, Optional
+from __future__ import annotations
 
+import logging
+import time
+from dataclasses import dataclass
+from typing import Callable, List, Optional
+
+import pytest
 from PySide6.QtCore import QPoint, QSize
 from PySide6.QtGui import QPixmap, QColor, QImage
 
 from core.animation.animator import AnimationManager
 from core.animation.types import EasingCurve
 from rendering.gl_compositor import GLCompositorWidget
+
+pytestmark = pytest.mark.frame_timing_isolated
 
 
 class FrameTimingCollector:
@@ -84,21 +90,100 @@ def test_pixmap2():
     return QPixmap.fromImage(image)
 
 
+@dataclass
+class _LoggerSilencer:
+    names: tuple[str, ...]
+    level: int = logging.WARNING
+
+    def __post_init__(self) -> None:
+        self._originals: list[tuple[logging.Logger, int]] = []
+        for name in self.names:
+            logger = logging.getLogger(name)
+            self._originals.append((logger, logger.level if logger.level else logging.NOTSET))
+            logger.setLevel(self.level)
+
+    def restore(self) -> None:
+        for logger, level in self._originals:
+            logger.setLevel(level)
+
+
+class FrameTimingHarness:
+    """Provides isolated GL compositor + animation manager for frame timing tests."""
+
+    def __init__(self, qtbot, *, loggers_to_silence: tuple[str, ...]) -> None:
+        self.qtbot = qtbot
+        self.collector = FrameTimingCollector()
+        self.compositor = GLCompositorWidget(parent=None)
+        self.qtbot.addWidget(self.compositor)
+        self.compositor.resize(1920, 1080)
+        self.compositor.show()
+        self.qtbot.waitExposed(self.compositor)
+        self.animation_manager = AnimationManager(fps=60)
+        self._original_update: Callable[[], None] = self.compositor.update
+        self._frame_sampling_enabled = False
+        self._silencer = _LoggerSilencer(loggers_to_silence)
+
+    def set_base_pixmap(self, pixmap: QPixmap) -> None:
+        self.compositor.set_base_pixmap(pixmap)
+
+    def enable_frame_sampling(self) -> None:
+        """Record render cadence by wrapping compositor.update."""
+        if self._frame_sampling_enabled:
+            return
+
+        def timed_update():
+            self.collector.record_frame()
+            self._original_update()
+
+        self.compositor.update = timed_update
+        self._frame_sampling_enabled = True
+
+    def reset_metrics(self) -> None:
+        self.collector.reset()
+
+    def teardown(self) -> None:
+        self.compositor.update = self._original_update
+        try:
+            self.animation_manager.stop()
+        except Exception:
+            pass
+        try:
+            self.animation_manager.cleanup()
+        except Exception:
+            pass
+        self.compositor.hide()
+        self.compositor.setParent(None)
+        self.compositor.deleteLater()
+        self.qtbot.wait(0)
+        self._silencer.restore()
+
+
+@pytest.fixture
+def frame_timing_harness(qtbot):
+    harness = FrameTimingHarness(
+        qtbot,
+        loggers_to_silence=(
+            "rendering.gl_compositor",
+            "rendering.display_widget",
+        ),
+    )
+    yield harness
+    harness.teardown()
+
+
 class TestFrameTimingWorkload:
     """Test frame timing under realistic workload conditions."""
     
-    def test_slide_with_visualizer_load(self, qtbot, test_pixmap, test_pixmap2):
+    def test_slide_with_visualizer_load(self, qtbot, test_pixmap, test_pixmap2, frame_timing_harness):
         """Test slide transition with simulated visualizer load."""
-        collector = FrameTimingCollector()
+        collector = frame_timing_harness.collector
+        collector.reset()
         visualizer = MockSpotifyVisualizer(collector)
         
-        compositor = GLCompositorWidget(parent=None)
-        compositor.resize(1920, 1080)
-        compositor.show()
-        qtbot.waitExposed(compositor)
-        compositor.set_base_pixmap(test_pixmap)
+        compositor = frame_timing_harness.compositor
+        frame_timing_harness.set_base_pixmap(test_pixmap)
         
-        animation_manager = AnimationManager(fps=60)
+        animation_manager = frame_timing_harness.animation_manager
         listener_id = animation_manager.add_tick_listener(lambda dt: visualizer.on_tick())
         
         duration_ms = 1500
@@ -143,23 +228,16 @@ class TestFrameTimingWorkload:
         
         assert max_dt < 200, f"dt_max {max_dt:.2f}ms is unacceptably high"
     
-    def test_sustained_workload(self, qtbot, test_pixmap, test_pixmap2):
+    def test_sustained_workload(self, qtbot, test_pixmap, test_pixmap2, frame_timing_harness):
         """Test 10 back-to-back transitions for degradation."""
-        collector = FrameTimingCollector()
+        collector = frame_timing_harness.collector
+        collector.reset()
         
-        compositor = GLCompositorWidget(parent=None)
-        compositor.resize(1920, 1080)
-        compositor.show()
-        qtbot.waitExposed(compositor)
-        compositor.set_base_pixmap(test_pixmap)
+        compositor = frame_timing_harness.compositor
+        frame_timing_harness.set_base_pixmap(test_pixmap)
+        frame_timing_harness.enable_frame_sampling()
         
-        animation_manager = AnimationManager(fps=60)
-        
-        original_update = compositor.update
-        def timed_update():
-            collector.record_frame()
-            original_update()
-        compositor.update = timed_update
+        animation_manager = frame_timing_harness.animation_manager
         
         duration_ms = 800
         width = compositor.width()

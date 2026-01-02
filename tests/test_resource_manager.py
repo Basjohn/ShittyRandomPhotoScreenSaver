@@ -10,11 +10,39 @@ Tests the centralized resource management functionality including:
 - Shutdown behavior
 """
 import threading
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
+from PySide6.QtGui import QImage, QPixmap
 
 from core.resources.manager import ResourceManager
 from core.resources.types import ResourceType
+
+
+@pytest.fixture
+def resource_manager():
+    """Provide a ResourceManager instance that is always shut down."""
+    manager = ResourceManager()
+    try:
+        yield manager
+    finally:
+        try:
+            manager.shutdown()
+        except Exception:
+            pass
+
+
+@pytest.fixture
+def qt_resource_manager(qt_app):
+    """Provide a ResourceManager tied to the qt_app fixture."""
+    manager = ResourceManager()
+    try:
+        yield manager
+    finally:
+        try:
+            manager.shutdown()
+        except Exception:
+            pass
 
 
 class TestResourceManagerInit:
@@ -316,6 +344,181 @@ class TestCleanupHandlers:
             "test",
             cleanup_handler=my_cleanup
         )
-        
+
         # Handler should be stored
         assert resource_id in manager._cleanup_handlers
+
+
+class TestResourceLifecycle:
+    """End-to-end registration and unregister tests."""
+
+    def test_register_resource(self, resource_manager):
+        class TestResource:
+            def __init__(self):
+                self.cleaned_up = False
+
+            def cleanup(self):
+                self.cleaned_up = True
+
+        resource = TestResource()
+        resource_id = resource_manager.register(resource, ResourceType.CUSTOM, "Test resource")
+
+        assert resource_id is not None
+        assert resource_manager.get(resource_id) is resource
+
+        resource_manager.shutdown()
+        assert resource.cleaned_up is True
+
+    def test_unregister_resource_calls_handler(self, resource_manager):
+        cleaned_up: list[bool] = []
+
+        def cleanup_handler(obj):
+            cleaned_up.append(True)
+
+        class TestResource:
+            pass
+
+        resource = TestResource()
+        resource_id = resource_manager.register(
+            resource,
+            ResourceType.CUSTOM,
+            "Test resource",
+            cleanup_handler=cleanup_handler,
+        )
+
+        result = resource_manager.unregister(resource_id, force=True)
+
+        assert result is True
+        assert len(cleaned_up) == 1
+        assert resource_manager.get(resource_id) is None
+
+
+class TestTemporaryFiles:
+    """Temporary file registration tests."""
+
+    def test_register_temp_file_deletes_on_shutdown(self, resource_manager, tmp_path):
+        temp_file = tmp_path / "test.txt"
+        temp_file.write_text("test content")
+
+        resource_id = resource_manager.register_temp_file(
+            str(temp_file),
+            "Test temp file",
+            delete=True,
+        )
+
+        assert resource_id is not None
+        assert temp_file.exists()
+
+        resource_manager.shutdown()
+
+        assert not temp_file.exists()
+
+
+class TestResourceStats:
+    """Resource enumeration and stats tests."""
+
+    def test_get_all_resources(self, resource_manager):
+        class TestResource:
+            pass
+
+        r1 = TestResource()
+        r2 = TestResource()
+
+        resource_manager.register(r1, ResourceType.CUSTOM, "Resource 1")
+        resource_manager.register(r2, ResourceType.CUSTOM, "Resource 2")
+
+        resources = resource_manager.get_all_resources()
+
+        assert len(resources) >= 2
+
+    def test_get_stats_contains_totals(self, resource_manager):
+        class TestResource:
+            pass
+
+        resource_manager.register(TestResource(), ResourceType.GUI_COMPONENT, "GUI resource")
+
+        stats = resource_manager.get_stats()
+
+        assert "total_resources" in stats
+        assert stats["total_resources"] >= 1
+        assert "by_type" in stats
+        assert "by_group" in stats
+
+
+class TestPixmapPooling:
+    """QPixmap pooling behaviour."""
+
+    def test_acquire_returns_none_when_empty(self, qt_resource_manager):
+        result = qt_resource_manager.acquire_pixmap(100, 100)
+        assert result is None
+
+    def test_release_and_acquire(self, qt_resource_manager):
+        pixmap = QPixmap(100, 100)
+        assert qt_resource_manager.release_pixmap(pixmap) is True
+
+        acquired = qt_resource_manager.acquire_pixmap(100, 100)
+        assert acquired is not None
+        assert acquired.width() == 100
+        assert acquired.height() == 100
+
+    def test_pool_size_limit(self, qt_resource_manager):
+        for _ in range(qt_resource_manager.PIXMAP_POOL_MAX_SIZE + 5):
+            qt_resource_manager.release_pixmap(QPixmap(50, 50))
+
+        stats = qt_resource_manager.get_pool_stats()
+        assert stats["pixmap_pool_size"] <= qt_resource_manager.PIXMAP_POOL_MAX_SIZE
+
+    def test_pool_stats_tracking(self, qt_resource_manager):
+        qt_resource_manager.acquire_pixmap(100, 100)
+
+        pixmap = QPixmap(100, 100)
+        qt_resource_manager.release_pixmap(pixmap)
+        qt_resource_manager.acquire_pixmap(100, 100)
+
+        stats = qt_resource_manager.get_pool_stats()
+        assert stats["pixmap_misses"] >= 1
+        assert stats["pixmap_hits"] >= 1
+
+    def test_different_sizes_use_separate_buckets(self, qt_resource_manager):
+        qt_resource_manager.release_pixmap(QPixmap(100, 100))
+        qt_resource_manager.release_pixmap(QPixmap(200, 200))
+
+        stats = qt_resource_manager.get_pool_stats()
+        assert stats["pixmap_buckets"] == 2
+
+
+class TestImagePooling:
+    """QImage pooling behaviour."""
+
+    def test_acquire_returns_none_when_empty(self, qt_resource_manager):
+        result = qt_resource_manager.acquire_image(100, 100)
+        assert result is None
+
+    def test_release_and_acquire(self, qt_resource_manager):
+        image = QImage(100, 100, QImage.Format.Format_ARGB32)
+        assert qt_resource_manager.release_image(image) is True
+
+        acquired = qt_resource_manager.acquire_image(100, 100)
+        assert acquired is not None
+        assert acquired.width() == 100
+        assert acquired.height() == 100
+
+
+class TestPoolCleanup:
+    """Pool cleanup behaviour."""
+
+    def test_clear_pools(self, qt_resource_manager):
+        qt_resource_manager.release_pixmap(QPixmap(100, 100))
+        qt_resource_manager.release_image(QImage(100, 100, QImage.Format.Format_ARGB32))
+
+        qt_resource_manager.clear_pools()
+        stats = qt_resource_manager.get_pool_stats()
+
+        assert stats["pixmap_pool_size"] == 0
+        assert stats["image_pool_size"] == 0
+
+    def test_shutdown_clears_pixmap_pool(self, qt_resource_manager):
+        qt_resource_manager.release_pixmap(QPixmap(100, 100))
+        qt_resource_manager.shutdown()
+        stats = qt_resource_manager.get_pool_stats()
+        assert stats["pixmap_pool_size"] == 0

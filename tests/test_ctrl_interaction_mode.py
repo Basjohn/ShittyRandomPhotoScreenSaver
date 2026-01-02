@@ -9,9 +9,11 @@ import time
 import types
 
 import pytest
-from PySide6.QtCore import Qt, QPoint, QEvent
-from PySide6.QtGui import QMouseEvent, QKeyEvent
+from PySide6.QtCore import Qt, QPoint, QPointF, QEvent
+from PySide6.QtGui import QMouseEvent, QKeyEvent, QWheelEvent
 from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QWidget
+from shiboken6 import Shiboken
 
 from rendering.display_widget import DisplayWidget
 from rendering.display_modes import DisplayMode
@@ -70,6 +72,27 @@ def _wait_for_halo_hidden(qtbot, widget, timeout: int = 2000):
         return hint is None or not hint.isVisible()
 
     qtbot.waitUntil(_is_hidden, timeout=timeout)
+
+
+def _safe_close(widget) -> None:
+    """Detach widget safely before pytest-qt closes it to avoid double deletes."""
+    if widget is None:
+        return
+    try:
+        if not Shiboken.isValid(widget):
+            return
+    except Exception:
+        return
+    try:
+        widget.setParent(None)
+    except RuntimeError:
+        pass
+
+
+def _register_volume_widget(qtbot, widget):
+    widget.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False)
+    qtbot.addWidget(widget, before_close_func=_safe_close)
+    return widget
 
 
 @pytest.mark.qt
@@ -268,10 +291,43 @@ def test_ctrl_halo_fades_in_and_out(qt_app, settings_manager, qtbot):
 
     # After fade-out, the halo should either be hidden or effectively transparent.
     hint_after = getattr(widget, "_ctrl_cursor_hint", None)
-    assert hint_after is not None
-    if hint_after.isVisible():
-        opacity_after = float(getattr(hint_after, "_opacity", 1.0))
-        assert opacity_after <= 0.1
+    assert hint_after is None or hint_after.isVisible() is False
+
+
+@pytest.mark.qt
+def test_mc_display_widget_receives_hotkeys(qt_app, qtbot, settings_manager, monkeypatch):
+    """Manual Controller build must keep hotkeys and exit shortcuts wired."""
+    monkeypatch.setattr("sys.argv", ["SRPSS_Media_Center.exe"])
+
+    widget = DisplayWidget(
+        screen_index=0,
+        display_mode=DisplayMode.FILL,
+        settings_manager=settings_manager,
+    )
+    qtbot.addWidget(widget)
+    widget.resize(640, 360)
+    widget.show()
+    qt_app.processEvents()
+
+    counts = {"z": 0, "x": 0, "c": 0, "s": 0, "esc": 0}
+
+    widget.previous_requested.connect(lambda: counts.__setitem__("z", counts["z"] + 1))
+    widget.next_requested.connect(lambda: counts.__setitem__("x", counts["x"] + 1))
+    widget.cycle_transition_requested.connect(lambda: counts.__setitem__("c", counts["c"] + 1))
+    widget.settings_requested.connect(lambda: counts.__setitem__("s", counts["s"] + 1))
+    widget.exit_requested.connect(lambda: counts.__setitem__("esc", counts["esc"] + 1))
+
+    qtbot.keyClick(widget, Qt.Key.Key_Z)
+    qtbot.keyClick(widget, Qt.Key.Key_X)
+    qtbot.keyClick(widget, Qt.Key.Key_C)
+    qtbot.keyClick(widget, Qt.Key.Key_S)
+    qtbot.keyClick(widget, Qt.Key.Key_Escape)
+
+    assert counts["z"] == 1
+    assert counts["x"] == 1
+    assert counts["c"] == 1
+    assert counts["s"] == 1
+    assert counts["esc"] == 1
 
 
 @pytest.mark.qt
@@ -539,3 +595,310 @@ def test_ctrl_halo_suppressed_while_settings_dialog_active(qt_app, settings_mana
     assert hint_final is not None and hint_final.isVisible()
     QTest.keyRelease(widget, Qt.Key.Key_Control)
     coord.set_ctrl_held(False)
+
+
+@pytest.mark.qt
+def test_spotify_volume_widget_uses_coordinated_fade_sync(qtbot, monkeypatch):
+    """Volume widget should request overlay fade sync when it starts."""
+    from widgets.spotify_volume_widget import SpotifyVolumeWidget
+
+    fade_sync_requests = []
+
+    class MockParent(QWidget):
+        def request_overlay_fade_sync(self, name, starter):
+            fade_sync_requests.append((name, starter))
+
+    parent = MockParent()
+    qtbot.addWidget(parent)
+    parent.resize(800, 600)
+    parent.show()
+
+    vol = SpotifyVolumeWidget(parent)
+    vol.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False)
+
+    try:
+        monkeypatch.setattr(vol._controller, "is_available", lambda: True)
+        monkeypatch.setattr(vol._controller, "get_volume", lambda: 0.5)
+
+        vol.start()
+        assert len(fade_sync_requests) == 1
+        assert fade_sync_requests[0][0] == "spotify_volume"
+        starter = fade_sync_requests[0][1]
+        assert callable(starter)
+    finally:
+        try:
+            vol.setParent(None)
+            vol.deleteLater()
+        except Exception:
+            pass
+
+
+@pytest.mark.qt
+def test_spotify_volume_widget_handle_wheel_clamps_and_schedules(qtbot, monkeypatch):
+    from widgets.spotify_volume_widget import SpotifyVolumeWidget
+
+    vol = SpotifyVolumeWidget()
+    _register_volume_widget(qtbot, vol)
+    vol.setGeometry(0, 0, 32, 180)
+    vol.show()
+
+    applied_levels: list[float] = []
+    scheduled_levels: list[float] = []
+
+    def _fake_apply(level: float) -> None:
+        applied_levels.append(level)
+        vol._volume = level
+
+    def _fake_schedule(level: float) -> None:
+        scheduled_levels.append(level)
+
+    monkeypatch.setattr(vol, "_apply_volume_and_broadcast", _fake_apply)
+    monkeypatch.setattr(vol, "_schedule_set_volume", _fake_schedule)
+
+    try:
+        vol._volume = 0.95
+        assert vol.handle_wheel(QPoint(10, 10), 120)
+        assert applied_levels[-1] <= 1.0
+        assert scheduled_levels[-1] == applied_levels[-1]
+
+        vol._volume = 0.02
+        assert vol.handle_wheel(QPoint(10, 170), -120)
+        assert applied_levels[-1] >= 0.0
+
+        vol.hide()
+        assert not vol.handle_wheel(QPoint(0, 0), 120)
+        vol.show()
+        assert not vol.handle_wheel(QPoint(0, 0), 0)
+    finally:
+        vol.hide()
+
+
+@pytest.mark.qt
+def test_input_handler_route_wheel_uses_local_coordinates(qt_app, settings_manager, qtbot, monkeypatch):
+    from widgets.spotify_volume_widget import SpotifyVolumeWidget
+
+    widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+    qtbot.addWidget(widget)
+    widget.resize(600, 400)
+    widget.show()
+    qt_app.processEvents()
+
+    vol = SpotifyVolumeWidget(widget)
+    _register_volume_widget(qtbot, vol)
+    vol.setGeometry(100, 50, 32, 180)
+    vol._volume = 0.3
+    vol.show()
+    widget.spotify_volume_widget = vol
+    qt_app.processEvents()
+
+    assert widget._input_handler is not None
+
+    captured: dict[str, object] = {}
+
+    def _fake_handle(self, local_pos, delta_y):
+        captured["local"] = QPoint(local_pos)
+        captured["delta"] = delta_y
+        return True
+
+    monkeypatch.setattr(SpotifyVolumeWidget, "handle_wheel", _fake_handle)
+
+    pos = QPoint(vol.geometry().x() + 5, vol.geometry().y() + 10)
+    handled = widget._input_handler.route_wheel_event(pos, 120, vol, None, None)
+
+    assert handled is True
+    assert captured["delta"] == 120
+    assert captured["local"] == QPoint(5, 10)
+
+
+@pytest.mark.qt
+def test_input_handler_route_wheel_ignores_hidden_volume(qt_app, settings_manager, qtbot):
+    from widgets.spotify_volume_widget import SpotifyVolumeWidget
+
+    widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+    qtbot.addWidget(widget)
+    widget.resize(400, 300)
+    widget.show()
+    qt_app.processEvents()
+
+    vol = SpotifyVolumeWidget(widget)
+    _register_volume_widget(qtbot, vol)
+    vol.setGeometry(50, 50, 32, 180)
+    vol._volume = 0.6
+    vol.hide()
+    widget.spotify_volume_widget = vol
+    qt_app.processEvents()
+
+    assert widget._input_handler is not None
+
+    handled = widget._input_handler.route_wheel_event(QPoint(60, 60), 120, vol, None, None)
+
+    assert handled is False
+
+
+@pytest.mark.qt
+def test_input_handler_route_wheel_propagates_widget_rejection(qt_app, settings_manager, qtbot, monkeypatch):
+    from widgets.spotify_volume_widget import SpotifyVolumeWidget
+
+    widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+    qtbot.addWidget(widget)
+    widget.resize(500, 300)
+    widget.show()
+    qt_app.processEvents()
+
+    vol = SpotifyVolumeWidget(widget)
+    _register_volume_widget(qtbot, vol)
+    vol.setGeometry(70, 40, 32, 180)
+    vol._volume = 0.4
+    vol.show()
+    widget.spotify_volume_widget = vol
+    qt_app.processEvents()
+
+    assert widget._input_handler is not None
+
+    def _fake_handle(self, local_pos, delta_y):
+        return False
+
+    monkeypatch.setattr(SpotifyVolumeWidget, "handle_wheel", _fake_handle)
+
+    handled = widget._input_handler.route_wheel_event(QPoint(80, 60), 120, vol, None, None)
+
+    assert handled is False
+
+
+@pytest.mark.qt
+def test_ctrl_mode_wheel_adjusts_spotify_volume_widget(qt_app, settings_manager, qtbot, monkeypatch):
+    from rendering.input_handler import InputHandler
+    from widgets.spotify_volume_widget import SpotifyVolumeWidget
+
+    monkeypatch.setattr(SpotifyVolumeWidget, "_schedule_set_volume", lambda self, level: None)
+
+    try:
+        settings_manager.set("display.hw_accel", False)
+    except Exception:
+        pass
+    try:
+        settings_manager.set("display.render_backend_mode", "software")
+    except Exception:
+        pass
+
+    widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+    qtbot.addWidget(widget)
+    widget.resize(640, 360)
+    widget.show()
+    qt_app.processEvents()
+
+    vol = SpotifyVolumeWidget(widget)
+    _register_volume_widget(qtbot, vol)
+    widget.spotify_volume_widget = vol
+
+    vol.setGeometry(10, 10, 32, 180)
+    vol._volume = 0.5
+    vol.show()
+    qt_app.processEvents()
+
+    assert isinstance(widget._input_handler, InputHandler)
+    widget._coordinator.set_ctrl_held(True)
+
+    pos = QPointF(15.0, 20.0)
+    global_pos = QPointF(15.0, 20.0)
+    event = QWheelEvent(
+        pos,
+        global_pos,
+        QPoint(0, 0),
+        QPoint(0, 120),
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier,
+        Qt.ScrollPhase.ScrollUpdate,
+        False,
+    )
+
+    before = vol._volume
+    widget.wheelEvent(event)
+    after = vol._volume
+
+    assert after > before
+
+
+@pytest.mark.qt
+def test_cursor_halo_forwarded_wheel_adjusts_volume(qt_app, settings_manager, qtbot, monkeypatch):
+    from rendering.input_handler import InputHandler
+    from widgets.spotify_volume_widget import SpotifyVolumeWidget
+
+    monkeypatch.setattr(SpotifyVolumeWidget, "_schedule_set_volume", lambda self, level: None)
+
+    widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+    qtbot.addWidget(widget)
+    widget.resize(800, 600)
+    widget.move(0, 0)
+    widget.show()
+    qt_app.processEvents()
+
+    vol = SpotifyVolumeWidget(widget)
+    _register_volume_widget(qtbot, vol)
+    widget.spotify_volume_widget = vol
+
+    vol.setGeometry(200, 120, 32, 180)
+    vol._volume = 0.4
+    vol.show()
+    qt_app.processEvents()
+
+    assert widget._input_handler is not None
+    widget._coordinator.set_ctrl_held(True)
+    widget._ctrl_held = True
+
+    widget._ensure_ctrl_cursor_hint()
+    halo = widget._ctrl_cursor_hint
+    assert halo is not None
+    halo.set_parent_widget(widget)
+    qt_app.processEvents()
+
+    call_state: dict[str, object] = {
+        "route_calls": 0,
+        "wheel_calls": 0,
+    }
+
+    original_route = InputHandler.route_wheel_event
+
+    def _patched_route(self, pos, delta_y, *args, **kwargs):
+        call_state["route_calls"] = call_state.get("route_calls", 0) + 1
+        call_state["route_last_pos"] = QPoint(pos)
+        call_state["route_last_delta"] = delta_y
+        result = original_route(self, pos, delta_y, *args, **kwargs)
+        call_state["route_result"] = result
+        return result
+
+    monkeypatch.setattr(InputHandler, "route_wheel_event", _patched_route)
+
+    original_handle_wheel = SpotifyVolumeWidget.handle_wheel
+
+    def _patched_handle_wheel(self, local_pos, delta_y):
+        call_state["wheel_calls"] = call_state.get("wheel_calls", 0) + 1
+        call_state["wheel_last_local"] = QPoint(local_pos)
+        call_state["wheel_last_delta"] = delta_y
+        return original_handle_wheel(self, local_pos, delta_y)
+
+    monkeypatch.setattr(SpotifyVolumeWidget, "handle_wheel", _patched_handle_wheel)
+
+    target_local = QPointF(210.0, 160.0)
+    global_point = widget.mapToGlobal(target_local.toPoint())
+    global_pos = QPointF(float(global_point.x()), float(global_point.y()))
+
+    event = QWheelEvent(
+        QPointF(0.0, 0.0),
+        global_pos,
+        QPoint(0, 0),
+        QPoint(0, 120),
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier,
+        Qt.ScrollPhase.ScrollUpdate,
+        False,
+    )
+
+    before = vol._volume
+    halo._forward_wheel_event(event)
+    qt_app.processEvents()
+    after = vol._volume
+
+    assert call_state["route_calls"] > 0
+    assert call_state["wheel_calls"] > 0
+    assert after > before
