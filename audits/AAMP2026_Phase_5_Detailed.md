@@ -25,7 +25,6 @@ Status: Planning-only (no code). Spec.md remains current-state. Main audit refer
 - [ ] Ensure Spec.md stays current-state, not planning.
 
 ## 5) Audits & Backups
-- [ ] `/audits/v1_2 ROADMAP.md` maintained when GL/compositor behavior changes.
 - [ ] `/bak`: snapshots for critical modules touched in each phase with short README.
 
 ## 6) Exit Criteria (Planning Only)

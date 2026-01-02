@@ -1,0 +1,20 @@
+There are two SST files in this folder.
+
+1. \audits\setting manager defaults\SRPSS_Settings_Screensaver.sst is for the main build default settings for settings manager
+
+2. \audits\setting manager defaults\SRPSS_Settings_Screensaver_MC.sst is for the MC Build default settings in settings manager.
+
+Important points:
+
+- SST files should not be required for this after the audit is done, I will be deleting them.
+- All settings are through the settings manager, nothing hardcoded.
+- New future settings these do not cover should have graceful defaults without crashing the application.
+(IE: New fappomatic bar with 1-5 but defaults doesn't cover fappomatic yet, will default to 1 until a user setting is saved and persisted or new defaults are registered with the manager)
+
+- MC Build Settings default to only displaying on one display. If user doesn't have a monitor 2 (default) it should instead pick one display of whatever is available. (Like display 1) so that we do not have a dead application.
+- Settings for location and timezone should default to our automatic resolution attempts and not what is in the SST files.
+- Settings for sources from my SSTs should not be set in the settings manager or hardcoded in, users are already (or should be) prompted to enter sources and have the "Just Make It Work" button. If users try to close settings without ANY sources added we need a stylised pop up (our canonical custom title bar styling we use for all popups) to warn them the application won't work without any sources and give them a button choice between "Just Make It Work" and "Ehhhh", Ehhh functions as an exit anyway choice.
+
+- Check that reset to defaults in about restores our new canonical defaults in settings manager and applies them immediately.
+
+- Check that there are no straggling conflicting methods of settings that may change our settings when we do not explicitly want that.

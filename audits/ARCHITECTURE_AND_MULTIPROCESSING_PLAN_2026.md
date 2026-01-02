@@ -172,12 +172,18 @@ Document first and last policy, follow phase order unless explicitly told otherw
    - [x] Replace ad-hoc `settings.get` with models; helper to/from dot-notation; update UI tabs respecting MC vs Screensaver profile separation. ✅ _2026‑01‑01_: WidgetManager + Widgets tab now consume `MediaWidgetSettings`, `RedditWidgetSettings`, and `SpotifyVisualizerSettings`.
    - [x] Capture live-setting reaction requirements (Spotify VIS/Sensitivity) inside the typed model contract so UI sliders always affect running widgets. ✅ _2026‑01‑01_: `WidgetManager._handle_settings_changed` pushes live refresh for Spotify VIS/media/reddit; regression tests cover VIS replay and scrollwheel volume.
    - [x] Document display/monitor toggles as non-destructive updates in typed profiles. ✅ _2026‑01‑01_: Typed models carry monitor selectors; refresh path applies without tearing down DisplayWidget; notes added to Spec/Phase doc.
-4. **Overlay Guidelines Audit**
+   - [ ] Audit settings end to end for stragglers, make sure subwidgets inherit style settings where appropriate (when they lack their own exposed in the GUI) check positioning settings for any issues with placement, especially regarding middle/center and stacking.
+4. **Modal Settings Conversion**
+   - [ ] **Canonical defaults sweep (pre-modal work):** Apply the checklist in `audits/setting manager defaults/Setting Defaults Guide.txt` to ensure Screensaver vs MC SST exports map cleanly into SettingsManager defaults. Confirm reset-to-defaults adheres to the guide before the modal dialog rework.
+   - [ ] Convert the existing settings dialog workflow into the modal version referenced in Spec.md, ensuring it can be launched from both SRPSS and MC builds without forcing an engine restart.
+   - [ ] Wire modal lifecycle to `SettingsManager` signals so changes apply live; document how Just Make It Work/Ehhhh flow integrates with the modal dialog.
+   - [ ] Verify that monitor toggles, widget enablement, and queue/source changes raised through the modal path keep DisplayWidget running (no teardown/re-init).
+5. **Overlay Guidelines Audit**
    - [ ] Verify alignment/fade/resource registration per Docs/10_WIDGET_GUIDELINES.md across all widgets and `ui/widget_stack_predictor.py`.
-5. **Tests & Docs**
+6. **Tests & Docs**
    - [ ] Expand `tests/test_widget_factories.py`, `tests/test_widget_positioner.py`, add lifecycle/UI binding integration tests.
    - [ ] Update `Spec.md`, `Index.md`, `Docs/TestSuite.md`; capture post-change `/bak`.
-6. **Exit**
+7. **Exit**
    - [ ] WidgetManager < 600 LOC, no widget-specific logic; guideline compliance documented.
 
 ### Phase 5 – Observability, Performance, Documentation (Ongoing)

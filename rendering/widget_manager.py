@@ -334,6 +334,49 @@ class WidgetManager:
         except Exception:
             logger.debug("[SPOTIFY_VIS][CFG] %s %s", context, cfg, exc_info=True)
 
+    def _apply_media_card_style_to_visualizer(
+        self,
+        vis_widget: Optional["SpotifyVisualizerWidget"],
+        media_settings: Optional[Mapping[str, Any]],
+    ) -> None:
+        """Apply media widget card styling to the Spotify visualizer card."""
+        if vis_widget is None:
+            return
+
+        settings_map = media_settings if isinstance(media_settings, Mapping) else {}
+
+        bg_color_data = settings_map.get("bg_color") or settings_map.get("background_color") or [64, 64, 64, 255]
+        bg_qcolor = parse_color_to_qcolor(bg_color_data)
+
+        try:
+            bg_opacity = float(settings_map.get("bg_opacity", settings_map.get("background_opacity", 0.9)))
+        except Exception:
+            bg_opacity = 0.9
+
+        border_color_data = settings_map.get("border_color", [128, 128, 128, 255])
+        try:
+            border_opacity = float(settings_map.get("border_opacity", 0.8))
+        except Exception:
+            border_opacity = 0.8
+        border_qcolor = parse_color_to_qcolor(border_color_data, opacity_override=border_opacity)
+
+        show_background = SettingsManager.to_bool(settings_map.get("show_background", True), True)
+        try:
+            border_width = int(settings_map.get("border_width", 2) or 2)
+        except Exception:
+            border_width = 2
+
+        try:
+            vis_widget.set_bar_style(
+                bg_color=bg_qcolor or parse_color_to_qcolor([64, 64, 64, 255]),
+                bg_opacity=bg_opacity,
+                border_color=border_qcolor or parse_color_to_qcolor([128, 128, 128, 255]),
+                border_width=max(0, border_width),
+                show_background=show_background,
+            )
+        except Exception:
+            logger.debug("[WIDGET_MANAGER] Failed to apply media card style to visualizer", exc_info=True)
+
     def _refresh_spotify_visualizer_config(self, widgets_config: Optional[Mapping[str, Any]] = None) -> None:
         """Apply latest Spotify VIS sensitivity / floor settings to the live widget."""
         vis = self._widgets.get('spotify_visualizer') or self._widgets.get('spotify_visualizer_widget')
@@ -371,6 +414,9 @@ class WidgetManager:
             vis.set_floor_config(dynamic_floor, manual_floor)
         except Exception:
             logger.debug("[WIDGET_MANAGER] Failed to reapply Spotify floor config", exc_info=True)
+
+        media_cfg = cfg.get('media', {}) if isinstance(cfg, Mapping) else {}
+        self._apply_media_card_style_to_visualizer(vis, media_cfg)
 
     def _refresh_media_config(self, widgets_config: Optional[Mapping[str, Any]] = None) -> None:
         """Apply latest media settings to the live media widget (colors/volume flag)."""
@@ -418,6 +464,10 @@ class WidgetManager:
         except Exception:
             logger.debug("[WIDGET_MANAGER] Failed to reapply media controls/header", exc_info=True)
 
+        vis_widget = self._widgets.get('spotify_visualizer') or self._widgets.get('spotify_visualizer_widget')
+        if vis_widget is not None:
+            self._apply_media_card_style_to_visualizer(vis_widget, media_cfg)
+
     def _refresh_reddit_configs(self, widgets_config: Optional[Mapping[str, Any]] = None) -> None:
         """Apply latest reddit settings to live reddit widgets (reddit, reddit2)."""
         targets = [('reddit', self._widgets.get('reddit_widget')), ('reddit2', self._widgets.get('reddit2_widget'))]
@@ -432,6 +482,8 @@ class WidgetManager:
         if not isinstance(cfg, Mapping):
             return
 
+        base_reddit_cfg = cfg.get('reddit', {}) if isinstance(cfg.get('reddit', {}), Mapping) else cfg.get('reddit', {})
+
         for key, widget in targets:
             if widget is None:
                 continue
@@ -440,27 +492,47 @@ class WidgetManager:
                 continue
             model = RedditWidgetSettings.from_mapping(reddit_cfg, prefix=f"widgets.{key}")
 
+            style_fallback = base_reddit_cfg if (key == 'reddit2' and isinstance(base_reddit_cfg, Mapping)) else None
+
+            def inherit_style(field: str, default: Any) -> Any:
+                if field in reddit_cfg:
+                    return reddit_cfg.get(field)
+                if isinstance(style_fallback, Mapping) and field in style_fallback:
+                    return style_fallback.get(field)
+                return default
+
             try:
+                font_family = inherit_style('font_family', model.font_family)
+                font_size = inherit_style('font_size', model.font_size)
+                margin = inherit_style('margin', model.margin)
+                text_color = inherit_style('color', [255, 255, 255, 230])
+                show_background = SettingsManager.to_bool(inherit_style('show_background', model.show_background), True)
+                show_separators = SettingsManager.to_bool(inherit_style('show_separators', model.show_separators), True)
+                bg_color_value = inherit_style('bg_color', inherit_style('background_color', [35, 35, 35, 255]))
+                bg_opacity_value = inherit_style('bg_opacity', model.background_opacity)
+                border_color_value = inherit_style('border_color', [255, 255, 255, 255])
+                border_opacity_value = inherit_style('border_opacity', model.border_opacity)
+
                 if hasattr(widget, 'set_font_family'):
-                    widget.set_font_family(model.font_family)
+                    widget.set_font_family(font_family)
                 if hasattr(widget, 'set_font_size'):
-                    widget.set_font_size(int(model.font_size))
+                    widget.set_font_size(int(font_size))
                 if hasattr(widget, 'set_text_color'):
-                    widget.set_text_color(parse_color_to_qcolor(model.color))
+                    widget.set_text_color(parse_color_to_qcolor(text_color))
                 if hasattr(widget, 'set_show_background'):
-                    widget.set_show_background(SettingsManager.to_bool(model.show_background, True))
+                    widget.set_show_background(show_background)
                 if hasattr(widget, 'set_show_separators'):
-                    widget.set_show_separators(SettingsManager.to_bool(model.show_separators, True))
+                    widget.set_show_separators(show_separators)
                 if hasattr(widget, 'set_background_color'):
-                    widget.set_background_color(parse_color_to_qcolor(model.background_color))
+                    widget.set_background_color(parse_color_to_qcolor(bg_color_value))
                 if hasattr(widget, 'set_background_opacity'):
-                    widget.set_background_opacity(float(model.background_opacity))
+                    widget.set_background_opacity(float(bg_opacity_value))
                 if hasattr(widget, 'set_background_border'):
-                    border_qcolor = parse_color_to_qcolor(model.border_color, opacity_override=model.border_opacity)
+                    border_qcolor = parse_color_to_qcolor(border_color_value, opacity_override=border_opacity_value)
                     if border_qcolor:
                         widget.set_background_border(2, border_qcolor)
                 if hasattr(widget, 'set_margin'):
-                    widget.set_margin(int(model.margin))
+                    widget.set_margin(int(margin))
             except Exception:
                 logger.debug("[WIDGET_MANAGER] Failed to reapply reddit config for %s", key, exc_info=True)
     
@@ -1771,9 +1843,9 @@ class WidgetManager:
                 widget.set_font_family(font_family)
 
             try:
-                widget.set_font_size(int(font_size))
+                widget.set_background_opacity(0.9)
             except Exception:
-                widget.set_font_size(20)
+                widget.set_background_opacity(0.9)
 
             try:
                 margin_val = int(margin)
@@ -1895,24 +1967,32 @@ class WidgetManager:
 
             self.add_expected_overlay(settings_key)
 
-            # For reddit2, inherit styling from reddit1 (base_reddit_settings)
+            # For reddit2, inherit styling from reddit1 when present.
             style_model = base_model if (settings_key == 'reddit2' and base_reddit_settings) else reddit_model
+            style_fallback = base_reddit_settings if (settings_key == 'reddit2' and isinstance(base_reddit_settings, Mapping)) else None
+
+            def inherit_style(key: str, default=None):
+                if isinstance(reddit_settings, Mapping) and key in reddit_settings:
+                    return reddit_settings.get(key)
+                if isinstance(style_fallback, Mapping) and key in style_fallback:
+                    return style_fallback.get(key)
+                return default
 
             position_val = reddit_model.position.value if isinstance(reddit_model.position, RedditPosition) else str(reddit_model.position)
             position_str = position_val.replace('_', ' ').title()
             subreddit = reddit_model.subreddit or 'wallpapers'
             
-            # Styling from style_model (reddit1 for reddit2, own settings for reddit1)
-            font_size = style_model.font_size
-            margin = getattr(style_model, "margin", 20)
-            color = reddit_settings.get('color', [255, 255, 255, 230])
-            bg_color_data = reddit_settings.get('bg_color', [35, 35, 35, 255])
-            border_color_data = reddit_settings.get('border_color', [255, 255, 255, 255])
-            border_opacity = reddit_settings.get('border_opacity', 1.0)
-            show_background = SettingsManager.to_bool(style_model.show_background, True)
-            show_separators = SettingsManager.to_bool(style_model.show_separators, True)
-            bg_opacity = reddit_settings.get('bg_opacity', 1.0)
-            font_family = style_model.font_family
+            # Styling inheritance with fallback to reddit1 when configuring reddit2.
+            font_size = inherit_style('font_size', style_model.font_size)
+            margin = inherit_style('margin', getattr(style_model, "margin", 20))
+            color = inherit_style('color', [255, 255, 255, 230])
+            bg_color_data = inherit_style('bg_color', [35, 35, 35, 255])
+            border_color_data = inherit_style('border_color', [255, 255, 255, 255])
+            border_opacity = inherit_style('border_opacity', 1.0)
+            show_background = SettingsManager.to_bool(inherit_style('show_background', style_model.show_background), True)
+            show_separators = SettingsManager.to_bool(inherit_style('show_separators', style_model.show_separators), True)
+            bg_opacity = inherit_style('bg_opacity', 1.0)
+            font_family = inherit_style('font_family', style_model.font_family)
             
             # Limit comes from own settings
             try:

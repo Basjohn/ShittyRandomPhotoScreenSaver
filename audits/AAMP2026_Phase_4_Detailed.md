@@ -29,12 +29,18 @@ Status: Planning-only (no code). Spec.md remains current-state. Main audit refer
 - [x] Add migration shim for legacy configs (one-time transform) and document removal timeline. ✅ _2026‑01‑01_: `from_mapping` accepts both dotted keys and legacy embedded dicts to keep backward compatibility; removal noted for Phase 5.
 - [x] Capture live-setting reaction requirements explicitly: widget-facing services (e.g. Spotify visualizer sensitivity/floor) must subscribe to the typed settings model so manual overrides take effect even if the engine stays running. ✅ _2026‑01‑01_: WidgetManager now refreshes Spotify VIS/media/reddit on `settings_changed`, with tests covering VIS + Spotify volume live behaviour.
 - [x] Document the monitoring/display dependency: if the “primary display” checkbox gets toggled off, the settings model must inform DisplayWidget without killing the engine; typed accessors should expose the linkage so UI modals can issue non-destructive refreshes instead of triggering full restarts. ✅ _2026‑01‑01_: Settings doc updated; WidgetManager hooks reuse typed monitor fields without engine restart.
+## 4) Modal Settings Conversion
+- [ ] **Defaults realignment gate (pre-modal work)** – Follow `audits/setting manager defaults/Setting Defaults Guide.txt`: import both SST snapshots (`SRPSS_Settings_Screensaver.sst`, `SRPSS_Settings_Screensaver_MC.sst`), verify SettingsManager canonical defaults cover every value the SSTs relied on, ensure reset-to-defaults immediately applies those values, assert MC build defaults fall back to a single available monitor when display 2 is missing, confirm automatic geo detection remains the default for weather location, and document the “no sources” popup + Just Make It Work/Ehhhh flow before proceeding to modal settings improvements. Remove dependence on SST files after parity is proven.
+- [ ] Convert the existing settings dialog into the modal workflow defined in Spec.md, preserving the custom title bar/theme and ensuring both SRPSS and MC builds can summon it without restarting the engine.
+- [ ] Wire the modal lifecycle to `SettingsManager.settings_changed` so edits apply live (DisplayWidget refresh, widget config updates, queue/source changes) without forcing teardown/reinit.
+- [ ] Integrate the Just Make It Work/Ehhhh guard into the modal flow: enforce sources validation, show the canonical popup styling, and persist the choice through SettingsManager.
+- [ ] Update Spec.md + Docs/TestSuite.md with the modal workflow, launch triggers, and regression coverage; add pytest covering modal open/close sequencing, live updates, and reset-to-defaults behavior.
 
-## 4) Overlay Guidelines Audit
+## 5) Overlay Guidelines Audit
 - [ ] Audit all widgets against `Docs/10_WIDGET_GUIDELINES.md` (header/logo alignment, fade sync, ResourceManager registration).
 - [ ] Include `ui/widget_stack_predictor.py` alignment.
 
-## 5) Testing Strategy (Design)
+## 6) Testing Strategy (Design)
 - [ ] Expand `tests/test_widget_factories.py`, `tests/test_widget_positioner.py` for new cases (multi-monitor, collision, stacking).
 - [ ] Add `tests/test_widget_manager.py` lifecycle suite (start/stop order, ResourceManager cleanup, fade orchestration).
 - [ ] Settings model tests: serialization/deserialization, profile separation, validation; ensure `tests/test_settings_type_safety.py` stays green.

@@ -1,0 +1,405 @@
+{
+  "application": "Screensaver_MC",
+  "settings_version": 1,
+  "snapshot": {
+    "accessibility": {
+      "dimming.enabled": "false",
+      "dimming.opacity": 30,
+      "pixel_shift.enabled": "true",
+      "pixel_shift.rate": 1
+    },
+    "display": {
+      "gl_depth_bits": 24,
+      "gl_stencil_bits": 8,
+      "hw_accel": "true",
+      "mode": "fill",
+      "pan_and_scan": "false",
+      "pan_auto_speed": "true",
+      "pan_speed": 3,
+      "prefer_triple_buffer": "true",
+      "refresh_sync": "true",
+      "render_backend_mode": "opengl",
+      "same_image_all_monitors": "false",
+      "sharpen_downscale": "false",
+      "show_on_monitors": [
+        "2"
+      ]
+    },
+    "input": {
+      "hard_exit": "true"
+    },
+    "queue": {
+      "shuffle": "true"
+    },
+    "sources": {
+      "folders": [
+        "C:/Users/Basjohn/Documents/[4] WALLPAPERS/PERSONALSET"
+      ],
+      "local_ratio": 65,
+      "mode": "folders",
+      "rss_background_cap": 30,
+      "rss_feeds": [
+        "https://www.bing.com/HPImageArchive.aspx?format=rss&idx=0&n=8&mkt=en-US",
+        "https://www.nasa.gov/feeds/iotd-feed",
+        "https://www.reddit.com/r/EarthPorn/top/.json?t=day&limit=25",
+        "https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25",
+        "https://www.reddit.com/r/CityPorn/top/.json?t=day&limit=25",
+        "https://www.reddit.com/r/ArchitecturePorn/top/.json?t=day&limit=25",
+        "https://www.reddit.com/r/WaterPorn/top/.json?t=day&limit=25",
+        "https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limit=25",
+        "https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=25",
+        "https://www.reddit.com/r/AbandonedPorn/top/.json?t=day&limit=25"
+      ],
+      "rss_refresh_minutes": 10,
+      "rss_rotating_cache_size": 20,
+      "rss_save_directory": "",
+      "rss_save_to_disk": "false",
+      "rss_stale_minutes": 30
+    },
+    "timing": {
+      "interval": 120
+    },
+    "transitions": {
+      "block_flip": {
+        "cols": 24,
+        "rows": 12
+      },
+      "blockspin": {
+        "direction": "Random"
+      },
+      "crumble": {
+        "crack_complexity": 1.0,
+        "piece_count": 14,
+        "weighting": "Random Choice"
+      },
+      "diffuse": {
+        "block_size": 18,
+        "shape": "Rectangle"
+      },
+      "duration_ms": 8067,
+      "durations": {
+        "3D Block Spins": 9000,
+        "Blinds": 3000,
+        "Block Puzzle Flip": 4560,
+        "Crossfade": 3000,
+        "Crumble": 12215,
+        "Diffuse": 3523,
+        "Particle": 12025,
+        "Peel": 3000,
+        "Ripple": 7275,
+        "Slide": 5032,
+        "Warp Dissolve": 8067,
+        "Wipe": 4035
+      },
+      "easing": "Auto",
+      "last_random_choice": "Particle",
+      "particle": {
+        "direction": "Left to Right",
+        "gloss_size": 72.0,
+        "light_direction": 0,
+        "mode": "Converge",
+        "overlap": 4.0,
+        "particle_radius": 10.0,
+        "swirl_order": 0,
+        "swirl_strength": 1.0,
+        "swirl_turns": 3.0,
+        "texture_mapping": true,
+        "trail_length": 0.15,
+        "trail_strength": 0.6,
+        "use_3d_shading": true,
+        "wobble": true
+      },
+      "peel": {
+        "direction": "Random"
+      },
+      "pool": {
+        "3D Block Spins": true,
+        "Blinds": true,
+        "Block Puzzle Flip": true,
+        "Crossfade": false,
+        "Crumble": true,
+        "Diffuse": true,
+        "Particle": true,
+        "Peel": false,
+        "Ripple": true,
+        "Slide": true,
+        "Warp Dissolve": true,
+        "Wipe": true
+      },
+      "random_always": true,
+      "random_choice": "Particle",
+      "slide": {
+        "direction": "Random"
+      },
+      "type": "Warp Dissolve",
+      "wipe": {
+        "direction": "Random"
+      },
+      "wipe.direction": "Diagonal TL-BR",
+      "wipe.last_direction": "Diagonal TL-BR"
+    },
+    "ui": {
+      "dialog_geometry": {
+        "height": 845,
+        "width": 1622,
+        "x": 17,
+        "y": 13
+      },
+      "last_tab_index": 5,
+      "last_tab_scroll": {
+        "accessibility": 0,
+        "display": 0,
+        "sources": 0,
+        "transitions": 0,
+        "widgets": 43
+      },
+      "tab_state": {
+        "widgets": {
+          "view_state": {
+            "scroll": 43,
+            "subtab": 3
+          }
+        }
+      }
+    },
+    "widgets": {
+      "clock": {
+        "analog_face_shadow": true,
+        "analog_shadow_intense": true,
+        "bg_color": [
+          35,
+          35,
+          35,
+          255
+        ],
+        "bg_opacity": 0.7,
+        "border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "border_opacity": 1.0,
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "digital_shadow_intense": false,
+        "display_mode": "analog",
+        "enabled": true,
+        "font_family": "Segoe UI",
+        "font_size": 60,
+        "format": "24h",
+        "margin": 40,
+        "monitor": "ALL",
+        "position": "Top Right",
+        "show_background": false,
+        "show_numerals": true,
+        "show_seconds": true,
+        "show_timezone": true,
+        "timezone": "local"
+      },
+      "clock2": {
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "display_mode": "digital",
+        "enabled": false,
+        "font_family": "Segoe UI",
+        "font_size": 32,
+        "format": "24h",
+        "margin": 20,
+        "monitor": 2,
+        "position": "Bottom Right",
+        "show_numerals": true,
+        "show_seconds": false,
+        "show_timezone": true,
+        "timezone": "local"
+      },
+      "clock3": {
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "display_mode": "digital",
+        "enabled": false,
+        "font_family": "Segoe UI",
+        "font_size": 32,
+        "format": "24h",
+        "margin": 20,
+        "monitor": "ALL",
+        "position": "Bottom Left",
+        "show_numerals": true,
+        "show_seconds": false,
+        "show_timezone": true,
+        "timezone": "local"
+      },
+      "media": {
+        "artwork_size": 220,
+        "bg_color": [
+          35,
+          35,
+          35,
+          255
+        ],
+        "bg_opacity": 0.6,
+        "border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "border_opacity": 1.0,
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "enabled": true,
+        "font_family": "Segoe Script",
+        "font_size": 20,
+        "intense_shadow": true,
+        "margin": 40,
+        "monitor": 2,
+        "position": "Bottom Left",
+        "rounded_artwork_border": true,
+        "show_background": true,
+        "show_controls": true,
+        "show_header_frame": true,
+        "spotify_volume_enabled": true,
+        "spotify_volume_fill_color": [
+          255,
+          255,
+          255,
+          230
+        ]
+      },
+      "reddit": {
+        "bg_color": [
+          35,
+          35,
+          35,
+          255
+        ],
+        "bg_opacity": 0.5,
+        "border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "border_opacity": 1.0,
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "enabled": true,
+        "exit_on_click": true,
+        "font_family": "Segoe UI",
+        "font_size": 15,
+        "intense_shadow": true,
+        "limit": 10,
+        "margin": 40,
+        "monitor": 2,
+        "position": "Bottom Center",
+        "show_background": true,
+        "show_separators": true,
+        "subreddit": "All"
+      },
+      "reddit2": {
+        "enabled": true,
+        "limit": 10,
+        "monitor": 2,
+        "position": "Bottom Right",
+        "subreddit": "SubRedditDrama"
+      },
+      "shadows": {
+        "blur_radius": 18,
+        "color": [
+          0,
+          0,
+          0,
+          255
+        ],
+        "enabled": true,
+        "frame_opacity": 0.77,
+        "offset": [
+          4,
+          4
+        ],
+        "text_opacity": 0.33
+      },
+      "spotify_visualizer": {
+        "adaptive_sensitivity": true,
+        "audio_block_size": 512,
+        "bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "bar_border_opacity": 1.0,
+        "bar_count": 17,
+        "bar_fill_color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "dynamic_floor": true,
+        "dynamic_range_enabled": true,
+        "enabled": true,
+        "ghost_alpha": 0.4,
+        "ghost_decay": 0.35,
+        "ghosting_enabled": true,
+        "manual_floor": 2.1,
+        "mode": "spectrum",
+        "monitor": "ALL",
+        "sensitivity": 1.0,
+        "software_visualizer_enabled": false
+      },
+      "weather": {
+        "bg_color": [
+          35,
+          35,
+          35,
+          255
+        ],
+        "bg_opacity": 0.6,
+        "border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "border_opacity": 1.0,
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "enabled": true,
+        "font_family": "Segoe UI",
+        "font_size": 27,
+        "intense_shadow": true,
+        "location": "Johannesburg",
+        "margin": 40,
+        "monitor": 2,
+        "position": "Top Left",
+        "show_background": true,
+        "show_forecast": true
+      }
+    }
+  }
+}

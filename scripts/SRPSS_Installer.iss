@@ -47,16 +47,17 @@ Type: files; Name: "{sys}\\ShittyRandomPhotoScreenSaver.scr"
 
 [Registry]
 ; Set SRPSS.scr as the current user's active screensaver
-Root: HKCU; Subkey: "Control Panel\\Desktop"; ValueType: string; ValueName: "SCRNSAVE.EXE"; ValueData: "{sys}\\SRPSS.scr"; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Control Panel\Desktop"; ValueType: string; ValueName: "SCRNSAVE.EXE"; ValueData: "{sys}\SRPSS.scr"; Flags: uninsdeletevalue
 
 [Icons]
 ; Desktop shortcut to open Screen Saver Settings (with SRPSS selected).
 ; Using control.exe desk.cpl,,1 is the supported way on modern Windows.
-Name: "{commondesktop}\\Configure ShittyRandomPhotoScreenSaver"; Filename: "{sys}\\control.exe"; Parameters: "desk.cpl,,1"; WorkingDir: "{sys}"; IconFilename: "{app}\\SRPSS.ico"
+Name: "{commondesktop}\Configure SRPSS"; Filename: "{sys}\control.exe"; Parameters: "desk.cpl,,1"; WorkingDir: "{sys}"; IconFilename: "{app}\SRPSS.ico"
 
 ; Start menu shortcut to the same Screen Saver Settings dialog
-Name: "{group}\\Configure ShittyRandomPhotoScreenSaver"; Filename: "{sys}\\control.exe"; Parameters: "desk.cpl,,1"; WorkingDir: "{sys}"; IconFilename: "{app}\\SRPSS.ico"
+Name: "{group}\Configure SRPSS"; Filename: "{sys}\control.exe"; Parameters: "desk.cpl,,1"; WorkingDir: "{sys}"; IconFilename: "{app}\SRPSS.ico"
 
 [Run]
 ; No post-install run step by default. The user can open Screen Saver
 ; Settings via the standard control panel entry.
+Filename: "{sys}\control.exe"; Parameters: "desk.cpl,,1"; Description: "Open Screen Saver Settings now"; Flags: postinstall nowait skipifsilent; Checked: yes
