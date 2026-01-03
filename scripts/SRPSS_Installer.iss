@@ -25,7 +25,7 @@ SolidCompression=yes
 ArchitecturesInstallIn64BitMode=x64os
 SetupIconFile=..\SRPSS.ico
 UninstallDisplayIcon={app}\SRPSS.ico
-VersionInfoVersion=1.5.8.0
+VersionInfoVersion=1.5.9.0
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -60,4 +60,4 @@ Name: "{group}\Configure SRPSS"; Filename: "{sys}\control.exe"; Parameters: "des
 [Run]
 ; No post-install run step by default. The user can open Screen Saver
 ; Settings via the standard control panel entry.
-Filename: "{sys}\control.exe"; Parameters: "desk.cpl,,1"; Description: "Open Screen Saver Settings now"; Flags: postinstall nowait skipifsilent; Checked: yes
+Filename: "{sys}\control.exe"; Parameters: "desk.cpl,,1"; Description: "Open Screen Saver Settings now"; Flags: postinstall nowait skipifsilent

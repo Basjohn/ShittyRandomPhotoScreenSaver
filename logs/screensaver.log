@@ -1066,3 +1066,1184 @@
 2026-01-02 21:06:51 - __main__                       - INFO     - ============================================================
 2026-01-02 21:06:51 - __main__                       - INFO     - ShittyRandomPhotoScreenSaver Exiting (code=0)
 2026-01-02 21:06:51 - __main__                       - INFO     - ============================================================
+2026-01-03 12:23:49 - root                           - INFO     - ============================================================
+2026-01-03 12:23:49 - root                           - INFO     - Screensaver logging initialized (debug=False, verbose=False)
+2026-01-03 12:23:49 - root                           - INFO     - ============================================================
+2026-01-03 12:23:49 - root                           - INFO     - [1 duplicates suppressed]
+2026-01-03 12:23:49 - __main__                       - INFO     - ShittyRandomPhotoScreenSaver Starting
+2026-01-03 12:23:49 - __main__                       - INFO     - ============================================================
+2026-01-03 12:23:49 - __main__                       - INFO     - Running in script mode - cleaning pycache on startup
+2026-01-03 12:23:49 - __main__                       - INFO     - Removed 27 __pycache__ directories
+2026-01-03 12:23:49 - __main__                       - WARNING  - Unknown argument: -debug, defaulting to RUN mode (script)
+2026-01-03 12:23:49 - __main__                       - INFO     - Global QSurfaceFormat configured (swap=SwapBehavior.DoubleBuffer, interval=1, depth=24, stencil=8)
+2026-01-03 12:23:49 - __main__                       - INFO     - Qt image allocation limit: 1GB (supports 8K+ images, per-image on-demand)
+2026-01-03 12:23:49 - __main__                       - INFO     - Qt Application created: SRPSS
+2026-01-03 12:23:49 - __main__                       - INFO     - Starting screensaver in RUN mode
+2026-01-03 12:23:49 - __main__                       - INFO     - Windows timer resolution set to 1ms for smooth animations
+2026-01-03 12:23:49 - __main__                       - INFO     - Initializing screensaver engine
+2026-01-03 12:23:49 - SettingsManager                - INFO     - SettingsManager initialized
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - ScreensaverEngine created
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - Engine state: UNINITIALIZED -> INITIALIZING
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - ============================================================
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - Initializing Screensaver Engine 🚦🚦🚦🚦🚦
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - ============================================================
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - Initializing core systems...
+2026-01-03 12:23:49 - EventSystem                    - INFO     - EventSystem initialized
+2026-01-03 12:23:49 - core.threading.manager         - INFO     - Initialized io pool with 4 workers
+2026-01-03 12:23:49 - core.threading.manager         - INFO     - Initialized compute pool with 23 workers
+2026-01-03 12:23:49 - core.threading.manager         - INFO     - ThreadManager initialized with IO=4, COMPUTE=23 workers
+2026-01-03 12:23:49 - SettingsManager                - INFO     - SettingsManager initialized
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - Core systems initialized successfully
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - Loading settings...
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - Image rotation interval: 10s
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - Display mode: fill
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - Shuffle enabled: true
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - Prefetch ahead: 5
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - Initializing image sources...
+2026-01-03 12:23:49 - sources.base_provider.folder.PERSONALSET - INFO     - Created FolderSource for 'C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET' (recursive=True)
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - Folder source added: C:/Users/Basjohn/Documents/[4] WALLPAPERS/PERSONALSET
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - RSS source added: https://www.bing.com/HPImageArchive.aspx?format=rss&idx=0&n=8&mkt=en-US
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - RSS source added: https://www.nasa.gov/feeds/iotd-feed
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/EarthPorn/top/.json?t=day&limit=25
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/CityPorn/top/.json?t=day&limit=25
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/ArchitecturePorn/top/.json?t=day&limit=25
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/WaterPorn/top/.json?t=day&limit=25
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limit=25
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=25
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/AbandonedPorn/top/.json?t=day&limit=25
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - Initialized 11 image sources (1 folder, 10 RSS)
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - Building image queue...
+2026-01-03 12:23:49 - engine.image_queue             - INFO     - ImageQueue initialized (shuffle=true, history_size=50, local_ratio=90%)
+2026-01-03 12:23:49 - sources.base_provider.folder.PERSONALSET - INFO     - Scanning folder: C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET
+2026-01-03 12:23:49 - sources.base_provider.folder.PERSONALSET - INFO     - Scan complete: 558 images found (558 files scanned) in 0.05s
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - Added 558 images from C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET
+2026-01-03 12:23:49 - engine.image_queue             - INFO     - Added 558 images (local=558, rss=0). Pools: local=558, rss=0
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - Queue initialized with 558 local images
+2026-01-03 12:23:49 - engine.image_queue             - INFO     - Added 20 images (local=0, rss=20). Pools: local=558, rss=20
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - Pre-loaded 20 cached RSS images for immediate use (cap=20)
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - Starting async RSS load for 10 sources...
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - Image queue ready with 578 images
+2026-01-03 12:23:49 - utils.image_cache              - INFO     - ImageCache initialized: max_items=24, max_memory=1024MB
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 1/10: https://www.bing.com/HPImageArchive.aspx?format=rss&idx=0&n=...
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - Image prefetcher initialized (ahead=5, max_concurrent=2)
+2026-01-03 12:23:49 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:23:49 - engine.screensaver             - INFO     - Initializing display...
+2026-01-03 12:23:49 - engine.display                 - INFO     - Monitor detection enabled (2 screens)
+2026-01-03 12:23:49 - engine.display                 - INFO     - DisplayManager initialized (mode=fill, same_image=false)
+2026-01-03 12:23:49 - engine.display                 - INFO     - Initializing displays for 2 screens
+2026-01-03 12:23:49 - engine.display                 - INFO     - Cleaning up 0 display widgets
+2026-01-03 12:23:49 - engine.display                 - INFO     - Display manager cleanup complete
+2026-01-03 12:23:49 - rendering.display              - INFO     - DisplayWidget created for screen 0 (fill)
+2026-01-03 12:23:49 - rendering.backends.opengl.backend - INFO     - Using OpenGL renderer backend
+2026-01-03 12:23:49 - rendering.backends             - INFO     - Renderer backend 'opengl' initialized
+2026-01-03 12:23:49 - rendering.display              - INFO     - [RENDER] Backend active (screen=0, api=OpenGL 4.x, triple=False, vsync_toggle=False)
+2026-01-03 12:23:49 - rendering.display              - INFO     - Showing on screen 0: 1707x959 at (0, 0) DPR=1.5
+2026-01-03 12:23:50 - rendering.display              - INFO     - Detected refresh rate: 165 Hz, adaptive target FPS: 55
+2026-01-03 12:23:50 - rendering.display              - INFO     - [RENDER] Render surface established (screen=0, 1707x959, vsync=True, triple_preference=True)
+2026-01-03 12:23:50 - rendering.display              - INFO     - [GL COMPOSITOR] Created shared compositor for screen 0
+2026-01-03 12:23:50 - rendering.gl_compositor        - INFO     - [DIMMING] GL dimming changed: enabled=False→False, opacity=0%→30%
+2026-01-03 12:23:50 - rendering.widget_manager       - INFO     - ✅ clock widget created: Top Right, 24h, font=75px, seconds=True
+2026-01-03 12:23:50 - rendering.widget_manager       - INFO     - ✅ Weather widget created: Johannesburg, Top Left, font=28px
+2026-01-03 12:23:50 - core.media.media_controller    - INFO     - [MEDIA] Windows GSMTC controller initialized
+2026-01-03 12:23:50 - widgets.media_widget           - INFO     - [MEDIA_WIDGET] Using controller: WindowsGlobalMediaController
+2026-01-03 12:23:50 - rendering.widget_manager       - INFO     - ✅ Media widget created: Widgetposition.Bottom Left, font=20px, margin=40
+2026-01-03 12:23:50 - rendering.widget_manager       - INFO     - ✅ reddit widget created: r/All, Widgetposition.Top Left, font=14px, limit=4
+2026-01-03 12:23:50 - rendering.widget_manager       - INFO     - ✅ reddit2 widget created: r/Games, Widgetposition.Top Left, font=14px, limit=4
+2026-01-03 12:23:50 - rendering.widget_manager       - INFO     - ✅ Spotify volume widget started with coordinated fade sync
+2026-01-03 12:23:50 - rendering.widget_manager       - INFO     - ✅ Spotify visualizer widget started: 19 bars
+2026-01-03 12:23:50 - widgets.clock_widget           - INFO     - Clock widget started
+2026-01-03 12:23:50 - widgets.weather_widget         - INFO     - Weather widget started (using cached data)
+2026-01-03 12:23:50 - widgets.media_widget           - INFO     - Media widget started
+2026-01-03 12:23:50 - rendering.widget_manager       - INFO     - Widget setup complete: 7 widgets created and started
+2026-01-03 12:23:50 - rendering.display              - INFO     - WidgetManager created 7 widgets
+2026-01-03 12:23:50 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] clock initialized
+2026-01-03 12:23:50 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] weather initialized
+2026-01-03 12:23:50 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] media initialized
+2026-01-03 12:23:50 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] reddit initialized
+2026-01-03 12:23:50 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] reddit2 initialized
+2026-01-03 12:23:50 - engine.display                 - INFO     - Display widget created for screen 0
+2026-01-03 12:23:50 - core.threading.manager         - INFO     - Initialized io pool with 4 workers
+2026-01-03 12:23:50 - core.threading.manager         - INFO     - Initialized compute pool with 23 workers
+2026-01-03 12:23:50 - core.threading.manager         - INFO     - ThreadManager initialized with IO=4, COMPUTE=23 workers
+2026-01-03 12:23:50 - sources.rss_source             - INFO     - Feed 'Bing Images': 8 entries
+2026-01-03 12:23:50 - rendering.display              - INFO     - DisplayWidget created for screen 1 (fill)
+2026-01-03 12:23:50 - rendering.backends.opengl.backend - INFO     - Using OpenGL renderer backend
+2026-01-03 12:23:50 - rendering.backends             - INFO     - Renderer backend 'opengl' initialized
+2026-01-03 12:23:50 - rendering.display              - INFO     - [RENDER] Backend active (screen=1, api=OpenGL 4.x, triple=False, vsync_toggle=False)
+2026-01-03 12:23:50 - rendering.display              - INFO     - Showing on screen 1: 2560x1439 at (2560, 0) DPR=1.5
+2026-01-03 12:23:50 - rendering.display              - INFO     - Detected refresh rate: 60 Hz, adaptive target FPS: 60
+2026-01-03 12:23:50 - rendering.display              - INFO     - [RENDER] Render surface established (screen=1, 2560x1439, vsync=True, triple_preference=True)
+2026-01-03 12:23:50 - rendering.display              - INFO     - [GL COMPOSITOR] Created shared compositor for screen 1
+2026-01-03 12:23:50 - rendering.gl_compositor        - INFO     - [DIMMING] GL dimming changed: enabled=False→False, opacity=0%→30%
+2026-01-03 12:23:50 - rendering.widget_manager       - INFO     - ✅ clock widget created: Top Right, 24h, font=75px, seconds=True
+2026-01-03 12:23:50 - widgets.clock_widget           - INFO     - Clock widget started
+2026-01-03 12:23:50 - rendering.widget_manager       - INFO     - Widget setup complete: 1 widgets created and started
+2026-01-03 12:23:50 - rendering.display              - INFO     - WidgetManager created 1 widgets
+2026-01-03 12:23:50 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] clock initialized
+2026-01-03 12:23:50 - engine.display                 - INFO     - Display widget created for screen 1
+2026-01-03 12:23:50 - engine.display                 - INFO     - Created 2 display widgets
+2026-01-03 12:23:50 - engine.screensaver             - INFO     - Display initialized with 2 screens
+2026-01-03 12:23:50 - engine.screensaver             - INFO     - Rotation timer configured: 10s
+2026-01-03 12:23:50 - engine.screensaver             - INFO     - Background RSS refresh enabled (interval=600000ms, cap=30)
+2026-01-03 12:23:50 - engine.screensaver             - INFO     - Engine state: INITIALIZING -> STOPPED
+2026-01-03 12:23:50 - engine.screensaver             - INFO     - Engine initialization complete
+2026-01-03 12:23:50 - engine.screensaver             - INFO     - Engine state: STOPPED -> STARTING
+2026-01-03 12:23:50 - engine.screensaver             - INFO     - Starting screensaver engine...
+2026-01-03 12:23:50 - engine.screensaver             - INFO     - Rotation timer started (10000ms)
+2026-01-03 12:23:50 - engine.screensaver             - INFO     - Engine state: STARTING -> RUNNING
+2026-01-03 12:23:50 - engine.screensaver             - INFO     - Screensaver engine started
+2026-01-03 12:23:50 - __main__                       - INFO     - Screensaver engine started - entering event loop
+2026-01-03 12:23:50 - widgets.media_widget           - INFO     - [MEDIA_WIDGET] First track snapshot captured; waiting for coordinated fade-in
+2026-01-03 12:23:50 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3507x2480 → scaled 2559x1810 → cropped to 2560x1438
+2026-01-03 12:23:50 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] Context initialized: version=4.6, swap=SwapBehavior.DoubleBuffer, interval=1
+2026-01-03 12:23:50 - sources.rss_source             - INFO     - Downloaded image: 736d1ddff265faf22a1c09b442083722.jpg (329407 bytes)
+2026-01-03 12:23:50 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] OpenGL adapter: vendor=NVIDIA Corporation, renderer=NVIDIA GeForce RTX 4090/PCIe/SSE2, version=4.6.0 NVIDIA 591.44
+2026-01-03 12:23:50 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled raindrops program: 12
+2026-01-03 12:23:50 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled warp program: 13
+2026-01-03 12:23:50 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled diffuse program: 14
+2026-01-03 12:23:50 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled blockflip program: 15
+2026-01-03 12:23:50 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled peel program: 16
+2026-01-03 12:23:50 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled crossfade program: 17
+2026-01-03 12:23:50 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled slide program: 18
+2026-01-03 12:23:50 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled wipe program: 19
+2026-01-03 12:23:50 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled blinds program: 20
+2026-01-03 12:23:50 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled crumble program: 21
+2026-01-03 12:23:50 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled particle program: 22
+2026-01-03 12:23:51 - rendering.image_processor_async - INFO     - FILL(QImage): Image 5950x4913 → scaled 3839x3170 → cropped to 3840x2158
+2026-01-03 12:23:51 - sources.rss_source             - INFO     - Downloaded image: 300287ec358d1bbe52d539dfac5b54be.jpg (331405 bytes)
+2026-01-03 12:23:51 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] Context initialized: version=4.6, swap=SwapBehavior.DoubleBuffer, interval=1
+2026-01-03 12:23:51 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] OpenGL adapter: vendor=NVIDIA Corporation, renderer=NVIDIA GeForce RTX 4090/PCIe/SSE2, version=4.6.0 NVIDIA 591.44
+2026-01-03 12:23:51 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] Shader pipeline initialized (1.5ms)
+2026-01-03 12:23:51 - weather.open_meteo_provider    - INFO     - Geocoded Johannesburg → Johannesburg, South Africa (-26.20, 28.04)
+2026-01-03 12:23:51 - engine.screensaver             - INFO     - [ASYNC] Different images displayed on 2 displays
+2026-01-03 12:23:51 - sources.rss_source             - INFO     - Downloaded image: 8a7a113b6e014aaad88b923e4ac6ee9a.jpg (325799 bytes)
+2026-01-03 12:23:51 - widgets.media_widget           - INFO     - [MEDIA_WIDGET] Requesting coordinated fade sync
+2026-01-03 12:23:51 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.110 Bars: [1.00 1.00 0.85 0.64 0.53 0.69 0.81 0.67 0.45 0.41 0.45 0.67 0.81 0.69 0.53 0.64 0.85 1.00 1.00]
+2026-01-03 12:23:51 - sources.rss_source             - INFO     - Downloaded image: f55dac3ea292bed6411f9b4ca9ae98dd.jpg (332849 bytes)
+2026-01-03 12:23:51 - sources.rss_source             - INFO     - RSS refresh complete: 38 total images (8 new)
+2026-01-03 12:23:51 - sources.rss_source             - INFO     - Cache cleanup needed: count 44 > 40
+2026-01-03 12:23:51 - sources.rss_source             - INFO     - Cache cleanup: removed 4 files (5.6MB), kept 40 files (min_keep=20)
+2026-01-03 12:23:51 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 38 images from source
+2026-01-03 12:23:51 - engine.image_queue             - INFO     - Added 10 images (local=0, rss=10). Pools: local=556, rss=30
+2026-01-03 12:23:52 - weather.open_meteo_provider    - INFO     - Weather fetched for Johannesburg: 28.2°C, Overcast
+2026-01-03 12:23:52 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.589 Bars: [1.00 0.97 0.77 0.57 0.44 0.47 0.49 0.38 0.26 0.25 0.26 0.38 0.49 0.47 0.44 0.57 0.77 0.97 1.00]
+2026-01-03 12:23:53 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.343 Bars: [0.54 0.48 0.41 0.35 0.34 0.44 0.47 0.34 0.23 0.21 0.23 0.34 0.47 0.44 0.34 0.35 0.41 0.48 0.54]
+2026-01-03 12:23:53 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 2/10: https://www.nasa.gov/feeds/iotd-feed...
+2026-01-03 12:23:53 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:23:54 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.825 Bars: [0.83 0.74 0.60 0.46 0.37 0.41 0.40 0.30 0.20 0.19 0.20 0.30 0.40 0.41 0.37 0.46 0.60 0.74 0.83]
+2026-01-03 12:23:55 - sources.rss_source             - INFO     - Feed 'NASA Image of the Day': 60 entries
+2026-01-03 12:23:55 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.534 Bars: [0.45 0.41 0.35 0.31 0.33 0.45 0.48 0.38 0.27 0.26 0.27 0.38 0.48 0.45 0.33 0.31 0.35 0.41 0.45]
+2026-01-03 12:23:55 - sources.rss_source             - INFO     - Downloaded image: cc28bd19125f67d411e659dd43741b98.jpg (4809178 bytes)
+2026-01-03 12:23:56 - sources.rss_source             - INFO     - Downloaded image: 2a894cd388183d856cc82c7d19e850b2.jpg (244116 bytes)
+2026-01-03 12:23:56 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.993 Bars: [0.65 0.58 0.48 0.39 0.35 0.42 0.43 0.32 0.22 0.21 0.22 0.32 0.43 0.42 0.35 0.39 0.48 0.58 0.65]
+2026-01-03 12:23:56 - sources.rss_source             - INFO     - Downloaded image: c3cdf63a723cb87a63cfe097778b17c9.jpg (6769782 bytes)
+2026-01-03 12:23:56 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.612 Bars: [0.58 0.52 0.44 0.36 0.36 0.47 0.51 0.39 0.26 0.24 0.26 0.39 0.51 0.47 0.36 0.36 0.44 0.52 0.58]
+2026-01-03 12:23:57 - sources.rss_source             - INFO     - Downloaded image: c51256a265668b34d04d7e1abcc42c9f.jpg (626908 bytes)
+2026-01-03 12:23:57 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.375 Bars: [0.96 0.85 0.69 0.52 0.41 0.44 0.43 0.34 0.25 0.24 0.25 0.34 0.43 0.44 0.41 0.52 0.69 0.85 0.96]
+2026-01-03 12:23:58 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.313 Bars: [0.78 0.69 0.56 0.43 0.36 0.39 0.39 0.29 0.21 0.20 0.21 0.29 0.39 0.39 0.36 0.43 0.56 0.69 0.78]
+2026-01-03 12:23:58 - sources.rss_source             - INFO     - Downloaded image: ede773994be4bc926a5a0743b5f8dc03.jpg (21864366 bytes)
+2026-01-03 12:23:58 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.516 Bars: [0.69 0.61 0.51 0.41 0.38 0.48 0.50 0.40 0.28 0.27 0.28 0.40 0.50 0.48 0.38 0.41 0.51 0.61 0.69]
+2026-01-03 12:23:59 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.345 Bars: [0.30 0.28 0.25 0.25 0.30 0.44 0.47 0.36 0.25 0.23 0.25 0.36 0.47 0.44 0.30 0.25 0.25 0.28 0.30]
+2026-01-03 12:23:59 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.927 Bars: [0.53 0.48 0.40 0.35 0.38 0.55 0.63 0.50 0.34 0.32 0.34 0.50 0.63 0.55 0.38 0.35 0.40 0.48 0.53]
+2026-01-03 12:24:00 - sources.rss_source             - INFO     - Downloaded image: cb23ac7f98f747ad162fe1e2fa3012e0.jpg (35596187 bytes)
+2026-01-03 12:24:00 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.091 Bars: [0.53 0.48 0.40 0.33 0.31 0.37 0.37 0.27 0.18 0.17 0.18 0.27 0.37 0.37 0.31 0.33 0.40 0.48 0.53]
+2026-01-03 12:24:00 - sources.rss_source             - INFO     - Downloaded image: c73f4b54c0c5e411e6001a6e7daf45b6.jpg (486961 bytes)
+2026-01-03 12:24:00 - sources.rss_source             - INFO     - RSS refresh complete: 38 total images (8 new)
+2026-01-03 12:24:00 - sources.rss_source             - INFO     - Cache cleanup needed: count 47 > 40
+2026-01-03 12:24:00 - sources.rss_source             - INFO     - Cache cleanup: removed 7 files (34.0MB), kept 40 files (min_keep=20)
+2026-01-03 12:24:00 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 38 images from source
+2026-01-03 12:24:00 - rendering.image_processor_async - INFO     - FILL(QImage): Image 4284x5712 → scaled 2559x3413 → cropped to 2560x1438
+2026-01-03 12:24:00 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3840x2557 → scaled 3840x2557 → cropped to 3840x2158
+2026-01-03 12:24:01 - transitions.gl_compositor_crossfade_transition - INFO     - GLCompositorCrossfadeTransition started (6199ms)
+2026-01-03 12:24:01 - engine.screensaver             - INFO     - [ASYNC] Different images displayed on 2 displays
+2026-01-03 12:24:01 - transitions.gl_compositor_crossfade_transition - INFO     - GLCompositorCrossfadeTransition started (6199ms)
+2026-01-03 12:24:01 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.023 Bars: [0.50 0.45 0.38 0.32 0.31 0.39 0.40 0.29 0.18 0.17 0.18 0.29 0.40 0.39 0.31 0.32 0.38 0.45 0.50]
+2026-01-03 12:24:02 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 3/10: https://www.reddit.com/r/EarthPorn/top/.json?t=day&limit=25...
+2026-01-03 12:24:02 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:24:02 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.025 Bars: [0.17 0.16 0.17 0.19 0.28 0.45 0.51 0.38 0.25 0.23 0.25 0.38 0.51 0.45 0.28 0.19 0.17 0.16 0.17]
+2026-01-03 12:24:03 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/EarthPorn/top/.json?t=day&limit=25)': 10 entries
+2026-01-03 12:24:04 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.257 Bars: [0.09 0.10 0.12 0.18 0.32 0.59 0.70 0.53 0.33 0.29 0.33 0.53 0.70 0.59 0.32 0.18 0.12 0.10 0.09]
+2026-01-03 12:24:04 - sources.rss_source             - INFO     - Downloaded image: 803be3713442a1084c04fa55bcad6b16.jpeg (9711353 bytes)
+2026-01-03 12:24:04 - sources.rss_source             - INFO     - RSS refresh complete: 31 total images (1 new)
+2026-01-03 12:24:04 - sources.rss_source             - INFO     - Cache cleanup needed: count 41 > 40
+2026-01-03 12:24:04 - sources.rss_source             - INFO     - Cache cleanup: removed 1 files (3.1MB), kept 40 files (min_keep=20)
+2026-01-03 12:24:04 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 31 images from source
+2026-01-03 12:24:05 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.608 Bars: [0.05 0.04 0.04 0.04 0.06 0.11 0.14 0.11 0.07 0.06 0.07 0.11 0.14 0.11 0.06 0.04 0.04 0.04 0.05]
+2026-01-03 12:24:06 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.153 Bars: [0.17 0.16 0.17 0.21 0.33 0.59 0.70 0.54 0.34 0.31 0.34 0.54 0.70 0.59 0.33 0.21 0.17 0.16 0.17]
+2026-01-03 12:24:06 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 4/10: https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25...
+2026-01-03 12:24:06 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:24:07 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.872 Bars: [0.11 0.11 0.13 0.18 0.31 0.58 0.70 0.53 0.33 0.30 0.33 0.53 0.70 0.58 0.31 0.18 0.13 0.11 0.11]
+2026-01-03 12:24:07 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25)': 7 entries
+2026-01-03 12:24:07 - sources.rss_source             - WARNING  - [FEED_HEALTH] Feed https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25 failed 1 times, backoff 60s
+2026-01-03 12:24:07 - sources.rss_source             - WARNING  - [RATE_LIMIT] Reddit feed returned 0 images: https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25
+2026-01-03 12:24:07 - sources.rss_source             - INFO     - [RATE_LIMIT] Skipping 1 rate-limited Reddit feeds (will retry on next refresh)
+2026-01-03 12:24:07 - sources.rss_source             - INFO     - RSS refresh complete: 30 total images (0 new)
+2026-01-03 12:24:07 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 30 images from source
+2026-01-03 12:24:07 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.664 Bars: [0.02 0.02 0.02 0.03 0.05 0.08 0.10 0.08 0.04 0.04 0.04 0.08 0.10 0.08 0.05 0.03 0.02 0.02 0.02]
+2026-01-03 12:24:08 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.193 Bars: [0.59 0.53 0.44 0.38 0.40 0.63 0.76 0.58 0.35 0.31 0.35 0.58 0.76 0.63 0.40 0.38 0.44 0.53 0.59]
+2026-01-03 12:24:09 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.709 Bars: [0.92 0.81 0.65 0.51 0.45 0.60 0.69 0.52 0.32 0.28 0.32 0.52 0.69 0.60 0.45 0.51 0.65 0.81 0.92]
+2026-01-03 12:24:09 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 5/10: https://www.reddit.com/r/CityPorn/top/.json?t=day&limit=25...
+2026-01-03 12:24:09 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:24:09 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.388 Bars: [0.03 0.04 0.06 0.09 0.17 0.31 0.36 0.27 0.16 0.15 0.16 0.27 0.36 0.31 0.17 0.09 0.06 0.04 0.03]
+2026-01-03 12:24:10 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.913 Bars: [0.03 0.03 0.05 0.08 0.14 0.23 0.25 0.17 0.10 0.09 0.10 0.17 0.25 0.23 0.14 0.08 0.05 0.03 0.03]
+2026-01-03 12:24:10 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/CityPorn/top/.json?t=day&limit=25)': 18 entries
+2026-01-03 12:24:10 - sources.rss_source             - WARNING  - [FEED_HEALTH] Feed https://www.reddit.com/r/CityPorn/top/.json?t=day&limit=25 failed 1 times, backoff 60s
+2026-01-03 12:24:10 - sources.rss_source             - WARNING  - [RATE_LIMIT] Reddit feed returned 0 images: https://www.reddit.com/r/CityPorn/top/.json?t=day&limit=25
+2026-01-03 12:24:10 - sources.rss_source             - INFO     - [RATE_LIMIT] Skipping 1 rate-limited Reddit feeds (will retry on next refresh)
+2026-01-03 12:24:10 - sources.rss_source             - INFO     - RSS refresh complete: 30 total images (0 new)
+2026-01-03 12:24:10 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 30 images from source
+2026-01-03 12:24:10 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.506 Bars: [0.00 0.01 0.01 0.01 0.03 0.04 0.05 0.03 0.02 0.02 0.02 0.03 0.05 0.04 0.03 0.01 0.01 0.01 0.00]
+2026-01-03 12:24:10 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3840x2711 → scaled 2559x1807 → cropped to 2560x1438
+2026-01-03 12:24:11 - rendering.image_processor_async - INFO     - FILL(QImage): Image 6021x3685 → scaled 3839x2350 → cropped to 3840x2158
+2026-01-03 12:24:11 - transitions.gl_compositor_crossfade_transition - INFO     - GLCompositorCrossfadeTransition started (6199ms)
+2026-01-03 12:24:11 - engine.screensaver             - INFO     - [ASYNC] Different images displayed on 2 displays
+2026-01-03 12:24:11 - transitions.gl_compositor_crossfade_transition - INFO     - GLCompositorCrossfadeTransition started (6199ms)
+2026-01-03 12:24:11 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.419 Bars: [0.13 0.13 0.14 0.17 0.26 0.43 0.47 0.34 0.19 0.17 0.19 0.34 0.47 0.43 0.26 0.17 0.14 0.13 0.13]
+2026-01-03 12:24:12 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 6/10: https://www.reddit.com/r/ArchitecturePorn/top/.json?t=day&li...
+2026-01-03 12:24:12 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:24:13 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.071 Bars: [1.00 1.00 0.81 0.61 0.50 0.62 0.69 0.55 0.37 0.35 0.37 0.55 0.69 0.62 0.50 0.61 0.81 1.00 1.00]
+2026-01-03 12:24:13 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/ArchitecturePorn/top/.json?t=day&limit=25)': 5 entries
+2026-01-03 12:24:13 - sources.rss_source             - WARNING  - [FEED_HEALTH] Feed https://www.reddit.com/r/ArchitecturePorn/top/.json?t=day&limit=25 failed 1 times, backoff 60s
+2026-01-03 12:24:13 - sources.rss_source             - WARNING  - [RATE_LIMIT] Reddit feed returned 0 images: https://www.reddit.com/r/ArchitecturePorn/top/.json?t=day&limit=25
+2026-01-03 12:24:13 - sources.rss_source             - INFO     - [RATE_LIMIT] Skipping 1 rate-limited Reddit feeds (will retry on next refresh)
+2026-01-03 12:24:13 - sources.rss_source             - INFO     - RSS refresh complete: 30 total images (0 new)
+2026-01-03 12:24:13 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 30 images from source
+2026-01-03 12:24:14 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.883 Bars: [0.01 0.01 0.01 0.02 0.04 0.07 0.08 0.06 0.03 0.03 0.03 0.06 0.08 0.07 0.04 0.02 0.01 0.01 0.01]
+2026-01-03 12:24:15 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 7/10: https://www.reddit.com/r/WaterPorn/top/.json?t=day&limit=25...
+2026-01-03 12:24:15 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:24:15 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.509 Bars: [0.89 0.78 0.63 0.47 0.35 0.36 0.36 0.24 0.14 0.12 0.14 0.24 0.36 0.36 0.35 0.47 0.63 0.78 0.89]
+2026-01-03 12:24:16 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/WaterPorn/top/.json?t=day&limit=25)': 0 entries
+2026-01-03 12:24:16 - sources.rss_source             - WARNING  - [FEED_HEALTH] Feed https://www.reddit.com/r/WaterPorn/top/.json?t=day&limit=25 failed 1 times, backoff 60s
+2026-01-03 12:24:16 - sources.rss_source             - WARNING  - [RATE_LIMIT] Reddit feed returned 0 images: https://www.reddit.com/r/WaterPorn/top/.json?t=day&limit=25
+2026-01-03 12:24:16 - sources.rss_source             - INFO     - [RATE_LIMIT] Skipping 1 rate-limited Reddit feeds (will retry on next refresh)
+2026-01-03 12:24:16 - sources.rss_source             - INFO     - RSS refresh complete: 30 total images (0 new)
+2026-01-03 12:24:16 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 30 images from source
+2026-01-03 12:24:16 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.722 Bars: [0.09 0.10 0.12 0.16 0.27 0.46 0.52 0.39 0.26 0.24 0.26 0.39 0.52 0.46 0.27 0.16 0.12 0.10 0.09]
+2026-01-03 12:24:17 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.842 Bars: [0.03 0.04 0.06 0.09 0.16 0.26 0.29 0.21 0.12 0.10 0.12 0.21 0.29 0.26 0.16 0.09 0.06 0.04 0.03]
+2026-01-03 12:24:18 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 8/10: https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limi...
+2026-01-03 12:24:18 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:24:18 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.587 Bars: [0.90 0.80 0.64 0.50 0.45 0.61 0.71 0.54 0.33 0.29 0.33 0.54 0.71 0.61 0.45 0.50 0.64 0.80 0.90]
+2026-01-03 12:24:18 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.080 Bars: [0.71 0.63 0.52 0.41 0.38 0.48 0.53 0.38 0.23 0.21 0.23 0.38 0.53 0.48 0.38 0.41 0.52 0.63 0.71]
+2026-01-03 12:24:18 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limit=25)': 0 entries
+2026-01-03 12:24:18 - sources.rss_source             - WARNING  - [FEED_HEALTH] Feed https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limit=25 failed 1 times, backoff 60s
+2026-01-03 12:24:18 - sources.rss_source             - WARNING  - [RATE_LIMIT] Reddit feed returned 0 images: https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limit=25
+2026-01-03 12:24:18 - sources.rss_source             - INFO     - [RATE_LIMIT] Skipping 1 rate-limited Reddit feeds (will retry on next refresh)
+2026-01-03 12:24:18 - sources.rss_source             - INFO     - RSS refresh complete: 30 total images (0 new)
+2026-01-03 12:24:18 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 30 images from source
+2026-01-03 12:24:19 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.098 Bars: [0.05 0.06 0.09 0.16 0.31 0.58 0.68 0.54 0.35 0.32 0.35 0.54 0.68 0.58 0.31 0.16 0.09 0.06 0.05]
+2026-01-03 12:24:19 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.885 Bars: [0.39 0.36 0.31 0.29 0.35 0.53 0.61 0.47 0.31 0.28 0.31 0.47 0.61 0.53 0.35 0.29 0.31 0.36 0.39]
+2026-01-03 12:24:20 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.452 Bars: [0.01 0.01 0.02 0.03 0.05 0.08 0.10 0.07 0.05 0.04 0.05 0.07 0.10 0.08 0.05 0.03 0.02 0.01 0.01]
+2026-01-03 12:24:20 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3840x2785 → scaled 2559x1856 → cropped to 2560x1438
+2026-01-03 12:24:20 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3840x1946 → scaled 4258x2158 → cropped to 3840x2158
+2026-01-03 12:24:20 - transitions.gl_compositor_crossfade_transition - INFO     - GLCompositorCrossfadeTransition started (6199ms)
+2026-01-03 12:24:20 - engine.screensaver             - INFO     - [ASYNC] Different images displayed on 2 displays
+2026-01-03 12:24:20 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 9/10: https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=2...
+2026-01-03 12:24:20 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:24:21 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.719 Bars: [0.09 0.10 0.11 0.15 0.24 0.42 0.49 0.36 0.21 0.19 0.21 0.36 0.49 0.42 0.24 0.15 0.11 0.10 0.09]
+2026-01-03 12:24:21 - transitions.gl_compositor_crossfade_transition - INFO     - GLCompositorCrossfadeTransition started (6199ms)
+2026-01-03 12:24:21 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=25)': 0 entries
+2026-01-03 12:24:21 - sources.rss_source             - WARNING  - [FEED_HEALTH] Feed https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=25 failed 1 times, backoff 60s
+2026-01-03 12:24:21 - sources.rss_source             - WARNING  - [RATE_LIMIT] Reddit feed returned 0 images: https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=25
+2026-01-03 12:24:21 - sources.rss_source             - INFO     - [RATE_LIMIT] Skipping 1 rate-limited Reddit feeds (will retry on next refresh)
+2026-01-03 12:24:21 - sources.rss_source             - INFO     - RSS refresh complete: 30 total images (0 new)
+2026-01-03 12:24:21 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 30 images from source
+2026-01-03 12:24:22 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.175 Bars: [0.06 0.07 0.10 0.18 0.36 0.71 0.89 0.69 0.42 0.37 0.42 0.69 0.89 0.71 0.36 0.18 0.10 0.07 0.06]
+2026-01-03 12:24:23 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.463 Bars: [0.03 0.04 0.04 0.05 0.07 0.11 0.11 0.08 0.05 0.05 0.05 0.08 0.11 0.11 0.07 0.05 0.04 0.04 0.03]
+2026-01-03 12:24:23 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 10/10: https://www.reddit.com/r/AbandonedPorn/top/.json?t=day&limit...
+2026-01-03 12:24:23 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:24:24 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.876 Bars: [0.69 0.61 0.50 0.41 0.39 0.55 0.64 0.48 0.29 0.26 0.29 0.48 0.64 0.55 0.39 0.41 0.50 0.61 0.69]
+2026-01-03 12:24:24 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/AbandonedPorn/top/.json?t=day&limit=25)': 4 entries
+2026-01-03 12:24:24 - sources.rss_source             - WARNING  - [FEED_HEALTH] Feed https://www.reddit.com/r/AbandonedPorn/top/.json?t=day&limit=25 failed 1 times, backoff 60s
+2026-01-03 12:24:24 - sources.rss_source             - WARNING  - [RATE_LIMIT] Reddit feed returned 0 images: https://www.reddit.com/r/AbandonedPorn/top/.json?t=day&limit=25
+2026-01-03 12:24:24 - sources.rss_source             - INFO     - [RATE_LIMIT] Skipping 1 rate-limited Reddit feeds (will retry on next refresh)
+2026-01-03 12:24:24 - sources.rss_source             - INFO     - RSS refresh complete: 30 total images (0 new)
+2026-01-03 12:24:24 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 30 images from source
+2026-01-03 12:24:24 - engine.screensaver             - INFO     - [ASYNC RSS] Completed: 317 total images loaded from 10 sources
+2026-01-03 12:24:25 - rendering.input_handler        - INFO     - Exit key pressed (16777216), requesting exit
+2026-01-03 12:24:25 - engine.display                 - INFO     - Exit requested from display widget
+2026-01-03 12:24:25 - engine.screensaver             - INFO     - Exit requested from display
+2026-01-03 12:24:25 - engine.screensaver             - INFO     - Engine state: RUNNING -> SHUTTING_DOWN
+2026-01-03 12:24:25 - engine.screensaver             - INFO     - Stopping screensaver engine...
+2026-01-03 12:24:25 - engine.screensaver             - INFO     - Stopping displays via DisplayManager (count=2, exit_app=True)
+2026-01-03 12:24:25 - engine.display                 - INFO     - All displays cleared
+2026-01-03 12:24:25 - engine.display                 - INFO     - Cleaning up 2 display widgets
+2026-01-03 12:24:25 - engine.display                 - INFO     - Display manager cleanup complete
+2026-01-03 12:24:25 - engine.screensaver             - INFO     - Screensaver engine stopped
+2026-01-03 12:24:25 - engine.screensaver             - INFO     - [1 duplicates suppressed]
+2026-01-03 12:24:25 - __main__                       - INFO     - Cleaning pycache on exit
+2026-01-03 12:24:25 - __main__                       - INFO     - Removed 1 __pycache__ directories
+2026-01-03 12:24:25 - __main__                       - INFO     - ============================================================
+2026-01-03 12:24:25 - __main__                       - INFO     - ShittyRandomPhotoScreenSaver Exiting (code=0)
+2026-01-03 12:24:25 - __main__                       - INFO     - ============================================================
+2026-01-03 12:24:41 - root                           - INFO     - ============================================================
+2026-01-03 12:24:41 - root                           - INFO     - Screensaver logging initialized (debug=False, verbose=False)
+2026-01-03 12:24:41 - root                           - INFO     - ============================================================
+2026-01-03 12:24:41 - root                           - INFO     - [1 duplicates suppressed]
+2026-01-03 12:24:41 - __main__                       - INFO     - ShittyRandomPhotoScreenSaver Starting
+2026-01-03 12:24:41 - __main__                       - INFO     - ============================================================
+2026-01-03 12:24:41 - __main__                       - INFO     - Running in script mode - cleaning pycache on startup
+2026-01-03 12:24:41 - __main__                       - INFO     - Removed 25 __pycache__ directories
+2026-01-03 12:24:41 - __main__                       - WARNING  - Unknown argument: -debug, defaulting to RUN mode (script)
+2026-01-03 12:24:41 - __main__                       - INFO     - Global QSurfaceFormat configured (swap=SwapBehavior.DoubleBuffer, interval=1, depth=24, stencil=8)
+2026-01-03 12:24:42 - __main__                       - INFO     - Qt image allocation limit: 1GB (supports 8K+ images, per-image on-demand)
+2026-01-03 12:24:42 - __main__                       - INFO     - Qt Application created: SRPSS
+2026-01-03 12:24:42 - __main__                       - INFO     - Starting screensaver in RUN mode
+2026-01-03 12:24:42 - __main__                       - INFO     - Windows timer resolution set to 1ms for smooth animations
+2026-01-03 12:24:42 - __main__                       - INFO     - Initializing screensaver engine
+2026-01-03 12:24:42 - SettingsManager                - INFO     - SettingsManager initialized
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - ScreensaverEngine created
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - Engine state: UNINITIALIZED -> INITIALIZING
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - ============================================================
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - Initializing Screensaver Engine 🚦🚦🚦🚦🚦
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - ============================================================
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - Initializing core systems...
+2026-01-03 12:24:42 - EventSystem                    - INFO     - EventSystem initialized
+2026-01-03 12:24:42 - core.threading.manager         - INFO     - Initialized io pool with 4 workers
+2026-01-03 12:24:42 - core.threading.manager         - INFO     - Initialized compute pool with 23 workers
+2026-01-03 12:24:42 - core.threading.manager         - INFO     - ThreadManager initialized with IO=4, COMPUTE=23 workers
+2026-01-03 12:24:42 - SettingsManager                - INFO     - SettingsManager initialized
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - Core systems initialized successfully
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - Loading settings...
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - Image rotation interval: 10s
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - Display mode: fill
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - Shuffle enabled: true
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - Prefetch ahead: 5
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - Initializing image sources...
+2026-01-03 12:24:42 - sources.base_provider.folder.PERSONALSET - INFO     - Created FolderSource for 'C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET' (recursive=True)
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - Folder source added: C:/Users/Basjohn/Documents/[4] WALLPAPERS/PERSONALSET
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - RSS source added: https://www.bing.com/HPImageArchive.aspx?format=rss&idx=0&n=8&mkt=en-US
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - RSS source added: https://www.nasa.gov/feeds/iotd-feed
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/EarthPorn/top/.json?t=day&limit=25
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/CityPorn/top/.json?t=day&limit=25
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/ArchitecturePorn/top/.json?t=day&limit=25
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/WaterPorn/top/.json?t=day&limit=25
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limit=25
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=25
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/AbandonedPorn/top/.json?t=day&limit=25
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - Initialized 11 image sources (1 folder, 10 RSS)
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - Building image queue...
+2026-01-03 12:24:42 - engine.image_queue             - INFO     - ImageQueue initialized (shuffle=true, history_size=50, local_ratio=90%)
+2026-01-03 12:24:42 - sources.base_provider.folder.PERSONALSET - INFO     - Scanning folder: C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET
+2026-01-03 12:24:42 - sources.base_provider.folder.PERSONALSET - INFO     - Scan complete: 558 images found (558 files scanned) in 0.06s
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - Added 558 images from C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET
+2026-01-03 12:24:42 - engine.image_queue             - INFO     - Added 558 images (local=558, rss=0). Pools: local=558, rss=0
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - Queue initialized with 558 local images
+2026-01-03 12:24:42 - engine.image_queue             - INFO     - Added 20 images (local=0, rss=20). Pools: local=558, rss=20
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - Pre-loaded 20 cached RSS images for immediate use (cap=20)
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - Starting async RSS load for 10 sources...
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - Image queue ready with 578 images
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 1/10: https://www.bing.com/HPImageArchive.aspx?format=rss&idx=0&n=...
+2026-01-03 12:24:42 - utils.image_cache              - INFO     - ImageCache initialized: max_items=24, max_memory=1024MB
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - Image prefetcher initialized (ahead=5, max_concurrent=2)
+2026-01-03 12:24:42 - engine.screensaver             - INFO     - Initializing display...
+2026-01-03 12:24:42 - engine.display                 - INFO     - Monitor detection enabled (2 screens)
+2026-01-03 12:24:42 - engine.display                 - INFO     - DisplayManager initialized (mode=fill, same_image=false)
+2026-01-03 12:24:42 - engine.display                 - INFO     - Initializing displays for 2 screens
+2026-01-03 12:24:42 - engine.display                 - INFO     - Cleaning up 0 display widgets
+2026-01-03 12:24:42 - engine.display                 - INFO     - Display manager cleanup complete
+2026-01-03 12:24:42 - rendering.display              - INFO     - DisplayWidget created for screen 0 (fill)
+2026-01-03 12:24:42 - rendering.backends.opengl.backend - INFO     - Using OpenGL renderer backend
+2026-01-03 12:24:42 - rendering.backends             - INFO     - Renderer backend 'opengl' initialized
+2026-01-03 12:24:42 - rendering.display              - INFO     - [RENDER] Backend active (screen=0, api=OpenGL 4.x, triple=False, vsync_toggle=False)
+2026-01-03 12:24:42 - rendering.display              - INFO     - Showing on screen 0: 1707x959 at (0, 0) DPR=1.5
+2026-01-03 12:24:42 - rendering.display              - INFO     - Detected refresh rate: 165 Hz, adaptive target FPS: 55
+2026-01-03 12:24:42 - rendering.display              - INFO     - [RENDER] Render surface established (screen=0, 1707x959, vsync=True, triple_preference=True)
+2026-01-03 12:24:42 - rendering.display              - INFO     - [GL COMPOSITOR] Created shared compositor for screen 0
+2026-01-03 12:24:42 - rendering.gl_compositor        - INFO     - [DIMMING] GL dimming changed: enabled=False→False, opacity=0%→30%
+2026-01-03 12:24:42 - rendering.widget_manager       - INFO     - ✅ clock widget created: Top Right, 24h, font=75px, seconds=True
+2026-01-03 12:24:42 - rendering.widget_manager       - INFO     - ✅ Weather widget created: Johannesburg, Top Left, font=28px
+2026-01-03 12:24:42 - core.media.media_controller    - INFO     - [MEDIA] Windows GSMTC controller initialized
+2026-01-03 12:24:42 - widgets.media_widget           - INFO     - [MEDIA_WIDGET] Using controller: WindowsGlobalMediaController
+2026-01-03 12:24:42 - rendering.widget_manager       - INFO     - ✅ Media widget created: Widgetposition.Bottom Left, font=20px, margin=40
+2026-01-03 12:24:42 - rendering.widget_manager       - INFO     - ✅ reddit widget created: r/All, Widgetposition.Top Left, font=14px, limit=4
+2026-01-03 12:24:42 - rendering.widget_manager       - INFO     - ✅ reddit2 widget created: r/Games, Widgetposition.Top Left, font=14px, limit=4
+2026-01-03 12:24:42 - rendering.widget_manager       - INFO     - ✅ Spotify volume widget started with coordinated fade sync
+2026-01-03 12:24:42 - rendering.widget_manager       - INFO     - ✅ Spotify visualizer widget started: 19 bars
+2026-01-03 12:24:42 - widgets.clock_widget           - INFO     - Clock widget started
+2026-01-03 12:24:42 - widgets.weather_widget         - INFO     - Weather widget started (using cached data)
+2026-01-03 12:24:42 - widgets.media_widget           - INFO     - Media widget started
+2026-01-03 12:24:42 - rendering.widget_manager       - INFO     - Widget setup complete: 7 widgets created and started
+2026-01-03 12:24:42 - rendering.display              - INFO     - WidgetManager created 7 widgets
+2026-01-03 12:24:42 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] clock initialized
+2026-01-03 12:24:42 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] weather initialized
+2026-01-03 12:24:42 - core.threading.manager         - INFO     - Initialized io pool with 4 workers
+2026-01-03 12:24:42 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] media initialized
+2026-01-03 12:24:42 - core.threading.manager         - INFO     - Initialized compute pool with 23 workers
+2026-01-03 12:24:42 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] reddit initialized
+2026-01-03 12:24:42 - core.threading.manager         - INFO     - ThreadManager initialized with IO=4, COMPUTE=23 workers
+2026-01-03 12:24:42 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] reddit2 initialized
+2026-01-03 12:24:42 - engine.display                 - INFO     - Display widget created for screen 0
+2026-01-03 12:24:42 - sources.rss_source             - INFO     - Feed 'Bing Images': 8 entries
+2026-01-03 12:24:42 - rendering.display              - INFO     - DisplayWidget created for screen 1 (fill)
+2026-01-03 12:24:42 - rendering.backends.opengl.backend - INFO     - Using OpenGL renderer backend
+2026-01-03 12:24:42 - rendering.backends             - INFO     - Renderer backend 'opengl' initialized
+2026-01-03 12:24:42 - rendering.display              - INFO     - [RENDER] Backend active (screen=1, api=OpenGL 4.x, triple=False, vsync_toggle=False)
+2026-01-03 12:24:42 - rendering.display              - INFO     - Showing on screen 1: 2560x1439 at (2560, 0) DPR=1.5
+2026-01-03 12:24:42 - rendering.display              - INFO     - Detected refresh rate: 60 Hz, adaptive target FPS: 60
+2026-01-03 12:24:42 - rendering.display              - INFO     - [RENDER] Render surface established (screen=1, 2560x1439, vsync=True, triple_preference=True)
+2026-01-03 12:24:43 - rendering.display              - INFO     - [GL COMPOSITOR] Created shared compositor for screen 1
+2026-01-03 12:24:43 - rendering.gl_compositor        - INFO     - [DIMMING] GL dimming changed: enabled=False→False, opacity=0%→30%
+2026-01-03 12:24:43 - rendering.widget_manager       - INFO     - ✅ clock widget created: Top Right, 24h, font=75px, seconds=True
+2026-01-03 12:24:43 - widgets.clock_widget           - INFO     - Clock widget started
+2026-01-03 12:24:43 - rendering.widget_manager       - INFO     - Widget setup complete: 1 widgets created and started
+2026-01-03 12:24:43 - rendering.display              - INFO     - WidgetManager created 1 widgets
+2026-01-03 12:24:43 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] clock initialized
+2026-01-03 12:24:43 - engine.display                 - INFO     - Display widget created for screen 1
+2026-01-03 12:24:43 - engine.display                 - INFO     - Created 2 display widgets
+2026-01-03 12:24:43 - engine.screensaver             - INFO     - Display initialized with 2 screens
+2026-01-03 12:24:43 - engine.screensaver             - INFO     - Rotation timer configured: 10s
+2026-01-03 12:24:43 - engine.screensaver             - INFO     - Background RSS refresh enabled (interval=600000ms, cap=30)
+2026-01-03 12:24:43 - engine.screensaver             - INFO     - Engine state: INITIALIZING -> STOPPED
+2026-01-03 12:24:43 - engine.screensaver             - INFO     - Engine initialization complete
+2026-01-03 12:24:43 - engine.screensaver             - INFO     - Engine state: STOPPED -> STARTING
+2026-01-03 12:24:43 - engine.screensaver             - INFO     - Starting screensaver engine...
+2026-01-03 12:24:43 - engine.screensaver             - INFO     - Rotation timer started (10000ms)
+2026-01-03 12:24:43 - engine.screensaver             - INFO     - Engine state: STARTING -> RUNNING
+2026-01-03 12:24:43 - engine.screensaver             - INFO     - Screensaver engine started
+2026-01-03 12:24:43 - __main__                       - INFO     - Screensaver engine started - entering event loop
+2026-01-03 12:24:43 - widgets.media_widget           - INFO     - [MEDIA_WIDGET] First track snapshot captured; waiting for coordinated fade-in
+2026-01-03 12:24:43 - sources.rss_source             - INFO     - Downloaded image: da0885327d756d64687c06b309087d8a.jpg (328652 bytes)
+2026-01-03 12:24:43 - sources.rss_source             - INFO     - RSS refresh complete: 38 total images (8 new)
+2026-01-03 12:24:43 - sources.rss_source             - INFO     - Cache cleanup needed: count 41 > 40
+2026-01-03 12:24:43 - sources.rss_source             - INFO     - Cache cleanup: removed 1 files (8.2MB), kept 40 files (min_keep=20)
+2026-01-03 12:24:43 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 38 images from source
+2026-01-03 12:24:43 - engine.image_queue             - INFO     - Added 10 images (local=0, rss=10). Pools: local=556, rss=30
+2026-01-03 12:24:43 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3840x2400 → scaled 2560x1600 → cropped to 2560x1438
+2026-01-03 12:24:43 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] Context initialized: version=4.6, swap=SwapBehavior.DoubleBuffer, interval=1
+2026-01-03 12:24:43 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] OpenGL adapter: vendor=NVIDIA Corporation, renderer=NVIDIA GeForce RTX 4090/PCIe/SSE2, version=4.6.0 NVIDIA 591.44
+2026-01-03 12:24:43 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled raindrops program: 12
+2026-01-03 12:24:43 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled warp program: 13
+2026-01-03 12:24:43 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled diffuse program: 14
+2026-01-03 12:24:43 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled blockflip program: 15
+2026-01-03 12:24:43 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled peel program: 16
+2026-01-03 12:24:43 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled crossfade program: 17
+2026-01-03 12:24:43 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled slide program: 18
+2026-01-03 12:24:43 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled wipe program: 19
+2026-01-03 12:24:43 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled blinds program: 20
+2026-01-03 12:24:43 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled crumble program: 21
+2026-01-03 12:24:43 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3840x2400 → scaled 3840x2400 → cropped to 3840x2158
+2026-01-03 12:24:43 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled particle program: 22
+2026-01-03 12:24:43 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] Shader pipeline initialized (38.7ms)
+2026-01-03 12:24:43 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] Context initialized: version=4.6, swap=SwapBehavior.DoubleBuffer, interval=1
+2026-01-03 12:24:43 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] OpenGL adapter: vendor=NVIDIA Corporation, renderer=NVIDIA GeForce RTX 4090/PCIe/SSE2, version=4.6.0 NVIDIA 591.44
+2026-01-03 12:24:43 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] Shader pipeline initialized (1.5ms)
+2026-01-03 12:24:43 - engine.screensaver             - INFO     - [ASYNC] Different images displayed on 2 displays
+2026-01-03 12:24:43 - widgets.media_widget           - INFO     - [MEDIA_WIDGET] Requesting coordinated fade sync
+2026-01-03 12:24:43 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.943 Bars: [1.00 1.00 0.87 0.60 0.38 0.31 0.30 0.21 0.13 0.12 0.13 0.21 0.30 0.31 0.38 0.60 0.87 1.00 1.00]
+2026-01-03 12:24:44 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.731 Bars: [0.05 0.06 0.09 0.16 0.30 0.54 0.63 0.48 0.30 0.27 0.30 0.48 0.63 0.54 0.30 0.16 0.09 0.06 0.05]
+2026-01-03 12:24:45 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.949 Bars: [0.05 0.06 0.09 0.16 0.30 0.56 0.67 0.50 0.31 0.27 0.31 0.50 0.67 0.56 0.30 0.16 0.09 0.06 0.05]
+2026-01-03 12:24:45 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 2/10: https://www.nasa.gov/feeds/iotd-feed...
+2026-01-03 12:24:45 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:24:46 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.031 Bars: [0.04 0.05 0.07 0.12 0.20 0.34 0.37 0.26 0.15 0.14 0.15 0.26 0.37 0.34 0.20 0.12 0.07 0.05 0.04]
+2026-01-03 12:24:46 - sources.rss_source             - INFO     - Feed 'NASA Image of the Day': 60 entries
+2026-01-03 12:24:46 - sources.rss_source             - INFO     - RSS refresh complete: 38 total images (8 new)
+2026-01-03 12:24:46 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 38 images from source
+2026-01-03 12:24:46 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.009 Bars: [0.04 0.06 0.09 0.14 0.25 0.43 0.48 0.35 0.20 0.18 0.20 0.35 0.48 0.43 0.25 0.14 0.09 0.06 0.04]
+2026-01-03 12:24:48 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.991 Bars: [0.05 0.06 0.09 0.16 0.31 0.57 0.68 0.51 0.31 0.28 0.31 0.51 0.68 0.57 0.31 0.16 0.09 0.06 0.05]
+2026-01-03 12:24:48 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 3/10: https://www.reddit.com/r/EarthPorn/top/.json?t=day&limit=25...
+2026-01-03 12:24:48 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:24:48 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=4.107 Bars: [0.44 0.40 0.35 0.35 0.46 0.83 1.00 0.83 0.52 0.46 0.52 0.83 1.00 0.83 0.46 0.35 0.35 0.40 0.44]
+2026-01-03 12:24:48 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/EarthPorn/top/.json?t=day&limit=25)': 10 entries
+2026-01-03 12:24:49 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.209 Bars: [0.07 0.08 0.10 0.17 0.31 0.58 0.70 0.53 0.32 0.28 0.32 0.53 0.70 0.58 0.31 0.17 0.10 0.08 0.07]
+2026-01-03 12:24:49 - sources.rss_source             - INFO     - Downloaded image: 86bb2fc4c21857dfebe9d55223a5d0d6.jpeg (3211264 bytes)
+2026-01-03 12:24:50 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.320 Bars: [0.17 0.16 0.17 0.23 0.40 0.78 0.97 0.75 0.45 0.39 0.45 0.75 0.97 0.78 0.40 0.23 0.17 0.16 0.17]
+2026-01-03 12:24:50 - sources.rss_source             - INFO     - Downloaded image: 0c9034307de7e0b85c7c569d9a31a9b5.jpeg (8635147 bytes)
+2026-01-03 12:24:50 - sources.rss_source             - INFO     - RSS refresh complete: 35 total images (5 new)
+2026-01-03 12:24:50 - sources.rss_source             - INFO     - Cache cleanup needed: count 42 > 40
+2026-01-03 12:24:50 - sources.rss_source             - INFO     - Cache cleanup: removed 2 files (8.7MB), kept 40 files (min_keep=20)
+2026-01-03 12:24:50 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 35 images from source
+2026-01-03 12:24:50 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.402 Bars: [0.36 0.31 0.24 0.16 0.09 0.06 0.05 0.03 0.02 0.02 0.02 0.03 0.05 0.06 0.09 0.16 0.24 0.31 0.36]
+2026-01-03 12:24:51 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.657 Bars: [0.05 0.06 0.09 0.14 0.27 0.48 0.56 0.41 0.24 0.21 0.24 0.41 0.56 0.48 0.27 0.14 0.09 0.06 0.05]
+2026-01-03 12:24:51 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.720 Bars: [0.28 0.26 0.24 0.25 0.36 0.64 0.79 0.62 0.38 0.34 0.38 0.62 0.79 0.64 0.36 0.25 0.24 0.26 0.28]
+2026-01-03 12:24:52 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 4/10: https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25...
+2026-01-03 12:24:52 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:24:52 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.829 Bars: [0.59 0.53 0.45 0.38 0.39 0.55 0.62 0.46 0.29 0.26 0.29 0.46 0.62 0.55 0.39 0.38 0.45 0.53 0.59]
+2026-01-03 12:24:52 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25)': 7 entries
+2026-01-03 12:24:52 - sources.rss_source             - WARNING  - [FEED_HEALTH] Feed https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25 failed 1 times, backoff 60s
+2026-01-03 12:24:52 - sources.rss_source             - WARNING  - [RATE_LIMIT] Reddit feed returned 0 images: https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25
+2026-01-03 12:24:52 - sources.rss_source             - INFO     - [RATE_LIMIT] Skipping 1 rate-limited Reddit feeds (will retry on next refresh)
+2026-01-03 12:24:52 - sources.rss_source             - INFO     - RSS refresh complete: 30 total images (0 new)
+2026-01-03 12:24:52 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 30 images from source
+2026-01-03 12:24:53 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.023 Bars: [0.05 0.06 0.09 0.15 0.27 0.46 0.52 0.38 0.23 0.20 0.23 0.38 0.52 0.46 0.27 0.15 0.09 0.06 0.05]
+2026-01-03 12:24:53 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3840x2535 → scaled 2560x1690 → cropped to 2560x1438
+2026-01-03 12:24:53 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3840x2400 → scaled 3840x2400 → cropped to 3840x2158
+2026-01-03 12:24:53 - transitions.gl_compositor_crossfade_transition - INFO     - GLCompositorCrossfadeTransition started (6199ms)
+2026-01-03 12:24:53 - engine.screensaver             - INFO     - [ASYNC] Different images displayed on 2 displays
+2026-01-03 12:24:53 - transitions.gl_compositor_crossfade_transition - INFO     - GLCompositorCrossfadeTransition started (6199ms)
+2026-01-03 12:24:54 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.625 Bars: [0.40 0.37 0.32 0.31 0.40 0.69 0.85 0.67 0.42 0.38 0.42 0.67 0.85 0.69 0.40 0.31 0.32 0.37 0.40]
+2026-01-03 12:24:54 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 5/10: https://www.reddit.com/r/CityPorn/top/.json?t=day&limit=25...
+2026-01-03 12:24:54 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:24:55 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/CityPorn/top/.json?t=day&limit=25)': 17 entries
+2026-01-03 12:24:55 - sources.rss_source             - INFO     - RSS refresh complete: 32 total images (2 new)
+2026-01-03 12:24:55 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 32 images from source
+2026-01-03 12:24:55 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.619 Bars: [0.59 0.53 0.44 0.38 0.39 0.54 0.61 0.45 0.27 0.24 0.27 0.45 0.61 0.54 0.39 0.38 0.44 0.53 0.59]
+2026-01-03 12:24:56 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.972 Bars: [1.00 1.00 0.85 0.64 0.52 0.64 0.72 0.55 0.34 0.30 0.34 0.55 0.72 0.64 0.52 0.64 0.85 1.00 1.00]
+2026-01-03 12:24:57 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 6/10: https://www.reddit.com/r/ArchitecturePorn/top/.json?t=day&li...
+2026-01-03 12:24:57 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:24:57 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.096 Bars: [0.78 0.70 0.57 0.46 0.45 0.63 0.74 0.59 0.38 0.35 0.38 0.59 0.74 0.63 0.45 0.46 0.57 0.70 0.78]
+2026-01-03 12:24:58 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/ArchitecturePorn/top/.json?t=day&limit=25)': 5 entries
+2026-01-03 12:24:58 - sources.rss_source             - INFO     - RSS refresh complete: 31 total images (1 new)
+2026-01-03 12:24:58 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 31 images from source
+2026-01-03 12:24:58 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.902 Bars: [0.90 0.79 0.64 0.52 0.51 0.76 0.91 0.72 0.44 0.39 0.44 0.72 0.91 0.76 0.51 0.52 0.64 0.79 0.90]
+2026-01-03 12:24:59 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.421 Bars: [0.95 0.84 0.67 0.52 0.43 0.53 0.59 0.44 0.27 0.24 0.27 0.44 0.59 0.53 0.43 0.52 0.67 0.84 0.95]
+2026-01-03 12:25:00 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 7/10: https://www.reddit.com/r/WaterPorn/top/.json?t=day&limit=25...
+2026-01-03 12:25:00 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:25:00 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.599 Bars: [0.69 0.62 0.51 0.43 0.46 0.73 0.89 0.72 0.47 0.42 0.47 0.72 0.89 0.73 0.46 0.43 0.51 0.62 0.69]
+2026-01-03 12:25:00 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/WaterPorn/top/.json?t=day&limit=25)': 0 entries
+2026-01-03 12:25:00 - sources.rss_source             - WARNING  - [FEED_HEALTH] Feed https://www.reddit.com/r/WaterPorn/top/.json?t=day&limit=25 failed 1 times, backoff 60s
+2026-01-03 12:25:00 - sources.rss_source             - WARNING  - [RATE_LIMIT] Reddit feed returned 0 images: https://www.reddit.com/r/WaterPorn/top/.json?t=day&limit=25
+2026-01-03 12:25:00 - sources.rss_source             - INFO     - [RATE_LIMIT] Skipping 1 rate-limited Reddit feeds (will retry on next refresh)
+2026-01-03 12:25:00 - sources.rss_source             - INFO     - RSS refresh complete: 30 total images (0 new)
+2026-01-03 12:25:00 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 30 images from source
+2026-01-03 12:25:00 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.825 Bars: [0.01 0.02 0.02 0.03 0.04 0.07 0.08 0.06 0.04 0.03 0.04 0.06 0.08 0.07 0.04 0.03 0.02 0.02 0.01]
+2026-01-03 12:25:01 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.406 Bars: [1.00 1.00 1.00 0.75 0.58 0.71 0.82 0.65 0.41 0.37 0.41 0.65 0.82 0.71 0.58 0.75 1.00 1.00 1.00]
+2026-01-03 12:25:02 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.391 Bars: [1.00 1.00 0.80 0.59 0.44 0.44 0.43 0.31 0.20 0.19 0.20 0.31 0.43 0.44 0.44 0.59 0.80 1.00 1.00]
+2026-01-03 12:25:02 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 8/10: https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limi...
+2026-01-03 12:25:02 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:25:02 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.643 Bars: [0.10 0.10 0.12 0.17 0.29 0.50 0.58 0.44 0.27 0.25 0.27 0.44 0.58 0.50 0.29 0.17 0.12 0.10 0.10]
+2026-01-03 12:25:03 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limit=25)': 0 entries
+2026-01-03 12:25:03 - sources.rss_source             - WARNING  - [FEED_HEALTH] Feed https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limit=25 failed 1 times, backoff 60s
+2026-01-03 12:25:03 - sources.rss_source             - WARNING  - [RATE_LIMIT] Reddit feed returned 0 images: https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limit=25
+2026-01-03 12:25:03 - sources.rss_source             - INFO     - [RATE_LIMIT] Skipping 1 rate-limited Reddit feeds (will retry on next refresh)
+2026-01-03 12:25:03 - sources.rss_source             - INFO     - RSS refresh complete: 30 total images (0 new)
+2026-01-03 12:25:03 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 30 images from source
+2026-01-03 12:25:03 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3840x2880 → scaled 2560x1920 → cropped to 2560x1438
+2026-01-03 12:25:03 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3000x1087 → scaled 5955x2158 → cropped to 3840x2158
+2026-01-03 12:25:03 - transitions.gl_compositor_crossfade_transition - INFO     - GLCompositorCrossfadeTransition started (6199ms)
+2026-01-03 12:25:03 - engine.screensaver             - INFO     - [ASYNC] Different images displayed on 2 displays
+2026-01-03 12:25:03 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.849 Bars: [0.20 0.19 0.19 0.23 0.34 0.60 0.72 0.55 0.34 0.31 0.34 0.55 0.72 0.60 0.34 0.23 0.19 0.19 0.20]
+2026-01-03 12:25:03 - transitions.gl_compositor_crossfade_transition - INFO     - GLCompositorCrossfadeTransition started (6199ms)
+2026-01-03 12:25:04 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.419 Bars: [0.08 0.07 0.06 0.06 0.07 0.11 0.14 0.11 0.07 0.06 0.07 0.11 0.14 0.11 0.07 0.06 0.06 0.07 0.08]
+2026-01-03 12:25:05 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 9/10: https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=2...
+2026-01-03 12:25:05 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:25:05 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=25)': 0 entries
+2026-01-03 12:25:05 - sources.rss_source             - WARNING  - [FEED_HEALTH] Feed https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=25 failed 1 times, backoff 60s
+2026-01-03 12:25:05 - sources.rss_source             - WARNING  - [RATE_LIMIT] Reddit feed returned 0 images: https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=25
+2026-01-03 12:25:05 - sources.rss_source             - INFO     - [RATE_LIMIT] Skipping 1 rate-limited Reddit feeds (will retry on next refresh)
+2026-01-03 12:25:05 - sources.rss_source             - INFO     - RSS refresh complete: 30 total images (0 new)
+2026-01-03 12:25:05 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 30 images from source
+2026-01-03 12:25:06 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.875 Bars: [0.25 0.23 0.22 0.24 0.33 0.56 0.65 0.50 0.31 0.28 0.31 0.50 0.65 0.56 0.33 0.24 0.22 0.23 0.25]
+2026-01-03 12:25:07 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.658 Bars: [0.05 0.06 0.10 0.16 0.30 0.53 0.61 0.45 0.27 0.23 0.27 0.45 0.61 0.53 0.30 0.16 0.10 0.06 0.05]
+2026-01-03 12:25:07 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 10/10: https://www.reddit.com/r/AbandonedPorn/top/.json?t=day&limit...
+2026-01-03 12:25:07 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:25:08 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/AbandonedPorn/top/.json?t=day&limit=25)': 4 entries
+2026-01-03 12:25:08 - sources.rss_source             - WARNING  - [FEED_HEALTH] Feed https://www.reddit.com/r/AbandonedPorn/top/.json?t=day&limit=25 failed 1 times, backoff 60s
+2026-01-03 12:25:08 - sources.rss_source             - WARNING  - [RATE_LIMIT] Reddit feed returned 0 images: https://www.reddit.com/r/AbandonedPorn/top/.json?t=day&limit=25
+2026-01-03 12:25:08 - sources.rss_source             - INFO     - [RATE_LIMIT] Skipping 1 rate-limited Reddit feeds (will retry on next refresh)
+2026-01-03 12:25:08 - sources.rss_source             - INFO     - RSS refresh complete: 30 total images (0 new)
+2026-01-03 12:25:08 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 30 images from source
+2026-01-03 12:25:08 - engine.screensaver             - INFO     - [ASYNC RSS] Completed: 324 total images loaded from 10 sources
+2026-01-03 12:25:08 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.266 Bars: [0.05 0.06 0.09 0.15 0.29 0.50 0.57 0.43 0.26 0.24 0.26 0.43 0.57 0.50 0.29 0.15 0.09 0.06 0.05]
+2026-01-03 12:25:09 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.700 Bars: [0.06 0.07 0.10 0.16 0.30 0.54 0.64 0.48 0.30 0.28 0.30 0.48 0.64 0.54 0.30 0.16 0.10 0.07 0.06]
+2026-01-03 12:25:10 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.003 Bars: [0.05 0.06 0.09 0.16 0.31 0.57 0.67 0.54 0.36 0.34 0.36 0.54 0.67 0.57 0.31 0.16 0.09 0.06 0.05]
+2026-01-03 12:25:10 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.658 Bars: [0.67 0.60 0.50 0.41 0.39 0.54 0.61 0.46 0.28 0.26 0.28 0.46 0.61 0.54 0.39 0.41 0.50 0.60 0.67]
+2026-01-03 12:25:11 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.319 Bars: [0.23 0.21 0.20 0.22 0.31 0.53 0.63 0.48 0.29 0.26 0.29 0.48 0.63 0.53 0.31 0.22 0.20 0.21 0.23]
+2026-01-03 12:25:11 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.155 Bars: [1.00 1.00 0.87 0.61 0.40 0.35 0.33 0.23 0.15 0.14 0.15 0.23 0.33 0.35 0.40 0.61 0.87 1.00 1.00]
+2026-01-03 12:25:12 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.986 Bars: [0.13 0.12 0.13 0.14 0.18 0.25 0.25 0.17 0.11 0.10 0.11 0.17 0.25 0.25 0.18 0.14 0.13 0.12 0.13]
+2026-01-03 12:25:13 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3840x2721 → scaled 2560x1814 → cropped to 2560x1438
+2026-01-03 12:25:13 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.598 Bars: [0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00]
+2026-01-03 12:25:13 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3840x2194 → scaled 3840x2194 → cropped to 3840x2158
+2026-01-03 12:25:13 - transitions.gl_compositor_crossfade_transition - INFO     - GLCompositorCrossfadeTransition started (6199ms)
+2026-01-03 12:25:13 - engine.screensaver             - INFO     - [ASYNC] Different images displayed on 2 displays
+2026-01-03 12:25:13 - transitions.gl_compositor_crossfade_transition - INFO     - GLCompositorCrossfadeTransition started (6199ms)
+2026-01-03 12:25:14 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.867 Bars: [0.75 0.67 0.55 0.47 0.49 0.80 0.99 0.79 0.49 0.44 0.49 0.79 0.99 0.80 0.49 0.47 0.55 0.67 0.75]
+2026-01-03 12:25:15 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.879 Bars: [0.05 0.06 0.09 0.16 0.30 0.55 0.65 0.50 0.32 0.30 0.32 0.50 0.65 0.55 0.30 0.16 0.09 0.06 0.05]
+2026-01-03 12:25:16 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.844 Bars: [1.00 1.00 0.91 0.66 0.46 0.45 0.46 0.34 0.22 0.20 0.22 0.34 0.46 0.45 0.46 0.66 0.91 1.00 1.00]
+2026-01-03 12:25:17 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.296 Bars: [0.04 0.05 0.07 0.11 0.21 0.38 0.45 0.33 0.18 0.16 0.18 0.33 0.45 0.38 0.21 0.11 0.07 0.05 0.04]
+2026-01-03 12:25:18 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.419 Bars: [0.34 0.31 0.28 0.29 0.41 0.74 0.92 0.72 0.43 0.38 0.43 0.72 0.92 0.74 0.41 0.29 0.28 0.31 0.34]
+2026-01-03 12:25:19 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.762 Bars: [0.31 0.28 0.26 0.26 0.35 0.60 0.73 0.57 0.35 0.33 0.35 0.57 0.73 0.60 0.35 0.26 0.26 0.28 0.31]
+2026-01-03 12:25:20 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.615 Bars: [0.19 0.18 0.18 0.21 0.31 0.50 0.56 0.44 0.30 0.29 0.30 0.44 0.56 0.50 0.31 0.21 0.18 0.18 0.19]
+2026-01-03 12:25:20 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=4.205 Bars: [1.00 1.00 1.00 0.77 0.63 0.86 1.00 0.84 0.51 0.47 0.51 0.84 1.00 0.86 0.63 0.77 1.00 1.00 1.00]
+2026-01-03 12:25:21 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.647 Bars: [0.05 0.07 0.09 0.15 0.26 0.44 0.49 0.37 0.25 0.24 0.25 0.37 0.49 0.44 0.26 0.15 0.09 0.07 0.05]
+2026-01-03 12:25:22 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.912 Bars: [0.61 0.55 0.46 0.41 0.48 0.81 1.00 0.82 0.51 0.46 0.51 0.82 1.00 0.81 0.48 0.41 0.46 0.55 0.61]
+2026-01-03 12:25:22 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.734 Bars: [0.51 0.46 0.39 0.37 0.45 0.77 0.96 0.78 0.51 0.46 0.51 0.78 0.96 0.77 0.45 0.37 0.39 0.46 0.51]
+2026-01-03 12:25:23 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3840x2400 → scaled 2560x1600 → cropped to 2560x1438
+2026-01-03 12:25:23 - rendering.image_processor_async - INFO     - FILL(QImage): Image 2560x1600 → scaled 3840x2400 → cropped to 3840x2158
+2026-01-03 12:25:23 - transitions.gl_compositor_crossfade_transition - INFO     - GLCompositorCrossfadeTransition started (6199ms)
+2026-01-03 12:25:23 - engine.screensaver             - INFO     - [ASYNC] Different images displayed on 2 displays
+2026-01-03 12:25:23 - transitions.gl_compositor_crossfade_transition - INFO     - GLCompositorCrossfadeTransition started (6199ms)
+2026-01-03 12:25:23 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.859 Bars: [0.73 0.65 0.52 0.39 0.30 0.31 0.30 0.21 0.14 0.13 0.14 0.21 0.30 0.31 0.30 0.39 0.52 0.65 0.73]
+2026-01-03 12:25:25 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.216 Bars: [0.47 0.43 0.37 0.32 0.33 0.44 0.48 0.37 0.25 0.24 0.25 0.37 0.48 0.44 0.33 0.32 0.37 0.43 0.47]
+2026-01-03 12:25:26 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.440 Bars: [0.72 0.64 0.53 0.42 0.37 0.45 0.49 0.37 0.25 0.24 0.25 0.37 0.49 0.45 0.37 0.42 0.53 0.64 0.72]
+2026-01-03 12:25:27 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.198 Bars: [0.61 0.55 0.46 0.38 0.36 0.46 0.49 0.37 0.24 0.23 0.24 0.37 0.49 0.46 0.36 0.38 0.46 0.55 0.61]
+2026-01-03 12:25:28 - rendering.input_handler        - INFO     - S key pressed - settings requested
+2026-01-03 12:25:28 - engine.screensaver             - INFO     - Settings requested - pausing screensaver and opening config
+2026-01-03 12:25:28 - engine.screensaver             - INFO     - Engine state: RUNNING -> STOPPING
+2026-01-03 12:25:28 - engine.screensaver             - INFO     - Stopping screensaver engine...
+2026-01-03 12:25:28 - engine.screensaver             - INFO     - Stopping displays via DisplayManager (count=2, exit_app=False)
+2026-01-03 12:25:28 - engine.display                 - INFO     - All displays cleared
+2026-01-03 12:25:28 - engine.display                 - INFO     - All displays hidden
+2026-01-03 12:25:28 - engine.screensaver             - INFO     - Screensaver engine stopped
+2026-01-03 12:25:28 - engine.screensaver             - INFO     - Engine state: STOPPING -> STOPPED
+2026-01-03 12:25:28 - engine.screensaver             - INFO     - Screensaver engine stopped
+2026-01-03 12:25:28 - ui.settings_dialog             - INFO     - Settings dialog created
+2026-01-03 12:25:29 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.370 Bars: [0.64 0.57 0.48 0.41 0.43 0.64 0.76 0.59 0.37 0.34 0.37 0.59 0.76 0.64 0.43 0.41 0.48 0.57 0.64]
+2026-01-03 12:25:29 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.690 Bars: [0.31 0.29 0.27 0.27 0.34 0.53 0.61 0.46 0.30 0.27 0.30 0.46 0.61 0.53 0.34 0.27 0.27 0.29 0.31]
+2026-01-03 12:25:30 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.336 Bars: [0.05 0.06 0.09 0.14 0.24 0.38 0.41 0.30 0.20 0.19 0.20 0.30 0.41 0.38 0.24 0.14 0.09 0.06 0.05]
+2026-01-03 12:25:31 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.229 Bars: [0.86 0.76 0.62 0.48 0.40 0.46 0.47 0.35 0.22 0.21 0.22 0.35 0.47 0.46 0.40 0.48 0.62 0.76 0.86]
+2026-01-03 12:25:32 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.537 Bars: [0.05 0.06 0.09 0.17 0.33 0.64 0.78 0.59 0.35 0.31 0.35 0.59 0.78 0.64 0.33 0.17 0.09 0.06 0.05]
+2026-01-03 12:25:33 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=4.834 Bars: [1.00 1.00 1.00 0.78 0.60 0.78 0.95 0.75 0.46 0.42 0.46 0.75 0.95 0.78 0.60 0.78 1.00 1.00 1.00]
+2026-01-03 12:25:33 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.549 Bars: [0.05 0.06 0.10 0.17 0.33 0.63 0.75 0.58 0.35 0.31 0.35 0.58 0.75 0.63 0.33 0.17 0.10 0.06 0.05]
+2026-01-03 12:25:34 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.934 Bars: [1.00 0.94 0.75 0.56 0.45 0.52 0.56 0.42 0.27 0.25 0.27 0.42 0.56 0.52 0.45 0.56 0.75 0.94 1.00]
+2026-01-03 12:25:35 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.905 Bars: [0.84 0.75 0.61 0.48 0.43 0.55 0.60 0.48 0.33 0.31 0.33 0.48 0.60 0.55 0.43 0.48 0.61 0.75 0.84]
+2026-01-03 12:25:36 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.488 Bars: [0.30 0.28 0.26 0.28 0.40 0.71 0.86 0.70 0.47 0.43 0.47 0.70 0.86 0.71 0.40 0.28 0.26 0.28 0.30]
+2026-01-03 12:25:36 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.011 Bars: [0.95 0.84 0.67 0.51 0.43 0.50 0.53 0.40 0.25 0.23 0.25 0.40 0.53 0.50 0.43 0.51 0.67 0.84 0.95]
+2026-01-03 12:25:37 - engine.screensaver             - INFO     - Settings dialog closed, performing full-style restart of screensaver
+2026-01-03 12:25:37 - engine.display                 - INFO     - Cleaning up 2 display widgets
+2026-01-03 12:25:37 - engine.display                 - INFO     - Display manager cleanup complete
+2026-01-03 12:25:37 - engine.screensaver             - INFO     - Initializing display...
+2026-01-03 12:25:37 - engine.display                 - INFO     - Monitor detection enabled (2 screens)
+2026-01-03 12:25:37 - engine.display                 - INFO     - DisplayManager initialized (mode=fill, same_image=false)
+2026-01-03 12:25:37 - engine.display                 - INFO     - Initializing displays for 2 screens
+2026-01-03 12:25:37 - engine.display                 - INFO     - Cleaning up 0 display widgets
+2026-01-03 12:25:37 - engine.display                 - INFO     - Display manager cleanup complete
+2026-01-03 12:25:37 - rendering.display              - INFO     - DisplayWidget created for screen 0 (fill)
+2026-01-03 12:25:37 - rendering.backends.opengl.backend - INFO     - Using OpenGL renderer backend
+2026-01-03 12:25:37 - rendering.backends             - INFO     - Renderer backend 'opengl' initialized
+2026-01-03 12:25:37 - rendering.display              - INFO     - [RENDER] Backend active (screen=0, api=OpenGL 4.x, triple=False, vsync_toggle=False)
+2026-01-03 12:25:37 - rendering.display              - INFO     - Showing on screen 0: 1707x959 at (0, 0) DPR=1.5
+2026-01-03 12:25:37 - rendering.display              - INFO     - Detected refresh rate: 165 Hz, adaptive target FPS: 55
+2026-01-03 12:25:37 - rendering.display              - INFO     - [RENDER] Render surface established (screen=0, 1707x959, vsync=True, triple_preference=True)
+2026-01-03 12:25:37 - rendering.display              - INFO     - [GL COMPOSITOR] Created shared compositor for screen 0
+2026-01-03 12:25:37 - rendering.gl_compositor        - INFO     - [DIMMING] GL dimming changed: enabled=False→False, opacity=0%→30%
+2026-01-03 12:25:37 - rendering.widget_manager       - INFO     - ✅ clock widget created: Top Right, 24h, font=75px, seconds=True
+2026-01-03 12:25:37 - rendering.widget_manager       - INFO     - ✅ Weather widget created: Johannesburg, Top Left, font=28px
+2026-01-03 12:25:37 - core.media.media_controller    - INFO     - [MEDIA] Windows GSMTC controller initialized
+2026-01-03 12:25:37 - widgets.media_widget           - INFO     - [MEDIA_WIDGET] Using controller: WindowsGlobalMediaController
+2026-01-03 12:25:37 - rendering.widget_manager       - INFO     - ✅ Media widget created: Widgetposition.Bottom Left, font=20px, margin=40
+2026-01-03 12:25:37 - rendering.widget_manager       - INFO     - ✅ reddit widget created: r/All, Widgetposition.Top Left, font=14px, limit=4
+2026-01-03 12:25:37 - rendering.widget_manager       - INFO     - ✅ reddit2 widget created: r/Games, Widgetposition.Top Left, font=14px, limit=4
+2026-01-03 12:25:37 - rendering.widget_manager       - INFO     - ✅ Spotify volume widget started with coordinated fade sync
+2026-01-03 12:25:37 - rendering.widget_manager       - INFO     - ✅ Spotify visualizer widget started: 19 bars
+2026-01-03 12:25:37 - widgets.clock_widget           - INFO     - Clock widget started
+2026-01-03 12:25:37 - widgets.weather_widget         - INFO     - Weather widget started (using cached data)
+2026-01-03 12:25:37 - widgets.media_widget           - INFO     - Media widget started
+2026-01-03 12:25:37 - rendering.widget_manager       - INFO     - Widget setup complete: 7 widgets created and started
+2026-01-03 12:25:37 - rendering.display              - INFO     - WidgetManager created 7 widgets
+2026-01-03 12:25:37 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] clock initialized
+2026-01-03 12:25:37 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] weather initialized
+2026-01-03 12:25:37 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] media initialized
+2026-01-03 12:25:37 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] reddit initialized
+2026-01-03 12:25:37 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] reddit2 initialized
+2026-01-03 12:25:37 - engine.display                 - INFO     - Display widget created for screen 0
+2026-01-03 12:25:37 - rendering.display              - INFO     - DisplayWidget created for screen 1 (fill)
+2026-01-03 12:25:37 - rendering.backends.opengl.backend - INFO     - Using OpenGL renderer backend
+2026-01-03 12:25:37 - rendering.backends             - INFO     - Renderer backend 'opengl' initialized
+2026-01-03 12:25:37 - rendering.display              - INFO     - [RENDER] Backend active (screen=1, api=OpenGL 4.x, triple=False, vsync_toggle=False)
+2026-01-03 12:25:37 - rendering.display              - INFO     - Showing on screen 1: 2560x1439 at (2560, 0) DPR=1.5
+2026-01-03 12:25:37 - rendering.display              - INFO     - Detected refresh rate: 60 Hz, adaptive target FPS: 60
+2026-01-03 12:25:37 - rendering.display              - INFO     - [RENDER] Render surface established (screen=1, 2560x1439, vsync=True, triple_preference=True)
+2026-01-03 12:25:37 - rendering.display              - INFO     - [GL COMPOSITOR] Created shared compositor for screen 1
+2026-01-03 12:25:37 - rendering.gl_compositor        - INFO     - [DIMMING] GL dimming changed: enabled=False→False, opacity=0%→30%
+2026-01-03 12:25:37 - rendering.widget_manager       - INFO     - ✅ clock widget created: Top Right, 24h, font=75px, seconds=True
+2026-01-03 12:25:37 - widgets.clock_widget           - INFO     - Clock widget started
+2026-01-03 12:25:37 - rendering.widget_manager       - INFO     - Widget setup complete: 1 widgets created and started
+2026-01-03 12:25:37 - rendering.display              - INFO     - WidgetManager created 1 widgets
+2026-01-03 12:25:37 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] clock initialized
+2026-01-03 12:25:37 - engine.display                 - INFO     - Display widget created for screen 1
+2026-01-03 12:25:37 - engine.display                 - INFO     - Created 2 display widgets
+2026-01-03 12:25:37 - engine.screensaver             - INFO     - Display initialized with 2 screens
+2026-01-03 12:25:37 - engine.screensaver             - INFO     - Rotation timer configured: 10s
+2026-01-03 12:25:37 - engine.screensaver             - INFO     - Engine state: STOPPED -> STARTING
+2026-01-03 12:25:37 - engine.screensaver             - INFO     - Starting screensaver engine...
+2026-01-03 12:25:37 - engine.screensaver             - INFO     - Rotation timer started (10000ms)
+2026-01-03 12:25:37 - engine.screensaver             - INFO     - Engine state: STARTING -> RUNNING
+2026-01-03 12:25:37 - engine.screensaver             - INFO     - Screensaver engine started
+2026-01-03 12:25:37 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3840x2160 → scaled 2560x1440 → cropped to 2560x1438
+2026-01-03 12:25:37 - widgets.media_widget           - INFO     - [MEDIA_WIDGET] First track snapshot captured; waiting for coordinated fade-in
+2026-01-03 12:25:38 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3072x4096 → scaled 3840x5120 → cropped to 3840x2158
+2026-01-03 12:25:38 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] Context initialized: version=4.6, swap=SwapBehavior.DoubleBuffer, interval=1
+2026-01-03 12:25:38 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] OpenGL adapter: vendor=NVIDIA Corporation, renderer=NVIDIA GeForce RTX 4090/PCIe/SSE2, version=4.6.0 NVIDIA 591.44
+2026-01-03 12:25:38 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] Shader pipeline initialized (1.0ms)
+2026-01-03 12:25:38 - engine.screensaver             - INFO     - [ASYNC] Different images displayed on 2 displays
+2026-01-03 12:25:38 - rendering.display              - INFO     - Mouse clicked at (497, 343), requesting exit
+2026-01-03 12:25:38 - engine.display                 - INFO     - Exit requested from display widget
+2026-01-03 12:25:38 - engine.screensaver             - INFO     - Exit requested from display
+2026-01-03 12:25:38 - engine.screensaver             - INFO     - Engine state: RUNNING -> SHUTTING_DOWN
+2026-01-03 12:25:38 - engine.screensaver             - INFO     - Stopping screensaver engine...
+2026-01-03 12:25:38 - engine.screensaver             - INFO     - Stopping displays via DisplayManager (count=2, exit_app=True)
+2026-01-03 12:25:38 - engine.display                 - INFO     - All displays cleared
+2026-01-03 12:25:38 - engine.display                 - INFO     - Cleaning up 2 display widgets
+2026-01-03 12:25:38 - engine.display                 - INFO     - Display manager cleanup complete
+2026-01-03 12:25:38 - engine.screensaver             - INFO     - Screensaver engine stopped
+2026-01-03 12:25:38 - engine.screensaver             - INFO     - [1 duplicates suppressed]
+2026-01-03 12:25:38 - __main__                       - INFO     - Cleaning pycache on exit
+2026-01-03 12:25:38 - __main__                       - INFO     - Removed 1 __pycache__ directories
+2026-01-03 12:25:38 - __main__                       - INFO     - ============================================================
+2026-01-03 12:25:38 - __main__                       - INFO     - ShittyRandomPhotoScreenSaver Exiting (code=0)
+2026-01-03 12:25:38 - __main__                       - INFO     - ============================================================
+2026-01-03 12:25:57 - root                           - INFO     - ============================================================
+2026-01-03 12:25:57 - root                           - INFO     - Screensaver logging initialized (debug=False, verbose=False)
+2026-01-03 12:25:57 - root                           - INFO     - ============================================================
+2026-01-03 12:25:57 - root                           - INFO     - [1 duplicates suppressed]
+2026-01-03 12:25:57 - __main__                       - INFO     - ShittyRandomPhotoScreenSaver Starting
+2026-01-03 12:25:57 - __main__                       - INFO     - ============================================================
+2026-01-03 12:25:57 - __main__                       - INFO     - Running in script mode - cleaning pycache on startup
+2026-01-03 12:25:57 - __main__                       - INFO     - Removed 25 __pycache__ directories
+2026-01-03 12:25:57 - __main__                       - WARNING  - Unknown argument: -debug, defaulting to RUN mode (script)
+2026-01-03 12:25:57 - __main__                       - INFO     - Global QSurfaceFormat configured (swap=SwapBehavior.DoubleBuffer, interval=1, depth=24, stencil=8)
+2026-01-03 12:25:57 - __main__                       - INFO     - Qt image allocation limit: 1GB (supports 8K+ images, per-image on-demand)
+2026-01-03 12:25:57 - __main__                       - INFO     - Qt Application created: SRPSS
+2026-01-03 12:25:57 - __main__                       - INFO     - Starting screensaver in RUN mode
+2026-01-03 12:25:57 - __main__                       - INFO     - Windows timer resolution set to 1ms for smooth animations
+2026-01-03 12:25:57 - __main__                       - INFO     - Initializing screensaver engine
+2026-01-03 12:25:57 - SettingsManager                - INFO     - SettingsManager initialized
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - ScreensaverEngine created
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - Engine state: UNINITIALIZED -> INITIALIZING
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - ============================================================
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - Initializing Screensaver Engine 🚦🚦🚦🚦🚦
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - ============================================================
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - Initializing core systems...
+2026-01-03 12:25:57 - EventSystem                    - INFO     - EventSystem initialized
+2026-01-03 12:25:57 - core.threading.manager         - INFO     - Initialized io pool with 4 workers
+2026-01-03 12:25:57 - core.threading.manager         - INFO     - Initialized compute pool with 23 workers
+2026-01-03 12:25:57 - core.threading.manager         - INFO     - ThreadManager initialized with IO=4, COMPUTE=23 workers
+2026-01-03 12:25:57 - SettingsManager                - INFO     - SettingsManager initialized
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - Core systems initialized successfully
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - Loading settings...
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - Image rotation interval: 10s
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - Display mode: fill
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - Shuffle enabled: true
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - Prefetch ahead: 5
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - Initializing image sources...
+2026-01-03 12:25:57 - sources.base_provider.folder.PERSONALSET - INFO     - Created FolderSource for 'C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET' (recursive=True)
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - Folder source added: C:/Users/Basjohn/Documents/[4] WALLPAPERS/PERSONALSET
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - RSS source added: https://www.bing.com/HPImageArchive.aspx?format=rss&idx=0&n=8&mkt=en-US
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - RSS source added: https://www.nasa.gov/feeds/iotd-feed
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/EarthPorn/top/.json?t=day&limit=25
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/CityPorn/top/.json?t=day&limit=25
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/ArchitecturePorn/top/.json?t=day&limit=25
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/WaterPorn/top/.json?t=day&limit=25
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limit=25
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=25
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - RSSSource initialized with 1 feeds
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - Cache directory: C:\Users\Basjohn\AppData\Local\Temp\screensaver_rss_cache
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - Pre-loaded 30 cached RSS images
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - RSS source added: https://www.reddit.com/r/AbandonedPorn/top/.json?t=day&limit=25
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - Initialized 11 image sources (1 folder, 10 RSS)
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - Building image queue...
+2026-01-03 12:25:57 - engine.image_queue             - INFO     - ImageQueue initialized (shuffle=true, history_size=50, local_ratio=90%)
+2026-01-03 12:25:57 - sources.base_provider.folder.PERSONALSET - INFO     - Scanning folder: C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET
+2026-01-03 12:25:57 - sources.base_provider.folder.PERSONALSET - INFO     - Scan complete: 558 images found (558 files scanned) in 0.05s
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - Added 558 images from C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET
+2026-01-03 12:25:57 - engine.image_queue             - INFO     - Added 558 images (local=558, rss=0). Pools: local=558, rss=0
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - Queue initialized with 558 local images
+2026-01-03 12:25:57 - engine.image_queue             - INFO     - Added 20 images (local=0, rss=20). Pools: local=558, rss=20
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - Pre-loaded 20 cached RSS images for immediate use (cap=20)
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - Starting async RSS load for 10 sources...
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - Image queue ready with 578 images
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 1/10: https://www.bing.com/HPImageArchive.aspx?format=rss&idx=0&n=...
+2026-01-03 12:25:57 - utils.image_cache              - INFO     - ImageCache initialized: max_items=24, max_memory=1024MB
+2026-01-03 12:25:57 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - Image prefetcher initialized (ahead=5, max_concurrent=2)
+2026-01-03 12:25:57 - engine.screensaver             - INFO     - Initializing display...
+2026-01-03 12:25:57 - engine.display                 - INFO     - Monitor detection enabled (2 screens)
+2026-01-03 12:25:57 - engine.display                 - INFO     - DisplayManager initialized (mode=fill, same_image=false)
+2026-01-03 12:25:57 - engine.display                 - INFO     - Initializing displays for 2 screens
+2026-01-03 12:25:57 - engine.display                 - INFO     - Cleaning up 0 display widgets
+2026-01-03 12:25:57 - engine.display                 - INFO     - Display manager cleanup complete
+2026-01-03 12:25:57 - rendering.display              - INFO     - DisplayWidget created for screen 0 (fill)
+2026-01-03 12:25:57 - rendering.backends.opengl.backend - INFO     - Using OpenGL renderer backend
+2026-01-03 12:25:57 - rendering.backends             - INFO     - Renderer backend 'opengl' initialized
+2026-01-03 12:25:57 - rendering.display              - INFO     - [RENDER] Backend active (screen=0, api=OpenGL 4.x, triple=False, vsync_toggle=False)
+2026-01-03 12:25:57 - rendering.display              - INFO     - Showing on screen 0: 1707x959 at (0, 0) DPR=1.5
+2026-01-03 12:25:57 - rendering.display              - INFO     - Detected refresh rate: 165 Hz, adaptive target FPS: 55
+2026-01-03 12:25:57 - rendering.display              - INFO     - [RENDER] Render surface established (screen=0, 1707x959, vsync=True, triple_preference=True)
+2026-01-03 12:25:57 - rendering.display              - INFO     - [GL COMPOSITOR] Created shared compositor for screen 0
+2026-01-03 12:25:57 - rendering.gl_compositor        - INFO     - [DIMMING] GL dimming changed: enabled=False→False, opacity=0%→30%
+2026-01-03 12:25:57 - rendering.widget_manager       - INFO     - ✅ clock widget created: Top Right, 24h, font=75px, seconds=True
+2026-01-03 12:25:57 - rendering.widget_manager       - INFO     - ✅ Weather widget created: Johannesburg, Top Left, font=28px
+2026-01-03 12:25:57 - core.media.media_controller    - INFO     - [MEDIA] Windows GSMTC controller initialized
+2026-01-03 12:25:57 - widgets.media_widget           - INFO     - [MEDIA_WIDGET] Using controller: WindowsGlobalMediaController
+2026-01-03 12:25:57 - rendering.widget_manager       - INFO     - ✅ Media widget created: Widgetposition.Bottom Left, font=20px, margin=40
+2026-01-03 12:25:57 - rendering.widget_manager       - INFO     - ✅ reddit widget created: r/All, Widgetposition.Top Left, font=14px, limit=4
+2026-01-03 12:25:57 - rendering.widget_manager       - INFO     - ✅ reddit2 widget created: r/Games, Widgetposition.Top Left, font=14px, limit=4
+2026-01-03 12:25:57 - rendering.widget_manager       - INFO     - ✅ Spotify volume widget started with coordinated fade sync
+2026-01-03 12:25:57 - rendering.widget_manager       - INFO     - ✅ Spotify visualizer widget started: 19 bars
+2026-01-03 12:25:57 - widgets.clock_widget           - INFO     - Clock widget started
+2026-01-03 12:25:57 - widgets.weather_widget         - INFO     - Weather widget started (using cached data)
+2026-01-03 12:25:57 - widgets.media_widget           - INFO     - Media widget started
+2026-01-03 12:25:57 - rendering.widget_manager       - INFO     - Widget setup complete: 7 widgets created and started
+2026-01-03 12:25:57 - rendering.display              - INFO     - WidgetManager created 7 widgets
+2026-01-03 12:25:57 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] clock initialized
+2026-01-03 12:25:57 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] weather initialized
+2026-01-03 12:25:57 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] media initialized
+2026-01-03 12:25:57 - core.threading.manager         - INFO     - Initialized io pool with 4 workers
+2026-01-03 12:25:57 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] reddit initialized
+2026-01-03 12:25:57 - core.threading.manager         - INFO     - Initialized compute pool with 23 workers
+2026-01-03 12:25:57 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] reddit2 initialized
+2026-01-03 12:25:57 - core.threading.manager         - INFO     - ThreadManager initialized with IO=4, COMPUTE=23 workers
+2026-01-03 12:25:57 - engine.display                 - INFO     - Display widget created for screen 0
+2026-01-03 12:25:57 - rendering.display              - INFO     - DisplayWidget created for screen 1 (fill)
+2026-01-03 12:25:57 - rendering.backends.opengl.backend - INFO     - Using OpenGL renderer backend
+2026-01-03 12:25:57 - rendering.backends             - INFO     - Renderer backend 'opengl' initialized
+2026-01-03 12:25:57 - rendering.display              - INFO     - [RENDER] Backend active (screen=1, api=OpenGL 4.x, triple=False, vsync_toggle=False)
+2026-01-03 12:25:57 - rendering.display              - INFO     - Showing on screen 1: 2560x1439 at (2560, 0) DPR=1.5
+2026-01-03 12:25:58 - rendering.display              - INFO     - Detected refresh rate: 60 Hz, adaptive target FPS: 60
+2026-01-03 12:25:58 - rendering.display              - INFO     - [RENDER] Render surface established (screen=1, 2560x1439, vsync=True, triple_preference=True)
+2026-01-03 12:25:58 - rendering.display              - INFO     - [GL COMPOSITOR] Created shared compositor for screen 1
+2026-01-03 12:25:58 - rendering.gl_compositor        - INFO     - [DIMMING] GL dimming changed: enabled=False→False, opacity=0%→30%
+2026-01-03 12:25:58 - rendering.widget_manager       - INFO     - ✅ clock widget created: Top Right, 24h, font=75px, seconds=True
+2026-01-03 12:25:58 - widgets.clock_widget           - INFO     - Clock widget started
+2026-01-03 12:25:58 - rendering.widget_manager       - INFO     - Widget setup complete: 1 widgets created and started
+2026-01-03 12:25:58 - rendering.display              - INFO     - WidgetManager created 1 widgets
+2026-01-03 12:25:58 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] clock initialized
+2026-01-03 12:25:58 - engine.display                 - INFO     - Display widget created for screen 1
+2026-01-03 12:25:58 - engine.display                 - INFO     - Created 2 display widgets
+2026-01-03 12:25:58 - engine.screensaver             - INFO     - Display initialized with 2 screens
+2026-01-03 12:25:58 - engine.screensaver             - INFO     - Rotation timer configured: 10s
+2026-01-03 12:25:58 - engine.screensaver             - INFO     - Background RSS refresh enabled (interval=600000ms, cap=30)
+2026-01-03 12:25:58 - engine.screensaver             - INFO     - Engine state: INITIALIZING -> STOPPED
+2026-01-03 12:25:58 - engine.screensaver             - INFO     - Engine initialization complete
+2026-01-03 12:25:58 - engine.screensaver             - INFO     - Engine state: STOPPED -> STARTING
+2026-01-03 12:25:58 - engine.screensaver             - INFO     - Starting screensaver engine...
+2026-01-03 12:25:58 - engine.screensaver             - INFO     - Rotation timer started (10000ms)
+2026-01-03 12:25:58 - engine.screensaver             - INFO     - Engine state: STARTING -> RUNNING
+2026-01-03 12:25:58 - engine.screensaver             - INFO     - Screensaver engine started
+2026-01-03 12:25:58 - __main__                       - INFO     - Screensaver engine started - entering event loop
+2026-01-03 12:25:58 - widgets.media_widget           - INFO     - [MEDIA_WIDGET] First track snapshot captured; waiting for coordinated fade-in
+2026-01-03 12:25:58 - sources.rss_source             - INFO     - Feed 'Bing Images': 8 entries
+2026-01-03 12:25:58 - sources.rss_source             - INFO     - RSS refresh complete: 38 total images (8 new)
+2026-01-03 12:25:58 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 38 images from source
+2026-01-03 12:25:58 - engine.image_queue             - INFO     - Added 10 images (local=0, rss=10). Pools: local=557, rss=29
+2026-01-03 12:25:58 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] Context initialized: version=4.6, swap=SwapBehavior.DoubleBuffer, interval=1
+2026-01-03 12:25:58 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] OpenGL adapter: vendor=NVIDIA Corporation, renderer=NVIDIA GeForce RTX 4090/PCIe/SSE2, version=4.6.0 NVIDIA 591.44
+2026-01-03 12:25:58 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled raindrops program: 12
+2026-01-03 12:25:58 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled warp program: 13
+2026-01-03 12:25:58 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled diffuse program: 14
+2026-01-03 12:25:58 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled blockflip program: 15
+2026-01-03 12:25:58 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled peel program: 16
+2026-01-03 12:25:58 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled crossfade program: 17
+2026-01-03 12:25:58 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled slide program: 18
+2026-01-03 12:25:58 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled wipe program: 19
+2026-01-03 12:25:58 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled blinds program: 20
+2026-01-03 12:25:58 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled crumble program: 21
+2026-01-03 12:25:58 - rendering.gl_programs.program_cache - INFO     - [GL CACHE] Compiled particle program: 22
+2026-01-03 12:25:58 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] Shader pipeline initialized (22.9ms)
+2026-01-03 12:25:58 - rendering.image_processor_async - INFO     - FILL(QImage): Image 8256x5504 → scaled 2559x1706 → cropped to 2560x1438
+2026-01-03 12:25:58 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3840x2400 → scaled 3840x2400 → cropped to 3840x2158
+2026-01-03 12:25:58 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] Context initialized: version=4.6, swap=SwapBehavior.DoubleBuffer, interval=1
+2026-01-03 12:25:58 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] OpenGL adapter: vendor=NVIDIA Corporation, renderer=NVIDIA GeForce RTX 4090/PCIe/SSE2, version=4.6.0 NVIDIA 591.44
+2026-01-03 12:25:58 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] Shader pipeline initialized (1.0ms)
+2026-01-03 12:25:58 - engine.screensaver             - INFO     - [ASYNC] Different images displayed on 2 displays
+2026-01-03 12:25:59 - widgets.media_widget           - INFO     - [MEDIA_WIDGET] Requesting coordinated fade sync
+2026-01-03 12:25:59 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.796 Bars: [0.20 0.19 0.19 0.23 0.37 0.66 0.80 0.62 0.38 0.33 0.38 0.62 0.80 0.66 0.37 0.23 0.19 0.19 0.20]
+2026-01-03 12:25:59 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.339 Bars: [0.04 0.06 0.08 0.15 0.29 0.54 0.66 0.50 0.31 0.28 0.31 0.50 0.66 0.54 0.29 0.15 0.08 0.06 0.04]
+2026-01-03 12:26:00 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 2/10: https://www.nasa.gov/feeds/iotd-feed...
+2026-01-03 12:26:00 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:26:00 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.959 Bars: [0.44 0.40 0.35 0.35 0.46 0.83 1.00 0.84 0.53 0.48 0.53 0.84 1.00 0.83 0.46 0.35 0.35 0.40 0.44]
+2026-01-03 12:26:01 - sources.rss_source             - INFO     - Feed 'NASA Image of the Day': 60 entries
+2026-01-03 12:26:01 - sources.rss_source             - INFO     - RSS refresh complete: 38 total images (8 new)
+2026-01-03 12:26:01 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 38 images from source
+2026-01-03 12:26:01 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.484 Bars: [0.31 0.29 0.27 0.28 0.39 0.66 0.80 0.62 0.39 0.35 0.39 0.62 0.80 0.66 0.39 0.28 0.27 0.29 0.31]
+2026-01-03 12:26:02 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.929 Bars: [0.05 0.06 0.10 0.17 0.32 0.60 0.71 0.54 0.33 0.29 0.33 0.54 0.71 0.60 0.32 0.17 0.10 0.06 0.05]
+2026-01-03 12:26:03 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 3/10: https://www.reddit.com/r/EarthPorn/top/.json?t=day&limit=25...
+2026-01-03 12:26:03 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:26:03 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.231 Bars: [0.77 0.68 0.55 0.45 0.44 0.65 0.79 0.60 0.36 0.33 0.36 0.60 0.79 0.65 0.44 0.45 0.55 0.68 0.77]
+2026-01-03 12:26:04 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/EarthPorn/top/.json?t=day&limit=25)': 10 entries
+2026-01-03 12:26:04 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.167 Bars: [0.29 0.26 0.24 0.24 0.33 0.57 0.69 0.53 0.32 0.29 0.32 0.53 0.69 0.57 0.33 0.24 0.24 0.26 0.29]
+2026-01-03 12:26:05 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.281 Bars: [0.06 0.07 0.10 0.18 0.36 0.70 0.86 0.68 0.42 0.38 0.42 0.68 0.86 0.70 0.36 0.18 0.10 0.07 0.06]
+2026-01-03 12:26:05 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.855 Bars: [0.20 0.20 0.20 0.23 0.35 0.59 0.70 0.54 0.34 0.31 0.34 0.54 0.70 0.59 0.35 0.23 0.20 0.20 0.20]
+2026-01-03 12:26:06 - rendering.input_handler        - INFO     - S key pressed - settings requested
+2026-01-03 12:26:06 - engine.screensaver             - INFO     - Settings requested - pausing screensaver and opening config
+2026-01-03 12:26:06 - engine.screensaver             - INFO     - Engine state: RUNNING -> STOPPING
+2026-01-03 12:26:06 - engine.screensaver             - INFO     - Stopping screensaver engine...
+2026-01-03 12:26:06 - engine.screensaver             - INFO     - Stopping displays via DisplayManager (count=2, exit_app=False)
+2026-01-03 12:26:06 - engine.display                 - INFO     - All displays cleared
+2026-01-03 12:26:06 - engine.display                 - INFO     - All displays hidden
+2026-01-03 12:26:06 - engine.screensaver             - INFO     - Screensaver engine stopped
+2026-01-03 12:26:06 - engine.screensaver             - INFO     - Engine state: STOPPING -> STOPPED
+2026-01-03 12:26:06 - engine.screensaver             - INFO     - Screensaver engine stopped
+2026-01-03 12:26:06 - ui.settings_dialog             - INFO     - Settings dialog created
+2026-01-03 12:26:06 - sources.rss_source             - INFO     - Downloaded image: 45652a1c9bc5adcaef2518149478a98e.jpeg (6979622 bytes)
+2026-01-03 12:26:06 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.434 Bars: [0.18 0.18 0.18 0.22 0.35 0.64 0.78 0.61 0.38 0.35 0.38 0.61 0.78 0.64 0.35 0.22 0.18 0.18 0.18]
+2026-01-03 12:26:08 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.435 Bars: [0.05 0.06 0.09 0.15 0.27 0.47 0.54 0.40 0.24 0.22 0.24 0.40 0.54 0.47 0.27 0.15 0.09 0.06 0.05]
+2026-01-03 12:26:08 - sources.rss_source             - INFO     - Downloaded image: d222e438d4cfb22f5dee68a0e7a2fd0b.jpeg (2132008 bytes)
+2026-01-03 12:26:08 - sources.rss_source             - INFO     - RSS refresh complete: 33 total images (3 new)
+2026-01-03 12:26:08 - sources.rss_source             - INFO     - Cache cleanup needed: count 42 > 40
+2026-01-03 12:26:08 - sources.rss_source             - INFO     - Cache cleanup: removed 2 files (4.7MB), kept 40 files (min_keep=20)
+2026-01-03 12:26:08 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 33 images from source
+2026-01-03 12:26:09 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.332 Bars: [0.66 0.59 0.49 0.39 0.34 0.40 0.42 0.30 0.19 0.17 0.19 0.30 0.42 0.40 0.34 0.39 0.49 0.59 0.66]
+2026-01-03 12:26:09 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.576 Bars: [0.00 0.00 0.00 0.00 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.00 0.00 0.00 0.00]
+2026-01-03 12:26:10 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 4/10: https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25...
+2026-01-03 12:26:10 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:26:10 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.352 Bars: [1.00 0.92 0.74 0.56 0.46 0.55 0.61 0.45 0.28 0.25 0.28 0.45 0.61 0.55 0.46 0.56 0.74 0.92 1.00]
+2026-01-03 12:26:11 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.055 Bars: [0.05 0.06 0.09 0.14 0.26 0.45 0.51 0.37 0.21 0.18 0.21 0.37 0.51 0.45 0.26 0.14 0.09 0.06 0.05]
+2026-01-03 12:26:11 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25)': 7 entries
+2026-01-03 12:26:11 - sources.rss_source             - WARNING  - [FEED_HEALTH] Feed https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25 failed 1 times, backoff 60s
+2026-01-03 12:26:11 - sources.rss_source             - WARNING  - [RATE_LIMIT] Reddit feed returned 0 images: https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25
+2026-01-03 12:26:11 - sources.rss_source             - INFO     - [RATE_LIMIT] Skipping 1 rate-limited Reddit feeds (will retry on next refresh)
+2026-01-03 12:26:11 - sources.rss_source             - INFO     - RSS refresh complete: 30 total images (0 new)
+2026-01-03 12:26:11 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 30 images from source
+2026-01-03 12:26:11 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.792 Bars: [0.34 0.31 0.27 0.28 0.36 0.61 0.74 0.57 0.35 0.31 0.35 0.57 0.74 0.61 0.36 0.28 0.27 0.31 0.34]
+2026-01-03 12:26:12 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=4.018 Bars: [1.00 1.00 0.91 0.68 0.56 0.76 0.92 0.72 0.44 0.40 0.44 0.72 0.92 0.76 0.56 0.68 0.91 1.00 1.00]
+2026-01-03 12:26:12 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.789 Bars: [0.49 0.44 0.38 0.35 0.42 0.71 0.87 0.68 0.42 0.38 0.42 0.68 0.87 0.71 0.42 0.35 0.38 0.44 0.49]
+2026-01-03 12:26:13 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 5/10: https://www.reddit.com/r/CityPorn/top/.json?t=day&limit=25...
+2026-01-03 12:26:13 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:26:13 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.661 Bars: [0.11 0.12 0.13 0.18 0.28 0.47 0.54 0.40 0.25 0.23 0.25 0.40 0.54 0.47 0.28 0.18 0.13 0.12 0.11]
+2026-01-03 12:26:13 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/CityPorn/top/.json?t=day&limit=25)': 17 entries
+2026-01-03 12:26:13 - sources.rss_source             - INFO     - RSS refresh complete: 32 total images (2 new)
+2026-01-03 12:26:13 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 32 images from source
+2026-01-03 12:26:14 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.586 Bars: [0.46 0.42 0.36 0.35 0.45 0.78 0.96 0.76 0.47 0.42 0.47 0.76 0.96 0.78 0.45 0.35 0.36 0.42 0.46]
+2026-01-03 12:26:14 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.311 Bars: [0.32 0.30 0.27 0.28 0.37 0.64 0.76 0.58 0.35 0.31 0.35 0.58 0.76 0.64 0.37 0.28 0.27 0.30 0.32]
+2026-01-03 12:26:15 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.635 Bars: [0.35 0.32 0.29 0.28 0.35 0.55 0.63 0.48 0.30 0.27 0.30 0.48 0.63 0.55 0.35 0.28 0.29 0.32 0.35]
+2026-01-03 12:26:15 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 6/10: https://www.reddit.com/r/ArchitecturePorn/top/.json?t=day&li...
+2026-01-03 12:26:15 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:26:16 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.948 Bars: [0.04 0.05 0.07 0.12 0.22 0.40 0.46 0.34 0.20 0.17 0.20 0.34 0.46 0.40 0.22 0.12 0.07 0.05 0.04]
+2026-01-03 12:26:16 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/ArchitecturePorn/top/.json?t=day&limit=25)': 5 entries
+2026-01-03 12:26:16 - sources.rss_source             - INFO     - RSS refresh complete: 31 total images (1 new)
+2026-01-03 12:26:16 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 31 images from source
+2026-01-03 12:26:16 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.658 Bars: [1.00 1.00 1.00 1.00 0.75 0.75 0.84 0.66 0.41 0.37 0.41 0.66 0.84 0.75 0.75 1.00 1.00 1.00 1.00]
+2026-01-03 12:26:17 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.093 Bars: [0.05 0.07 0.10 0.17 0.33 0.62 0.75 0.57 0.35 0.31 0.35 0.57 0.75 0.62 0.33 0.17 0.10 0.07 0.05]
+2026-01-03 12:26:18 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 7/10: https://www.reddit.com/r/WaterPorn/top/.json?t=day&limit=25...
+2026-01-03 12:26:18 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:26:18 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.166 Bars: [0.38 0.35 0.30 0.28 0.31 0.45 0.49 0.36 0.22 0.20 0.22 0.36 0.49 0.45 0.31 0.28 0.30 0.35 0.38]
+2026-01-03 12:26:18 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/WaterPorn/top/.json?t=day&limit=25)': 0 entries
+2026-01-03 12:26:18 - sources.rss_source             - WARNING  - [FEED_HEALTH] Feed https://www.reddit.com/r/WaterPorn/top/.json?t=day&limit=25 failed 1 times, backoff 60s
+2026-01-03 12:26:18 - sources.rss_source             - WARNING  - [RATE_LIMIT] Reddit feed returned 0 images: https://www.reddit.com/r/WaterPorn/top/.json?t=day&limit=25
+2026-01-03 12:26:18 - sources.rss_source             - INFO     - [RATE_LIMIT] Skipping 1 rate-limited Reddit feeds (will retry on next refresh)
+2026-01-03 12:26:18 - sources.rss_source             - INFO     - RSS refresh complete: 30 total images (0 new)
+2026-01-03 12:26:18 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 30 images from source
+2026-01-03 12:26:19 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.997 Bars: [0.73 0.65 0.54 0.44 0.42 0.57 0.64 0.49 0.31 0.29 0.31 0.49 0.64 0.57 0.42 0.44 0.54 0.65 0.73]
+2026-01-03 12:26:19 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.709 Bars: [0.05 0.06 0.09 0.14 0.23 0.35 0.37 0.27 0.18 0.17 0.18 0.27 0.37 0.35 0.23 0.14 0.09 0.06 0.05]
+2026-01-03 12:26:20 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.452 Bars: [0.72 0.64 0.52 0.41 0.36 0.43 0.44 0.32 0.21 0.19 0.21 0.32 0.44 0.43 0.36 0.41 0.52 0.64 0.72]
+2026-01-03 12:26:20 - engine.screensaver             - INFO     - Settings dialog closed, performing full-style restart of screensaver
+2026-01-03 12:26:20 - engine.display                 - INFO     - Cleaning up 2 display widgets
+2026-01-03 12:26:20 - engine.display                 - INFO     - Display manager cleanup complete
+2026-01-03 12:26:20 - engine.screensaver             - INFO     - Initializing display...
+2026-01-03 12:26:20 - engine.display                 - INFO     - Monitor detection enabled (2 screens)
+2026-01-03 12:26:20 - engine.display                 - INFO     - DisplayManager initialized (mode=fill, same_image=false)
+2026-01-03 12:26:20 - engine.display                 - INFO     - Initializing displays for 2 screens
+2026-01-03 12:26:20 - engine.display                 - INFO     - Cleaning up 0 display widgets
+2026-01-03 12:26:20 - engine.display                 - INFO     - Display manager cleanup complete
+2026-01-03 12:26:20 - rendering.display              - INFO     - DisplayWidget created for screen 0 (fill)
+2026-01-03 12:26:20 - rendering.backends.opengl.backend - INFO     - Using OpenGL renderer backend
+2026-01-03 12:26:20 - rendering.backends             - INFO     - Renderer backend 'opengl' initialized
+2026-01-03 12:26:20 - rendering.display              - INFO     - [RENDER] Backend active (screen=0, api=OpenGL 4.x, triple=False, vsync_toggle=False)
+2026-01-03 12:26:20 - rendering.display              - INFO     - Showing on screen 0: 1707x959 at (0, 0) DPR=1.5
+2026-01-03 12:26:20 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 8/10: https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limi...
+2026-01-03 12:26:20 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:26:20 - rendering.display              - INFO     - Detected refresh rate: 165 Hz, adaptive target FPS: 55
+2026-01-03 12:26:20 - rendering.display              - INFO     - [RENDER] Render surface established (screen=0, 1707x959, vsync=True, triple_preference=True)
+2026-01-03 12:26:20 - rendering.display              - INFO     - [GL COMPOSITOR] Created shared compositor for screen 0
+2026-01-03 12:26:20 - rendering.gl_compositor        - INFO     - [DIMMING] GL dimming changed: enabled=False→False, opacity=0%→30%
+2026-01-03 12:26:20 - rendering.widget_manager       - INFO     - ✅ clock widget created: Top Right, 24h, font=75px, seconds=True
+2026-01-03 12:26:20 - rendering.widget_manager       - INFO     - ✅ Weather widget created: Johannesburg, Top Left, font=28px
+2026-01-03 12:26:20 - core.media.media_controller    - INFO     - [MEDIA] Windows GSMTC controller initialized
+2026-01-03 12:26:20 - widgets.media_widget           - INFO     - [MEDIA_WIDGET] Using controller: WindowsGlobalMediaController
+2026-01-03 12:26:20 - rendering.widget_manager       - INFO     - ✅ Media widget created: Widgetposition.Bottom Left, font=20px, margin=40
+2026-01-03 12:26:20 - rendering.widget_manager       - INFO     - ✅ reddit widget created: r/All, Widgetposition.Top Left, font=14px, limit=4
+2026-01-03 12:26:21 - rendering.widget_manager       - INFO     - ✅ reddit2 widget created: r/Games, Widgetposition.Top Left, font=14px, limit=4
+2026-01-03 12:26:21 - rendering.widget_manager       - INFO     - ✅ Spotify volume widget started with coordinated fade sync
+2026-01-03 12:26:21 - rendering.widget_manager       - INFO     - ✅ Spotify visualizer widget started: 17 bars
+2026-01-03 12:26:21 - widgets.clock_widget           - INFO     - Clock widget started
+2026-01-03 12:26:21 - widgets.weather_widget         - INFO     - Weather widget started (using cached data)
+2026-01-03 12:26:21 - widgets.media_widget           - INFO     - Media widget started
+2026-01-03 12:26:21 - rendering.widget_manager       - INFO     - Widget setup complete: 7 widgets created and started
+2026-01-03 12:26:21 - rendering.display              - INFO     - WidgetManager created 7 widgets
+2026-01-03 12:26:21 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] clock initialized
+2026-01-03 12:26:21 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] weather initialized
+2026-01-03 12:26:21 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] media initialized
+2026-01-03 12:26:21 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] reddit initialized
+2026-01-03 12:26:21 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] reddit2 initialized
+2026-01-03 12:26:21 - engine.display                 - INFO     - Display widget created for screen 0
+2026-01-03 12:26:21 - rendering.display              - INFO     - DisplayWidget created for screen 1 (fill)
+2026-01-03 12:26:21 - rendering.backends.opengl.backend - INFO     - Using OpenGL renderer backend
+2026-01-03 12:26:21 - rendering.backends             - INFO     - Renderer backend 'opengl' initialized
+2026-01-03 12:26:21 - rendering.display              - INFO     - [RENDER] Backend active (screen=1, api=OpenGL 4.x, triple=False, vsync_toggle=False)
+2026-01-03 12:26:21 - rendering.display              - INFO     - Showing on screen 1: 2560x1439 at (2560, 0) DPR=1.5
+2026-01-03 12:26:21 - rendering.display              - INFO     - Detected refresh rate: 60 Hz, adaptive target FPS: 60
+2026-01-03 12:26:21 - rendering.display              - INFO     - [RENDER] Render surface established (screen=1, 2560x1439, vsync=True, triple_preference=True)
+2026-01-03 12:26:21 - rendering.display              - INFO     - [GL COMPOSITOR] Created shared compositor for screen 1
+2026-01-03 12:26:21 - rendering.gl_compositor        - INFO     - [DIMMING] GL dimming changed: enabled=False→False, opacity=0%→30%
+2026-01-03 12:26:21 - rendering.widget_manager       - INFO     - ✅ clock widget created: Top Right, 24h, font=75px, seconds=True
+2026-01-03 12:26:21 - widgets.clock_widget           - INFO     - Clock widget started
+2026-01-03 12:26:21 - rendering.widget_manager       - INFO     - Widget setup complete: 1 widgets created and started
+2026-01-03 12:26:21 - rendering.display              - INFO     - WidgetManager created 1 widgets
+2026-01-03 12:26:21 - widgets.base_overlay_widget    - INFO     - [LIFECYCLE] clock initialized
+2026-01-03 12:26:21 - engine.display                 - INFO     - Display widget created for screen 1
+2026-01-03 12:26:21 - engine.display                 - INFO     - Created 2 display widgets
+2026-01-03 12:26:21 - engine.screensaver             - INFO     - Display initialized with 2 screens
+2026-01-03 12:26:21 - engine.screensaver             - INFO     - Rotation timer configured: 10s
+2026-01-03 12:26:21 - engine.screensaver             - INFO     - Engine state: STOPPED -> STARTING
+2026-01-03 12:26:21 - engine.screensaver             - INFO     - Starting screensaver engine...
+2026-01-03 12:26:21 - engine.screensaver             - INFO     - Rotation timer started (10000ms)
+2026-01-03 12:26:21 - engine.screensaver             - INFO     - Engine state: STARTING -> RUNNING
+2026-01-03 12:26:21 - engine.screensaver             - INFO     - Screensaver engine started
+2026-01-03 12:26:21 - widgets.media_widget           - INFO     - [MEDIA_WIDGET] First track snapshot captured; waiting for coordinated fade-in
+2026-01-03 12:26:21 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3840x2160 → scaled 2560x1440 → cropped to 2560x1438
+2026-01-03 12:26:21 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3840x2459 → scaled 3840x2459 → cropped to 3840x2158
+2026-01-03 12:26:21 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limit=25)': 0 entries
+2026-01-03 12:26:21 - sources.rss_source             - WARNING  - [FEED_HEALTH] Feed https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limit=25 failed 1 times, backoff 60s
+2026-01-03 12:26:21 - sources.rss_source             - WARNING  - [RATE_LIMIT] Reddit feed returned 0 images: https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limit=25
+2026-01-03 12:26:21 - sources.rss_source             - INFO     - [RATE_LIMIT] Skipping 1 rate-limited Reddit feeds (will retry on next refresh)
+2026-01-03 12:26:21 - sources.rss_source             - INFO     - RSS refresh complete: 30 total images (0 new)
+2026-01-03 12:26:21 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 30 images from source
+2026-01-03 12:26:21 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] Context initialized: version=4.6, swap=SwapBehavior.DoubleBuffer, interval=1
+2026-01-03 12:26:21 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] OpenGL adapter: vendor=NVIDIA Corporation, renderer=NVIDIA GeForce RTX 4090/PCIe/SSE2, version=4.6.0 NVIDIA 591.44
+2026-01-03 12:26:21 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] Shader pipeline initialized (2.5ms)
+2026-01-03 12:26:21 - engine.screensaver             - INFO     - [ASYNC] Different images displayed on 2 displays
+2026-01-03 12:26:21 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] Context initialized: version=4.6, swap=SwapBehavior.DoubleBuffer, interval=1
+2026-01-03 12:26:21 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] OpenGL adapter: vendor=NVIDIA Corporation, renderer=NVIDIA GeForce RTX 4090/PCIe/SSE2, version=4.6.0 NVIDIA 591.44
+2026-01-03 12:26:21 - rendering.gl_compositor        - INFO     - [GL COMPOSITOR] Shader pipeline initialized (1.5ms)
+2026-01-03 12:26:22 - widgets.media_widget           - INFO     - [MEDIA_WIDGET] Requesting coordinated fade sync
+2026-01-03 12:26:22 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.171 Bars: [0.39 0.36 0.31 0.29 0.33 0.50 0.57 0.42 0.24 0.21 0.24 0.42 0.57 0.50 0.33 0.29 0.31 0.36 0.39]
+2026-01-03 12:26:23 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.256 Bars: [0.19 0.18 0.18 0.20 0.29 0.50 0.58 0.43 0.26 0.23 0.26 0.43 0.58 0.50 0.29 0.20 0.18 0.18 0.19]
+2026-01-03 12:26:23 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 9/10: https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=2...
+2026-01-03 12:26:23 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:26:24 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=25)': 0 entries
+2026-01-03 12:26:24 - sources.rss_source             - WARNING  - [FEED_HEALTH] Feed https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=25 failed 1 times, backoff 60s
+2026-01-03 12:26:24 - sources.rss_source             - WARNING  - [RATE_LIMIT] Reddit feed returned 0 images: https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=25
+2026-01-03 12:26:24 - sources.rss_source             - INFO     - [RATE_LIMIT] Skipping 1 rate-limited Reddit feeds (will retry on next refresh)
+2026-01-03 12:26:24 - sources.rss_source             - INFO     - RSS refresh complete: 30 total images (0 new)
+2026-01-03 12:26:24 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 30 images from source
+2026-01-03 12:26:24 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.130 Bars: [0.13 0.13 0.14 0.17 0.25 0.39 0.42 0.30 0.19 0.18 0.19 0.30 0.42 0.39 0.25 0.17 0.14 0.13 0.13]
+2026-01-03 12:26:25 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.255 Bars: [0.80 0.71 0.58 0.48 0.49 0.73 0.88 0.69 0.43 0.38 0.43 0.69 0.88 0.73 0.49 0.48 0.58 0.71 0.80]
+2026-01-03 12:26:26 - engine.screensaver             - INFO     - [ASYNC RSS] Processing source 10/10: https://www.reddit.com/r/AbandonedPorn/top/.json?t=day&limit...
+2026-01-03 12:26:26 - sources.rss_source             - INFO     - Refreshing RSS feeds (1 feeds, max 8/source)...
+2026-01-03 12:26:26 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.815 Bars: [0.32 0.30 0.27 0.27 0.35 0.55 0.63 0.49 0.32 0.30 0.32 0.49 0.63 0.55 0.35 0.27 0.27 0.30 0.32]
+2026-01-03 12:26:26 - sources.rss_source             - INFO     - JSON feed 'JSON Feed (https://www.reddit.com/r/AbandonedPorn/top/.json?t=day&limit=25)': 4 entries
+2026-01-03 12:26:26 - sources.rss_source             - WARNING  - [FEED_HEALTH] Feed https://www.reddit.com/r/AbandonedPorn/top/.json?t=day&limit=25 failed 1 times, backoff 60s
+2026-01-03 12:26:26 - sources.rss_source             - WARNING  - [RATE_LIMIT] Reddit feed returned 0 images: https://www.reddit.com/r/AbandonedPorn/top/.json?t=day&limit=25
+2026-01-03 12:26:26 - sources.rss_source             - INFO     - [RATE_LIMIT] Skipping 1 rate-limited Reddit feeds (will retry on next refresh)
+2026-01-03 12:26:26 - sources.rss_source             - INFO     - RSS refresh complete: 30 total images (0 new)
+2026-01-03 12:26:26 - engine.screensaver             - INFO     - [ASYNC RSS] Loaded 30 images from source
+2026-01-03 12:26:26 - engine.screensaver             - INFO     - [ASYNC RSS] Completed: 322 total images loaded from 10 sources
+2026-01-03 12:26:27 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.754 Bars: [0.44 0.40 0.34 0.31 0.37 0.60 0.72 0.56 0.34 0.31 0.34 0.56 0.72 0.60 0.37 0.31 0.34 0.40 0.44]
+2026-01-03 12:26:27 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.284 Bars: [0.48 0.43 0.37 0.35 0.41 0.67 0.80 0.64 0.42 0.38 0.42 0.64 0.80 0.67 0.41 0.35 0.37 0.43 0.48]
+2026-01-03 12:26:28 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.467 Bars: [0.05 0.07 0.10 0.16 0.30 0.55 0.64 0.47 0.27 0.22 0.27 0.47 0.64 0.55 0.30 0.16 0.10 0.07 0.05]
+2026-01-03 12:26:29 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.331 Bars: [0.05 0.06 0.09 0.15 0.27 0.47 0.54 0.40 0.26 0.24 0.26 0.40 0.54 0.47 0.27 0.15 0.09 0.06 0.05]
+2026-01-03 12:26:29 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.682 Bars: [0.08 0.09 0.11 0.18 0.33 0.60 0.72 0.55 0.33 0.30 0.33 0.55 0.72 0.60 0.33 0.18 0.11 0.09 0.08]
+2026-01-03 12:26:30 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=1.166 Bars: [0.02 0.02 0.04 0.06 0.10 0.17 0.18 0.13 0.07 0.07 0.07 0.13 0.18 0.17 0.10 0.06 0.04 0.02 0.02]
+2026-01-03 12:26:31 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.879 Bars: [0.33 0.30 0.28 0.28 0.38 0.64 0.76 0.59 0.36 0.32 0.36 0.59 0.76 0.64 0.38 0.28 0.28 0.30 0.33]
+2026-01-03 12:26:31 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3840x2400 → scaled 2560x1600 → cropped to 2560x1438
+2026-01-03 12:26:31 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3840x2160 → scaled 3840x2160 → cropped to 3840x2158
+2026-01-03 12:26:31 - transitions.gl_compositor_crossfade_transition - INFO     - GLCompositorCrossfadeTransition started (6199ms)
+2026-01-03 12:26:31 - engine.screensaver             - INFO     - [ASYNC] Different images displayed on 2 displays
+2026-01-03 12:26:31 - transitions.gl_compositor_crossfade_transition - INFO     - GLCompositorCrossfadeTransition started (6199ms)
+2026-01-03 12:26:32 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.171 Bars: [1.00 1.00 1.00 0.83 0.58 0.60 0.65 0.49 0.31 0.28 0.31 0.49 0.65 0.60 0.58 0.83 1.00 1.00 1.00]
+2026-01-03 12:26:33 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.733 Bars: [0.51 0.46 0.38 0.32 0.32 0.43 0.48 0.35 0.22 0.19 0.22 0.35 0.48 0.43 0.32 0.32 0.38 0.46 0.51]
+2026-01-03 12:26:34 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=4.121 Bars: [0.84 0.74 0.60 0.49 0.47 0.69 0.82 0.66 0.43 0.40 0.43 0.66 0.82 0.69 0.47 0.49 0.60 0.74 0.84]
+2026-01-03 12:26:35 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.465 Bars: [0.05 0.06 0.09 0.15 0.29 0.52 0.61 0.46 0.28 0.25 0.28 0.46 0.61 0.52 0.29 0.15 0.09 0.06 0.05]
+2026-01-03 12:26:36 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.350 Bars: [0.19 0.18 0.19 0.23 0.38 0.71 0.88 0.69 0.43 0.38 0.43 0.69 0.88 0.71 0.38 0.23 0.19 0.18 0.19]
+2026-01-03 12:26:37 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.672 Bars: [0.05 0.06 0.09 0.16 0.31 0.59 0.71 0.56 0.37 0.34 0.37 0.56 0.71 0.59 0.31 0.16 0.09 0.06 0.05]
+2026-01-03 12:26:38 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.288 Bars: [0.13 0.14 0.15 0.19 0.31 0.53 0.61 0.49 0.34 0.33 0.34 0.49 0.61 0.53 0.31 0.19 0.15 0.14 0.13]
+2026-01-03 12:26:38 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=4.076 Bars: [0.48 0.43 0.37 0.35 0.43 0.70 0.83 0.68 0.46 0.43 0.46 0.68 0.83 0.70 0.43 0.35 0.37 0.43 0.48]
+2026-01-03 12:26:39 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.572 Bars: [1.00 0.93 0.73 0.55 0.44 0.53 0.59 0.45 0.28 0.25 0.28 0.45 0.59 0.53 0.44 0.55 0.73 0.93 1.00]
+2026-01-03 12:26:40 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.013 Bars: [0.20 0.19 0.18 0.20 0.28 0.46 0.53 0.43 0.29 0.27 0.29 0.43 0.53 0.46 0.28 0.20 0.18 0.19 0.20]
+2026-01-03 12:26:40 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.941 Bars: [1.00 1.00 1.00 0.76 0.52 0.53 0.57 0.43 0.27 0.24 0.27 0.43 0.57 0.53 0.52 0.76 1.00 1.00 1.00]
+2026-01-03 12:26:41 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=2.908 Bars: [0.93 0.82 0.65 0.49 0.39 0.46 0.50 0.37 0.24 0.21 0.24 0.37 0.50 0.46 0.39 0.49 0.65 0.82 0.93]
+2026-01-03 12:26:41 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3840x2880 → scaled 2560x1920 → cropped to 2560x1438
+2026-01-03 12:26:41 - rendering.image_processor_async - INFO     - FILL(QImage): Image 3840x2400 → scaled 3840x2400 → cropped to 3840x2158
+2026-01-03 12:26:41 - transitions.gl_compositor_crossfade_transition - INFO     - GLCompositorCrossfadeTransition started (6199ms)
+2026-01-03 12:26:41 - engine.screensaver             - INFO     - [ASYNC] Different images displayed on 2 displays
+2026-01-03 12:26:41 - transitions.gl_compositor_crossfade_transition - INFO     - GLCompositorCrossfadeTransition started (6199ms)
+2026-01-03 12:26:42 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=3.640 Bars: [0.36 0.33 0.29 0.29 0.37 0.65 0.79 0.64 0.42 0.38 0.42 0.64 0.79 0.65 0.37 0.29 0.29 0.33 0.36]
+2026-01-03 12:26:43 - widgets.spotify_visualizer_widget - INFO     - [DEBUG] raw_bass=0.862 Bars: [0.75 0.66 0.53 0.39 0.28 0.26 0.24 0.16 0.11 0.10 0.11 0.16 0.24 0.26 0.28 0.39 0.53 0.66 0.75]
+2026-01-03 12:26:51 - rendering.input_handler        - INFO     - Non-hotkey key pressed (16777251) in normal mode - requesting exit
+2026-01-03 12:26:51 - engine.display                 - INFO     - Exit requested from display widget
+2026-01-03 12:26:51 - engine.screensaver             - INFO     - Exit requested from display
+2026-01-03 12:26:51 - engine.screensaver             - INFO     - Engine state: RUNNING -> SHUTTING_DOWN
+2026-01-03 12:26:51 - engine.screensaver             - INFO     - Stopping screensaver engine...
+2026-01-03 12:26:51 - engine.screensaver             - INFO     - Stopping displays via DisplayManager (count=2, exit_app=True)
+2026-01-03 12:26:51 - engine.display                 - INFO     - All displays cleared
+2026-01-03 12:26:51 - engine.display                 - INFO     - Cleaning up 2 display widgets
+2026-01-03 12:26:51 - engine.display                 - INFO     - Display manager cleanup complete
+2026-01-03 12:26:51 - engine.screensaver             - INFO     - Screensaver engine stopped
+2026-01-03 12:26:51 - engine.screensaver             - INFO     - [1 duplicates suppressed]
+2026-01-03 12:26:51 - __main__                       - INFO     - Cleaning pycache on exit
+2026-01-03 12:26:51 - __main__                       - INFO     - Removed 1 __pycache__ directories
+2026-01-03 12:26:51 - __main__                       - INFO     - ============================================================
+2026-01-03 12:26:51 - __main__                       - INFO     - ShittyRandomPhotoScreenSaver Exiting (code=0)
+2026-01-03 12:26:51 - __main__                       - INFO     - ============================================================

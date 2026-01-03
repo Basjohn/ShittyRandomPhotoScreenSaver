@@ -93,80 +93,33 @@ class TestWidgetPositioner:
         
         assert positioner._container_size == QSize(2560, 1440)
     
-    def test_calculate_position_top_left(self):
-        """Test position calculation for TOP_LEFT anchor."""
+    @pytest.mark.parametrize(
+        "anchor,expected",
+        [
+            (PositionAnchor.TOP_LEFT, QPoint(20, 20)),
+            (PositionAnchor.TOP_CENTER, QPoint((1920 - 200) // 2, 20)),
+            (PositionAnchor.TOP_RIGHT, QPoint(1920 - 200 - 20, 20)),
+            (PositionAnchor.MIDDLE_LEFT, QPoint(20, (1080 - 100) // 2)),
+            (PositionAnchor.CENTER, QPoint((1920 - 200) // 2, (1080 - 100) // 2)),
+            (PositionAnchor.MIDDLE_RIGHT, QPoint(1920 - 200 - 20, (1080 - 100) // 2)),
+            (PositionAnchor.BOTTOM_LEFT, QPoint(20, 1080 - 100 - 20)),
+            (PositionAnchor.BOTTOM_CENTER, QPoint((1920 - 200) // 2, 1080 - 100 - 20)),
+            (PositionAnchor.BOTTOM_RIGHT, QPoint(1920 - 200 - 20, 1080 - 100 - 20)),
+        ],
+    )
+    def test_calculate_position_all_anchors(self, anchor, expected):
+        """Ensure calculate_position covers all 9 anchors."""
         positioner = WidgetPositioner(QSize(1920, 1080))
         widget_size = QSize(200, 100)
-        
+
         pos = positioner.calculate_position(
             widget_size,
-            PositionAnchor.TOP_LEFT,
+            anchor,
             margin_x=20,
             margin_y=20,
         )
-        
-        assert pos.x() == 20
-        assert pos.y() == 20
-    
-    def test_calculate_position_top_right(self):
-        """Test position calculation for TOP_RIGHT anchor."""
-        positioner = WidgetPositioner(QSize(1920, 1080))
-        widget_size = QSize(200, 100)
-        
-        pos = positioner.calculate_position(
-            widget_size,
-            PositionAnchor.TOP_RIGHT,
-            margin_x=20,
-            margin_y=20,
-        )
-        
-        assert pos.x() == 1920 - 200 - 20  # 1700
-        assert pos.y() == 20
-    
-    def test_calculate_position_bottom_left(self):
-        """Test position calculation for BOTTOM_LEFT anchor."""
-        positioner = WidgetPositioner(QSize(1920, 1080))
-        widget_size = QSize(200, 100)
-        
-        pos = positioner.calculate_position(
-            widget_size,
-            PositionAnchor.BOTTOM_LEFT,
-            margin_x=20,
-            margin_y=20,
-        )
-        
-        assert pos.x() == 20
-        assert pos.y() == 1080 - 100 - 20  # 960
-    
-    def test_calculate_position_bottom_right(self):
-        """Test position calculation for BOTTOM_RIGHT anchor."""
-        positioner = WidgetPositioner(QSize(1920, 1080))
-        widget_size = QSize(200, 100)
-        
-        pos = positioner.calculate_position(
-            widget_size,
-            PositionAnchor.BOTTOM_RIGHT,
-            margin_x=20,
-            margin_y=20,
-        )
-        
-        assert pos.x() == 1920 - 200 - 20  # 1700
-        assert pos.y() == 1080 - 100 - 20  # 960
-    
-    def test_calculate_position_center(self):
-        """Test position calculation for CENTER anchor."""
-        positioner = WidgetPositioner(QSize(1920, 1080))
-        widget_size = QSize(200, 100)
-        
-        pos = positioner.calculate_position(
-            widget_size,
-            PositionAnchor.CENTER,
-            margin_x=20,
-            margin_y=20,
-        )
-        
-        assert pos.x() == (1920 - 200) // 2  # 860
-        assert pos.y() == (1080 - 100) // 2  # 490
+
+        assert pos == expected
     
     def test_calculate_position_with_stack_offset(self):
         """Test position calculation with stack offset."""

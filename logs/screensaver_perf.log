@@ -2232,3 +2232,225 @@
 2026-01-02 21:06:51 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=10249.7ms, frames=550, avg_fps=53.7, dt_min=11.70ms, dt_max=62.41ms, bar_count=19
 2026-01-02 21:06:51 - engine.screensaver             - INFO     - [PERF] ImageCache: items=9/24, mem=404.5/1024MB, hits=0, misses=4, hit_rate=0.0%%, evictions=0
 2026-01-02 21:06:51 - __main__                       - WARNING  - [PERF] [GC] Collection took 28.71ms (gen=2, collected=515)
+2026-01-03 12:23:49 - __main__                       - INFO     - [PERF] GC tracking enabled
+2026-01-03 12:23:50 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 97.39ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2026-01-03 12:23:51 - rendering.gl_compositor        - WARNING  - [PERF] [GL COMPOSITOR] Shader pipeline init took 69.02ms
+2026-01-03 12:23:51 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap for SpotifyVisualizerWidget._on_tick: 414.54ms (interval=16ms)
+2026-01-03 12:23:51 - rendering.gl_programs.texture_manager - WARNING  - [PERF] [GL TEXTURE] Slow upload: 21.06ms (2560x1440, pbo=True)
+2026-01-03 12:23:52 - widgets.spotify_bars_gl_overlay - WARNING  - [PERF] [SPOTIFY_BARS_GL] set_state breakdown: geom=8.11ms, show=0.00ms, update=0.00ms
+2026-01-03 12:23:52 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 72.07ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2026-01-03 12:23:55 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=4339.7ms, frames=202, avg_fps=46.5, dt_min=12.10ms, dt_max=76.13ms, bar_count=19
+2026-01-03 12:24:00 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=9347.1ms, frames=507, avg_fps=54.2, dt_min=11.17ms, dt_max=76.13ms, bar_count=19
+2026-01-03 12:24:01 - rendering.display              - INFO     - [PERF] [TRANSITION] Start name=GLCompositorCrossfadeTransition first_run=True overlay=<none>
+2026-01-03 12:24:01 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.42ms (running=True name=GLCompositorCrossfadeTransition elapsed=0.09 idle_age=<n/a>)
+2026-01-03 12:24:01 - rendering.display              - INFO     - [PERF] [TRANSITION] Start name=GLCompositorCrossfadeTransition first_run=True overlay=<none>
+2026-01-03 12:24:01 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.63ms (running=True name=GLCompositorCrossfadeTransition elapsed=0.95 idle_age=<n/a>)
+2026-01-03 12:24:02 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.77ms (running=True name=GLCompositorCrossfadeTransition elapsed=1.80 idle_age=<n/a>)
+2026-01-03 12:24:03 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.48ms (running=True name=GLCompositorCrossfadeTransition elapsed=2.67 idle_age=<n/a>)
+2026-01-03 12:24:04 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.19ms (running=True name=GLCompositorCrossfadeTransition elapsed=3.61 idle_age=<n/a>)
+2026-01-03 12:24:05 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=14360.1ms, frames=696, avg_fps=48.5, dt_min=11.17ms, dt_max=76.13ms, bar_count=19
+2026-01-03 12:24:05 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.66ms (running=True name=GLCompositorCrossfadeTransition elapsed=4.97 idle_age=<n/a>)
+2026-01-03 12:24:07 - rendering.gl_compositor        - INFO     - [PERF] [GL RENDER] Timer metrics: frames=322, avg_fps=51.9, dt_min=2.51ms, dt_max=60.51ms, stalls=0, target=54Hz, outcome=stopped
+2026-01-03 12:24:07 - rendering.gl_compositor        - INFO     - [PERF] [GL ANIM] Transition metrics: duration=6209.2ms, frames=323, avg_fps=52.0, dt_min=2.13ms, dt_max=59.99ms, spikes=0, target_fps=55, outcome=complete
+2026-01-03 12:24:07 - transitions.base_transition    - INFO     - [PERF] GLCompositorCrossfadeTransition completed in 6211.7ms (expected 6199ms, Δ+12.7ms)
+2026-01-03 12:24:07 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 52.40ms (running=False name=<none> elapsed=<n/a> idle_age=0.05)
+2026-01-03 12:24:07 - rendering.gl_compositor        - INFO     - [PERF] [GL RENDER] Timer metrics: frames=355, avg_fps=57.2, dt_min=0.51ms, dt_max=51.73ms, stalls=0, target=60Hz, outcome=stopped
+2026-01-03 12:24:07 - rendering.gl_compositor        - INFO     - [PERF] [GL ANIM] Transition metrics: duration=6208.4ms, frames=355, avg_fps=57.2, dt_min=0.51ms, dt_max=51.73ms, spikes=0, target_fps=60, outcome=complete
+2026-01-03 12:24:07 - transitions.base_transition    - INFO     - [PERF] GLCompositorCrossfadeTransition completed in 6209.4ms (expected 6199ms, Δ+10.4ms)
+2026-01-03 12:24:07 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=6208.4ms, frames=355, avg_fps=57.2, dt_min=0.51ms, dt_max=51.73ms, active_count=0, fps_target=60
+2026-01-03 12:24:10 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=19361.6ms, frames=971, avg_fps=50.2, dt_min=11.14ms, dt_max=76.13ms, bar_count=19
+2026-01-03 12:24:11 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=10177.4ms, frames=541, avg_fps=53.2, dt_min=2.13ms, dt_max=61.00ms, active_count=0, fps_target=55
+2026-01-03 12:24:11 - rendering.gl_compositor        - INFO     - [PERF] [GL PAINT] Transition metrics: frames=322, avg_fps=31.6, dt_min=3.05ms, dt_max=88.11ms, dur_min=1.01ms, dur_max=4.68ms, slow_frames=0, outcome=cleared
+2026-01-03 12:24:11 - rendering.display              - INFO     - [PERF] [TRANSITION] Start name=GLCompositorCrossfadeTransition first_run=False overlay=<none>
+2026-01-03 12:24:11 - rendering.gl_compositor        - INFO     - [PERF] [GL PAINT] Transition metrics: frames=347, avg_fps=34.0, dt_min=7.12ms, dt_max=76.48ms, dur_min=3.96ms, dur_max=11.37ms, slow_frames=0, outcome=cleared
+2026-01-03 12:24:11 - rendering.display              - INFO     - [PERF] [TRANSITION] Start name=GLCompositorCrossfadeTransition first_run=False overlay=<none>
+2026-01-03 12:24:11 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 56.09ms (running=True name=GLCompositorCrossfadeTransition elapsed=0.14 idle_age=<n/a>)
+2026-01-03 12:24:12 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.91ms (running=True name=GLCompositorCrossfadeTransition elapsed=1.12 idle_age=<n/a>)
+2026-01-03 12:24:13 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 44.40ms (running=True name=GLCompositorCrossfadeTransition elapsed=2.00 idle_age=<n/a>)
+2026-01-03 12:24:14 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.11ms (running=True name=GLCompositorCrossfadeTransition elapsed=3.14 idle_age=<n/a>)
+2026-01-03 12:24:15 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.05ms (running=True name=GLCompositorCrossfadeTransition elapsed=4.05 idle_age=<n/a>)
+2026-01-03 12:24:15 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=24381.1ms, frames=1169, avg_fps=47.9, dt_min=11.14ms, dt_max=76.13ms, bar_count=19
+2026-01-03 12:24:16 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.56ms (running=True name=GLCompositorCrossfadeTransition elapsed=5.61 idle_age=<n/a>)
+2026-01-03 12:24:17 - rendering.gl_compositor        - INFO     - [PERF] [GL RENDER] Timer metrics: frames=326, avg_fps=52.6, dt_min=2.52ms, dt_max=50.95ms, stalls=0, target=54Hz, outcome=stopped
+2026-01-03 12:24:17 - rendering.gl_compositor        - INFO     - [PERF] [GL ANIM] Transition metrics: duration=6200.6ms, frames=327, avg_fps=52.7, dt_min=1.29ms, dt_max=51.97ms, spikes=0, target_fps=55, outcome=complete
+2026-01-03 12:24:17 - transitions.base_transition    - INFO     - [PERF] GLCompositorCrossfadeTransition completed in 6201.8ms (expected 6199ms, Δ+2.8ms)
+2026-01-03 12:24:17 - rendering.gl_compositor        - INFO     - [PERF] [GL RENDER] Timer metrics: frames=359, avg_fps=57.9, dt_min=1.00ms, dt_max=47.90ms, stalls=0, target=60Hz, outcome=stopped
+2026-01-03 12:24:17 - rendering.gl_compositor        - INFO     - [PERF] [GL ANIM] Transition metrics: duration=6201.6ms, frames=349, avg_fps=56.3, dt_min=1.51ms, dt_max=42.37ms, spikes=0, target_fps=60, outcome=complete
+2026-01-03 12:24:17 - transitions.base_transition    - INFO     - [PERF] GLCompositorCrossfadeTransition completed in 6202.1ms (expected 6199ms, Δ+3.1ms)
+2026-01-03 12:24:17 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=6200.0ms, frames=349, avg_fps=56.3, dt_min=1.51ms, dt_max=42.37ms, active_count=0, fps_target=60
+2026-01-03 12:24:20 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=29393.3ms, frames=1440, avg_fps=49.0, dt_min=11.14ms, dt_max=76.13ms, bar_count=19
+2026-01-03 12:24:20 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=9653.2ms, frames=518, avg_fps=53.7, dt_min=1.29ms, dt_max=51.97ms, active_count=0, fps_target=55
+2026-01-03 12:24:20 - rendering.gl_compositor        - INFO     - [PERF] [GL PAINT] Transition metrics: frames=326, avg_fps=33.7, dt_min=2.51ms, dt_max=76.15ms, dur_min=1.05ms, dur_max=4.16ms, slow_frames=0, outcome=cleared
+2026-01-03 12:24:20 - rendering.display              - INFO     - [PERF] [TRANSITION] Start name=GLCompositorCrossfadeTransition first_run=False overlay=<none>
+2026-01-03 12:24:21 - rendering.gl_compositor        - INFO     - [PERF] [GL PAINT] Transition metrics: frames=355, avg_fps=36.7, dt_min=6.59ms, dt_max=76.58ms, dur_min=4.11ms, dur_max=8.11ms, slow_frames=0, outcome=cleared
+2026-01-03 12:24:21 - rendering.display              - INFO     - [PERF] [TRANSITION] Start name=GLCompositorCrossfadeTransition first_run=False overlay=<none>
+2026-01-03 12:24:21 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 46.68ms (running=True name=GLCompositorCrossfadeTransition elapsed=0.53 idle_age=<n/a>)
+2026-01-03 12:24:22 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 49.75ms (running=True name=GLCompositorCrossfadeTransition elapsed=1.52 idle_age=<n/a>)
+2026-01-03 12:24:25 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 49.87ms (running=True name=GLCompositorCrossfadeTransition elapsed=4.55 idle_age=<n/a>)
+2026-01-03 12:24:25 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=4401.7ms, frames=256, avg_fps=58.2, dt_min=1.02ms, dt_max=49.87ms, active_count=0, fps_target=60
+2026-01-03 12:24:25 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=4543.4ms, frames=239, avg_fps=52.6, dt_min=6.44ms, dt_max=50.87ms, active_count=0, fps_target=55
+2026-01-03 12:24:25 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=34142.9ms, frames=1625, avg_fps=47.6, dt_min=11.14ms, dt_max=76.13ms, bar_count=19
+2026-01-03 12:24:25 - engine.screensaver             - INFO     - [PERF] ImageCache: items=13/24, mem=644.8/1024MB, hits=0, misses=8, hit_rate=0.0%%, evictions=0
+2026-01-03 12:24:25 - __main__                       - WARNING  - [PERF] [GC] Collection took 40.05ms (gen=2, collected=4140)
+2026-01-03 12:24:41 - __main__                       - INFO     - [PERF] GC tracking enabled
+2026-01-03 12:24:43 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 84.09ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2026-01-03 12:24:43 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap for SpotifyVisualizerWidget._on_tick: 314.57ms (interval=16ms)
+2026-01-03 12:24:45 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.18ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2026-01-03 12:24:46 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 54.97ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2026-01-03 12:24:48 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=4440.6ms, frames=211, avg_fps=47.5, dt_min=12.18ms, dt_max=59.14ms, bar_count=19
+2026-01-03 12:24:53 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=9445.9ms, frames=517, avg_fps=54.7, dt_min=12.18ms, dt_max=59.14ms, bar_count=19
+2026-01-03 12:24:53 - rendering.display              - INFO     - [PERF] [TRANSITION] Start name=GLCompositorCrossfadeTransition first_run=True overlay=<none>
+2026-01-03 12:24:53 - rendering.display              - INFO     - [1 duplicates suppressed]
+2026-01-03 12:24:54 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.04ms (running=True name=GLCompositorCrossfadeTransition elapsed=1.02 idle_age=<n/a>)
+2026-01-03 12:24:55 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.03ms (running=True name=GLCompositorCrossfadeTransition elapsed=2.14 idle_age=<n/a>)
+2026-01-03 12:24:57 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.56ms (running=True name=GLCompositorCrossfadeTransition elapsed=3.73 idle_age=<n/a>)
+2026-01-03 12:24:58 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=14456.9ms, frames=714, avg_fps=49.4, dt_min=12.18ms, dt_max=59.14ms, bar_count=19
+2026-01-03 12:24:58 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.61ms (running=True name=GLCompositorCrossfadeTransition elapsed=5.31 idle_age=<n/a>)
+2026-01-03 12:24:59 - rendering.gl_compositor        - INFO     - [PERF] [GL RENDER] Timer metrics: frames=332, avg_fps=53.5, dt_min=1.92ms, dt_max=40.28ms, stalls=0, target=54Hz, outcome=stopped
+2026-01-03 12:24:59 - rendering.gl_compositor        - INFO     - [PERF] [GL ANIM] Transition metrics: duration=6203.6ms, frames=332, avg_fps=53.5, dt_min=1.50ms, dt_max=50.26ms, spikes=0, target_fps=55, outcome=complete
+2026-01-03 12:24:59 - transitions.base_transition    - INFO     - [PERF] GLCompositorCrossfadeTransition completed in 6205.1ms (expected 6199ms, Δ+6.1ms)
+2026-01-03 12:24:59 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 57.99ms (running=False name=<none> elapsed=<n/a> idle_age=0.06)
+2026-01-03 12:24:59 - rendering.gl_compositor        - INFO     - [PERF] [GL RENDER] Timer metrics: frames=366, avg_fps=58.9, dt_min=1.00ms, dt_max=56.49ms, stalls=0, target=60Hz, outcome=stopped
+2026-01-03 12:24:59 - rendering.gl_compositor        - INFO     - [PERF] [GL ANIM] Transition metrics: duration=6211.6ms, frames=367, avg_fps=59.1, dt_min=1.00ms, dt_max=56.49ms, spikes=0, target_fps=60, outcome=complete
+2026-01-03 12:24:59 - transitions.base_transition    - INFO     - [PERF] GLCompositorCrossfadeTransition completed in 6211.6ms (expected 6199ms, Δ+12.6ms)
+2026-01-03 12:24:59 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=6211.6ms, frames=367, avg_fps=59.1, dt_min=1.00ms, dt_max=56.49ms, active_count=0, fps_target=60
+2026-01-03 12:25:03 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=19460.7ms, frames=996, avg_fps=51.2, dt_min=11.12ms, dt_max=59.14ms, bar_count=19
+2026-01-03 12:25:03 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=9993.5ms, frames=540, avg_fps=54.0, dt_min=1.50ms, dt_max=59.10ms, active_count=0, fps_target=55
+2026-01-03 12:25:03 - rendering.gl_compositor        - INFO     - [PERF] [GL PAINT] Transition metrics: frames=332, avg_fps=33.1, dt_min=2.94ms, dt_max=54.99ms, dur_min=1.50ms, dur_max=4.05ms, slow_frames=0, outcome=cleared
+2026-01-03 12:25:03 - rendering.display              - INFO     - [PERF] [TRANSITION] Start name=GLCompositorCrossfadeTransition first_run=False overlay=<none>
+2026-01-03 12:25:03 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 47.68ms (running=True name=GLCompositorCrossfadeTransition elapsed=0.03 idle_age=<n/a>)
+2026-01-03 12:25:03 - rendering.gl_compositor        - INFO     - [PERF] [GL PAINT] Transition metrics: frames=361, avg_fps=36.0, dt_min=5.60ms, dt_max=67.16ms, dur_min=4.10ms, dur_max=8.23ms, slow_frames=0, outcome=cleared
+2026-01-03 12:25:03 - rendering.display              - INFO     - [PERF] [TRANSITION] Start name=GLCompositorCrossfadeTransition first_run=False overlay=<none>
+2026-01-03 12:25:04 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.95ms (running=True name=GLCompositorCrossfadeTransition elapsed=0.81 idle_age=<n/a>)
+2026-01-03 12:25:05 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 44.59ms (running=True name=GLCompositorCrossfadeTransition elapsed=1.83 idle_age=<n/a>)
+2026-01-03 12:25:06 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.82ms (running=True name=GLCompositorCrossfadeTransition elapsed=3.28 idle_age=<n/a>)
+2026-01-03 12:25:08 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=24469.6ms, frames=1193, avg_fps=48.8, dt_min=11.12ms, dt_max=59.14ms, bar_count=19
+2026-01-03 12:25:08 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.63ms (running=True name=GLCompositorCrossfadeTransition elapsed=5.31 idle_age=<n/a>)
+2026-01-03 12:25:09 - rendering.gl_compositor        - INFO     - [PERF] [GL RENDER] Timer metrics: frames=331, avg_fps=53.4, dt_min=5.56ms, dt_max=40.61ms, stalls=0, target=54Hz, outcome=stopped
+2026-01-03 12:25:09 - rendering.gl_compositor        - INFO     - [PERF] [GL ANIM] Transition metrics: duration=6202.9ms, frames=332, avg_fps=53.5, dt_min=5.56ms, dt_max=40.61ms, spikes=0, target_fps=55, outcome=complete
+2026-01-03 12:25:09 - transitions.base_transition    - INFO     - [PERF] GLCompositorCrossfadeTransition completed in 6203.4ms (expected 6199ms, Δ+4.4ms)
+2026-01-03 12:25:09 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 58.69ms (running=False name=<none> elapsed=<n/a> idle_age=0.06)
+2026-01-03 12:25:09 - rendering.gl_compositor        - INFO     - [PERF] [GL RENDER] Timer metrics: frames=363, avg_fps=58.4, dt_min=1.00ms, dt_max=58.69ms, stalls=0, target=60Hz, outcome=stopped
+2026-01-03 12:25:09 - rendering.gl_compositor        - INFO     - [PERF] [GL ANIM] Transition metrics: duration=6213.7ms, frames=364, avg_fps=58.6, dt_min=1.00ms, dt_max=58.69ms, spikes=0, target_fps=60, outcome=complete
+2026-01-03 12:25:09 - transitions.base_transition    - INFO     - [PERF] GLCompositorCrossfadeTransition completed in 6214.2ms (expected 6199ms, Δ+15.2ms)
+2026-01-03 12:25:09 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=6213.7ms, frames=364, avg_fps=58.6, dt_min=1.00ms, dt_max=58.69ms, active_count=0, fps_target=60
+2026-01-03 12:25:13 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=29478.2ms, frames=1476, avg_fps=50.1, dt_min=11.12ms, dt_max=59.14ms, bar_count=19
+2026-01-03 12:25:13 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=10032.2ms, frames=542, avg_fps=54.0, dt_min=5.56ms, dt_max=61.72ms, active_count=0, fps_target=55
+2026-01-03 12:25:13 - rendering.gl_compositor        - INFO     - [PERF] [GL PAINT] Transition metrics: frames=332, avg_fps=33.0, dt_min=2.42ms, dt_max=48.34ms, dur_min=1.42ms, dur_max=4.56ms, slow_frames=0, outcome=cleared
+2026-01-03 12:25:13 - rendering.display              - INFO     - [PERF] [TRANSITION] Start name=GLCompositorCrossfadeTransition first_run=False overlay=<none>
+2026-01-03 12:25:13 - rendering.gl_compositor        - INFO     - [PERF] [GL PAINT] Transition metrics: frames=359, avg_fps=35.7, dt_min=5.03ms, dt_max=70.92ms, dur_min=4.32ms, dur_max=7.69ms, slow_frames=0, outcome=cleared
+2026-01-03 12:25:13 - rendering.display              - INFO     - [PERF] [TRANSITION] Start name=GLCompositorCrossfadeTransition first_run=False overlay=<none>
+2026-01-03 12:25:13 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 53.22ms (running=True name=GLCompositorCrossfadeTransition elapsed=0.12 idle_age=<n/a>)
+2026-01-03 12:25:14 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.19ms (running=True name=GLCompositorCrossfadeTransition elapsed=1.03 idle_age=<n/a>)
+2026-01-03 12:25:15 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 44.33ms (running=True name=GLCompositorCrossfadeTransition elapsed=1.91 idle_age=<n/a>)
+2026-01-03 12:25:16 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.99ms (running=True name=GLCompositorCrossfadeTransition elapsed=3.48 idle_age=<n/a>)
+2026-01-03 12:25:17 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.04ms (running=True name=GLCompositorCrossfadeTransition elapsed=4.38 idle_age=<n/a>)
+2026-01-03 12:25:18 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=34486.8ms, frames=1671, avg_fps=48.5, dt_min=11.12ms, dt_max=59.14ms, bar_count=19
+2026-01-03 12:25:18 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 44.41ms (running=True name=GLCompositorCrossfadeTransition elapsed=5.48 idle_age=<n/a>)
+2026-01-03 12:25:19 - rendering.gl_compositor        - INFO     - [PERF] [GL RENDER] Timer metrics: frames=335, avg_fps=53.9, dt_min=1.50ms, dt_max=43.91ms, stalls=0, target=54Hz, outcome=stopped
+2026-01-03 12:25:19 - rendering.gl_compositor        - INFO     - [PERF] [GL ANIM] Transition metrics: duration=6217.3ms, frames=336, avg_fps=54.0, dt_min=6.45ms, dt_max=45.42ms, spikes=0, target_fps=55, outcome=complete
+2026-01-03 12:25:19 - transitions.base_transition    - INFO     - [PERF] GLCompositorCrossfadeTransition completed in 6219.5ms (expected 6199ms, Δ+20.5ms)
+2026-01-03 12:25:19 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 61.05ms (running=False name=<none> elapsed=<n/a> idle_age=0.06)
+2026-01-03 12:25:19 - rendering.gl_compositor        - INFO     - [PERF] [GL RENDER] Timer metrics: frames=365, avg_fps=58.8, dt_min=1.32ms, dt_max=60.05ms, stalls=0, target=60Hz, outcome=stopped
+2026-01-03 12:25:19 - rendering.gl_compositor        - INFO     - [PERF] [GL ANIM] Transition metrics: duration=6208.7ms, frames=365, avg_fps=58.8, dt_min=1.32ms, dt_max=60.05ms, spikes=0, target_fps=60, outcome=complete
+2026-01-03 12:25:19 - transitions.base_transition    - INFO     - [PERF] GLCompositorCrossfadeTransition completed in 6208.7ms (expected 6199ms, Δ+9.7ms)
+2026-01-03 12:25:19 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=6208.7ms, frames=365, avg_fps=58.8, dt_min=1.32ms, dt_max=60.05ms, active_count=0, fps_target=60
+2026-01-03 12:25:23 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=39493.6ms, frames=1951, avg_fps=49.4, dt_min=11.11ms, dt_max=61.05ms, bar_count=19
+2026-01-03 12:25:23 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=9866.6ms, frames=537, avg_fps=54.4, dt_min=5.94ms, dt_max=60.05ms, active_count=0, fps_target=55
+2026-01-03 12:25:23 - rendering.gl_compositor        - INFO     - [PERF] [GL PAINT] Transition metrics: frames=333, avg_fps=33.7, dt_min=3.14ms, dt_max=63.40ms, dur_min=1.53ms, dur_max=4.03ms, slow_frames=0, outcome=cleared
+2026-01-03 12:25:23 - rendering.display              - INFO     - [PERF] [TRANSITION] Start name=GLCompositorCrossfadeTransition first_run=False overlay=<none>
+2026-01-03 12:25:23 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 46.44ms (running=True name=GLCompositorCrossfadeTransition elapsed=0.01 idle_age=<n/a>)
+2026-01-03 12:25:23 - rendering.gl_compositor        - INFO     - [PERF] [GL PAINT] Transition metrics: frames=362, avg_fps=36.6, dt_min=6.13ms, dt_max=72.35ms, dur_min=4.02ms, dur_max=8.38ms, slow_frames=0, outcome=cleared
+2026-01-03 12:25:23 - rendering.display              - INFO     - [PERF] [TRANSITION] Start name=GLCompositorCrossfadeTransition first_run=False overlay=<none>
+2026-01-03 12:25:24 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 45.93ms (running=True name=GLCompositorCrossfadeTransition elapsed=1.17 idle_age=<n/a>)
+2026-01-03 12:25:25 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.73ms (running=True name=GLCompositorCrossfadeTransition elapsed=2.33 idle_age=<n/a>)
+2026-01-03 12:25:27 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.69ms (running=True name=GLCompositorCrossfadeTransition elapsed=4.36 idle_age=<n/a>)
+2026-01-03 12:25:28 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=44500.0ms, frames=2152, avg_fps=48.4, dt_min=11.11ms, dt_max=61.05ms, bar_count=19
+2026-01-03 12:25:28 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=4898.6ms, frames=290, avg_fps=59.2, dt_min=1.00ms, dt_max=40.96ms, active_count=0, fps_target=60
+2026-01-03 12:25:28 - engine.screensaver             - INFO     - [PERF] ImageCache: items=15/24, mem=487.3/1024MB, hits=0, misses=10, hit_rate=0.0%%, evictions=0
+2026-01-03 12:25:28 - rendering.gl_compositor        - WARNING  - [PERF] [GL RENDER] Render timer stall 599.86ms (target=60Hz interval=16ms frames=291 anim=transition)
+2026-01-03 12:25:28 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap for SpotifyVisualizerWidget._on_tick: 599.86ms (interval=16ms)
+2026-01-03 12:25:28 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 599.86ms (running=False name=<none> elapsed=<n/a> idle_age=0.60)
+2026-01-03 12:25:28 - core.animation.animator        - INFO     - [PERF] [ANIM] Large frame dt=601.42ms clamped to 500ms (target=18.18ms, active=0, listeners=1)
+2026-01-03 12:25:28 - rendering.gl_compositor        - WARNING  - [PERF] [GL RENDER] Render timer stall 601.42ms (target=54Hz interval=18ms frames=268 anim=transition)
+2026-01-03 12:25:29 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap for SpotifyVisualizerWidget._on_tick: 150.10ms (interval=16ms)
+2026-01-03 12:25:30 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.32ms (running=False name=<none> elapsed=<n/a> idle_age=2.65)
+2026-01-03 12:25:33 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=4096.7ms, frames=221, avg_fps=53.9, dt_min=11.12ms, dt_max=43.79ms, bar_count=19
+2026-01-03 12:25:33 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.70ms (running=False name=<none> elapsed=<n/a> idle_age=5.73)
+2026-01-03 12:25:37 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=14076.3ms, frames=699, avg_fps=49.7, dt_min=1.01ms, dt_max=500.00ms, active_count=0, fps_target=55
+2026-01-03 12:25:37 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=8284.8ms, frames=455, avg_fps=54.9, dt_min=10.09ms, dt_max=44.72ms, bar_count=19
+2026-01-03 12:25:37 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=17.21ms, min=-1.55ms, max=364.39ms
+2026-01-03 12:25:37 - rendering.gl_compositor        - WARNING  - [PERF] [GL RENDER] Render timer stall 381.78ms (target=60Hz interval=16ms frames=771 anim=transition)
+2026-01-03 12:25:37 - rendering.gl_compositor        - WARNING  - [PERF] [GL RENDER] Render timer stall 385.88ms (target=54Hz interval=18ms frames=700 anim=transition)
+2026-01-03 12:25:38 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 53.05ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2026-01-03 12:25:38 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=142.9ms, frames=6, avg_fps=42.0, dt_min=14.16ms, dt_max=53.05ms, bar_count=19
+2026-01-03 12:25:38 - engine.screensaver             - INFO     - [PERF] ImageCache: items=17/24, mem=567.0/1024MB, hits=0, misses=12, hit_rate=0.0%%, evictions=0
+2026-01-03 12:25:39 - __main__                       - WARNING  - [PERF] [GC] Collection took 47.39ms (gen=2, collected=3955)
+2026-01-03 12:25:57 - __main__                       - INFO     - [PERF] GC tracking enabled
+2026-01-03 12:25:58 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 90.45ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2026-01-03 12:25:58 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap for SpotifyVisualizerWidget._on_tick: 326.00ms (interval=16ms)
+2026-01-03 12:25:58 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 52.37ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2026-01-03 12:26:00 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 48.49ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2026-01-03 12:26:03 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=4430.7ms, frames=199, avg_fps=44.9, dt_min=11.29ms, dt_max=72.19ms, bar_count=19
+2026-01-03 12:26:03 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=133.71ms, min=-1.06ms, max=326.00ms
+2026-01-03 12:26:06 - engine.screensaver             - INFO     - [PERF] ImageCache: items=6/24, mem=428.7/1024MB, hits=0, misses=2, hit_rate=0.0%%, evictions=0
+2026-01-03 12:26:06 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap for SpotifyVisualizerWidget._on_tick: 585.45ms (interval=16ms)
+2026-01-03 12:26:06 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 585.45ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2026-01-03 12:26:06 - core.threading.manager         - WARNING  - [PERF] [TIMER] Large gap for SpotifyVisualizerWidget._on_tick: 127.22ms (interval=16ms)
+2026-01-03 12:26:07 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 44.03ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2026-01-03 12:26:08 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=1367.0ms, frames=63, avg_fps=46.1, dt_min=11.21ms, dt_max=44.03ms, bar_count=19
+2026-01-03 12:26:08 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.16ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2026-01-03 12:26:13 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=6374.3ms, frames=348, avg_fps=54.6, dt_min=11.21ms, dt_max=50.23ms, bar_count=19
+2026-01-03 12:26:16 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 45.54ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2026-01-03 12:26:18 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=11382.5ms, frames=638, avg_fps=56.1, dt_min=11.21ms, dt_max=50.23ms, bar_count=19
+2026-01-03 12:26:18 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=15.13ms, min=-1.08ms, max=326.00ms
+2026-01-03 12:26:18 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 45.86ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2026-01-03 12:26:20 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.37ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2026-01-03 12:26:20 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=13959.6ms, frames=776, avg_fps=55.6, dt_min=11.18ms, dt_max=50.23ms, bar_count=19
+2026-01-03 12:26:21 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 54.36ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2026-01-03 12:26:23 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 80.32ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2026-01-03 12:26:26 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=5003.8ms, frames=234, avg_fps=46.8, dt_min=12.40ms, dt_max=80.32ms, bar_count=19
+2026-01-03 12:26:26 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.12ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+2026-01-03 12:26:31 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=10009.5ms, frames=539, avg_fps=53.8, dt_min=11.17ms, dt_max=80.32ms, bar_count=19
+2026-01-03 12:26:31 - rendering.display              - INFO     - [PERF] [TRANSITION] Start name=GLCompositorCrossfadeTransition first_run=True overlay=<none>
+2026-01-03 12:26:31 - rendering.display              - INFO     - [1 duplicates suppressed]
+2026-01-03 12:26:32 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 50.90ms (running=True name=GLCompositorCrossfadeTransition elapsed=0.62 idle_age=<n/a>)
+2026-01-03 12:26:33 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 57.58ms (running=True name=GLCompositorCrossfadeTransition elapsed=1.62 idle_age=<n/a>)
+2026-01-03 12:26:33 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.69ms (running=True name=GLCompositorCrossfadeTransition elapsed=2.39 idle_age=<n/a>)
+2026-01-03 12:26:35 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 42.44ms (running=True name=GLCompositorCrossfadeTransition elapsed=3.97 idle_age=<n/a>)
+2026-01-03 12:26:36 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=15025.7ms, frames=740, avg_fps=49.2, dt_min=11.17ms, dt_max=80.32ms, bar_count=19
+2026-01-03 12:26:36 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=21.58ms, min=-1.53ms, max=589.15ms
+2026-01-03 12:26:37 - rendering.gl_compositor        - INFO     - [PERF] [GL RENDER] Timer metrics: frames=327, avg_fps=52.7, dt_min=5.58ms, dt_max=42.96ms, stalls=0, target=54Hz, outcome=stopped
+2026-01-03 12:26:37 - rendering.gl_compositor        - INFO     - [PERF] [GL ANIM] Transition metrics: duration=6202.1ms, frames=328, avg_fps=52.9, dt_min=5.58ms, dt_max=42.96ms, spikes=0, target_fps=55, outcome=complete
+2026-01-03 12:26:37 - transitions.base_transition    - INFO     - [PERF] GLCompositorCrossfadeTransition completed in 6203.1ms (expected 6199ms, Δ+4.1ms)
+2026-01-03 12:26:37 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 57.70ms (running=False name=<none> elapsed=<n/a> idle_age=0.06)
+2026-01-03 12:26:37 - rendering.gl_compositor        - INFO     - [PERF] [GL RENDER] Timer metrics: frames=359, avg_fps=57.8, dt_min=1.38ms, dt_max=58.26ms, stalls=0, target=60Hz, outcome=stopped
+2026-01-03 12:26:37 - rendering.gl_compositor        - INFO     - [PERF] [GL ANIM] Transition metrics: duration=6209.6ms, frames=360, avg_fps=58.0, dt_min=1.01ms, dt_max=58.26ms, spikes=0, target_fps=60, outcome=complete
+2026-01-03 12:26:37 - transitions.base_transition    - INFO     - [PERF] GLCompositorCrossfadeTransition completed in 6209.6ms (expected 6199ms, Δ+10.6ms)
+2026-01-03 12:26:37 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=6209.1ms, frames=360, avg_fps=58.0, dt_min=1.01ms, dt_max=58.26ms, active_count=0, fps_target=60
+2026-01-03 12:26:41 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=20040.9ms, frames=1023, avg_fps=51.0, dt_min=11.12ms, dt_max=80.32ms, bar_count=19
+2026-01-03 12:26:41 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=10048.0ms, frames=539, avg_fps=53.6, dt_min=5.58ms, dt_max=59.20ms, active_count=0, fps_target=55
+2026-01-03 12:26:41 - rendering.gl_compositor        - INFO     - [PERF] [GL PAINT] Transition metrics: frames=327, avg_fps=32.5, dt_min=2.52ms, dt_max=51.90ms, dur_min=1.51ms, dur_max=4.42ms, slow_frames=0, outcome=cleared
+2026-01-03 12:26:41 - rendering.display              - INFO     - [PERF] [TRANSITION] Start name=GLCompositorCrossfadeTransition first_run=False overlay=<none>
+2026-01-03 12:26:41 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 51.47ms (running=True name=GLCompositorCrossfadeTransition elapsed=0.03 idle_age=<n/a>)
+2026-01-03 12:26:41 - rendering.gl_compositor        - INFO     - [PERF] [GL PAINT] Transition metrics: frames=355, avg_fps=35.2, dt_min=5.61ms, dt_max=73.66ms, dur_min=4.04ms, dur_max=7.60ms, slow_frames=0, outcome=cleared
+2026-01-03 12:26:41 - rendering.display              - INFO     - [PERF] [TRANSITION] Start name=GLCompositorCrossfadeTransition first_run=False overlay=<none>
+2026-01-03 12:26:42 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.27ms (running=True name=GLCompositorCrossfadeTransition elapsed=0.95 idle_age=<n/a>)
+2026-01-03 12:26:43 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.55ms (running=True name=GLCompositorCrossfadeTransition elapsed=1.81 idle_age=<n/a>)
+2026-01-03 12:26:44 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.56ms (running=True name=GLCompositorCrossfadeTransition elapsed=3.25 idle_age=<n/a>)
+2026-01-03 12:26:45 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.29ms (running=True name=GLCompositorCrossfadeTransition elapsed=4.11 idle_age=<n/a>)
+2026-01-03 12:26:46 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=25045.6ms, frames=1216, avg_fps=48.6, dt_min=11.12ms, dt_max=80.32ms, bar_count=19
+2026-01-03 12:26:46 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] AudioLag metrics: last=39.37ms, min=-1.53ms, max=589.15ms
+2026-01-03 12:26:46 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 43.55ms (running=True name=GLCompositorCrossfadeTransition elapsed=5.45 idle_age=<n/a>)
+2026-01-03 12:26:47 - rendering.gl_compositor        - INFO     - [PERF] [GL RENDER] Timer metrics: frames=328, avg_fps=52.8, dt_min=4.65ms, dt_max=54.34ms, stalls=0, target=54Hz, outcome=stopped
+2026-01-03 12:26:47 - rendering.gl_compositor        - INFO     - [PERF] [GL ANIM] Transition metrics: duration=6210.4ms, frames=329, avg_fps=53.0, dt_min=4.65ms, dt_max=55.35ms, spikes=0, target_fps=55, outcome=complete
+2026-01-03 12:26:47 - transitions.base_transition    - INFO     - [PERF] GLCompositorCrossfadeTransition completed in 6212.0ms (expected 6199ms, Δ+13.0ms)
+2026-01-03 12:26:47 - widgets.spotify_visualizer_widget - WARNING  - [PERF] [SPOTIFY_VIS] Tick dt spike 51.24ms (running=False name=<none> elapsed=<n/a> idle_age=0.05)
+2026-01-03 12:26:47 - rendering.gl_compositor        - INFO     - [PERF] [GL RENDER] Timer metrics: frames=359, avg_fps=57.8, dt_min=1.51ms, dt_max=63.54ms, stalls=0, target=60Hz, outcome=stopped
+2026-01-03 12:26:47 - rendering.gl_compositor        - INFO     - [PERF] [GL ANIM] Transition metrics: duration=6208.1ms, frames=358, avg_fps=57.7, dt_min=3.21ms, dt_max=63.54ms, spikes=0, target_fps=60, outcome=complete
+2026-01-03 12:26:47 - transitions.base_transition    - INFO     - [PERF] GLCompositorCrossfadeTransition completed in 6209.6ms (expected 6199ms, Δ+10.6ms)
+2026-01-03 12:26:47 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=6208.1ms, frames=358, avg_fps=57.7, dt_min=1.51ms, dt_max=63.54ms, active_count=0, fps_target=60
+2026-01-03 12:26:51 - core.animation.animator        - INFO     - [PERF] [ANIM] AnimationManager metrics: duration=9666.6ms, frames=520, avg_fps=53.8, dt_min=4.01ms, dt_max=55.35ms, active_count=0, fps_target=55
+2026-01-03 12:26:51 - widgets.spotify_visualizer_widget - INFO     - [PERF] [SPOTIFY_VIS] Tick metrics: duration=29880.8ms, frames=1485, avg_fps=49.7, dt_min=11.12ms, dt_max=80.32ms, bar_count=19
+2026-01-03 12:26:51 - engine.screensaver             - INFO     - [PERF] ImageCache: items=13/24, mem=680.2/1024MB, hits=0, misses=8, hit_rate=0.0%%, evictions=0
+2026-01-03 12:26:51 - __main__                       - WARNING  - [PERF] [GC] Collection took 47.92ms (gen=2, collected=4421)

@@ -980,6 +980,10 @@ class _SpotifyBeatEngine(QObject):
         self._smoothed_bars: List[float] = [0.0] * self._bar_count
         self._last_smooth_ts: float = -1.0
         self._smoothing_tau: float = 0.12  # Base smoothing time constant
+        
+        # Playback state gating for FFT processing
+        self._is_spotify_playing: bool = False
+        self._last_playback_state_ts: float = 0.0
 
     def set_thread_manager(self, thread_manager: Optional[ThreadManager]) -> None:
         self._thread_manager = thread_manager
@@ -999,6 +1003,25 @@ class _SpotifyBeatEngine(QObject):
             self._audio_worker.set_floor_config(dynamic_enabled, manual_floor)
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to apply floor config", exc_info=True)
+
+    def set_playback_state(self, is_playing: bool) -> None:
+        """Set Spotify playback state for FFT processing gating.
+        
+        When False, FFT processing is halted and only 1-bar floor is shown.
+        When True, normal FFT processing resumes.
+        
+        Args:
+            is_playing: Whether Spotify is currently playing
+        """
+        self._is_spotify_playing = bool(is_playing)
+        self._last_playback_state_ts = time.time()
+        
+        if is_verbose_logging():
+            logger.debug(
+                "[SPOTIFY_VIS] Beat engine playback state: playing=%s (ts=%.3f)",
+                self._is_spotify_playing,
+                self._last_playback_state_ts
+            )
 
     def _apply_smoothing(self, target_bars: List[float]) -> List[float]:
         """Apply time-based exponential smoothing to bars.
@@ -1149,6 +1172,18 @@ class _SpotifyBeatEngine(QObject):
                     self._last_audio_ts = now_ts
                 except Exception:
                     pass
+                
+                # CRITICAL: Gate FFT processing when Spotify is not playing
+                # This prevents wasteful FFT calculations when music is paused/stopped
+                if not self._is_spotify_playing:
+                    # When not playing, ensure we show minimal 1-bar floor instead of full processing
+                    if self._latest_bars is None or len(self._latest_bars) != self._bar_count:
+                        self._latest_bars = [0.0] * self._bar_count
+                    # Ensure at least 1 bar is visible (1-segment floor requirement)
+                    if all(bar == 0.0 for bar in self._latest_bars):
+                        self._latest_bars[0] = 0.08  # Minimal visible floor
+                    return self._latest_bars
+                
                 if tm is not None:
                     if not self._compute_task_active:
                         self._schedule_compute_bars_task(samples)
@@ -1608,6 +1643,13 @@ class SpotifyVisualizerWidget(QWidget):
         self._last_media_state_ts = time.time()
         self._fallback_logged = False
 
+        # CRITICAL: Pass playback state to beat engine for FFT processing gating
+        try:
+            if self._engine is not None:
+                self._engine.set_playback_state(self._spotify_playing)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to set beat engine playback state", exc_info=True)
+
         if logger.isEnabledFor(logging.INFO):
             try:
                 track = payload.get("track_name") or payload.get("title") or ""
@@ -1818,6 +1860,11 @@ class SpotifyVisualizerWidget(QWidget):
                 engine.set_thread_manager(self._thread_manager)
             engine.acquire()
             self._replay_engine_config(engine)
+            
+            # CRITICAL: Initialize beat engine with current playback state
+            # This ensures FFT gating is active from startup
+            engine.set_playback_state(self._spotify_playing)
+            
             engine.ensure_started()
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to start shared beat engine", exc_info=True)
