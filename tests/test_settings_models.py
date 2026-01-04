@@ -237,6 +237,18 @@ class TestSourceSettings:
 class TestClockWidgetSettings:
     """Test ClockWidgetSettings dataclass."""
     
+    def test_from_settings_accepts_prefixed_position(self):
+        """WidgetPosition.* strings should coerce correctly."""
+        mock_settings = MagicMock()
+        mock_settings.get.side_effect = lambda key, default=None: {
+            "widgets.clock.enabled": True,
+            "widgets.clock.position": "WidgetPosition.BOTTOM_RIGHT",
+        }.get(key, default)
+
+        model = ClockWidgetSettings.from_settings(mock_settings)
+
+        assert model.position == WidgetPosition.BOTTOM_RIGHT
+
     def test_default_values(self):
         """Test default values."""
         settings = ClockWidgetSettings()
@@ -266,6 +278,17 @@ class TestClockWidgetSettings:
 class TestWeatherWidgetSettings:
     """Test WeatherWidgetSettings dataclass."""
     
+    def test_from_settings_accepts_prefixed_position(self):
+        """Ensure legacy WidgetPosition.* strings are handled."""
+        mock_settings = MagicMock()
+        mock_settings.get.side_effect = lambda key, default=None: {
+            "widgets.weather.position": "WidgetPosition.TOP_CENTER",
+        }.get(key, default)
+
+        model = WeatherWidgetSettings.from_settings(mock_settings)
+
+        assert model.position == WidgetPosition.TOP_CENTER
+
     def test_default_values(self):
         """Test default values."""
         settings = WeatherWidgetSettings()
@@ -278,6 +301,17 @@ class TestWeatherWidgetSettings:
 class TestMediaWidgetSettings:
     """Test MediaWidgetSettings dataclass."""
     
+    def test_from_settings_accepts_prefixed_position(self):
+        """Ensure WidgetPosition.* strings are coerced."""
+        stub = MagicMock()
+        stub.get.side_effect = lambda key, default=None: {
+            "widgets.media.position": "WidgetPosition.MIDDLE_RIGHT",
+        }.get(key, default)
+
+        model = MediaWidgetSettings.from_settings(stub)
+
+        assert model.position == WidgetPosition.MIDDLE_RIGHT
+
     def test_default_values(self):
         """Test default values."""
         settings = MediaWidgetSettings()
@@ -374,6 +408,17 @@ class TestMediaWidgetSettings:
 class TestRedditWidgetSettings:
     """Test RedditWidgetSettings dataclass."""
     
+    def test_from_settings_accepts_prefixed_position(self):
+        """Ensure WidgetPosition.* strings are coerced."""
+        stub = MagicMock()
+        stub.get.side_effect = lambda key, default=None: {
+            "widgets.reddit.position": "WidgetPosition.BOTTOM_CENTER",
+        }.get(key, default)
+
+        model = RedditWidgetSettings.from_settings(stub)
+
+        assert model.position == WidgetPosition.BOTTOM_CENTER
+
     def test_default_values(self):
         """Test default values."""
         settings = RedditWidgetSettings()

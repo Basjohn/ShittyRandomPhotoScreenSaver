@@ -126,7 +126,7 @@ This harness is now authoritative; do **not** tweak `_fft_to_bars` without runni
 ## 7. Known Limits / Next Ideas
 
 1. **dt spikes**: PERF logs still show `dt_max_ms` ≈70–100 ms during heavy transitions. Visual smoothing hides most, but interpolation (holding the previous frame and lerping to the next) would be the next lever if needed.
-2. **Edge pops on ultra-low resolution**: When Windows drops to 256-sample block size, the drop accumulator has to clamp harder. We already boost `drop_gain` + `target_map` for low-res, but if edges still flicker we can blend a small amount of mid energy into bars 1/13.
+2. **Edge pops on ultra-low resolution**: When Windows drops to 256-sample block size, the drop accumulator has to clamp harder. We already boost `drop_gain` + `target_map` for low-res, but if edges still flicker we can blend a small amount of mid energy into bars 1/13. [Auto should prioritise 512 not 256 to help this.]
 3. **Audio worker fallback**: If the shared beat engine fails, the widget falls back to inline FFT, but we rarely hit that path. Keep logging; if we see `[SPOTIFY_VIS] compute task callback failed` more than once per session, investigate ThreadManager saturation.
 
 ---

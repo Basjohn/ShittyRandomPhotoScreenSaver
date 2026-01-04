@@ -115,6 +115,8 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._use_recommended: bool = True
         self._user_sensitivity: float = 1.0
         self._frame_debug_counter: int = 0
+        self._bars_log_last_ts: float = 0.0
+        self._bars_log_interval: float = 5.0
         # Logging throttling for floor diagnostics
         self._floor_log_last_ts: float = 0.0
         self._floor_log_last_mode: Optional[str] = None
@@ -805,17 +807,20 @@ class SpotifyVisualizerAudioWorker(QObject):
 
         np.clip(arr, 0.0, 1.0, out=arr)
         
-        # DEBUG: Log bar values and raw energy periodically
-        if not hasattr(self, '_debug_counter'):
-            self._debug_counter = 0
-        self._debug_counter += 1
-        if self._debug_counter % 30 == 1:
-            import logging
-            logger = logging.getLogger(__name__)
+        # Dedicated Spotify log snapshot (sparse, routed to screensaver_spotify_vis.log)
+        try:
+            now = time.time()
+        except Exception:
+            now = 0.0
+        last_snapshot = getattr(self, "_bars_log_last_ts", 0.0)
+        min_interval = max(1.0, float(getattr(self, "_bars_log_interval", 5.0) or 5.0))
+        if now <= 0.0 or (now - last_snapshot) >= min_interval:
             bar_str = " ".join(f"{v:.2f}" for v in arr)
-            # Log raw values to understand the range
-            raw_bass = float(np.mean(freq_values[:4])) if len(freq_values) >= 4 else 0.0
-            logger.info(f"[DEBUG] raw_bass={raw_bass:.3f} Bars: [{bar_str}]")
+            logger.info("[SPOTIFY_VIS][BARS] raw_bass=%.3f Bars=[%s]", float(raw_bass), bar_str)
+            try:
+                self._bars_log_last_ts = now
+            except Exception:
+                pass
         
         # tolist() still allocates, but this is unavoidable for the return type
         return arr.tolist()

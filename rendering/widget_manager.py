@@ -23,7 +23,13 @@ from widgets.reddit_widget import RedditWidget, RedditPosition
 # Gmail widget archived - see archive/gmail_feature/RESTORE_GMAIL.md
 # from widgets.gmail_widget import GmailWidget, GmailPosition
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
-from core.settings.models import SpotifyVisualizerSettings, MediaWidgetSettings, RedditWidgetSettings
+from core.settings.models import (
+    SpotifyVisualizerSettings,
+    MediaWidgetSettings,
+    RedditWidgetSettings,
+    WidgetPosition,
+    coerce_widget_position,
+)
 from widgets.spotify_volume_widget import SpotifyVolumeWidget
 from widgets.shadow_utils import apply_widget_shadow
 from rendering.widget_positioner import WidgetPositioner, PositionAnchor
@@ -650,13 +656,30 @@ class WidgetManager:
             width = media_geom.width()
             x = media_geom.left()
             
-            position = getattr(media_widget, "_position", None)
-            place_above = position not in ("TOP_LEFT", "TOP_RIGHT") if position else True
+            # Determine if we should place the visualizer BELOW or ABOVE the media widget.
+            # If media is at the TOP of the screen, visualizer should be BELOW.
+            # If media is at the BOTTOM (or center/middle), visualizer generally goes ABOVE.
             
-            if place_above:
-                y = media_geom.top() - gap - height
+            # Robustly check position name
+            position_name = ""
+            if hasattr(media_widget, "_position"):
+                pos = media_widget._position
+                if hasattr(pos, "name"):
+                    position_name = pos.name.upper()
+                else:
+                    position_name = str(pos).upper()
+            
+            # List of anchors where visualizer should be BELOW the media card
+            top_anchors = ("TOP_LEFT", "TOP_CENTER", "TOP_RIGHT")
+            
+            # Default to placing ABOVE, unless we are definitely at a TOP anchor
+            place_below = any(anchor in position_name for anchor in top_anchors)
+            
+            if place_below:
+                 # usage of top() + height() avoids QRect.bottom() off-by-one (bottom is y+h-1)
+                 y = media_geom.top() + media_geom.height() + gap
             else:
-                y = media_geom.bottom() + gap
+                 y = media_geom.top() - gap - height
             
             y = max(0, y)
             x = max(0, x)
@@ -1521,20 +1544,26 @@ class WidgetManager:
             return default
 
         position_map = {
-            'Top Left': ClockPosition.TOP_LEFT,
-            'Top Center': ClockPosition.TOP_CENTER,
-            'Top Right': ClockPosition.TOP_RIGHT,
-            'Middle Left': ClockPosition.MIDDLE_LEFT,
-            'Center': ClockPosition.CENTER,
-            'Middle Right': ClockPosition.MIDDLE_RIGHT,
-            'Bottom Left': ClockPosition.BOTTOM_LEFT,
-            'Bottom Center': ClockPosition.BOTTOM_CENTER,
-            'Bottom Right': ClockPosition.BOTTOM_RIGHT,
+            WidgetPosition.TOP_LEFT: ClockPosition.TOP_LEFT,
+            WidgetPosition.TOP_CENTER: ClockPosition.TOP_CENTER,
+            WidgetPosition.TOP_RIGHT: ClockPosition.TOP_RIGHT,
+            WidgetPosition.MIDDLE_LEFT: ClockPosition.MIDDLE_LEFT,
+            WidgetPosition.CENTER: ClockPosition.CENTER,
+            WidgetPosition.MIDDLE_RIGHT: ClockPosition.MIDDLE_RIGHT,
+            WidgetPosition.BOTTOM_LEFT: ClockPosition.BOTTOM_LEFT,
+            WidgetPosition.BOTTOM_CENTER: ClockPosition.BOTTOM_CENTER,
+            WidgetPosition.BOTTOM_RIGHT: ClockPosition.BOTTOM_RIGHT,
         }
+
+        default_widget_position = coerce_widget_position(default_position, WidgetPosition.TOP_RIGHT)
+        resolved_widget_position = coerce_widget_position(
+            _resolve_style('position', default_position),
+            default_widget_position,
+        )
 
         raw_format = _resolve_style('format', '12h')
         time_format = TimeFormat.TWELVE_HOUR if raw_format == '12h' else TimeFormat.TWENTY_FOUR_HOUR
-        position_str = _resolve_style('position', default_position)
+        position_str = resolved_widget_position.value.replace("_", " ").title()
         show_seconds = SettingsManager.to_bool(_resolve_style('show_seconds', False), False)
         timezone_str = clock_settings.get('timezone', 'local')
         show_timezone = SettingsManager.to_bool(_resolve_style('show_timezone', False), False)
@@ -1545,7 +1574,7 @@ class WidgetManager:
         border_color_data = _resolve_style('border_color', [128, 128, 128, 255])
         border_opacity_val = _resolve_style('border_opacity', 0.8)
 
-        position = position_map.get(position_str, position_map.get(default_position, ClockPosition.TOP_RIGHT))
+        position = position_map.get(resolved_widget_position, position_map.get(default_widget_position, ClockPosition.TOP_RIGHT))
 
         try:
             clock = ClockWidget(self._parent, time_format, position, show_seconds, timezone_str, show_timezone)
@@ -1681,23 +1710,24 @@ class WidgetManager:
 
         self.add_expected_overlay("weather")
 
-        position_str = weather_settings.get('position', 'Top Left')
+        weather_widget_position = coerce_widget_position(weather_settings.get('position', 'Top Left'), WidgetPosition.TOP_LEFT)
+        position_str = weather_widget_position.value.replace("_", " ").title()
         location = weather_settings.get('location', 'New York')
         font_size = weather_settings.get('font_size', 24)
         color = weather_settings.get('color', [255, 255, 255, 230])
 
         weather_position_map = {
-            'Top Left': WeatherPosition.TOP_LEFT,
-            'Top Center': WeatherPosition.TOP_CENTER,
-            'Top Right': WeatherPosition.TOP_RIGHT,
-            'Middle Left': WeatherPosition.MIDDLE_LEFT,
-            'Center': WeatherPosition.CENTER,
-            'Middle Right': WeatherPosition.MIDDLE_RIGHT,
-            'Bottom Left': WeatherPosition.BOTTOM_LEFT,
-            'Bottom Center': WeatherPosition.BOTTOM_CENTER,
-            'Bottom Right': WeatherPosition.BOTTOM_RIGHT,
+            WidgetPosition.TOP_LEFT: WeatherPosition.TOP_LEFT,
+            WidgetPosition.TOP_CENTER: WeatherPosition.TOP_CENTER,
+            WidgetPosition.TOP_RIGHT: WeatherPosition.TOP_RIGHT,
+            WidgetPosition.MIDDLE_LEFT: WeatherPosition.MIDDLE_LEFT,
+            WidgetPosition.CENTER: WeatherPosition.CENTER,
+            WidgetPosition.MIDDLE_RIGHT: WeatherPosition.MIDDLE_RIGHT,
+            WidgetPosition.BOTTOM_LEFT: WeatherPosition.BOTTOM_LEFT,
+            WidgetPosition.BOTTOM_CENTER: WeatherPosition.BOTTOM_CENTER,
+            WidgetPosition.BOTTOM_RIGHT: WeatherPosition.BOTTOM_RIGHT,
         }
-        position = weather_position_map.get(position_str, WeatherPosition.TOP_LEFT)
+        position = weather_position_map.get(weather_widget_position, WeatherPosition.TOP_LEFT)
 
         try:
             widget = WeatherWidget(self._parent, location, position)
@@ -1806,28 +1836,26 @@ class WidgetManager:
 
         self.add_expected_overlay("media")
 
-        position_val = media_model.position.value if isinstance(media_model.position, MediaPosition) else str(media_model.position)
-        position_str = position_val.replace('_', ' ').title()
-        font_size = media_model.font_size
-        margin = getattr(media_model, "margin", 20)
-        color = media_settings.get('color', [255, 255, 255, 230])
-        artwork_size = media_model.artwork_size
-        rounded_artwork = SettingsManager.to_bool(media_settings.get('rounded_artwork_border', True), True)
-        show_controls = SettingsManager.to_bool(media_model.show_controls, True)
-        show_header_frame = SettingsManager.to_bool(media_model.show_header_frame, True)
-
-        media_position_map = {
-            'Top Left': MediaPosition.TOP_LEFT,
-            'Top Center': MediaPosition.TOP_CENTER,
-            'Top Right': MediaPosition.TOP_RIGHT,
-            'Middle Left': MediaPosition.MIDDLE_LEFT,
-            'Center': MediaPosition.CENTER,
-            'Middle Right': MediaPosition.MIDDLE_RIGHT,
-            'Bottom Left': MediaPosition.BOTTOM_LEFT,
-            'Bottom Center': MediaPosition.BOTTOM_CENTER,
-            'Bottom Right': MediaPosition.BOTTOM_RIGHT,
-        }
-        position = media_position_map.get(position_str, MediaPosition.BOTTOM_LEFT)
+        # Resolve position with full legacy normalization.
+        try:
+            normalized = coerce_widget_position(media_model.position, WidgetPosition.BOTTOM_LEFT)
+            position_lookup = {
+                WidgetPosition.TOP_LEFT: MediaPosition.TOP_LEFT,
+                WidgetPosition.TOP_CENTER: MediaPosition.TOP_CENTER,
+                WidgetPosition.TOP_RIGHT: MediaPosition.TOP_RIGHT,
+                WidgetPosition.MIDDLE_LEFT: MediaPosition.MIDDLE_LEFT,
+                WidgetPosition.CENTER: MediaPosition.CENTER,
+                WidgetPosition.MIDDLE_RIGHT: MediaPosition.MIDDLE_RIGHT,
+                WidgetPosition.BOTTOM_LEFT: MediaPosition.BOTTOM_LEFT,
+                WidgetPosition.BOTTOM_CENTER: MediaPosition.BOTTOM_CENTER,
+                WidgetPosition.BOTTOM_RIGHT: MediaPosition.BOTTOM_RIGHT,
+            }
+            position = position_lookup.get(normalized, MediaPosition.BOTTOM_LEFT)
+            position_str = normalized.value.replace("_", " ").title()
+        except Exception as e:
+            logger.error(f"[WIDGET_MANAGER] Error resolving media position: {e}")
+            position = MediaPosition.BOTTOM_LEFT
+            position_str = "Bottom Left"
 
         try:
             widget = MediaWidget(self._parent, position=position)
@@ -1843,12 +1871,17 @@ class WidgetManager:
                 widget.set_font_family(font_family)
 
             try:
+                font_size = int(media_model.font_size)
+            except Exception:
+                font_size = 20
+
+            try:
                 widget.set_background_opacity(0.9)
             except Exception:
                 widget.set_background_opacity(0.9)
 
             try:
-                margin_val = int(margin)
+                margin_val = int(media_model.margin)
             except Exception:
                 margin_val = 20
             widget.set_margin(margin_val)
@@ -1856,34 +1889,33 @@ class WidgetManager:
             # Artwork size, border shape, and controls visibility
             try:
                 if hasattr(widget, 'set_artwork_size'):
-                    widget.set_artwork_size(int(artwork_size))
+                    widget.set_artwork_size(int(media_model.artwork_size))
             except Exception:
                 pass
             try:
                 if hasattr(widget, 'set_rounded_artwork_border'):
-                    widget.set_rounded_artwork_border(rounded_artwork)
+                    widget.set_rounded_artwork_border(bool(media_model.rounded_artwork_border))
             except Exception:
                 pass
             try:
                 if hasattr(widget, 'set_show_controls'):
-                    widget.set_show_controls(show_controls)
+                    widget.set_show_controls(SettingsManager.to_bool(media_model.show_controls, True))
             except Exception:
                 pass
             try:
                 if hasattr(widget, 'set_show_header_frame'):
-                    widget.set_show_header_frame(show_header_frame)
+                    widget.set_show_header_frame(SettingsManager.to_bool(media_model.show_header_frame, True))
             except Exception:
                 pass
 
-            qcolor = parse_color_to_qcolor(color)
+            qcolor = parse_color_to_qcolor(media_model.color)
             if qcolor:
                 widget.set_text_color(qcolor)
 
             show_background = SettingsManager.to_bool(media_model.show_background, True)
             widget.set_show_background(show_background)
 
-            bg_color_data = media_settings.get('bg_color', [64, 64, 64, 255])
-            bg_qcolor = parse_color_to_qcolor(bg_color_data)
+            bg_qcolor = parse_color_to_qcolor(media_model.bg_color)
             if bg_qcolor:
                 widget.set_background_color(bg_qcolor)
 
@@ -1894,12 +1926,11 @@ class WidgetManager:
             widget.set_background_opacity(bg_opacity)
 
             # Border color and opacity
-            border_color_data = media_settings.get('border_color', [128, 128, 128, 255])
             try:
-                bo = float(media_settings.get('border_opacity', 0.8))
+                bo = float(media_model.border_opacity)
             except Exception:
                 bo = 0.8
-            border_qcolor = parse_color_to_qcolor(border_color_data, opacity_override=bo)
+            border_qcolor = parse_color_to_qcolor(media_model.border_color, opacity_override=bo)
             if border_qcolor:
                 widget.set_background_border(2, border_qcolor)
 
@@ -1978,8 +2009,8 @@ class WidgetManager:
                     return style_fallback.get(key)
                 return default
 
-            position_val = reddit_model.position.value if isinstance(reddit_model.position, RedditPosition) else str(reddit_model.position)
-            position_str = position_val.replace('_', ' ').title()
+            widget_position = coerce_widget_position(reddit_model.position, WidgetPosition.TOP_LEFT)
+            position_str = widget_position.value.replace("_", " ").title()
             subreddit = reddit_model.subreddit or 'wallpapers'
             
             # Styling inheritance with fallback to reddit1 when configuring reddit2.
@@ -2002,17 +2033,17 @@ class WidgetManager:
             limit_val = max(4, min(limit_val, 25))
 
             reddit_position_map = {
-                'Top Left': RedditPosition.TOP_LEFT,
-                'Top Center': RedditPosition.TOP_CENTER,
-                'Top Right': RedditPosition.TOP_RIGHT,
-                'Middle Left': RedditPosition.MIDDLE_LEFT,
-                'Center': RedditPosition.CENTER,
-                'Middle Right': RedditPosition.MIDDLE_RIGHT,
-                'Bottom Left': RedditPosition.BOTTOM_LEFT,
-                'Bottom Center': RedditPosition.BOTTOM_CENTER,
-                'Bottom Right': RedditPosition.BOTTOM_RIGHT,
+                WidgetPosition.TOP_LEFT: RedditPosition.TOP_LEFT,
+                WidgetPosition.TOP_CENTER: RedditPosition.TOP_CENTER,
+                WidgetPosition.TOP_RIGHT: RedditPosition.TOP_RIGHT,
+                WidgetPosition.MIDDLE_LEFT: RedditPosition.MIDDLE_LEFT,
+                WidgetPosition.CENTER: RedditPosition.CENTER,
+                WidgetPosition.MIDDLE_RIGHT: RedditPosition.MIDDLE_RIGHT,
+                WidgetPosition.BOTTOM_LEFT: RedditPosition.BOTTOM_LEFT,
+                WidgetPosition.BOTTOM_CENTER: RedditPosition.BOTTOM_CENTER,
+                WidgetPosition.BOTTOM_RIGHT: RedditPosition.BOTTOM_RIGHT,
             }
-            position = reddit_position_map.get(position_str, RedditPosition.BOTTOM_RIGHT)
+            position = reddit_position_map.get(widget_position, RedditPosition.BOTTOM_RIGHT)
 
             widget = RedditWidget(self._parent, subreddit=subreddit, position=position)
 

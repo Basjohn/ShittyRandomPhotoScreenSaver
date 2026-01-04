@@ -1,0 +1,462 @@
+[
+  {
+    "file": "tests\\test_animation.py",
+    "doc": "Tests for the centralized animation framework.",
+    "test_count": 12
+  },
+  {
+    "file": "tests\\test_animation_set_target_fps.py",
+    "doc": "",
+    "test_count": 1
+  },
+  {
+    "file": "tests\\test_block_puzzle_flip.py",
+    "doc": "Tests for block puzzle flip transition (mask-based).",
+    "test_count": 10
+  },
+  {
+    "file": "tests\\test_clock_integration_regression.py",
+    "doc": "Integration regression tests for ClockWidget.\n\nTests that the 9 clock widget bugs fixed in Phase 1 don't reoccur.\nThese are regression tests to ensure the integration stays stable.",
+    "test_count": 12
+  },
+  {
+    "file": "tests\\test_clock_widget.py",
+    "doc": "Tests for clock widget.",
+    "test_count": 26
+  },
+  {
+    "file": "tests\\test_context_menu_effect_invalidation.py",
+    "doc": "",
+    "test_count": 1
+  },
+  {
+    "file": "tests\\test_ctrl_interaction_mode.py",
+    "doc": "Tests for Ctrl-held temporary interaction mode in DisplayWidget.\n\nThese tests verify that holding Ctrl suppresses mouse-based exits (move/click)\nwhile still allowing exit keys to function, and that the behaviour applies\nconsistently across multiple DisplayWidget instances.",
+    "test_count": 10
+  },
+  {
+    "file": "tests\\test_diffuse_transition.py",
+    "doc": "Tests for diffuse transition.",
+    "test_count": 16
+  },
+  {
+    "file": "tests\\test_dimming_and_interaction_fixes.py",
+    "doc": "Tests for dimming overlay, halo interaction, and deferred Reddit URL fixes.\n\nThese tests verify:\n1. Dimming overlay uses correct widget attributes for alpha compositing\n2. Ctrl cursor halo doesn't punch through dimming overlay\n3. Deferred Reddit URL is opened on all exit paths\n4. Media widget click detection respects Y coordinates (controls row only)\n5. Settings are read with dot notation (not nested dict access)\n6. Dimming overlay is included in Z-order management\n7. Context menu reads dimming state correctly",
+    "test_count": 12
+  },
+  {
+    "file": "tests\\test_display_gl_underlay_coverage.py",
+    "doc": "DisplayWidget + GL overlay integration tests: underlay/blank-frame coverage.\n\nThese tests exercise the full DisplayWidget + GL transition overlay stack and\nlook for two classes of visual defects that correspond to what the USER sees\nin practice:\n\n- \"Underlay leaks\": frames where the underlying parent surface shows through\n  instead of the DisplayWidget/overlay content.\n- \"Blank frames\": frames that are mostly black even though we are transitioning\n  between non-black images.\n\nWe intentionally do NOT assert anything about the *shape* of a particular\ntransition; we only assert that the GL-backed transition, once started, keeps\ncovering the presentation surface and does not devolve into empty/black frames.",
+    "test_count": 1
+  },
+  {
+    "file": "tests\\test_display_tab.py",
+    "doc": "Integration tests for Display tab UI.\n\nTests the new Display tab created in Phase 1 for settings management.",
+    "test_count": 14
+  },
+  {
+    "file": "tests\\test_engine_lifecycle.py",
+    "doc": "Test engine lifecycle state transitions.\n\nThis test module verifies the EngineState enum and state transitions\nthat were introduced to fix the RSS reload bug where async RSS loading\nwould abort after settings changes.\n\nKey scenarios tested:\n1. State transitions follow valid paths\n2. _shutting_down property returns correct values for each state\n3. Settings changes use REINITIALIZING (not STOPPING)\n4. Async RSS loading continues during REINITIALIZING\n5. Actual shutdown properly aborts async tasks",
+    "test_count": 20
+  },
+  {
+    "file": "tests\\test_events.py",
+    "doc": "Tests for EventSystem.",
+    "test_count": 6
+  },
+  {
+    "file": "tests\\test_flicker_fix_integration.py",
+    "doc": "Integration tests for flicker fix implementation (Phases 1-3).\n\nTests the complete flow from Qt allocation limit through atomic overlay state\nto multi-display synchronization.",
+    "test_count": 7
+  },
+  {
+    "file": "tests\\test_frame_timing_workload.py",
+    "doc": "Automated frame timing test with realistic workload.\n\nSimulates a realistic screensaver session with multiple transitions\nand measures dt_max to detect UI thread blocking.\n\nRun with: python pytest.py tests/test_frame_timing_workload.py -v",
+    "test_count": 4
+  },
+  {
+    "file": "tests\\test_geometry_dpi_matrix.py",
+    "doc": "Deterministic geometry/DPI/DPR matrix tests.\n\nThese tests do not require real multi-monitor hardware. They exercise the\nDisplayWidget screen-change path with fake QScreen objects to validate that:\n\n- Geometry (x/y/width/height) is applied consistently for common monitor layouts\n  including negative coordinates.\n- The device pixel ratio (DPR) is captured and used for physical size math.\n\nThe goal is to catch regressions in the code paths that users hit with mixed-DPI\nand unusual monitor arrangements.",
+    "test_count": 1
+  },
+  {
+    "file": "tests\\test_gl_compositor_blinds.py",
+    "doc": "Tests for GLCompositorWidget blinds transitions.\n\nThese tests validate that the compositor-based blinds path does not produce\nmostly-black frames or expose a coloured underlay when driven in a simple\nQWidget hierarchy.",
+    "test_count": 1
+  },
+  {
+    "file": "tests\\test_gl_compositor_blockflip.py",
+    "doc": "Tests for GLCompositorWidget block puzzle flip transitions.\n\nThese tests validate that the compositor-based block flip path does not\nproduce mostly-black frames or expose a coloured underlay when driven in a\nsimple QWidget hierarchy.",
+    "test_count": 1
+  },
+  {
+    "file": "tests\\test_gl_compositor_blockspin.py",
+    "doc": "Tests for GLCompositorWidget 3D Block Spins transition.\n\nThese tests validate that the compositor-based Block Spins path does not\nproduce mostly-black frames or expose a coloured underlay when driven in a\nsimple QWidget hierarchy. This exercises the GLSL-backed Block Spins path when\nPyOpenGL is available, and falls back to the QPainter implementation otherwise.",
+    "test_count": 1
+  },
+  {
+    "file": "tests\\test_gl_compositor_cleanup.py",
+    "doc": "Lifecycle and cleanup tests for GLCompositorWidget.\n\nThese tests focus on the GLSL pipeline teardown path to ensure that\n`GLCompositorWidget.cleanup()` is safe to call multiple times and behaves\ncorrectly when a GL context is (or is not) available.",
+    "test_count": 2
+  },
+  {
+    "file": "tests\\test_gl_compositor_crossfade.py",
+    "doc": "Tests for GLCompositorWidget and GLCompositorCrossfadeTransition.\n\nThese tests validate that the compositor-based crossfade path does not\nproduce mostly-black frames or expose a coloured underlay when driven\nin a simple QWidget hierarchy.",
+    "test_count": 1
+  },
+  {
+    "file": "tests\\test_gl_compositor_diffuse.py",
+    "doc": "Tests for GLCompositorWidget diffuse transitions.\n\nThese tests validate that the compositor-based diffuse path does not produce\nmostly-black frames or expose a coloured underlay when driven in a simple\nQWidget hierarchy.",
+    "test_count": 1
+  },
+  {
+    "file": "tests\\test_gl_compositor_peel.py",
+    "doc": "Tests for GLCompositorWidget peel transitions.\n\nThese tests validate that the compositor-based + GLSL peel path does not\nproduce mostly-black frames or expose a coloured underlay when driven in a\nsimple QWidget hierarchy.",
+    "test_count": 1
+  },
+  {
+    "file": "tests\\test_gl_compositor_raindrops.py",
+    "doc": "Tests for GLCompositorWidget Rain Drops transition.\n\nThese tests validate that the compositor-based Rain Drops path does not\nproduce mostly-black frames or expose a coloured underlay when driven in a\nsimple QWidget hierarchy. This exercises the GLSL-backed path when PyOpenGL\nis available, and falls back to the diffuse/QPainter implementation otherwise.",
+    "test_count": 1
+  },
+  {
+    "file": "tests\\test_gl_compositor_slide.py",
+    "doc": "Tests for GLCompositorWidget slide transitions.\n\nThese tests validate that the compositor-based slide path does not produce\nmostly-black frames or expose a coloured underlay when driven in a simple\nQWidget hierarchy.",
+    "test_count": 1
+  },
+  {
+    "file": "tests\\test_gl_compositor_transition_lifecycle.py",
+    "doc": "Regression tests for GLCompositorWidget transition lifecycle safety.\n\nThese tests focus on ensuring that compositor transitions can start and tear\ndown without raising, even when the GL pipeline is unavailable (our CI\nenvironment). They guard against missing helper hooks when adding new\ninstrumentation around transition cancellation.",
+    "test_count": 2
+  },
+  {
+    "file": "tests\\test_gl_compositor_wipe.py",
+    "doc": "Tests for GLCompositorWidget wipe transitions.\n\nThese tests validate that the compositor-based wipe path does not produce\nmostly-black frames or expose a coloured underlay when driven in a simple\nQWidget hierarchy.",
+    "test_count": 1
+  },
+  {
+    "file": "tests\\test_gl_overlay_no_black_frames.py",
+    "doc": "GL overlay visual regression tests.\n\nThese tests exercise the core OpenGL-backed overlay widgets used by transitions\n(Crossfade, Slide, Wipe) and verify that their rendered frames are not\n\"mostly black\" when given non-black input pixmaps.\n\nThe goal is to provide a repeatable, architecture-level guard against\nfull-frame black flashes originating from the GL overlay FBOs themselves.\n\nNotes\n-----\n- Tests are skipped if a valid GL context cannot be created on the test\n  environment (e.g. in headless CI without GPU support).\n- We use small solid-colour pixmaps so we can make simple assertions about\n  the framebuffer contents without depending on real photos.",
+    "test_count": 3
+  },
+  {
+    "file": "tests\\test_gl_prewarm.py",
+    "doc": "",
+    "test_count": 1
+  },
+  {
+    "file": "tests\\test_gl_state_manager.py",
+    "doc": "Tests for GL State Manager.\n\nTests the GLStateManager state machine including:\n- State transitions\n- Invalid transition rejection\n- Thread safety\n- Callbacks\n- Error handling\n- Statistics and debugging",
+    "test_count": 34
+  },
+  {
+    "file": "tests\\test_hotkeys_no_text.py",
+    "doc": "",
+    "test_count": 1
+  },
+  {
+    "file": "tests\\test_image_processor.py",
+    "doc": "Tests for image processor.",
+    "test_count": 20
+  },
+  {
+    "file": "tests\\test_image_queue.py",
+    "doc": "Tests for image queue.",
+    "test_count": 24
+  },
+  {
+    "file": "tests\\test_integration.py",
+    "doc": "Integration tests for screensaver engine.",
+    "test_count": 15
+  },
+  {
+    "file": "tests\\test_integration_settings.py",
+    "doc": "Integration tests for Settings Dialog and SettingsManager.\n\nThese tests verify the ACTUAL workflow that was broken:\n- UI saves settings correctly\n- Settings persist to disk\n- Settings load correctly on next run",
+    "test_count": 10
+  },
+  {
+    "file": "tests\\test_lanczos_scaling.py",
+    "doc": "Integration tests for Lanczos image scaling.\n\nTests PIL/Pillow integration, fallback behavior, and image quality.\nIncludes regression test for Bug #10 (image tripling/distortion).",
+    "test_count": 16
+  },
+  {
+    "file": "tests\\test_log_throttling.py",
+    "doc": "Tests for ThrottledLogger rate-limiting functionality.\n\nVerifies that high-frequency log messages are properly throttled\nto reduce log spam in hot paths like animation frames and visualizer ticks.",
+    "test_count": 18
+  },
+  {
+    "file": "tests\\test_logging_console_encoding.py",
+    "doc": "",
+    "test_count": 2
+  },
+  {
+    "file": "tests\\test_mc_keyboard_input.py",
+    "doc": "",
+    "test_count": 1
+  },
+  {
+    "file": "tests\\test_mc_window_flags.py",
+    "doc": "",
+    "test_count": 2
+  },
+  {
+    "file": "tests\\test_media_widget.py",
+    "doc": "Tests for MediaWidget and centralized media controller integration.\n\nThese tests focus on:\n- Widget visibility when no media is available (hidden when no track)\n- Rendering of track metadata\n- Artwork byte decoding into a QPixmap and margin adjustments\n- Transport control delegation from MediaWidget to the controller\n- DisplayWidget mouse interaction routing for Ctrl/ hard-exit modes",
+    "test_count": 14
+  },
+  {
+    "file": "tests\\test_multi_monitor_focus.py",
+    "doc": "Tests for multi-monitor focus coordination.",
+    "test_count": 9
+  },
+  {
+    "file": "tests\\test_multidisplay_sync.py",
+    "doc": "Tests for multi-display synchronization (Phase 3).\n\nTests the lock-free SPSC queue-based synchronization for coordinating\ntransitions across multiple displays.",
+    "test_count": 15
+  },
+  {
+    "file": "tests\\test_overlay_ready_state.py",
+    "doc": "Tests for overlay ready state atomic flags (Phase 1 & 2).\n\nTests the thread-safe ready state tracking added to all transition overlays\nto eliminate paint event race conditions.",
+    "test_count": 6
+  },
+  {
+    "file": "tests\\test_overlay_timers.py",
+    "doc": "",
+    "test_count": 2
+  },
+  {
+    "file": "tests\\test_painter_shadow.py",
+    "doc": "Tests for PainterShadow - Phase E root cause fix.\n\nThese tests verify the QPainter-based shadow rendering system that replaces\nQGraphicsDropShadowEffect to fix the Phase E visual corruption bug.\n\nPhase E Bug Summary:\n    QGraphicsDropShadowEffect caches rendered shadow pixmaps internally.\n    When window position/activation changes occur across displays (e.g., context\n    menu on Display 1 triggers WM_WINDOWPOSCHANGING on Display 0), the cache\n    invalidation doesn't happen correctly, causing shadow corruption.\n\nSolution:\n    Shadows are now rendered via PainterShadow in each widget's paintEvent(),\n    completely bypassing Qt's internal effect caching system.",
+    "test_count": 26
+  },
+  {
+    "file": "tests\\test_pan_scan_animator.py",
+    "doc": "Tests for pan & scan animator (removed in v1.2).\n\nThis module is kept only as historical documentation of the old Ken Burns\neffect; all tests are skipped because the runtime no longer ships the\nanimator or Pan & Scan feature.",
+    "test_count": 16
+  },
+  {
+    "file": "tests\\test_pan_scan_integration.py",
+    "doc": "Integration tests for transitions WITH pan & scan enabled.\n\nTests that were MISSING and allowed bugs to slip through:\n- Transitions with pan & scan enabled\n- Visual verification that images don't change after transition\n- Proper cleanup of pan & scan labels between transitions",
+    "test_count": 10
+  },
+  {
+    "file": "tests\\test_particle_transition.py",
+    "doc": "Tests for particle transition and shader program.",
+    "test_count": 18
+  },
+  {
+    "file": "tests\\test_perf_dt_max.py",
+    "doc": "Automated dt_max performance test with realistic workload.\n\nThis test simulates a realistic screensaver session with:\n- Multiple GL transitions (Slide, Crossfade)\n- Simulated Spotify visualizer tick load\n- Measures dt_max for both transitions and visualizer ticks\n\nPASS CRITERIA:\n- Visualizer dt_max < 50ms (target: 25ms)\n- Transition dt_max < 100ms (target: 50ms)\n\nRun with: python pytest.py tests/test_perf_dt_max.py -v -s",
+    "test_count": 2
+  },
+  {
+    "file": "tests\\test_perf_integration.py",
+    "doc": "Integration performance test - runs actual app components.\n\nThis test runs the REAL visualizer and transitions to measure actual dt_max.\nIt identifies which component is causing UI thread blocks.\n\nRun with: python pytest.py tests/test_perf_integration.py -v -s\nOr directly: python tests/test_perf_integration.py",
+    "test_count": 0
+  },
+  {
+    "file": "tests\\test_phase_e_effect_corruption.py",
+    "doc": "Phase E: QGraphicsEffect Cache Corruption Test Suite\n\nThis test suite attempts to reproduce the visual corruption bug that occurs when:\n1. Reddit link is clicked on Display 0 or Display 1\n2. Context menu is opened on Display 0 or Display 1\n3. Cross-display activation cascades corrupt QGraphicsEffect cache\n\nThe bug manifests as:\n- Widget shadows becoming visually corrupted\n- Cursor \"eating away\" at opacity when moving through widgets\n- Corruption on Display 0 when triggered from Display 1\n\nRoot cause hypothesis:\n- Windows sends WM_WINDOWPOSCHANGING to ALL topmost windows when popup opens\n- This triggers activation cascade that corrupts Qt's QGraphicsEffect cache\n- The single-focus-window policy fixed left-click corruption but not context menu\n\nTest approach:\n- Simulate the exact sequence of events that trigger corruption\n- Monitor QGraphicsEffect state before/after trigger events\n- Detect cache corruption by checking effect properties",
+    "test_count": 19
+  },
+  {
+    "file": "tests\\test_pixel_shift.py",
+    "doc": "Tests for pixel shift manager.",
+    "test_count": 9
+  },
+  {
+    "file": "tests\\test_prewarm_no_deadlock.py",
+    "doc": "",
+    "test_count": 1
+  },
+  {
+    "file": "tests\\test_qt_timer_threading.py",
+    "doc": "",
+    "test_count": 1
+  },
+  {
+    "file": "tests\\test_reddit_exit_logic.py",
+    "doc": "Regression tests for Reddit link handling A/B/C logic.\n\nThese tests verify the smart exit behavior implemented to fix the Phase E\ncache corruption issue. The logic is:\n- Case A: Primary covered + hard_exit \u2192 Exit immediately\n- Case B: Primary covered + Ctrl held \u2192 Exit immediately  \n- Case C: MC mode (primary NOT covered) \u2192 Stay open, bring browser to foreground\n\nSee: audits/PHASE_E_ROOT_CAUSE_ANALYSIS.md",
+    "test_count": 15
+  },
+  {
+    "file": "tests\\test_reddit_helper_installer.py",
+    "doc": "",
+    "test_count": 1
+  },
+  {
+    "file": "tests\\test_reddit_widget.py",
+    "doc": "Tests for RedditWidget behaviour and integration points.\n\nThese cover filtering, age label formatting, hide-on-error behaviour, and\nclick handling for posts and the header.",
+    "test_count": 5
+  },
+  {
+    "file": "tests\\test_rendering_backends.py",
+    "doc": "Tests for rendering backend selection and registry.",
+    "test_count": 4
+  },
+  {
+    "file": "tests\\test_resource_manager.py",
+    "doc": "Integration tests for ResourceManager.\n\nTests the centralized resource management functionality including:\n- Resource registration and tracking\n- Weak reference management\n- Cleanup handlers\n- Thread safety\n- Object pooling\n- Shutdown behavior",
+    "test_count": 33
+  },
+  {
+    "file": "tests\\test_resource_pooling.py",
+    "doc": "Tests for QPixmap/QImage pooling in ResourceManager.\n\nThese tests require a Qt application context for QPixmap/QImage.",
+    "test_count": 9
+  },
+  {
+    "file": "tests\\test_resources.py",
+    "doc": "Tests for ResourceManager.",
+    "test_count": 6
+  },
+  {
+    "file": "tests\\test_rss_behavior.py",
+    "doc": "Test RSS image fetching and queue behavior.\n\nThis test verifies:\n1. RSS sources fetch images from multiple feeds\n2. Images are properly cached and not re-downloaded\n3. Queue properly rotates through RSS images\n4. Duplicate detection works correctly",
+    "test_count": 7
+  },
+  {
+    "file": "tests\\test_s_hotkey_workflow.py",
+    "doc": "Integration test for S hotkey workflow.\n\nTests the complete workflow:\n1. Start screensaver\n2. Press S key\n3. Display windows are HIDDEN (not just cleared)\n4. Settings dialog opens (and is visible)\n5. Close settings\n6. Display windows shown again\n7. Screensaver resumes\n\nCRITICAL: Display widgets must be hidden when settings open,\notherwise they cover the dialog with black fullscreen windows!",
+    "test_count": 5
+  },
+  {
+    "file": "tests\\test_scrollwheel_volume.py",
+    "doc": "",
+    "test_count": 7
+  },
+  {
+    "file": "tests\\test_settings.py",
+    "doc": "Tests for SettingsManager.",
+    "test_count": 9
+  },
+  {
+    "file": "tests\\test_settings_dialog.py",
+    "doc": "Tests for settings dialog.",
+    "test_count": 14
+  },
+  {
+    "file": "tests\\test_settings_manager.py",
+    "doc": "Integration tests for SettingsManager.\n\nTests the core settings functionality including:\n- Get/set operations\n- Type conversion\n- Nested key access\n- Change notifications\n- Thread safety\n- Persistence",
+    "test_count": 23
+  },
+  {
+    "file": "tests\\test_settings_models.py",
+    "doc": "Tests for Settings dataclass models.\n\nTests the type-safe settings models including:\n- Model creation with defaults\n- Loading from SettingsManager\n- Enum conversions\n- Dictionary serialization",
+    "test_count": 28
+  },
+  {
+    "file": "tests\\test_settings_sync.py",
+    "doc": "Tests for SettingsManager critical settings sync mechanism.\n\nVerifies that critical settings (transitions, widgets, sources, display)\nare immediately synced to persistent storage to prevent data loss.",
+    "test_count": 7
+  },
+  {
+    "file": "tests\\test_slide_jitter.py",
+    "doc": "Test for slide transition jitter/judder.\n\nMeasures frame timing during slide transitions to detect UI thread blocking.",
+    "test_count": 4
+  },
+  {
+    "file": "tests\\test_slide_transition.py",
+    "doc": "Tests for slide transition.",
+    "test_count": 16
+  },
+  {
+    "file": "tests\\test_spotify_visualizer_widget.py",
+    "doc": "",
+    "test_count": 13
+  },
+  {
+    "file": "tests\\test_startup_black_flash.py",
+    "doc": "Startup integration tests to guard against black init flash.\n\nThese tests exercise DisplayWidget startup in both software and OpenGL\nmodes, with clock and weather widgets enabled, and assert that the base\nblack fallback paint path is never used for the first image.\n\nThe goal is to catch regressions where the base widget would briefly\npaint a black frame (e.g. during GL overlay prewarm or widget setup)\ninstead of a seeded pixmap.",
+    "test_count": 2
+  },
+  {
+    "file": "tests\\test_thread_manager.py",
+    "doc": "Integration tests for ThreadManager.\n\nTests the centralized threading functionality including:\n- Thread pool initialization\n- Task submission and execution\n- IO and Compute pool separation\n- Task callbacks and results\n- Shutdown behavior\n- UI thread dispatch",
+    "test_count": 33
+  },
+  {
+    "file": "tests\\test_threading.py",
+    "doc": "Tests for ThreadManager.",
+    "test_count": 9
+  },
+  {
+    "file": "tests\\test_timezone_support.py",
+    "doc": "Tests for timezone support in clock widget.\n\nTests timezone parsing, auto-detection, and display functionality.",
+    "test_count": 27
+  },
+  {
+    "file": "tests\\test_transition_integration.py",
+    "doc": "Integration tests for transition system.\n\nTests that transitions actually run in DisplayWidget and complete properly.\nThese tests validate the full transition lifecycle end-to-end.",
+    "test_count": 13
+  },
+  {
+    "file": "tests\\test_transition_telemetry.py",
+    "doc": "Tests for transition telemetry tracking (Phase 2.2).\n\nTests the performance timing tracking added to base transition class\nand all transition implementations.",
+    "test_count": 14
+  },
+  {
+    "file": "tests\\test_transitions.py",
+    "doc": "Tests for transition system.",
+    "test_count": 19
+  },
+  {
+    "file": "tests\\test_transitions_integration.py",
+    "doc": "Integration tests for transitions with pan & scan.\n\nTests that transitions work correctly when pan & scan is enabled,\nand that they trigger automatically during normal rotation.",
+    "test_count": 4
+  },
+  {
+    "file": "tests\\test_transitions_tab.py",
+    "doc": "Tests for TransitionsTab behaviour (UI-level transition settings).",
+    "test_count": 2
+  },
+  {
+    "file": "tests\\test_visualizer_distribution.py",
+    "doc": "Test script to visualize FFT bar distribution.\nGenerates synthetic audio signals and shows the resulting bar heights.",
+    "test_count": 0
+  },
+  {
+    "file": "tests\\test_visualizer_modes.py",
+    "doc": "Tests for Spotify Visualizer visualization modes.\n\nThese tests verify the VisualizerMode enum and the SPECTRUM mode\nwhich is the only currently implemented visualization style.\n\nNote: WAVEFORM and ABSTRACT modes were planned but not implemented.\nTests for those modes have been removed to match actual implementation.",
+    "test_count": 13
+  },
+  {
+    "file": "tests\\test_weather_widget.py",
+    "doc": "Tests for weather widget.",
+    "test_count": 21
+  },
+  {
+    "file": "tests\\test_widget_factories.py",
+    "doc": "Tests for Widget Factory classes.\n\nTests the widget factory pattern implementation including:\n- Factory registration\n- Widget creation\n- Configuration handling\n- Factory registry",
+    "test_count": 22
+  },
+  {
+    "file": "tests\\test_widget_lifecycle.py",
+    "doc": "Tests for widget lifecycle management.\n\nTests the BaseOverlayWidget lifecycle state machine including:\n- State transitions (CREATED \u2192 INITIALIZED \u2192 ACTIVE \u21c4 HIDDEN \u2192 DESTROYED)\n- Invalid transition rejection\n- Thread safety\n- ResourceManager integration\n- Cleanup behavior",
+    "test_count": 30
+  },
+  {
+    "file": "tests\\test_widget_manager_refresh.py",
+    "doc": "",
+    "test_count": 1
+  },
+  {
+    "file": "tests\\test_widget_positioner.py",
+    "doc": "Tests for Widget Positioner.\n\nTests the centralized widget positioning logic including:\n- Position calculations based on anchor\n- Collision detection\n- Stacking logic\n- Relative positioning",
+    "test_count": 21
+  },
+  {
+    "file": "tests\\test_widgets_media_integration.py",
+    "doc": "Integration tests for media widget settings persistence.\n\nThese tests verify that the Widgets tab and SettingsDialog correctly\npersist `widgets.media` configuration via SettingsManager and that a\nfresh SettingsManager instance plus DisplayWidget see the expected\nvalues.",
+    "test_count": 2
+  },
+  {
+    "file": "tests\\test_widgets_persistence_integration.py",
+    "doc": "Integration tests for widgets settings persistence.\n\nThese tests bridge WidgetsTab (UI) and DisplayWidget runtime wiring to ensure\nthat changes persisted via the widgets tab are reflected correctly when\nDisplayWidget sets up overlay widgets, and that per-monitor routing works.",
+    "test_count": 2
+  },
+  {
+    "file": "tests\\test_widgets_tab.py",
+    "doc": "Tests for Widgets tab UI.\n\nVerifies that WidgetsTab integrates correctly with the canonical nested\n`widgets` settings structure (clock + weather) and that defaults and\nroundtrips behave as expected.",
+    "test_count": 3
+  }
+]

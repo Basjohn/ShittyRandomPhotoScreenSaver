@@ -1,0 +1,29 @@
+Nuitka-Options: Used command line options:
+Nuitka-Options:   --onefile --standalone --remove-output --windows-console-mode=disable --output-dir=F:\Programming\Apps\ShittyRandomPhotoScreenSaver\release_helpers --output-filename=SRPSS_RedditHelper --product-name="SRPSS Reddit Helper" --file-description="SRPSS Reddit URL Helper" --company-name=SRPSS --product-version=1.5.8 --file-version=1.5.8.0 --nofollow-import-to=PySide6 --nofollow-import-to=PySide2 --nofollow-import-to=PyQt5 --nofollow-import-to=winrt --noinclude-default-mode=error --windows-icon-from-ico=F:\Programming\Apps\ShittyRandomPhotoScreenSaver\SRPSS.ico F:\Programming\Apps\ShittyRandomPhotoScreenSaver\helpers\reddit_helper_worker.py
+Nuitka: Starting Python compilation with:
+Nuitka:   Version '2.7.12' on Python 3.11 (flavor 'CPython Official') commercial grade 'not installed'.
+Nuitka-Plugins:anti-bloat: Not including 'socket' automatically in order to avoid bloat, but this may cause: can break calls of 'email.utils.make_msgid()'.
+Nuitka: Completed Python level compilation and optimization.
+Nuitka: Generating source code for C backend compiler.
+Nuitka: Running data composer tool for optimal constant value handling.
+Nuitka: Running C compilation via Scons.
+Nuitka-Scons: Non downloaded winlibs-gcc 'C:\ProgramData\mingw64\mingw64\bin\gcc.exe' is being ignored, Nuitka is very dependent on the precise one.
+Nuitka-Scons: Backend C compiler: gcc (gcc 14.2.0).
+Nuitka-Scons: Backend C linking with 6 files (no progress information available for this stage).
+Nuitka-Scons: Compiled 6 C files using ccache.
+Nuitka-Scons: Cached C files (using ccache) with result 'cache hit': 6
+Nuitka-Postprocessing: Adding 9 icon(s) from icon file 'F:\Programming\Apps\ShittyRandomPhotoScreenSaver\SRPSS.ico'.
+Nuitka-Postprocessing: Creating single file from dist folder, this may take a while.
+Nuitka-Onefile: Running bootstrap binary compilation via Scons.
+Nuitka-Scons: Non downloaded winlibs-gcc 'C:\ProgramData\mingw64\mingw64\bin\gcc.exe' is being ignored, Nuitka is very dependent on the precise one.
+Nuitka-Scons: Onefile C compiler: gcc (gcc 14.2.0).
+Nuitka-Scons: Onefile C linking.
+Nuitka-Scons: Compiled 1 C files using ccache.
+Nuitka-Scons: Cached C files (using ccache) with result 'cache hit': 1
+Nuitka-Postprocessing: Adding 9 icon(s) from icon file 'F:\Programming\Apps\ShittyRandomPhotoScreenSaver\SRPSS.ico'.
+Nuitka-Onefile: Using compression for onefile payload.
+Nuitka-Onefile: Onefile payload compression ratio (29.87%) size 19902516 to 5945627.
+Nuitka-Onefile: Removing onefile build directory 'F:\Programming\Apps\ShittyRandomPhotoScreenSaver\release_helpers\reddit_helper_worker.onefile-build'.
+Nuitka: Removing dist folder 'F:\Programming\Apps\ShittyRandomPhotoScreenSaver\release_helpers\reddit_helper_worker.dist'.
+Nuitka: Removing build directory 'F:\Programming\Apps\ShittyRandomPhotoScreenSaver\release_helpers\reddit_helper_worker.build'.
+Nuitka: Successfully created 'F:\Programming\Apps\ShittyRandomPhotoScreenSaver\release_helpers\SRPSS_RedditHelper.exe'.

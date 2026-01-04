@@ -1,0 +1,188 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+cachedir: .pytest_cache
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+configfile: pytest.ini
+plugins: qt-4.5.0
+collecting ... collected 612 items / 4 skipped
+
+tests/test_animation.py::test_animation_manager_initialization PASSED    [  0%]
+tests/test_animation.py::test_property_animation PASSED                  [  0%]
+tests/test_animation.py::test_custom_animation PASSED                    [  0%]
+tests/test_animation.py::test_animation_pause_resume PASSED              [  0%]
+tests/test_animation.py::test_animation_cancel PASSED                    [  0%]
+tests/test_animation.py::test_easing_curves PASSED                       [  0%]
+tests/test_animation.py::test_animation_with_delay PASSED                [  1%]
+tests/test_animation.py::test_multiple_animations PASSED                 [  1%]
+tests/test_animation.py::test_cancel_all_animations PASSED               [  1%]
+tests/test_animation.py::test_animation_manager_auto_stop PASSED         [  1%]
+tests/test_animation.py::test_animation_manager_emits_perf_metrics PASSED [  1%]
+tests/test_animation_set_target_fps.py::test_set_target_fps_updates_timer_interval PASSED [  1%]
+tests/test_block_puzzle_flip.py::test_block_puzzle_creation PASSED       [  2%]
+tests/test_block_puzzle_flip.py::test_block_puzzle_runs_and_labels PASSED [  2%]
+tests/test_block_puzzle_flip.py::test_block_puzzle_cleanup PASSED        [  2%]
+tests/test_block_puzzle_flip.py::test_block_puzzle_invalid_pixmap PASSED [  2%]
+tests/test_block_puzzle_flip.py::test_block_puzzle_set_flip_duration PASSED [  2%]
+tests/test_block_puzzle_flip.py::test_block_puzzle_randomization PASSED  [  2%]
+tests/test_block_puzzle_flip.py::test_block_puzzle_small_widget PASSED   [  3%]
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug1_clock_widget_created PASSED [  3%]
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug2_set_text_color_method_exists PASSED [  3%]
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug3_color_array_to_qcolor_conversion PASSED [  3%]
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug4_z_order_clock_on_top PASSED [  3%]
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug5_settings_retrieval_no_crash PASSED [  3%]
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug6_boolean_type_conversion PASSED [  4%]
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug7_position_string_to_enum PASSED [  4%]
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug8_format_string_to_enum PASSED [  4%]
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug9_missing_raise_call PASSED [  4%]
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_clock_widget_visibility_after_setup PASSED [  4%]
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_clock_widget_size_and_position PASSED [  4%]
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_clock_settings_complete_integration PASSED [  5%]
+tests/test_clock_widget.py::test_time_format_enum PASSED                 [  5%]
+tests/test_clock_widget.py::test_clock_position_enum PASSED              [  5%]
+tests/test_clock_widget.py::test_clock_creation PASSED                   [  5%]
+tests/test_clock_widget.py::test_clock_start_stop FAILED                 [  5%]
+tests/test_clock_widget.py::test_clock_signals FAILED                    [  5%]
+tests/test_clock_widget.py::test_clock_12h_format FAILED                 [  6%]
+tests/test_clock_widget.py::test_clock_24h_format FAILED                 [  6%]
+tests/test_clock_widget.py::test_clock_without_seconds FAILED            [  6%]
+
+================================== FAILURES ===================================
+____________________________ test_clock_start_stop ____________________________
+
+qapp = <PySide6.QtWidgets.QApplication(0x1f363dc5d70) at 0x000001F37FEB03C0>
+parent_widget = <PySide6.QtWidgets.QWidget(0x1f36444fc60) at 0x000001F3144A9B80>
+
+    def test_clock_start_stop(qapp, parent_widget):
+        """Test starting and stopping clock."""
+        clock = ClockWidget(parent=parent_widget)
+        parent_widget.show()  # Show parent so child visibility works
+    
+        assert clock.is_running() is False
+    
+        clock.start()
+>       assert clock.is_running() is True
+E       assert False is True
+E        +  where False = is_running()
+E        +    where is_running = <widgets.clock_widget.ClockWidget(0x1f36444fa80, name="clock_main") at 0x000001F3144AAFC0>.is_running
+
+tests\test_clock_widget.py:67: AssertionError
+------------------------------ Captured log call ------------------------------
+ERROR    widgets.base_overlay_widget:base_overlay_widget.py:351 [THREAD_MANAGER] Missing ThreadManager for clock during ClockWidget.start; timer-driven features disabled.
+_____________________________ test_clock_signals ______________________________
+
+qapp = <PySide6.QtWidgets.QApplication(0x1f363dc5d70) at 0x000001F37FEB03C0>
+parent_widget = <PySide6.QtWidgets.QWidget(0x1f314be75b0) at 0x000001F3144AB380>
+qtbot = <pytestqt.qtbot.QtBot object at 0x000001F3143F4850>
+
+    def test_clock_signals(qapp, parent_widget, qtbot):
+        """Test clock signals."""
+        clock = ClockWidget(parent=parent_widget)
+    
+        time_updates = []
+        clock.time_updated.connect(lambda t: time_updates.append(t))
+    
+        clock.start()
+    
+        # Wait for at least one update
+        qtbot.wait(1500)
+    
+>       assert len(time_updates) >= 1
+E       assert 0 >= 1
+E        +  where 0 = len([])
+
+tests\test_clock_widget.py:87: AssertionError
+------------------------------ Captured log call ------------------------------
+ERROR    widgets.base_overlay_widget:base_overlay_widget.py:351 [THREAD_MANAGER] Missing ThreadManager for clock during ClockWidget.start; timer-driven features disabled.
+____________________________ test_clock_12h_format ____________________________
+
+qapp = <PySide6.QtWidgets.QApplication(0x1f363dc5d70) at 0x000001F37FEB03C0>
+parent_widget = <PySide6.QtWidgets.QWidget(0x1f314be7c70) at 0x000001F314143040>
+
+    def test_clock_12h_format(qapp, parent_widget):
+        """Test 12-hour format."""
+        clock = ClockWidget(
+            parent=parent_widget,
+            time_format=TimeFormat.TWELVE_HOUR,
+            show_seconds=True
+        )
+    
+        clock.start()
+        text = clock.text()
+    
+        # Should contain AM or PM
+>       assert 'AM' in text or 'PM' in text
+E       AssertionError: assert ('AM' in '' or 'PM' in '')
+
+tests\test_clock_widget.py:104: AssertionError
+------------------------------ Captured log call ------------------------------
+ERROR    widgets.base_overlay_widget:base_overlay_widget.py:351 [THREAD_MANAGER] Missing ThreadManager for clock during ClockWidget.start; timer-driven features disabled.
+____________________________ test_clock_24h_format ____________________________
+
+qapp = <PySide6.QtWidgets.QApplication(0x1f363dc5d70) at 0x000001F37FEB03C0>
+parent_widget = <PySide6.QtWidgets.QWidget(0x1f314be8e70) at 0x000001F31400AD00>
+
+    def test_clock_24h_format(qapp, parent_widget):
+        """Test 24-hour format."""
+        clock = ClockWidget(
+            parent=parent_widget,
+            time_format=TimeFormat.TWENTY_FOUR_HOUR,
+            show_seconds=True
+        )
+    
+        clock.start()
+        text = clock.text()
+    
+        # Should NOT contain AM or PM
+        assert 'AM' not in text
+        assert 'PM' not in text
+        # Should contain colons
+>       assert ':' in text
+E       AssertionError: assert ':' in ''
+
+tests\test_clock_widget.py:126: AssertionError
+------------------------------ Captured log call ------------------------------
+ERROR    widgets.base_overlay_widget:base_overlay_widget.py:351 [THREAD_MANAGER] Missing ThreadManager for clock during ClockWidget.start; timer-driven features disabled.
+_________________________ test_clock_without_seconds __________________________
+
+qapp = <PySide6.QtWidgets.QApplication(0x1f363dc5d70) at 0x000001F37FEB03C0>
+parent_widget = <PySide6.QtWidgets.QWidget(0x1f314be8c90) at 0x000001F37FDE2F00>
+
+    def test_clock_without_seconds(qapp, parent_widget):
+        """Test clock without seconds."""
+        clock = ClockWidget(
+            parent=parent_widget,
+            show_seconds=False
+        )
+    
+        clock.start()
+        text = clock.text()
+    
+        # Should have only one colon (HH:MM)
+>       assert text.count(':') == 1
+E       AssertionError: assert 0 == 1
+E        +  where 0 = <built-in method count of str object at 0x00007FFFCD91C6E0>(':')
+E        +    where <built-in method count of str object at 0x00007FFFCD91C6E0> = ''.count
+
+tests\test_clock_widget.py:142: AssertionError
+------------------------------ Captured log call ------------------------------
+ERROR    widgets.base_overlay_widget:base_overlay_widget.py:351 [THREAD_MANAGER] Missing ThreadManager for clock during ClockWidget.start; timer-driven features disabled.
+============================== warnings summary ===============================
+core\windows\reddit_helper_installer.py:1
+  F:\Programming\Apps\ShittyRandomPhotoScreenSaver\core\windows\reddit_helper_installer.py:1: DeprecationWarning: invalid escape sequence '\S'
+    """
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_clock_widget.py::test_clock_start_stop - assert False is True
+ +  where False = is_running()
+ +    where is_running = <widgets.clock_widget.ClockWidget(0x1f36444fa80, name="clock_main") at 0x000001F3144AAFC0>.is_running
+FAILED tests/test_clock_widget.py::test_clock_signals - assert 0 >= 1
+ +  where 0 = len([])
+FAILED tests/test_clock_widget.py::test_clock_12h_format - AssertionError: assert ('AM' in '' or 'PM' in '')
+FAILED tests/test_clock_widget.py::test_clock_24h_format - AssertionError: assert ':' in ''
+FAILED tests/test_clock_widget.py::test_clock_without_seconds - AssertionError: assert 0 == 1
+ +  where 0 = <built-in method count of str object at 0x00007FFFCD91C6E0>(':')
+ +    where <built-in method count of str object at 0x00007FFFCD91C6E0> = ''.count
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 5 failures !!!!!!!!!!!!!!!!!!!!!!!!!!
+============= 5 failed, 34 passed, 4 skipped, 1 warning in 9.30s ==============

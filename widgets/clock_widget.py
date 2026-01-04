@@ -645,7 +645,10 @@ class ClockWidget(BaseOverlayWidget):
         else:
             x = edge_margin - visual_offset_x
             y = edge_margin - visual_offset_y
-        
+
+        x += self._pixel_shift_offset.x() + self._stack_offset.x()
+        y += self._pixel_shift_offset.y() + self._stack_offset.y()
+
         self.move(x, y)
         
         # Position timezone label inside the background frame (bottom-right)

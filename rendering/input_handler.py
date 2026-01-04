@@ -171,7 +171,7 @@ class InputHandler(QObject):
         
         # Media keys should never cause exit
         if self._is_media_key(event):
-            logger.debug("Media key pressed - ignoring for exit (key=%s)", key)
+            logger.debug("Media key pressed - ignoring (passthrough) (key=%s)", key)
             return False
         
         # Determine current interaction mode
@@ -368,6 +368,20 @@ class InputHandler(QObject):
         self._mouse_press_time = 0.0
         
         return False
+    
+    def handle_mouse_double_click(self, event: QMouseEvent) -> bool:
+        """
+        Handle a mouse double click event.
+        
+        Triggers transition to the next image (same as 'x' key).
+        """
+        # Don't trigger if context menu is active
+        if self._context_menu_active:
+            return False
+
+        logger.info("Double-click detected - requesting next image")
+        self.next_image_requested.emit()
+        return True
     
     # =========================================================================
     # State Management

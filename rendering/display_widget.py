@@ -103,6 +103,39 @@ def _describe_pixmap(pm: Optional[QPixmap]) -> str:
 # Qt.Tool behavior; switch to True when testing the splash-style flag.
 MC_USE_SPLASH_FLAGS = False
 
+# Windows-specific constants for diagnostics and input handling
+WM_APPCOMMAND = 0x0319
+
+_APPCOMMAND_NAMES = {
+    0x0005: "APPCOMMAND_MEDIA_NEXTTRACK",
+    0x0006: "APPCOMMAND_MEDIA_PREVIOUSTRACK",
+    0x0007: "APPCOMMAND_MEDIA_STOP",
+    0x000E: "APPCOMMAND_MEDIA_PLAY_PAUSE",
+    0x0008: "APPCOMMAND_MEDIA_PLAY",
+    0x0009: "APPCOMMAND_MEDIA_PAUSE",
+    0x000A: "APPCOMMAND_MEDIA_RECORD",
+    0x000B: "APPCOMMAND_MEDIA_FAST_FORWARD",
+    0x000C: "APPCOMMAND_MEDIA_REWIND",
+    0x000D: "APPCOMMAND_MEDIA_CHANNEL_UP",
+    0x0011: "APPCOMMAND_VOLUME_MUTE",
+    0x0000: "APPCOMMAND_BROWSER_BACKWARD",  # included for completeness
+    0x0001: "APPCOMMAND_BROWSER_FORWARD",
+    0x0002: "APPCOMMAND_BROWSER_REFRESH",
+    0x0003: "APPCOMMAND_BROWSER_STOP",
+    0x0004: "APPCOMMAND_BROWSER_SEARCH",
+    0x000F: "APPCOMMAND_MEDIA_CHANNEL_DOWN",
+    0x0010: "APPCOMMAND_VOLUME_DOWN",
+    0x0012: "APPCOMMAND_VOLUME_UP",
+}
+
+if sys.platform == "win32":
+    try:
+        _USER32 = ctypes.windll.user32
+    except Exception:
+        _USER32 = None
+else:
+    _USER32 = None
+
 
 class DisplayWidget(QWidget):
     """
@@ -176,6 +209,7 @@ class DisplayWidget(QWidget):
         self.display_mode = display_mode
         self.settings_manager = settings_manager
         self.current_pixmap: Optional[QPixmap] = None
+        self.current_image_path: Optional[str] = None
         self.previous_pixmap: Optional[QPixmap] = None
         self.error_message: Optional[str] = None
         self.clock_widget: Optional[ClockWidget] = None
@@ -1364,6 +1398,7 @@ class DisplayWidget(QWidget):
                     pass
 
                 logger.debug(f"Image displayed: {image_path} ({processed_pixmap.width()}x{processed_pixmap.height()})")
+                self.current_image_path = image_path
                 self.image_displayed.emit(image_path)
                 self._has_rendered_first_frame = True
 
@@ -1430,6 +1465,7 @@ class DisplayWidget(QWidget):
             logger.debug("Transition completed, image displayed: %s", image_path)
         except Exception:
             pass
+        self.current_image_path = image_path
         self.image_displayed.emit(image_path)
         self._pending_transition_finish_args = None
 
@@ -1593,6 +1629,11 @@ class DisplayWidget(QWidget):
             return False
 
         return True
+
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
+        """Handle mouse double click."""
+        if self._input_handler is not None:
+            self._input_handler.handle_mouse_double_click(event)
 
     def resizeEvent(self, event: QResizeEvent) -> None:  # type: ignore[override]
         super().resizeEvent(event)
@@ -3087,22 +3128,19 @@ class DisplayWidget(QWidget):
 
     def nativeEvent(self, eventType, message):  # type: ignore[override]
         try:
-            if sys.platform != "win32" or not win_diag_logger.isEnabledFor(logging.DEBUG):
+            if sys.platform != "win32":
                 return super().nativeEvent(eventType, message)
 
-            try:
-                msg_ptr = int(message)
-            except Exception:
-                msg_ptr = 0
-            if msg_ptr == 0:
-                return super().nativeEvent(eventType, message)
-
-            try:
-                msg = ctypes.cast(msg_ptr, ctypes.POINTER(wintypes.MSG)).contents
-            except Exception:
+            msg = self._extract_win_msg(message)
+            if msg is None:
                 return super().nativeEvent(eventType, message)
 
             mid = int(getattr(msg, "message", 0) or 0)
+            if mid == WM_APPCOMMAND:
+                self._handle_win_appcommand(msg)
+
+            if not win_diag_logger.isEnabledFor(logging.DEBUG):
+                return super().nativeEvent(eventType, message)
 
             names = {
                 0x0006: "WM_ACTIVATE",
@@ -3113,6 +3151,7 @@ class DisplayWidget(QWidget):
                 0x007D: "WM_STYLECHANGED",
                 0x0014: "WM_ERASEBKGND",
                 0x000B: "WM_SETREDRAW",
+                WM_APPCOMMAND: "WM_APPCOMMAND",
             }
 
             name = names.get(mid)
@@ -3179,6 +3218,57 @@ class DisplayWidget(QWidget):
             pass
 
         return super().nativeEvent(eventType, message)
+
+    def _extract_win_msg(self, raw_message):
+        try:
+            msg_ptr = int(raw_message)
+        except Exception:
+            return None
+        if msg_ptr == 0:
+            return None
+        try:
+            return ctypes.cast(msg_ptr, ctypes.POINTER(wintypes.MSG)).contents
+        except Exception:
+            return None
+
+    def _handle_win_appcommand(self, msg) -> None:
+        try:
+            hwnd = int(getattr(msg, "hwnd", 0) or 0)
+        except Exception:
+            hwnd = 0
+        try:
+            wparam = int(getattr(msg, "wParam", 0) or 0)
+        except Exception:
+            wparam = 0
+        try:
+            lparam = int(getattr(msg, "lParam", 0) or 0)
+        except Exception:
+            lparam = 0
+
+        command = (lparam >> 16) & 0xFFFF
+        command_name = _APPCOMMAND_NAMES.get(command, f"APPCOMMAND_{command:04x}")
+        device = lparam & 0xFFFF
+        window_mode = getattr(self, "_mc_window_flag_mode", None) or "standard"
+
+        target_logger = win_diag_logger if win_diag_logger.isEnabledFor(logging.DEBUG) else logger
+        target_logger.debug(
+            "[WIN_APPCOMMAND] mode=%s cmd=%s (%#06x) device=%#06x wParam=%s lParam=%#010x",
+            window_mode,
+            command_name,
+            command,
+            device,
+            wparam,
+            lparam,
+        )
+
+        if _USER32 is not None and hwnd:
+            try:
+                _USER32.DefWindowProcW(hwnd, WM_APPCOMMAND, wparam, lparam)
+            except Exception:
+                target_logger.debug("[WIN_APPCOMMAND] DefWindowProcW failed", exc_info=True)
+
+        # Always let Qt/OS continue processing so global hotkeys work.
+        return None
 
     def eventFilter(self, watched, event):  # type: ignore[override]
         """Global event filter to keep the Ctrl halo responsive over children."""

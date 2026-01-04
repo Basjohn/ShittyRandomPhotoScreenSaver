@@ -3,17 +3,18 @@
 A living map of modules, purposes, and key classes. Keep this up to date.
 
 ## Refactor Status
-- audits/REFACTOR_DISPLAY_WIDGET.md
-  - **COMPLETE**: display_widget.py reduced from 4780 → 2783 lines (42% reduction)
-  - Extracted: WidgetManager, InputHandler, TransitionController, ImagePresenter, MultiMonitorCoordinator
-  - Target: ~1000 lines (further reduction deferred - current flow stable)
-- audits/REFACTOR_GL_COMPOSITOR.md
-  - **COMPLETE**: gl_compositor.py reduced from 4416 → 2179 lines (50.6% reduction)
-  - Extracted: GLProgramCache, GLGeometryManager, GLTextureManager, GLTransitionRenderer, GLErrorHandler
-  - Per-compositor instances for GLGeometryManager and GLTextureManager (OpenGL VAOs/textures are context-specific)
-- audits/COMPREHENSIVE_ARCHITECTURE_AUDIT_2025.md
+- audits/ARCHITECTURE_AND_MULTIPROCESSING_PLAN_2026.md (Main 2026 Execution Plan)
+- audits/v2_0_Roadmap.md (Live Checklist)
+- audits/GL_STATE_MANAGEMENT_REFACTORING_GUIDE.md (**REFRESHED**: 12-phase execution plan for Phase 3; mandates ResourceManager for VRAM safety)
+- audits/WIDGET_LIFECYCLE_REFACTORING_GUIDE.md (Phase 4 Supplement)
+- audits/COMPREHENSIVE_ARCHITECTURE_AUDIT_2025.md (Historical)
   - **Dec 2025**: Widget Lifecycle Management, GL State Management, Widget Factories, Settings Type Safety, Widget Positioning, Intense Shadows, Log Throttling, Core Manager Tests
   - 236 unit tests across 9 test files
+
+- Phase 0 Improvements (Jan 2026)
+  - **WidgetManager**: Robust position normalization (Enum/String/Coerce); Smart positioning logic for Visualizer (Top vs Bottom alignment).
+  - **InputHandler**: Global media key passthrough; Double-click "Next Image" navigation.
+  - **SettingsDialog**: Multi-monitor aware window state persistence (geometry clamping, screen-at detection).
 
 ## Core Managers
 - core/threading/manager.py
@@ -183,8 +184,11 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - rendering/widget_manager.py
   - `WidgetManager`: Extracted from DisplayWidget. Manages overlay widget lifecycle, positioning, visibility, Z-order, rate-limited raise operations, and effect invalidation.
   - **Phase E Enhancement (2025-12-16)**: Added `invalidate_overlay_effects()`, `_recreate_effect()`, `schedule_effect_invalidation()` for centralized QGraphicsEffect cache-busting
+  - **Phase 0.6 (Jan 2026)**: Smart positioning logic for Visualizer (Top vs Bottom alignment).
+  - **Phase 0.7 (Jan 2026)**: Robust positioning resolution via `coerce_widget_position` for Media, Reddit, and Clock widgets.
   - **Fade coordination**: `request_overlay_fade_sync()`, `register_spotify_secondary_fade()`, `reset_fade_coordination()`
   - **Lifecycle Integration (Dec 2025)**: Added `initialize_widget()`, `activate_widget()`, `deactivate_widget()`, `cleanup_widget()` and batch methods for new lifecycle system
+  - **Tests**: `tests/test_visualizer_smart_positioning.py`
 - rendering/widget_positioner.py
   - `WidgetPositioner`: Centralized widget positioning logic extracted from WidgetManager
   - `PositionAnchor`: Enum for 9 standard widget positions (TOP_LEFT, CENTER, BOTTOM_RIGHT, etc.)
@@ -197,9 +201,10 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - `WidgetFactoryRegistry`: Central registry for widget factories with `create_widget()` method.
   - **Features (Dec 2025)**: Extracts widget creation logic from WidgetManager for better SRP, testability, and extensibility.
 - rendering/input_handler.py
-  - `InputHandler`: Extracted from DisplayWidget. Handles all user input including mouse/keyboard events, context menu triggers, and exit gestures.
+  - `InputHandler`: Extracted from DisplayWidget. Handles all user input including mouse/keyboard events, context menu triggers, exit gestures, and **double-click "Next Image" navigation**.
   - **Phase E Enhancement (2025-12-16)**: Provides single choke point for context menu open/close triggers for deterministic effect invalidation ordering.
-  - **Signals**: `exit_requested`, `settings_requested`, `next_image_requested`, `previous_image_requested`, `cycle_transition_requested`, `context_menu_requested`
+  - **Signals**: `exit_requested`, `settings_requested`, `next_image_requested` (triggered by 'X' key or double-click), `previous_image_requested`, `cycle_transition_requested`, `context_menu_requested`
+  - **Tests**: `tests/test_double_click_navigation.py`, `tests/test_media_keys.py`
 - rendering/transition_controller.py
   - `TransitionController`: Extracted from DisplayWidget. Manages transition lifecycle including start, progress, completion, cancellation, and watchdog timeout handling.
   - **Phase 3 (2025-12-16)**: Centralizes transition state management for deterministic overlay visibility changes.
@@ -293,7 +298,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
     - Case A: Primary covered + hard_exit → Exit immediately, bring browser to foreground
     - Case B: Primary covered + Ctrl held → Exit immediately, bring browser to foreground
     - Case C: MC mode (primary NOT covered) → Stay open, bring browser to foreground
-  - System-agnostic detection using `QGuiApplication.primaryScreen()` (not screen index assumptions)
+    - System-agnostic detection using `QGuiApplication.primaryScreen()` (not screen index assumptions)
   - Supports a second instance (`reddit2_widget`) via `widgets.reddit2.*` settings with independent subreddit/position/display but inheriting all styling from Reddit 1.
 - widgets/spotify_visualizer_widget.py
    - Spotify Beat Visualizer widget and background audio worker. Captures loopback audio via a shared `_SpotifyBeatEngine` (single process-wide engine), publishes raw mono frames into a lock-free `TripleBuffer`, performs FFT/band mapping on the COMPUTE pool (not UI thread), and exposes pre-smoothed bar magnitudes plus a derived GPU fade factor to the bar overlay.
@@ -301,7 +306,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
    - **Visualizer tuning (v1.243+)**: Uses noise floor subtraction (`noise_floor=2.1`) and dynamic range expansion (`expansion=2.5`) to achieve 0.02-1.0 bar range with reactive drops. V1.2-style smoothing (`smoothing=0.3`, `decay_rate=0.7`) provides aggressive 30% per-frame decay for visible drops while maintaining fast attack. Center-out gradient (`(1-dist)²*0.85+0.15`) ensures bass in center, treble at edges. See `audits/VISUALIZER_DEBUG.md` for tuning history.
    - **Floor controls**: `set_floor_config(dynamic_enabled, manual_floor)` drives dynamic noise floor averaging (ratio 1.05, alpha 0.05) with manual override clamped to 0.12–4.00. Manual selection snaps internal running average to avoid re-enable jumps.
    - The QWidget owns the Spotify-style card, primary overlay fade, and drop shadow; bars are drawn by a dedicated `SpotifyBarsGLOverlay` QOpenGLWidget overlay created and managed by `DisplayWidget`, with a software (CPU) fallback path controlled by `widgets.spotify_visualizer.software_visualizer_enabled` when the renderer backend is set to Software. Bars only animate while the normalized media state is PLAYING; when Spotify is paused or stopped the beat engine decays targets to zero and the overlay's 1-segment idle floor produces a flat single-row baseline. Card fade participates in the primary overlay wave, while the bar field uses a delayed secondary fade computed from the shared `ShadowFadeProfile` progress so the visualiser never pops in or shows stray green pixels.
- - widgets/spotify_bars_gl_overlay.py
+- widgets/spotify_bars_gl_overlay.py
    - GLSL/VAO Spotify bars overlay with DPI-aware geometry, per-bar peak envelope and 1-segment floor, rendering the main bar stack plus a configurable ghost trail driven by a decaying peak value. Uses the bar border colour for ghost segments with a vertical alpha falloff, respects `ghosting_enabled`, `ghost_alpha`, and `ghost_decay` from `widgets.spotify_visualizer.*` settings, and consumes the GPU fade factor from `SpotifyVisualizerWidget` so opacity ramps in after the card fade using the same `ShadowFadeProfile` timing.
 - widgets/spotify_volume_widget.py
   - Spotify-only vertical volume slider paired with the media card; gated on a Spotify GSMTC session.
@@ -311,13 +316,13 @@ A living map of modules, purposes, and key classes. Keep this up to date.
  - widgets/pixel_shift_manager.py
    - `PixelShiftManager`: Manages periodic 1px shifts of overlay widgets for burn-in prevention. Maximum drift of 4px in any direction with automatic drift-back. Defers during transitions.
    - **Outward Bias (Dec 2025)**: `_calculate_next_offset()` now biases toward outward movement (80% probability) to prevent immediate shift-back behavior. Only ~5% chance to move inward when not at max drift, creating natural drift patterns.
- - widgets/context_menu.py
+- widgets/context_menu.py
    - `ScreensaverContextMenu`: Dark-themed right-click context menu matching settings dialog styling. Provides Previous/Next image, transition selection submenu, Settings, Background Dimming toggle, Hard Exit Mode toggle, and Exit. Uses monochromatic icons and app-owned dark theme (no Windows accent bleed). Activated by right-click in hard exit mode or Ctrl+right-click in normal mode. Lazy-initialized by DisplayWidget for performance.
- - widgets/cursor_halo.py
+- widgets/cursor_halo.py
    - `CursorHaloWidget`: Visual cursor indicator for Ctrl-held interaction mode. Displays a semi-transparent ring with center dot that follows the cursor. Supports fade-in/fade-out animations via AnimationManager.
- - widgets/overlay_timers.py
+- widgets/overlay_timers.py
    - Centralised overlay timer helper providing `create_overlay_timer()` and `OverlayTimerHandle` for recurring UI-thread timers (clock/weather/media/Reddit). Prefers `ThreadManager.schedule_recurring` with ResourceManager tracking and falls back to a widget-local `QTimer` when no ThreadManager is available.
- - widgets/beat_engine.py
+- widgets/beat_engine.py
    - `BeatEngine`: Extracted from SpotifyVisualizerWidget. Handles FFT processing, beat detection, and bar smoothing on the COMPUTE pool. Thread-safe state access for UI thread consumption.
    - `BeatEngineConfig`: Configuration dataclass for bar count, smoothing, decay, ghosting.
    - `BeatEngineState`: Current state dataclass with bars, peaks, and playing status.

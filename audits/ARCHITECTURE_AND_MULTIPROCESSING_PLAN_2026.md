@@ -39,7 +39,8 @@ Document first and last policy, follow phase order unless explicitly told otherw
 | **2** | Image & audio pipeline offload | Image decode/prescale worker, RSS worker, FFT/beat worker, transition precompute offload, shared-memory handoff | 1 | ☐ Not started |
 | **3** | GL compositor & transition reliability | GLStateManager rollout, TransitionFactory parity, watchdog + fallback hardening, visualizer state alignment | 0–2 | ☐ Not started |
 | **4** | Widget & settings modularity | WidgetManager slim-down, typed settings end-to-end, overlay timer unification, guideline compliance | 0–3 | ☐ Not started |
-| **5** | Observability, performance, documentation | Perf baselines, regression tests, doc/audit upkeep, backups per phase | Runs alongside | ☐ Ongoing |
+| **5** | MC specialization & layering | Context menu layering, visibility detection, fully-automatic Eco Mode | 4 | ☐ Not started |
+| **6** | Observability, performance, documentation | Perf baselines, regression tests, doc/audit upkeep, backups per phase | Runs alongside | ☐ Ongoing |
 
 ### Phase Status (single source)
 | Phase | Status | Notes | Blockers | Next |
@@ -49,37 +50,15 @@ Document first and last policy, follow phase order unless explicitly told otherw
 | 2 | ☐ Not started | | | |
 | 3 | ☐ Not started | | | |
 | 4 | ☐ Not started | | | |
-| 5 | ☐ Ongoing | Perf/tests/docs/backups run per phase. | None | Keep docs/backups current. |
+| 5 | ☐ Not started | | | |
+| 6 | ☐ Ongoing | Perf/tests/docs/backups run per phase. | None | Keep docs/backups current. |
 
 ---
 
+**Phase 0 Accomplishments Summary:** Phase 0 established core thread safety and instrumentation. Key accomplishments include migrating WeatherWidget to ThreadManager, eliminating raw `threading.Thread`/`QThread` usage outside tests/archive, enforcing overlay timers via ThreadManager helpers, and reviewing event system lock usage. A canonical Spotify visualizer snapshot was also preserved for Phase 2 workerization.
+
 ## 4) Detailed Phases & Ordered Checklists
 
-### Phase 0 – Baseline Readiness (Thread Safety, Instrumentation)
-**Objectives**
-- Remove ThreadManager violations, raw Qt timers, cross-thread widget access.
-- Validate EventSystem/thread safety invariants and telemetry coverage.
-- Begin `/bak` snapshots for any touched modules.
-- **Current state snapshot**: WeatherWidget now fetches exclusively via ThreadManager IO (no raw QThread); `/bak/widgets_weather_widget.py` holds the pre-change copy.
-
-**Action Steps (order)**
-1. **Inventory & Backups**
-   - [x] List modules touched; `/bak/widgets_weather_widget.py` created before edits.
-2. **Thread Safety Sweep**
-   - [x] Traverse engine/rendering/widgets/media/sources for `threading.Thread`/`QThread` (none in runtime code; archive/tests only). WeatherWidget migrated to ThreadManager IO-only path.
-   - [x] Add `_state_lock`/`RLock` only where unavoidable; prefer existing lock-free queues. (No new locks added.)
-   - [x] Document lock-free coverage: ThreadManager mutation queue uses `SPSCQueue`, stats via `TripleBuffer`; Spotify visualizer shares data through `TripleBuffer` only.
-3. **Timers & Events**
-   - [x] Verify overlay timers use `widgets/overlay_timers.create_overlay_timer` or `ThreadManager.schedule_recurring`; documented ownership and ResourceManager cleanup via helper.
-   - [x] Review `core/events/event_system.py` lock usage and async dispatch guarantees; lock released before callbacks, recursion guarded.
-4. **Telemetry Baseline**
-   - [x] `[PERF]` logs present for transitions/visualizer/AnimationManager; rotation tests remain valid; no new metrics needed.
-5. **Tests & Docs**
-   - [x] Thread-safety posture validated; existing threading tests cover UI dispatch/timer semantics; no new cases required this sweep.
-   - [x] `python -m pytest tests/test_thread_manager.py tests/test_threading.py -q` (2026-01-01) to prove ThreadManager-only policy holds.
-   - [x] Update `Index.md`, `Spec.md` with current state; `Docs/TestSuite.md` unchanged (coverage adequate for Phase 0 scope).
-6. **Exit**
-   - [x] All above green; post-change `/bak` snapshots captured; checklist updated.
 
 ### Phase 1 – Process Isolation Foundations
 **Objectives**
@@ -186,7 +165,26 @@ Document first and last policy, follow phase order unless explicitly told otherw
 7. **Exit**
    - [ ] WidgetManager < 600 LOC, no widget-specific logic; guideline compliance documented.
 
-### Phase 5 – Observability, Performance, Documentation (Ongoing)
+### Phase 5 – MC Specialization & Layering (Eco Mode)
+**Objectives**
+- Add window layering control for MC builds and automatic performance gating.
+
+**Action Steps (order)**
+1. **Window Layering Control**
+   - [ ] Implement toggle for window Z-order layering in `rendering/display_widget.py`.
+   - [ ] Add context menu entry in `widgets/context_menu.py` (restricted to MC builds).
+   - [ ] Ensure internal widget Z-order is preserved across layering changes.
+2. **Visibility Detection**
+   - [ ] Implement coverage detection algorithm (threshold: 95% occlusion).
+   - [ ] Hook into OS-level window events to detect when SRPSS/MC is buried.
+3. **Eco Mode Implementation**
+   - [ ] Implement automatic "Eco Mode" that pauses transitions and visualizer updates when covered.
+   - [ ] Ensure Eco Mode is strictly gated (never triggers when "On Top" is active).
+4. **Tests & Telemetry**
+   - [ ] Add `tests/test_mc_layering_mode.py` covering multi-monitor overlap.
+   - [ ] Log activation/deactivation effectiveness in telemetry.
+
+### Phase 6 – Observability, Performance, Documentation (Ongoing)
 **Objectives**
 - Keep telemetry, tests, docs, and backups current across phases.
 

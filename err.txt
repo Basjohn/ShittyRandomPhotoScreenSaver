@@ -1,0 +1,47 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+cachedir: .pytest_cache
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+configfile: pytest.ini
+plugins: cov-7.0.0, qt-4.5.0
+collecting ... collected 3 items
+
+tests/test_double_click_navigation.py::test_double_click_triggers_handler PASSED [ 33%]
+tests/test_double_click_navigation.py::test_handler_opens_explorer FAILED [ 66%]
+tests/test_double_click_navigation.py::test_handler_ignores_missing_path PASSED [100%]
+
+================================== FAILURES ===================================
+_________________________ test_handler_opens_explorer _________________________
+
+mock_desktop_services = <MagicMock name='QDesktopServices' id='2310676187728'>
+
+    def test_handler_opens_explorer(mock_desktop_services):
+        """InputHandler should open explorer on valid double click."""
+        parent = MagicMock()
+        parent.current_image_path = "C:/Photos/vacation/pic.jpg"
+    
+        # Pass None to init to satisfy QObject requirements, then injection mock parent
+        handler = InputHandler(None)
+        handler._parent = parent
+    
+        with patch('rendering.input_handler.Path') as MockPath:
+            mock_path_instance = MockPath.return_value
+            mock_path_instance.exists.return_value = True
+            mock_path_instance.parent = "C:/Photos/vacation"
+            mock_path_instance.name = "pic.jpg"
+            # Make parent return a string when str() is called, needed for QUrl.fromLocalFile
+>           MockPath.return_value.parent.__str__.return_value = "C:/Photos/vacation"
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'method-wrapper' object has no attribute 'return_value'
+
+tests\test_double_click_navigation.py:58: AttributeError
+============================== warnings summary ===============================
+tests/test_double_click_navigation.py::test_double_click_triggers_handler
+  F:\Programming\Apps\ShittyRandomPhotoScreenSaver\tests\test_double_click_navigation.py:30: DeprecationWarning: Function: 'QMouseEvent.QMouseEvent(QEvent.Type type, const QPointF &localPos, Qt.MouseButton button, QFlags<Qt.MouseButton> buttons, QFlags<Qt.KeyboardModifier> modifiers, const QPointingDevice *device)' is marked as deprecated, please check the documentation for more information.
+    event = QMouseEvent(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_double_click_navigation.py::test_handler_opens_explorer - A...
+=================== 1 failed, 2 passed, 1 warning in 0.58s ====================

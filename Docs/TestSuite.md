@@ -14,7 +14,7 @@ The test suite is now stable and can be relied upon for regression testing. All 
 **Highlights:**
 
 1. `test_settings.py` updated to cover widget defaults helper drift and SST import/preview merges.
-2. `tests/test_widget_manager_refresh.py` expanded for Spotify visualizer live updates (typed models).
+2. `tests/test_widget_manager_refresh.py` expanded for widget-position normalization smoke tests (media/clock/weather/reddit) plus Spotify visualizer coverage.
 3. `tests/test_widget_positioner.py` now covers stacking offsets + monitor toggles (Modal prep).
 4. `tests/test_widget_factories.py` ensures factories keep ResourceManager registration centralized.
 5. Spotify visualizer synthetic/log harness relocated to `tools/visualizer_distribution_harness.py` (manual run only; no longer in pytest).
@@ -304,6 +304,8 @@ Get-Content logs\pytest_output.log -Tail 80
 | SettingsManager | 6 | All passing | Get/set, defaults, persistence, change handlers |
 | ThreadManager | 32 | All passing | Pools, submission, overlay timers, UI dispatch, shutdown |
 | Display/Engine Integration | 42 | All passing | Transitions, engine lifecycle, settings dialog, widget routing, multi-display sync |
+| WidgetManager Smoke Suite (`tests/test_widget_manager_refresh.py`) | 4 | All passing | Clock/weather/media/reddit creation using prefixed WidgetPosition strings and full styling payloads |
+| Legacy guard (`tests/test_no_legacy_widget_position_strings.py`) | 1 | All passing | Fails the suite if any production .py file contains `"WidgetPosition."` |
 | **Total** | **110** | **All passing** | **Framework + integration coverage consolidated** |
 
 ---
@@ -798,6 +800,21 @@ pytest tests/ --tb=short || exit 1
 **Critical Tests:**
 - `test_noop_media_controller_safe_calls` – NoOp controller is safe to call and always returns `None`.
 - `test_create_media_controller_falls_back_to_noop` – Factory falls back to NoOp when the Windows controller is unavailable.
+
+---
+
+### 24. `tests/test_double_click_navigation.py` - Double-Click Navigation
+
+**Module Purpose**: Verify the `InputHandler` correctly processes double-click events to trigger the "Next Image" action.
+
+**Test Count**: 2 tests
+**Status**: ✅ All passing
+
+**Tests:**
+- `test_double_click_triggers_next_image` - Verifies double-click emits `next_image_requested` signal.
+- `test_double_click_ignored_when_menu_active` - Verifies events are ignored when context menu is open.
+
+**Purpose**: Validate Minor Task #4 (Double-Click Next Image).
 - `test_windows_media_controller_selects_spotify_session` – Selector prefers Spotify GSMTC sessions by `source_app_user_model_id`.
 - `test_windows_media_controller_returns_none_when_no_spotify` – Non‑Spotify sessions are treated as "no media".
 - `test_media_widget_placeholder_when_no_media` – Widget stays hidden when no media is available.
@@ -996,6 +1013,44 @@ pytest tests/ --tb=short || exit 1
 - Regression tests added for all critical bugs
 
 ---
+
+**Purpose**: Validate Minor Task #4 (Double-Click Next Image).
+
+---
+
+### 25. `tests/test_media_keys.py` - Media Key Passthrough
+
+**Module Purpose**: Verify the `InputHandler` correctly identifies and ignores system media keys (Volume Up/Down/Mute, Play/Pause) to ensure they are passed through to the OS for handling.
+
+**Test Count**: 6 tests
+**Status**: ✅ All passing
+
+**Tests:**
+- `test_media_keys_are_ignored_volume_up` - Verifies Volume Up returns False.
+- `test_media_keys_are_ignored_volume_down` - Verifies Volume Down returns False.
+- `test_media_keys_are_ignored_mute` - Verifies Mute returns False.
+- `test_media_keys_are_ignored_play_pause` - Verifies Play/Pause returns False.
+- `test_standard_keys_are_handled` - Verifies standard keys (Esc) are still handled.
+- `test_native_virtual_key_recognition` - Verifies Windows native virtual code recognition.
+
+**Purpose**: Validate Minor Task #5 (Global Volume Key Passthrough).
+
+---
+
+### 26. `tests/test_visualizer_smart_positioning.py` - Visualizer Positioning
+
+**Module Purpose**: Ensure the Spotify Visualizer is correctly positioned relative to the Media Widget, specifically verifying that it appears *below* the media card when top-anchored (Top Left/Center/Right) and *above* it when bottom-anchored.
+
+**Test Count**: 4 tests
+**Status**: ✅ All passing
+
+**Tests:**
+- `test_visualizer_below_media_at_top_left` - Verifies Visualizer Y > Media Y (Top Left).
+- `test_visualizer_below_media_at_top_center` - Verifies Visualizer Y > Media Y (Top Center).
+- `test_visualizer_below_media_at_top_right` - Verifies Visualizer Y > Media Y (Top Right).
+- `test_visualizer_above_media_at_bottom_left` - Verifies Visualizer Y < Media Y (Bottom Left).
+
+**Purpose**: Validate Minor Task #6 (Visualizer Smart Positioning).
 
 ## Notes
 

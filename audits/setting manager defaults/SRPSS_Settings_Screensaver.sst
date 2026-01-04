@@ -4,9 +4,9 @@
   "snapshot": {
     "accessibility": {
       "dimming.enabled": "false",
-      "dimming.opacity": 30,
+      "dimming.opacity": 00,
       "pixel_shift.enabled": "false",
-      "pixel_shift.rate": 1
+      "pixel_shift.rate": 0
     },
     "display": {
       "gl_depth_bits": 24,

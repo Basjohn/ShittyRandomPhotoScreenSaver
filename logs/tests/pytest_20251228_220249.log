@@ -1,0 +1,576 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+cachedir: .pytest_cache
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+configfile: pytest.ini
+plugins: qt-4.5.0
+collecting ... collected 612 items / 4 skipped
+
+tests/test_animation.py::test_animation_manager_initialization PASSED    [  0%]
+tests/test_animation.py::test_property_animation PASSED                  [  0%]
+tests/test_animation.py::test_custom_animation PASSED                    [  0%]
+tests/test_animation.py::test_animation_pause_resume PASSED              [  0%]
+tests/test_animation.py::test_animation_cancel PASSED                    [  0%]
+tests/test_animation.py::test_easing_curves PASSED                       [  0%]
+tests/test_animation.py::test_animation_with_delay PASSED                [  1%]
+tests/test_animation.py::test_multiple_animations PASSED                 [  1%]
+tests/test_animation.py::test_cancel_all_animations PASSED               [  1%]
+tests/test_animation.py::test_animation_manager_auto_stop PASSED         [  1%]
+tests/test_animation.py::test_animation_manager_emits_perf_metrics PASSED [  1%]
+tests/test_animation_set_target_fps.py::test_set_target_fps_updates_timer_interval PASSED [  1%]
+tests/test_block_puzzle_flip.py::test_block_puzzle_creation PASSED       [  2%]
+tests/test_block_puzzle_flip.py::test_block_puzzle_runs_and_labels PASSED [  2%]
+tests/test_block_puzzle_flip.py::test_block_puzzle_cleanup PASSED        [  2%]
+tests/test_block_puzzle_flip.py::test_block_puzzle_invalid_pixmap PASSED [  2%]
+tests/test_block_puzzle_flip.py::test_block_puzzle_set_flip_duration PASSED [  2%]
+tests/test_block_puzzle_flip.py::test_block_puzzle_randomization PASSED  [  2%]
+tests/test_block_puzzle_flip.py::test_block_puzzle_small_widget PASSED   [  3%]
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug1_clock_widget_created PASSED [  3%]
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug2_set_text_color_method_exists PASSED [  3%]
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug3_color_array_to_qcolor_conversion PASSED [  3%]
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug4_z_order_clock_on_top PASSED [  3%]
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug5_settings_retrieval_no_crash PASSED [  3%]
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug6_boolean_type_conversion PASSED [  4%]
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug7_position_string_to_enum PASSED [  4%]
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug8_format_string_to_enum PASSED [  4%]
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_bug9_missing_raise_call PASSED [  4%]
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_clock_widget_visibility_after_setup PASSED [  4%]
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_clock_widget_size_and_position PASSED [  4%]
+tests/test_clock_integration_regression.py::TestClockIntegrationRegression::test_clock_settings_complete_integration PASSED [  5%]
+tests/test_clock_widget.py::test_time_format_enum PASSED                 [  5%]
+tests/test_clock_widget.py::test_clock_position_enum PASSED              [  5%]
+tests/test_clock_widget.py::test_clock_creation PASSED                   [  5%]
+tests/test_clock_widget.py::test_clock_start_stop PASSED                 [  5%]
+tests/test_clock_widget.py::test_clock_signals PASSED                    [  5%]
+tests/test_clock_widget.py::test_clock_12h_format PASSED                 [  6%]
+tests/test_clock_widget.py::test_clock_24h_format PASSED                 [  6%]
+tests/test_clock_widget.py::test_clock_without_seconds PASSED            [  6%]
+tests/test_clock_widget.py::test_clock_with_seconds PASSED               [  6%]
+tests/test_clock_widget.py::test_clock_set_time_format PASSED            [  6%]
+tests/test_clock_widget.py::test_clock_set_show_seconds PASSED           [  6%]
+tests/test_clock_widget.py::test_clock_all_positions PASSED              [  7%]
+tests/test_clock_widget.py::test_clock_set_position PASSED               [  7%]
+tests/test_clock_widget.py::test_clock_set_font_size PASSED              [  7%]
+tests/test_clock_widget.py::test_clock_set_text_color PASSED             [  7%]
+tests/test_clock_widget.py::test_clock_set_margin PASSED                 [  7%]
+tests/test_clock_widget.py::test_clock_cleanup PASSED                    [  7%]
+tests/test_clock_widget.py::test_clock_concurrent_start_prevention PASSED [  8%]
+tests/test_clock_widget.py::test_clock_updates_over_time PASSED          [  8%]
+tests/test_context_menu_effect_invalidation.py::test_context_menu_invalidates_effects_before_popup PASSED [  8%]
+tests/test_ctrl_interaction_mode.py::test_ctrl_held_suppresses_mouse_exit_single_widget PASSED [  8%]
+tests/test_ctrl_interaction_mode.py::test_ctrl_held_global_across_multiple_widgets PASSED [  8%]
+tests/test_ctrl_interaction_mode.py::test_media_keys_do_not_exit_screensaver[16777344] PASSED [  8%]
+tests/test_ctrl_interaction_mode.py::test_media_keys_do_not_exit_screensaver[16777349] PASSED [  8%]
+tests/test_ctrl_interaction_mode.py::test_media_keys_do_not_exit_screensaver[16777347] PASSED [  9%]
+tests/test_ctrl_interaction_mode.py::test_media_keys_do_not_exit_screensaver[16777346] PASSED [  9%]
+tests/test_ctrl_interaction_mode.py::test_media_keys_do_not_exit_screensaver[16777330] PASSED [  9%]
+tests/test_ctrl_interaction_mode.py::test_media_keys_do_not_exit_screensaver[16777328] PASSED [  9%]
+tests/test_ctrl_interaction_mode.py::test_media_keys_do_not_exit_screensaver[16777329] PASSED [  9%]
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_fades_in_and_out PASSED [  9%]
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_owner_migrates_between_screens PASSED [ 10%]
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_shows_without_slack_attr PASSED [ 10%]
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_context_menu_active PASSED [ 10%]
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_hides_when_cursor_leaves_display PASSED [ 10%]
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_inactivity_timeout PASSED [ 10%]
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_settings_dialog_active PASSED [ 10%]
+tests/test_diffuse_transition.py::test_diffuse_creation PASSED           [ 11%]
+tests/test_diffuse_transition.py::test_diffuse_start_no_old_image PASSED [ 11%]
+tests/test_diffuse_transition.py::test_diffuse_start_with_images PASSED  [ 11%]
+tests/test_diffuse_transition.py::test_diffuse_signals PASSED            [ 11%]
+tests/test_diffuse_transition.py::test_diffuse_progress_range PASSED     [ 11%]
+tests/test_diffuse_transition.py::test_diffuse_stop PASSED               [ 11%]
+tests/test_diffuse_transition.py::test_diffuse_grid_creation PASSED      [ 12%]
+tests/test_diffuse_transition.py::test_diffuse_cleanup PASSED            [ 12%]
+tests/test_diffuse_transition.py::test_diffuse_invalid_pixmap PASSED     [ 12%]
+tests/test_diffuse_transition.py::test_diffuse_already_running PASSED    [ 12%]
+tests/test_diffuse_transition.py::test_diffuse_block_size PASSED         [ 12%]
+tests/test_diffuse_transition.py::test_diffuse_small_widget PASSED       [ 12%]
+tests/test_diffuse_transition.py::test_diffuse_randomization PASSED      [ 13%]
+tests/test_dimming_and_interaction_fixes.py::TestDimmingOverlayAttributes::test_dimming_overlay_uses_translucent_background PASSED [ 13%]
+tests/test_dimming_and_interaction_fixes.py::TestDimmingOverlayAttributes::test_dimming_overlay_opacity_calculation PASSED [ 13%]
+tests/test_dimming_and_interaction_fixes.py::TestDimmingOverlayAttributes::test_dimming_overlay_opacity_clamping PASSED [ 13%]
+tests/test_dimming_and_interaction_fixes.py::TestCtrlHaloAttributes::test_halo_code_uses_translucent_background PASSED [ 13%]
+tests/test_dimming_and_interaction_fixes.py::TestMediaWidgetClickDetection::test_click_detection_checks_y_coordinate PASSED [ 13%]
+tests/test_dimming_and_interaction_fixes.py::TestMediaWidgetClickDetection::test_controls_row_height_is_reasonable PASSED [ 14%]
+tests/test_dimming_and_interaction_fixes.py::TestCrumbleShaderPerformance::test_crumble_search_range_is_reduced PASSED [ 14%]
+tests/test_dimming_and_interaction_fixes.py::TestSettingsDotNotation::test_dimming_settings_use_dot_notation PASSED [ 14%]
+tests/test_dimming_and_interaction_fixes.py::TestSettingsDotNotation::test_pixel_shift_settings_use_dot_notation PASSED [ 14%]
+tests/test_dimming_and_interaction_fixes.py::TestSettingsDotNotation::test_context_menu_dimming_uses_dot_notation PASSED [ 14%]
+tests/test_dimming_and_interaction_fixes.py::TestDimmingOverlayZOrder::test_raise_overlay_includes_dimming PASSED [ 14%]
+tests/test_dimming_and_interaction_fixes.py::TestDimmingOverlayZOrder::test_raise_overlay_zorder_documented PASSED [ 15%]
+tests/test_display_tab.py::TestDisplayTab::test_display_tab_creation PASSED [ 15%]
+tests/test_display_tab.py::TestDisplayTab::test_display_tab_loads_settings PASSED [ 15%]
+tests/test_display_tab.py::TestDisplayTab::test_display_tab_saves_monitor_selection PASSED [ 15%]
+tests/test_display_tab.py::TestDisplayTab::test_display_tab_saves_display_mode PASSED [ 15%]
+tests/test_display_tab.py::TestDisplayTab::test_display_tab_saves_timing PASSED [ 15%]
+tests/test_display_tab.py::TestDisplayTab::test_display_tab_boolean_conversion PASSED [ 16%]
+tests/test_display_tab.py::TestDisplayTab::test_display_tab_lanczos_setting PASSED [ 16%]
+tests/test_display_tab.py::TestDisplayTab::test_display_tab_sharpen_setting PASSED [ 16%]
+tests/test_display_tab.py::TestDisplayTab::test_display_tab_same_image_monitors PASSED [ 16%]
+tests/test_display_tab.py::TestDisplayTab::test_display_tab_all_settings_persist PASSED [ 16%]
+tests/test_display_tab.py::TestDisplayTab::test_display_tab_default_values PASSED [ 16%]
+tests/test_display_tab.py::TestDisplayTab::test_display_tab_invalid_mode_handling PASSED [ 16%]
+tests/test_display_tab.py::TestDisplayTab::test_display_tab_invalid_interval_handling PASSED [ 17%]
+tests/test_display_tab.py::TestDisplayTab::test_display_tab_ui_elements_exist PASSED [ 17%]
+tests/test_engine_lifecycle.py::TestEngineState::test_engine_state_enum_values PASSED [ 17%]
+tests/test_engine_lifecycle.py::TestEngineState::test_initial_state_is_uninitialized PASSED [ 17%]
+tests/test_engine_lifecycle.py::TestEngineState::test_running_property_false_when_not_running PASSED [ 17%]
+tests/test_engine_lifecycle.py::TestEngineState::test_running_property_true_when_running PASSED [ 17%]
+tests/test_engine_lifecycle.py::TestEngineState::test_initialized_property PASSED [ 18%]
+tests/test_engine_lifecycle.py::TestShuttingDownProperty::test_shutting_down_false_in_running PASSED [ 18%]
+tests/test_engine_lifecycle.py::TestShuttingDownProperty::test_shutting_down_false_in_reinitializing PASSED [ 18%]
+tests/test_engine_lifecycle.py::TestShuttingDownProperty::test_shutting_down_true_in_stopping PASSED [ 18%]
+tests/test_engine_lifecycle.py::TestShuttingDownProperty::test_shutting_down_true_in_shutting_down PASSED [ 18%]
+tests/test_engine_lifecycle.py::TestShuttingDownProperty::test_shutting_down_false_in_other_states PASSED [ 18%]
+tests/test_engine_lifecycle.py::TestStateTransitions::test_transition_state_success PASSED [ 19%]
+tests/test_engine_lifecycle.py::TestStateTransitions::test_transition_state_invalid_source PASSED [ 19%]
+tests/test_engine_lifecycle.py::TestStateTransitions::test_transition_from_shutting_down_blocked PASSED [ 19%]
+tests/test_engine_lifecycle.py::TestStateTransitions::test_transition_without_expected_from PASSED [ 19%]
+tests/test_engine_lifecycle.py::TestStateTransitions::test_is_state_check PASSED [ 19%]
+tests/test_engine_lifecycle.py::TestStateTransitionThreadSafety::test_concurrent_state_reads PASSED [ 19%]
+tests/test_engine_lifecycle.py::TestStateTransitionThreadSafety::test_concurrent_state_transitions PASSED [ 20%]
+tests/test_engine_lifecycle.py::TestRSSReloadBugScenario::test_settings_change_does_not_abort_rss PASSED [ 20%]
+tests/test_engine_lifecycle.py::TestRSSReloadBugScenario::test_actual_shutdown_aborts_rss PASSED [ 20%]
+tests/test_engine_lifecycle.py::TestGetStats::test_get_stats_includes_state PASSED [ 20%]
+tests/test_events.py::test_event_system_initialization PASSED            [ 20%]
+tests/test_events.py::test_subscribe_and_publish PASSED                  [ 20%]
+tests/test_events.py::test_unsubscribe PASSED                            [ 21%]
+tests/test_events.py::test_priority_ordering PASSED                      [ 21%]
+tests/test_events.py::test_event_filter PASSED                           [ 21%]
+tests/test_events.py::test_event_history PASSED                          [ 21%]
+tests/test_flicker_fix_integration.py::TestQtAllocationLimit::test_allocation_limit_increased PASSED [ 21%]
+tests/test_flicker_fix_integration.py::TestQtAllocationLimit::test_large_image_can_be_allocated PASSED [ 21%]
+tests/test_flicker_fix_integration.py::TestTransitionTelemetryFlow::test_transition_tracks_timing FAILED [ 22%]
+tests/test_flicker_fix_integration.py::TestMultiDisplaySyncFlow::test_sync_queue_lifecycle PASSED [ 22%]
+tests/test_flicker_fix_integration.py::TestMultiDisplaySyncFlow::test_sync_timeout_handling PASSED [ 22%]
+tests/test_flicker_fix_integration.py::TestRegressionPrevention::test_no_process_events_in_transitions PASSED [ 22%]
+tests/test_flicker_fix_integration.py::TestRegressionPrevention::test_showfullscreen_not_deferred PASSED [ 22%]
+tests/test_frame_timing_workload.py::TestFrameTimingWorkload::test_slide_with_visualizer_load PASSED [ 22%]
+tests/test_frame_timing_workload.py::TestFrameTimingWorkload::test_sustained_workload PASSED [ 23%]
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[1080p_dpr1_primary] PASSED [ 23%]
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[left_negative_origin] PASSED [ 23%]
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[4k_125pct] PASSED [ 23%]
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[right_4k_150pct] PASSED [ 23%]
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[portrait_above_200pct] PASSED [ 23%]
+tests/test_geometry_dpi_matrix.py::test_handle_screen_change_applies_geometry_and_dpr[laptop_175pct] PASSED [ 24%]
+tests/test_gl_compositor_blinds.py::test_gl_compositor_blinds_no_underlay_and_no_black PASSED [ 24%]
+tests/test_gl_compositor_blockflip.py::test_gl_compositor_blockflip_no_underlay_and_no_black PASSED [ 24%]
+tests/test_gl_compositor_blockspin.py::test_gl_compositor_blockspin_no_underlay_and_no_black FAILED [ 24%]
+tests/test_gl_compositor_cleanup.py::test_gl_compositor_cleanup_idempotent_without_context PASSED [ 24%]
+tests/test_gl_compositor_cleanup.py::test_gl_compositor_cleanup_releases_pipeline_when_gl_available PASSED [ 24%]
+tests/test_gl_compositor_crossfade.py::test_gl_compositor_crossfade_no_underlay_and_no_black PASSED [ 25%]
+tests/test_gl_compositor_diffuse.py::test_gl_compositor_diffuse_no_underlay_and_no_black PASSED [ 25%]
+tests/test_gl_compositor_peel.py::test_gl_compositor_peel_no_underlay_and_no_black PASSED [ 25%]
+tests/test_gl_compositor_raindrops.py::test_gl_compositor_raindrops_no_underlay_and_no_black PASSED [ 25%]
+tests/test_gl_compositor_slide.py::test_gl_compositor_slide_no_underlay_and_no_black PASSED [ 25%]
+tests/test_gl_compositor_transition_lifecycle.py::test_clear_all_transitions_cancels_active_animation PASSED [ 25%]
+tests/test_gl_compositor_transition_lifecycle.py::test_cancel_current_transition_snaps_to_new_pixmap PASSED [ 25%]
+tests/test_gl_compositor_wipe.py::test_gl_compositor_wipe_no_underlay_and_no_black[WipeDirection.LEFT_TO_RIGHT] PASSED [ 26%]
+tests/test_gl_compositor_wipe.py::test_gl_compositor_wipe_no_underlay_and_no_black[WipeDirection.RIGHT_TO_LEFT] PASSED [ 26%]
+tests/test_gl_compositor_wipe.py::test_gl_compositor_wipe_no_underlay_and_no_black[WipeDirection.TOP_TO_BOTTOM] PASSED [ 26%]
+tests/test_gl_compositor_wipe.py::test_gl_compositor_wipe_no_underlay_and_no_black[WipeDirection.BOTTOM_TO_TOP] PASSED [ 26%]
+tests/test_gl_compositor_wipe.py::test_gl_compositor_wipe_no_underlay_and_no_black[WipeDirection.DIAG_TL_BR] PASSED [ 26%]
+tests/test_gl_compositor_wipe.py::test_gl_compositor_wipe_no_underlay_and_no_black[WipeDirection.DIAG_TR_BL] PASSED [ 26%]
+tests/test_gl_prewarm.py::test_gl_prewarm_overlays_ready PASSED          [ 27%]
+tests/test_hotkeys_no_text.py::test_hotkeys_work_with_empty_event_text PASSED [ 27%]
+tests/test_image_processor.py::test_fill_mode_wider_image PASSED         [ 27%]
+tests/test_image_processor.py::test_fill_mode_taller_image PASSED        [ 27%]
+tests/test_image_processor.py::test_fill_mode_small_image PASSED         [ 27%]
+tests/test_image_processor.py::test_fit_mode_landscape PASSED            [ 27%]
+tests/test_image_processor.py::test_fit_mode_portrait PASSED             [ 28%]
+tests/test_image_processor.py::test_shrink_mode_large_image PASSED       [ 28%]
+tests/test_image_processor.py::test_shrink_mode_small_image PASSED       [ 28%]
+tests/test_image_processor.py::test_null_image_fallback PASSED           [ 28%]
+tests/test_image_processor.py::test_square_image_fill PASSED             [ 28%]
+tests/test_image_processor.py::test_aspect_ratio_preservation_fit PASSED [ 28%]
+tests/test_image_processor.py::test_calculate_scale_factors_fill PASSED  [ 29%]
+tests/test_image_processor.py::test_calculate_scale_factors_fit PASSED   [ 29%]
+tests/test_image_processor.py::test_calculate_scale_factors_shrink_no_scaling PASSED [ 29%]
+tests/test_image_processor.py::test_calculate_scale_factors_shrink_with_scaling PASSED [ 29%]
+tests/test_image_processor.py::test_get_crop_rect PASSED                 [ 29%]
+tests/test_image_processor.py::test_display_mode_from_string PASSED      [ 29%]
+tests/test_image_processor.py::test_display_mode_from_string_invalid PASSED [ 30%]
+tests/test_image_processor.py::test_display_mode_str PASSED              [ 30%]
+tests/test_image_processor.py::test_qimage_sync_matches_pixmap[fill] PASSED [ 30%]
+tests/test_image_processor.py::test_qimage_sync_matches_pixmap[fit] PASSED [ 30%]
+tests/test_image_processor.py::test_qimage_sync_matches_pixmap[shrink] PASSED [ 30%]
+tests/test_image_processor.py::test_qimage_async_matches_sync[fill] PASSED [ 30%]
+tests/test_image_processor.py::test_qimage_async_matches_sync[fit] PASSED [ 31%]
+tests/test_image_processor.py::test_qimage_async_matches_sync[shrink] PASSED [ 31%]
+tests/test_image_queue.py::test_image_queue_initialization PASSED        [ 31%]
+tests/test_image_queue.py::test_add_images_no_shuffle PASSED             [ 31%]
+tests/test_image_queue.py::test_add_images_with_shuffle PASSED           [ 31%]
+tests/test_image_queue.py::test_next_image PASSED                        [ 31%]
+tests/test_image_queue.py::test_next_multiple_images PASSED              [ 32%]
+tests/test_image_queue.py::test_queue_wraparound PASSED                  [ 32%]
+tests/test_image_queue.py::test_current_image PASSED                     [ 32%]
+tests/test_image_queue.py::test_peek_next_image PASSED                   [ 32%]
+tests/test_image_queue.py::test_history_tracking PASSED                  [ 32%]
+tests/test_image_queue.py::test_history_max_size PASSED                  [ 32%]
+tests/test_image_queue.py::test_is_in_recent_history PASSED              [ 33%]
+tests/test_image_queue.py::test_shuffle_method PASSED                    [ 33%]
+tests/test_image_queue.py::test_set_shuffle_enabled PASSED               [ 33%]
+tests/test_image_queue.py::test_clear_queue PASSED                       [ 33%]
+tests/test_image_queue.py::test_set_images_replaces_all PASSED           [ 33%]
+tests/test_image_queue.py::test_remove_image PASSED                      [ 33%]
+tests/test_image_queue.py::test_remove_nonexistent_image PASSED          [ 33%]
+tests/test_image_queue.py::test_get_stats PASSED                         [ 34%]
+tests/test_image_queue.py::test_empty_queue_behavior PASSED              [ 34%]
+tests/test_image_queue.py::test_queue_len_and_bool PASSED                [ 34%]
+tests/test_image_queue.py::test_queue_repr PASSED                        [ 34%]
+tests/test_image_queue.py::test_previous_image PASSED                    [ 34%]
+tests/test_image_queue.py::test_previous_with_no_history PASSED          [ 34%]
+tests/test_image_queue.py::test_wraparound_preserves_shuffle PASSED      [ 35%]
+tests/test_integration.py::test_engine_creation PASSED                   [ 35%]
+tests/test_integration.py::test_engine_initialization PASSED             [ 35%]
+tests/test_integration.py::test_engine_core_systems PASSED               [ 35%]
+tests/test_integration.py::test_engine_image_queue_initialization PASSED [ 35%]
+tests/test_integration.py::test_engine_display_initialization PASSED     [ 35%]
+tests/test_integration.py::test_engine_start_stop PASSED                 [ 36%]
+tests/test_integration.py::test_engine_signals PASSED                    [ 36%]
+tests/test_integration.py::test_engine_rotation_timer FAILED             [ 36%]
+tests/test_integration.py::test_engine_get_stats PASSED                  [ 36%]
+tests/test_integration.py::test_engine_cleanup PASSED                    [ 36%]
+tests/test_integration.py::test_engine_without_initialization PASSED     [ 36%]
+tests/test_integration.py::test_engine_default_rss_sources PASSED        [ 37%]
+tests/test_integration.py::test_engine_settings_integration PASSED       [ 37%]
+tests/test_integration.py::test_engine_multiple_start_calls PASSED       [ 37%]
+tests/test_integration.py::test_engine_stop_without_start PASSED         [ 37%]
+tests/test_integration_settings.py::test_sources_tab_folder_persistence PASSED [ 37%]
+tests/test_integration_settings.py::test_sources_tab_rss_persistence PASSED [ 37%]
+tests/test_integration_settings.py::test_settings_dialog_full_workflow PASSED [ 38%]
+tests/test_integration_settings.py::test_nested_dict_does_not_work PASSED [ 38%]
+tests/test_integration_settings.py::test_settings_load_on_startup PASSED [ 38%]
+tests/test_integration_settings.py::TestEngineSettingsIntegration::test_sources_changed_triggers_reinitialize PASSED [ 38%]
+tests/test_integration_settings.py::TestEngineSettingsIntegration::test_engine_state_during_settings_change PASSED [ 38%]
+tests/test_integration_settings.py::TestEngineSettingsIntegration::test_just_make_it_work_clears_cache PASSED [ 38%]
+tests/test_integration_settings.py::TestEngineSettingsIntegration::test_add_rss_feed_triggers_source_reinit PASSED [ 39%]
+tests/test_integration_settings.py::TestEngineSettingsIntegration::test_remove_folder_triggers_queue_rebuild PASSED [ 39%]
+tests/test_lanczos_scaling.py::TestLanczosScaling::test_lanczos_downscaling PASSED [ 39%]
+tests/test_lanczos_scaling.py::TestLanczosScaling::test_bug10_no_image_tripling PASSED [ 39%]
+tests/test_lanczos_scaling.py::TestLanczosScaling::test_lanczos_with_alpha_channel PASSED [ 39%]
+tests/test_lanczos_scaling.py::TestLanczosScaling::test_lanczos_with_sharpening PASSED [ 39%]
+tests/test_lanczos_scaling.py::TestLanczosScaling::test_fallback_when_lanczos_disabled PASSED [ 40%]
+tests/test_lanczos_scaling.py::TestLanczosScaling::test_fallback_when_pil_unavailable SKIPPED [ 40%]
+tests/test_lanczos_scaling.py::TestLanczosScaling::test_lanczos_fill_mode PASSED [ 40%]
+tests/test_lanczos_scaling.py::TestLanczosScaling::test_lanczos_fit_mode PASSED [ 40%]
+tests/test_lanczos_scaling.py::TestLanczosScaling::test_lanczos_shrink_mode_downscale PASSED [ 40%]
+tests/test_lanczos_scaling.py::TestLanczosScaling::test_lanczos_shrink_mode_no_upscale PASSED [ 40%]
+tests/test_lanczos_scaling.py::TestLanczosScaling::test_lanczos_aspect_ratio_preserved PASSED [ 41%]
+tests/test_lanczos_scaling.py::TestLanczosScaling::test_null_image_handling PASSED [ 41%]
+tests/test_lanczos_scaling.py::TestLanczosScaling::test_aggressive_downscale PASSED [ 41%]
+tests/test_logging_console_encoding.py::test_console_handler_replaces_unencodable_characters_narrow_encodings[cp1252] PASSED [ 41%]
+tests/test_logging_console_encoding.py::test_console_handler_replaces_unencodable_characters_narrow_encodings[latin-1] PASSED [ 41%]
+tests/test_logging_console_encoding.py::test_console_handler_preserves_unicode_on_utf8_console PASSED [ 41%]
+tests/test_mc_keyboard_input.py::test_mc_display_widget_receives_hotkeys PASSED [ 41%]
+tests/test_mc_window_flags.py::test_mc_window_uses_tool_flag PASSED      [ 42%]
+tests/test_mc_window_flags.py::test_main_build_does_not_use_tool_flag PASSED [ 42%]
+tests/test_media_widget.py::test_noop_media_controller_safe_calls PASSED [ 42%]
+tests/test_media_widget.py::test_create_media_controller_falls_back_to_noop PASSED [ 42%]
+tests/test_media_widget.py::test_windows_media_controller_selects_spotify_session PASSED [ 42%]
+tests/test_media_widget.py::test_windows_media_controller_returns_none_when_no_spotify PASSED [ 42%]
+tests/test_media_widget.py::test_windows_media_controller_live_spotify_track PASSED [ 43%]
+tests/test_media_widget.py::test_media_widget_placeholder_when_no_media PASSED [ 43%]
+tests/test_media_widget.py::test_media_widget_displays_metadata PASSED   [ 43%]
+tests/test_media_widget.py::test_media_widget_hides_again_when_media_disappears PASSED [ 43%]
+tests/test_media_widget.py::test_media_widget_decodes_artwork_and_adjusts_margins PASSED [ 43%]
+tests/test_media_widget.py::test_media_widget_warns_when_thread_manager_missing PASSED [ 43%]
+tests/test_media_widget.py::test_media_widget_starts_fade_in_when_artwork_appears PASSED [ 44%]
+tests/test_media_widget.py::test_media_widget_transport_delegates_to_controller PASSED [ 44%]
+tests/test_media_widget.py::test_display_widget_ctrl_click_routes_to_media_widget PASSED [ 44%]
+tests/test_media_widget.py::test_display_widget_hard_exit_click_routes_to_media_widget PASSED [ 44%]
+tests/test_multidisplay_sync.py::TestDisplayManagerSync::test_sync_disabled_by_default PASSED [ 44%]
+tests/test_multidisplay_sync.py::TestDisplayManagerSync::test_enable_sync_creates_queue PASSED [ 44%]
+tests/test_multidisplay_sync.py::TestDisplayManagerSync::test_disable_sync_clears_queue PASSED [ 45%]
+tests/test_multidisplay_sync.py::TestDisplayManagerSync::test_sync_not_enabled_for_single_display PASSED [ 45%]
+tests/test_multidisplay_sync.py::TestSPSCQueueSync::test_ready_signal_queuing PASSED [ 45%]
+tests/test_multidisplay_sync.py::TestSPSCQueueSync::test_wait_for_all_displays_success PASSED [ 45%]
+tests/test_multidisplay_sync.py::TestSPSCQueueSync::test_wait_for_all_displays_timeout PASSED [ 45%]
+tests/test_multidisplay_sync.py::TestSPSCQueueSync::test_wait_returns_true_when_sync_disabled PASSED [ 45%]
+tests/test_multidisplay_sync.py::TestSPSCQueueSync::test_wait_returns_true_for_single_display PASSED [ 46%]
+tests/test_multidisplay_sync.py::TestSynchronizedTransition::test_show_image_synchronized_falls_back_when_disabled PASSED [ 46%]
+tests/test_multidisplay_sync.py::TestSynchronizedTransition::test_show_image_synchronized_clears_queue PASSED [ 46%]
+tests/test_multidisplay_sync.py::TestQueueOverflow::test_queue_rejects_when_full PASSED [ 46%]
+tests/test_multidisplay_sync.py::TestQueueOverflow::test_display_manager_logs_queue_full PASSED [ 46%]
+tests/test_multidisplay_sync.py::TestConcurrentReadySignals::test_no_duplicate_ready_signals PASSED [ 46%]
+tests/test_multidisplay_sync.py::TestPerformanceMetrics::test_sync_overhead_minimal PASSED [ 47%]
+tests/test_overlay_ready_state.py::TestSWCrossfadeOverlayReady::test_sw_overlay_not_ready_before_paint PASSED [ 47%]
+tests/test_overlay_ready_state.py::TestSWCrossfadeOverlayReady::test_sw_overlay_ready_after_paint PASSED [ 47%]
+tests/test_overlay_ready_state.py::TestOverlayManagerReady::test_any_overlay_ready_returns_false_when_none_visible PASSED [ 47%]
+tests/test_overlay_ready_state.py::TestOverlayManagerReady::test_display_widget_retains_previous_pixmap_on_clear PASSED [ 47%]
+tests/test_overlay_ready_state.py::TestDisplayWidgetOverlayDiagnostics::test_notify_overlay_ready_tracks_counts PASSED [ 47%]
+tests/test_overlay_ready_state.py::TestDisplayWidgetOverlayDiagnostics::test_handle_screen_change_updates_geometry_and_dpi FAILED [ 48%]
+tests/test_overlay_timers.py::test_overlay_timer_uses_thread_manager_when_available PASSED [ 48%]
+tests/test_overlay_timers.py::test_overlay_timer_raises_without_thread_manager PASSED [ 48%]
+tests/test_painter_shadow.py::TestShadowConfig::test_default_values PASSED [ 48%]
+tests/test_painter_shadow.py::TestShadowConfig::test_from_settings_empty PASSED [ 48%]
+tests/test_painter_shadow.py::TestShadowConfig::test_from_settings_none PASSED [ 48%]
+tests/test_painter_shadow.py::TestShadowConfig::test_from_settings_disabled PASSED [ 49%]
+tests/test_painter_shadow.py::TestShadowConfig::test_from_settings_enabled_string FAILED [ 49%]
+
+================================== FAILURES ===================================
+__________ TestTransitionTelemetryFlow.test_transition_tracks_timing __________
+
+self = <tests.test_flicker_fix_integration.TestTransitionTelemetryFlow object at 0x000001A13B96D710>
+qapp = <PySide6.QtWidgets.QApplication(0x1a10ba65d90) at 0x000001A13CBCBB80>
+dummy_pixmap = <PySide6.QtGui.QPixmap(QSize(10, 10),depth=32,devicePixelRatio=1,cacheKey=0xff00000001) at 0x000001A140D362C0>
+
+    def test_transition_tracks_timing(self, qapp, dummy_pixmap):
+        """GL compositor transition should track start and end times."""
+        from transitions.gl_compositor_crossfade_transition import (
+            GLCompositorCrossfadeTransition,
+        )
+    
+        widget = QWidget()
+        widget.setGeometry(0, 0, 100, 100)
+    
+        try:
+            trans = GLCompositorCrossfadeTransition(duration_ms=100)
+    
+            # Start transition (telemetry implemented in GL version)
+            trans.start(dummy_pixmap, dummy_pixmap, widget)
+    
+            # Should have start time (GL version calls _mark_start)
+>           assert trans._start_time is not None
+E           assert None is not None
+E            +  where None = GLCompositorCrossfadeTransition(duration=100ms, state=finished)._start_time
+
+tests\test_flicker_fix_integration.py:84: AssertionError
+------------------------------ Captured log call ------------------------------
+WARNING  transitions.gl_compositor_crossfade_transition:gl_compositor_crossfade_transition.py:62 [GL COMPOSITOR] No compositor attached to widget; falling back to immediate display
+____________ test_gl_compositor_blockspin_no_underlay_and_no_black ____________
+
+qapp = <PySide6.QtWidgets.QApplication(0x1a10ba65d90) at 0x000001A13CBCBB80>
+
+    @pytest.mark.qt_no_exception_capture
+    def test_gl_compositor_blockspin_no_underlay_and_no_black(qapp):
+        """Compositor-driven Block Spins should not leak underlay or show black frames.
+    
+        Mirrors the compositor crossfade/block flip tests but drives a 3D Block
+        Spins transition between solid-colour images via GLCompositorBlockSpinTransition.
+        """
+    
+        # Parent with loud magenta background (acts as underlay)
+        parent = QWidget()
+        parent.resize(96, 96)
+        pal = parent.palette()
+        magenta = QColor(Qt.GlobalColor.magenta)
+        pal.setColor(QPalette.ColorRole.Window, magenta)
+        parent.setAutoFillBackground(True)
+        parent.setPalette(pal)
+        parent.show()
+    
+        # Compositor child covering parent; attach as the shared compositor that
+        # GLCompositorBlockSpinTransition expects on its widget.
+        comp = GLCompositorWidget(parent)
+        comp.setGeometry(parent.rect())
+        comp.show()
+        setattr(parent, "_gl_compositor", comp)
+    
+        # Prime compositor base image
+        old_pm = solid_pixmap(96, 96, Qt.GlobalColor.red)
+        new_pm = solid_pixmap(96, 96, Qt.GlobalColor.blue)
+        comp.set_base_pixmap(old_pm)
+    
+        trans = GLCompositorBlockSpinTransition(
+            duration_ms=800,
+            easing="Auto",
+        )
+    
+        # Start transition; if GL context is not available, skip.
+        try:
+            started = trans.start(old_pm, new_pm, parent)
+        except Exception:
+            started = False
+        if not started:
+            pytest.skip("GL compositor block spins could not be started in this environment")
+    
+        try:
+            comp.makeCurrent()
+        except Exception:
+            pytest.skip("GL context not available for GLCompositorWidget (block spins)")
+    
+        # Capture a series of frames from the parent while the compositor spins blocks.
+        frames: list[QImage] = []
+        for _ in range(28):
+            qapp.processEvents()
+            frames.append(parent.grab().toImage())
+            QTest.qWait(20)
+    
+        # Analyse frames for underlay leaks (magenta) and blank/very dark frames.
+        for img in frames:
+            underlay_fraction = fraction_matching_color(img, magenta, tolerance=16)
+            dark_fraction = fraction_dark_pixels(img, threshold=16)
+    
+            # Underlay should not dominate any frame.
+            assert (
+                underlay_fraction < 0.05
+            ), f"GL compositor block spins underlay leak detected ({underlay_fraction:.2%})"
+    
+            # No mostly-black frames while transitioning between non-black colours.
+>           assert (
+                dark_fraction < 0.7
+            ), f"GL compositor block spins produced blank/very dark frame ({dark_fraction:.2%})"
+E           AssertionError: GL compositor block spins produced blank/very dark frame (72.01%)
+E           assert 0.7200915404040404 < 0.7
+
+tests\test_gl_compositor_blockspin.py:98: AssertionError
+_________________________ test_engine_rotation_timer __________________________
+
+engine = <engine.screensaver_engine.ScreensaverEngine(0x1a10c2669f0) at 0x000001A140E0BF00>
+
+    def test_engine_rotation_timer(engine):
+        """Test rotation timer is configured."""
+        engine.initialize()
+    
+        assert engine._rotation_timer is not None
+    
+        # Timer should be configured but not started
+>       assert engine._rotation_timer.isActive() is False
+E       assert True is False
+E        +  where True = <built-in method isActive of PySide6.QtCore.QTimer object at 0x000001A149CEB700>()
+E        +    where <built-in method isActive of PySide6.QtCore.QTimer object at 0x000001A149CEB700> = <PySide6.QtCore.QTimer(0x1a14bc49be0) at 0x000001A149CEB700>.isActive
+E        +      where <PySide6.QtCore.QTimer(0x1a14bc49be0) at 0x000001A149CEB700> = <engine.screensaver_engine.ScreensaverEngine(0x1a10c2669f0) at 0x000001A140E0BF00>._rotation_timer
+
+tests\test_integration.py:136: AssertionError
+---------------------------- Captured log teardown ----------------------------
+WARNING  widgets.spotify_visualizer_widget:spotify_visualizer_widget.py:1957 [PERF] [SPOTIFY_VIS] Tick dt spike 307.38ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+WARNING  engine.screensaver:screensaver_engine.py:1851 [ASYNC] Failed to submit task, falling back to sync: Thread manager is shut down
+WARNING  widgets.spotify_visualizer_widget:spotify_visualizer_widget.py:1957 [PERF] [SPOTIFY_VIS] Tick dt spike 107.24ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+WARNING  widgets.spotify_visualizer_widget:spotify_visualizer_widget.py:1957 [PERF] [SPOTIFY_VIS] Tick dt spike 105.48ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+WARNING  widgets.spotify_visualizer_widget:spotify_visualizer_widget.py:1957 [PERF] [SPOTIFY_VIS] Tick dt spike 110.86ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+WARNING  widgets.spotify_visualizer_widget:spotify_visualizer_widget.py:1957 [PERF] [SPOTIFY_VIS] Tick dt spike 109.82ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+WARNING  sources.rss_source:rss_source.py:180 [FEED_HEALTH] Feed https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25 failed 1 times, backoff 60s
+WARNING  sources.rss_source:rss_source.py:380 [RATE_LIMIT] Reddit feed returned 0 images: https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25
+WARNING  sources.rss_source:rss_source.py:180 [FEED_HEALTH] Feed https://www.reddit.com/r/ArchitecturePorn/top/.json?t=day&limit=25 failed 1 times, backoff 60s
+WARNING  sources.rss_source:rss_source.py:380 [RATE_LIMIT] Reddit feed returned 0 images: https://www.reddit.com/r/ArchitecturePorn/top/.json?t=day&limit=25
+WARNING  sources.rss_source:rss_source.py:180 [FEED_HEALTH] Feed https://www.reddit.com/r/WaterPorn/top/.json?t=day&limit=25 failed 1 times, backoff 60s
+WARNING  sources.rss_source:rss_source.py:380 [RATE_LIMIT] Reddit feed returned 0 images: https://www.reddit.com/r/WaterPorn/top/.json?t=day&limit=25
+WARNING  sources.rss_source:rss_source.py:180 [FEED_HEALTH] Feed https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limit=25 failed 1 times, backoff 60s
+WARNING  sources.rss_source:rss_source.py:380 [RATE_LIMIT] Reddit feed returned 0 images: https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limit=25
+WARNING  sources.rss_source:rss_source.py:180 [FEED_HEALTH] Feed https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=25 failed 1 times, backoff 60s
+WARNING  sources.rss_source:rss_source.py:380 [RATE_LIMIT] Reddit feed returned 0 images: https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=25
+WARNING  widgets.spotify_visualizer_widget:spotify_visualizer_widget.py:1957 [PERF] [SPOTIFY_VIS] Tick dt spike 36154.33ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+WARNING  widgets.spotify_visualizer_widget:spotify_visualizer_widget.py:1957 [PERF] [SPOTIFY_VIS] Tick dt spike 36154.83ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+WARNING  widgets.spotify_visualizer_widget:spotify_visualizer_widget.py:1957 [PERF] [SPOTIFY_VIS] Tick dt spike 36153.77ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+WARNING  widgets.spotify_visualizer_widget:spotify_visualizer_widget.py:1957 [PERF] [SPOTIFY_VIS] Tick dt spike 36153.77ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+WARNING  engine.screensaver:screensaver_engine.py:1851 [ASYNC] Failed to submit task, falling back to sync: Thread manager is shut down
+WARNING  widgets.spotify_visualizer_widget:spotify_visualizer_widget.py:1957 [PERF] [SPOTIFY_VIS] Tick dt spike 36294.83ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+WARNING  widgets.spotify_visualizer_widget:spotify_visualizer_widget.py:1957 [PERF] [SPOTIFY_VIS] Tick dt spike 36363.92ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+WARNING  widgets.spotify_visualizer_widget:spotify_visualizer_widget.py:1957 [PERF] [SPOTIFY_VIS] Tick dt spike 36362.37ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+WARNING  widgets.spotify_visualizer_widget:spotify_visualizer_widget.py:1957 [PERF] [SPOTIFY_VIS] Tick dt spike 36362.37ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+WARNING  widgets.spotify_visualizer_widget:spotify_visualizer_widget.py:1957 [PERF] [SPOTIFY_VIS] Tick dt spike 36362.37ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+WARNING  widgets.spotify_visualizer_widget:spotify_visualizer_widget.py:1957 [PERF] [SPOTIFY_VIS] Tick dt spike 36361.87ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+WARNING  widgets.spotify_visualizer_widget:spotify_visualizer_widget.py:1957 [PERF] [SPOTIFY_VIS] Tick dt spike 36361.87ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+WARNING  widgets.spotify_visualizer_widget:spotify_visualizer_widget.py:1957 [PERF] [SPOTIFY_VIS] Tick dt spike 36363.41ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+WARNING  widgets.spotify_visualizer_widget:spotify_visualizer_widget.py:1957 [PERF] [SPOTIFY_VIS] Tick dt spike 36363.36ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+WARNING  widgets.spotify_visualizer_widget:spotify_visualizer_widget.py:1957 [PERF] [SPOTIFY_VIS] Tick dt spike 36362.35ms (running=False name=<none> elapsed=<n/a> idle_age=<n/a>)
+WARNING  engine.screensaver:screensaver_engine.py:1851 [ASYNC] Failed to submit task, falling back to sync: Thread manager is shut down
+WARNING  engine.screensaver:screensaver_engine.py:1851 [ASYNC] Failed to submit task, falling back to sync: Thread manager is shut down
+WARNING  engine.screensaver:screensaver_engine.py:1851 [ASYNC] Failed to submit task, falling back to sync: Thread manager is shut down
+WARNING  engine.screensaver:screensaver_engine.py:1851 [ASYNC] Failed to submit task, falling back to sync: Thread manager is shut down
+_ TestDisplayWidgetOverlayDiagnostics.test_handle_screen_change_updates_geometry_and_dpi _
+
+self = <tests.test_overlay_ready_state.TestDisplayWidgetOverlayDiagnostics object at 0x000001A13CD04590>
+qapp = <PySide6.QtWidgets.QApplication(0x1a10ba65d90) at 0x000001A13CBCBB80>
+dummy_pixmap = <PySide6.QtGui.QPixmap(QSize(10, 10),depth=32,devicePixelRatio=1,cacheKey=0x69000000001) at 0x000001A1408898C0>
+
+    def test_handle_screen_change_updates_geometry_and_dpi(self, qapp, dummy_pixmap):
+        from rendering.display_widget import DisplayWidget
+    
+        class _FakeScreen:
+            def __init__(self, rect: QRect, dpr: float) -> None:
+                self._rect = rect
+                self._dpr = dpr
+    
+            def geometry(self) -> QRect:
+                return self._rect
+    
+            def devicePixelRatio(self) -> float:
+                return self._dpr
+    
+        widget = DisplayWidget(0, None, None)
+        widget.resize(100, 100)
+    
+        fake_screen = _FakeScreen(QRect(0, 0, 640, 360), 1.75)
+        widget._handle_screen_change(fake_screen)
+    
+        assert widget._screen is fake_screen
+>       assert widget.width() == 640 and widget.height() == 360
+E       assert (640 == 640 and 359 == 360)
+E        +  where 640 = <built-in method width of DisplayWidget object at 0x000001A140888180>()
+E        +    where <built-in method width of DisplayWidget object at 0x000001A140888180> = <rendering.display_widget.DisplayWidget(0x1a19b8cc4f0) at 0x000001A140888180>.width
+E        +  and   359 = <built-in method height of DisplayWidget object at 0x000001A140888180>()
+E        +    where <built-in method height of DisplayWidget object at 0x000001A140888180> = <rendering.display_widget.DisplayWidget(0x1a19b8cc4f0) at 0x000001A140888180>.height
+
+tests\test_overlay_ready_state.py:127: AssertionError
+_____________ TestShadowConfig.test_from_settings_enabled_string ______________
+
+self = <tests.test_painter_shadow.TestShadowConfig object at 0x000001A13CF9C0D0>
+
+    def test_from_settings_enabled_string(self):
+        """from_settings should parse string 'false' as disabled."""
+        config = ShadowConfig.from_settings({"enabled": "false"})
+>       assert config.enabled is False
+E       assert True is False
+E        +  where True = ShadowConfig(enabled=True, blur_radius=18, offset_x=4, offset_y=4, color=PySide6.QtGui.QColor.fromRgbF(0.000000, 0.000000, 0.000000, 0.705882), opacity=1.0).enabled
+
+tests\test_painter_shadow.py:62: AssertionError
+============================== warnings summary ===============================
+core\windows\reddit_helper_installer.py:1
+  F:\Programming\Apps\ShittyRandomPhotoScreenSaver\core\windows\reddit_helper_installer.py:1: DeprecationWarning: invalid escape sequence '\S'
+    """
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_held_suppresses_mouse_exit_single_widget
+tests/test_ctrl_interaction_mode.py::test_ctrl_held_global_across_multiple_widgets
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_suppressed_while_settings_dialog_active
+tests/test_integration.py::test_engine_stop_without_start
+tests/test_media_widget.py::test_display_widget_ctrl_click_routes_to_media_widget
+tests/test_media_widget.py::test_display_widget_hard_exit_click_routes_to_media_widget
+  F:\Programming\Apps\ShittyRandomPhotoScreenSaver\rendering\input_handler.py:631: DeprecationWarning: Function: 'QMouseEvent.pos() const' is marked as deprecated, please check the documentation for more information.
+    pos = event.pos()
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_held_suppresses_mouse_exit_single_widget
+tests/test_ctrl_interaction_mode.py::test_ctrl_held_suppresses_mouse_exit_single_widget
+tests/test_ctrl_interaction_mode.py::test_ctrl_held_global_across_multiple_widgets
+tests/test_ctrl_interaction_mode.py::test_ctrl_held_global_across_multiple_widgets
+  F:\Programming\Apps\ShittyRandomPhotoScreenSaver\rendering\display_widget.py:2580: DeprecationWarning: Function: 'QMouseEvent.pos() const' is marked as deprecated, please check the documentation for more information.
+    logger.info(f"Mouse clicked at ({event.pos().x()}, {event.pos().y()}), requesting exit")
+
+tests/test_ctrl_interaction_mode.py::test_ctrl_halo_owner_migrates_between_screens
+  F:\Programming\Apps\ShittyRandomPhotoScreenSaver\tests\test_ctrl_interaction_mode.py:346: DeprecationWarning: Function: 'QMouseEvent.QMouseEvent(QEvent.Type type, const QPointF &localPos, Qt.MouseButton button, QFlags<Qt.MouseButton> buttons, QFlags<Qt.KeyboardModifier> modifiers, const QPointingDevice *device)' is marked as deprecated, please check the documentation for more information.
+    event = QMouseEvent(
+
+tests/test_ctrl_interaction_mode.py: 3 warnings
+tests/test_integration.py: 79 warnings
+  F:\Programming\Apps\ShittyRandomPhotoScreenSaver\rendering\display_widget.py:2600: DeprecationWarning: Function: 'QMouseEvent.pos() const' is marked as deprecated, please check the documentation for more information.
+    event.pos(), getattr(self, "spotify_volume_widget", None)
+
+tests/test_media_widget.py::test_display_widget_ctrl_click_routes_to_media_widget
+  F:\Programming\Apps\ShittyRandomPhotoScreenSaver\tests\test_media_widget.py:469: DeprecationWarning: Function: 'QMouseEvent.QMouseEvent(QEvent.Type type, const QPointF &localPos, Qt.MouseButton button, QFlags<Qt.MouseButton> buttons, QFlags<Qt.KeyboardModifier> modifiers, const QPointingDevice *device)' is marked as deprecated, please check the documentation for more information.
+    event = QMouseEvent(
+
+tests/test_media_widget.py::test_display_widget_hard_exit_click_routes_to_media_widget
+  F:\Programming\Apps\ShittyRandomPhotoScreenSaver\tests\test_media_widget.py:539: DeprecationWarning: Function: 'QMouseEvent.QMouseEvent(QEvent.Type type, const QPointF &localPos, Qt.MouseButton button, QFlags<Qt.MouseButton> buttons, QFlags<Qt.KeyboardModifier> modifiers, const QPointingDevice *device)' is marked as deprecated, please check the documentation for more information.
+    event = QMouseEvent(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_flicker_fix_integration.py::TestTransitionTelemetryFlow::test_transition_tracks_timing - assert None is not None
+ +  where None = GLCompositorCrossfadeTransition(duration=100ms, state=finished)._start_time
+FAILED tests/test_gl_compositor_blockspin.py::test_gl_compositor_blockspin_no_underlay_and_no_black - AssertionError: GL compositor block spins produced blank/very dark frame (72.01%)
+assert 0.7200915404040404 < 0.7
+FAILED tests/test_integration.py::test_engine_rotation_timer - assert True is False
+ +  where True = <built-in method isActive of PySide6.QtCore.QTimer object at 0x000001A149CEB700>()
+ +    where <built-in method isActive of PySide6.QtCore.QTimer object at 0x000001A149CEB700> = <PySide6.QtCore.QTimer(0x1a14bc49be0) at 0x000001A149CEB700>.isActive
+ +      where <PySide6.QtCore.QTimer(0x1a14bc49be0) at 0x000001A149CEB700> = <engine.screensaver_engine.ScreensaverEngine(0x1a10c2669f0) at 0x000001A140E0BF00>._rotation_timer
+FAILED tests/test_overlay_ready_state.py::TestDisplayWidgetOverlayDiagnostics::test_handle_screen_change_updates_geometry_and_dpi - assert (640 == 640 and 359 == 360)
+ +  where 640 = <built-in method width of DisplayWidget object at 0x000001A140888180>()
+ +    where <built-in method width of DisplayWidget object at 0x000001A140888180> = <rendering.display_widget.DisplayWidget(0x1a19b8cc4f0) at 0x000001A140888180>.width
+ +  and   359 = <built-in method height of DisplayWidget object at 0x000001A140888180>()
+ +    where <built-in method height of DisplayWidget object at 0x000001A140888180> = <rendering.display_widget.DisplayWidget(0x1a19b8cc4f0) at 0x000001A140888180>.height
+FAILED tests/test_painter_shadow.py::TestShadowConfig::test_from_settings_enabled_string - assert True is False
+ +  where True = ShadowConfig(enabled=True, blur_radius=18, offset_x=4, offset_y=4, color=PySide6.QtGui.QColor.fromRgbF(0.000000, 0.000000, 0.000000, 0.705882), opacity=1.0).enabled
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 5 failures !!!!!!!!!!!!!!!!!!!!!!!!!!
+====== 5 failed, 295 passed, 5 skipped, 96 warnings in 394.65s (0:06:34) ======

@@ -10,7 +10,7 @@ from pathlib import Path
 import os
 import json
 from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import QTimer, Qt, Signal, QObject
+from PySide6.QtCore import QTimer, Qt, Signal, QObject, QSize
 from PySide6.QtGui import QFont, QPainter, QPen, QColor, QFontMetrics
 from shiboken6 import Shiboken
 
@@ -666,56 +666,69 @@ class WeatherWidget(BaseOverlayWidget):
             self.setText("Weather: Error")
 
     def _update_position(self) -> None:
-        """Update widget position based on settings."""
-        if not self.parent():
+        """Update widget position with padding-aware margins and stack offsets."""
+        parent = self.parentWidget()
+        if parent is None:
             return
-        
-        parent_width = self.parent().width()
-        parent_height = self.parent().height()
-        widget_width = self.width()
-        widget_height = self.height()
-        
-        # Use base class margin
-        edge_margin = self._margin
+
+        parent_size = parent.size()
+        widget_size = self.size()
+        if widget_size.width() <= 0 or widget_size.height() <= 0:
+            widget_size = self.sizeHint()
+        if widget_size.width() <= 0 or widget_size.height() <= 0:
+            widget_size = QSize(100, 50)
+
+        margin = self._margin
+        horizontal_margin = margin
+        if self._weather_position in (
+            WeatherPosition.TOP_RIGHT,
+            WeatherPosition.MIDDLE_RIGHT,
+            WeatherPosition.BOTTOM_RIGHT,
+        ):
+            pad_adjust = max(0, self._padding_right - self._padding_left)
+            horizontal_margin = max(0, margin - pad_adjust)
+
         pos = self._weather_position
-        
         if pos == WeatherPosition.TOP_LEFT:
-            x = edge_margin
-            y = edge_margin
+            x = horizontal_margin
+            y = margin
         elif pos == WeatherPosition.TOP_CENTER:
-            x = (parent_width - widget_width) // 2
-            y = edge_margin
+            x = (parent_size.width() - widget_size.width()) // 2
+            y = margin
         elif pos == WeatherPosition.TOP_RIGHT:
-            x = parent_width - widget_width - edge_margin
-            y = edge_margin
+            x = parent_size.width() - widget_size.width() - horizontal_margin
+            y = margin
         elif pos == WeatherPosition.MIDDLE_LEFT:
-            x = edge_margin
-            y = (parent_height - widget_height) // 2
+            x = horizontal_margin
+            y = (parent_size.height() - widget_size.height()) // 2
         elif pos == WeatherPosition.CENTER:
-            x = (parent_width - widget_width) // 2
-            y = (parent_height - widget_height) // 2
+            x = (parent_size.width() - widget_size.width()) // 2
+            y = (parent_size.height() - widget_size.height()) // 2
         elif pos == WeatherPosition.MIDDLE_RIGHT:
-            x = parent_width - widget_width - edge_margin
-            y = (parent_height - widget_height) // 2
+            x = parent_size.width() - widget_size.width() - horizontal_margin
+            y = (parent_size.height() - widget_size.height()) // 2
         elif pos == WeatherPosition.BOTTOM_LEFT:
-            x = edge_margin
-            y = parent_height - widget_height - edge_margin
+            x = horizontal_margin
+            y = parent_size.height() - widget_size.height() - margin
         elif pos == WeatherPosition.BOTTOM_CENTER:
-            x = (parent_width - widget_width) // 2
-            y = parent_height - widget_height - edge_margin
+            x = (parent_size.width() - widget_size.width()) // 2
+            y = parent_size.height() - widget_size.height() - margin
         elif pos == WeatherPosition.BOTTOM_RIGHT:
-            x = parent_width - widget_width - edge_margin
-            y = parent_height - widget_height - edge_margin
+            x = parent_size.width() - widget_size.width() - horizontal_margin
+            y = parent_size.height() - widget_size.height() - margin
         else:
-            x = edge_margin
-            y = parent_height - widget_height - edge_margin
-        
+            x = horizontal_margin
+            y = parent_size.height() - widget_size.height() - margin
+
+        x += self._pixel_shift_offset.x() + self._stack_offset.x()
+        y += self._pixel_shift_offset.y() + self._stack_offset.y()
+
         self.move(x, y)
-    
+
     def set_location(self, location: str) -> None:
         """
         Set location.
-        
+
         Args:
             location: City name or coordinates
         """

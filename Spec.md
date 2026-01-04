@@ -15,10 +15,11 @@ Single source of truth for architecture and key decisions.
 - SettingsManager provides dot-notation access, persisted across runs.
 - WidgetManager (extracted from DisplayWidget) handles overlay widget lifecycle, Z-order, rate-limited raises, and QGraphicsEffect invalidation.
 - WidgetFactoryRegistry (`rendering/widget_factories.py`) provides centralized widget creation via factory pattern (ClockWidgetFactory, WeatherWidgetFactory, MediaWidgetFactory, RedditWidgetFactory, SpotifyVisualizerFactory, SpotifyVolumeFactory).
-- InputHandler (extracted from DisplayWidget) handles all user input including mouse/keyboard events, context menu triggers, and exit gestures.
+- InputHandler (extracted from DisplayWidget) handles all user input including mouse/keyboard events, context menu triggers, exit gestures, **global media key passthrough**, and **double-click next image navigation** (which respects interaction gating).
 - TransitionController (extracted from DisplayWidget) manages transition lifecycle including watchdog timeout handling.
 - ImagePresenter (extracted from DisplayWidget) manages pixmap lifecycle.
 - MultiMonitorCoordinator (singleton) coordinates cross-display state for multi-monitor setups.
+- Settings Persistence: `SettingsDialog` saves and restores window geometry, automatically detecting the correct screen and clamping to available screen area to support multi-monitor and display changes.
 - GLProgramCache (singleton) centralizes lazy-loading of shader programs and validates cached program IDs per-context (recompiling when IDs are stale).
 - GLGeometryManager (per-compositor instance) handles VAO/VBO management. Changed from singleton because OpenGL VAOs are context-specific.
 - GLTextureManager (per-compositor instance) handles texture upload, caching (LRU), and PBO pooling. Changed from singleton because OpenGL textures are context-specific.
@@ -404,5 +405,5 @@ The current Windows mixer approach is simpler and works for all users. Implement
 
 This is a **low-priority enhancement** that could be added post-v1.2 if users request Spotify-synced volume.
 
-**Version**: 1.246  
-**Last Updated**: Dec 17, 2025 - Phase E mitigated via smart Reddit link handling (A/B/C logic); GLGeometryManager/GLTextureManager changed to per-compositor instances (OpenGL context-specific); legacy deferred URL logic removed; transition watchdog timeout increased to 14s.
+**Version**: 1.250  
+**Last Updated**: Jan 04, 2026 - Phase 0 complete: Double-click navigation, media key passthrough, robust widget positioning normalization, and settings geometry persistence added. Removed legacy URL logic and retired redundant Shuffle transition keys. Updated ARCHITECTURE_AND_MULTIPROCESSING_PLAN_2026 for Phase 5 (MC Specialization).

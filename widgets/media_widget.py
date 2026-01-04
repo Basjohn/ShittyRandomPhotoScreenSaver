@@ -370,6 +370,9 @@ class MediaWidget(BaseOverlayWidget):
             x = edge_margin
             y = parent_height - widget_height - edge_margin
 
+        x += self._pixel_shift_offset.x() + self._stack_offset.x()
+        y += self._pixel_shift_offset.y() + self._stack_offset.y()
+
         # Log unexpected position changes (helps debug teleport issues)
         old_pos = self.pos()
         if old_pos.x() != x or old_pos.y() != y:

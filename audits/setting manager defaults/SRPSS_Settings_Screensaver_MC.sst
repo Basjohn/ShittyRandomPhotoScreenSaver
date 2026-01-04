@@ -4,7 +4,7 @@
   "snapshot": {
     "accessibility": {
       "dimming.enabled": "false",
-      "dimming.opacity": 30,
+      "dimming.opacity": 00,
       "pixel_shift.enabled": "true",
       "pixel_shift.rate": 1
     },
@@ -264,7 +264,7 @@
           230
         ],
         "enabled": true,
-        "font_family": "Segoe Script",
+        "font_family": "Segoe UI",
         "font_size": 20,
         "intense_shadow": true,
         "margin": 40,

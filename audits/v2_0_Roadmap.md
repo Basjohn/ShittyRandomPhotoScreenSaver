@@ -6,76 +6,14 @@
 
 ---
 
-## Phase 0: Foundation & Quick Wins (Week 1-2)
-
-### 0.1 Critical Performance Fix - Visualizer Gating
-**Priority**: CRITICAL (Immediate resource savings)
-**Dependencies**: None
-**Reference**: `audits/Minor Tasks.md #1`, `audits/VISUALIZER_DEBUG.md`
-
-- [x] **Snapshot current visualizer logic**: Create `/bak/widgets/spotify_visualizer_widget.py` & Beat Engine before changes
-- [x] **Implement playback state detection**: Add Spotify state monitoring to `_SpotifyBeatEngine`
-- [x] **Gate FFT calculations**: Halt processing when `state != PLAYING` (preserve 1-bar floor)
-- [x] **Add sparse polling**: Leverage existing media widget polling/events to feed `handle_media_update` (no separate visualizer poll loop required)
-- [x] **Preserve dynamic floor pipeline**: Ensure exact preservation of current logic (VISUALIZER_DEBUG.md lines 31-94)
-- [x] **Create synthetic test**: `tests/test_spotify_visualizer_integration.py` to verify no visual fidelity loss
-- [x] **Performance validation**: Measure CPU savings with `SRPSS_PERF_METRICS=1`
-- [x] **Update documentation**: Record changes in VISUALIZER_DEBUG.md
-
-**Critical Logic to Preserve**:
-```python
-# From VISUALIZER_DEBUG.md - MUST preserve exactly:
-np.log1p(mag, out=mag)
-np.power(mag, 1.2, out=mag)
-# Dynamic floor with adaptive sensitivity
-base_noise_floor = max(self._min_floor, min(self._max_floor, noise_floor_base / auto_multiplier))
-expansion = expansion_base * max(0.55, auto_multiplier ** 0.35)
-# Smoothing with rise/decay tau
-alpha_rise = 1.0 - math.exp(-dt / (base_tau * 0.35))
-alpha_decay = 1.0 - math.exp(-dt / (base_tau * 3.0))
-```
-
-### 0.2 Widget Positioning System Audit
-**Priority**: High (User experience fixes)
-**Dependencies**: None
-**Reference**: `audits/Minor Tasks.md #2`
-
-- [ ] **Audit WidgetPositioner**: Review all 9 anchor positions for accuracy *(tests were missing coverage for TOP_CENTER/MIDDLE anchors – see `tests/test_widget_positioner.py` updates)*
-- [ ] **Test Reddit 2 specifically**: Verify middle/center positioning works correctly
-- [ ] **Check collision detection**: Validate multi-widget stacking scenarios
-- [ ] **Verify stack predictor**: Ensure `ui/widget_stack_predictor.py` alignment accuracy
-- [ ] **Detect positioning system conflicts**: Keep `PositionAnchor`, `RedditPosition`, and predictor position keys in sync
-- [x] **Create comprehensive test**: `tests/test_widget_positioning_comprehensive.py` (multi-widget stacking + enum sync)
-- [ ] **Document edge cases**: Record any limitations or special cases found
-- [ ] **Fix identified issues**: Address any positioning problems discovered
-
-### 0.3 Settings Dialog Window State Persistence
-**Priority**: Medium (Quality of life)
-**Dependencies**: None
-**Reference**: `audits/Minor Tasks.md #3`
-
-- **Risks & Guidance**: Touches SettingsManager schema, dialog lifecycle, and multi-monitor detection. Need typed settings migration, defensive fallbacks when saved displays disappear, and isolation between MC/normal profiles. Plan thorough manual validation on systems with changing monitor layouts before shipping.
-
-- [ ] **Add geometry settings**: Extend SettingsManager models for window state
-- [ ] **Implement save/restore**: Save geometry on close, restore on open
-- [ ] **Handle multi-monitor**: Add fallback if saved display unavailable
-- [ ] **Test MC vs normal**: Ensure profile separation works correctly
-- [ ] **Create test**: `tests/test_settings_dialog_persistence.py`
-
-### 0.4 Double-Click Navigation
-**Priority**: Medium (User interaction)
-**Dependencies**: None
-**Reference**: `audits/Minor Tasks.md #4`
-
-- **Risks & Guidance**: `InputHandler` changes affect global shortcuts; must gate strictly (Ctrl-held/hard-exit), perform widget hit-testing to avoid accidental skips, and add visual feedback without extra timers. Requires regression passes for existing key/mouse flows and overlay interaction, plus careful unit + manual testing before enabling.
-
-- [ ] **Add double-click handler**: Implement in `InputHandler`
-- [ ] **Filter widget areas**: Don't trigger when clicking widgets
-- [ ] **Respect interaction gating**: Only work in Ctrl-held or hard-exit modes
-- [ ] **Add visual feedback**: Optional halo half opacity flash on double-click
-- [ ] **Create test**: `tests/test_double_click_navigation.py`
-
----
+## Phase 0: Foundation & Quick Wins (Completed Jan 2026)
+- [x] **0.1 Visualizer Gating**: Halted FFT processing when Spotify != PLAYING; preserved dynamic floor logic. (Tests: `tests/test_spotify_visualizer_integration.py`).
+- [x] **0.2 Positioning Audit**: Verified all 9 anchors; fixed TOP_CENTER/MIDDLE missing coverage. (Tests: `tests/test_widget_positioning_comprehensive.py`).
+- [x] **0.3 Settings Persistence**: Implemented multi-monitor aware geometry save/restore in `SettingsDialog`.
+- [x] **0.4 Double-Click Nav**: Added double-click "Next Image" to `InputHandler` with interaction gating. (Tests: `tests/test_double_click_navigation.py`).
+- [x] **0.5 Volume Passthrough**: System volume keys now pass through to OS in MC mode. (Tests: `tests/test_media_keys.py`).
+- [x] **0.6 Smart Positioning**: Visualizer auto-aligns below MediaWidget when both use TOP anchors. (Tests: `tests/test_visualizer_smart_positioning.py`).
+- [x] **0.7 Regression Fixes**: Fixed `MediaWidget` position normalization (coerce logic) and resolved model/GUI string mismatches.
 
 ## Phase 1: Process Isolation Foundations (Week 3-4)
 
@@ -243,13 +181,22 @@ alpha_decay = 1.0 - math.exp(-dt / (base_tau * 3.0))
 **Dependencies**: Phase 4 complete
 **Reference**: `audits/Minor Tasks.md #7`
 
-- [ ] **Context menu item**: "On Top / On Bottom" (MC only)
-- [ ] **Window layering toggle**: Maintain Z-order hierarchy
-- [ ] **Visibility detection**: 95% coverage threshold
-- [ ] **Eco Mode implementation**: Pause transitions/visualizer when covered
-- [ ] **Automatic recovery**: Restore when visibility regained
-- [ ] **Logging integration**: Eco Mode activation/deactivation events
-- [ ] **Multi-monitor testing**: Various configurations
+- [ ] **Context menu item**: "On Top / On Bottom" (MC builds only)
+- [ ] **Window layering toggle**: Maintain Z-order hierarchy (preserve internal widget Z-index)
+- [ ] **Visibility detection**: implement 95% opacity/coverage threshold
+- [ ] **Eco Mode implementation**: pause transitions and visualizer updates when covered
+- [ ] **Ensure isolation**: never trigger Eco Mode in "On Top" mode
+- [ ] **Automatic recovery**: Restore all animations when visibility regained
+- [ ] **Logging & Telemetry**: Track Eco Mode activation/deactivation effectiveness
+- [ ] **Multi-monitor testing**: Various configurations and overlap scenarios
+
+**Files**: `rendering/display_widget.py`, `widgets/context_menu.py`
+**Test**: `tests/test_mc_layering_mode.py`
+
+**Notes**:
+- Disable in normal builds (grey out or hide option)
+- No GUI toggle for Eco Mode (fully automatic)
+- Consider adding performance telemetry for Eco Mode effectiveness
 
 ### 5.2 Performance Optimization
 **Priority**: Medium (Performance refinement)
@@ -316,13 +263,14 @@ alpha_decay = 1.0 - math.exp(-dt / (base_tau * 3.0))
 ### Performance Tests (Required for performance-sensitive changes)
 - [ ] `SRPSS_PERF_METRICS=1` baselines recorded
 - [ ] dt_max < 100ms maintained
-- [ ] Memory usage within acceptable bounds
+- [ ] Memory usage within acceptable bounds, no leak potential
+- [ ] VRAM usage < 1GB, no leak potential.
 - [ ] No new blocking operations on UI thread
 
 ### Visual Regression Tests (Required for UI changes)
 - [ ] Widget positioning verified
 - [ ] Transition correctness validated
-- [ ] Visualizer fidelity maintained
+- [ ] Visualizer fidelity and calculation results maintained
 - [ ] Settings dialog behavior consistent
 
 ---
@@ -333,6 +281,7 @@ alpha_decay = 1.0 - math.exp(-dt / (base_tau * 3.0))
 - [ ] Visualizer CPU usage reduced by 70%+ when not playing
 - [ ] dt_max < 100ms maintained across all operations
 - [ ] Memory usage stable (no leaks)
+- [ ] VRAM usage < 1GB, no leak potential
 - [ ] Startup time < 3 seconds on typical hardware
 
 ### Feature Completeness

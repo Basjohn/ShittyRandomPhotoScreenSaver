@@ -1,0 +1,109 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- C:\Python311\python.exe
+cachedir: .pytest_cache
+PySide6 6.9.1 -- Qt runtime 6.9.1 -- Qt compiled 6.9.1
+rootdir: F:\Programming\Apps\ShittyRandomPhotoScreenSaver
+configfile: pytest.ini
+plugins: cov-7.0.0, qt-4.5.0
+collecting ... collected 4 items
+
+tests/test_double_click_navigation.py::test_current_image_path_storage PASSED [ 25%]
+tests/test_double_click_navigation.py::test_double_click_triggers_handler PASSED [ 50%]
+tests/test_double_click_navigation.py::test_handler_opens_explorer FAILED [ 75%]
+tests/test_double_click_navigation.py::test_handler_ignores_missing_path FAILED [100%]
+
+================================== FAILURES ===================================
+_________________________ test_handler_opens_explorer _________________________
+
+mock_desktop_services = <MagicMock name='QDesktopServices' id='1606302384784'>
+
+    def test_handler_opens_explorer(mock_desktop_services):
+        """InputHandler should open explorer on valid double click."""
+        parent = MagicMock()
+        parent.current_image_path = "C:/Photos/vacation/pic.jpg"
+    
+>       handler = InputHandler(parent)
+                  ^^^^^^^^^^^^^^^^^^^^
+
+tests\test_double_click_navigation.py:66: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[RuntimeError("'__init__' method of object's base class (InputHandler) not called.") raised in repr()] InputHandler object at 0x175ff7dfc80>
+parent = <MagicMock id='1606309248080'>, settings_manager = None
+widget_manager = None
+
+    def __init__(
+        self,
+        parent: "DisplayWidget",
+        settings_manager: Optional[SettingsManager] = None,
+        widget_manager: Optional["WidgetManager"] = None,
+    ):
+        """
+        Initialize the InputHandler.
+    
+        Args:
+            parent: The DisplayWidget that owns this handler
+            settings_manager: Optional SettingsManager for input settings
+            widget_manager: Optional WidgetManager for effect invalidation coordination
+        """
+>       super().__init__(parent)
+E       TypeError: 'PySide6.QtCore.QObject.__init__' called with wrong argument types:
+E         PySide6.QtCore.QObject.__init__(MagicMock)
+E       Supported signatures:
+E         PySide6.QtCore.QObject.__init__(parent: PySide6.QtCore.QObject | None = None, *, objectName: str | None = None)
+
+rendering\input_handler.py:75: TypeError
+______________________ test_handler_ignores_missing_path ______________________
+
+mock_desktop_services = <MagicMock name='QDesktopServices' id='1604371713680'>
+
+    def test_handler_ignores_missing_path(mock_desktop_services):
+        """Should do nothing if no image path is set (e.g. RSS stream)."""
+        parent = MagicMock()
+        parent.current_image_path = None
+    
+>       handler = InputHandler(parent)
+                  ^^^^^^^^^^^^^^^^^^^^
+
+tests\test_double_click_navigation.py:87: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[RuntimeError("'__init__' method of object's base class (InputHandler) not called.") raised in repr()] InputHandler object at 0x1758c01bbc0>
+parent = <MagicMock id='1604371721040'>, settings_manager = None
+widget_manager = None
+
+    def __init__(
+        self,
+        parent: "DisplayWidget",
+        settings_manager: Optional[SettingsManager] = None,
+        widget_manager: Optional["WidgetManager"] = None,
+    ):
+        """
+        Initialize the InputHandler.
+    
+        Args:
+            parent: The DisplayWidget that owns this handler
+            settings_manager: Optional SettingsManager for input settings
+            widget_manager: Optional WidgetManager for effect invalidation coordination
+        """
+>       super().__init__(parent)
+E       TypeError: 'PySide6.QtCore.QObject.__init__' called with wrong argument types:
+E         PySide6.QtCore.QObject.__init__(MagicMock)
+E       Supported signatures:
+E         PySide6.QtCore.QObject.__init__(parent: PySide6.QtCore.QObject | None = None, *, objectName: str | None = None)
+
+rendering\input_handler.py:75: TypeError
+============================== warnings summary ===============================
+tests\test_double_click_navigation.py:16
+  F:\Programming\Apps\ShittyRandomPhotoScreenSaver\tests\test_double_click_navigation.py:16: PytestCollectionWarning: cannot collect test class 'TestableDisplayWidget' because it has a __init__ constructor (from: tests/test_double_click_navigation.py)
+    class TestableDisplayWidget(DisplayWidget):
+
+tests/test_double_click_navigation.py::test_double_click_triggers_handler
+  F:\Programming\Apps\ShittyRandomPhotoScreenSaver\tests\test_double_click_navigation.py:49: DeprecationWarning: Function: 'QMouseEvent.QMouseEvent(QEvent.Type type, const QPointF &localPos, Qt.MouseButton button, QFlags<Qt.MouseButton> buttons, QFlags<Qt.KeyboardModifier> modifiers, const QPointingDevice *device)' is marked as deprecated, please check the documentation for more information.
+    event = QMouseEvent(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_double_click_navigation.py::test_handler_opens_explorer - T...
+FAILED tests/test_double_click_navigation.py::test_handler_ignores_missing_path
+=================== 2 failed, 2 passed, 2 warnings in 0.63s ===================

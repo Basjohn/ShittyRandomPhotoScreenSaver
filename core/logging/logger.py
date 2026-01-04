@@ -860,6 +860,14 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
     internal_noisy_level = logging.DEBUG if verbose else logging.INFO
     for name in NOISY_INTERNAL_MODULES:
         logging.getLogger(name).setLevel(internal_noisy_level)
+
+    # Windows diagnostics logger (DisplayWidget native hooks, etc.).
+    # Allow DEBUG tracing only when SRPSS_WIN_DIAG=1 is specified.
+    win_diag_level = internal_noisy_level
+    win_diag_override = _parse_bool_token(os.getenv("SRPSS_WIN_DIAG"))
+    if win_diag_override is True:
+        win_diag_level = logging.DEBUG
+    logging.getLogger("win_diag").setLevel(win_diag_level)
     
     # Log startup
     _VERBOSE = bool(verbose)

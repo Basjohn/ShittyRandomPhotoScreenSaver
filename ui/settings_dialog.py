@@ -1300,6 +1300,13 @@ class SettingsDialog(QDialog):
                     self._remember_scroll_for_tab(current_index)
         except Exception:
             logger.debug("Failed to capture tab state on close", exc_info=True)
+        
+        # Save window geometry for next session
+        try:
+            self._save_geometry()
+        except Exception:
+            logger.debug("Failed to save dialog geometry on close", exc_info=True)
+        
         super().closeEvent(event)
 
     def _on_reset_to_defaults_clicked(self) -> None:
@@ -1633,43 +1640,39 @@ class SettingsDialog(QDialog):
         """Restore window geometry from settings."""
         geometry = self._settings.get('ui.dialog_geometry', {})
         if geometry:
-            screen = None
-            try:
-                screen = QGuiApplication.primaryScreen()
-            except Exception:
-                screen = None
+            x_saved = int(geometry.get('x', 100))
+            y_saved = int(geometry.get('y', 100))
+            w_saved = int(geometry.get('width', 1000))
+            h_saved = int(geometry.get('height', 700))
 
-            if screen is not None:
-                available = screen.availableGeometry()
+            # Find which screen the saved position belongs to
+            target_screen = QGuiApplication.screenAt(QPoint(x_saved, y_saved))
+            
+            # Fallback to primary if off-screen or monitor unplugged
+            if target_screen is None:
+                target_screen = QGuiApplication.primaryScreen()
 
-                width = int(geometry.get('width', 1000))
-                height = int(geometry.get('height', 700))
+            if target_screen is not None:
+                available = target_screen.availableGeometry()
 
-                # Clamp restored size so it always fits on the current screen,
-                # while respecting the dialog's minimum size.
-                width = max(self.minimumWidth(), min(width, available.width()))
-                height = max(self.minimumHeight(), min(height, available.height()))
+                # Clamp size to available screen area (minus taskbars)
+                width = max(self.minimumWidth(), min(w_saved, available.width()))
+                height = max(self.minimumHeight(), min(h_saved, available.height()))
 
-                x = int(geometry.get('x', available.x() + (available.width() - width) // 2))
-                y = int(geometry.get('y', available.y() + (available.height() - height) // 2))
-
-                # Ensure the dialog remains fully visible on-screen.
-                x = max(available.x(), min(x, available.x() + available.width() - width))
-                y = max(available.y(), min(y, available.y() + available.height() - height))
+                # Clamp position to be within the target screen
+                # Ensure x is within [left, right - width]
+                x = max(available.left(), min(x_saved, available.right() - width))
+                # Ensure y is within [top, bottom - height]
+                y = max(available.top(), min(y_saved, available.bottom() - height))
 
                 self.resize(width, height)
                 self.move(x, y)
                 logger.debug(
-                    "Restored dialog geometry (clamped to screen): x=%s, y=%s, w=%s, h=%s",
-                    x,
-                    y,
-                    width,
-                    height,
+                    "Restored dialog geometry: x=%s, y=%s, w=%s, h=%s (Screen: %s)",
+                    x, y, width, height, target_screen.name()
                 )
             else:
-                # Fallback: restore without clamping if we cannot query
-                # screens. Honour the dialog's minimum size when defaults
-                # are used so we do not shrink below the designed layout.
-                self.move(geometry.get('x', 100), geometry.get('y', 100))
-                self.resize(geometry.get('width', 1024), geometry.get('height', 610))
-                logger.debug(f"Restored dialog geometry: {geometry}")
+                # Last resort fallback
+                self.move(x_saved, y_saved)
+                self.resize(w_saved, h_saved)
+                logger.debug("Restored dialog geometry (no screen info): %s", geometry)
