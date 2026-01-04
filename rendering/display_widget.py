@@ -372,8 +372,27 @@ class DisplayWidget(QWidget):
         self.setCursor(Qt.CursorShape.BlankCursor)
         self.setMouseTracking(True)
         # Phase 5: Use MultiMonitorCoordinator for focus ownership
+        focus_claimed = False
         try:
-            if self._coordinator.claim_focus(self):
+            focus_claimed = self._coordinator.claim_focus(self)
+            if not focus_claimed and self._mc_window_flag_mode == "tool":
+                # MC Tool windows must remain focusable so global media keys pass
+                # through. Force-release the previous owner and re-claim focus.
+                try:
+                    current_owner = self._coordinator.focus_owner
+                except Exception:
+                    current_owner = None
+                if current_owner is not None and current_owner is not self:
+                    try:
+                        self._coordinator.release_focus(current_owner)
+                    except Exception:
+                        pass
+                    focus_claimed = self._coordinator.claim_focus(self)
+        except Exception:
+            focus_claimed = False
+
+        try:
+            if focus_claimed:
                 self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
                 try:
                     self.setWindowFlag(Qt.WindowType.WindowDoesNotAcceptFocus, False)
