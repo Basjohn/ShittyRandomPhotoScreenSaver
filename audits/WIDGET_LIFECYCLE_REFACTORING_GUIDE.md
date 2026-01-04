@@ -233,6 +233,31 @@ _Role_: companion deep dive for **Phase 4 – Widget & Settings Modularity** f
   - [ ] Clear cached data
   - [ ] Verify no leaks
 
+### ✅ Phase 5b: Overlay Geometry & Padding Alignment (weather-first rollout) (4 hours)
+
+_Research summary (Jan 2026)_:
+- WeatherWidget applies asymmetric padding (left = 21 px, right = 28 px) but only right anchors compensate, so visual content drifts past configured margins on other anchors.
+- BaseOverlayWidget’s `_update_position()` aligns the widget frame, not the “visual card” inside padding, so any widget with interior padding appears offset from margins, and stacking/pixel-shift inherit those errors.
+- Clock/Media/Reddit already have custom visual-offset math; Weather duplicates this ad‑hoc and still fails on pixel shift.
+
+**Action Items**
+1. **BaseOverlayWidget visual padding helpers**
+   - [ ] Add `set_visual_padding(top, right, bottom, left)` (default = 0) stored on the base class.
+   - [ ] Update `_update_position()` to subtract/add the appropriate padding deltas when anchoring so that the visible card edge, not the QLabel frame, honors margins.
+   - [ ] Ensure pixel shift + stack offsets apply after padding adjustments; notify `PixelShiftManager` of the new “true origin” (see Media/Reddit pattern).
+2. **WeatherWidget migration (first adopter)**
+   - [ ] Remove custom `_update_position()`; configure padding via the new helper.
+   - [ ] Keep separator/forecast logic untouched but confirm cached geometry updates still call into base `_update_position()`.
+   - [ ] Validate all nine anchors with pixel shift enabled; capture before/after in `tests/test_widget_layouts.py`.
+3. **Other widget adoption plan**
+   - [ ] Inventory widgets using internal padding or manual offsets (Media, Reddit, SpotifyVisualizer card, future widgets).
+   - [ ] For each, migrate to the helper or document why existing visual-offset routines (e.g., Clock analogue mode) remain custom.
+   - [ ] Add regression tests per widget once migrated (geometry assertions with stacking + pixel shift).
+4. **Documentation & Guidelines**
+   - [ ] Update `Docs/10_WIDGET_GUIDELINES.md` with a “visual padding alignment” rule referencing the helper.
+   - [ ] Note the new helper in `Index.md` under `widgets/base_overlay_widget.py`.
+   - [ ] Reference this subsection from `audits/v2_0_Roadmap.md` and `audits/ARCHITECTURE_AND_MULTIPROCESSING_PLAN_2026.md` so future phases schedule the rollout.
+
 ### ✅ Phase 6: Migrate MediaWidget (3 hours)
 
 - [ ] **Update MediaWidget initialization** (45 min)

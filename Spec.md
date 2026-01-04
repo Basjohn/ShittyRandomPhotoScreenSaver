@@ -222,7 +222,7 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
   - `widgets.clock2.*`, `widgets.clock3.*` (Clock 2/3): same schema as Clock 1 with independent per-monitor/timezone configuration.
   - `widgets.weather.*`: monitor ('ALL'|1|2|3), position, font, colour, margin, optional iconography. **FR-5.2**: Weather widget - temperature, condition, location 
     - Open-Meteo provider integration (no API key required), with back-compat parsing for legacy OpenWeather-style JSON in tests/mocks
-    - Background fetching with QThread
+    - Background fetching and refresh timers run exclusively through ThreadManager-driven overlay timers (no raw QThread usage); failures fall back to cached data with retry timers also registered via the overlay timer helper.
     - 30-minute caching
     - 9 position options (Top/Middle/Bottom × Left/Center/Right)
     - Title Case display for location and condition text

@@ -1,3 +1,5 @@
+This document remains as a static reference unless explicitly told to be updated with its exact file name used.
+
 # Spotify Visualizer Debug Notes (Dec 28 2025 - Updated Jan 3 2026)
 
 This document captures the current, tested behaviour for the Spotify bar visualizer. It intentionally avoids any Spotify-version-specific assumptions so it remains valid even if the Spotify desktop app changes transport APIs (we only consume loopback audio + GSMTC metadata).

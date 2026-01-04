@@ -6,7 +6,7 @@
 
 ## Goals
 
-1. **Weather Widget Layout**
+1. **Weather Widget Layout** [Planned fix is in Roadmap and Refactor Guide]
    - Audit `widgets/weather_widget.py` for hardcoded offsets.
    - Cross-check against `Docs/10_WIDGET_GUIDELINES.md` and ensure we reuse the shared spacing helpers.
    - Add regression tests (screenshot diff or geometry assertions) that instantiate `WeatherWidget` in each position and verify `geometry().margins()` respect the configured values.
