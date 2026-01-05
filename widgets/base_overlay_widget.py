@@ -409,7 +409,8 @@ class BaseOverlayWidget(QLabel):
 
         try:
             old_geo = self.geometry()
-        except Exception:
+        except Exception as e:
+            logger.debug("[OVERLAY] Exception suppressed: %s", e)
             old_geo = QRect()
         
         parent_size = parent.size()
@@ -456,13 +457,14 @@ class BaseOverlayWidget(QLabel):
 
         try:
             new_geo = self.geometry()
-        except Exception:
+        except Exception as e:
+            logger.debug("[OVERLAY] Exception suppressed: %s", e)
             new_geo = QRect()
 
         try:
             parent.update(old_geo.united(new_geo))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[OVERLAY] Exception suppressed: %s", e)
     
     # -------------------------------------------------------------------------
     # Shadow Management
@@ -530,7 +532,8 @@ class BaseOverlayWidget(QLabel):
             return
         try:
             inherited = getattr(parent, "_thread_manager", None)
-        except Exception:
+        except Exception as e:
+            logger.debug("[OVERLAY] Exception suppressed: %s", e)
             inherited = None
         if inherited is not None:
             self._thread_manager = inherited
@@ -865,8 +868,8 @@ class BaseOverlayWidget(QLabel):
             # Schedule Qt deletion
             try:
                 self.deleteLater()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[OVERLAY] Exception suppressed: %s", e)
                 
         except Exception as e:
             logger.error(

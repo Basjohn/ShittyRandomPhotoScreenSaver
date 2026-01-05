@@ -156,7 +156,8 @@ def _is_frozen_runtime() -> bool:
         return True
     try:
         return bool(getattr(builtins, "__compiled__", False))
-    except Exception:
+    except Exception as e:
+        logger.debug("[MISC] Exception suppressed: %s", e)
         return False
 
 
@@ -226,7 +227,8 @@ def _create_process(command_line: str) -> bool:
         error = ctypes.get_last_error()
         try:
             message = ctypes.WinError(error).strerror
-        except Exception:
+        except Exception as e:
+            logger.debug("[MISC] Exception suppressed: %s", e)
             message = f"Win32 error {error}"
         logger.debug("[REDDIT] CreateProcessW failed: %s", message)
         return False

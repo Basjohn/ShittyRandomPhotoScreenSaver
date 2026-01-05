@@ -53,7 +53,8 @@ def _coerce_bool(value, default: bool) -> bool:
         from core.settings.settings_manager import SettingsManager as _SM  # type: ignore
 
         return _SM.to_bool(value, default)
-    except Exception:
+    except Exception as e:
+        logger.debug("[MISC] Exception suppressed: %s", e)
         if value is None:
             return default
         if isinstance(value, str):
@@ -67,7 +68,8 @@ def _coerce_bool(value, default: bool) -> bool:
             return bool(value)
         try:
             return bool(value)
-        except Exception:
+        except Exception as e:
+            logger.debug("[MISC] Exception suppressed: %s", e)
             return default
 
 

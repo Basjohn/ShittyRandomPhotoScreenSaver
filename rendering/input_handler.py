@@ -106,7 +106,8 @@ class InputHandler(QObject):
             return SettingsManager.to_bool(
                 self._settings_manager.get('input.hard_exit', False), False
             )
-        except Exception:
+        except Exception as e:
+            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
             return False
     
     def set_ctrl_held(self, held: bool) -> None:
@@ -131,8 +132,8 @@ class InputHandler(QObject):
             if self._widget_manager is not None:
                 try:
                     self._widget_manager.schedule_effect_invalidation("menu_close", delay_ms=16)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
     
     def is_context_menu_active(self) -> bool:
         """Check if context menu is currently active."""
@@ -155,14 +156,16 @@ class InputHandler(QObject):
         key = event.key()
         try:
             key_text = event.text().lower() if event.text() else ""
-        except Exception:
+        except Exception as e:
+            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
             key_text = ""
 
         native_vk = 0
         try:
             if hasattr(event, "nativeVirtualKey"):
                 native_vk = int(event.nativeVirtualKey() or 0)
-        except Exception:
+        except Exception as e:
+            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
             native_vk = 0
         
         # Ctrl key handling is done by DisplayWidget for halo management
@@ -247,8 +250,8 @@ class InputHandler(QObject):
                 }
                 if native_vk in media_vk_codes:
                     return True
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
         
         return False
     
@@ -285,8 +288,8 @@ class InputHandler(QObject):
                 if self._widget_manager is not None:
                     try:
                         self._widget_manager.invalidate_overlay_effects("menu_before_popup")
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
                 
                 self.context_menu_requested.emit(global_pos)
                 return True
@@ -347,8 +350,8 @@ class InputHandler(QObject):
                 self._exiting = True
                 self.exit_requested.emit()
                 return True
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
         
         return False
     
@@ -430,19 +433,21 @@ class InputHandler(QObject):
             from rendering.display_widget import DisplayWidget
 
             DisplayWidget._global_ctrl_held = True  # type: ignore[attr-defined]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
         
         try:
             global_pos = QCursor.pos()
-        except Exception:
+        except Exception as e:
+            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
             global_pos = None
 
         cursor_screen = None
         if global_pos is not None:
             try:
                 cursor_screen = QGuiApplication.screenAt(global_pos)
-            except Exception:
+            except Exception as e:
+                logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
                 cursor_screen = None
 
         display_widgets = coordinator.get_all_instances()
@@ -453,7 +458,8 @@ class InputHandler(QObject):
                 display_widgets = [
                     w for w in QApplication.topLevelWidgets() if isinstance(w, DisplayWidget)
                 ]
-            except Exception:
+            except Exception as e:
+                logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
                 display_widgets = []
 
         # Reset Ctrl state and hide halos on all displays
@@ -465,9 +471,10 @@ class InputHandler(QObject):
                     try:
                         hint.cancel_animation()
                         hint.hide()
-                    except Exception:
-                        pass
-            except Exception:
+                    except Exception as e:
+                        logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
+            except Exception as e:
+                logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
                 continue
 
         target_widget = None
@@ -482,7 +489,8 @@ class InputHandler(QObject):
                         target_widget = w
                         target_pos = local_pos
                         break
-                except Exception:
+                except Exception as e:
+                    logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
                     continue
 
         # Fallback: geometry-based lookup
@@ -494,7 +502,8 @@ class InputHandler(QObject):
                         target_widget = w
                         target_pos = local_pos
                         break
-                except Exception:
+                except Exception as e:
+                    logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
                     continue
 
         # Final fallback: use parent
@@ -505,7 +514,8 @@ class InputHandler(QObject):
                     target_pos = self._parent.mapFromGlobal(global_pos)
                 else:
                     target_pos = self._parent.rect().center()
-            except Exception:
+            except Exception as e:
+                logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
                 target_pos = self._parent.rect().center()
 
         coordinator.set_halo_owner(target_widget)
@@ -514,8 +524,8 @@ class InputHandler(QObject):
             from rendering.display_widget import DisplayWidget
 
             DisplayWidget._halo_owner = target_widget  # type: ignore[attr-defined]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
         
         logger.debug("[CTRL HALO] Ctrl pressed; target screen=%s pos=%s",
                      getattr(target_widget, "screen_index", "?"), target_pos)
@@ -523,8 +533,8 @@ class InputHandler(QObject):
         # Show halo on target widget
         try:
             target_widget._show_ctrl_cursor_hint(target_pos, mode="fade_in")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
         
         return target_widget
 
@@ -547,8 +557,8 @@ class InputHandler(QObject):
                 from rendering.display_widget import DisplayWidget
 
                 DisplayWidget._global_ctrl_held = False  # type: ignore[attr-defined]
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
             return
 
         # Clear global Ctrl state and fade out halo
@@ -561,12 +571,13 @@ class InputHandler(QObject):
 
             DisplayWidget._global_ctrl_held = False  # type: ignore[attr-defined]
             DisplayWidget._halo_owner = None  # type: ignore[attr-defined]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
 
         try:
             global_pos = QCursor.pos()
-        except Exception:
+        except Exception as e:
+            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
             global_pos = None
 
         display_widgets = coordinator.get_all_instances()
@@ -577,15 +588,16 @@ class InputHandler(QObject):
                 display_widgets = [
                     w for w in QApplication.topLevelWidgets() if isinstance(w, DisplayWidget)
                 ]
-            except Exception:
+            except Exception as e:
+                logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
                 display_widgets = []
 
         # Fade out halo on owner (owner may not be registered in coordinator during tests).
         if owner is not None:
             try:
                 owner._ctrl_held = False
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
             try:
                 hint = getattr(owner, "_ctrl_cursor_hint", None)
                 if hint is not None and hint.isVisible():
@@ -594,15 +606,16 @@ class InputHandler(QObject):
                             local_pos = owner.mapFromGlobal(global_pos)
                         else:
                             local_pos = hint.pos() + hint.rect().center()
-                    except Exception:
+                    except Exception as e:
+                        logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
                         local_pos = hint.pos() + hint.rect().center()
                     logger.debug("[CTRL HALO] Ctrl released; fading out at %s", local_pos)
                     try:
                         owner._show_ctrl_cursor_hint(local_pos, mode="fade_out")
-                    except Exception:
-                        pass
-            except Exception:
-                pass
+                    except Exception as e:
+                        logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
+            except Exception as e:
+                logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
 
         # Clear Ctrl state on all other displays
         for w in display_widgets:
@@ -615,9 +628,10 @@ class InputHandler(QObject):
                     try:
                         hint.cancel_animation()
                         hint.hide()
-                    except Exception:
-                        pass
-            except Exception:
+                    except Exception as e:
+                        logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
+            except Exception as e:
+                logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
                 continue
 
     # =========================================================================
@@ -654,8 +668,8 @@ class InputHandler(QObject):
                     local_pos = QPoint(pos.x() - geom.x(), pos.y() - geom.y())
                     if hasattr(vw, 'handle_press') and vw.handle_press(local_pos, button):
                         handled = True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
         
         # Media widget transport controls
         if not handled and media_widget is not None:
@@ -669,16 +683,16 @@ class InputHandler(QObject):
                         try:
                             mw.next_track()
                             handled = True
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
                     elif button == _Qt.MouseButton.MiddleButton:
                         try:
                             mw.previous_track()
                             handled = True
-                        except Exception:
-                            pass
-            except Exception:
-                pass
+                        except Exception as e:
+                            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
+            except Exception as e:
+                logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
         
         # Reddit widgets
         for rw in [reddit_widget, reddit2_widget]:
@@ -692,7 +706,7 @@ class InputHandler(QObject):
                     if hasattr(rw, "resolve_click_target"):
                         try:
                             url = rw.resolve_click_target(local_pos)
-                        except Exception:
+                        except Exception as e:
                             logger.debug("[INPUT] resolve_click_target failed", exc_info=True)
                     if not url and hasattr(rw, "handle_click"):
                         result = rw.handle_click(local_pos)
@@ -708,7 +722,7 @@ class InputHandler(QObject):
                         handled = True
                         reddit_handled = True
                         reddit_url = url
-            except Exception:
+            except Exception as e:
                 logger.debug("[INPUT] Reddit click routing failed", exc_info=True)
         
         # Gmail widget
@@ -723,7 +737,7 @@ class InputHandler(QObject):
                         logger.debug("[INPUT] Gmail handle_click returned: %s", result)
                         if result:
                             handled = True
-            except Exception:
+            except Exception as e:
                 logger.debug("[INPUT] Gmail click routing failed", exc_info=True)
         
         logger.debug(
@@ -764,8 +778,8 @@ class InputHandler(QObject):
                 else:
                     mw.next_track()
                     return True
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
         return False
 
     def route_volume_drag(self, pos: QPoint, spotify_volume_widget) -> bool:
@@ -778,8 +792,8 @@ class InputHandler(QObject):
             if hasattr(spotify_volume_widget, 'handle_drag'):
                 spotify_volume_widget.handle_drag(local_pos)
                 return True
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
         return False
 
     def route_volume_release(self, spotify_volume_widget) -> bool:
@@ -790,8 +804,8 @@ class InputHandler(QObject):
             if hasattr(spotify_volume_widget, 'handle_release'):
                 spotify_volume_widget.handle_release()
                 return True
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
         return False
 
     def route_wheel_event(
@@ -825,8 +839,8 @@ class InputHandler(QObject):
             if hasattr(vw, "handle_wheel") and vw.handle_wheel(local_pos, delta_y):
                 logger.debug("[WHEEL] Volume widget handled wheel event")
                 return True
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
         
         logger.debug("[WHEEL] Volume widget ignored wheel event")
         return False

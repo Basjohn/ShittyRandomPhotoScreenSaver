@@ -311,8 +311,8 @@ class OpenMeteoProvider:
                         # Use title case for forecast condition
                         tomorrow_condition_display = tomorrow_condition.title() if tomorrow_condition else ""
                         forecast_text = f"Tomorrow: {tomorrow_min:.0f}°-{tomorrow_max:.0f}°C {tomorrow_condition_display}"
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[MISC] Exception suppressed: %s", e)
             
             weather_data = {
                 'location': city,

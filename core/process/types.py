@@ -11,6 +11,12 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any, Dict, Optional
 
+from core.constants.timing import (
+    WORKER_HEARTBEAT_INTERVAL_MS,
+    RETRY_BASE_DELAY_MS,
+    RETRY_MAX_DELAY_MS,
+)
+
 
 class WorkerType(Enum):
     """Types of worker processes."""
@@ -346,12 +352,12 @@ class HealthStatus:
     
     # Health thresholds
     # Increased interval to 3s - workers may be busy processing for 500ms+
-    HEARTBEAT_INTERVAL_MS = 3000       # Expected heartbeat interval (was 1000ms)
+    HEARTBEAT_INTERVAL_MS = WORKER_HEARTBEAT_INTERVAL_MS
     MISSED_HEARTBEAT_THRESHOLD = 5     # Restart after this many misses (was 3)
     MAX_RESTARTS_PER_WINDOW = 5        # Max restarts in time window
     RESTART_WINDOW_SECONDS = 300       # 5 minute window for restart counting
-    RESTART_BACKOFF_BASE_MS = 1000     # Base backoff for restarts
-    RESTART_BACKOFF_MAX_MS = 30000     # Max backoff for restarts
+    RESTART_BACKOFF_BASE_MS = RETRY_BASE_DELAY_MS
+    RESTART_BACKOFF_MAX_MS = RETRY_MAX_DELAY_MS
     
     def is_healthy(self) -> bool:
         """Check if worker is considered healthy."""

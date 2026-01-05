@@ -324,9 +324,10 @@ class AnimationManager(QObject):
                 self._resources = ResourceManager()
             try:
                 self._resources.register_qt(self._timer, description="AnimationManager timer")
-            except Exception:
-                pass
-        except Exception:
+            except Exception as e:
+                logger.debug("[ANIMATOR] Exception suppressed: %s", e)
+        except Exception as e:
+            logger.debug("[ANIMATOR] Exception suppressed: %s", e)
             self._resources = None
         
         logger.debug(f"AnimationManager initialized (fps={fps})")
@@ -335,7 +336,8 @@ class AnimationManager(QObject):
         """Update target FPS and reconfigure the timer interval safely."""
         try:
             new_fps = max(10, min(240, int(fps)))
-        except Exception:
+        except Exception as e:
+            logger.debug("[ANIMATOR] Exception suppressed: %s", e)
             new_fps = 60
         if new_fps == self.fps:
             return
@@ -379,7 +381,8 @@ class AnimationManager(QObject):
                 QTimer.singleShot(0, self._do_stop)
             else:
                 self._do_stop()
-        except Exception:
+        except Exception as e:
+            logger.debug("[ANIMATOR] Exception during stop: %s", e)
             # Fallback: try direct stop
             self._do_stop()
     
@@ -567,8 +570,8 @@ class AnimationManager(QObject):
             self._animations[animation_id].cancel()
             try:
                 self.animation_cancelled.emit(animation_id)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[ANIMATOR] Exception suppressed: %s", e)
             # Remove from active animations
             del self._animations[animation_id]
             # Stop timer only if no animations AND no tick listeners remain
@@ -577,7 +580,8 @@ class AnimationManager(QObject):
                 try:
                     if self._timer.isActive():
                         self.stop()
-                except Exception:
+                except Exception as e:
+                    logger.debug("[ANIMATOR] Timer check from wrong thread: %s", e)
                     # Timer check from wrong thread - schedule stop
                     QTimer.singleShot(0, self._do_stop)
             return True

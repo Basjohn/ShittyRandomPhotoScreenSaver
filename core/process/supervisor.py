@@ -16,6 +16,10 @@ import uuid
 from multiprocessing import Queue
 from typing import Any, Callable, Dict, Optional
 
+from core.constants.timing import (
+    THREAD_JOIN_TIMEOUT_S,
+    PROCESS_TERMINATE_TIMEOUT_S,
+)
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.process.types import (
     HealthStatus,
@@ -235,8 +239,8 @@ class ProcessSupervisor:
                 if req_queue:
                     try:
                         req_queue.put_nowait(shutdown_msg.to_dict())
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[WORKER] Exception suppressed: %s", e)
                 
                 # Wait for graceful shutdown
                 process.join(timeout=timeout)
@@ -247,7 +251,7 @@ class ProcessSupervisor:
                         worker_type.value,
                     )
                     process.terminate()
-                    process.join(timeout=1.0)
+                    process.join(timeout=PROCESS_TERMINATE_TIMEOUT_S)
                     
                     if process.is_alive():
                         logger.error(
@@ -362,7 +366,8 @@ class ProcessSupervisor:
                     req_queue.put_nowait(message.to_dict())
                     logger.debug("Dropped oldest message for %s worker", worker_type.value)
                     return corr_id
-                except Exception:
+                except Exception as e:
+                    logger.debug("[WORKER] Exception suppressed: %s", e)
                     return None
     
     def poll_responses(
@@ -414,7 +419,8 @@ class ProcessSupervisor:
                         self._health[worker_type].set_busy(False)
                         self._health[worker_type].record_heartbeat()  # Reset heartbeat on idle
                         
-            except Exception:
+            except Exception as e:
+                logger.debug("[WORKER] Exception suppressed: %s", e)
                 break
         
         return responses
@@ -445,6 +451,106 @@ class ProcessSupervisor:
         """Get health status for all workers."""
         with self._lock:
             return {wt: self._health[wt] for wt in WorkerType}
+    
+    def get_detailed_health(self, worker_type: WorkerType) -> Dict[str, Any]:
+        """Get detailed health diagnostics for a worker.
+        
+        Returns comprehensive health information including:
+        - Basic health status
+        - Queue depths
+        - Memory usage (if available)
+        - Processing statistics
+        
+        Args:
+            worker_type: Type of worker to check
+            
+        Returns:
+            Dict with detailed health information
+        """
+        with self._lock:
+            health = self._health.get(worker_type)
+            if not health:
+                return {"error": "Worker not found", "worker_type": worker_type.value}
+            
+            # Basic health info
+            diagnostics = health.to_dict()
+            
+            # Add queue depths
+            req_queue = self._request_queues.get(worker_type)
+            resp_queue = self._response_queues.get(worker_type)
+            
+            try:
+                diagnostics["request_queue_size"] = req_queue.qsize() if req_queue else 0
+            except Exception as e:
+                logger.debug("[WORKER] Exception suppressed: %s", e)
+                diagnostics["request_queue_size"] = -1  # Queue doesn't support qsize
+            
+            try:
+                diagnostics["response_queue_size"] = resp_queue.qsize() if resp_queue else 0
+            except Exception as e:
+                logger.debug("[WORKER] Exception suppressed: %s", e)
+                diagnostics["response_queue_size"] = -1
+            
+            # Add process info if running
+            process = self._workers.get(worker_type)
+            if process and process.is_alive():
+                diagnostics["process_alive"] = True
+                diagnostics["process_pid"] = process.pid
+                
+                # Try to get memory info via psutil
+                try:
+                    import psutil
+                    proc = psutil.Process(process.pid)
+                    mem_info = proc.memory_info()
+                    diagnostics["memory_rss_mb"] = mem_info.rss / (1024 * 1024)
+                    diagnostics["memory_vms_mb"] = mem_info.vms / (1024 * 1024)
+                    diagnostics["cpu_percent"] = proc.cpu_percent(interval=0)
+                except Exception as e:
+                    logger.debug("[WORKER] Exception suppressed: %s", e)
+                    diagnostics["memory_rss_mb"] = None
+                    diagnostics["memory_vms_mb"] = None
+                    diagnostics["cpu_percent"] = None
+            else:
+                diagnostics["process_alive"] = False
+                diagnostics["process_pid"] = None
+            
+            # Add timing info
+            diagnostics["time_since_heartbeat_ms"] = (
+                (time.time() - health.last_heartbeat) * 1000 
+                if health.last_heartbeat > 0 else None
+            )
+            diagnostics["time_busy_ms"] = (
+                (time.time() - health.busy_since) * 1000 
+                if health.is_busy and health.busy_since > 0 else None
+            )
+            
+            return diagnostics
+    
+    def log_all_health_diagnostics(self) -> None:
+        """Log detailed health diagnostics for all workers.
+        
+        Useful for debugging worker issues.
+        """
+        for worker_type in WorkerType:
+            diag = self.get_detailed_health(worker_type)
+            if diag.get("process_alive"):
+                logger.info(
+                    "[WORKER_HEALTH] %s: state=%s, pid=%s, rss=%.1fMB, "
+                    "heartbeat_age=%.0fms, queue_depth=%d, restarts=%d",
+                    worker_type.value,
+                    diag.get("state", "UNKNOWN"),
+                    diag.get("process_pid"),
+                    diag.get("memory_rss_mb", 0) or 0,
+                    diag.get("time_since_heartbeat_ms", 0) or 0,
+                    diag.get("request_queue_size", 0),
+                    diag.get("restart_count", 0),
+                )
+            else:
+                logger.debug(
+                    "[WORKER_HEALTH] %s: state=%s (not running)",
+                    worker_type.value,
+                    diag.get("state", "UNKNOWN"),
+                )
     
     def register_response_callback(
         self,
@@ -573,7 +679,8 @@ class ProcessSupervisor:
                         while True:
                             try:
                                 data = resp_queue.get_nowait()
-                            except Exception:
+                            except Exception as e:
+                                logger.debug("[WORKER] Exception suppressed: %s", e)
                                 break
                             
                             response = WorkerResponse.from_dict(data)
@@ -606,8 +713,8 @@ class ProcessSupervisor:
                         for data in responses_to_requeue:
                             try:
                                 resp_queue.put_nowait(data)
-                            except Exception:
-                                pass  # Queue full - drop
+                            except Exception as e:
+                                logger.debug("[WORKER] Exception suppressed: %s", e)  # Queue full - drop
                         
                         # Process responses with callbacks
                         for response in responses_to_process:
@@ -652,7 +759,7 @@ class ProcessSupervisor:
         # Stop response listener
         self._response_listener_running = False
         if self._response_listener_thread and self._response_listener_thread.is_alive():
-            self._response_listener_thread.join(timeout=1.0)
+            self._response_listener_thread.join(timeout=THREAD_JOIN_TIMEOUT_S)
         
         # Stop heartbeat monitoring
         if self._heartbeat_timer:
@@ -690,7 +797,8 @@ class ProcessSupervisor:
         key = f"workers.{worker_type.value}.enabled"
         try:
             return self._settings_manager.get(key, True)
-        except Exception:
+        except Exception as e:
+            logger.debug("[WORKER] Exception suppressed: %s", e)
             return True
     
     def _cleanup_worker(self, worker_type: WorkerType) -> None:
@@ -704,8 +812,8 @@ class ProcessSupervisor:
                 try:
                     queue.close()
                     queue.join_thread()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[WORKER] Exception suppressed: %s", e)
         
         self._health[worker_type].state = WorkerState.STOPPED
         self._health[worker_type].pid = None

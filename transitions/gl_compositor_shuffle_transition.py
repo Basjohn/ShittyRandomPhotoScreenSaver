@@ -101,7 +101,7 @@ class GLCompositorShuffleTransition(BaseTransition):
             comp.setGeometry(0, 0, widget.width(), widget.height())
             comp.show()
             comp.raise_()
-        except Exception:
+        except Exception as e:
             logger.debug(
                 "[GL COMPOSITOR] Failed to configure compositor geometry/visibility (shuffle)",
                 exc_info=True,
@@ -131,7 +131,7 @@ class GLCompositorShuffleTransition(BaseTransition):
             warm = getattr(comp, "warm_shader_textures", None)
             if callable(warm):
                 warm(old_pixmap, new_pixmap)
-        except Exception:
+        except Exception as e:
             logger.debug("[GL COMPOSITOR] Failed to warm shuffle textures", exc_info=True)
 
         def _on_finished() -> None:
@@ -150,7 +150,7 @@ class GLCompositorShuffleTransition(BaseTransition):
                 animation_manager=am,
                 on_finished=_on_finished,
             )
-        except Exception:
+        except Exception as e:
             logger.debug("[GL COMPOSITOR] start_shuffle_shader failed; falling back to diffuse", exc_info=True)
             anim_id = None
 
@@ -192,7 +192,7 @@ class GLCompositorShuffleTransition(BaseTransition):
             try:
                 # Snap to final frame when cancelling mid-way to avoid pops.
                 self._compositor.cancel_current_transition(snap_to_new=True)
-            except Exception:
+            except Exception as e:
                 logger.debug("[GL COMPOSITOR] Failed to cancel current shuffle transition", exc_info=True)
 
         self._animation_id = None
@@ -208,7 +208,7 @@ class GLCompositorShuffleTransition(BaseTransition):
                 # Ensure compositor is no longer animating; do not force snap
                 # here, as DisplayWidget will already have updated its base.
                 self._compositor.cancel_current_transition(snap_to_new=True)
-            except Exception:
+            except Exception as e:
                 logger.debug("[GL COMPOSITOR] Failed to cleanup shuffle compositor", exc_info=True)
             self._compositor = None
 
@@ -310,7 +310,7 @@ class GLCompositorShuffleTransition(BaseTransition):
         if not region.isEmpty():
             try:
                 self._compositor.set_diffuse_region(region)
-            except Exception:
+            except Exception as e:
                 logger.debug("[GL COMPOSITOR] Failed to update shuffle region", exc_info=True)
 
         total = len(self._blocks) or 1

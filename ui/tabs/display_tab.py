@@ -313,12 +313,14 @@ class DisplayTab(QWidget):
                         parsed = ast.literal_eval(raw_show_on)
                         if isinstance(parsed, (list, tuple, set)):
                             selected_monitors = {int(x) for x in parsed}
-                    except Exception:
+                    except Exception as e:
+                        logger.debug("[MISC] Exception suppressed: %s", e)
                         selected_monitors = set()
             elif isinstance(raw_show_on, (list, tuple, set)):
                 try:
                     selected_monitors = {int(x) for x in raw_show_on}
-                except Exception:
+                except Exception as e:
+                    logger.debug("[MISC] Exception suppressed: %s", e)
                     selected_monitors = set()
 
             self.show_all_check.setChecked(show_all)

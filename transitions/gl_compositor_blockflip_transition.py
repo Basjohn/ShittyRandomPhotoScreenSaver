@@ -119,7 +119,7 @@ class GLCompositorBlockFlipTransition(BaseTransition):
             warm = getattr(comp, "warm_shader_textures", None)
             if callable(warm):
                 warm(old_pixmap, new_pixmap)
-        except Exception:
+        except Exception as e:
             logger.debug("[GL COMPOSITOR] Failed to warm blockflip textures", exc_info=True)
 
         # Ensure compositor matches widget geometry and is above the base.
@@ -127,7 +127,7 @@ class GLCompositorBlockFlipTransition(BaseTransition):
             comp.setGeometry(0, 0, widget.width(), widget.height())
             comp.show()
             comp.raise_()
-        except Exception:
+        except Exception as e:
             logger.debug("[GL COMPOSITOR] Failed to configure compositor geometry/visibility (block flip)", exc_info=True)
 
         # Build block grid matching the widget geometry.
@@ -178,7 +178,7 @@ class GLCompositorBlockFlipTransition(BaseTransition):
             try:
                 # Snap to final frame when cancelling mid-way to avoid pops.
                 self._compositor.cancel_current_transition(snap_to_new=True)
-            except Exception:
+            except Exception as e:
                 logger.debug("[GL COMPOSITOR] Failed to cancel current block flip transition", exc_info=True)
 
         self._animation_id = None
@@ -194,7 +194,7 @@ class GLCompositorBlockFlipTransition(BaseTransition):
                 # Ensure compositor is no longer animating; do not force snap
                 # here, as DisplayWidget will already have updated its base.
                 self._compositor.cancel_current_transition(snap_to_new=True)
-            except Exception:
+            except Exception as e:
                 logger.debug("[GL COMPOSITOR] Failed to cleanup block flip compositor", exc_info=True)
             self._compositor = None
 
@@ -340,7 +340,7 @@ class GLCompositorBlockFlipTransition(BaseTransition):
 
         try:
             self._compositor.set_blockflip_region(region)
-        except Exception:
+        except Exception as e:
             logger.debug("[GL COMPOSITOR] Failed to update block flip region", exc_info=True)
 
         if self._blocks:

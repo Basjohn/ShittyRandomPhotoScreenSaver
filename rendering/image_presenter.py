@@ -36,7 +36,8 @@ def _describe_pixmap(pm: Optional[QPixmap]) -> str:
             f"Pixmap(id={id(pm):#x}, cacheKey={pm.cacheKey():#x}, "
             f"size={size.width()}x{size.height()}, dpr={pm.devicePixelRatio():.2f})"
         )
-    except Exception:
+    except Exception as e:
+        logger.debug("[IMAGE_PRESENTER] Exception suppressed: %s", e)
         return "Pixmap(?)"
 
 
@@ -176,7 +177,8 @@ class ImagePresenter(QObject):
                     w = int(getattr(target_size, "width", lambda: 0)())
                     h = int(getattr(target_size, "height", lambda: 0)())
                     target_qsize = QSize(w, h)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[IMAGE_PRESENTER] Exception suppressed: %s", e)
                     target_qsize = QSize(pixmap.width(), pixmap.height())
 
             processed = self._processor.process_image(
@@ -191,8 +193,8 @@ class ImagePresenter(QObject):
             # Apply device pixel ratio
             try:
                 processed.setDevicePixelRatio(self._device_pixel_ratio)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[IMAGE_PRESENTER] Exception suppressed: %s", e)
             
             if is_verbose_logging():
                 logger.debug(
@@ -225,8 +227,8 @@ class ImagePresenter(QObject):
         if pixmap:
             try:
                 pixmap.setDevicePixelRatio(self._device_pixel_ratio)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[IMAGE_PRESENTER] Exception suppressed: %s", e)
         
         if update_seed and pixmap:
             self._seed_pixmap = pixmap
@@ -263,8 +265,8 @@ class ImagePresenter(QObject):
         if self._current_pixmap:
             try:
                 self._current_pixmap.setDevicePixelRatio(self._device_pixel_ratio)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[IMAGE_PRESENTER] Exception suppressed: %s", e)
         
         self._seed_pixmap = self._current_pixmap
         self._last_seed_ts = time.monotonic()
@@ -310,15 +312,15 @@ class ImagePresenter(QObject):
             if wallpaper_pm is not None and not wallpaper_pm.isNull():
                 try:
                     wallpaper_pm.setDevicePixelRatio(self._device_pixel_ratio)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[IMAGE_PRESENTER] Exception suppressed: %s", e)
                 self._current_pixmap = wallpaper_pm
                 self._previous_pixmap = wallpaper_pm
                 self._seed_pixmap = wallpaper_pm
                 self._last_seed_ts = time.monotonic()
                 return True
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[IMAGE_PRESENTER] Exception suppressed: %s", e)
         return False
     
     # =========================================================================

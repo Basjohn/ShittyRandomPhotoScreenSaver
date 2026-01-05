@@ -132,7 +132,8 @@ class TransitionProfiler:
         # Ignore obviously invalid samples to keep metrics robust.
         try:
             value = float(gpu_time_ms)
-        except Exception:
+        except Exception as e:
+            logger.debug("[MISC] Exception suppressed: %s", e)
             return
         if value <= 0.0:
             return

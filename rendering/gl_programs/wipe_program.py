@@ -122,8 +122,8 @@ void main() {
                 return 4
             elif direction == WipeDirection.DIAG_TR_BL:
                 return 5
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[MISC] Exception suppressed: %s", e)
         return 0  # Default: LEFT_TO_RIGHT
 
     def render(

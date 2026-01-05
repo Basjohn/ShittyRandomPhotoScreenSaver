@@ -531,7 +531,8 @@ class TransitionsTab(QWidget):
         )
         try:
             default_duration = int(default_duration_raw)
-        except Exception:
+        except Exception as e:
+            logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
             default_duration = 3000
 
         durations_cfg = transitions_config.get('durations', {})
@@ -562,7 +563,8 @@ class TransitionsTab(QWidget):
                 raw = durations_cfg.get(name, default_duration)
             try:
                 value = int(raw)
-            except Exception:
+            except Exception as e:
+                logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
                 value = default_duration
             self._duration_by_type[name] = value
 
@@ -577,7 +579,8 @@ class TransitionsTab(QWidget):
                 raw_flag = pool_cfg.get(name, True)
             try:
                 enabled = SettingsManager.to_bool(raw_flag, True)
-            except Exception:
+            except Exception as e:
+                logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
                 enabled = True
             self._pool_by_type[name] = bool(enabled)
 
@@ -638,8 +641,8 @@ class TransitionsTab(QWidget):
             current_pool = self._pool_by_type.get(transition_type, True)
             try:
                 self.pool_checkbox.setChecked(bool(current_pool))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
             
             # Load per-transition directions (nested)
             slide_cfg = transitions_config.get('slide', {}) if isinstance(transitions_config.get('slide', {}), dict) else {}
@@ -682,8 +685,8 @@ class TransitionsTab(QWidget):
                 if idx < 0:
                     idx = 0
                 self.blockspin_direction_combo.setCurrentIndex(max(0, idx))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
 
             # Load diffuse settings - use canonical defaults from defaults.py
             canonical_diffuse = canonical_transitions.get('diffuse', {})
@@ -705,8 +708,8 @@ class TransitionsTab(QWidget):
                 if idx < 0:
                     idx = 0
                 self.crumble_weight_combo.setCurrentIndex(idx)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
 
             # Load particle settings - use canonical defaults from defaults.py
             canonical_particle = canonical_transitions.get('particle', {})
@@ -741,8 +744,8 @@ class TransitionsTab(QWidget):
             for w in blockers:
                 try:
                     w.blockSignals(False)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
     
     def _on_transition_changed(self, transition: str) -> None:
         """Handle transition type change."""
@@ -752,7 +755,8 @@ class TransitionsTab(QWidget):
         cur_type = self.transition_combo.currentText()
         try:
             value = self._duration_by_type.get(cur_type, self.duration_slider.value())
-        except Exception:
+        except Exception as e:
+            logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
             value = self.duration_slider.value()
         try:
             self.duration_slider.blockSignals(True)
@@ -886,8 +890,8 @@ class TransitionsTab(QWidget):
             # If HW is off and currently selected is GL-only, force Crossfade
             if not hw:
                 self._enforce_gl_only_selection()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
 
     def _enforce_gl_only_selection(self) -> None:
         """If a GL-only transition is selected with HW off, switch to Crossfade and persist."""
@@ -925,24 +929,25 @@ class TransitionsTab(QWidget):
         # choices from that group.
         try:
             self._dir_blockspin = self.blockspin_direction_combo.currentText() or "Left to Right"
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
 
         cur_duration = self.duration_slider.value()
         try:
             self._duration_by_type[cur_type] = cur_duration
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
 
         # Update in-memory per-type pool membership
         try:
             cur_pool = self.pool_checkbox.isChecked()
-        except Exception:
+        except Exception as e:
+            logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
             cur_pool = True
         try:
             self._pool_by_type[cur_type] = bool(cur_pool)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
 
         config = {
             'type': cur_type,
@@ -1013,6 +1018,6 @@ class TransitionsTab(QWidget):
         try:
             cur_type = self.transition_combo.currentText()
             self._duration_by_type[cur_type] = value
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
         self._save_settings()

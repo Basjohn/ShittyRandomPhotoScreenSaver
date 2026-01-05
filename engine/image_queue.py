@@ -27,8 +27,8 @@ def _extract_domain(image: ImageMetadata) -> str:
         try:
             parsed = urlparse(image.url)
             return parsed.netloc.lower()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[MISC] Exception suppressed: %s", e)
     # Try source_id (often contains feed URL)
     if image.source_id:
         try:
@@ -37,8 +37,8 @@ def _extract_domain(image: ImageMetadata) -> str:
                 parsed = urlparse(image.source_id)
                 if parsed.netloc:
                     return parsed.netloc.lower()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[MISC] Exception suppressed: %s", e)
     return "unknown"
 
 

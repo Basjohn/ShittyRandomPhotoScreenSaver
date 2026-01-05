@@ -106,7 +106,7 @@ class GLCompositorDiffuseTransition(BaseTransition):
             comp.setGeometry(0, 0, widget.width(), widget.height())
             comp.show()
             comp.raise_()
-        except Exception:
+        except Exception as e:
             logger.debug(
                 "[GL COMPOSITOR] Failed to configure compositor geometry/visibility (diffuse)",
                 exc_info=True,
@@ -119,7 +119,7 @@ class GLCompositorDiffuseTransition(BaseTransition):
             warm = getattr(comp, "warm_shader_textures", None)
             if callable(warm):
                 warm(old_pixmap, new_pixmap)
-        except Exception:
+        except Exception as e:
             logger.debug("[GL COMPOSITOR] Failed to warm diffuse textures", exc_info=True)
 
         # Build cell grid matching the widget geometry.
@@ -180,7 +180,7 @@ class GLCompositorDiffuseTransition(BaseTransition):
             try:
                 # Snap to final frame when cancelling mid-way to avoid pops.
                 self._compositor.cancel_current_transition(snap_to_new=True)
-            except Exception:
+            except Exception as e:
                 logger.debug(
                     "[GL COMPOSITOR] Failed to cancel current diffuse transition", exc_info=True
                 )
@@ -199,7 +199,7 @@ class GLCompositorDiffuseTransition(BaseTransition):
                 # final frame. Without this, the compositor may briefly show
                 # the old image after transition state is cleared.
                 self._compositor.cancel_current_transition(snap_to_new=True)
-            except Exception:
+            except Exception as e:
                 logger.debug("[GL COMPOSITOR] Failed to cleanup diffuse compositor", exc_info=True)
             self._compositor = None
 
@@ -261,7 +261,7 @@ class GLCompositorDiffuseTransition(BaseTransition):
         if any_new:
             try:
                 self._compositor.set_diffuse_region(self._region)
-            except Exception:
+            except Exception as e:
                 logger.debug("[GL COMPOSITOR] Failed to update diffuse region", exc_info=True)
 
         if total > 0:

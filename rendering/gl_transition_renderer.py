@@ -163,8 +163,8 @@ class GLTransitionRenderer:
             gl.glDepthMask(gl.GL_TRUE)
             gl.glClearColor(0.0, 0.0, 0.0, 1.0)
             gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[GL TRANSITION] Exception suppressed: %s", e)
         
         gl.glUseProgram(pipeline.basic_program)
         try:
@@ -266,8 +266,8 @@ class GLTransitionRenderer:
         try:
             gpu_ms = max(0.0, float((time.perf_counter() - start_gpu) * 1000.0))
             profiler.tick_gpu("slide", gpu_ms)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[GL TRANSITION] Exception suppressed: %s", e)
     
     # -------------------------------------------------------------------------
     # QPainter Fallback Rendering
@@ -340,7 +340,8 @@ class GLTransitionRenderer:
             try:
                 painter.translate(dx, dy)
                 painter.drawPixmap(target, state.old_pixmap)
-            except Exception:
+            except Exception as e:
+                logger.debug("[GL TRANSITION] Exception suppressed: %s", e)
                 painter.restore()
                 continue
             painter.restore()
@@ -383,7 +384,8 @@ class GLTransitionRenderer:
             painter.setOpacity(fade)
             try:
                 painter.drawPixmap(shifted, state.old_pixmap)
-            except Exception:
+            except Exception as e:
+                logger.debug("[GL TRANSITION] Exception suppressed: %s", e)
                 painter.restore()
                 break
             painter.restore()

@@ -143,8 +143,8 @@ class PixelShiftManager:
                 self._widgets.append(widget)
             logger.debug("Registered widget for pixel shift: %s at (%d, %d) [enabled=%s]",
                         widget.__class__.__name__, pos.x(), pos.y(), self._enabled)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[PIXEL_SHIFT] Exception suppressed: %s", e)
     
     def unregister_widget(self, widget: QWidget) -> None:
         """Unregister a widget from pixel shifting."""
@@ -156,8 +156,8 @@ class PixelShiftManager:
             try:
                 orig = self._original_positions[widget_id]
                 widget.move(orig)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[PIXEL_SHIFT] Exception suppressed: %s", e)
             del self._original_positions[widget_id]
         
         if widget in self._widgets:
@@ -185,8 +185,8 @@ class PixelShiftManager:
             orig_x = pos.x() - self._offset_x
             orig_y = pos.y() - self._offset_y
             self._original_positions[widget_id] = QPoint(orig_x, orig_y)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[PIXEL_SHIFT] Exception suppressed: %s", e)
     
     def get_current_offset(self) -> tuple[int, int]:
         """Get the current drift offset (x, y)."""
@@ -217,8 +217,8 @@ class PixelShiftManager:
                     self._timer,
                     description="PixelShiftManager timer",
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[PIXEL_SHIFT] Exception suppressed: %s", e)
         
         logger.debug("PixelShiftManager timer started (interval=%dms)", interval_ms)
     
@@ -229,20 +229,20 @@ class PixelShiftManager:
         
         try:
             self._timer.stop()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[PIXEL_SHIFT] Exception suppressed: %s", e)
         
         if self._timer_resource_id and self._resource_manager:
             try:
                 self._resource_manager.unregister(self._timer_resource_id, force=True)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[PIXEL_SHIFT] Exception suppressed: %s", e)
             self._timer_resource_id = None
         
         try:
             self._timer.deleteLater()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[PIXEL_SHIFT] Exception suppressed: %s", e)
         self._timer = None
         
         logger.debug("PixelShiftManager timer stopped")
@@ -258,8 +258,8 @@ class PixelShiftManager:
                 if self._defer_check():
                     logger.debug("PixelShiftManager: shift deferred")
                     return
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[PIXEL_SHIFT] Exception suppressed: %s", e)
         
         # Calculate new offset
         new_x, new_y = self._calculate_next_offset()
@@ -387,8 +387,8 @@ class PixelShiftManager:
                 try:
                     if Shiboken.isValid(w):
                         valid_widgets.append(w)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[PIXEL_SHIFT] Exception suppressed: %s", e)
         self._widgets = valid_widgets
         
         offset_point = QPoint(self._offset_x, self._offset_y)
@@ -441,5 +441,5 @@ class PixelShiftManager:
                     # Fallback: direct move for non-overlay widgets
                     orig = self._original_positions[widget_id]
                     widget.move(orig)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[PIXEL_SHIFT] Exception suppressed: %s", e)

@@ -71,7 +71,8 @@ class CursorHaloWidget(QWidget):
         """Set the halo opacity (0.0 to 1.0)."""
         try:
             self._opacity = max(0.0, min(1.0, float(value)))
-        except Exception:
+        except Exception as e:
+            logger.debug("[CURSOR_HALO] Exception suppressed: %s", e)
             self._opacity = 1.0
         self.update()
 
@@ -160,7 +161,8 @@ class CursorHaloWidget(QWidget):
         coordinator = None
         try:
             coordinator = get_coordinator()
-        except Exception:
+        except Exception as e:
+            logger.debug("[CURSOR_HALO] Exception suppressed: %s", e)
             coordinator = None
 
         if coordinator is not None:
@@ -169,7 +171,8 @@ class CursorHaloWidget(QWidget):
         if target is None and coordinator is not None:
             try:
                 instances = coordinator.get_all_instances()
-            except Exception:
+            except Exception as e:
+                logger.debug("[CURSOR_HALO] Exception suppressed: %s", e)
                 instances = []
             for inst in instances:
                 if inst is not None and Shiboken.isValid(inst):
@@ -203,7 +206,7 @@ class CursorHaloWidget(QWidget):
             
             # Post the event to the parent widget
             QApplication.sendEvent(parent, new_event)
-        except Exception:
+        except Exception as e:
             logger.debug("Failed to forward mouse event to parent", exc_info=True)
     
     def _forward_wheel_event(self, event: QWheelEvent) -> None:
@@ -246,14 +249,14 @@ class CursorHaloWidget(QWidget):
                     handled_direct = bool(
                         parent.handle_forwarded_halo_wheel(local_pos, global_pos, event.angleDelta())
                     )
-                except Exception:
+                except Exception as e:
                     logger.debug("[HALO] Direct halo routing failed", exc_info=True)
             if not handled_direct:
                 # DEBUG_WHEEL_TRACE: use postEvent so the app-wide filters observe it.
                 QApplication.sendEvent(parent, new_event)
             event.accept()
             logger.debug("[HALO] Wheel event forwarded to parent (direct=%s)", handled_direct)
-        except Exception:
+        except Exception as e:
             logger.debug("Failed to forward wheel event to parent", exc_info=True)
     
     def cancel_animation(self) -> None:
@@ -261,8 +264,8 @@ class CursorHaloWidget(QWidget):
         if self._animation_id is not None:
             try:
                 self._animation_manager.cancel_animation(self._animation_id)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CURSOR_HALO] Exception suppressed: %s", e)
             self._animation_id = None
     
     def fade_in(self, on_finished: Optional[callable] = None) -> None:
@@ -282,8 +285,8 @@ class CursorHaloWidget(QWidget):
                 self.setOpacity(0.0)
             else:
                 self.setOpacity(1.0)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[CURSOR_HALO] Exception suppressed: %s", e)
 
         duration_ms = 600 if fade_in else 1200
         start_val = 0.0 if fade_in else 1.0
@@ -293,25 +296,25 @@ class CursorHaloWidget(QWidget):
             try:
                 value = start_val + (end_val - start_val) * progress
                 self.setOpacity(float(value))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CURSOR_HALO] Exception suppressed: %s", e)
 
         def _on_anim_finished() -> None:
             if not fade_in:
                 try:
                     self.hide()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[CURSOR_HALO] Exception suppressed: %s", e)
             try:
                 self.setWindowOpacity(1.0)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CURSOR_HALO] Exception suppressed: %s", e)
             self._animation_id = None
             if on_finished:
                 try:
                     on_finished()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[CURSOR_HALO] Exception suppressed: %s", e)
 
         try:
             # AnimationManager uses seconds, not milliseconds
@@ -322,7 +325,7 @@ class CursorHaloWidget(QWidget):
                 on_complete=_on_anim_finished,
                 easing=EasingCurve.QUAD_OUT,
             )
-        except Exception:
+        except Exception as e:
             logger.debug("Failed to start halo animation via AnimationManager", exc_info=True)
     
     def show_at(self, x: int, y: int) -> None:
@@ -336,8 +339,8 @@ class CursorHaloWidget(QWidget):
             from rendering.multi_monitor_coordinator import get_coordinator
             if get_coordinator().settings_dialog_active:
                 return
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[CURSOR_HALO] Exception suppressed: %s", e)
         
         size = self.size()
         # Convert local coordinates to global screen coordinates
@@ -348,7 +351,8 @@ class CursorHaloWidget(QWidget):
                 )
                 global_x = global_pos.x() + x - size.width() // 2
                 global_y = global_pos.y() + y - size.height() // 2
-            except Exception:
+            except Exception as e:
+                logger.debug("[CURSOR_HALO] Exception suppressed: %s", e)
                 global_x = x - size.width() // 2
                 global_y = y - size.height() // 2
         else:
@@ -372,7 +376,8 @@ class CursorHaloWidget(QWidget):
                 )
                 global_x = global_pos.x() + x - size.width() // 2
                 global_y = global_pos.y() + y - size.height() // 2
-            except Exception:
+            except Exception as e:
+                logger.debug("[CURSOR_HALO] Exception suppressed: %s", e)
                 global_x = x - size.width() // 2
                 global_y = y - size.height() // 2
         else:

@@ -176,8 +176,8 @@ class WeatherWidget(BaseOverlayWidget):
         self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         try:
             self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[WEATHER] Exception suppressed: %s", e)
         
         # Weather uses normal weight font
         font = QFont(self._font_family, self._font_size, QFont.Weight.Normal)
@@ -242,7 +242,8 @@ class WeatherWidget(BaseOverlayWidget):
         if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
             try:
                 parent.request_overlay_fade_sync("weather", lambda: self._fade_in())
-            except Exception:
+            except Exception as e:
+                logger.debug("[WEATHER] Exception suppressed: %s", e)
                 self._fade_in()
         else:
             self._fade_in()
@@ -255,8 +256,8 @@ class WeatherWidget(BaseOverlayWidget):
         if self._update_timer_handle is not None:
             try:
                 self._update_timer_handle.stop()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WEATHER] Exception suppressed: %s", e)
             self._update_timer_handle = None
         
         if self._update_timer is not None:
@@ -278,8 +279,8 @@ class WeatherWidget(BaseOverlayWidget):
         if self._icon_timer_handle is not None:
             try:
                 self._icon_timer_handle.stop()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WEATHER] Exception suppressed: %s", e)
             self._icon_timer_handle = None
         
         logger.debug("[LIFECYCLE] WeatherWidget deactivated")
@@ -311,8 +312,8 @@ class WeatherWidget(BaseOverlayWidget):
                 self.adjustSize()
                 if self.parent():
                     self._update_position()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WEATHER] Exception suppressed: %s", e)
             self.show()
             self.error_occurred.emit(error_msg)
             return
@@ -332,7 +333,8 @@ class WeatherWidget(BaseOverlayWidget):
             if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
                 try:
                     parent.request_overlay_fade_sync("weather", _starter)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[WEATHER] Exception suppressed: %s", e)
                     _starter()
             else:
                 _starter()
@@ -343,7 +345,8 @@ class WeatherWidget(BaseOverlayWidget):
             self._update_timer_handle = handle
             try:
                 self._update_timer = getattr(handle, "_timer", None)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WEATHER] Exception suppressed: %s", e)
                 self._update_timer = None
 
             logger.info("Weather widget started (using cached data)")
@@ -358,7 +361,8 @@ class WeatherWidget(BaseOverlayWidget):
         self._update_timer_handle = handle
         try:
             self._update_timer = getattr(handle, "_timer", None)
-        except Exception:
+        except Exception as e:
+            logger.debug("[WEATHER] Exception suppressed: %s", e)
             self._update_timer = None
 
         self._enabled = True
@@ -373,8 +377,8 @@ class WeatherWidget(BaseOverlayWidget):
         if self._update_timer_handle is not None:
             try:
                 self._update_timer_handle.stop()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WEATHER] Exception suppressed: %s", e)
             self._update_timer_handle = None
 
         if self._update_timer is not None:
@@ -395,8 +399,8 @@ class WeatherWidget(BaseOverlayWidget):
         if self._icon_timer_handle is not None:
             try:
                 self._icon_timer_handle.stop()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WEATHER] Exception suppressed: %s", e)
             self._icon_timer_handle = None
         
         self._enabled = False
@@ -475,7 +479,8 @@ class WeatherWidget(BaseOverlayWidget):
             if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
                 try:
                     parent.request_overlay_fade_sync("weather", _starter)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[WEATHER] Exception suppressed: %s", e)
                     _starter()
             else:
                 _starter()
@@ -522,7 +527,7 @@ class WeatherWidget(BaseOverlayWidget):
                 return
             raw = _CACHE_FILE.read_text(encoding="utf-8")
             payload = json.loads(raw)
-        except Exception:
+        except Exception as e:
             logger.debug("Failed to load persisted weather cache", exc_info=True)
             return
 
@@ -532,7 +537,8 @@ class WeatherWidget(BaseOverlayWidget):
             return
         try:
             dt = datetime.fromisoformat(ts)
-        except Exception:
+        except Exception as e:
+            logger.debug("[WEATHER] Exception suppressed: %s", e)
             return
         if loc.lower() != self._location.lower():
             return
@@ -589,7 +595,7 @@ class WeatherWidget(BaseOverlayWidget):
                 "timestamp": datetime.now().isoformat(),
             }
             _CACHE_FILE.write_text(json.dumps(payload), encoding="utf-8")
-        except Exception:
+        except Exception as e:
             logger.debug("Failed to persist weather cache", exc_info=True)
     
     def _update_display(self, data: Optional[Dict[str, Any]]) -> None:
@@ -811,8 +817,8 @@ class WeatherWidget(BaseOverlayWidget):
             logger.debug("[WEATHER] _fade_in fallback path triggered", exc_info=True)
             try:
                 self.show()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WEATHER] Exception suppressed: %s", e)
             if self._shadow_config is not None:
                 try:
                     apply_widget_shadow(
@@ -820,7 +826,7 @@ class WeatherWidget(BaseOverlayWidget):
                         self._shadow_config,
                         has_background_frame=self._show_background,
                     )
-                except Exception:
+                except Exception as e:
                     logger.debug(
                         "[WEATHER] Failed to apply widget shadow in fallback path",
                         exc_info=True,

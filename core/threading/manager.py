@@ -151,8 +151,8 @@ class ThreadManager:
         # Start mutation drain
         try:
             self._schedule_mutation_drain()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[THREADING] Exception suppressed: %s", e)
         
         logger.info("ThreadManager initialized with IO=%d, COMPUTE=%d workers",
                    self.config[ThreadPoolType.IO], self.config[ThreadPoolType.COMPUTE])
@@ -384,7 +384,8 @@ class ThreadManager:
                 
                 try:
                     kind = ev[0]
-                except Exception:
+                except Exception as e:
+                    logger.debug("[THREADING] Exception suppressed: %s", e)
                     continue
                 
                 if kind == 'register_active':
@@ -392,13 +393,13 @@ class ThreadManager:
                         task_obj = ev[1]
                         if task_obj is not None:
                             self._active_tasks[task_obj.task_id] = task_obj
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[THREADING] Exception suppressed: %s", e)
                 elif kind == 'unregister_active':
                     try:
                         self._active_tasks.pop(ev[1], None)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[THREADING] Exception suppressed: %s", e)
                 else:
                     # Stats mutations
                     try:
@@ -406,7 +407,8 @@ class ThreadManager:
                         pt = next((p for p in ThreadPoolType if p.value == pool_value), None)
                         if pt and kind in self._stats[pt]:
                             self._stats[pt][kind] += 1
-                    except Exception:
+                    except Exception as e:
+                        logger.debug("[THREADING] Exception suppressed: %s", e)
                         continue
         finally:
             if not self._shutdown and not self._mut_q.is_empty():
@@ -447,7 +449,8 @@ class ThreadManager:
         latest = None
         try:
             latest = self._stats_tb.consume_latest()
-        except Exception:
+        except Exception as e:
+            logger.debug("[THREADING] Exception suppressed: %s", e)
             latest = None
         return latest if latest is not None else self._gather_stats()
 
@@ -516,7 +519,8 @@ class ThreadManager:
         if not timer_desc:
             try:
                 timer_desc = getattr(func, "__qualname__", None) or func.__name__
-            except Exception:
+            except Exception as e:
+                logger.debug("[THREADING] Exception suppressed: %s", e)
                 timer_desc = "recurring_timer"
 
         def _invoke():

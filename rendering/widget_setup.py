@@ -34,7 +34,8 @@ def parse_color_to_qcolor(color_data: Any, opacity_override: float = None) -> Op
         if opacity_override is not None:
             a = int(max(0.0, min(1.0, opacity_override)) * a)
         return QColor(r, g, b, a)
-    except Exception:
+    except Exception as e:
+        logger.debug("[MISC] Exception suppressed: %s", e)
         return None
 
 
@@ -50,7 +51,8 @@ def resolve_monitor_visibility(monitor_sel: str, screen_index: int) -> bool:
     """
     try:
         return (monitor_sel == 'ALL') or (int(monitor_sel) == (screen_index + 1))
-    except Exception:
+    except Exception as e:
+        logger.debug("[MISC] Exception suppressed: %s", e)
         return True  # Default to visible on parse error
 
 

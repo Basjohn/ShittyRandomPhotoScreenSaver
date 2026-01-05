@@ -48,12 +48,12 @@ def hide_all_overlays(widget) -> None:
             ov = getattr(widget, key, None)
             if ov is not None:
                 ov.hide()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[OVERLAY] Exception suppressed: %s", e)
     try:
         _ = getattr(widget, "_ctrl_cursor_hint", None)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[OVERLAY] Exception suppressed: %s", e)
     return
 
 
@@ -64,7 +64,8 @@ def any_gl_overlay_visible(widget) -> bool:
             ov = getattr(widget, key, None)
             if ov is not None and ov.isVisible():
                 return True
-        except Exception:
+        except Exception as e:
+            logger.debug("[OVERLAY] Exception suppressed: %s", e)
             continue
     return False
 
@@ -88,7 +89,8 @@ def any_overlay_ready_for_display(widget) -> bool:
                 # Fallback to legacy has_drawn() check
                 elif hasattr(ov, 'has_drawn') and ov.has_drawn():
                     return True
-        except Exception:
+        except Exception as e:
+            logger.debug("[OVERLAY] Exception suppressed: %s", e)
             continue
     
     # Check SW overlays (legacy pattern)
@@ -99,7 +101,8 @@ def any_overlay_ready_for_display(widget) -> bool:
                 # SW overlays use _has_drawn directly
                 if hasattr(ov, '_has_drawn') and ov._has_drawn:
                     return True
-        except Exception:
+        except Exception as e:
+            logger.debug("[OVERLAY] Exception suppressed: %s", e)
             continue
     
     return False
@@ -116,10 +119,11 @@ def raise_clock_if_present(widget) -> None:
                         clock.raise_()
                         if hasattr(clock, "_tz_label") and clock._tz_label:
                             clock._tz_label.raise_()
-                    except Exception:
+                    except Exception as e:
+                        logger.debug("[OVERLAY] Exception suppressed: %s", e)
                         continue
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[OVERLAY] Exception suppressed: %s", e)
 
 
 def get_or_create_overlay(
@@ -138,15 +142,15 @@ def get_or_create_overlay(
         try:
             if not overlay.objectName():
                 overlay.setObjectName(attr_name)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[OVERLAY] Exception suppressed: %s", e)
         setattr(widget, attr_name, overlay)
         # Attach to widget parent immediately
         try:
             if overlay.parent() is not widget:
                 overlay.setParent(widget)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[OVERLAY] Exception suppressed: %s", e)
         # Register with widget ResourceManager if present
         try:
             resource_manager = getattr(widget, "_resource_manager", None)
@@ -155,20 +159,20 @@ def get_or_create_overlay(
                     overlay,
                     description=f"Persistent overlay {attr_name}",
                 )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[OVERLAY] Exception suppressed: %s", e)
         if on_create:
             try:
                 on_create(overlay)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[OVERLAY] Exception suppressed: %s", e)
     else:
         # Ensure existing overlay remains parented and tracked
         try:
             if overlay.parent() is not widget:
                 overlay.setParent(widget)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[OVERLAY] Exception suppressed: %s", e)
         try:
             resource_manager = getattr(widget, "_resource_manager", None)
             if resource_manager and not getattr(overlay, "_resource_id", None):
@@ -176,14 +180,14 @@ def get_or_create_overlay(
                     overlay,
                     description=f"Persistent overlay {attr_name}",
                 )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[OVERLAY] Exception suppressed: %s", e)
 
     # Make sure overlay geometry matches widget bounds on retrieval
     try:
         overlay.setGeometry(0, 0, widget.width(), widget.height())
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[OVERLAY] Exception suppressed: %s", e)
     return overlay
 
 
@@ -229,16 +233,16 @@ def hide_backend_fallback_overlay(widget: QWidget) -> None:
         overlay = getattr(widget, BACKEND_FALLBACK_OVERLAY_KEY, None)
         if overlay is not None:
             overlay.hide()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[OVERLAY] Exception suppressed: %s", e)
 
 
 def set_overlay_geometry(widget: QWidget, overlay: QWidget) -> None:
     """Resize overlay to fully cover the widget."""
     try:
         overlay.setGeometry(0, 0, widget.width(), widget.height())
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[OVERLAY] Exception suppressed: %s", e)
 
 
 def _raise_halo_topmost(widget: QWidget) -> None:
@@ -281,8 +285,8 @@ def raise_overlay(widget: QWidget, overlay: QWidget) -> None:
     
     try:
         overlay.raise_()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[OVERLAY] Exception suppressed: %s", e)
     
     # NOTE: Dimming is now handled by GL compositor, no widget to raise
     
@@ -290,8 +294,8 @@ def raise_overlay(widget: QWidget, overlay: QWidget) -> None:
     try:
         if hasattr(widget, "weather_widget") and getattr(widget, "weather_widget"):
             widget.weather_widget.raise_()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[OVERLAY] Exception suppressed: %s", e)
     try:
         # Ensure the media widget (Spotify overlay) stays above transition
         # overlays as well so that transport controls and track text remain
@@ -299,8 +303,8 @@ def raise_overlay(widget: QWidget, overlay: QWidget) -> None:
         mw = getattr(widget, "media_widget", None)
         if mw is not None:
             mw.raise_()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[OVERLAY] Exception suppressed: %s", e)
 
     try:
         # Spotify Beat Visualizer should sit just above the media widget so
@@ -308,8 +312,8 @@ def raise_overlay(widget: QWidget, overlay: QWidget) -> None:
         sv = getattr(widget, "spotify_visualizer_widget", None)
         if sv is not None:
             sv.raise_()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[OVERLAY] Exception suppressed: %s", e)
 
     try:
         # Spotify Volume Widget should stay above transition overlays so
@@ -317,8 +321,8 @@ def raise_overlay(widget: QWidget, overlay: QWidget) -> None:
         vol = getattr(widget, "spotify_volume_widget", None)
         if vol is not None:
             vol.raise_()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[OVERLAY] Exception suppressed: %s", e)
 
     try:
         # Reddit widgets should stay above transition overlays.
@@ -328,14 +332,14 @@ def raise_overlay(widget: QWidget, overlay: QWidget) -> None:
         reddit2 = getattr(widget, "reddit2_widget", None)
         if reddit2 is not None:
             reddit2.raise_()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[OVERLAY] Exception suppressed: %s", e)
 
     # Ctrl cursor halo should always be topmost - raised LAST after all other widgets
     try:
         getattr(widget, "_ctrl_cursor_hint", None)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[OVERLAY] Exception suppressed: %s", e)
     _raise_halo_topmost(widget)
 
 
@@ -346,8 +350,8 @@ def notify_overlay_stage(overlay: QWidget, stage: str, **details) -> None:
         if parent and hasattr(parent, "notify_overlay_ready"):
             name = overlay.objectName() or overlay.__class__.__name__
             parent.notify_overlay_ready(name, stage, **details)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[OVERLAY] Exception suppressed: %s", e)
 
 
 def schedule_raise_when_ready(
@@ -371,7 +375,8 @@ def schedule_raise_when_ready(
                 ready = bool(overlay.is_ready_for_display())  # type: ignore[attr-defined]
             elif hasattr(overlay, "has_drawn"):
                 ready = bool(overlay.has_drawn())  # type: ignore[attr-defined]
-        except Exception:
+        except Exception as e:
+            logger.debug("[OVERLAY] Exception suppressed: %s", e)
             ready = False
 
         elapsed_ms = (time.monotonic() - start) * 1000.0
@@ -381,8 +386,8 @@ def schedule_raise_when_ready(
             if on_ready:
                 try:
                     on_ready()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[OVERLAY] Exception suppressed: %s", e)
             return
 
         if elapsed_ms >= timeout_ms:
@@ -390,8 +395,8 @@ def schedule_raise_when_ready(
             if on_timeout:
                 try:
                     on_timeout()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[OVERLAY] Exception suppressed: %s", e)
             return
 
         ThreadManager.single_shot(poll_ms, _check)
@@ -418,8 +423,8 @@ def prepare_gl_overlay(
     if make_current:
         try:
             overlay.makeCurrent()  # type: ignore[attr-defined]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[OVERLAY] Exception suppressed: %s", e)
 
     if grab_framebuffer:
         try:
@@ -434,7 +439,7 @@ def prepare_gl_overlay(
     if repaint:
         try:
             overlay.update()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[OVERLAY] Exception suppressed: %s", e)
 
     schedule_raise_when_ready(widget, overlay, stage=stage)

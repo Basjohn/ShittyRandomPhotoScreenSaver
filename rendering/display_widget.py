@@ -96,7 +96,8 @@ def _describe_pixmap(pm: Optional[QPixmap]) -> str:
             f"Pixmap(id={id(pm):#x}, cacheKey={pm.cacheKey():#x}, "
             f"size={size.width()}x{size.height()}, dpr={pm.devicePixelRatio():.2f}, depth={pm.depth()})"
         )
-    except Exception:
+    except Exception as e:
+        logger.debug("[DISPLAY_WIDGET] Failed to describe pixmap: %s", e)
         return "Pixmap(?)"
 
 
@@ -132,7 +133,8 @@ _APPCOMMAND_NAMES = {
 if sys.platform == "win32":
     try:
         _USER32 = ctypes.windll.user32
-    except Exception:
+    except Exception as e:
+        logger.debug("[DISPLAY_WIDGET] Failed to load user32: %s", e)
         _USER32 = None
 else:
     _USER32 = None
@@ -286,7 +288,8 @@ class DisplayWidget(QWidget):
                 self._always_on_top = SettingsManager.to_bool(
                     self.settings_manager.get("mc.always_on_top", True), True
                 )
-            except Exception:
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Failed to load always_on_top setting: %s", e)
                 self._always_on_top = True  # Default ON for MC builds
 
         # Central ResourceManager wiring
@@ -294,7 +297,8 @@ class DisplayWidget(QWidget):
         if self._resource_manager is None:
             try:
                 self._resource_manager = ResourceManager()
-            except Exception:
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Failed to create ResourceManager: %s", e)
                 self._resource_manager = None
         # Central ThreadManager wiring (optional, provided by engine)
         self._thread_manager = thread_manager
@@ -303,7 +307,7 @@ class DisplayWidget(QWidget):
         self._widget_manager: Optional[WidgetManager] = None
         try:
             self._widget_manager = WidgetManager(self, self._resource_manager)
-        except Exception:
+        except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Failed to create WidgetManager", exc_info=True)
         
         # InputHandler for centralized input event handling (Phase E refactor)
@@ -319,7 +323,7 @@ class DisplayWidget(QWidget):
             self._input_handler.previous_image_requested.connect(self.previous_requested)
             self._input_handler.cycle_transition_requested.connect(self.cycle_transition_requested)
             self._input_handler.context_menu_requested.connect(self._on_context_menu_requested)
-        except Exception:
+        except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Failed to create InputHandler", exc_info=True)
         
         # TransitionController for centralized transition lifecycle (Phase 3 refactor)
@@ -328,7 +332,7 @@ class DisplayWidget(QWidget):
             self._transition_controller = TransitionController(
                 self, self._resource_manager, self._widget_manager
             )
-        except Exception:
+        except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Failed to create TransitionController", exc_info=True)
         
         # EcoModeManager for MC builds (v2.1 integration)
@@ -361,15 +365,15 @@ class DisplayWidget(QWidget):
                 if self._transition_controller:
                     self._eco_mode_manager.set_transition_controller(self._transition_controller)
                 logger.info("[DISPLAY_WIDGET] EcoModeManager initialized for MC build")
-            except Exception:
-                logger.debug("[DISPLAY_WIDGET] Failed to create EcoModeManager", exc_info=True)
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Failed to create EcoModeManager: %s", e, exc_info=True)
         
         # ImagePresenter for centralized pixmap lifecycle (Phase 4 refactor)
         self._image_presenter: Optional[ImagePresenter] = None
         try:
             self._image_presenter = ImagePresenter(self, display_mode, 1.0)
-        except Exception:
-            logger.debug("[DISPLAY_WIDGET] Failed to create ImagePresenter", exc_info=True)
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Failed to create ImagePresenter: %s", e, exc_info=True)
         
         # MultiMonitorCoordinator for centralized cross-display state (Phase 5 refactor)
         self._coordinator: MultiMonitorCoordinator = get_coordinator()
@@ -384,8 +388,8 @@ class DisplayWidget(QWidget):
                     self._screen = screens[int(screen_index)]
                 elif screens:
                     self._screen = QGuiApplication.primaryScreen()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Failed to bind screen: %s", e)
 
         # Setup widget: frameless, always-on-top display window. For the MC
         # build (SRPSS_MC), also mark the window as a tool window so it does
@@ -411,8 +415,8 @@ class DisplayWidget(QWidget):
                 else:
                     flags |= Qt.WindowType.Tool
                     self._mc_window_flag_mode = "tool"
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Failed to detect MC build: %s", e)
 
         self.setWindowFlags(flags)
         self.setCursor(Qt.CursorShape.BlankCursor)
@@ -423,24 +427,24 @@ class DisplayWidget(QWidget):
                 self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
                 try:
                     self.setWindowFlag(Qt.WindowType.WindowDoesNotAcceptFocus, False)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Failed to set WindowDoesNotAcceptFocus=False: %s", e)
                 try:
                     self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, False)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Failed to set WA_ShowWithoutActivating=False: %s", e)
             else:
                 self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
                 try:
                     self.setWindowFlag(Qt.WindowType.WindowDoesNotAcceptFocus, True)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Failed to set WindowDoesNotAcceptFocus=True: %s", e)
                 try:
                     self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
-                except Exception:
-                    pass
-        except Exception:
-            pass
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Failed to set WA_ShowWithoutActivating=True: %s", e)
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Failed to claim focus: %s", e)
         # Ensure we can keep the Ctrl halo moving even when the cursor is over
         # child widgets (clocks, weather, etc.) by observing global mouse
         # move events.
@@ -451,8 +455,8 @@ class DisplayWidget(QWidget):
             app = QGuiApplication.instance()
             if app is not None and self._coordinator.install_event_filter(self):
                 app.installEventFilter(self)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Failed to install event filter: %s", e)
         
         # Set black background
         self.setAutoFillBackground(True)
@@ -488,8 +492,8 @@ class DisplayWidget(QWidget):
         # Ensure transitions are cleaned up if the widget is destroyed
         try:
             self.destroyed.connect(self._on_destroyed)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
     
     def show_on_screen(self) -> None:
         """Show widget fullscreen on assigned screen."""
@@ -511,8 +515,8 @@ class DisplayWidget(QWidget):
             try:
                 if geom.height() > 1:
                     geom.setHeight(geom.height() - 1)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
         logger.info(
             f"Showing on screen {self.screen_index}: "
@@ -535,28 +539,30 @@ class DisplayWidget(QWidget):
             if wallpaper_pm is not None and not wallpaper_pm.isNull():
                 try:
                     wallpaper_pm.setDevicePixelRatio(self._device_pixel_ratio)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 self.current_pixmap = wallpaper_pm
                 self.previous_pixmap = wallpaper_pm
                 self._seed_pixmap = wallpaper_pm
                 self._last_pixmap_seed_ts = time.monotonic()
                 placeholder_set = True
-        except Exception:
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             placeholder_set = False
 
         if placeholder_set:
             try:
                 self.setUpdatesEnabled(True)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             self._updates_blocked_until_seed = False
         else:
             try:
                 self.setUpdatesEnabled(False)
                 self._updates_blocked_until_seed = True
-            except Exception:
-                self._updates_blocked_until_seed = False
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+                self._self._updates_blocked_until_seed = False
 
         # Determine hardware acceleration setting once for startup behaviour.
         # IMPORTANT: We no longer run GL prewarm at startup; GL overlays are
@@ -566,7 +572,8 @@ class DisplayWidget(QWidget):
         if self.settings_manager is not None:
             try:
                 raw = self.settings_manager.get('display.hw_accel', True)
-            except Exception:
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 raw = True
             hw_accel = SettingsManager.to_bool(raw, True)
 
@@ -580,11 +587,12 @@ class DisplayWidget(QWidget):
         self.show()
         try:
             self.raise_()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         try:
             focus_policy = self.focusPolicy()
-        except Exception:
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             focus_policy = Qt.FocusPolicy.StrongFocus
 
         focusable = focus_policy != Qt.FocusPolicy.NoFocus
@@ -596,37 +604,38 @@ class DisplayWidget(QWidget):
                     handle = self.windowHandle()
                     if handle is not None:
                         handle.requestActivate()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 try:
                     self.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                     try:
                         self.setFocus()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             else:
                 try:
                     handle = self.windowHandle()
                     if handle is not None:
                         handle.setFlag(Qt.WindowType.WindowDoesNotAcceptFocus, True)
-                except Exception:
-                    pass
-        except Exception:
-            pass
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         self._handle_screen_change(screen)
         # Reconfigure when screen changes
         try:
             handle = self.windowHandle()
             if handle is not None:
                 handle.screenChanged.connect(self._handle_screen_change)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
         # Ensure shared GL compositor and reuse any persistent overlays
         try:
             self._ensure_gl_compositor()
-        except Exception:
+        except Exception as e:
             logger.debug("[GL COMPOSITOR] Failed to ensure compositor during show", exc_info=True)
 
         self._reuse_persistent_gl_overlays()
@@ -642,8 +651,8 @@ class DisplayWidget(QWidget):
                 self._thread_manager.single_shot(200, self._prewarm_context_menu)
             else:
                 ThreadManager.single_shot(200, self._prewarm_context_menu)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
     def _prewarm_context_menu(self) -> None:
         try:
@@ -652,7 +661,8 @@ class DisplayWidget(QWidget):
             if self._context_menu is not None:
                 self._context_menu_prewarmed = True
                 return
-        except Exception:
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             return
 
         try:
@@ -687,21 +697,21 @@ class DisplayWidget(QWidget):
 
             try:
                 self._context_menu.aboutToShow.connect(lambda: self._invalidate_overlay_effects("menu_about_to_show"))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
             # Force Qt to polish/apply stylesheet now.
             try:
                 self._context_menu.ensurePolished()
-            except Exception:
-                pass
-        except Exception:
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+        except Exception as e:
             logger.debug("Failed to prewarm context menu", exc_info=True)
         finally:
             try:
                 self._context_menu_prewarmed = True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
     def _mark_all_overlays_ready(self, overlays: Iterable[str], stage: str) -> None:
         """Mark overlays as ready when running without GL support."""
@@ -712,7 +722,8 @@ class DisplayWidget(QWidget):
                 continue
             try:
                 self._force_overlay_ready(overlay, stage=f"{stage}:{attr_name}", gl_available=False)
-            except Exception:
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 name = overlay.objectName() or attr_name
                 self.notify_overlay_ready(name, stage, status="software_ready", gl=False)
 
@@ -726,7 +737,7 @@ class DisplayWidget(QWidget):
 
         try:
             self._device_pixel_ratio = float(screen.devicePixelRatio())
-        except Exception:
+        except Exception as e:
             logger.debug("[SCREEN] Failed to read devicePixelRatio", exc_info=True)
 
         try:
@@ -737,35 +748,35 @@ class DisplayWidget(QWidget):
                     try:
                         if geom.height() > 1:
                             geom.setHeight(geom.height() - 1)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 self.setGeometry(geom)
-        except Exception:
+        except Exception as e:
             logger.debug("[SCREEN] Failed to apply screen geometry", exc_info=True)
 
         try:
             self._configure_refresh_rate_sync()
-        except Exception:
+        except Exception as e:
             logger.debug("[SCREEN] Refresh rate sync configuration failed", exc_info=True)
 
         try:
             self._ensure_render_surface()
-        except Exception:
+        except Exception as e:
             logger.debug("[SCREEN] Render surface update failed", exc_info=True)
 
         try:
             self._ensure_overlay_stack(stage="screen_change")
-        except Exception:
+        except Exception as e:
             logger.debug("[SCREEN] Overlay stack update failed", exc_info=True)
 
         try:
             self._reuse_persistent_gl_overlays()
-        except Exception:
+        except Exception as e:
             logger.debug("[SCREEN] Persistent overlay reuse failed", exc_info=True)
 
         try:
             self._ensure_gl_compositor()
-        except Exception:
+        except Exception as e:
             logger.debug("[SCREEN] GL compositor update failed", exc_info=True)
 
     def _detect_refresh_rate(self) -> float:
@@ -780,7 +791,8 @@ class DisplayWidget(QWidget):
             if not (10.0 <= rate <= 240.0):
                 return 60.0
             return rate
-        except Exception:
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             return 60.0
 
     def _configure_refresh_rate_sync(self) -> None:
@@ -789,7 +801,8 @@ class DisplayWidget(QWidget):
         if self.settings_manager:
             try:
                 raw = self.settings_manager.get('display.refresh_sync', True)
-            except Exception:
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 raw = True
             refresh_sync_enabled = SettingsManager.to_bool(raw, True)
         
@@ -817,8 +830,8 @@ class DisplayWidget(QWidget):
             am = getattr(self, "_animation_manager", None)
             if am is not None and hasattr(am, 'set_target_fps'):
                 am.set_target_fps(self._target_fps)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
     def _setup_dimming(self) -> None:
         """Setup background dimming via GL compositor.
@@ -854,28 +867,28 @@ class DisplayWidget(QWidget):
         if self.spotify_visualizer_widget is not None:
             try:
                 self._position_spotify_visualizer()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             
             # Wire up EcoModeManager to visualizer (MC builds only)
             if self._eco_mode_manager is not None:
                 try:
                     self._eco_mode_manager.set_visualizer(self.spotify_visualizer_widget)
-                except Exception:
+                except Exception as e:
                     logger.debug("[DISPLAY_WIDGET] Failed to set visualizer on EcoModeManager", exc_info=True)
         
         # Position Spotify volume if created
         if self.spotify_volume_widget is not None:
             try:
                 self._position_spotify_volume()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         
         # Start EcoModeManager monitoring (MC builds only)
         if self._eco_mode_manager is not None:
             try:
                 self._eco_mode_manager.start_monitoring()
-            except Exception:
+            except Exception as e:
                 logger.debug("[DISPLAY_WIDGET] Failed to start EcoModeManager monitoring", exc_info=True)
 
     def _setup_pixel_shift(self) -> None:
@@ -932,7 +945,8 @@ class DisplayWidget(QWidget):
             return False
         try:
             raw = self.settings_manager.get('input.hard_exit', False)
-        except Exception:
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             return False
         if isinstance(raw, str):
             raw = raw.strip().lower()
@@ -943,7 +957,8 @@ class DisplayWidget(QWidget):
             return False
         try:
             return bool(raw)
-        except Exception:
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             return False
     
     def _setup_widgets(self) -> None:
@@ -962,8 +977,8 @@ class DisplayWidget(QWidget):
             self.settings_manager.get("accessibility.dimming.opacity", 30)
             self.settings_manager.get("accessibility.pixel_shift.enabled", False)
             self.settings_manager.get("accessibility.pixel_shift.rate", 1)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         
         logger.debug("Setting up overlay widgets for screen %d", self.screen_index)
         
@@ -1035,7 +1050,7 @@ class DisplayWidget(QWidget):
         try:
             widgets = self.settings_manager.get('widgets', {}) if self.settings_manager else {}
             self._apply_widget_stacking(widgets)
-        except Exception:
+        except Exception as e:
             logger.debug("Failed to recalculate stacking", exc_info=True)
 
     def _on_animation_manager_ready(self, animation_manager) -> None:
@@ -1048,7 +1063,8 @@ class DisplayWidget(QWidget):
 
         try:
             vis = getattr(self, "spotify_visualizer_widget", None)
-        except Exception:
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             vis = None
 
         if vis is None:
@@ -1057,7 +1073,7 @@ class DisplayWidget(QWidget):
         try:
             if hasattr(vis, "attach_to_animation_manager"):
                 vis.attach_to_animation_manager(animation_manager)
-        except Exception:
+        except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to attach visualizer to AnimationManager", exc_info=True)
 
     def _ensure_overlay_stack(self, stage: str = "runtime") -> None:
@@ -1070,8 +1086,8 @@ class DisplayWidget(QWidget):
                 continue
             try:
                 set_overlay_geometry(self, overlay)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             try:
                 if overlay.isVisible():
                     schedule_raise_when_ready(
@@ -1082,7 +1098,8 @@ class DisplayWidget(QWidget):
                 else:
                     # Keep stacking order deterministic even if hidden for now
                     raise_overlay(self, overlay)
-            except Exception:
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 continue
 
         # Ensure primary overlay widgets remain above any GL compositor or
@@ -1107,8 +1124,8 @@ class DisplayWidget(QWidget):
                     try:
                         from rendering.gl_state_manager import GLContextState
                         gl_state.force_state(GLContextState.READY, "force_overlay_ready")
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             
             # Legacy flag support for overlays not yet using GLStateManager
             lock = getattr(overlay, "_state_lock", None)
@@ -1135,19 +1152,19 @@ class DisplayWidget(QWidget):
                     overlay._ready = True  # type: ignore[attr-defined]
                 if hasattr(overlay, "_is_ready"):
                     overlay._is_ready = True  # type: ignore[attr-defined]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
         try:
             overlay.update()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
         try:
             name = overlay.objectName() or overlay.__class__.__name__
             self.notify_overlay_ready(name, stage, status="forced_ready", gl=bool(gl_available))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
     def _reuse_persistent_gl_overlays(self) -> None:
         """Ensure persistent overlays have correct parent and geometry after show."""
@@ -1161,7 +1178,8 @@ class DisplayWidget(QWidget):
                     overlay.setParent(self)
                 set_overlay_geometry(self, overlay)
                 overlay.hide()  # stay hidden until transition starts
-            except Exception:
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 continue
     
     def _create_transition(self) -> Optional[BaseTransition]:
@@ -1274,8 +1292,8 @@ class DisplayWidget(QWidget):
         processed_pixmap.setDevicePixelRatio(self._device_pixel_ratio)
         try:
             new_pixmap.setDevicePixelRatio(self._device_pixel_ratio)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         
         # Stop any running transition via TransitionController
         if self._transition_controller is not None:
@@ -1298,8 +1316,8 @@ class DisplayWidget(QWidget):
         if self.current_pixmap:
             try:
                 self.current_pixmap.setDevicePixelRatio(self._device_pixel_ratio)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             self._seed_pixmap = self.current_pixmap
             self._last_pixmap_seed_ts = time.monotonic()
             
@@ -1307,8 +1325,8 @@ class DisplayWidget(QWidget):
             if self._image_presenter is not None:
                 try:
                     self._image_presenter.set_current(self.current_pixmap, update_seed=True)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             if is_verbose_logging():
                 logger.debug(
                     "[DIAG] Seed pixmap set (phase=pre-transition, pixmap=%s)",
@@ -1317,8 +1335,8 @@ class DisplayWidget(QWidget):
             if self._updates_blocked_until_seed:
                 try:
                     self.setUpdatesEnabled(True)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 self._updates_blocked_until_seed = False
 
             # Pre-warm the shared GL compositor with the current frame so that
@@ -1327,8 +1345,8 @@ class DisplayWidget(QWidget):
             # displays, by avoiding late compositor initialization.
             try:
                 self._ensure_gl_compositor()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             comp = getattr(self, "_gl_compositor", None)
             if isinstance(comp, GLCompositorWidget):
                 try:
@@ -1341,7 +1359,7 @@ class DisplayWidget(QWidget):
                     # full texture upload cost on their first animated frame.
                     try:
                         comp.warm_shader_textures(previous_pixmap_ref, new_pixmap)
-                    except Exception:
+                    except Exception as e:
                         logger.debug(
                             "[GL COMPOSITOR] warm_shader_textures failed during pre-warm",
                             exc_info=True,
@@ -1359,9 +1377,9 @@ class DisplayWidget(QWidget):
                         if w is not None:
                             try:
                                 w.raise_()
-                            except Exception:
-                                pass
-                except Exception:
+                            except Exception as e:
+                                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+                except Exception as e:
                     logger.debug("[GL COMPOSITOR] Failed to pre-warm compositor with base frame", exc_info=True)
 
             use_transition = bool(self.settings_manager) and self._has_rendered_first_frame
@@ -1385,8 +1403,8 @@ class DisplayWidget(QWidget):
                         and not previous_pixmap_ref.isNull()):
                         try:
                             comp.set_base_pixmap(previous_pixmap_ref)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
                     self._warm_transition_if_needed(
                         comp,
@@ -1443,15 +1461,15 @@ class DisplayWidget(QWidget):
                         if self._widget_manager is not None:
                             try:
                                 self._widget_manager.raise_all_widgets()
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                         for attr in ("_spotify_bars_overlay", "_ctrl_cursor_hint"):
                             w = getattr(self, attr, None)
                             if w is not None:
                                 try:
                                     w.raise_()
-                                except Exception:
-                                    pass
+                                except Exception as e:
+                                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                         logger.debug(f"Transition started: {transition.__class__.__name__}")
                         return
                     else:
@@ -1474,13 +1492,13 @@ class DisplayWidget(QWidget):
                 if GL is None:
                     try:
                         self._mark_all_overlays_ready(GL_OVERLAY_KEYS, stage="software_display")
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
                 try:
                     self._ensure_overlay_stack(stage="display")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
                 logger.debug(f"Image displayed: {image_path} ({processed_pixmap.width()}x{processed_pixmap.height()})")
                 self.current_image_path = image_path
@@ -1500,8 +1518,8 @@ class DisplayWidget(QWidget):
         if self._transition_controller is not None:
             try:
                 self._transition_controller.on_transition_finished()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         
         # Clear local state
         self._current_transition_overlay_key = None
@@ -1519,8 +1537,8 @@ class DisplayWidget(QWidget):
         if self.current_pixmap:
             try:
                 self.current_pixmap.setDevicePixelRatio(self._device_pixel_ratio)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         self._seed_pixmap = self.current_pixmap
         self._last_pixmap_seed_ts = time.monotonic()
         
@@ -1528,28 +1546,28 @@ class DisplayWidget(QWidget):
         if self._image_presenter is not None:
             try:
                 self._image_presenter.complete_transition(new_pixmap, pan_preview)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         
         if self._updates_blocked_until_seed:
             try:
                 self.setUpdatesEnabled(True)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             self._updates_blocked_until_seed = False
         self.previous_pixmap = None
 
         # Ensure overlays and repaint
         try:
             self._ensure_overlay_stack(stage="transition_finish")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         self.update()
 
         try:
             logger.debug("Transition completed, image displayed: %s", image_path)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         self.current_image_path = image_path
         self.image_displayed.emit(image_path)
         self._pending_transition_finish_args = None
@@ -1578,7 +1596,7 @@ class DisplayWidget(QWidget):
             warmed = compositor.warm_transition_resources(transition_name, warm_old, new_pixmap)
             if warmed:
                 self._prewarmed_transition_types.add(transition_name)
-        except Exception:
+        except Exception as e:
             logger.debug(
                 "[GL COMPOSITOR] warm_transition_resources failed for %s",
                 transition_name,
@@ -1590,8 +1608,8 @@ class DisplayWidget(QWidget):
         if self._transition_controller is not None:
             try:
                 self._transition_controller._cancel_watchdog()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         self._transition_watchdog_overlay_key = None
         self._transition_watchdog_transition = None
 
@@ -1646,12 +1664,14 @@ class DisplayWidget(QWidget):
         try:
             if not vis.isVisible():
                 return False
-        except Exception:
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             return False
 
         try:
             geom = vis.geometry()
-        except Exception:
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             return False
 
         if geom.width() <= 0 or geom.height() <= 0:
@@ -1672,16 +1692,17 @@ class DisplayWidget(QWidget):
                             overlay,
                             description="Spotify bars GL overlay",
                         )
-                    except Exception:
+                    except Exception as e:
                         logger.debug("[SPOTIFY_VIS] Failed to register SpotifyBarsGLOverlay", exc_info=True)
                 pixel_shift_manager = getattr(self, "_pixel_shift_manager", None)
                 if pixel_shift_manager is not None:
                     try:
                         pixel_shift_manager.register_widget(overlay)
-                    except Exception:
+                    except Exception as e:
                         logger.debug("[SPOTIFY_VIS] Failed to register GL overlay with PixelShiftManager", exc_info=True)
-            except Exception:
-                self._spotify_bars_overlay = None
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+                self._self._spotify_bars_overlay = None
                 return False
 
         if overlay is None:
@@ -1707,9 +1728,9 @@ class DisplayWidget(QWidget):
             if pixel_shift_manager is not None and hasattr(pixel_shift_manager, "update_original_position"):
                 try:
                     pixel_shift_manager.update_original_position(overlay)
-                except Exception:
+                except Exception as e:
                     logger.debug("[SPOTIFY_VIS] Failed to sync GL overlay baseline with PixelShiftManager", exc_info=True)
-        except Exception:
+        except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to push frame to SpotifyBarsGLOverlay", exc_info=True)
             return False
 
@@ -1739,20 +1760,20 @@ class DisplayWidget(QWidget):
         if self._backend_fallback_message:
             try:
                 self._refresh_backend_fallback_overlay()
-            except Exception:
+            except Exception as e:
                 logger.debug("[RENDER] Failed to refresh backend fallback overlay geometry", exc_info=True)
         try:
             self._ensure_overlay_stack(stage="resize")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         try:
             self._position_spotify_visualizer()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         try:
             self._position_spotify_volume()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
     def _init_renderer_backend(self) -> None:
         """Select and initialize the configured renderer backend."""
@@ -1767,7 +1788,8 @@ class DisplayWidget(QWidget):
                 candidate = self.settings_manager.get_event_system()
                 if isinstance(candidate, EventSystem):
                     event_system = candidate
-        except Exception:
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             event_system = None
 
         try:
@@ -1799,7 +1821,7 @@ class DisplayWidget(QWidget):
                 f"{selection.resolved_mode.upper()} (requested {selection.requested_mode.upper()})"
             )
             self._update_backend_fallback_overlay()
-        except Exception:
+        except Exception as e:
             logger.exception("[RENDER] Failed to initialize renderer backend", exc_info=True)
             self._renderer_backend = None
             self._backend_selection = None
@@ -1869,7 +1891,8 @@ class DisplayWidget(QWidget):
         if self.settings_manager is not None:
             try:
                 raw = self.settings_manager.get("display.hw_accel", True)
-            except Exception:
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 raw = True
             hw_accel = SettingsManager.to_bool(raw, True)
         if not hw_accel:
@@ -1891,7 +1914,7 @@ class DisplayWidget(QWidget):
                             comp,
                             description="Shared GL compositor for DisplayWidget",
                         )
-                    except Exception:
+                    except Exception as e:
                         logger.debug("[GL COMPOSITOR] Failed to register compositor with ResourceManager", exc_info=True)
                 self._gl_compositor = comp
                 logger.info("[GL COMPOSITOR] Created shared compositor for screen %s", self.screen_index)
@@ -1902,7 +1925,7 @@ class DisplayWidget(QWidget):
         else:
             try:
                 self._gl_compositor.setGeometry(0, 0, self.width(), self.height())
-            except Exception:
+            except Exception as e:
                 logger.debug("[GL COMPOSITOR] Failed to update compositor geometry", exc_info=True)
 
     def _has_gl_compositor(self) -> bool:
@@ -1937,12 +1960,12 @@ class DisplayWidget(QWidget):
                 if callable(method):
                     try:
                         method()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             try:
                 widget.hide()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             setattr(self, attr_name, None)
         except Exception as e:
             logger.debug("[%s] Failed to cleanup in _on_destroyed: %s", tag, e, exc_info=True)
@@ -1956,15 +1979,15 @@ class DisplayWidget(QWidget):
         if self._screen is not None:
             try:
                 self._coordinator.unregister_instance(self, self._screen)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         
         # Phase 5: Release focus and event filter ownership via coordinator
         try:
             self._coordinator.release_focus(self)
             self._coordinator.uninstall_event_filter(self)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         
         self._destroy_render_surface()
         
@@ -1998,8 +2021,9 @@ class DisplayWidget(QWidget):
                 self._ctrl_cursor_hint.hide()
                 self._ctrl_cursor_hint.deleteLater()
                 self._ctrl_cursor_hint = None
-        except Exception:
-            self._ctrl_cursor_hint = None
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+            self._self._ctrl_cursor_hint = None
         
         # Stop and clean up any active transition via TransitionController
         try:
@@ -2008,12 +2032,12 @@ class DisplayWidget(QWidget):
             elif self._current_transition:
                 try:
                     self._current_transition.stop()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 try:
                     self._current_transition.cleanup()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 self._current_transition = None
         except Exception as e:
             logger.debug("[TRANSITION] Cleanup failed: %s", e, exc_info=True)
@@ -2056,7 +2080,7 @@ class DisplayWidget(QWidget):
                         overlay,
                         description="Backend fallback diagnostic overlay",
                     )
-                except Exception:
+                except Exception as e:
                     logger.debug("[RENDER] Failed to register fallback overlay", exc_info=True)
 
         show_backend_fallback_overlay(
@@ -2100,8 +2124,8 @@ class DisplayWidget(QWidget):
         # Ensure overlays are hidden to prevent residual frames during exit
         try:
             hide_all_overlays(self)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         
         # Hide and destroy cursor halo (top-level window that persists independently)
         # Must hide immediately and process events to ensure it's gone before settings dialog
@@ -2111,8 +2135,9 @@ class DisplayWidget(QWidget):
                 self._ctrl_cursor_hint.close()
                 self._ctrl_cursor_hint.deleteLater()
                 self._ctrl_cursor_hint = None
-        except Exception:
-            self._ctrl_cursor_hint = None
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+            self._self._ctrl_cursor_hint = None
         
         # Reset global Ctrl state to prevent halo from reappearing
         try:
@@ -2120,8 +2145,8 @@ class DisplayWidget(QWidget):
             coordinator = get_coordinator()
             coordinator.set_ctrl_held(False)
             coordinator.clear_halo_owner()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
         self.previous_pixmap = self.current_pixmap
         self.current_pixmap = None
@@ -2136,8 +2161,9 @@ class DisplayWidget(QWidget):
         try:
             self.setUpdatesEnabled(False)
             self._updates_blocked_until_seed = True
-        except Exception:
-            self._updates_blocked_until_seed = False
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+            self._self._updates_blocked_until_seed = False
         self._has_rendered_first_frame = False
         self._seed_pixmap = None
         self._last_pixmap_seed_ts = None
@@ -2164,8 +2190,8 @@ class DisplayWidget(QWidget):
             comp = getattr(self, "_gl_compositor", None)
             if isinstance(comp, GLCompositorWidget) and comp.isVisible():
                 return
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
         # Thread-safe check: if any legacy overlay is ready (GL initialized +
         # first frame drawn), let it handle painting. This path is only used
@@ -2173,8 +2199,8 @@ class DisplayWidget(QWidget):
         try:
             if any_overlay_ready_for_display(self):
                 return
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
         pixmap_to_paint = self.current_pixmap
         if (pixmap_to_paint is None or pixmap_to_paint.isNull()) and self._seed_pixmap and not self._seed_pixmap.isNull():
@@ -2191,7 +2217,8 @@ class DisplayWidget(QWidget):
         if (pixmap_to_paint is None or pixmap_to_paint.isNull()) and not self._base_fallback_paint_logged:
             try:
                 overlay_visible = any_gl_overlay_visible(self)
-            except Exception:
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 overlay_visible = False
             seed_age_ms = None
             if self._last_pixmap_seed_ts is not None:
@@ -2216,7 +2243,8 @@ class DisplayWidget(QWidget):
         if pixmap_to_paint and not pixmap_to_paint.isNull():
             try:
                 painter.drawPixmap(self.rect(), pixmap_to_paint)
-            except Exception:
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 painter.drawPixmap(0, 0, pixmap_to_paint)
         elif self.error_message:
             painter.fillRect(self.rect(), Qt.GlobalColor.black)
@@ -2259,14 +2287,14 @@ class DisplayWidget(QWidget):
             try:
                 self._widget_manager.request_overlay_fade_sync(overlay_name, starter)
                 return
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         
         # Fallback: run starter immediately if no WidgetManager
         try:
             starter()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
     def _start_overlay_fades(self, force: bool = False) -> None:
         """Kick off any pending overlay fade callbacks."""
@@ -2280,15 +2308,16 @@ class DisplayWidget(QWidget):
             try:
                 timeout.stop()
                 timeout.deleteLater()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             self._overlay_fade_timeout = None
 
         pending = getattr(self, "_overlay_fade_pending", {})
         try:
             starters = list(pending.values())
             names = list(pending.keys())
-        except Exception:
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             starters = []
             names = []
         logger.debug(
@@ -2308,33 +2337,34 @@ class DisplayWidget(QWidget):
             for starter in starters:
                 try:
                     starter()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             # When the primary fades fire immediately (force path or no
             # warm-up), still give Spotify widgets a brief second-wave delay
             # so they do not appear before the main group.
             try:
                 self._run_spotify_secondary_fades(base_delay_ms=150)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             return
 
         for starter in starters:
             try:
                 QTimer.singleShot(warmup_delay_ms, starter)
-            except Exception:
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 try:
                     starter()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
         # Schedule Spotify secondary fades to start a little after the
         # coordinated primary warm-up, so the volume slider and visualiser
         # card feel attached to the wave without blocking it.
         try:
             self._run_spotify_secondary_fades(base_delay_ms=warmup_delay_ms + 150)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
     def _run_spotify_secondary_fades(self, *, base_delay_ms: int) -> None:
         """Start any queued Spotify second-wave fade callbacks."""
@@ -2344,7 +2374,8 @@ class DisplayWidget(QWidget):
             return
         try:
             queued = list(starters)
-        except Exception:
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             queued = []
         self._spotify_secondary_fade_starters = []
 
@@ -2355,11 +2386,12 @@ class DisplayWidget(QWidget):
                     starter()
                 else:
                     QTimer.singleShot(delay_ms, starter)
-            except Exception:
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 try:
                     starter()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
     def register_spotify_secondary_fade(self, starter: Callable[[], None]) -> None:
         """Register a Spotify second-wave fade to run after primary overlays.
@@ -2372,7 +2404,8 @@ class DisplayWidget(QWidget):
 
         try:
             expected = self._overlay_fade_expected
-        except Exception:
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             expected = set()
 
         starters = getattr(self, "_spotify_secondary_fade_starters", None)
@@ -2386,11 +2419,12 @@ class DisplayWidget(QWidget):
         if not expected or getattr(self, "_overlay_fade_started", False):
             try:
                 QTimer.singleShot(150, starter)
-            except Exception:
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 try:
                     starter()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             return
 
         starters.append(starter)
@@ -2424,8 +2458,8 @@ class DisplayWidget(QWidget):
             if get_coordinator().settings_dialog_active:
                 self._hide_ctrl_cursor_hint(immediate=True)
                 return
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
         # Normalize incoming position to QPoint for consistency
         try:
@@ -2433,7 +2467,8 @@ class DisplayWidget(QWidget):
                 local_point = QPoint(pos)
             else:
                 local_point = QPoint(int(pos.x()), int(pos.y()))
-        except Exception:
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             return
         rect = self.rect()
         context_menu_active = bool(getattr(self, "_context_menu_active", False))
@@ -2484,7 +2519,8 @@ class DisplayWidget(QWidget):
                 hint.hide()
             else:
                 hint.fade_out()
-        except Exception:
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             hint.hide()
 
     def _reset_halo_inactivity_timer(self) -> None:
@@ -2501,8 +2537,8 @@ class DisplayWidget(QWidget):
 
         try:
             timer.start(timeout_ms)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
     def _cancel_halo_inactivity_timer(self) -> None:
         timer = getattr(self, "_halo_inactivity_timer", None)
@@ -2510,8 +2546,8 @@ class DisplayWidget(QWidget):
             return
         try:
             timer.stop()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
     def _on_halo_inactivity_timeout(self) -> None:
         """Hide the halo if there has been no local movement recently."""
@@ -2525,15 +2561,15 @@ class DisplayWidget(QWidget):
         try:
             self._coordinator.release_focus(self)
             self._coordinator.uninstall_event_filter(self)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         
         # Stop EcoModeManager monitoring (MC builds only)
         if self._eco_mode_manager is not None:
             try:
                 self._eco_mode_manager.stop_monitoring()
                 logger.debug("[LIFECYCLE] EcoModeManager stopped")
-            except Exception:
+            except Exception as e:
                 logger.debug("[LIFECYCLE] EcoModeManager stop failed", exc_info=True)
         
         # Cleanup widgets via lifecycle system (Dec 2025)
@@ -2541,7 +2577,7 @@ class DisplayWidget(QWidget):
             try:
                 self._widget_manager.cleanup()
                 logger.debug("[LIFECYCLE] WidgetManager cleanup complete")
-            except Exception:
+            except Exception as e:
                 logger.debug("[LIFECYCLE] WidgetManager cleanup failed", exc_info=True)
         
         super().closeEvent(event)
@@ -2557,7 +2593,7 @@ class DisplayWidget(QWidget):
                     self._input_handler.handle_ctrl_press(self._coordinator)
                     event.accept()
                     return
-                except Exception:
+                except Exception as e:
                     logger.debug("[KEY] Ctrl press delegation failed", exc_info=True)
             event.accept()
             return
@@ -2571,7 +2607,7 @@ class DisplayWidget(QWidget):
                         self._exiting = True
                     event.accept()
                     return
-            except Exception:
+            except Exception as e:
                 logger.debug("[KEY] Key press delegation failed", exc_info=True)
         
         event.ignore()
@@ -2585,7 +2621,7 @@ class DisplayWidget(QWidget):
                     self._input_handler.handle_ctrl_release(self._coordinator)
                     event.accept()
                     return
-                except Exception:
+                except Exception as e:
                     logger.debug("[KEY] Ctrl release delegation failed", exc_info=True)
             event.accept()
             return
@@ -2606,8 +2642,8 @@ class DisplayWidget(QWidget):
                         if self._input_handler.handle_mouse_press(event, self._coordinator.ctrl_held):
                             event.accept()
                             return
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 # Fallback: direct context menu show
                 self._show_context_menu(event.globalPosition().toPoint())
                 event.accept()
@@ -2632,7 +2668,7 @@ class DisplayWidget(QWidget):
                     )
                     logger.info("[REDDIT] route_widget_click returned: handled=%s reddit_handled=%s screen=%s",
                                handled, reddit_handled, self.screen_index)
-                except Exception:
+                except Exception as e:
                     logger.debug("[INPUT] Widget click routing failed", exc_info=True)
 
             if handled:
@@ -2667,7 +2703,8 @@ class DisplayWidget(QWidget):
                             if primary_screen is not None:
                                 primary_widget = self._coordinator.get_instance_for_screen(primary_screen)
                                 primary_is_covered = (primary_widget is not None)
-                    except Exception:
+                    except Exception as e:
+                        logger.debug("[DISPLAY_WIDGET] Exception checking primary screen: %s", e)
                         # Fallback: assume primary is NOT covered (MC mode behavior)
                         # This is safer than assuming exit - user can always press Esc
                         primary_is_covered = False
@@ -2687,8 +2724,8 @@ class DisplayWidget(QWidget):
                                 try:
                                     from widgets.reddit_widget import _try_bring_reddit_window_to_front
                                     _try_bring_reddit_window_to_front()
-                                except Exception:
-                                    pass
+                                except Exception as e:
+                                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                             QTimer.singleShot(300, _bring_browser_foreground)
                             self.exit_requested.emit()
                     else:
@@ -2705,7 +2742,7 @@ class DisplayWidget(QWidget):
                                     logger.info("[REDDIT] MC mode: opened %s immediately", url_to_open)
                                 else:
                                     logger.warning("[REDDIT] MC mode: QDesktopServices rejected %s", url_to_open)
-                            except Exception:
+                            except Exception as e:
                                 logger.debug("[REDDIT] MC mode immediate open failed; falling back", exc_info=True)
                                 url_to_open = None
                         if not url_to_open:
@@ -2716,8 +2753,8 @@ class DisplayWidget(QWidget):
                                     from widgets.reddit_widget import _try_bring_reddit_window_to_front
                                     _try_bring_reddit_window_to_front()
                                     logger.debug("[REDDIT] MC mode: browser foreground attempted")
-                                except Exception:
-                                    pass
+                                except Exception as e:
+                                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                             QTimer.singleShot(300, _bring_browser_foreground_mc)
                     
                 event.accept()
@@ -2749,8 +2786,8 @@ class DisplayWidget(QWidget):
                     self._input_handler.route_volume_drag(
                         event.pos(), getattr(self, "spotify_volume_widget", None)
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             event.accept()
             return
 
@@ -2800,7 +2837,7 @@ class DisplayWidget(QWidget):
                     ):
                         event.accept()
                         return
-                except Exception:
+                except Exception as e:
                     logger.debug("[WHEEL] routing failed", exc_info=True)
             # In interaction mode, wheel should never exit
             event.accept()
@@ -2847,29 +2884,31 @@ class DisplayWidget(QWidget):
                 self._context_menu.exit_requested.connect(self._on_context_exit_requested)
                 try:
                     self._context_menu.aboutToShow.connect(lambda: self._invalidate_overlay_effects("menu_about_to_show"))
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 try:
                     submenu = getattr(self._context_menu, "_transition_menu", None)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                     submenu = None
                 try:
                     connected_sub = bool(getattr(self, "_context_menu_sub_connected", False))
-                except Exception:
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                     connected_sub = False
                 if submenu is not None and not connected_sub:
                     try:
                         submenu.aboutToShow.connect(lambda: self._invalidate_overlay_effects("menu_sub_about_to_show"))
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                     try:
                         submenu.aboutToHide.connect(lambda: self._schedule_effect_invalidation("menu_sub_after_hide"))
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                     try:
                         setattr(self, "_context_menu_sub_connected", True)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             else:
                 # Update state before showing
                 self._context_menu.update_current_transition(current_transition)
@@ -2879,8 +2918,8 @@ class DisplayWidget(QWidget):
             
             try:
                 self._context_menu_active = True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             self._hide_ctrl_cursor_hint(immediate=True)
 
             try:
@@ -2893,31 +2932,33 @@ class DisplayWidget(QWidget):
                         self.screen_index,
                         global_pos,
                     )
-            except Exception:
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 setattr(self, "_menu_open_ts", None)
 
             try:
                 connected = getattr(self, "_context_menu_hide_connected", False)
-            except Exception:
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 connected = False
             if not connected:
                 try:
                     def _on_menu_hide() -> None:
                         try:
                             self._context_menu_active = False
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                         # Phase E: Notify InputHandler of menu close for consistent state
                         try:
                             if self._input_handler is not None:
                                 self._input_handler.set_context_menu_active(False)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                         try:
                             self._invalidate_overlay_effects("menu_after_hide")
                             self._schedule_effect_invalidation("menu_after_hide")
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                         try:
                             start = getattr(self, "_menu_open_ts", None)
                             if start is not None and win_diag_logger.isEnabledFor(logging.DEBUG):
@@ -2928,8 +2969,8 @@ class DisplayWidget(QWidget):
                                     (t1 - start) * 1000.0,
                                     self.screen_index,
                                 )
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                         # Restore halo after menu closes if still in hard_exit or Ctrl mode
                         try:
                             hard_exit = False
@@ -2944,20 +2985,20 @@ class DisplayWidget(QWidget):
                                 if self.rect().contains(local_pos):
                                     self._coordinator.set_halo_owner(self)
                                     self._show_ctrl_cursor_hint(local_pos, mode="fade_in")
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
                     self._context_menu.aboutToHide.connect(_on_menu_hide)
                     setattr(self, "_context_menu_hide_connected", True)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
             # Phase E: Notify InputHandler of menu open for consistent state
             try:
                 if self._input_handler is not None:
                     self._input_handler.set_context_menu_active(True)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             try:
                 # Phase E: Broadcast effect invalidation to ALL displays
                 # Context menu on one display triggers Windows activation cascade
@@ -2965,17 +3006,18 @@ class DisplayWidget(QWidget):
                 from rendering.multi_monitor_coordinator import get_coordinator
                 try:
                     self._invalidate_overlay_effects("menu_before_popup")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 get_coordinator().invalidate_all_effects("menu_before_popup_broadcast")
                 self._context_menu.popup(global_pos)
-            except Exception:
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 try:
                     self._context_menu.popup(QCursor.pos())
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
-        except Exception:
+        except Exception as e:
             logger.debug("Failed to show context menu", exc_info=True)
             self._context_menu_active = False
     
@@ -2991,7 +3033,7 @@ class DisplayWidget(QWidget):
                 self.settings_manager.set("transitions", trans_cfg)
                 self.settings_manager.save()
                 logger.info("Context menu: transition changed to %s", name)
-        except Exception:
+        except Exception as e:
             logger.debug("Failed to set transition from context menu", exc_info=True)
     
     def _on_context_dimming_toggled(self, enabled: bool) -> None:
@@ -3010,7 +3052,7 @@ class DisplayWidget(QWidget):
             
             # Emit signal to sync dimming across ALL displays
             self.dimming_changed.emit(enabled, self._dimming_opacity)
-        except Exception:
+        except Exception as e:
             logger.debug("Failed to toggle dimming from context menu", exc_info=True)
     
     def _on_context_hard_exit_toggled(self, enabled: bool) -> None:
@@ -3020,7 +3062,7 @@ class DisplayWidget(QWidget):
                 self.settings_manager.set("input.hard_exit", enabled)
                 self.settings_manager.save()
                 logger.info("Context menu: hard exit mode set to %s", enabled)
-        except Exception:
+        except Exception as e:
             logger.debug("Failed to toggle hard exit from context menu", exc_info=True)
     
     def _on_context_always_on_top_toggled(self, on_top: bool) -> None:
@@ -3067,17 +3109,17 @@ class DisplayWidget(QWidget):
                 try:
                     self._eco_mode_manager.set_always_on_top(on_top)
                     logger.debug("[MC] EcoModeManager notified: always_on_top=%s", on_top)
-                except Exception:
+                except Exception as e:
                     logger.debug("[MC] Failed to notify EcoModeManager of always-on-top change", exc_info=True)
             
             logger.info("[MC] Context menu: always on top set to %s", on_top)
-        except Exception:
+        except Exception as e:
             logger.debug("Failed to toggle always on top from context menu", exc_info=True)
             # Ensure updates are re-enabled on error
             try:
                 self.setUpdatesEnabled(True)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
     
     def _on_context_exit_requested(self) -> None:
         """Handle exit request from context menu."""
@@ -3098,7 +3140,7 @@ class DisplayWidget(QWidget):
         """
         try:
             self._show_context_menu(global_pos)
-        except Exception:
+        except Exception as e:
             logger.debug("[INPUT_HANDLER] Failed to show context menu", exc_info=True)
     
     def focusOutEvent(self, event: QFocusEvent) -> None:  # type: ignore[override]
@@ -3117,8 +3159,8 @@ class DisplayWidget(QWidget):
                     int(self.windowState()),
                 )
                 self._focus_loss_logged = True
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
         super().focusOutEvent(event)
 
@@ -3128,23 +3170,28 @@ class DisplayWidget(QWidget):
         try:
             try:
                 hwnd = int(self.winId())
-            except Exception:
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 hwnd = 0
             try:
                 active = bool(self.isActiveWindow())
-            except Exception:
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 active = False
             try:
                 visible = bool(self.isVisible())
-            except Exception:
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 visible = False
             try:
                 ws = int(self.windowState())
-            except Exception:
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 ws = -1
             try:
                 upd = bool(self.updatesEnabled())
-            except Exception:
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 upd = False
 
             win_diag_logger.debug(
@@ -3158,19 +3205,19 @@ class DisplayWidget(QWidget):
                 upd,
                 extra,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
     def _perform_activation_refresh(self, reason: str) -> None:
         try:
             self._pending_activation_refresh = False
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
         try:
             self._base_fallback_paint_logged = False
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
         if win_diag_logger.isEnabledFor(logging.DEBUG):
             try:
@@ -3179,30 +3226,30 @@ class DisplayWidget(QWidget):
                     getattr(self, "screen_index", "?"),
                     reason,
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
         comp = getattr(self, "_gl_compositor", None)
         if comp is not None:
             try:
                 comp.update()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
         try:
             self.update()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
         try:
             bars_gl = getattr(self, "_spotify_bars_overlay", None)
             if bars_gl is not None:
                 try:
                     bars_gl.update()
-                except Exception:
-                    pass
-        except Exception:
-            pass
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
         for name in (
             "clock_widget",
@@ -3221,8 +3268,8 @@ class DisplayWidget(QWidget):
             try:
                 if w.isVisible():
                     w.update()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
         self._schedule_effect_invalidation(f"activate_refresh:{reason}")
 
@@ -3231,7 +3278,8 @@ class DisplayWidget(QWidget):
             if getattr(self, "_pending_effect_invalidation", False):
                 return
             self._pending_effect_invalidation = True
-        except Exception:
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             return
 
         def _run() -> None:
@@ -3240,8 +3288,8 @@ class DisplayWidget(QWidget):
             finally:
                 try:
                     self._pending_effect_invalidation = False
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
         try:
             tm = getattr(self, "_thread_manager", None)
@@ -3249,7 +3297,8 @@ class DisplayWidget(QWidget):
                 tm.single_shot(0, _run)
             else:
                 ThreadManager.single_shot(0, _run)
-        except Exception:
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             _run()
 
     def _invalidate_overlay_effects(self, reason: str) -> None:
@@ -3257,26 +3306,26 @@ class DisplayWidget(QWidget):
         if self._widget_manager is not None:
             try:
                 self._widget_manager.invalidate_overlay_effects(reason)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
     def focusInEvent(self, event: QFocusEvent) -> None:  # type: ignore[override]
         try:
             self._debug_window_state("focusInEvent")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         try:
             self._invalidate_overlay_effects("focus_in")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         super().focusInEvent(event)
 
     def changeEvent(self, event: QEvent) -> None:  # type: ignore[override]
         try:
             if event is not None:
                 self._debug_window_state(f"changeEvent:{int(event.type())}")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         super().changeEvent(event)
 
     def nativeEvent(self, eventType, message):  # type: ignore[override]
@@ -3313,15 +3362,18 @@ class DisplayWidget(QWidget):
             if name is not None:
                 try:
                     hwnd = int(getattr(msg, "hwnd", 0) or 0)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                     hwnd = 0
                 try:
                     wparam = int(getattr(msg, "wParam", 0) or 0)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                     wparam = 0
                 try:
                     lparam = int(getattr(msg, "lParam", 0) or 0)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                     lparam = 0
 
                 extra = f"msg={name} wParam={wparam} lParam={lparam} hwnd={hex(hwnd) if hwnd else '?'}"
@@ -3329,9 +3381,10 @@ class DisplayWidget(QWidget):
                     for inst in DisplayWidget.get_all_instances():
                         try:
                             inst._debug_window_state("nativeEvent", extra=extra)
-                        except Exception:
-                            pass
-                except Exception:
+                        except Exception as e:
+                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                     self._debug_window_state("nativeEvent", extra=extra)
 
                 if name == "WM_ACTIVATE":
@@ -3341,14 +3394,15 @@ class DisplayWidget(QWidget):
                                 try:
                                     inst._pending_activation_refresh = True
                                     inst._last_deactivate_ts = time.monotonic()
-                                except Exception:
-                                    pass
-                        except Exception:
+                                except Exception as e:
+                                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+                        except Exception as e:
+                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                             try:
                                 self._pending_activation_refresh = True
                                 self._last_deactivate_ts = time.monotonic()
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                     elif wparam == 1:
                         now_ts = time.monotonic()
                         try:
@@ -3360,44 +3414,50 @@ class DisplayWidget(QWidget):
                                     if dt <= 3.0:
                                         try:
                                             QTimer.singleShot(0, lambda _inst=inst: _inst._perform_activation_refresh("wm_activate"))
-                                        except Exception:
+                                        except Exception as e:
+                                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                                             inst._perform_activation_refresh("wm_activate")
                                     else:
                                         inst._pending_activation_refresh = False
-                                except Exception:
-                                    pass
-                        except Exception:
-                            pass
+                                except Exception as e:
+                                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+                        except Exception as e:
+                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
         return super().nativeEvent(eventType, message)
 
     def _extract_win_msg(self, raw_message):
         try:
             msg_ptr = int(raw_message)
-        except Exception:
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             return None
         if msg_ptr == 0:
             return None
         try:
             return ctypes.cast(msg_ptr, ctypes.POINTER(wintypes.MSG)).contents
-        except Exception:
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             return None
 
     def _handle_win_appcommand(self, msg) -> tuple[bool, int]:
         try:
             hwnd = int(getattr(msg, "hwnd", 0) or 0)
-        except Exception:
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             hwnd = 0
         try:
             wparam = int(getattr(msg, "wParam", 0) or 0)
-        except Exception:
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             wparam = 0
         try:
             lparam = int(getattr(msg, "lParam", 0) or 0)
-        except Exception:
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             lparam = 0
 
         command = (lparam >> 16) & 0xFFFF
@@ -3420,7 +3480,8 @@ class DisplayWidget(QWidget):
             try:
                 result = int(_USER32.DefWindowProcW(hwnd, WM_APPCOMMAND, wparam, lparam))
                 return True, result
-            except Exception:
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 target_logger.debug("[WIN_APPCOMMAND] DefWindowProcW failed", exc_info=True)
 
         return False, 0
@@ -3429,14 +3490,16 @@ class DisplayWidget(QWidget):
         """Global event filter to keep the Ctrl halo responsive over children."""
         try:
             coordinator = self._coordinator
-        except Exception:
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             coordinator = None
 
         settings_dialog_active = False
         if coordinator is not None:
             try:
                 settings_dialog_active = bool(coordinator.settings_dialog_active)
-            except Exception:
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 settings_dialog_active = False
 
         if settings_dialog_active:
@@ -3445,8 +3508,8 @@ class DisplayWidget(QWidget):
                 owner = coordinator.halo_owner if coordinator is not None else None
                 if owner is not None:
                     owner._hide_ctrl_cursor_hint(immediate=True)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             return super().eventFilter(watched, event)
 
         try:
@@ -3463,7 +3526,7 @@ class DisplayWidget(QWidget):
                                     target._input_handler.handle_ctrl_press(self._coordinator)
                                     event.accept()
                                     return True
-                                except Exception:
+                                except Exception as e:
                                     logger.debug("[KEY] Ctrl press delegation failed", exc_info=True)
                             event.accept()
                             return True
@@ -3474,10 +3537,10 @@ class DisplayWidget(QWidget):
                                         target._exiting = True
                                     event.accept()
                                     return True
-                            except Exception:
+                            except Exception as e:
                                 logger.debug("[KEY] Key press delegation failed", exc_info=True)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
             if event is not None and event.type() == QEvent.Type.KeyRelease:
                 try:
@@ -3492,18 +3555,19 @@ class DisplayWidget(QWidget):
                                     target._input_handler.handle_ctrl_release(self._coordinator)
                                     event.accept()
                                     return True
-                                except Exception:
+                                except Exception as e:
                                     logger.debug("[KEY] Ctrl release delegation failed", exc_info=True)
                             event.accept()
                             return True
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
             if event is not None and event.type() == QEvent.Type.MouseMove:
                 hard_exit = False
                 try:
                     hard_exit = self._is_hard_exit_enabled()
-                except Exception:
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                     hard_exit = False
 
                 # Phase 5: Use coordinator for global Ctrl state and halo ownership
@@ -3521,7 +3585,8 @@ class DisplayWidget(QWidget):
                     cursor_screen = None
                     try:
                         cursor_screen = QGuiApplication.screenAt(global_pos)
-                    except Exception:
+                    except Exception as e:
+                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                         cursor_screen = None
 
                     owner = self._coordinator.halo_owner
@@ -3543,7 +3608,8 @@ class DisplayWidget(QWidget):
                             if new_owner is None:
                                 try:
                                     widgets = QApplication.topLevelWidgets()
-                                except Exception:
+                                except Exception as e:
+                                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                                     widgets = []
 
                                 for w in widgets:
@@ -3555,7 +3621,8 @@ class DisplayWidget(QWidget):
                                             # Register with coordinator for future lookups
                                             self._coordinator.register_instance(w, cursor_screen)
                                             break
-                                    except Exception:
+                                    except Exception as e:
+                                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                                         continue
 
                             if new_owner is None:
@@ -3567,23 +3634,23 @@ class DisplayWidget(QWidget):
                                     if hint is not None:
                                         try:
                                             hint.cancel_animation()
-                                        except Exception:
-                                            pass
+                                        except Exception as e:
+                                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                                         hint.hide()
                                         try:
                                             hint.setOpacity(0.0)
-                                        except Exception:
-                                            pass
-                                except Exception:
-                                    pass
+                                        except Exception as e:
+                                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+                                except Exception as e:
+                                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                                 owner._ctrl_held = False
 
                             # Phase 5: Use coordinator for halo ownership
                             self._coordinator.set_halo_owner(new_owner)
                             try:
                                 DisplayWidget._halo_owner = new_owner
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                             owner = new_owner
 
                     if owner is None:
@@ -3591,10 +3658,12 @@ class DisplayWidget(QWidget):
 
                     try:
                         local_pos = owner.mapFromGlobal(global_pos)
-                    except Exception:
+                    except Exception as e:
+                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                         try:
                             local_pos = owner.rect().center()
-                        except Exception:
+                        except Exception as e:
+                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                             local_pos = None
 
                     if local_pos is not None:
@@ -3611,7 +3680,8 @@ class DisplayWidget(QWidget):
                             owner_hard_exit = False
                             try:
                                 owner_hard_exit = owner._is_hard_exit_enabled()
-                            except Exception:
+                            except Exception as e:
+                                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                                 owner_hard_exit = hard_exit  # fallback to self's value
                             
                             hint = getattr(owner, "_ctrl_cursor_hint", None)
@@ -3634,8 +3704,8 @@ class DisplayWidget(QWidget):
                                     self._coordinator.set_halo_owner(owner)
                                     try:
                                         DisplayWidget._halo_owner = owner
-                                    except Exception:
-                                        pass
+                                    except Exception as e:
+                                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                                     owner._show_ctrl_cursor_hint(local_pos, mode="fade_in")
                                 else:
                                     owner._show_ctrl_cursor_hint(local_pos, mode="none")
@@ -3648,16 +3718,17 @@ class DisplayWidget(QWidget):
                                 if rw is not None and rw.isVisible() and hasattr(rw, "handle_hover"):
                                     try:
                                         local_rw_pos = rw.mapFromGlobal(global_pos)
-                                    except Exception:
+                                    except Exception as e:
+                                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                                         local_rw_pos = None
                                     if local_rw_pos is not None:
                                         rw.handle_hover(local_rw_pos, global_pos)
-                            except Exception:
-                                pass
-                        except Exception:
-                            pass
-        except Exception:
-            pass
+                            except Exception as e:
+                                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+                        except Exception as e:
+                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         return super().eventFilter(watched, event)
 
     def get_screen_info(self) -> dict:
@@ -3683,7 +3754,8 @@ class DisplayWidget(QWidget):
         ct = getattr(self, "_current_transition", None)
         try:
             return bool(ct and ct.is_running())
-        except Exception:
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             return False
 
     def get_transition_snapshot(self) -> Dict[str, Any]:
@@ -3701,7 +3773,8 @@ class DisplayWidget(QWidget):
         if transition is not None:
             try:
                 running = transition.is_running()
-            except Exception:
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 running = False
             if running:
                 snapshot["running"] = True

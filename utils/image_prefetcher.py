@@ -65,17 +65,10 @@ class ImagePrefetcher:
 
     def _submit_load(self, path: str) -> None:
         # inflight is already marked by caller under lock
+        from utils.image_loader import ImageLoader
 
         def _load_qimage(p: str) -> Optional[QImage]:
-            try:
-                img = QImage(p)
-                if img.isNull():
-                    logger.warning(f"Prefetch decode failed for: {p}")
-                    return None
-                return img
-            except Exception as e:
-                logger.exception(f"Prefetch load failed for {p}: {e}")
-                return None
+            return ImageLoader.load_qimage_silent(p)
 
         def _on_done(res) -> None:
             # res is TaskResult
@@ -86,8 +79,8 @@ class ImagePrefetcher:
                         self._cache.put(path, img)
                         if is_verbose_logging():
                             logger.debug(f"Prefetched and cached: {path}")
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[MISC] Exception suppressed: %s", e)
             finally:
                 with self._lock:
                     self._inflight.discard(path)

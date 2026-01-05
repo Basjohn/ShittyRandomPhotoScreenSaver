@@ -128,8 +128,8 @@ def _hide_own_window() -> None:
         hwnd = kernel32.GetConsoleWindow()
         if hwnd:
             user32.ShowWindow(hwnd, 0)  # SW_HIDE
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[REDDIT] Exception suppressed: %s", e)
 
 
 def process_queue(queue_dir: Path, max_batch: int) -> int:
@@ -165,7 +165,8 @@ def process_queue(queue_dir: Path, max_batch: int) -> int:
                     logging.info("Browser foregrounded after helper launch: %s", url)
                 else:
                     logging.debug("Browser foreground attempt skipped/failed: %s", url)
-            except Exception:
+            except Exception as e:
+                logger.debug("[REDDIT] Exception suppressed: %s", e)
                 logging.debug("Browser foreground attempt errored: %s", url, exc_info=True)
             entry_path.unlink(missing_ok=True)
         else:
@@ -186,7 +187,8 @@ def main() -> int:
         return 0 if success else 1
     try:
         ensure_scheduled_task_registered(helper_path, args.queue, args.log_dir)
-    except Exception:
+    except Exception as e:
+        logger.debug("[REDDIT] Exception suppressed: %s", e)
         logging.debug("Scheduled task registration skipped due to error", exc_info=True)
 
     logging.info("Helper started (queue=%s)", args.queue)
@@ -328,8 +330,8 @@ def _build_keyword_list(url: str) -> list[str]:
             host = host.split(":")[0]
             tokens = [part for part in host.replace("-", ".").split(".") if part]
             keywords.extend(token for token in tokens if token not in ("www", "m"))
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[REDDIT] Exception suppressed: %s", e)
 
     if "reddit" not in keywords:
         keywords.append("reddit")
@@ -346,7 +348,8 @@ def _build_keyword_list(url: str) -> list[str]:
 def _foreground_first_matching_window(keywords: list[str]) -> bool:
     try:
         user32 = ctypes.windll.user32  # type: ignore[attr-defined]
-    except Exception:
+    except Exception as e:
+        logger.debug("[REDDIT] Exception suppressed: %s", e)
         return False
 
     EnumWindowsProc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
@@ -366,13 +369,15 @@ def _foreground_first_matching_window(keywords: list[str]) -> bool:
             if any(kw in title for kw in keywords):
                 candidates.append(hwnd)
                 return False
-        except Exception:
+        except Exception as e:
+            logger.debug("[REDDIT] Exception suppressed: %s", e)
             return True
         return True
 
     try:
         user32.EnumWindows(_enum_proc, 0)
-    except Exception:
+    except Exception as e:
+        logger.debug("[REDDIT] Exception suppressed: %s", e)
         return False
 
     if not candidates:
@@ -406,7 +411,8 @@ def _foreground_first_matching_window(keywords: list[str]) -> bool:
             user32.ShowWindow(hwnd, SW_SHOW)
 
         return bool(user32.SetForegroundWindow(hwnd))
-    except Exception:
+    except Exception as e:
+        logger.debug("[REDDIT] Exception suppressed: %s", e)
         return False
 
 

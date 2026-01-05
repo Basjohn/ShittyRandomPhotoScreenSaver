@@ -305,8 +305,8 @@ void main() {
                 return (0.0, 1.0)
             elif direction == SlideDirection.UP:
                 return (0.0, -1.0)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[MISC] Exception suppressed: %s", e)
         return (1.0, 0.0)
 
 

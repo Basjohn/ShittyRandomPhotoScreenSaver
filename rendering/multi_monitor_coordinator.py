@@ -64,8 +64,8 @@ class MultiMonitorCoordinator(QObject):
             if cls._instance is not None:
                 try:
                     cls._instance.cleanup()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[COORDINATOR] Exception suppressed: %s", e)
             cls._instance = None
     
     def __init__(self):
@@ -121,8 +121,8 @@ class MultiMonitorCoordinator(QObject):
             logger.debug("[MULTI_MONITOR] Ctrl held: %s", held)
             try:
                 self.ctrl_held_changed.emit(held)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[COORDINATOR] Exception suppressed: %s", e)
     
     @property
     def settings_dialog_active(self) -> bool:
@@ -163,8 +163,8 @@ class MultiMonitorCoordinator(QObject):
                      widget.screen_index if widget else None)
         try:
             self.halo_owner_changed.emit(widget)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[COORDINATOR] Exception suppressed: %s", e)
     
     def clear_halo_owner(self) -> Optional["DisplayWidget"]:
         """Clear and return the previous halo owner."""
@@ -215,7 +215,8 @@ class MultiMonitorCoordinator(QObject):
                         "[MULTI_MONITOR] Focus owner screen %s not visible",
                         getattr(current, "screen_index", "?"),
                     )
-            except Exception:
+            except Exception as e:
+                logger.debug("[COORDINATOR] Exception suppressed: %s", e)
                 should_yield = True
             
             if not should_yield:
@@ -236,8 +237,8 @@ class MultiMonitorCoordinator(QObject):
                                 "[MULTI_MONITOR] Focus owner screen %s has invalid geometry",
                                 getattr(current, "screen_index", "?"),
                             )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[COORDINATOR] Exception suppressed: %s", e)
             
             if should_yield:
                 self._focus_owner_ref = weakref.ref(widget)
@@ -302,7 +303,8 @@ class MultiMonitorCoordinator(QObject):
                             widget.screen_index,
                         )
                         return True
-                except Exception:
+                except Exception as e:
+                    logger.debug("[COORDINATOR] Exception suppressed: %s", e)
                     self._event_filter_owner_ref = weakref.ref(widget)
                     return True
                 return False
@@ -344,7 +346,8 @@ class MultiMonitorCoordinator(QObject):
                     value = getter()
                     if value:
                         parts.append(f"{label}:{value}")
-            except Exception:
+            except Exception as e:
+                logger.debug("[COORDINATOR] Exception suppressed: %s", e)
                 continue
 
         # Geometry (pos + size) is a decent fallback when metadata is missing.
@@ -353,8 +356,8 @@ class MultiMonitorCoordinator(QObject):
             parts.append(
                 f"geom:{geom.x()}_{geom.y()}_{geom.width()}x{geom.height()}"
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[COORDINATOR] Exception suppressed: %s", e)
 
         if not parts:
             parts.append(f"id:{id(screen)}")
@@ -418,8 +421,8 @@ class MultiMonitorCoordinator(QObject):
         for widget in self.get_all_instances():
             try:
                 widget._ctrl_held = False
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[COORDINATOR] Exception suppressed: %s", e)
     
     def hide_all_halos(self) -> None:
         """Hide cursor halos on all displays."""
@@ -429,8 +432,8 @@ class MultiMonitorCoordinator(QObject):
                 if hint is not None:
                     hint.cancel_animation()
                     hint.hide()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[COORDINATOR] Exception suppressed: %s", e)
 
     def invalidate_all_effects(self, reason: str) -> None:
         """Invalidate overlay effects on ALL displays.
@@ -444,8 +447,8 @@ class MultiMonitorCoordinator(QObject):
                 invalidate_fn = getattr(widget, "_invalidate_overlay_effects", None)
                 if callable(invalidate_fn):
                     invalidate_fn(reason)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[COORDINATOR] Exception suppressed: %s", e)
     
     def cleanup(self) -> None:
         """Clean up all coordinator state."""

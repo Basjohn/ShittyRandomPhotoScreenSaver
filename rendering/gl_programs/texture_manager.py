@@ -130,7 +130,7 @@ class GLTextureManager:
                 data = bytes(ptr)
             else:
                 data = ptr.tobytes()
-        except Exception:
+        except Exception as e:
             logger.debug("[GL TEXTURE] Failed to access image bits", exc_info=True)
             return 0
         
@@ -158,17 +158,19 @@ class GLTextureManager:
                         else:
                             gl.glBufferSubData(gl.GL_PIXEL_UNPACK_BUFFER, 0, data_size, data)
                             use_pbo = True
-                    except Exception:
+                    except Exception as e:
+                        logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
                         gl.glBufferData(gl.GL_PIXEL_UNPACK_BUFFER, data_size, data, gl.GL_STREAM_DRAW)
                         use_pbo = True
-        except Exception:
+        except Exception as e:
+            logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
             use_pbo = False
             if pbo_id > 0:
                 try:
                     gl.glBindBuffer(gl.GL_PIXEL_UNPACK_BUFFER, 0)
                     self._release_pbo(pbo_id)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
                 pbo_id = 0
         
         # Upload texture
@@ -190,18 +192,18 @@ class GLTextureManager:
                     gl.GL_TEXTURE_2D, 0, gl.GL_RGBA8, w, h, 0,
                     gl.GL_BGRA, gl.GL_UNSIGNED_BYTE, data
                 )
-        except Exception:
+        except Exception as e:
             logger.debug("[GL TEXTURE] Upload failed", exc_info=True)
             try:
                 gl.glDeleteTextures(int(tex_id))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
             if pbo_id > 0:
                 try:
                     gl.glBindBuffer(gl.GL_PIXEL_UNPACK_BUFFER, 0)
                     self._release_pbo(pbo_id)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
             return 0
         finally:
             gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
@@ -209,8 +211,8 @@ class GLTextureManager:
                 try:
                     gl.glBindBuffer(gl.GL_PIXEL_UNPACK_BUFFER, 0)
                     self._release_pbo(pbo_id)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
         
         # Log slow uploads
         _upload_elapsed = (time.time() - _upload_start) * 1000.0
@@ -223,8 +225,8 @@ class GLTextureManager:
             from core.resources.manager import ResourceManager
             rm = ResourceManager()
             rm.register_gl_texture(tex_id, description=f"GLTextureManager {w}x{h}")
-        except Exception:
-            pass  # Non-critical - texture still usable
+        except Exception as e:
+            logger.debug("[GL TEXTURE] Exception suppressed: %s", e)  # Non-critical - texture still usable
         
         return tex_id
     
@@ -242,7 +244,8 @@ class GLTextureManager:
         try:
             if hasattr(pixmap, "cacheKey"):
                 key = int(pixmap.cacheKey())
-        except Exception:
+        except Exception as e:
+            logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
             key = 0
         
         # Check cache
@@ -254,8 +257,8 @@ class GLTextureManager:
                     if key in self._texture_lru:
                         self._texture_lru.remove(key)
                     self._texture_lru.append(key)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
                 return int(tex_id)
         
         # Upload new texture
@@ -276,11 +279,11 @@ class GLTextureManager:
                     if old_tex:
                         try:
                             gl.glDeleteTextures(int(old_tex))
-                        except Exception:
+                        except Exception as e:
                             logger.debug("[GL TEXTURE] Failed to delete cached texture %s", 
                                         old_tex, exc_info=True)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
         
         return tex_id
     
@@ -298,7 +301,7 @@ class GLTextureManager:
         try:
             self._old_tex_id = self.get_or_create_texture(old_pixmap)
             self._new_tex_id = self.get_or_create_texture(new_pixmap)
-        except Exception:
+        except Exception as e:
             logger.debug("[GL TEXTURE] Failed to prepare transition textures", exc_info=True)
             self.release_transition_textures()
             return False
@@ -348,12 +351,12 @@ class GLTextureManager:
                     from core.resources.manager import ResourceManager
                     rm = ResourceManager()
                     rm.register_gl_vbo(pbo_id, description=f"GLTextureManager PBO {required_size}B")
-                except Exception:
-                    pass  # Non-critical
+                except Exception as e:
+                    logger.debug("[GL TEXTURE] Exception suppressed: %s", e)  # Non-critical
                 
                 return pbo_id
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
         return 0
     
     def _release_pbo(self, pbo_id: int) -> None:
@@ -370,8 +373,8 @@ class GLTextureManager:
         for entry in self._pbo_pool:
             try:
                 gl.glDeleteBuffers(1, [entry.pbo_id])
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
         self._pbo_pool.clear()
     
     # -------------------------------------------------------------------------
@@ -388,7 +391,7 @@ class GLTextureManager:
             if ids:
                 arr = (ctypes.c_uint * len(ids))(*ids)
                 gl.glDeleteTextures(len(ids), arr)
-        except Exception:
+        except Exception as e:
             logger.debug("[GL TEXTURE] Failed to delete cached textures", exc_info=True)
         
         self._texture_cache.clear()

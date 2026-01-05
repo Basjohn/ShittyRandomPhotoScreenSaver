@@ -302,8 +302,8 @@ class NoSourcesPopup(QDialog):
                 self.move(
                     parent.mapToGlobal(geom.center()) - self.rect().center()
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SETTINGS] Exception suppressed: %s", e)
 
 
 class ResetDefaultsDialog(QWidget):
@@ -380,8 +380,8 @@ class ResetDefaultsDialog(QWidget):
                 geom = parent.rect()
                 self.move(geom.center() - self.rect().center())
                 self.raise_()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SETTINGS] Exception suppressed: %s", e)
 
     def accept(self) -> None:
         """Close the toast when acknowledged or after timeout."""
@@ -439,7 +439,7 @@ class SettingsDialog(QDialog):
             for key, value in stored_scroll.items():
                 try:
                     self._tab_scroll_cache[str(key)] = int(value)
-                except Exception:
+                except Exception as e:
                     logger.debug("Invalid stored scroll position for %s: %r", key, value)
         self._tab_scroll_widgets: Dict[int, Optional[QScrollArea]] = {}
         stored_states = self._settings.get('ui.tab_state', {})
@@ -448,7 +448,7 @@ class SettingsDialog(QDialog):
                 if isinstance(value, dict):
                     try:
                         self._tab_state_cache[str(key)] = dict(value)
-                    except Exception:
+                    except Exception as e:
                         logger.debug("Invalid stored tab state for %s", key)
         
         self._setup_window()
@@ -905,7 +905,8 @@ class SettingsDialog(QDialog):
                 if alt_dir.exists():
                     images_dir = alt_dir
             logger.debug("[ABOUT] Images directory resolved to %s (exists=%s)", images_dir, images_dir.exists())
-        except Exception:
+        except Exception as e:
+            logger.debug("[SETTINGS] Exception suppressed: %s", e)
             images_dir = Path.cwd() / "images"
 
         logo_label = QLabel()
@@ -919,7 +920,7 @@ class SettingsDialog(QDialog):
                 # Store the original, unscaled pixmap; scaling is handled
                 # centrally in _update_about_header_images().
                 self._about_logo_source = logo_pm
-        except Exception:
+        except Exception as e:
             logger.debug("[ABOUT] Failed to load Logo.png", exc_info=True)
         header_layout.addWidget(logo_label, 0, Qt.AlignmentFlag.AlignTop)
 
@@ -934,7 +935,7 @@ class SettingsDialog(QDialog):
                 # Store the original, unscaled pixmap for responsive
                 # scaling based on the dialog width.
                 self._about_shoogle_source = shoogle_pm
-        except Exception:
+        except Exception as e:
             logger.debug("[ABOUT] Failed to load Shoogle300W.png", exc_info=True)
         header_layout.addWidget(shoogle_label, 0, Qt.AlignmentFlag.AlignTop)
         header_layout.addStretch()
@@ -980,8 +981,8 @@ class SettingsDialog(QDialog):
 
                 if blurb_lines:
                     blurb_text = "<br>".join(blurb_lines)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SETTINGS] Exception suppressed: %s", e)
 
         # Small stylistic tweak to italicize the "can" in the second sentence,
         # matching the ABOUTExample reference mockup.
@@ -1034,8 +1035,8 @@ class SettingsDialog(QDialog):
             def _open() -> None:
                 try:
                     QDesktopServices.openUrl(QUrl(url))
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[SETTINGS] Exception suppressed: %s", e)
 
             btn.clicked.connect(_open)
             return btn
@@ -1185,7 +1186,8 @@ class SettingsDialog(QDialog):
 
         try:
             dpr = float(self.devicePixelRatioF())
-        except Exception:
+        except Exception as e:
+            logger.debug("[SETTINGS] Exception suppressed: %s", e)
             dpr = 1.0
         if dpr < 1.0:
             dpr = 1.0
@@ -1206,8 +1208,8 @@ class SettingsDialog(QDialog):
             if dpr != 1.0:
                 try:
                     scaled.setDevicePixelRatio(dpr)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[SETTINGS] Exception suppressed: %s", e)
 
             label.setPixmap(scaled)
 
@@ -1273,12 +1275,12 @@ class SettingsDialog(QDialog):
             if index == 5:
                 try:
                     self._about_last_card_width = 0
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[SETTINGS] Exception suppressed: %s", e)
                 try:
                     self._update_about_header_images()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[SETTINGS] Exception suppressed: %s", e)
             self._restore_tab_view_state(index, current_widget)
             self._restore_scroll_for_tab(index, current_widget)
             self._save_last_tab(index)
@@ -1333,7 +1335,7 @@ class SettingsDialog(QDialog):
             return
         try:
             view_state = getter()
-        except Exception:
+        except Exception as e:
             logger.debug("Failed to capture view state for tab %s", index, exc_info=True)
             return
         key = self._tab_key_for_index(index)
@@ -1365,14 +1367,14 @@ class SettingsDialog(QDialog):
             return
         try:
             restorer(view_state)
-        except Exception:
+        except Exception as e:
             logger.debug("Failed to restore view state for tab %s", key, exc_info=True)
 
     def _save_tab_state_cache(self) -> None:
         try:
             self._settings.set('ui.tab_state', dict(self._tab_state_cache))
             self._settings.save()
-        except Exception:
+        except Exception as e:
             logger.debug("Failed to persist tab state cache", exc_info=True)
 
     def _tab_key_for_index(self, index: int) -> str:
@@ -1386,14 +1388,15 @@ class SettingsDialog(QDialog):
             return
         try:
             value = scroll.verticalScrollBar().value()
-        except Exception:
+        except Exception as e:
+            logger.debug("[SETTINGS] Exception suppressed: %s", e)
             return
         key = self._tab_key_for_index(index)
         self._tab_scroll_cache[key] = value
         try:
             self._settings.set('ui.last_tab_scroll', dict(self._tab_scroll_cache))
             self._settings.save()
-        except Exception:
+        except Exception as e:
             logger.debug("Failed to persist tab scroll positions", exc_info=True)
 
     def _restore_scroll_for_tab(self, index: int, widget: Optional[QWidget]) -> None:
@@ -1410,7 +1413,7 @@ class SettingsDialog(QDialog):
         try:
             self._suppress_scroll_capture = True
             scrollbar.setValue(value)
-        except Exception:
+        except Exception as e:
             logger.debug("Failed to restore scroll for tab %s", key, exc_info=True)
         finally:
             self._suppress_scroll_capture = False
@@ -1421,14 +1424,15 @@ class SettingsDialog(QDialog):
         try:
             self._settings.set('ui.last_tab_index', int(index))
             self._settings.save()
-        except Exception:
+        except Exception as e:
             logger.debug("Failed to persist last tab index", exc_info=True)
 
     def _restore_last_tab_selection(self) -> None:
         stored = self._settings.get('ui.last_tab_index', 0)
         try:
             index = int(stored)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SETTINGS] Exception suppressed: %s", e)
             index = 0
         if index < 0 or index >= len(self.tab_buttons):
             index = 0
@@ -1451,13 +1455,13 @@ class SettingsDialog(QDialog):
                 self._capture_tab_view_state(current_index)
                 if not self._suppress_scroll_capture:
                     self._remember_scroll_for_tab(current_index)
-        except Exception:
+        except Exception as e:
             logger.debug("Failed to capture tab state on close", exc_info=True)
         
         # Save window geometry for next session
         try:
             self._save_geometry()
-        except Exception:
+        except Exception as e:
             logger.debug("Failed to save dialog geometry on close", exc_info=True)
         
         super().closeEvent(event)
@@ -1468,7 +1472,8 @@ class SettingsDialog(QDialog):
             folders = self._settings.get('sources.folders', [])
             rss_feeds = self._settings.get('sources.rss_feeds', [])
             return bool(folders) or bool(rss_feeds)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SETTINGS] Exception suppressed: %s", e)
             return False
     
     def _show_no_sources_popup(self) -> None:
@@ -1506,7 +1511,7 @@ class SettingsDialog(QDialog):
             
             # Now close the dialog
             self.close()
-        except Exception:
+        except Exception as e:
             logger.exception("Failed to add default sources")
     
     def _on_exit_without_sources(self) -> None:
@@ -1532,7 +1537,7 @@ class SettingsDialog(QDialog):
                     self.transitions_tab._load_settings()  # type: ignore[attr-defined]
                 if hasattr(self, "widgets_tab"):
                     self.widgets_tab._load_settings()  # type: ignore[attr-defined]
-            except Exception:
+            except Exception as e:
                 logger.debug("Failed to reload settings tabs after reset_to_defaults", exc_info=True)
 
             try:
@@ -1540,7 +1545,7 @@ class SettingsDialog(QDialog):
                 if notice is not None:
                     notice.setVisible(True)
                     QTimer.singleShot(2000, lambda: notice.setVisible(False))
-            except Exception:
+            except Exception as e:
                 logger.debug("Failed to show reset notice label", exc_info=True)
         except Exception as exc:
             logger.exception("Failed to reset settings to defaults: %s", exc)
@@ -1603,7 +1608,7 @@ class SettingsDialog(QDialog):
             if not logs_path.exists():
                 logs_path.mkdir(parents=True, exist_ok=True)
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(logs_path)))
-        except Exception:
+        except Exception as e:
             logger.debug("Failed to open logs folder", exc_info=True)
     
     def _open_settings_folder(self) -> None:
@@ -1615,7 +1620,7 @@ class SettingsDialog(QDialog):
                 # Fallback to current directory
                 settings_path = Path.cwd()
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(settings_path)))
-        except Exception:
+        except Exception as e:
             logger.debug("Failed to open settings folder", exc_info=True)
 
     def _on_export_settings_clicked(self) -> None:
@@ -1626,7 +1631,8 @@ class SettingsDialog(QDialog):
             # location for human-edited snapshots; fall back to CWD.
             try:
                 base_dir = Path.home() / "Documents"
-            except Exception:
+            except Exception as e:
+                logger.debug("[SETTINGS] Exception suppressed: %s", e)
                 base_dir = Path.cwd()
 
             if not base_dir.exists():
@@ -1636,7 +1642,8 @@ class SettingsDialog(QDialog):
             try:
                 if hasattr(self._settings, "get_application_name"):
                     profile = self._settings.get_application_name()
-            except Exception:
+            except Exception as e:
+                logger.debug("[SETTINGS] Exception suppressed: %s", e)
                 profile = "Screensaver"
             safe_profile = str(profile).replace(" ", "_") if profile is not None else "Screensaver"
             default_path = str(base_dir / f"SRPSS_Settings_{safe_profile}.sst")
@@ -1653,7 +1660,7 @@ class SettingsDialog(QDialog):
             ok = False
             try:
                 ok = bool(self._settings.export_to_sst(file_path))
-            except Exception:
+            except Exception as e:
                 logger.exception("Export to SST failed")
                 ok = False
 
@@ -1683,7 +1690,8 @@ class SettingsDialog(QDialog):
         try:
             try:
                 base_dir = Path.home() / "Documents"
-            except Exception:
+            except Exception as e:
+                logger.debug("[SETTINGS] Exception suppressed: %s", e)
                 base_dir = Path.cwd()
 
             if not base_dir.exists():
@@ -1702,7 +1710,7 @@ class SettingsDialog(QDialog):
             ok = False
             try:
                 ok = bool(self._settings.import_from_sst(file_path, merge=True))
-            except Exception:
+            except Exception as e:
                 logger.exception("Import from SST failed")
                 ok = False
 
@@ -1725,7 +1733,7 @@ class SettingsDialog(QDialog):
                     self.transitions_tab._load_settings()  # type: ignore[attr-defined]
                 if hasattr(self, "widgets_tab"):
                     self.widgets_tab._load_settings()  # type: ignore[attr-defined]
-            except Exception:
+            except Exception as e:
                 logger.debug("Failed to reload settings tabs after SST import", exc_info=True)
 
             StyledPopup.show_success(
@@ -1764,8 +1772,8 @@ class SettingsDialog(QDialog):
                     pw - self.size_grip.width(),
                     ph - self.size_grip.height(),
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SETTINGS] Exception suppressed: %s", e)
         
         # Save geometry on resize (debounced to avoid excessive saves)
         if hasattr(self, '_resize_timer'):
@@ -1782,15 +1790,15 @@ class SettingsDialog(QDialog):
         # constructed yet.
         try:
             self._update_about_header_images()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SETTINGS] Exception suppressed: %s", e)
     
     def showEvent(self, event):
         super().showEvent(event)
         try:
             self._update_about_header_images()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SETTINGS] Exception suppressed: %s", e)
     
     def moveEvent(self, event):
         """Handle move event to save geometry."""

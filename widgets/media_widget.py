@@ -83,8 +83,8 @@ class MediaWidget(BaseOverlayWidget):
         self._controller: BaseMediaController = controller or create_media_controller()
         try:
             logger.info("[MEDIA_WIDGET] Using controller: %s", type(self._controller).__name__)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
 
         self._widget_manager: Optional["WidgetManager"] = None
         self._update_timer: Optional[QTimer] = None
@@ -165,8 +165,8 @@ class MediaWidget(BaseOverlayWidget):
         try:
             # Non-interactive by default; screensaver interaction is gated elsewhere.
             self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
 
         font = QFont(self._font_family, self._font_size, QFont.Weight.Normal)
         self.setFont(font)
@@ -211,8 +211,8 @@ class MediaWidget(BaseOverlayWidget):
         if self._update_timer_handle is not None:
             try:
                 self._update_timer_handle.stop()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             self._update_timer_handle = None
         
         if self._update_timer is not None:
@@ -248,8 +248,8 @@ class MediaWidget(BaseOverlayWidget):
         self._enabled = True
         try:
             self.hide()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
         self._refresh()
         self._ensure_timer()
         if self._thread_manager is not None:
@@ -268,8 +268,8 @@ class MediaWidget(BaseOverlayWidget):
         if self._update_timer_handle is not None:
             try:
                 self._update_timer_handle.stop()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             self._update_timer_handle = None
 
         if self._update_timer is not None:
@@ -317,7 +317,8 @@ class MediaWidget(BaseOverlayWidget):
         self._update_timer_handle = handle
         try:
             self._update_timer = getattr(handle, "_timer", None)
-        except Exception:
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             self._update_timer = None
 
     def _update_position(self) -> None:
@@ -361,13 +362,13 @@ class MediaWidget(BaseOverlayWidget):
             if hasattr(parent, "_position_spotify_visualizer"):
                 try:
                     parent._position_spotify_visualizer()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             if hasattr(parent, "_position_spotify_volume"):
                 try:
                     parent._position_spotify_volume()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
     
     def _notify_spotify_widgets_visibility(self) -> None:
         """Notify Spotify-related widgets to sync their visibility with this widget.
@@ -389,8 +390,8 @@ class MediaWidget(BaseOverlayWidget):
                     # Legacy fallback for widgets without explicit sync helper
                     state = "playing" if self.isVisible() else "stopped"
                     vis.handle_media_update({"state": state})
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
         
         # Notify volume widget
         vol = getattr(parent, "spotify_volume_widget", None)
@@ -398,8 +399,8 @@ class MediaWidget(BaseOverlayWidget):
             try:
                 if hasattr(vol, "sync_visibility_with_anchor"):
                     vol.sync_visibility_with_anchor()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
 
     # ------------------------------------------------------------------
     # Styling
@@ -452,7 +453,8 @@ class MediaWidget(BaseOverlayWidget):
         if self._last_info is not None:
             try:
                 self._update_display(self._last_info)
-            except Exception:
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
                 self.update()
 
     def set_rounded_artwork_border(self, rounded: bool) -> None:
@@ -474,7 +476,8 @@ class MediaWidget(BaseOverlayWidget):
         if self._last_info is not None:
             try:
                 self._update_display(self._last_info)
-            except Exception:
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
                 self.update()
 
     # ------------------------------------------------------------------
@@ -490,7 +493,7 @@ class MediaWidget(BaseOverlayWidget):
 
         try:
             self._controller.play_pause()
-        except Exception:
+        except Exception as e:
             logger.debug("[MEDIA] play_pause delegation failed", exc_info=True)
             return
 
@@ -501,12 +504,14 @@ class MediaWidget(BaseOverlayWidget):
         new_state = None
         try:
             info = self._last_info
-        except Exception:
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             info = None
         if isinstance(info, MediaTrackInfo):
             try:
                 current_state = info.state
-            except Exception:
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
                 current_state = MediaPlaybackState.UNKNOWN
             if current_state in (MediaPlaybackState.PLAYING, MediaPlaybackState.PAUSED):
                 new_state = (
@@ -526,17 +531,18 @@ class MediaWidget(BaseOverlayWidget):
                         can_previous=info.can_previous,
                         artwork=info.artwork,
                     )
-                except Exception:
+                except Exception as e:
+                    logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
                     optimistic = None
         if optimistic is not None:
             try:
                 self._update_display(optimistic)
-            except Exception:
+            except Exception as e:
                 logger.debug("[MEDIA] play_pause optimistic update failed", exc_info=True)
             try:
                 if new_state is not None:
                     self._apply_pending_state_override(new_state)
-            except Exception:
+            except Exception as e:
                 logger.debug("[MEDIA] play_pause optimistic override failed", exc_info=True)
 
     def _apply_pending_state_override(self, state: MediaPlaybackState) -> None:
@@ -545,16 +551,16 @@ class MediaWidget(BaseOverlayWidget):
             try:
                 timer.stop()
                 timer.deleteLater()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             self._pending_state_timer = None
 
         self._pending_state_override = state
 
         try:
             self.update()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
 
         if not self._enabled:
             return
@@ -572,12 +578,12 @@ class MediaWidget(BaseOverlayWidget):
                         self._refresh_async()
                     else:
                         self._refresh()
-            except Exception:
+            except Exception as e:
                 logger.debug("[MEDIA] pending state refresh failed", exc_info=True)
             try:
                 self.update()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
 
         timer.timeout.connect(_on_timeout)
         self._pending_state_timer = timer
@@ -588,7 +594,7 @@ class MediaWidget(BaseOverlayWidget):
 
         try:
             self._controller.next()
-        except Exception:
+        except Exception as e:
             logger.debug("[MEDIA] next delegation failed", exc_info=True)
             return
 
@@ -598,7 +604,7 @@ class MediaWidget(BaseOverlayWidget):
                     self._refresh_async()
                 else:
                     self._refresh()
-        except Exception:
+        except Exception as e:
             logger.debug("[MEDIA] next post-refresh failed", exc_info=True)
 
     def previous_track(self) -> None:
@@ -606,7 +612,7 @@ class MediaWidget(BaseOverlayWidget):
 
         try:
             self._controller.previous()
-        except Exception:
+        except Exception as e:
             logger.debug("[MEDIA] previous delegation failed", exc_info=True)
             return
 
@@ -616,7 +622,7 @@ class MediaWidget(BaseOverlayWidget):
                     self._refresh_async()
                 else:
                     self._refresh()
-        except Exception:
+        except Exception as e:
             logger.debug("[MEDIA] previous post-refresh failed", exc_info=True)
 
     # ------------------------------------------------------------------
@@ -656,7 +662,7 @@ class MediaWidget(BaseOverlayWidget):
         def _do_query():
             try:
                 return self._controller.get_current_track()
-            except Exception:
+            except Exception as e:
                 logger.debug("[MEDIA] get_current_track failed", exc_info=True)
                 if is_verbose_logging():
                     logger.debug("[MEDIA] get_current_track failed", exc_info=True)
@@ -673,7 +679,8 @@ class MediaWidget(BaseOverlayWidget):
                         try:
                             state = getattr(info, "state", None)
                             state_val = state.value if hasattr(state, "value") else str(state)
-                        except Exception:
+                        except Exception as e:
+                            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
                             state_val = "?"
                         if is_verbose_logging():
                             logger.debug(
@@ -683,7 +690,7 @@ class MediaWidget(BaseOverlayWidget):
                                 getattr(info, "artist", None),
                                 getattr(info, "album", None),
                             )
-                except Exception:
+                except Exception as e:
                     logger.debug("[MEDIA_WIDGET] Failed to log async apply", exc_info=True)
                 self._update_display(info)
 
@@ -694,7 +701,8 @@ class MediaWidget(BaseOverlayWidget):
 
         try:
             tm.submit_io_task(_do_query, callback=_on_result)
-        except Exception:
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             self._refresh_in_flight = False
 
     def _update_display(self, info: Optional[MediaTrackInfo]) -> None:
@@ -706,22 +714,23 @@ class MediaWidget(BaseOverlayWidget):
                 if getattr(self, "_update_timer_handle", None) is not None:
                     try:
                         self._update_timer_handle.stop()  # type: ignore[union-attr]
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
                     self._update_timer_handle = None  # type: ignore[assignment]
 
                 if getattr(self, "_update_timer", None) is not None:
                     try:
                         self._update_timer.stop()  # type: ignore[union-attr]
                         self._update_timer.deleteLater()  # type: ignore[union-attr]
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
                     self._update_timer = None  # type: ignore[assignment]
 
                 self._enabled = False
                 self._refresh_in_flight = False
                 return
-        except Exception:
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             return
 
         # Cache last track snapshot for diagnostics/interaction
@@ -736,8 +745,8 @@ class MediaWidget(BaseOverlayWidget):
             self._artwork_pixmap = None
             try:
                 self.hide()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             # Notify parent to hide Spotify-related widgets
             self._notify_spotify_widgets_visibility()
             self._telemetry_last_visibility = False
@@ -833,7 +842,8 @@ class MediaWidget(BaseOverlayWidget):
         # grow when a later track needs more space, but never shrinks.
         try:
             hint_h = self.sizeHint().height()
-        except Exception:
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             hint_h = 0
         base_min = self.minimumHeight()
         fixed_candidate = max(220, base_min, hint_h)
@@ -852,8 +862,8 @@ class MediaWidget(BaseOverlayWidget):
             self._has_seen_first_track = True
             try:
                 self.hide()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             if not self._telemetry_logged_fade_request:
                 logger.info("[MEDIA_WIDGET] First track snapshot captured; waiting for coordinated fade-in")
             # Even though we keep the widget hidden for the very first
@@ -871,7 +881,8 @@ class MediaWidget(BaseOverlayWidget):
             if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
                 try:
                     parent.request_overlay_fade_sync("media", _starter)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
                     _starter()
             else:
                 _starter()
@@ -920,12 +931,13 @@ class MediaWidget(BaseOverlayWidget):
                                     != _norm(getattr(info, "album", None))
                                 ):
                                     should_fade_artwork = True
-                        except Exception:
+                        except Exception as e:
+                            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
                             should_fade_artwork = False
 
                     if should_fade_artwork:
                         self._start_artwork_fade_in()
-            except Exception:
+            except Exception as e:
                 logger.debug("[MEDIA] Failed to decode artwork pixmap", exc_info=True)
 
         # Reserve space for artwork plus breathing room on the right even
@@ -963,15 +975,16 @@ class MediaWidget(BaseOverlayWidget):
                         logger.info("[MEDIA_WIDGET] Requesting coordinated fade sync")
                         self._telemetry_logged_fade_request = True
                     parent.request_overlay_fade_sync("media", _starter)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
                     _starter()
             else:
                 _starter()
         else:
             try:
                 self.show()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             # Notify Spotify widgets in case they need to sync visibility
             self._notify_spotify_widgets_visibility()
             self._telemetry_last_visibility = True
@@ -994,8 +1007,8 @@ class MediaWidget(BaseOverlayWidget):
             try:
                 painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
                 painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
 
             # Optional header frame on the left side around logo + SPOTIFY.
             self._paint_header_frame(painter)
@@ -1014,7 +1027,8 @@ class MediaWidget(BaseOverlayWidget):
                     # displays.
                     try:
                         dpr = float(self.devicePixelRatioF())
-                    except Exception:
+                    except Exception as e:
+                        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
                         dpr = 1.0
                     scale_dpr = max(1.0, dpr)
 
@@ -1032,7 +1046,8 @@ class MediaWidget(BaseOverlayWidget):
                         src_w = float(pm.width())
                         src_h = float(pm.height())
                         aspect = src_w / src_h if (src_w > 0.0 and src_h > 0.0) else 1.0
-                    except Exception:
+                    except Exception as e:
+                        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
                         aspect = 1.0
 
                     if aspect > 0.0:
@@ -1074,8 +1089,8 @@ class MediaWidget(BaseOverlayWidget):
                     )
                     try:
                         scaled.setDevicePixelRatio(scale_dpr)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
 
                     scaled_logical_w = max(1, int(round(scaled.width() / scale_dpr)))
                     scaled_logical_h = max(1, int(round(scaled.height() / scale_dpr)))
@@ -1161,7 +1176,7 @@ class MediaWidget(BaseOverlayWidget):
             # along the bottom of the text column so its position never
             # drifts between tracks.
             self._paint_controls_row(painter)
-        except Exception:
+        except Exception as e:
             logger.debug("[MEDIA] Failed to paint artwork pixmap", exc_info=True)
 
     def _load_brand_pixmap(self) -> Optional[QPixmap]:
@@ -1185,7 +1200,7 @@ class MediaWidget(BaseOverlayWidget):
                     pm = QPixmap(str(candidate))
                     if not pm.isNull():
                         return pm
-        except Exception:
+        except Exception as e:
             logger.debug("[MEDIA] Failed to load Spotify logo", exc_info=True)
         return None
 
@@ -1219,7 +1234,8 @@ class MediaWidget(BaseOverlayWidget):
         # comfortably contains both the wordmark and the logo glyph.
         try:
             header_font_pt = int(self._header_font_pt) if self._header_font_pt > 0 else self._font_size
-        except Exception:
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             header_font_pt = self._font_size
 
         font = QFont(self._font_family, header_font_pt, QFont.Weight.Bold)
@@ -1277,7 +1293,8 @@ class MediaWidget(BaseOverlayWidget):
 
         try:
             dpr = float(self.devicePixelRatioF())
-        except Exception:
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             dpr = 1.0
 
         target_px = int(size * max(1.0, dpr))
@@ -1292,8 +1309,8 @@ class MediaWidget(BaseOverlayWidget):
         )
         try:
             scaled.setDevicePixelRatio(max(1.0, dpr))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
 
         margins = self.contentsMargins()
         x = margins.left() + 7
@@ -1303,7 +1320,8 @@ class MediaWidget(BaseOverlayWidget):
         # simply pinning it to the top margin.
         try:
             header_font_pt = int(self._header_font_pt) if self._header_font_pt > 0 else self._font_size
-        except Exception:
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             header_font_pt = self._font_size
 
         font = QFont(self._font_family, header_font_pt, QFont.Weight.Bold)
@@ -1341,7 +1359,8 @@ class MediaWidget(BaseOverlayWidget):
 
         try:
             base_state = info.state if info is not None else MediaPlaybackState.UNKNOWN
-        except Exception:
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             base_state = MediaPlaybackState.UNKNOWN
 
         state = self._pending_state_override or base_state
@@ -1379,7 +1398,8 @@ class MediaWidget(BaseOverlayWidget):
 
             try:
                 header_font_pt = int(self._header_font_pt) if self._header_font_pt > 0 else self._font_size
-            except Exception:
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
                 header_font_pt = self._font_size
 
             header_fm = QFontMetrics(QFont(self._font_family, header_font_pt, QFont.Weight.Bold))
@@ -1449,21 +1469,21 @@ class MediaWidget(BaseOverlayWidget):
         # before becoming visible to avoid a brief flash in the wrong location.
         try:
             self._update_position()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
         
         if duration_ms <= 0:
             try:
                 self.show()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             try:
                 ShadowFadeProfile.attach_shadow(
                     self,
                     self._shadow_config,
                     has_background_frame=self._show_background,
                 )
-            except Exception:
+            except Exception as e:
                 logger.debug(
                     "[MEDIA] Failed to attach shadow in no-fade path",
                     exc_info=True,
@@ -1476,15 +1496,15 @@ class MediaWidget(BaseOverlayWidget):
                 self._shadow_config,
                 has_background_frame=self._show_background,
             )
-        except Exception:
+        except Exception as e:
             logger.debug(
                 "[MEDIA] _start_widget_fade_in fallback path triggered",
                 exc_info=True,
             )
             try:
                 self.show()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             if self._shadow_config is not None:
                 try:
                     apply_widget_shadow(
@@ -1492,7 +1512,7 @@ class MediaWidget(BaseOverlayWidget):
                         self._shadow_config,
                         has_background_frame=self._show_background,
                     )
-                except Exception:
+                except Exception as e:
                     logger.debug(
                         "[MEDIA] Failed to apply widget shadow in fallback path",
                         exc_info=True,
@@ -1502,8 +1522,8 @@ class MediaWidget(BaseOverlayWidget):
         if self._artwork_anim is not None:
             try:
                 self._artwork_anim.stop()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             self._artwork_anim = None
 
         self._artwork_opacity = 0.0

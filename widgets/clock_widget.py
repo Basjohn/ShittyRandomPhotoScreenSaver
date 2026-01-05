@@ -197,7 +197,8 @@ class ClockWidget(BaseOverlayWidget):
             try:
                 overlay_name = getattr(self, "_overlay_name", "clock")
                 parent.request_overlay_fade_sync(overlay_name, lambda: self._start_widget_fade_in(1500))
-            except Exception:
+            except Exception as e:
+                logger.debug("[CLOCK] Exception suppressed: %s", e)
                 self._start_widget_fade_in(1500)
         else:
             self._start_widget_fade_in(1500)
@@ -209,8 +210,8 @@ class ClockWidget(BaseOverlayWidget):
         if self._timer_handle is not None:
             try:
                 self._timer_handle.stop()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CLOCK] Exception suppressed: %s", e)
             self._timer_handle = None
         
         if self._timer is not None:
@@ -232,8 +233,8 @@ class ClockWidget(BaseOverlayWidget):
         if self._tz_label is not None:
             try:
                 self._tz_label.deleteLater()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CLOCK] Exception suppressed: %s", e)
             self._tz_label = None
         
         self._lifecycle_initialized = False
@@ -276,7 +277,8 @@ class ClockWidget(BaseOverlayWidget):
             try:
                 overlay_name = getattr(self, "_overlay_name", "clock")
                 parent.request_overlay_fade_sync(overlay_name, _starter)
-            except Exception:
+            except Exception as e:
+                logger.debug("[CLOCK] Exception suppressed: %s", e)
                 _starter()
         else:
             _starter()
@@ -291,8 +293,8 @@ class ClockWidget(BaseOverlayWidget):
         if self._timer_handle is not None:
             try:
                 self._timer_handle.stop()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CLOCK] Exception suppressed: %s", e)
             self._timer_handle = None
 
         if self._timer is not None:
@@ -316,41 +318,41 @@ class ClockWidget(BaseOverlayWidget):
         if duration_ms <= 0:
             try:
                 self.show()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CLOCK] Exception suppressed: %s", e)
             if self._tz_label:
                 try:
                     self._tz_label.show()
                     self._tz_label.raise_()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[CLOCK] Exception suppressed: %s", e)
             try:
                 ShadowFadeProfile.attach_shadow(
                     self,
                     self._shadow_config,
                     has_background_frame=self._show_background,
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CLOCK] Exception suppressed: %s", e)
             self._has_faded_in = True
             return
 
         if Shiboken.isValid(self) and self.parent():
             try:
                 self._update_position()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CLOCK] Exception suppressed: %s", e)
 
         try:
             self.show()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[CLOCK] Exception suppressed: %s", e)
         if self._tz_label:
             try:
                 self._tz_label.show()
                 self._tz_label.raise_()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CLOCK] Exception suppressed: %s", e)
 
         try:
             ShadowFadeProfile.start_fade_in(
@@ -358,15 +360,16 @@ class ClockWidget(BaseOverlayWidget):
                 self._shadow_config,
                 has_background_frame=self._show_background,
             )
-        except Exception:
+        except Exception as e:
+            logger.debug("[CLOCK] Exception suppressed: %s", e)
             try:
                 apply_widget_shadow(
                     self,
                     self._shadow_config or {},
                     has_background_frame=self._show_background,
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CLOCK] Exception suppressed: %s", e)
         self._has_faded_in = True
     
     def is_running(self) -> bool:
@@ -505,21 +508,22 @@ class ClockWidget(BaseOverlayWidget):
                 if getattr(self, "_timer_handle", None) is not None:
                     try:
                         self._timer_handle.stop()  # type: ignore[union-attr]
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[CLOCK] Exception suppressed: %s", e)
                     self._timer_handle = None  # type: ignore[assignment]
 
                 if getattr(self, "_timer", None) is not None:
                     try:
                         self._timer.stop()  # type: ignore[union-attr]
                         self._timer.deleteLater()  # type: ignore[union-attr]
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[CLOCK] Exception suppressed: %s", e)
                     self._timer = None  # type: ignore[assignment]
 
                 self._enabled = False
                 return
-        except Exception:
+        except Exception as e:
+            logger.debug("[CLOCK] Exception suppressed: %s", e)
             return
 
         # Get current time in specified timezone
@@ -570,8 +574,8 @@ class ClockWidget(BaseOverlayWidget):
                 self._tz_label.setText(timezone_abbrev)
                 try:
                     self._tz_label.adjustSize()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[CLOCK] Exception suppressed: %s", e)
                 self._tz_label.show()
                 self._tz_label.raise_()
             else:
@@ -762,7 +766,8 @@ class ClockWidget(BaseOverlayWidget):
         """Set font size - override to use bold weight and update tz label."""
         try:
             size_i = int(size)
-        except Exception:
+        except Exception as e:
+            logger.debug("[CLOCK] Exception suppressed: %s", e)
             size_i = self.DEFAULT_FONT_SIZE
         if size_i <= 0:
             size_i = self.DEFAULT_FONT_SIZE
@@ -778,7 +783,8 @@ class ClockWidget(BaseOverlayWidget):
     def set_margin(self, margin: int) -> None:
         try:
             margin_i = int(margin)
-        except Exception:
+        except Exception as e:
+            logger.debug("[CLOCK] Exception suppressed: %s", e)
             margin_i = self.DEFAULT_MARGIN
         if margin_i < 0:
             margin_i = self.DEFAULT_MARGIN

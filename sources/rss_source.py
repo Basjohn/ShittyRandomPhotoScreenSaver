@@ -439,7 +439,8 @@ class RSSSource(ImageProvider):
             if value < 0:
                 return None
             return value
-        except Exception:
+        except Exception as e:
+            logger.debug("[RSS] Exception suppressed: %s", e)
             return None
 
     def _resolve_feed_mode(self, feed_url: str) -> tuple[str, str, str]:
@@ -568,7 +569,8 @@ class RSSSource(ImageProvider):
         try:
             if isinstance(data, dict) and data.get('kind') == 'Listing':
                 entries = [c.get('data', {}) for c in data.get('data', {}).get('children', []) if isinstance(c, dict)]
-        except Exception:
+        except Exception as e:
+            logger.debug("[RSS] Exception suppressed: %s", e)
             entries = []
 
         feed_title = f"JSON Feed ({original_url})"
@@ -700,7 +702,8 @@ class RSSSource(ImageProvider):
             lowered = path.lower()
             if not any(lowered.endswith(ext) for ext in (".jpg", ".jpeg", ".png", ".webp")):
                 return False
-        except Exception:
+        except Exception as e:
+            logger.debug("[RSS] Exception suppressed: %s", e)
             return False
 
         # Light high-resolution filter: when Reddit provides preview
@@ -740,7 +743,8 @@ class RSSSource(ImageProvider):
             try:
                 if isinstance(created_ts, (int, float)):
                     created_date = datetime.utcfromtimestamp(created_ts)
-            except Exception:
+            except Exception as e:
+                logger.debug("[RSS] Exception suppressed: %s", e)
                 created_date = None
 
             metadata = ImageMetadata(
@@ -855,8 +859,8 @@ class RSSSource(ImageProvider):
                 if time_struct:
                     try:
                         return datetime(*time_struct[:6])
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[RSS] Exception suppressed: %s", e)
         
         return None
     

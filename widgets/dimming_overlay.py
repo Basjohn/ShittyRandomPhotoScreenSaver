@@ -119,16 +119,16 @@ class DimmingOverlay(QWidget):
                 w = parent.width()
                 h = parent.height()
                 self.setGeometry(0, 0, w, h)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DIMMING] Exception suppressed: %s", e)
     
     def _get_animation_manager(self) -> Optional[AnimationManager]:
         """Get or create AnimationManager instance."""
         if self._animation_manager is None:
             try:
                 self._animation_manager = AnimationManager()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DIMMING] Exception suppressed: %s", e)
         return self._animation_manager
 
     def _start_fade_animation(self, target_opacity: int) -> None:
@@ -150,8 +150,8 @@ class DimmingOverlay(QWidget):
                 # Interpolate opacity based on progress
                 self._opacity = int(start_opacity + (target_opacity - start_opacity) * progress)
                 self.update()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DIMMING] Exception suppressed: %s", e)
         
         def on_complete() -> None:
             self._opacity = target_opacity
@@ -180,8 +180,8 @@ class DimmingOverlay(QWidget):
             if manager is not None:
                 try:
                     manager.cancel_animation(self._fade_animation_id)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[DIMMING] Exception suppressed: %s", e)
             self._fade_animation_id = None
     
     def paintEvent(self, event) -> None:  # type: ignore[override]

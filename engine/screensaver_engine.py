@@ -30,7 +30,9 @@ from PySide6.QtCore import QObject, Signal, QTimer, QSize, QMetaObject, Qt, QThr
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QPixmap, QImage
 
+from core.constants.timing import TRANSITION_STAGGER_MS
 from core.events import EventSystem, EventType
+from core.logging.tags import TAG_WORKER, TAG_PERF, TAG_RSS, TAG_IMAGE, TAG_ASYNC
 from core.resources import ResourceManager
 from core.threading import ThreadManager
 from core.settings import SettingsManager
@@ -515,8 +517,8 @@ class ScreensaverEngine(QObject):
                     try:
                         if self.settings_manager:
                             rotating_cache_size = int(self.settings_manager.get('sources.rss_rotating_cache_size', 20))
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"{TAG_RSS} Failed to get rotating cache size: %s", e)
                     # Limit cached images to rotating cache size
                     if len(cached_rss_images) > rotating_cache_size:
                         import random
@@ -598,7 +600,7 @@ class ScreensaverEngine(QObject):
             )
             
             if not correlation_id:
-                logger.debug("[WORKER] Failed to send message to RSSWorker")
+                logger.debug(f"{TAG_WORKER} Failed to send message to RSSWorker")
                 return None
             
             # Poll for response with timeout
@@ -621,24 +623,24 @@ class ScreensaverEngine(QObject):
                             if is_perf_metrics_enabled():
                                 proc_time = response.processing_time_ms or 0
                                 logger.info(
-                                    "[PERF] [WORKER] RSSWorker fetch: %d images in %.1fms",
+                                    f"{TAG_PERF} {TAG_WORKER} RSSWorker fetch: %d images in %.1fms",
                                     len(images), proc_time
                                 )
                             
                             return images
                         else:
                             error = response.error or "Unknown error"
-                            logger.warning("[WORKER] RSSWorker failed: %s", error)
+                            logger.warning(f"{TAG_WORKER} RSSWorker failed: %s", error)
                             return None
                 
                 # Brief sleep to avoid busy-waiting
                 time.sleep(0.05)
             
-            logger.warning("[WORKER] RSSWorker timeout after %dms", timeout_ms)
+            logger.warning(f"{TAG_WORKER} RSSWorker timeout after %dms", timeout_ms)
             return None
             
         except Exception as e:
-            logger.warning("[WORKER] RSSWorker error: %s", e)
+            logger.warning(f"{TAG_WORKER} RSSWorker error: %s", e)
             return None
     
     def _load_rss_images_async(self) -> None:
@@ -850,7 +852,8 @@ class ScreensaverEngine(QObject):
             
             # Ensure cap is at least the dynamic minimum
             return max(cap, dynamic_min) if cap > 0 else dynamic_min
-        except Exception:
+        except Exception as e:
+            logger.debug("[ENGINE] Exception suppressed: %s", e)
             return 30
 
     def _get_dynamic_rss_settings(self) -> Tuple[int, int]:
@@ -875,7 +878,8 @@ class ScreensaverEngine(QObject):
                 return (15, 10)
             else:
                 return (10, 15)
-        except Exception:
+        except Exception as e:
+            logger.debug("[ENGINE] Exception suppressed: %s", e)
             return (15, 10)  # Safe default
     
     def _get_rss_stale_minutes(self) -> int:
@@ -903,7 +907,8 @@ class ScreensaverEngine(QObject):
                 return minutes if minutes > 0 else 0
             
             return dynamic_decay
-        except Exception:
+        except Exception as e:
+            logger.debug("[ENGINE] Exception suppressed: %s", e)
             return 10
 
     def _start_rss_background_refresh_if_needed(self) -> None:
@@ -924,7 +929,8 @@ class ScreensaverEngine(QObject):
                 if self.settings_manager:
                     raw = self.settings_manager.get('sources.rss_refresh_minutes', 10)
                     interval_min = int(raw)
-            except Exception:
+            except Exception as e:
+                logger.debug("[ENGINE] Exception suppressed: %s", e)
                 interval_min = 10
 
             interval_ms = max(60_000, interval_min * 60_000)
@@ -962,7 +968,8 @@ class ScreensaverEngine(QObject):
 
             try:
                 existing = self.image_queue.get_all_images()
-            except Exception:
+            except Exception as e:
+                logger.debug("[ENGINE] Exception suppressed: %s", e)
                 existing = []
 
             current_rss = 0
@@ -970,7 +977,8 @@ class ScreensaverEngine(QObject):
                 try:
                     if getattr(m, 'source_type', None) == ImageSourceType.RSS:
                         current_rss += 1
-                except Exception:
+                except Exception as e:
+                    logger.debug("[ENGINE] Exception suppressed: %s", e)
                     continue
 
             if current_rss >= cap:
@@ -1003,8 +1011,8 @@ class ScreensaverEngine(QObject):
                             if self.event_system:
                                 try:
                                     self.event_system.publish(EventType.RSS_FAILED, data={"source": "background"}, source=self)
-                                except Exception:
-                                    pass
+                                except Exception as e:
+                                    logger.debug(f"{TAG_RSS} Failed to publish RSS_FAILED event: %s", e)
                             return
                         images = getattr(res, 'result', None) or []
                         if not isinstance(images, list):
@@ -1032,7 +1040,8 @@ class ScreensaverEngine(QObject):
         with self._rss_merge_lock:
             try:
                 existing = self.image_queue.get_all_images()
-            except Exception:
+            except Exception as e:
+                logger.debug("[ENGINE] Exception suppressed: %s", e)
                 existing = []
 
             existing_keys = set()
@@ -1044,7 +1053,8 @@ class ScreensaverEngine(QObject):
                         existing_keys.add(key)
                     if getattr(m, 'source_type', None) == ImageSourceType.RSS:
                         current_rss += 1
-                except Exception:
+                except Exception as e:
+                    logger.debug("[ENGINE] Exception suppressed: %s", e)
                     continue
 
             remaining = cap - current_rss
@@ -1060,7 +1070,8 @@ class ScreensaverEngine(QObject):
                     if not key or key in existing_keys:
                         continue
                     new_items.append(m)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[ENGINE] Exception suppressed: %s", e)
                     continue
 
             if not new_items:
@@ -1068,8 +1079,8 @@ class ScreensaverEngine(QObject):
 
             try:
                 random.shuffle(new_items)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"{TAG_RSS} Failed to shuffle new items: %s", e)
 
             to_add = new_items[: max(0, remaining)]
             if not to_add:
@@ -1090,12 +1101,14 @@ class ScreensaverEngine(QObject):
 
                     try:
                         snapshot = self.image_queue.get_all_images()
-                    except Exception:
+                    except Exception as e:
+                        logger.debug("[ENGINE] Exception suppressed: %s", e)
                         snapshot = []
 
                     try:
                         history_paths = set(self.image_queue.get_history(self.image_queue.history_size))
-                    except Exception:
+                    except Exception as e:
+                        logger.debug("[ENGINE] Exception suppressed: %s", e)
                         history_paths = set()
 
                     stale_paths: List[str] = []
@@ -1111,7 +1124,8 @@ class ScreensaverEngine(QObject):
                                 continue
                             if ts < cutoff:
                                 stale_paths.append(lp)
-                        except Exception:
+                        except Exception as e:
+                            logger.debug("[ENGINE] Exception suppressed: %s", e)
                             continue
 
                     if stale_paths:
@@ -1120,7 +1134,8 @@ class ScreensaverEngine(QObject):
                             try:
                                 if self.image_queue.remove_image(path):
                                     removed_stale += 1
-                            except Exception:
+                            except Exception as e:
+                                logger.debug("[ENGINE] Exception suppressed: %s", e)
                                 continue
 
             logger.info(
@@ -1134,7 +1149,8 @@ class ScreensaverEngine(QObject):
                 try:
                     try:
                         final_existing = self.image_queue.get_all_images()
-                    except Exception:
+                    except Exception as e:
+                        logger.debug("[ENGINE] Exception suppressed: %s", e)
                         final_existing = []
 
                     total_rss = 0
@@ -1142,7 +1158,8 @@ class ScreensaverEngine(QObject):
                         try:
                             if getattr(m, 'source_type', None) == ImageSourceType.RSS:
                                 total_rss += 1
-                        except Exception:
+                        except Exception as e:
+                            logger.debug("[ENGINE] Exception suppressed: %s", e)
                             continue
 
                     self.event_system.publish(
@@ -1150,8 +1167,8 @@ class ScreensaverEngine(QObject):
                         data={"added": added, "removed_stale": removed_stale, "total_rss": total_rss},
                         source=self,
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"{TAG_RSS} Failed to publish RSS_REFRESHED event: %s", e)
 
     def _initialize_cache_prefetcher(self) -> None:
         try:
@@ -1177,7 +1194,8 @@ class ScreensaverEngine(QObject):
                     p = str(m.local_path) if m and m.local_path else (m.url or "")
                     if p:
                         paths.append(p)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[ENGINE] Exception suppressed: %s", e)
                     continue
             self._prefetcher.prefetch_paths(paths)
             if paths and is_verbose_logging():
@@ -1187,7 +1205,8 @@ class ScreensaverEngine(QObject):
                 try:
                     if self.display_manager and hasattr(self.display_manager, "has_running_transition"):
                         skip_heavy_ui_work = self.display_manager.has_running_transition()
-                except Exception:
+                except Exception as e:
+                    logger.debug("[ENGINE] Exception suppressed: %s", e)
                     skip_heavy_ui_work = False
                 # UI warmup: convert first cached QImage to QPixmap to reduce on-demand conversion
                 # PERFORMANCE FIX: Move QPixmap.fromImage to compute pool (Qt 6 allows this)
@@ -1203,6 +1222,8 @@ class ScreensaverEngine(QObject):
                                 if isinstance(cached, QImage):
                                     pm = QPixmap.fromImage(cached)  # ← Now on worker thread
                                     if not pm.isNull():
+                                        # Clear QImage reference to free memory (Section 1.1 fix)
+                                        cached = None
                                         return (first, pm)
                             except Exception as e:
                                 logger.debug(f"Prefetch convert failed for {first}: {e}")
@@ -1222,8 +1243,8 @@ class ScreensaverEngine(QObject):
                             _compute_convert,
                             callback=lambda r: self.thread_manager.run_on_ui_thread(lambda: _ui_cache(r))
                         )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[PREFETCH] UI warmup failed: %s", e)
                 # Pre-scale proposal: safely compute scaled QImages for distinct display sizes (multi-monitor safe)
                 # Optional and removable; computes only for the next image to limit memory.
                 try:
@@ -1236,8 +1257,8 @@ class ScreensaverEngine(QObject):
                             try:
                                 if self._image_cache.contains(scaled_key):
                                     continue
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.debug("[ENGINE] Exception suppressed: %s", e)
                             def _compute_prescale_wh(width=w, height=h, src_path=first_path, cache_key=scaled_key):
                                 """Compute-task: scale cached QImage to a target size and store in cache.
                                 Safe to remove if not needed. Avoids doing the heavy scale on the next frame.
@@ -1263,10 +1284,10 @@ class ScreensaverEngine(QObject):
                                 submit = getattr(self.thread_manager, 'submit_compute_task', None)
                                 if callable(submit):
                                     submit(_compute_prescale_wh)
-                            except Exception:
-                                pass
-                except Exception:
-                    pass
+                            except Exception as e:
+                                logger.debug("[ENGINE] Exception suppressed: %s", e)
+                except Exception as e:
+                    logger.debug("[ENGINE] Exception suppressed: %s", e)
         except Exception as e:
             logger.debug(f"Prefetch schedule failed: {e}")
     
@@ -1513,14 +1534,15 @@ class ScreensaverEngine(QObject):
                 try:
                     try:
                         display_count = self.display_manager.get_display_count()
-                    except Exception:
+                    except Exception as e:
+                        logger.debug("[ENGINE] Exception suppressed: %s", e)
                         display_count = len(getattr(self.display_manager, "displays", []))
                     logger.info(
                         "Stopping displays via DisplayManager (count=%s, exit_app=%s)",
                         display_count,
                         exit_app,
                     )
-                except Exception:
+                except Exception as e:
                     logger.info(
                         "Stopping displays via DisplayManager (count=?, exit_app=%s)",
                         exit_app,
@@ -1622,8 +1644,8 @@ class ScreensaverEngine(QObject):
                     timer.stop()
                 try:
                     timer.deleteLater()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[ENGINE] Exception suppressed: %s", e)
             else:
                 QMetaObject.invokeMethod(
                     timer,
@@ -1724,8 +1746,8 @@ class ScreensaverEngine(QObject):
         # If random transitions are enabled, prepare a new non-repeating choice for this change
         try:
             self._prepare_random_transition_if_needed()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[TRANSITION] Failed to prepare random transition: %s", e)
         if not self.image_queue or not self.display_manager:
             logger.warning("[FALLBACK] Queue or display not initialized")
             return False
@@ -1812,7 +1834,7 @@ class ScreensaverEngine(QObject):
             )
             
             if not correlation_id:
-                logger.debug("[WORKER] Failed to send message to ImageWorker")
+                logger.debug(f"{TAG_WORKER} Failed to send message to ImageWorker")
                 return None
             
             # Poll for response with timeout
@@ -1834,7 +1856,7 @@ class ScreensaverEngine(QObject):
                             height = payload.get("height", 0)
                             
                             if width <= 0 or height <= 0:
-                                logger.warning("[WORKER] ImageWorker returned invalid dimensions")
+                                logger.warning(f"{TAG_WORKER} ImageWorker returned invalid dimensions")
                                 return None
                             
                             # Check for shared memory response (large images)
@@ -1850,11 +1872,11 @@ class ScreensaverEngine(QObject):
                                     
                                     if is_perf_metrics_enabled():
                                         logger.debug(
-                                            "[PERF] [WORKER] ImageWorker used shared memory: %.1f MB",
+                                            f"{TAG_PERF} {TAG_WORKER} ImageWorker used shared memory: %.1f MB",
                                             shm_size / (1024 * 1024)
                                         )
                                 except Exception as shm_err:
-                                    logger.warning("[WORKER] Failed to read shared memory: %s", shm_err)
+                                    logger.warning(f"{TAG_WORKER} Failed to read shared memory: %s", shm_err)
                                     return None
                             else:
                                 # Queue-based transfer (smaller images)
@@ -1874,24 +1896,24 @@ class ScreensaverEngine(QObject):
                                 if is_perf_metrics_enabled():
                                     proc_time = response.processing_time_ms or 0
                                     logger.info(
-                                        "[PERF] [WORKER] ImageWorker prescale: %dx%d in %.1fms",
+                                        f"{TAG_PERF} {TAG_WORKER} ImageWorker prescale: %dx%d in %.1fms",
                                         width, height, proc_time
                                     )
                                 
                                 return qimage
                         else:
                             error = response.error or "Unknown error"
-                            logger.warning("[WORKER] ImageWorker failed: %s", error)
+                            logger.warning(f"{TAG_WORKER} ImageWorker failed: %s", error)
                             return None
                 
                 # Brief sleep to avoid busy-waiting
                 time.sleep(0.005)
             
-            logger.warning("[WORKER] ImageWorker timeout after %dms", timeout_ms)
+            logger.warning(f"{TAG_WORKER} ImageWorker timeout after %dms", timeout_ms)
             return None
             
         except Exception as e:
-            logger.warning("[WORKER] ImageWorker error: %s", e)
+            logger.warning(f"{TAG_WORKER} ImageWorker error: %s", e)
             return None
     
     def _load_image_task(self, image_meta: ImageMetadata, preferred_size: Optional[tuple] = None) -> Optional[QPixmap]:
@@ -1938,7 +1960,10 @@ class ScreensaverEngine(QObject):
                             if not pm.isNull():
                                 self._image_cache.put(scaled_key, pm)
                                 pixmap = pm
-                except Exception:
+                                # Clear QImage reference to free memory (Section 1.1 fix)
+                                scaled_cached = None
+                except Exception as e:
+                    logger.debug("[ENGINE] Exception suppressed: %s", e)
                     pixmap = None
 
                 if pixmap is None or pixmap.isNull():
@@ -1952,7 +1977,10 @@ class ScreensaverEngine(QObject):
                             if not pm.isNull():
                                 self._image_cache.put(image_path, pm)
                                 pixmap = pm
-                        except Exception:
+                                # Clear QImage reference to free memory (Section 1.1 fix)
+                                cached = None
+                        except Exception as e:
+                            logger.debug("[ENGINE] Exception suppressed: %s", e)
                             pixmap = None
                     if pixmap is None:
                         pixmap = QPixmap(image_path)
@@ -2022,20 +2050,20 @@ class ScreensaverEngine(QObject):
                         break
                     elif attempt < 4:
                         # Got duplicate, try again
-                        logger.debug(f"[ASYNC] Skipping duplicate image for display {i}, attempt {attempt + 1}")
+                        logger.debug(f"{TAG_ASYNC} Skipping duplicate image for display {i}, attempt {attempt + 1}")
                     else:
                         # Last attempt, use it anyway
                         next_meta = candidate
-                        logger.warning(f"[ASYNC] Could not find unique image for display {i} after 5 attempts")
+                        logger.warning(f"{TAG_ASYNC} Could not find unique image for display {i} after 5 attempts")
                 
                 if next_meta:
                     image_metas.append(next_meta)
                 else:
                     # Fallback: reuse first image if queue is empty
                     image_metas.append(image_meta)
-                    logger.warning(f"[ASYNC] Queue empty, reusing first image for display {i}")
+                    logger.warning(f"{TAG_ASYNC} Queue empty, reusing first image for display {i}")
             
-            logger.debug(f"[ASYNC] Loading {len(image_metas)} different images for {len(displays)} displays")
+            logger.debug(f"{TAG_ASYNC} Loading {len(image_metas)} different images for {len(displays)} displays")
 
         def _do_load_and_process() -> Optional[Dict]:
             """Background task: load and process images for all displays."""
@@ -2058,7 +2086,7 @@ class ScreensaverEngine(QObject):
                     img_path = str(meta.local_path) if meta.local_path else (meta.url or "")
                     
                     if not img_path:
-                        logger.warning(f"[ASYNC] No path for display {i}")
+                        logger.warning(f"{TAG_ASYNC} No path for display {i}")
                         continue
                     
                     # Load QImage (thread-safe)
@@ -2081,7 +2109,7 @@ class ScreensaverEngine(QObject):
                     if qimage is None or qimage.isNull():
                         from pathlib import Path
                         if not Path(img_path).exists():
-                            logger.warning(f"[ASYNC] Image file not found: {img_path}")
+                            logger.warning(f"{TAG_ASYNC} Image file not found: {img_path}")
                             # Try to get a replacement image for this display
                             for retry in range(3):
                                 replacement = self.image_queue.next() if self.image_queue else None
@@ -2090,11 +2118,11 @@ class ScreensaverEngine(QObject):
                                     if Path(replacement_path).exists():
                                         img_path = replacement_path
                                         meta = replacement
-                                        logger.info(f"[ASYNC] Using replacement image for display {i}: {Path(replacement_path).name}")
+                                        logger.info(f"{TAG_ASYNC} Using replacement image for display {i}: {Path(replacement_path).name}")
                                         break
                             
                             if not Path(img_path).exists():
-                                logger.warning(f"[ASYNC] No valid replacement found for display {i}")
+                                logger.warning(f"{TAG_ASYNC} No valid replacement found for display {i}")
                                 continue
                     
                     try:
@@ -2129,9 +2157,9 @@ class ScreensaverEngine(QObject):
                             )
                             if worker_qimage and not worker_qimage.isNull():
                                 processed_qimage = worker_qimage
-                                logger.debug(f"[ASYNC] Image loaded via ImageWorker for display {i}")
+                                logger.debug(f"{TAG_ASYNC} Image loaded via ImageWorker for display {i}")
                             else:
-                                logger.warning(f"[ASYNC] ImageWorker failed for display {i}, skipping image")
+                                logger.warning(f"{TAG_ASYNC} ImageWorker failed for display {i}, skipping image")
                                 continue  # Skip this display - don't block with sync fallback
                         else:
                             # Worker not available - use cached image if available, otherwise skip
@@ -2144,7 +2172,7 @@ class ScreensaverEngine(QObject):
                                     sharpen=sharpen,
                                 )
                             else:
-                                logger.warning(f"[ASYNC] No ImageWorker and no cache for display {i}, skipping")
+                                logger.warning(f"{TAG_ASYNC} No ImageWorker and no cache for display {i}, skipping")
                                 continue
                         
                         # Convert to QPixmap on worker thread (Qt 6 allows this)
@@ -2154,6 +2182,8 @@ class ScreensaverEngine(QObject):
                         _conv_elapsed = (time.time() - _conv_start) * 1000
                         if _conv_elapsed > 50 and is_perf_metrics_enabled():
                             logger.warning(f"[PERF] [ASYNC] QPixmap.fromImage took {_conv_elapsed:.1f}ms for display {i}")
+                        # Clear QImage reference to free memory (Section 1.1 fix)
+                        processed_qimage = None
                         
                         # PERFORMANCE FIX: Don't load original image synchronously (5+ seconds)
                         # Use processed image for both pixmaps - original is only used for fallback
@@ -2166,6 +2196,8 @@ class ScreensaverEngine(QObject):
                             _conv2_elapsed = (time.time() - _conv2_start) * 1000
                             if _conv2_elapsed > 50 and is_perf_metrics_enabled():
                                 logger.warning(f"[PERF] [ASYNC] Original QPixmap.fromImage took {_conv2_elapsed:.1f}ms for display {i}")
+                            # Clear QImage reference to free memory (Section 1.1 fix)
+                            qimage = None
                         
                         processed_images[i] = {
                             'pixmap': processed_pixmap,
@@ -2208,7 +2240,7 @@ class ScreensaverEngine(QObject):
                 
                 # PERF: Stagger transition starts by 100ms per display to avoid
                 # simultaneous transition completions which cause 100+ms UI blocks.
-                stagger_ms = 100
+                stagger_ms = TRANSITION_STAGGER_MS
                 
                 for i, display in enumerate(displays):
                     if i not in processed:
@@ -2332,7 +2364,8 @@ class ScreensaverEngine(QObject):
                             try:
                                 d = self.display_manager.displays[i]
                                 size = (d.width(), d.height())
-                            except Exception:
+                            except Exception as e:
+                                logger.debug("[ENGINE] Exception suppressed: %s", e)
                                 size = None
                             next_pixmap = self._load_image_task(next_meta, preferred_size=size)
                             if next_pixmap:
@@ -2377,7 +2410,8 @@ class ScreensaverEngine(QObject):
             try:
                 raw_hw = self.settings_manager.get('display.hw_accel', False)
                 hw = SettingsManager.to_bool(raw_hw, False)
-            except Exception:
+            except Exception as e:
+                logger.debug("[ENGINE] Exception suppressed: %s", e)
                 hw = False
 
             pool_cfg = transitions.get('pool', {}) if isinstance(transitions.get('pool', {}), dict) else {}
@@ -2389,7 +2423,8 @@ class ScreensaverEngine(QObject):
                     else:
                         raw_flag = pool_cfg.get(name, True)
                     return bool(SettingsManager.to_bool(raw_flag, True))
-                except Exception:
+                except Exception as e:
+                    logger.debug("[ENGINE] Exception suppressed: %s", e)
                     return True
 
             available: List[str] = []
@@ -2458,7 +2493,8 @@ class ScreensaverEngine(QObject):
                 w, h = d0.width(), d0.height()
                 if w > 0 and h > 0:
                     return (w, h)
-        except Exception:
+        except Exception as e:
+            logger.debug("[ENGINE] Exception suppressed: %s", e)
             return None
         return None
 
@@ -2481,7 +2517,8 @@ class ScreensaverEngine(QObject):
             for d in dm.displays:
                 try:
                     w, h = d.width(), d.height()
-                except Exception:
+                except Exception as e:
+                    logger.debug("[ENGINE] Exception suppressed: %s", e)
                     continue
                 if w <= 0 or h <= 0:
                     continue
@@ -2529,7 +2566,8 @@ class ScreensaverEngine(QObject):
             try:
                 raw_flag = pool_cfg.get(name, True)
                 return bool(SettingsManager.to_bool(raw_flag, True))
-            except Exception:
+            except Exception as e:
+                logger.debug("[ENGINE] Exception suppressed: %s", e)
                 return True
 
         # Cycle to next transition honoring HW capabilities and per-type pool
@@ -2579,8 +2617,8 @@ class ScreensaverEngine(QObject):
             from rendering.multi_monitor_coordinator import get_coordinator
             coordinator = get_coordinator()
             coordinator.set_settings_dialog_active(True)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[ENGINE] Exception suppressed: %s", e)
         
         # Hide and destroy all cursor halo windows
         if self.display_manager:
@@ -2592,8 +2630,8 @@ class ScreensaverEngine(QObject):
                         halo.close()
                         halo.deleteLater()
                         display._ctrl_cursor_hint = None
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[ENGINE] Exception suppressed: %s", e)
         
         # Stop the engine but DON'T exit the app
         self.stop(exit_app=False)
@@ -2615,7 +2653,7 @@ class ScreensaverEngine(QObject):
                 if self.display_manager:
                     try:
                         self.display_manager.cleanup()
-                    except Exception:
+                    except Exception as e:
                         logger.debug("DisplayManager cleanup after settings failed", exc_info=True)
                     self.display_manager = None
                     self._display_initialized = False
@@ -2626,7 +2664,7 @@ class ScreensaverEngine(QObject):
                     coordinator = get_coordinator()
                     coordinator.set_settings_dialog_active(False)  # Re-enable halo
                     coordinator.cleanup()
-                except Exception:
+                except Exception as e:
                     logger.debug("Coordinator cleanup after settings failed", exc_info=True)
 
                 # Reinitialize displays using current settings
@@ -2778,8 +2816,8 @@ class ScreensaverEngine(QObject):
                 if hasattr(self, '_prefetcher') and self._prefetcher:
                     try:
                         self._prefetcher.stop()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[ENGINE] Exception suppressed: %s", e)
                 
                 # Initialize prefetcher for new queue
                 try:

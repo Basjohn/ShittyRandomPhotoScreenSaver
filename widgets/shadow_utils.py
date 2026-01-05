@@ -48,8 +48,8 @@ def configure_overlay_widget_attributes(widget: QWidget) -> None:
         widget.setAutoFillBackground(False)
         # Ensure QSS-based backgrounds still work
         widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[SHADOW] Exception suppressed: %s", e)
 
 # Global multiplier to make widget shadows slightly larger/softer by
 # increasing their blur radius. This applies both to immediate shadows
@@ -120,7 +120,7 @@ def apply_widget_shadow(
         if isinstance(existing_effect, QGraphicsDropShadowEffect):
             try:
                 widget.setGraphicsEffect(None)
-            except Exception:
+            except Exception as e:
                 logger.debug("[SHADOWS] Failed to clear drop shadow for %r", widget, exc_info=True)
         return
 
@@ -138,7 +138,8 @@ def apply_widget_shadow(
     try:
         r, g, b = int(color_data[0]), int(color_data[1]), int(color_data[2])
         a = int(color_data[3]) if len(color_data) > 3 else 255
-    except Exception:
+    except Exception as e:
+        logger.debug("[SHADOW] Exception suppressed: %s", e)
         r, g, b, a = 0, 0, 0, 255
 
     # Separate opacities for text-only vs framed widgets.
@@ -153,17 +154,19 @@ def apply_widget_shadow(
     offset = config.get("offset", [4, 4])
     try:
         dx, dy = int(offset[0]), int(offset[1])
-    except Exception:
+    except Exception as e:
+        logger.debug("[SHADOW] Exception suppressed: %s", e)
         dx, dy = 4, 4
 
     try:
         blur_radius = int(config.get("blur_radius", 18))
-    except Exception:
+    except Exception as e:
+        logger.debug("[SHADOW] Exception suppressed: %s", e)
         blur_radius = 18
     try:
         blur_radius = max(0, int(blur_radius * SHADOW_SIZE_MULTIPLIER))
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[SHADOW] Exception suppressed: %s", e)
 
     # Apply intense shadow multipliers if enabled
     if intense:
@@ -176,8 +179,8 @@ def apply_widget_shadow(
             base_opacity = min(1.0, max(0.6, base_opacity * INTENSE_SHADOW_OPACITY_MULTIPLIER))
             # Use full alpha channel for maximum shadow visibility
             color = QColor(r, g, b, int(255 * base_opacity))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SHADOW] Exception suppressed: %s", e)
 
     if isinstance(existing_effect, QGraphicsDropShadowEffect):
         effect = existing_effect
@@ -185,7 +188,7 @@ def apply_widget_shadow(
         effect = QGraphicsDropShadowEffect(widget)
         try:
             widget.setGraphicsEffect(effect)
-        except Exception:
+        except Exception as e:
             logger.debug("[SHADOWS] Failed to attach drop shadow effect for %r", widget, exc_info=True)
             return
 
@@ -225,7 +228,7 @@ class ShadowFadeProfile:
 
         try:
             apply_widget_shadow(widget, config or {}, has_background_frame=has_background_frame)
-        except Exception:
+        except Exception as e:
             logger.debug("[SHADOW_FADE] attach_shadow failed for %r", widget, exc_info=True)
 
     @classmethod
@@ -245,7 +248,8 @@ class ShadowFadeProfile:
 
         try:
             enabled = _to_bool(config.get("enabled", True), True)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SHADOW] Exception suppressed: %s", e)
             enabled = True
 
         if not enabled:
@@ -258,7 +262,7 @@ class ShadowFadeProfile:
             effect = QGraphicsDropShadowEffect(widget)
             try:
                 widget.setGraphicsEffect(effect)
-            except Exception:
+            except Exception as e:
                 logger.debug(
                     "[SHADOW_FADE] Failed to attach drop shadow effect for %r",
                     widget,
@@ -270,7 +274,8 @@ class ShadowFadeProfile:
         try:
             r, g, b = int(color_data[0]), int(color_data[1]), int(color_data[2])
             a = int(color_data[3]) if len(color_data) > 3 else 255
-        except Exception:
+        except Exception as e:
+            logger.debug("[SHADOW] Exception suppressed: %s", e)
             r, g, b, a = 0, 0, 0, 255
 
         text_opacity = float(config.get("text_opacity", 0.3))
@@ -282,17 +287,19 @@ class ShadowFadeProfile:
         offset = config.get("offset", [4, 4])
         try:
             dx, dy = int(offset[0]), int(offset[1])
-        except Exception:
+        except Exception as e:
+            logger.debug("[SHADOW] Exception suppressed: %s", e)
             dx, dy = 4, 4
 
         try:
             blur_radius = int(config.get("blur_radius", 18))
-        except Exception:
+        except Exception as e:
+            logger.debug("[SHADOW] Exception suppressed: %s", e)
             blur_radius = 18
         try:
             blur_radius = max(0, int(blur_radius * SHADOW_SIZE_MULTIPLIER))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SHADOW] Exception suppressed: %s", e)
 
         start_color = QColor(r, g, b, 0)
         effect.setColor(start_color)
@@ -305,40 +312,41 @@ class ShadowFadeProfile:
         anim.setEndValue(1.0)
         try:
             anim.setEasingCurve(cls.EASING)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SHADOW] Exception suppressed: %s", e)
 
         def _on_value_changed(value: float) -> None:
             try:
                 t = float(value)
-            except Exception:
+            except Exception as e:
+                logger.debug("[SHADOW] Exception suppressed: %s", e)
                 t = 1.0
             t = max(0.0, min(1.0, t))
             alpha = int(target_alpha * t)
             color = QColor(r, g, b, alpha)
             try:
                 effect.setColor(color)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SHADOW] Exception suppressed: %s", e)
 
         anim.valueChanged.connect(_on_value_changed)
 
         def _on_finished() -> None:
             try:
                 setattr(widget, "_shadowfade_shadow_anim", None)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SHADOW] Exception suppressed: %s", e)
             try:
                 final_color = QColor(r, g, b, target_alpha)
                 effect.setColor(final_color)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SHADOW] Exception suppressed: %s", e)
 
         anim.finished.connect(_on_finished)
         try:
             setattr(widget, "_shadowfade_shadow_anim", anim)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SHADOW] Exception suppressed: %s", e)
         anim.start()
 
     @classmethod
@@ -366,8 +374,8 @@ class ShadowFadeProfile:
             if isinstance(anim, QVariantAnimation):
                 try:
                     anim.stop()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[SHADOW] Exception suppressed: %s", e)
 
             effect = getattr(widget, "_shadowfade_effect", None)
             if not isinstance(effect, QGraphicsOpacityEffect):
@@ -407,54 +415,56 @@ class ShadowFadeProfile:
             def _on_value_changed(value: float) -> None:
                 try:
                     f = float(value)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[SHADOW] Exception suppressed: %s", e)
                     f = 0.0
                 try:
                     effect.setOpacity(f)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[SHADOW] Exception suppressed: %s", e)
                 # Expose the instantaneous fade progress on the widget so
                 # GPU clients (e.g. GL compositor overlays) can track the
                 # same curve without duplicating easing logic.
                 try:
                     setattr(widget, "_shadowfade_progress", f)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[SHADOW] Exception suppressed: %s", e)
 
             anim.valueChanged.connect(_on_value_changed)
 
             def _on_finished() -> None:
                 try:
                     widget.setGraphicsEffect(None)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[SHADOW] Exception suppressed: %s", e)
 
                 try:
                     setattr(widget, "_shadowfade_anim", None)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[SHADOW] Exception suppressed: %s", e)
 
                 try:
                     setattr(widget, "_shadowfade_effect", None)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[SHADOW] Exception suppressed: %s", e)
 
                 # Ensure final progress is pinned at 1.0 for clients that
                 # read the attribute after the fade completes.
                 try:
                     setattr(widget, "_shadowfade_progress", 1.0)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[SHADOW] Exception suppressed: %s", e)
                 # Mark fade as completed so GPU overlays know they can show
                 # even if _shadowfade_progress is later cleared or unavailable.
                 try:
                     setattr(widget, "_shadowfade_completed", True)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[SHADOW] Exception suppressed: %s", e)
 
                 try:
                     cls._start_shadow_fade(widget, cfg, has_background_frame=has_background_frame)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[SHADOW] Exception suppressed: %s", e)
                     if is_verbose_logging():
                         logger.debug(
                             "[SHADOW_FADE] Failed to start shadow fade for %r",
@@ -465,13 +475,14 @@ class ShadowFadeProfile:
             anim.finished.connect(_on_finished)
             setattr(widget, "_shadowfade_anim", anim)
             anim.start()
-        except Exception:
+        except Exception as e:
+            logger.debug("[SHADOW] Exception suppressed: %s", e)
             if is_verbose_logging():
                 logger.debug("[SHADOW_FADE] start_fade_in fallback path triggered for %r", widget, exc_info=True)
             try:
                 widget.show()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SHADOW] Exception suppressed: %s", e)
             cls.attach_shadow(widget, cfg, has_background_frame=has_background_frame)
 
 

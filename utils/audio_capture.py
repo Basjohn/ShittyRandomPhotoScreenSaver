@@ -102,7 +102,8 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
             default_speakers = pa.get_device_info_by_index(
                 wasapi_info["defaultOutputDevice"]
             )
-        except Exception:
+        except Exception as e:
+            logger.debug("[AUDIO] Exception suppressed: %s", e)
             return None
         
         if default_speakers is None:
@@ -124,7 +125,8 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
                     chosen = loopback
                     break
             return chosen
-        except Exception:
+        except Exception as e:
+            logger.debug("[AUDIO] Exception suppressed: %s", e)
             return None
     
     def start(self, callback: Callable[[Any], None]) -> bool:
@@ -170,7 +172,8 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
         try:
             self._channels = int(device.get("maxInputChannels", 0) or 0)
             self._sample_rate = int(device.get("defaultSampleRate", 48000) or 48000)
-        except Exception:
+        except Exception as e:
+            logger.debug("[AUDIO] Exception suppressed: %s", e)
             self._channels = 2
             self._sample_rate = 48000
         
@@ -193,18 +196,19 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
                 samples = self._np.frombuffer(in_data, dtype=self._np.float32)
                 try:
                     ch = int(self._channels) if self._channels else 1
-                except Exception:
+                except Exception as e:
+                    logger.debug("[AUDIO] Exception suppressed: %s", e)
                     ch = 1
                 if ch > 1:
                     try:
                         frames = int(samples.size // ch)
                         if frames > 0 and (frames * ch) == int(samples.size):
                             samples = samples.reshape(frames, ch)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[AUDIO] Exception suppressed: %s", e)
                 callback(samples)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[AUDIO] Exception suppressed: %s", e)
             return (None, pyaudio.paContinue)
         
         # Try different block sizes (smaller = lower latency, higher CPU)
@@ -233,8 +237,8 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
                     try:
                         self._stream.stop_stream()
                         self._stream.close()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[AUDIO] Exception suppressed: %s", e)
                     self._stream = None
                 if is_verbose_logging():
                     logger.debug("[AUDIO] Block size %d failed: %s", block_size, e)
@@ -247,8 +251,8 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
         if self._pa:
             try:
                 self._pa.terminate()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[AUDIO] Exception suppressed: %s", e)
             self._pa = None
     
     def stop(self) -> None:
@@ -257,8 +261,8 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
             try:
                 self._stream.stop_stream()
                 self._stream.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[AUDIO] Exception suppressed: %s", e)
             self._stream = None
         self._cleanup_pa()
     
@@ -311,8 +315,8 @@ class SounddeviceBackend(AudioCaptureBackend):
                     dev = self._sd.query_devices(default_out_idx)
                     if dev.get("max_input_channels", 0) > 0:
                         return dev
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[AUDIO] Exception suppressed: %s", e)
             
             # Fallback to global default output if it's WASAPI
             try:
@@ -320,11 +324,11 @@ class SounddeviceBackend(AudioCaptureBackend):
                 if global_out.get("hostapi") == wasapi_idx:
                     if global_out.get("max_input_channels", 0) > 0:
                         return global_out
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[AUDIO] Exception suppressed: %s", e)
                 
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[AUDIO] Exception suppressed: %s", e)
         
         return None
     
@@ -348,8 +352,8 @@ class SounddeviceBackend(AudioCaptureBackend):
             if candidates:
                 candidates.sort(key=lambda x: -x[0])
                 return candidates[0][2]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[AUDIO] Exception suppressed: %s", e)
         
         return None
     
@@ -386,7 +390,8 @@ class SounddeviceBackend(AudioCaptureBackend):
         try:
             self._channels = min(2, int(device.get("max_input_channels", 2)))
             self._sample_rate = int(device.get("default_samplerate", 48000))
-        except Exception:
+        except Exception as e:
+            logger.debug("[AUDIO] Exception suppressed: %s", e)
             self._channels = 2
             self._sample_rate = 48000
         
@@ -399,8 +404,8 @@ class SounddeviceBackend(AudioCaptureBackend):
                 else:
                     samples = indata[:, 0].astype(self._np.float32)
                 callback(samples)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[AUDIO] Exception suppressed: %s", e)
         
         # Open stream
         try:
@@ -430,8 +435,8 @@ class SounddeviceBackend(AudioCaptureBackend):
             try:
                 self._stream.stop()
                 self._stream.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[AUDIO] Exception suppressed: %s", e)
             self._stream = None
     
     def is_running(self) -> bool:

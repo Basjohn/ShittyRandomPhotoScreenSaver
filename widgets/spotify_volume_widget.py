@@ -58,8 +58,8 @@ class SpotifyVolumeWidget(QWidget):
 
         try:
             SpotifyVolumeWidget._instances.add(self)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
 
         # Geometry constants (logical pixels)
         self._track_margin: int = 6
@@ -85,7 +85,7 @@ class SpotifyVolumeWidget(QWidget):
         self._shadow_config = config
         try:
             apply_widget_shadow(self, config, has_background_frame=False)
-        except Exception:
+        except Exception as e:
             logger.debug("[SPOTIFY_VOL] Failed to apply widget shadow", exc_info=True)
 
     def set_colors(self, *, track_bg: QColor, track_border: QColor, fill: QColor) -> None:
@@ -106,12 +106,12 @@ class SpotifyVolumeWidget(QWidget):
             self._track_border_color.setAlpha(255)
             fill_alpha = int(0.55 * 255)
             self._fill_color.setAlpha(fill_alpha)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
         try:
             self.update()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
     
     def set_anchor_media_widget(self, widget: Optional[QWidget]) -> None:
         """Set the anchor media widget for visibility gating."""
@@ -135,8 +135,8 @@ class SpotifyVolumeWidget(QWidget):
             elif not anchor_visible and self.isVisible():
                 # Media widget hidden - hide volume widget
                 self.hide()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -151,8 +151,8 @@ class SpotifyVolumeWidget(QWidget):
         try:
             self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
             self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
         self.hide()
 
     # ------------------------------------------------------------------
@@ -181,22 +181,22 @@ class SpotifyVolumeWidget(QWidget):
                 try:
                     if getattr(result, "success", False):
                         val = getattr(result, "result", None)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
                 if isinstance(val, float):
                     ThreadManager.run_on_ui_thread(self._apply_volume, val)
             
             try:
                 self._thread_manager.submit_io_task(_do_read, callback=_on_result)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
         else:
             try:
                 current = self._controller.get_volume()
                 if isinstance(current, float):
                     self._apply_volume(current)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
         
         logger.debug("[LIFECYCLE] SpotifyVolumeWidget activated")
     
@@ -205,8 +205,8 @@ class SpotifyVolumeWidget(QWidget):
         if self._flush_timer is not None:
             try:
                 self._flush_timer.stop()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
         self._pending_volume = None
         logger.debug("[LIFECYCLE] SpotifyVolumeWidget deactivated")
     
@@ -216,8 +216,8 @@ class SpotifyVolumeWidget(QWidget):
         if self._flush_timer is not None:
             try:
                 self._flush_timer.deleteLater()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
             self._flush_timer = None
         logger.debug("[LIFECYCLE] SpotifyVolumeWidget cleaned up")
 
@@ -234,8 +234,8 @@ class SpotifyVolumeWidget(QWidget):
 
         try:
             self.hide()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
 
         if not self._controller.is_available():
             if is_verbose_logging():
@@ -250,7 +250,8 @@ class SpotifyVolumeWidget(QWidget):
         if anchor is not None:
             try:
                 anchor_visible = anchor.isVisible()
-            except Exception:
+            except Exception as e:
+                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
                 anchor_visible = True
         
         if not anchor_visible:
@@ -260,7 +261,8 @@ class SpotifyVolumeWidget(QWidget):
         if self._thread_manager is None:
             try:
                 current = self._controller.get_volume()
-            except Exception:
+            except Exception as e:
+                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
                 current = None
             if isinstance(current, float):
                 self._apply_volume(current)
@@ -277,13 +279,14 @@ class SpotifyVolumeWidget(QWidget):
                 try:
                     if getattr(result, "success", False):
                         val = getattr(result, "result", None)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
                     val = None
                 ThreadManager.run_on_ui_thread(_apply, val)
 
             try:
                 self._thread_manager.submit_io_task(_do_read, callback=_on_result)
-            except Exception:
+            except Exception as e:
                 logger.debug("[SPOTIFY_VOL] Failed to schedule initial volume read", exc_info=True)
 
         # Participate in coordinated overlay fade sync like other widgets
@@ -296,7 +299,8 @@ class SpotifyVolumeWidget(QWidget):
         if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
             try:
                 parent.request_overlay_fade_sync("spotify_volume", _starter)
-            except Exception:
+            except Exception as e:
+                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
                 _starter()
         else:
             _starter()
@@ -308,13 +312,13 @@ class SpotifyVolumeWidget(QWidget):
         try:
             if self._flush_timer is not None:
                 self._flush_timer.stop()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
         self._pending_volume = None
         try:
             self.hide()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
 
     def cleanup(self) -> None:
         self.stop()
@@ -370,8 +374,8 @@ class SpotifyVolumeWidget(QWidget):
         painter = QPainter(self)
         try:
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
 
         rect = self.rect().adjusted(
             self._track_margin,
@@ -391,7 +395,8 @@ class SpotifyVolumeWidget(QWidget):
         pen = QPen(self._track_border_color)
         try:
             pen.setWidthF(1.5)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
             pen.setWidth(2)
         painter.setPen(pen)
         painter.setBrush(self._track_bg_color)
@@ -439,8 +444,8 @@ class SpotifyVolumeWidget(QWidget):
         self._volume = level
         try:
             self.update()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
 
     def _apply_volume_and_broadcast(self, level: float) -> None:
         """Apply a new volume locally and mirror it to sibling sliders.
@@ -454,7 +459,8 @@ class SpotifyVolumeWidget(QWidget):
         cls = self.__class__
         try:
             broadcasting = getattr(cls, "_broadcasting", False)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
             broadcasting = False
         if broadcasting:
             return
@@ -463,14 +469,16 @@ class SpotifyVolumeWidget(QWidget):
             cls._broadcasting = True
             try:
                 instances = list(getattr(cls, "_instances", []))
-            except Exception:
+            except Exception as e:
+                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
                 instances = []
             for other in instances:
                 if other is self:
                     continue
                 try:
                     other._apply_volume(level)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
                     continue
         finally:
             cls._broadcasting = False
@@ -499,8 +507,8 @@ class SpotifyVolumeWidget(QWidget):
         if self._flush_timer is not None:
             try:
                 self._flush_timer.start()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
 
     def _submit_volume_set(self, level: float) -> None:
         if not self._controller.is_available():
@@ -514,7 +522,7 @@ class SpotifyVolumeWidget(QWidget):
                 result = self._controller.set_volume(clamped)
                 if is_verbose_logging():
                     logger.debug("[SPOTIFY_VOL] set_volume direct: %.2f -> %s", clamped, result)
-            except Exception:
+            except Exception as e:
                 logger.debug("[SPOTIFY_VOL] set_volume direct call failed", exc_info=True)
             return
 
@@ -523,12 +531,12 @@ class SpotifyVolumeWidget(QWidget):
                 result = self._controller.set_volume(target)
                 if is_verbose_logging():
                     logger.debug("[SPOTIFY_VOL] set_volume async: %.2f -> %s", target, result)
-            except Exception:
+            except Exception as e:
                 logger.debug("[SPOTIFY_VOL] set_volume task failed", exc_info=True)
 
         try:
             self._thread_manager.submit_io_task(_do_set, clamped)
-        except Exception:
+        except Exception as e:
             logger.debug("[SPOTIFY_VOL] Failed to submit set_volume task", exc_info=True)
 
     def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:
@@ -542,19 +550,19 @@ class SpotifyVolumeWidget(QWidget):
         if self._has_faded_in and duration_ms <= 0:
             try:
                 self.show()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
             return
 
         if duration_ms <= 0:
             try:
                 self.show()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
             if self._shadow_config is not None:
                 try:
                     apply_widget_shadow(self, self._shadow_config, has_background_frame=False)
-                except Exception:
+                except Exception as e:
                     logger.debug("[SPOTIFY_VOL] Failed to attach shadow in no-fade path", exc_info=True)
             self._has_faded_in = True
             return
@@ -566,14 +574,14 @@ class SpotifyVolumeWidget(QWidget):
                 has_background_frame=False,
             )
             self._has_faded_in = True
-        except Exception:
+        except Exception as e:
             logger.debug("[SPOTIFY_VOL] _start_widget_fade_in fallback path triggered", exc_info=True)
             try:
                 self.show()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
             if self._shadow_config is not None:
                 try:
                     apply_widget_shadow(self, self._shadow_config, has_background_frame=False)
-                except Exception:
+                except Exception as e:
                     logger.debug("[SPOTIFY_VOL] Failed to apply widget shadow in fallback path", exc_info=True)

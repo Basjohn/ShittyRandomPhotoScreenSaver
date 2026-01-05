@@ -111,8 +111,8 @@ class TransitionFactory:
             try:
                 if supervisor.is_running(WorkerType.TRANSITION):
                     logger.info("[TRANSITION_FACTORY] TransitionWorker available for precomputation")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)
     
     def _precompute_via_worker(
         self,
@@ -245,7 +245,8 @@ class TransitionFactory:
                 if isinstance(chosen, str) and chosen:
                     random_choice_value = chosen
             return random_mode, random_choice_value
-        except Exception:
+        except Exception as e:
+            logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)
             return False, None
     
     def _get_duration(self, settings: dict, transition_type: str) -> int:
@@ -257,7 +258,8 @@ class TransitionFactory:
         base_duration_raw = settings.get('duration_ms', canonical_transitions.get('duration_ms', 1300))
         try:
             base_duration_ms = int(base_duration_raw)
-        except Exception:
+        except Exception as e:
+            logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)
             base_duration_ms = 1300
         
         duration_ms = base_duration_ms
@@ -277,8 +279,8 @@ class TransitionFactory:
 
             if per_type_raw is not None:
                 duration_ms = int(per_type_raw)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)
         
         return duration_ms
     
@@ -286,7 +288,8 @@ class TransitionFactory:
         """Check if hardware acceleration is enabled."""
         try:
             hw_raw = self._settings.get('display.hw_accel', True)
-        except Exception:
+        except Exception as e:
+            logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)
             hw_raw = True
         return SettingsManager.to_bool(hw_raw, True)
     
@@ -296,7 +299,7 @@ class TransitionFactory:
             return False
         try:
             self._ensure_compositor()
-        except Exception:
+        except Exception as e:
             logger.debug("[GL COMPOSITOR] Failed to ensure compositor", exc_info=True)
         return self._check_compositor()
     
@@ -531,8 +534,8 @@ class TransitionFactory:
                 type_settings['last_direction'] = SLIDE_DIRECTION_REVERSE.get(direction, 'Left to Right')
                 settings[settings_key] = type_settings
                 self._settings.set('transitions', settings)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)
             
             return direction
         
@@ -559,8 +562,8 @@ class TransitionFactory:
             wipe_settings['last_direction'] = enum_to_str.get(direction, 'Left to Right')
             settings['wipe'] = wipe_settings
             self._settings.set('transitions', settings)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)
         
         return direction
     
@@ -570,14 +573,16 @@ class TransitionFactory:
     def _safe_int(value, default: int) -> int:
         try:
             return int(value)
-        except Exception:
+        except Exception as e:
+            logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)
             return default
     
     @staticmethod
     def _safe_float(value, default: float) -> float:
         try:
             return float(value)
-        except Exception:
+        except Exception as e:
+            logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)
             return default
     
     def _log_selection(self, requested: str, actual: str, random_mode: bool, random_choice: Optional[str]) -> None:
@@ -593,5 +598,5 @@ class TransitionFactory:
                     "[TRANSITIONS] Instantiating '%s' (requested=%s, random_mode=%s, random_choice=%s)",
                     actual, requested, random_mode, random_choice,
                 )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)

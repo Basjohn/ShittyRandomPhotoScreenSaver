@@ -107,7 +107,7 @@ def _determine_mode(settings: SettingsManager) -> str:
     if isinstance(raw, str) and raw.lower().strip() != normalized:
         try:
             settings.set("display.render_backend_mode", normalized)
-        except Exception:
+        except Exception as e:
             logger.debug("Failed to persist normalized backend mode", exc_info=True)
 
     return normalized

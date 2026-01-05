@@ -53,7 +53,7 @@ class OverlayTimerHandle:
                     "stop",
                     Qt.ConnectionType.QueuedConnection,
                 )
-        except Exception:
+        except Exception as e:
             logger.debug("[OVERLAY_TIMER] Failed to stop timer", exc_info=True)
         self._timer = None
 
@@ -63,7 +63,8 @@ class OverlayTimerHandle:
             return False
         try:
             return timer.isActive()
-        except Exception:
+        except Exception as e:
+            logger.debug("[OVERLAY] Exception suppressed: %s", e)
             return False
 
 
@@ -79,18 +80,20 @@ def _get_thread_manager_for(widget: QObject) -> Optional[Any]:
         tm = getattr(widget, "_thread_manager", None)
         if tm is not None:
             return tm
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[OVERLAY] Exception suppressed: %s", e)
 
     try:
         parent = widget.parent()
-    except Exception:
+    except Exception as e:
+        logger.debug("[OVERLAY] Exception suppressed: %s", e)
         parent = None
 
     if parent is not None:
         try:
             tm = getattr(parent, "_thread_manager", None)
-        except Exception:
+        except Exception as e:
+            logger.debug("[OVERLAY] Exception suppressed: %s", e)
             tm = None
         return tm
 

@@ -183,7 +183,8 @@ class ClockWidgetFactory(WidgetFactory):
             
             try:
                 bo = float(border_opacity)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGET_FACTORY] Exception suppressed: %s", e)
                 bo = 0.8
             border_qcolor = parse_color_to_qcolor(border_color, opacity_override=bo)
             if border_qcolor and hasattr(widget, "set_background_border"):
@@ -222,15 +223,15 @@ class ClockWidgetFactory(WidgetFactory):
                         widget.set_shadow_config(shadows_config)
                     else:
                         apply_widget_shadow(widget, shadows_config, has_background_frame=show_background)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[WIDGET_FACTORY] Exception suppressed: %s", e)
             
             # Overlay name for fade coordination
             if overlay_name and hasattr(widget, "set_overlay_name"):
                 try:
                     widget.set_overlay_name(overlay_name)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[WIDGET_FACTORY] Exception suppressed: %s", e)
             
             # Thread manager
             if self._thread_manager and hasattr(widget, 'set_thread_manager'):
@@ -319,7 +320,8 @@ class WeatherWidgetFactory(WidgetFactory):
             border_opacity = config.get('border_opacity', 1.0)
             try:
                 bo = float(border_opacity)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGET_FACTORY] Exception suppressed: %s", e)
                 bo = 1.0
             border_qcolor = parse_color_to_qcolor(border_color, opacity_override=bo)
             if border_qcolor:
@@ -333,8 +335,8 @@ class WeatherWidgetFactory(WidgetFactory):
             margin = config.get('margin', 20)
             try:
                 widget.set_margin(int(margin))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_FACTORY] Exception suppressed: %s", e)
             
             # Intense shadow
             intense_shadow = SettingsManager.to_bool(config.get('intense_shadow', False), False)
@@ -348,8 +350,8 @@ class WeatherWidgetFactory(WidgetFactory):
                         widget.set_shadow_config(shadows_config)
                     else:
                         apply_widget_shadow(widget, shadows_config, has_background_frame=show_background)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[WIDGET_FACTORY] Exception suppressed: %s", e)
             
             logger.debug("[WEATHER_FACTORY] Created WeatherWidget: %s", location)
             return widget
@@ -429,7 +431,8 @@ class MediaWidgetFactory(WidgetFactory):
             # Border
             try:
                 bo = float(model.border_opacity)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGET_FACTORY] Exception suppressed: %s", e)
                 bo = 0.8
             border_qcolor = parse_color_to_qcolor(model.border_color, opacity_override=bo)
             if border_qcolor:
@@ -451,8 +454,8 @@ class MediaWidgetFactory(WidgetFactory):
                         widget.set_shadow_config(shadows_config)
                     else:
                         apply_widget_shadow(widget, shadows_config, has_background_frame=show_background)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[WIDGET_FACTORY] Exception suppressed: %s", e)
             
             logger.debug("[MEDIA_FACTORY] Created MediaWidget")
             return widget
@@ -564,7 +567,8 @@ class RedditWidgetFactory(WidgetFactory):
             border_opacity = inherit_style('border_opacity', model.border_opacity)
             try:
                 bo = float(border_opacity)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGET_FACTORY] Exception suppressed: %s", e)
                 bo = 0.8
             border_qcolor = parse_color_to_qcolor(border_color, opacity_override=bo)
             if border_qcolor and hasattr(widget, 'set_background_border'):
@@ -595,8 +599,8 @@ class RedditWidgetFactory(WidgetFactory):
                         widget.set_shadow_config(shadows_config)
                     else:
                         apply_widget_shadow(widget, shadows_config, has_background_frame=show_background)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[WIDGET_FACTORY] Exception suppressed: %s", e)
             
             logger.debug("[REDDIT_FACTORY] Created RedditWidget: %s", settings_key)
             return widget

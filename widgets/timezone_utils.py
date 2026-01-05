@@ -44,7 +44,8 @@ def get_local_timezone() -> str:
                 if now.utcoffset().total_seconds() == offset:
                     logger.info(f"Auto-detected timezone: {tz}")
                     return tz
-            except Exception:
+            except Exception as e:
+                logger.debug("[MISC] Exception suppressed: %s", e)
                 continue
         
         # Fallback: return UTC offset

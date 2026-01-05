@@ -57,8 +57,8 @@ def _set_windows_timer_resolution(resolution_ms: int = 1) -> bool:
         if result == 0:  # TIMERR_NOERROR
             _timer_resolution_set = True
             return True
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[MAIN] Exception suppressed: %s", e)
     return False
 
 def _restore_windows_timer_resolution(resolution_ms: int = 1) -> None:
@@ -69,8 +69,8 @@ def _restore_windows_timer_resolution(resolution_ms: int = 1) -> None:
     try:
         _winmm.timeEndPeriod(resolution_ms)
         _timer_resolution_set = False
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[MAIN] Exception suppressed: %s", e)
 
 class ScreensaverMode(Enum):
     """Screensaver execution modes based on Windows arguments."""
@@ -237,7 +237,8 @@ def run_screensaver(app: QApplication) -> int:
             hard_exit_enabled = SettingsManager.to_bool(raw_hard_exit, False)
         else:
             hard_exit_enabled = bool(raw_hard_exit)
-    except Exception:
+    except Exception as e:
+        logger.debug("[MAIN] Exception suppressed: %s", e)
         hard_exit_enabled = False
     
     # Check if sources are configured (using dot notation)
@@ -283,7 +284,7 @@ def run_screensaver(app: QApplication) -> int:
         if hard_exit_enabled:
             try:
                 tray_icon = ScreensaverTrayIcon(app, app.windowIcon())
-            except Exception:
+            except Exception as e:
                 logger.debug("Failed to create system tray icon", exc_info=True)
 
             if tray_icon is not None:
@@ -294,13 +295,13 @@ def run_screensaver(app: QApplication) -> int:
                         # _on_settings_requested performs a full stop →
                         # settings dialog → restart cycle.
                         engine._on_settings_requested()  # type: ignore[attr-defined]
-                    except Exception:
+                    except Exception as e:
                         logger.exception("Failed to open settings from system tray")
 
                 def _on_tray_exit() -> None:
                     try:
                         engine.stop()
-                    except Exception:
+                    except Exception as e:
                         logger.exception("Failed to stop engine from system tray")
                     app.quit()
 
@@ -318,7 +319,8 @@ def run_screensaver(app: QApplication) -> int:
                                     if eco_manager.is_eco_mode_active():
                                         return True
                         return False
-                    except Exception:
+                    except Exception as e:
+                        logger.debug("[MAIN] Exception suppressed: %s", e)
                         return False
                 
                 tray_icon.set_eco_mode_callback(_check_eco_mode)
@@ -439,8 +441,8 @@ def main():
     app.setOrganizationName("ShittyRandomPhotoScreenSaver")
     try:
         app.setApplicationVersion(APP_VERSION)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[MAIN] Exception suppressed: %s", e)
 
     # Apply application icon from SRPSS.ico when available so the
     # taskbar/systray and dialogs share a consistent identity.
@@ -448,7 +450,7 @@ def main():
     if icon_path.exists():
         try:
             app.setWindowIcon(QIcon(str(icon_path)))
-        except Exception:
+        except Exception as e:
             logger.debug("Failed to set application icon from SRPSS.ico", exc_info=True)
     
     # Increase Qt image allocation limit from 256MB to 1GB for high-res images
@@ -487,7 +489,7 @@ def main():
                     profile_path = get_log_dir() / "screensaver_run.pstats"
                     profiler.dump_stats(str(profile_path))
                     logger.info("[PERF] [CPU] cProfile stats written to %s", profile_path)
-                except Exception:
+                except Exception as e:
                     logger.debug("[PERF] [CPU] Failed to write cProfile stats", exc_info=True)
             else:
                 exit_code = run_screensaver(app)
@@ -506,7 +508,7 @@ def main():
                     profile_path = get_log_dir() / "screensaver_config.pstats"
                     profiler.dump_stats(str(profile_path))
                     logger.info("[PERF] [CPU] cProfile stats written to %s", profile_path)
-                except Exception:
+                except Exception as e:
                     logger.debug("[PERF] [CPU] Failed to write cProfile stats", exc_info=True)
             else:
                 exit_code = run_config(app)
@@ -549,12 +551,12 @@ def main():
             try:
                 from scripts import spotify_vis_metrics_parser as _sv  # type: ignore[import]
                 _sv.main()
-            except Exception:
+            except Exception as e:
                 logger.debug(
                     "[PERF] spotify_vis_metrics_parser auto-run failed",
                     exc_info=True,
                 )
-    except Exception:
+    except Exception as e:
         logger.debug(
             "[PERF] spotify_vis_metrics_parser auto-run guard failed",
             exc_info=True,

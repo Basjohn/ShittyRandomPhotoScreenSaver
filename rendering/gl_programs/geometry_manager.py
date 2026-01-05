@@ -277,7 +277,8 @@ class GLGeometryManager:
         try:
             gl.glBindVertexArray(self._quad_vao)
             return True
-        except Exception:
+        except Exception as e:
+            logger.debug("[GL GEOMETRY] Exception suppressed: %s", e)
             return False
     
     def bind_box(self) -> bool:
@@ -287,7 +288,8 @@ class GLGeometryManager:
         try:
             gl.glBindVertexArray(self._box_vao)
             return True
-        except Exception:
+        except Exception as e:
+            logger.debug("[GL GEOMETRY] Exception suppressed: %s", e)
             return False
     
     def draw_quad(self) -> None:
@@ -298,8 +300,8 @@ class GLGeometryManager:
             gl.glBindVertexArray(self._quad_vao)
             gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
             gl.glBindVertexArray(0)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[GL GEOMETRY] Exception suppressed: %s", e)
     
     def draw_box(self) -> None:
         """Draw box mesh (36 vertices as triangles)."""
@@ -309,8 +311,8 @@ class GLGeometryManager:
             gl.glBindVertexArray(self._box_vao)
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, self._box_vertex_count)
             gl.glBindVertexArray(0)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[GL GEOMETRY] Exception suppressed: %s", e)
     
     def unbind(self) -> None:
         """Unbind any bound VAO."""
@@ -318,8 +320,8 @@ class GLGeometryManager:
             return
         try:
             gl.glBindVertexArray(0)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[GL GEOMETRY] Exception suppressed: %s", e)
     
     def cleanup(self) -> None:
         """Delete all VAO/VBO.

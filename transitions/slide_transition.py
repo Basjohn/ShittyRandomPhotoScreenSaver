@@ -118,8 +118,8 @@ class SlideTransition(BaseTransition):
                         description="SlideTransition old label",
                     )
                     setattr(self._old_label, "_resource_id", resource_id)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[TRANSITION] Exception suppressed: %s", e)
 
             self._new_label = QLabel(widget)
             self._new_label.setPixmap(fitted_new)
@@ -134,8 +134,8 @@ class SlideTransition(BaseTransition):
                         description="SlideTransition new label",
                     )
                     setattr(self._new_label, "_resource_id", resource_id)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[TRANSITION] Exception suppressed: %s", e)
 
             # Calculate start and end positions based on direction
             old_start, old_end, new_start, new_end = self._calculate_positions(width, height)
@@ -182,8 +182,8 @@ class SlideTransition(BaseTransition):
             try:
                 am = self._get_animation_manager(self._widget)
                 am.cancel_animation(self._animation_id)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITION] Exception suppressed: %s", e)
             self._animation_id = None
         self._old_animation = None
         self._new_animation = None
@@ -201,8 +201,8 @@ class SlideTransition(BaseTransition):
             try:
                 am = self._get_animation_manager(self._widget)
                 am.cancel_animation(self._animation_id)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITION] Exception suppressed: %s", e)
             self._animation_id = None
         self._old_animation = None
         self._new_animation = None
@@ -212,7 +212,8 @@ class SlideTransition(BaseTransition):
             if self._resource_manager and hasattr(self._old_label, "_resource_id"):
                 try:
                     self._resource_manager.unregister(self._old_label._resource_id, force=True)  # type: ignore[attr-defined]
-                except Exception:
+                except Exception as e:
+                    logger.debug("[TRANSITION] Exception suppressed: %s", e)
                     try:
                         self._old_label.deleteLater()
                     except RuntimeError:
@@ -228,7 +229,8 @@ class SlideTransition(BaseTransition):
             if self._resource_manager and hasattr(self._new_label, "_resource_id"):
                 try:
                     self._resource_manager.unregister(self._new_label._resource_id, force=True)  # type: ignore[attr-defined]
-                except Exception:
+                except Exception as e:
+                    logger.debug("[TRANSITION] Exception suppressed: %s", e)
                     try:
                         self._new_label.deleteLater()
                     except RuntimeError:
@@ -318,8 +320,8 @@ class SlideTransition(BaseTransition):
                 self._old_label.move(lerp(old_start, old_end, t))
             if self._new_label:
                 self._new_label.move(lerp(new_start, new_end, t))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[TRANSITION] Exception suppressed: %s", e)
         self._emit_progress(t)
 
     def _on_anim_complete(self, old_end: QPoint, new_end: QPoint) -> None:
@@ -331,8 +333,8 @@ class SlideTransition(BaseTransition):
                 self._old_label.move(old_end)
             if self._new_label:
                 self._new_label.move(new_end)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[TRANSITION] Exception suppressed: %s", e)
         logger.debug("Slide animation finished")
         # End telemetry tracking for successful completion
         self._mark_end()

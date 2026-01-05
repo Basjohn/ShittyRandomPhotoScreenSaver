@@ -127,7 +127,8 @@ class BaseWorker:
                     # Get message (non-blocking since we checked empty)
                     try:
                         msg_data = self._request_queue.get_nowait()
-                    except Exception:
+                    except Exception as e:
+                        logger.debug("[MISC] Exception suppressed: %s", e)
                         continue
                     
                     # Parse message

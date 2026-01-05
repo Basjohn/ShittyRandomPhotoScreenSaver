@@ -39,8 +39,8 @@ def main() -> int:
     try:
         mgr = SettingsManager()
         mgr.set("input.hard_exit", True)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[MISC] Exception suppressed: %s", e)
 
     result = 0
     result = core_main()

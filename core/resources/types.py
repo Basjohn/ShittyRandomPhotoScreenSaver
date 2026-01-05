@@ -61,7 +61,8 @@ class ResourceInfo:
         self.last_accessed = self.created_at
         try:
             self.group = self._derive_group()
-        except Exception:
+        except Exception as e:
+            logger.debug("[MISC] Exception suppressed: %s", e)
             self.group = "other"
     
     def _derive_group(self) -> str:

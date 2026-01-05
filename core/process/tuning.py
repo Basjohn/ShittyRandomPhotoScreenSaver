@@ -184,8 +184,8 @@ class LatencyMonitor:
         for callback in self._alert_callbacks:
             try:
                 callback(worker_type, latency_ms, threshold_ms)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[MISC] Exception suppressed: %s", e)
     
     def register_alert_callback(self, callback) -> None:
         """Register a callback for latency alerts."""

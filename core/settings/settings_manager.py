@@ -50,21 +50,25 @@ class SettingsManager(QObject):
                     or "main_mc.py" in exe_name
                 ):
                     app_name = "Screensaver_MC"
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SETTINGS] Exception suppressed: %s", e)
 
         self._settings = QSettings(organization, app_name)
         self._organization = organization
         self._application = app_name
         self._lock = threading.RLock()
         self._change_handlers: Dict[str, List[Callable]] = {}
+        
+        # In-memory cache for frequently accessed settings (P2 optimization)
+        self._cache: Dict[str, Any] = {}
+        self._cache_enabled = True
 
         # Initialize defaults
         self._set_defaults()
 
         try:
             self.validate_and_repair()
-        except Exception:
+        except Exception as e:
             logger.debug("Settings validation failed", exc_info=True)
 
         # Diagnostic snapshot so widget enable/monitor issues can be traced
@@ -86,7 +90,7 @@ class SettingsManager(QObject):
                     logger.debug(
                         "Widgets snapshot on init: type=%s", type(widgets_snapshot).__name__
                     )
-        except Exception:
+        except Exception as e:
             logger.debug("Failed to read widgets snapshot on init", exc_info=True)
 
         logger.info("SettingsManager initialized")
@@ -104,8 +108,8 @@ class SettingsManager(QObject):
             pictures = QStandardPaths.writableLocation(QStandardPaths.PicturesLocation)
             if pictures and Path(pictures).exists():
                 folders.append(pictures)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SETTINGS] Exception suppressed: %s", e)
         
         # Fallback: try common Windows paths
         if not folders:
@@ -116,8 +120,8 @@ class SettingsManager(QObject):
                     pictures_path = Path(user_profile) / 'Pictures'
                     if pictures_path.exists():
                         folders.append(str(pictures_path))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SETTINGS] Exception suppressed: %s", e)
         
         return folders
     
@@ -258,6 +262,11 @@ class SettingsManager(QObject):
             Setting value or default
         """
         with self._lock:
+            # Check cache first (P2 optimization from architectural audit)
+            cache_key = f"{key}:{id(default)}"
+            if self._cache_enabled and cache_key in self._cache:
+                return self._cache[cache_key]
+            
             value = self._settings.value(key, default)
 
         def to_plain(obj: Any) -> Any:
@@ -281,10 +290,19 @@ class SettingsManager(QObject):
                         coerced.append(int(item))
                     else:
                         coerced.append(int(item))
-                except Exception:
+                except Exception as e:
+                    logger.debug("[SETTINGS] Exception suppressed: %s", e)
                     coerced.append(item)
+            # Cache the coerced value
+            if self._cache_enabled:
+                with self._lock:
+                    self._cache[cache_key] = coerced
             return coerced
 
+        # Cache the result for future lookups
+        if self._cache_enabled:
+            with self._lock:
+                self._cache[cache_key] = value
         return value
     
     @staticmethod
@@ -319,14 +337,16 @@ class SettingsManager(QObject):
         """Return the QSettings application name for this manager."""
         try:
             return getattr(self, "_application", self._settings.applicationName())
-        except Exception:
+        except Exception as e:
+            logger.debug("[SETTINGS] Exception suppressed: %s", e)
             return "Screensaver"
 
     def get_organization_name(self) -> str:
         """Return the QSettings organization name for this manager."""
         try:
             return getattr(self, "_organization", self._settings.organizationName())
-        except Exception:
+        except Exception as e:
+            logger.debug("[SETTINGS] Exception suppressed: %s", e)
             return "ShittyRandomPhotoScreenSaver"
 
     def _coerce_import_value(self, key: str, value: Any) -> Any:
@@ -367,7 +387,7 @@ class SettingsManager(QObject):
                     # bool is a subclass of int; preserve intent.
                     return int(value)
                 return int(value)
-        except Exception:
+        except Exception as e:
             logger.debug("Failed to coerce SST value for %s=%r", dotted, value, exc_info=True)
             return value
 
@@ -393,6 +413,12 @@ class SettingsManager(QObject):
         with self._lock:
             old_value = self._settings.value(key)
             self._settings.setValue(key, value)
+            
+            # Invalidate cache entries for this key (P2 optimization)
+            if self._cache_enabled:
+                keys_to_remove = [k for k in self._cache if k.startswith(f"{key}:")]
+                for k in keys_to_remove:
+                    del self._cache[k]
             
             # Immediate sync for critical settings to prevent data loss
             # QSettings on Windows uses registry and may delay writes
@@ -585,7 +611,8 @@ class SettingsManager(QObject):
                         self._settings.setValue('widgets', dict(canonical_widgets))
                     else:
                         self._settings.setValue('widgets', {})
-                except Exception:
+                except Exception as e:
+                    logger.debug("[SETTINGS] Exception suppressed: %s", e)
                     self._settings.setValue('widgets', {})
                 repairs['widgets'] = f"Invalid type: {type(widgets).__name__}"
             
@@ -600,7 +627,8 @@ class SettingsManager(QObject):
                         self._settings.setValue('transitions', dict(canonical_transitions))
                     else:
                         self._settings.setValue('transitions', {})
-                except Exception:
+                except Exception as e:
+                    logger.debug("[SETTINGS] Exception suppressed: %s", e)
                     self._settings.setValue('transitions', {})
                 repairs['transitions'] = f"Invalid type: {type(transitions).__name__}"
             
@@ -887,7 +915,8 @@ class SettingsManager(QObject):
             app_name = None
             try:
                 app_name = getattr(self, "_application", None) or self._settings.applicationName()
-            except Exception:
+            except Exception as e:
+                logger.debug("[SETTINGS] Exception suppressed: %s", e)
                 app_name = "Screensaver"
 
             payload: Dict[str, Any] = {
@@ -900,7 +929,7 @@ class SettingsManager(QObject):
             target.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding='utf-8')
             logger.info("Exported settings snapshot to %s", target)
             return True
-        except Exception:
+        except Exception as e:
             logger.exception("Failed to export settings snapshot to %s", path)
             return False
 
@@ -916,7 +945,7 @@ class SettingsManager(QObject):
         try:
             raw = Path(path).read_text(encoding='utf-8')
             loaded = json.loads(raw)
-        except Exception:
+        except Exception as e:
             logger.exception("Failed to read settings snapshot from %s", path)
             return False
 
@@ -944,7 +973,8 @@ class SettingsManager(QObject):
         if isinstance(sst_application, str):
             try:
                 current_app = self.get_application_name()
-            except Exception:
+            except Exception as e:
+                logger.debug("[SETTINGS] Exception suppressed: %s", e)
                 current_app = None
             if current_app and sst_application != current_app:
                 logger.info(
@@ -1029,7 +1059,7 @@ class SettingsManager(QObject):
             self.settings_changed.emit('*', None)
             logger.info("Imported settings snapshot from %s", path)
             return True
-        except Exception:
+        except Exception as e:
             logger.exception("Failed to apply settings snapshot from %s", path)
             return False
 
@@ -1044,7 +1074,7 @@ class SettingsManager(QObject):
         try:
             raw = Path(path).read_text(encoding='utf-8')
             loaded = json.loads(raw)
-        except Exception:
+        except Exception as e:
             logger.exception("Failed to read settings snapshot for preview from %s", path)
             return {}
 
@@ -1129,6 +1159,6 @@ class SettingsManager(QObject):
                             diffs[section_key] = (old_val, new_val)
 
             return diffs
-        except Exception:
+        except Exception as e:
             logger.exception("Failed to compute settings snapshot preview from %s", path)
             return {}

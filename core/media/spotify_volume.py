@@ -68,7 +68,7 @@ class SpotifyVolumeController:
 
         try:
             value = float(volume_iface.GetMasterVolume())  # type: ignore[attr-defined]
-        except Exception:
+        except Exception as e:
             logger.debug("[SPOTIFY_VOL] GetMasterVolume failed", exc_info=True)
             return None
 
@@ -101,7 +101,7 @@ class SpotifyVolumeController:
             logger.debug("[SPOTIFY_VOL] Set Spotify session volume to %.3f (session=%s)", clamped, session_name)
             self._last_pid = getattr(getattr(volume_iface, "_session", None), "ProcessId", None)
             return True
-        except Exception:
+        except Exception as e:
             logger.debug("[SPOTIFY_VOL] SetMasterVolume failed", exc_info=True)
             return False
 
@@ -143,7 +143,7 @@ class SpotifyVolumeController:
         # If Spotify is paused or stopped, no session will be found.
         try:
             sessions = AudioUtilities.GetAllSessions()
-        except Exception:
+        except Exception as e:
             logger.debug("[SPOTIFY_VOL] GetAllSessions failed", exc_info=True)
             return None, None
         
@@ -157,8 +157,8 @@ class SpotifyVolumeController:
             try:
                 if s.Process:
                     session_names.append(s.Process.name())
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
         logger.debug("[SPOTIFY_VOL] No Spotify session found. Active sessions: %s", session_names)
         
         return None, None
@@ -175,7 +175,8 @@ class SpotifyVolumeController:
             proc = None
             try:
                 proc = getattr(session, "Process", None)
-            except Exception:
+            except Exception as e:
+                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
                 proc = None
 
             if proc is None:
@@ -183,7 +184,8 @@ class SpotifyVolumeController:
 
             try:
                 name = proc.name()
-            except Exception:
+            except Exception as e:
+                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
                 name = None
 
             if not isinstance(name, str):
@@ -200,7 +202,7 @@ class SpotifyVolumeController:
                 volume = ctl.QueryInterface(ISimpleAudioVolume)  # type: ignore[call-arg]
                 logger.debug("[SPOTIFY_VOL] Found Spotify session: %s", name)
                 return volume, name
-            except Exception:
+            except Exception as e:
                 logger.debug(
                     "[SPOTIFY_VOL] Failed to obtain ISimpleAudioVolume for %r", name, exc_info=True
                 )

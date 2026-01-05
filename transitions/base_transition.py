@@ -236,7 +236,8 @@ class BaseTransition(QObject, metaclass=QABCMeta):
         # Use device pixels for backing store then set DPR so logical size is w x h
         try:
             dpr = getattr(widget, "_device_pixel_ratio", widget.devicePixelRatioF())
-        except Exception:
+        except Exception as e:
+            logger.debug("[TRANSITION] Exception suppressed: %s", e)
             dpr = 1.0
         tw = max(1, int(round(w * dpr)))
         th = max(1, int(round(h * dpr)))
@@ -265,7 +266,8 @@ class BaseTransition(QObject, metaclass=QABCMeta):
         w, h = widget.width(), widget.height()
         try:
             dpr = getattr(widget, "_device_pixel_ratio", widget.devicePixelRatioF())
-        except Exception:
+        except Exception as e:
+            logger.debug("[TRANSITION] Exception suppressed: %s", e)
             dpr = 1.0
         tw = max(1, int(round(w * dpr)))
         th = max(1, int(round(h * dpr)))
@@ -288,31 +290,33 @@ class BaseTransition(QObject, metaclass=QABCMeta):
                 cap = sm.get('transitions.max_fps_sw', 0)
                 try:
                     cap = int(cap)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[TRANSITION] Exception suppressed: %s", e)
                     cap = 0
                 if cap and cap > 0:
                     target_fps = min(int(target_fps), cap)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[TRANSITION] Exception suppressed: %s", e)
         if am is None:
             from core.animation.animator import AnimationManager
             try:
                 resource_manager = getattr(widget, "_resource_manager", None)
                 am = AnimationManager(int(target_fps), resource_manager=resource_manager)
-            except Exception:
+            except Exception as e:
+                logger.debug("[TRANSITION] Exception suppressed: %s", e)
                 am = AnimationManager(resource_manager=getattr(widget, "_resource_manager", None))
             setattr(widget, "_animation_manager", am)
         else:
             try:
                 if hasattr(am, 'set_target_fps'):
                     am.set_target_fps(int(target_fps))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITION] Exception suppressed: %s", e)
         try:
             if hasattr(widget, "_on_animation_manager_ready"):
                 widget._on_animation_manager_ready(am)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[TRANSITION] Exception suppressed: %s", e)
         return am
 
     def _get_thread_manager(self, widget: QWidget):
@@ -324,7 +328,8 @@ class BaseTransition(QObject, metaclass=QABCMeta):
             from core.threading.manager import ThreadManager
             try:
                 tm = ThreadManager()
-            except Exception:
+            except Exception as e:
+                logger.debug("[TRANSITION] Exception suppressed: %s", e)
                 tm = ThreadManager()
             setattr(widget, "_thread_manager", tm)
         return tm

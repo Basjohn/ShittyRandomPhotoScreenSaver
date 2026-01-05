@@ -84,7 +84,7 @@ class GLCompositorSlideTransition(BaseTransition):
             comp.setGeometry(0, 0, widget.width(), widget.height())
             comp.show()
             comp.raise_()
-        except Exception:
+        except Exception as e:
             logger.debug("[GL COMPOSITOR] Failed to configure compositor geometry/visibility (slide)", exc_info=True)
 
         # Drive slide via shared AnimationManager.
@@ -131,7 +131,7 @@ class GLCompositorSlideTransition(BaseTransition):
             try:
                 # Snap to final frame when cancelling mid-way to avoid pops.
                 self._compositor.cancel_current_transition(snap_to_new=True)
-            except Exception:
+            except Exception as e:
                 logger.debug("[GL COMPOSITOR] Failed to cancel current slide transition", exc_info=True)
 
         self._animation_id = None
@@ -148,7 +148,7 @@ class GLCompositorSlideTransition(BaseTransition):
                 # here, as DisplayWidget will already have updated its base.
                 # The compositor remains visible as the primary renderer.
                 self._compositor.cancel_current_transition(snap_to_new=True)
-            except Exception:
+            except Exception as e:
                 logger.debug("[GL COMPOSITOR] Failed to cleanup slide compositor", exc_info=True)
             self._compositor = None
 

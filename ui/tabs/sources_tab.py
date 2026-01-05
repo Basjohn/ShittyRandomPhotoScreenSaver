@@ -443,7 +443,8 @@ class SourcesTab(QWidget):
 
             rebuilt = urlunparse((scheme, netloc, path, "", query, ""))
             return rebuilt
-        except Exception:
+        except Exception as e:
+            logger.debug("[MISC] Exception suppressed: %s", e)
             return text
 
     def _on_clear_rss_cache_clicked(self) -> None:
@@ -459,8 +460,8 @@ class SourcesTab(QWidget):
         try:
             if cache_dir.exists() and cache_dir.is_dir():
                 file_count = sum(1 for f in cache_dir.glob('*') if f.is_file())
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[MISC] Exception suppressed: %s", e)
         
         if file_count == 0:
             QMessageBox.information(

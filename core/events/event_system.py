@@ -200,7 +200,8 @@ class EventSystem:
         with self._lock:
             try:
                 limit_int = int(limit)
-            except Exception:
+            except Exception as e:
+                logger.debug("[MISC] Exception suppressed: %s", e)
                 limit_int = 100
 
             if limit_int <= 0:

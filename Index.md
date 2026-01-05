@@ -11,6 +11,21 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - **Dec 2025**: Widget Lifecycle Management, GL State Management, Widget Factories, Settings Type Safety, Widget Positioning, Intense Shadows, Log Throttling, Core Manager Tests
   - 236 unit tests across 9 test files
 
+## Active Audit Documents (Jan 2026)
+- **audits/Full_Architectural_Audit_Jan_2026.md** - ✅ **P0-P2 COMPLETE + Sections 3.2-3.4 IMPLEMENTED**
+  - ~600 bare except statements fixed across 35+ files
+  - 50% memory reduction (QImage lifecycle cleanup)
+  - 8 new modules created (constants, logging tags, spotify_visualizer package, image_loader)
+  - **NEW:** Constants integration (timing values centralized in 4 files)
+  - **NEW:** Logging tags integration (30+ replacements in engine)
+  - **NEW:** Image loading consolidated (unified ImageLoader interface)
+  - All completed work condensed into collapsible sections
+  - Remaining P3 work clearly tracked with checkboxes
+- **audits/Solution_1_VSync_Driven_Analysis.md** - Future VSync-driven rendering analysis (P3 deferred)
+- **audits/Shadow Invalidation And Key Interaction MC MODE.md** - MC mode shadow invalidation issue
+- **audits/VISUALIZER_DEBUG.md** - Visualizer debugging reference
+- **Archived:** `bak/audits_archive_20260105/` - Completed audit documents (Performance_Investigation, Solution_3, etc.)
+
 - Phase 0 Improvements (Jan 2026)
   - **WidgetManager**: Robust position normalization (Enum/String/Coerce); Smart positioning logic for Visualizer (Top vs Bottom alignment).
   - **InputHandler**: Global media key passthrough; Double-click "Next Image" navigation.
@@ -55,10 +70,23 @@ A living map of modules, purposes, and key classes. Keep this up to date.
     - Fixed CPU % bug: delayed first tooltip update for psutil baseline (`system_tray.py`)
     - Added eco mode worker control: stops ImageWorker/FFTWorker when window occluded (`eco_mode.py`)
     - **Audit Documents Created**:
-      - `audits/Solution_3_Implementation_Plan.md` - Task breakdown for worker offloading
+      - `audits/Solution_3_Implementation_Plan.md` - Task breakdown for worker offloading ✅ COMPLETED
       - `audits/Main_Thread_Blocking_Audit.md` - Complete audit of blocking operations
       - `audits/Solution_1_VSync_Driven_Analysis.md` - Deep analysis of VSync-driven rendering
-      - `audits/Full_Architectural_Audit_Jan_2026.md` - Comprehensive codebase audit
+      - `audits/Full_Architectural_Audit_Jan_2026.md` - Comprehensive codebase audit ✅ P0-P2 COMPLETED
+  - **Audit Implementation (Jan 5, 2026)**:
+    - P0: Worker health diagnostics (`get_detailed_health()`, `log_all_health_diagnostics()`) in ProcessSupervisor
+    - P1: Eco mode worker control - stops IMAGE/FFT workers when window occluded
+    - P1: QImage lifecycle cleanup - 7 conversion sites fixed (50% memory reduction)
+    - P2: Settings caching with invalidation on change in SettingsManager
+    - P2: Exception logging improvements (bare except → logged) in screensaver_engine.py
+    - Tests: `tests/test_eco_mode_worker_control.py` (8 tests)
+    - Backup: `bak/architecture_snapshot_20260105_perf_audit/`
+  - **Code Quality Improvements (Jan 5, 2026)**:
+    - Created `core/constants/` package with `timing.py` and `sizes.py` for magic number extraction
+    - Created `core/logging/tags.py` for standardized logging tags
+    - Created `widgets/spotify_visualizer/` package (audio_worker.py, beat_engine.py) - partial refactor
+    - PBO texture upload already implemented in `rendering/gl_programs/texture_manager.py`
 
 - v2.0 Roadmap Progress (Jan 2026)
   - **Phase 4.2**: Modal Settings Conversion complete (no-sources popup, profile separation, live updates)

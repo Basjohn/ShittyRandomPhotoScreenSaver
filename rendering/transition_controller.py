@@ -108,7 +108,8 @@ class TransitionController(QObject):
             return None
         try:
             return transition.__class__.__name__
-        except Exception:
+        except Exception as e:
+            logger.debug("[TRANSITION] Exception suppressed: %s", e)
             return None
     
     def get_active_transition_elapsed_s(self) -> Optional[float]:
@@ -118,7 +119,8 @@ class TransitionController(QObject):
             return None
         try:
             return max(0.0, time.monotonic() - self._transition_started_at)
-        except Exception:
+        except Exception as e:
+            logger.debug("[TRANSITION] Exception suppressed: %s", e)
             return None
     
     @property
@@ -127,7 +129,8 @@ class TransitionController(QObject):
         ct = self._current_transition
         try:
             return bool(ct and ct.is_running())
-        except Exception:
+        except Exception as e:
+            logger.debug("[TRANSITION] Exception suppressed: %s", e)
             return False
     
     @property
@@ -224,18 +227,18 @@ class TransitionController(QObject):
                 compositor = getattr(self._parent, "_compositor", None)
                 if compositor is not None and hasattr(compositor, "cancel_current_transition"):
                     compositor.cancel_current_transition(snap_to_new=True)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITION] Exception suppressed: %s", e)
         
         try:
             transition.stop()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[TRANSITION] Exception suppressed: %s", e)
         
         try:
             transition.cleanup()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[TRANSITION] Exception suppressed: %s", e)
         
         self._cancel_watchdog()
         self._clear_overlay_timeout()
@@ -259,8 +262,8 @@ class TransitionController(QObject):
         if transition:
             try:
                 transition.cleanup()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITION] Exception suppressed: %s", e)
         
         self.transition_finished.emit()
     
@@ -274,8 +277,8 @@ class TransitionController(QObject):
         
         try:
             transition.cleanup()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[TRANSITION] Exception suppressed: %s", e)
     
     def _clear_overlay_timeout(self) -> None:
         """Clear the current overlay timeout."""
@@ -299,8 +302,8 @@ class TransitionController(QObject):
                 custom = settings.get("transitions.watchdog_timeout_sec", None)
                 if custom is not None:
                     timeout_sec = float(custom)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[TRANSITION] Exception suppressed: %s", e)
         
         timeout_ms = int(timeout_sec * 1000)
         
@@ -323,15 +326,15 @@ class TransitionController(QObject):
                         timer, description="TransitionWatchdog"
                     )
                     self._watchdog_resource_id = rid
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[TRANSITION] Exception suppressed: %s", e)
             
             if is_verbose_logging():
                 logger.debug(
                     "[WATCHDOG] Started: timeout=%.1fs overlay=%s transition=%s",
                     timeout_sec, overlay_key, self._watchdog_transition_name,
                 )
-        except Exception:
+        except Exception as e:
             logger.debug("[WATCHDOG] Failed to start watchdog timer", exc_info=True)
     
     def _cancel_watchdog(self) -> None:
@@ -339,14 +342,14 @@ class TransitionController(QObject):
         if self._watchdog_timer and self._watchdog_timer.isActive():
             try:
                 self._watchdog_timer.stop()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITION] Exception suppressed: %s", e)
         
         if self._watchdog_resource_id and self._resource_manager:
             try:
                 self._resource_manager.unregister(self._watchdog_resource_id)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITION] Exception suppressed: %s", e)
         
         self._watchdog_timer = None
         self._watchdog_resource_id = None
@@ -379,17 +382,17 @@ class TransitionController(QObject):
                 compositor = getattr(self._parent, "_compositor", None)
                 if compositor is not None and hasattr(compositor, "cancel_current_transition"):
                     compositor.cancel_current_transition(snap_to_new=True)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITION] Exception suppressed: %s", e)
             
             try:
                 transition.stop()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITION] Exception suppressed: %s", e)
             try:
                 transition.cleanup()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITION] Exception suppressed: %s", e)
             if self._current_transition is transition:
                 self._current_transition = None
         

@@ -17,7 +17,8 @@ def _sanitize_details(details: Dict[str, Any]) -> Dict[str, Any]:
                 )
             else:
                 sanitized["base_pixmap"] = "<pixmap>"
-        except Exception:
+        except Exception as e:
+            logger.debug("[MISC] Exception suppressed: %s", e)
             sanitized["base_pixmap"] = "<pixmap>"
     return sanitized
 
@@ -55,7 +56,8 @@ def record_overlay_ready(
 
     try:
         actual_swap = str(details.get("swap", ""))
-    except Exception:
+    except Exception as e:
+        logger.debug("[MISC] Exception suppressed: %s", e)
         actual_swap = str(details.get("swap", ""))
 
     if "triple" in actual_swap.lower():

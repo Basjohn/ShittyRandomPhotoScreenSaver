@@ -209,8 +209,8 @@ def _log_helper_event(message: str) -> None:
         stamp = datetime.utcnow().isoformat(timespec="seconds") + "Z"
         with log_file.open("a", encoding="utf-8") as handle:
             handle.write(f"{stamp} {message}\n")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[REDDIT] Exception suppressed: %s", e)
 
 
 def _format_win32_error(error_code: int | None) -> str:
@@ -218,7 +218,8 @@ def _format_win32_error(error_code: int | None) -> str:
         return "Win32 error (no code)"
     try:
         message = ctypes.WinError(error_code).strerror
-    except Exception:
+    except Exception as e:
+        logger.debug("[REDDIT] Exception suppressed: %s", e)
         message = f"Win32 error {error_code}"
     return f"{message} (code={error_code})"
 
@@ -230,7 +231,8 @@ def ensure_helper_installed() -> Path | None:
         payload = pkgutil.get_data(
             "core.windows", f"helper_payload/{HELPER_NAME}"
         )
-    except Exception:
+    except Exception as e:
+        logger.debug("[REDDIT] Exception suppressed: %s", e)
         payload = None
     if not payload:
         logger.debug("[REDDIT-INSTALL] Helper payload missing in build")
@@ -241,7 +243,8 @@ def ensure_helper_installed() -> Path | None:
         if HELPER_PATH.exists():
             try:
                 existing = HELPER_PATH.read_bytes()
-            except Exception:
+            except Exception as e:
+                logger.debug("[REDDIT] Exception suppressed: %s", e)
                 existing = None
         if existing != payload:
             HELPER_PATH.write_bytes(payload)
@@ -340,7 +343,8 @@ def _maybe_register_helper_task(helper_exe: Path, queue_dir: Path) -> None:
         return
     try:
         helper_exe.stat()
-    except Exception:
+    except Exception as e:
+        logger.debug("[REDDIT] Exception suppressed: %s", e)
         return
     sentinel_valid = False
     if HELPER_TASK_SENTINEL.exists():
@@ -348,7 +352,8 @@ def _maybe_register_helper_task(helper_exe: Path, queue_dir: Path) -> None:
             sentinel_mtime = HELPER_TASK_SENTINEL.stat().st_mtime
             helper_mtime = helper_exe.stat().st_mtime
             sentinel_valid = sentinel_mtime >= helper_mtime
-        except Exception:
+        except Exception as e:
+            logger.debug("[REDDIT] Exception suppressed: %s", e)
             sentinel_valid = False
     if sentinel_valid:
         return

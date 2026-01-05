@@ -197,8 +197,8 @@ class TransitionStateManager:
         if self._on_state_change:
             try:
                 self._on_state_change(name, active)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[MISC] Exception suppressed: %s", e)
     
     @property
     def crossfade(self) -> Optional[CrossfadeState]:

@@ -160,13 +160,13 @@ class WidgetManager:
         if widget is not None and hasattr(widget, "set_widget_manager"):
             try:
                 widget.set_widget_manager(self)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
         if self._resource_manager:
             try:
                 self._resource_manager.register_qt(widget, description=f"Widget: {name}")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
         logger.debug(f"[WIDGET_MANAGER] Registered widget: {name}")
 
     def configure_expected_overlays(self, widgets_config: Dict[str, Any]) -> None:
@@ -175,7 +175,8 @@ class WidgetManager:
             widgets_config = {}
         try:
             expected = compute_expected_overlays(self._parent, widgets_config)
-        except Exception:
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             expected = set()
         self.set_expected_overlays(expected)
     
@@ -241,7 +242,8 @@ class WidgetManager:
             try:
                 if widget is not None and widget.isVisible():
                     widget.raise_()
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                 if is_verbose_logging():
                     logger.debug(f"[WIDGET_MANAGER] Failed to raise {name}", exc_info=True)
     
@@ -260,8 +262,8 @@ class WidgetManager:
             try:
                 widget.raise_()
                 return True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
         return False
 
     # =========================================================================
@@ -278,7 +280,7 @@ class WidgetManager:
         self._settings_manager = settings_manager
         try:
             settings_manager.settings_changed.connect(self._handle_settings_changed)
-        except Exception:
+        except Exception as e:
             logger.debug("[WIDGET_MANAGER] Failed to connect settings_changed signal", exc_info=True)
 
     def _detach_settings_manager(self) -> None:
@@ -287,8 +289,8 @@ class WidgetManager:
             return
         try:
             self._settings_manager.settings_changed.disconnect(self._handle_settings_changed)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
         finally:
             self._settings_manager = None
 
@@ -296,15 +298,16 @@ class WidgetManager:
         """React to settings changes for live widget updates."""
         try:
             setting_key = str(key) if key is not None else ""
-        except Exception:
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             setting_key = ""
         if not setting_key:
             return
 
         try:
             logger.debug("[WIDGET_MANAGER][SETTINGS] key=%s payload_type=%s", setting_key, type(value).__name__)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
         if setting_key == 'widgets':
             widgets_payload: Optional[Mapping[str, Any]] = value if isinstance(value, Mapping) else None
@@ -336,7 +339,7 @@ class WidgetManager:
                 cfg.get('dynamic_floor'),
                 float(cfg.get('manual_floor', 0.0)),
             )
-        except Exception:
+        except Exception as e:
             logger.debug("[SPOTIFY_VIS][CFG] %s %s", context, cfg, exc_info=True)
 
     def _apply_media_card_style_to_visualizer(
@@ -355,20 +358,23 @@ class WidgetManager:
 
         try:
             bg_opacity = float(settings_map.get("bg_opacity", settings_map.get("background_opacity", 0.9)))
-        except Exception:
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             bg_opacity = 0.9
 
         border_color_data = settings_map.get("border_color", [128, 128, 128, 255])
         try:
             border_opacity = float(settings_map.get("border_opacity", 0.8))
-        except Exception:
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             border_opacity = 0.8
         border_qcolor = parse_color_to_qcolor(border_color_data, opacity_override=border_opacity)
 
         show_background = SettingsManager.to_bool(settings_map.get("show_background", True), True)
         try:
             border_width = int(settings_map.get("border_width", 2) or 2)
-        except Exception:
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             border_width = 2
 
         try:
@@ -379,7 +385,7 @@ class WidgetManager:
                 border_width=max(0, border_width),
                 show_background=show_background,
             )
-        except Exception:
+        except Exception as e:
             logger.debug("[WIDGET_MANAGER] Failed to apply media card style to visualizer", exc_info=True)
 
     def _refresh_spotify_visualizer_config(self, widgets_config: Optional[Mapping[str, Any]] = None) -> None:
@@ -409,7 +415,7 @@ class WidgetManager:
             sens_raw = float(model.sensitivity)
             sensitivity = max(0.25, min(2.5, sens_raw))
             vis.set_sensitivity_config(recommended, sensitivity)
-        except Exception:
+        except Exception as e:
             logger.debug("[WIDGET_MANAGER] Failed to reapply Spotify sensitivity config", exc_info=True)
 
         # Noise floor (dynamic/manual)
@@ -417,7 +423,7 @@ class WidgetManager:
             dynamic_floor = SettingsManager.to_bool(model.dynamic_floor, True)
             manual_floor = float(model.manual_floor)
             vis.set_floor_config(dynamic_floor, manual_floor)
-        except Exception:
+        except Exception as e:
             logger.debug("[WIDGET_MANAGER] Failed to reapply Spotify floor config", exc_info=True)
 
         media_cfg = cfg.get('media', {}) if isinstance(cfg, Mapping) else {}
@@ -446,7 +452,7 @@ class WidgetManager:
         try:
             if hasattr(media_widget, 'set_text_color'):
                 media_widget.set_text_color(parse_color_to_qcolor(model.color))
-        except Exception:
+        except Exception as e:
             logger.debug("[WIDGET_MANAGER] Failed to reapply media text color", exc_info=True)
 
         try:
@@ -458,7 +464,7 @@ class WidgetManager:
                 border_qcolor = parse_color_to_qcolor(model.border_color, opacity_override=model.border_opacity)
                 if border_qcolor:
                     media_widget.set_background_border(2, border_qcolor)
-        except Exception:
+        except Exception as e:
             logger.debug("[WIDGET_MANAGER] Failed to reapply media background/border", exc_info=True)
 
         try:
@@ -466,7 +472,7 @@ class WidgetManager:
                 media_widget.set_show_controls(SettingsManager.to_bool(model.show_controls, True))
             if hasattr(media_widget, 'set_show_header_frame'):
                 media_widget.set_show_header_frame(SettingsManager.to_bool(model.show_header_frame, True))
-        except Exception:
+        except Exception as e:
             logger.debug("[WIDGET_MANAGER] Failed to reapply media controls/header", exc_info=True)
 
         vis_widget = self._widgets.get('spotify_visualizer') or self._widgets.get('spotify_visualizer_widget')
@@ -538,7 +544,7 @@ class WidgetManager:
                         widget.set_background_border(2, border_qcolor)
                 if hasattr(widget, 'set_margin'):
                     widget.set_margin(int(margin))
-            except Exception:
+            except Exception as e:
                 logger.debug("[WIDGET_MANAGER] Failed to reapply reddit config for %s", key, exc_info=True)
     
     def show_widget(self, name: str) -> bool:
@@ -556,8 +562,8 @@ class WidgetManager:
             try:
                 widget.show()
                 return True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
         return False
     
     def hide_widget(self, name: str) -> bool:
@@ -575,8 +581,8 @@ class WidgetManager:
             try:
                 widget.hide()
                 return True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
         return False
     
     def set_widget_geometry(self, name: str, x: int, y: int, width: int, height: int) -> bool:
@@ -596,8 +602,8 @@ class WidgetManager:
             try:
                 widget.setGeometry(x, y, width, height)
                 return True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
         return False
     
     def register_fade_callback(self, name: str, callback: Callable) -> None:
@@ -620,7 +626,8 @@ class WidgetManager:
         for name, callback in self._fade_callbacks.items():
             try:
                 callback(progress)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                 if is_verbose_logging():
                     logger.debug(f"[WIDGET_MANAGER] Fade callback failed for {name}", exc_info=True)
     
@@ -638,8 +645,8 @@ class WidgetManager:
                     # Handle clock timezone labels
                     if hasattr(widget, '_tz_label') and widget._tz_label:
                         widget._tz_label.raise_()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
     def position_spotify_visualizer(self, vis_widget, media_widget, parent_width: int, parent_height: int) -> None:
         """Position Spotify visualizer relative to media widget."""
@@ -693,10 +700,10 @@ class WidgetManager:
             if pixel_shift_manager is not None and hasattr(pixel_shift_manager, "update_original_position"):
                 try:
                     pixel_shift_manager.update_original_position(vis_widget)
-                except Exception:
-                    pass
-        except Exception:
-            pass
+                except Exception as e:
+                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
     def position_spotify_volume(self, vol_widget, media_widget, parent_width: int, parent_height: int) -> None:
         """Position Spotify volume slider beside media widget."""
@@ -730,8 +737,8 @@ class WidgetManager:
             vol_widget.setGeometry(x, y, width, height)
             if vol_widget.isVisible():
                 vol_widget.raise_()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
     def apply_widget_stacking(self, widget_list: list) -> None:
         """Apply vertical stacking offsets to widgets sharing the same position."""
@@ -786,8 +793,8 @@ class WidgetManager:
                 if hasattr(pos, 'name'):
                     return pos.name.lower()
                 return str(pos).lower().replace(' ', '_')
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
         return ""
 
     def _get_widget_stack_height(self, widget) -> int:
@@ -799,7 +806,8 @@ class WidgetManager:
             if hint.isValid() and hint.height() > 0:
                 return hint.height()
             return widget.height() if widget.height() > 0 else 100
-        except Exception:
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             return 100
     
     def cleanup(self) -> None:
@@ -808,8 +816,8 @@ class WidgetManager:
         if self._raise_timer is not None:
             try:
                 self._raise_timer.stop()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             self._raise_timer = None
         
         # Use lifecycle cleanup for widgets that support it
@@ -818,7 +826,7 @@ class WidgetManager:
                 try:
                     if hasattr(widget, 'cleanup') and callable(widget.cleanup):
                         widget.cleanup()
-                except Exception:
+                except Exception as e:
                     logger.debug("[WIDGET_MANAGER] Failed to cleanup %s", name, exc_info=True)
         
         self._widgets.clear()
@@ -847,7 +855,7 @@ class WidgetManager:
                 widget.initialize()
                 logger.debug("[LIFECYCLE] Widget %s initialized via WidgetManager", name)
                 return True
-        except Exception:
+        except Exception as e:
             logger.debug("[LIFECYCLE] Failed to initialize %s", name, exc_info=True)
         return False
 
@@ -869,7 +877,7 @@ class WidgetManager:
                 widget.activate()
                 logger.debug("[LIFECYCLE] Widget %s activated via WidgetManager", name)
                 return True
-        except Exception:
+        except Exception as e:
             logger.debug("[LIFECYCLE] Failed to activate %s", name, exc_info=True)
         return False
 
@@ -891,7 +899,7 @@ class WidgetManager:
                 widget.deactivate()
                 logger.debug("[LIFECYCLE] Widget %s deactivated via WidgetManager", name)
                 return True
-        except Exception:
+        except Exception as e:
             logger.debug("[LIFECYCLE] Failed to deactivate %s", name, exc_info=True)
         return False
 
@@ -913,7 +921,7 @@ class WidgetManager:
                 widget.cleanup()
                 logger.debug("[LIFECYCLE] Widget %s cleaned up via WidgetManager", name)
                 return True
-        except Exception:
+        except Exception as e:
             logger.debug("[LIFECYCLE] Failed to cleanup %s", name, exc_info=True)
         return False
 
@@ -975,8 +983,8 @@ class WidgetManager:
                 if hasattr(state, 'name'):
                     return state.name
                 return str(state)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
         return None
 
     def get_all_lifecycle_states(self) -> Dict[str, str]:
@@ -1028,7 +1036,7 @@ class WidgetManager:
         try:
             self._positioner.position_widget(widget, anchor, margin_x=margin, margin_y=margin)
             return True
-        except Exception:
+        except Exception as e:
             logger.debug("[POSITIONER] Failed to position %s", name, exc_info=True)
         return False
 
@@ -1052,8 +1060,8 @@ class WidgetManager:
         screen_idx = "?"
         try:
             screen_idx = getattr(self._parent, "screen_index", "?")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
         
         if win_diag_logger.isEnabledFor(logging.DEBUG):
             # Phase E instrumentation: log effect state before invalidation
@@ -1068,8 +1076,8 @@ class WidgetManager:
                         eff_id = id(eff)
                         enabled = eff.isEnabled() if hasattr(eff, 'isEnabled') else '?'
                         effect_states.append(f"{name}:{eff_type}@{eff_id:#x}(en={enabled})")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             
             win_diag_logger.debug(
                 "[EFFECT_INVALIDATE] screen=%s reason=%s widgets=%d effects=[%s]",
@@ -1079,7 +1087,8 @@ class WidgetManager:
         # Menu-related triggers warrant stronger invalidation (effect recreation)
         try:
             strong = "menu" in str(reason)
-        except Exception:
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             strong = False
 
         refresh_effects = False
@@ -1088,13 +1097,14 @@ class WidgetManager:
             # invalidation to bust Qt caches without excessive churn.
             try:
                 flip = bool(getattr(self, "_effect_refresh_flip", False))
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                 flip = False
             flip = not flip
             try:
                 setattr(self, "_effect_refresh_flip", flip)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             refresh_effects = flip
 
         seen: set[int] = set()
@@ -1103,8 +1113,8 @@ class WidgetManager:
                 continue
             try:
                 seen.add(id(widget))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             self._invalidate_widget_effect(widget, name, refresh_effects)
 
         for attr_name in (
@@ -1120,15 +1130,16 @@ class WidgetManager:
         ):
             try:
                 widget = getattr(self._parent, attr_name, None)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                 widget = None
             if widget is None:
                 continue
             try:
                 if id(widget) in seen:
                     continue
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             self._invalidate_widget_effect(widget, attr_name, refresh_effects)
 
     def _invalidate_widget_effect(self, widget: QWidget, name: str, refresh: bool) -> None:
@@ -1141,7 +1152,8 @@ class WidgetManager:
         """
         try:
             eff = widget.graphicsEffect()
-        except Exception:
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             eff = None
 
         if isinstance(eff, (QGraphicsDropShadowEffect, QGraphicsOpacityEffect)):
@@ -1149,11 +1161,13 @@ class WidgetManager:
                 # Skip recreation if widget is mid-animation (has active fades)
                 try:
                     anim = getattr(widget, "_shadowfade_anim", None)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                     anim = None
                 try:
                     shadow_anim = getattr(widget, "_shadowfade_shadow_anim", None)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                     shadow_anim = None
 
                 if anim is None and shadow_anim is None:
@@ -1163,8 +1177,8 @@ class WidgetManager:
             try:
                 eff.setEnabled(False)
                 eff.setEnabled(True)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
             # Force property refresh for drop shadows
             if isinstance(eff, QGraphicsDropShadowEffect):
@@ -1172,15 +1186,15 @@ class WidgetManager:
                     eff.setBlurRadius(eff.blurRadius())
                     eff.setOffset(eff.offset())
                     eff.setColor(eff.color())
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
         # Request widget repaint
         try:
             if widget.isVisible():
                 widget.update()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
     def _recreate_effect(self, widget: QWidget, old_eff: Any) -> Any:
         """Recreate a QGraphicsEffect to bust Qt's internal cache.
@@ -1195,21 +1209,24 @@ class WidgetManager:
         if isinstance(old_eff, QGraphicsDropShadowEffect):
             try:
                 blur = old_eff.blurRadius()
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                 blur = None
             try:
                 offset = old_eff.offset()
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                 offset = None
             try:
                 color = old_eff.color()
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                 color = None
 
             try:
                 widget.setGraphicsEffect(None)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
             try:
                 new_eff = QGraphicsDropShadowEffect(widget)
@@ -1221,22 +1238,25 @@ class WidgetManager:
                     new_eff.setColor(color)
                 widget.setGraphicsEffect(new_eff)
                 return new_eff
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                 try:
                     return widget.graphicsEffect()
-                except Exception:
+                except Exception as e:
+                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                     return old_eff
 
         elif isinstance(old_eff, QGraphicsOpacityEffect):
             try:
                 opacity = old_eff.opacity()
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                 opacity = None
 
             try:
                 widget.setGraphicsEffect(None)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
             try:
                 new_eff = QGraphicsOpacityEffect(widget)
@@ -1244,10 +1264,12 @@ class WidgetManager:
                     new_eff.setOpacity(opacity)
                 widget.setGraphicsEffect(new_eff)
                 return new_eff
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                 try:
                     return widget.graphicsEffect()
-                except Exception:
+                except Exception as e:
+                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                     return old_eff
 
         return old_eff
@@ -1263,7 +1285,8 @@ class WidgetManager:
         """
         try:
             pending = getattr(self, "_pending_effect_invalidation", False)
-        except Exception:
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             pending = False
 
         if pending:
@@ -1271,8 +1294,8 @@ class WidgetManager:
 
         try:
             setattr(self, "_pending_effect_invalidation", True)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
         def _run() -> None:
             try:
@@ -1280,12 +1303,13 @@ class WidgetManager:
             finally:
                 try:
                     setattr(self, "_pending_effect_invalidation", False)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
         try:
             QTimer.singleShot(max(0, delay_ms), _run)
-        except Exception:
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             _run()
 
     # =========================================================================
@@ -1301,8 +1325,8 @@ class WidgetManager:
             try:
                 self._overlay_fade_timeout.stop()
                 self._overlay_fade_timeout.deleteLater()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             self._overlay_fade_timeout = None
         self._spotify_secondary_fade_starters = []
 
@@ -1348,8 +1372,8 @@ class WidgetManager:
                 )
             try:
                 starter()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             return
 
         self._overlay_fade_pending[overlay_name] = starter
@@ -1364,7 +1388,8 @@ class WidgetManager:
         if not remaining:
             try:
                 QTimer.singleShot(0, lambda: self._start_overlay_fades(force=False))
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                 self._start_overlay_fades(force=False)
             return
 
@@ -1376,7 +1401,8 @@ class WidgetManager:
                 timeout.timeout.connect(lambda: self._start_overlay_fades(force=True))
                 timeout.start(2500)
                 self._overlay_fade_timeout = timeout
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                 self._start_overlay_fades(force=True)
 
     def _start_overlay_fades(self, force: bool = False) -> None:
@@ -1389,14 +1415,15 @@ class WidgetManager:
             try:
                 self._overlay_fade_timeout.stop()
                 self._overlay_fade_timeout.deleteLater()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             self._overlay_fade_timeout = None
 
         try:
             starters = list(self._overlay_fade_pending.values())
             names = list(self._overlay_fade_pending.keys())
-        except Exception:
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             starters = []
             names = []
 
@@ -1415,14 +1442,14 @@ class WidgetManager:
             for starter in starters:
                 try:
                     starter()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             try:
                 # Delay secondary fades by 500ms so they start after primary overlays
                 # are well into their 1500ms fade-in animation
                 self._run_spotify_secondary_fades(base_delay_ms=500)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
         if warmup_delay_ms <= 0:
             _run_all_starters()
@@ -1431,7 +1458,8 @@ class WidgetManager:
         # Single timer to run ALL starters together after warmup
         try:
             QTimer.singleShot(warmup_delay_ms, _run_all_starters)
-        except Exception:
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             _run_all_starters()
 
     def _run_spotify_secondary_fades(self, *, base_delay_ms: int) -> None:
@@ -1442,7 +1470,8 @@ class WidgetManager:
 
         try:
             queued = list(starters)
-        except Exception:
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             queued = []
         self._spotify_secondary_fade_starters = []
 
@@ -1453,11 +1482,12 @@ class WidgetManager:
                     starter()
                 else:
                     QTimer.singleShot(delay_ms, starter)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                 try:
                     starter()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
     def register_spotify_secondary_fade(self, starter: Callable[[], None]) -> None:
         """Register a Spotify second-wave fade to run after primary overlays.
@@ -1474,11 +1504,12 @@ class WidgetManager:
         if not expected or self._overlay_fade_started:
             try:
                 QTimer.singleShot(500, starter)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                 try:
                     starter()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             return
 
         self._spotify_secondary_fade_starters.append(starter)
@@ -1547,7 +1578,8 @@ class WidgetManager:
         def _show_on_this_monitor(monitor_sel) -> bool:
             try:
                 return (monitor_sel == 'ALL') or (int(monitor_sel) == (screen_index + 1))
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                 return True
 
         # Get factory instances
@@ -1699,7 +1731,8 @@ class WidgetManager:
         media_monitor_sel = media_model.monitor
         try:
             show_on_this = (media_monitor_sel == 'ALL') or (int(media_monitor_sel) == (screen_index + 1))
-        except Exception:
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             show_on_this = False
         
         if not (spotify_volume_enabled and show_on_this):
@@ -1711,20 +1744,20 @@ class WidgetManager:
             if thread_manager is not None and hasattr(vol, "set_thread_manager"):
                 try:
                     vol.set_thread_manager(thread_manager)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             
             try:
                 vol.set_shadow_config(shadows_config)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             
             # Set anchor to media widget for visibility gating
             try:
                 if hasattr(vol, "set_anchor_media_widget"):
                     vol.set_anchor_media_widget(media_widget)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             
             # Inherit media card background and border colours
             bg_color_data = media_model.bg_color
@@ -1733,7 +1766,8 @@ class WidgetManager:
             border_opacity = media_model.border_opacity
             try:
                 bo = float(border_opacity)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                 bo = 0.8
             border_qcolor = parse_color_to_qcolor(border_color_data, opacity_override=bo)
             
@@ -1744,13 +1778,14 @@ class WidgetManager:
                     fr, fg, fb = fill_color_data[0], fill_color_data[1], fill_color_data[2]
                     fa = fill_color_data[3] if len(fill_color_data) > 3 else 230
                     fill_color = _QColor(fr, fg, fb, fa)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                     fill_color = _QColor(255, 255, 255, 230)
                 
                 if hasattr(vol, "set_colors"):
                     vol.set_colors(track_bg=bg_qcolor, track_border=border_qcolor, fill=fill_color)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             
             self.register_widget("spotify_volume", vol)
             vol.raise_()
@@ -1784,7 +1819,8 @@ class WidgetManager:
         media_monitor_sel = media_settings.get('monitor', 'ALL')
         try:
             show_on_this = (media_monitor_sel == 'ALL') or (int(media_monitor_sel) == (screen_index + 1))
-        except Exception:
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             show_on_this = False
         
         if not (spotify_vis_enabled and show_on_this):
@@ -1803,34 +1839,36 @@ class WidgetManager:
                 block_size = int(model.audio_block_size or 0)
                 if hasattr(vis, 'set_audio_block_size'):
                     vis.set_audio_block_size(block_size)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             
             # ThreadManager for animation tick scheduling
             if thread_manager is not None and hasattr(vis, 'set_thread_manager'):
                 try:
                     vis.set_thread_manager(thread_manager)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             
             # Anchor geometry to media widget
             try:
                 vis.set_anchor_media_widget(media_widget)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             
             # Card style inheritance from media widget
             bg_color_data = media_settings.get('bg_color', [64, 64, 64, 255])
             bg_qcolor = parse_color_to_qcolor(bg_color_data)
             try:
                 bg_opacity = float(media_settings.get('bg_opacity', 0.9))
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                 bg_opacity = 0.9
             border_color_data = media_settings.get('border_color', [128, 128, 128, 255])
             border_opacity = media_settings.get('border_opacity', 0.8)
             try:
                 bo = float(border_opacity)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                 bo = 0.8
             border_qcolor = parse_color_to_qcolor(border_color_data, opacity_override=bo)
             show_background = SettingsManager.to_bool(media_settings.get('show_background', True), True)
@@ -1843,8 +1881,8 @@ class WidgetManager:
                     border_width=2,
                     show_background=show_background,
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             
             # Per-bar colours
             from PySide6.QtGui import QColor as _QColor
@@ -1853,7 +1891,8 @@ class WidgetManager:
                 fr, fg, fb = fill_color_data[0], fill_color_data[1], fill_color_data[2]
                 fa = fill_color_data[3] if len(fill_color_data) > 3 else 230
                 bar_fill_qcolor = _QColor(fr, fg, fb, fa)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                 bar_fill_qcolor = _QColor(255, 255, 255, 230)
             
             try:
@@ -1862,18 +1901,20 @@ class WidgetManager:
                 base_alpha = bar_border_color_data[3] if len(bar_border_color_data) > 3 else 230
                 try:
                     bar_bo = float(spotify_vis_settings.get('bar_border_opacity', 0.85))
-                except Exception:
+                except Exception as e:
+                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                     bar_bo = 0.85
                 bar_bo = max(0.0, min(1.0, bar_bo))
                 br_a = int(bar_bo * base_alpha)
                 bar_border_qcolor = _QColor(br_r, br_g, br_b, br_a)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                 bar_border_qcolor = _QColor(255, 255, 255, 230)
             
             try:
                 vis.set_bar_colors(bar_fill_qcolor, bar_border_qcolor)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             
             # Ghosting configuration
             try:
@@ -1882,8 +1923,8 @@ class WidgetManager:
                 ghost_decay = max(0.0, float(model.ghost_decay))
                 if hasattr(vis, 'set_ghost_config'):
                     vis.set_ghost_config(ghost_enabled, ghost_alpha, ghost_decay)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             
             # Sensitivity configuration
             try:
@@ -1891,16 +1932,16 @@ class WidgetManager:
                 sens = max(0.25, min(2.5, float(model.sensitivity)))
                 if hasattr(vis, 'set_sensitivity_config'):
                     vis.set_sensitivity_config(recommended, sens)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
             # Visualization mode (only spectrum supported)
             try:
                 if hasattr(vis, 'set_visualization_mode'):
                     from widgets.spotify_visualizer_widget import VisualizerMode
                     vis.set_visualization_mode(VisualizerMode.SPECTRUM)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
             # Noise floor configuration
             try:
@@ -1908,22 +1949,22 @@ class WidgetManager:
                 manual_floor = float(model.manual_floor)
                 if hasattr(vis, 'set_floor_config'):
                     vis.set_floor_config(dynamic_floor, manual_floor)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
             # Shadow config
             try:
                 vis.set_shadow_config(shadows_config)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             
             # Wire media state into visualizer
             try:
                 if not getattr(vis, "_srpss_media_connected", False):
                     media_widget.media_updated.connect(vis.handle_media_update)
                     setattr(vis, "_srpss_media_connected", True)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             
             self.register_widget("spotify_visualizer", vis)
             vis.raise_()

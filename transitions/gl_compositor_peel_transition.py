@@ -88,7 +88,7 @@ class GLCompositorPeelTransition(BaseTransition):
             warm = getattr(comp, "warm_shader_textures", None)
             if callable(warm):
                 warm(old_pixmap, new_pixmap)
-        except Exception:
+        except Exception as e:
             logger.debug("[GL COMPOSITOR] Failed to warm peel textures", exc_info=True)
 
         # Ensure compositor matches widget geometry and is above the base.
@@ -96,7 +96,7 @@ class GLCompositorPeelTransition(BaseTransition):
             comp.setGeometry(0, 0, widget.width(), widget.height())
             comp.show()
             comp.raise_()
-        except Exception:
+        except Exception as e:
             logger.debug(
                 "[GL COMPOSITOR] Failed to configure compositor geometry/visibility (peel)",
                 exc_info=True,
@@ -141,7 +141,7 @@ class GLCompositorPeelTransition(BaseTransition):
             try:
                 # Snap to final frame when cancelling mid-way to avoid pops.
                 self._compositor.cancel_current_transition(snap_to_new=True)
-            except Exception:
+            except Exception as e:
                 logger.debug("[GL COMPOSITOR] Failed to cancel current peel transition", exc_info=True)
 
         self._animation_id = None
@@ -158,7 +158,7 @@ class GLCompositorPeelTransition(BaseTransition):
                 # here, as DisplayWidget will already have updated its base.
                 # The compositor remains visible as the primary renderer.
                 self._compositor.cancel_current_transition(snap_to_new=True)
-            except Exception:
+            except Exception as e:
                 logger.debug("[GL COMPOSITOR] Failed to cleanup peel compositor", exc_info=True)
             self._compositor = None
 

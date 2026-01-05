@@ -34,7 +34,8 @@ logger = get_logger(__name__)
 
 try:
     _DEBUG_CONST_BARS = float(os.environ.get("SRPSS_SPOTIFY_VIS_DEBUG_CONST", "0.0"))
-except Exception:
+except Exception as e:
+    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
     _DEBUG_CONST_BARS = 0.0
 
 
@@ -135,12 +136,14 @@ class SpotifyVisualizerAudioWorker(QObject):
     def set_sensitivity_config(self, recommended: bool, sensitivity: float) -> None:
         try:
             rec = bool(recommended)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             rec = True
 
         try:
             sens = float(sensitivity)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             sens = 1.0
         if sens < 0.25:
             sens = 0.25
@@ -155,12 +158,14 @@ class SpotifyVisualizerAudioWorker(QObject):
     def set_floor_config(self, dynamic_enabled: bool, manual_floor: float) -> None:
         try:
             dyn = bool(dynamic_enabled)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             dyn = True
 
         try:
             floor = float(manual_floor)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             floor = 2.1
 
         floor = max(self._min_floor, min(self._max_floor, floor))
@@ -177,13 +182,14 @@ class SpotifyVisualizerAudioWorker(QObject):
             if engine is not None:
                 engine.set_floor_config(dyn, floor)
                 self._last_floor_config = (dyn, floor)
-        except Exception:
+        except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to propagate floor config to shared engine", exc_info=True)
 
     def set_audio_block_size(self, block_size: int) -> None:
         try:
             value = int(block_size)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             value = 0
         if value < 0:
             value = 0
@@ -193,7 +199,8 @@ class SpotifyVisualizerAudioWorker(QObject):
         """Adjust post-FFT energy boost factor (used for future tuning hooks)."""
         try:
             val = float(boost)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             val = 1.0
         if val < 0.5:
             val = 0.5
@@ -216,7 +223,8 @@ class SpotifyVisualizerAudioWorker(QObject):
                 self._fft_worker_available = supervisor.is_running(WorkerType.FFT)
                 if self._fft_worker_available:
                     logger.info("[SPOTIFY_VIS] FFTWorker available for audio processing")
-            except Exception:
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                 self._fft_worker_available = False
 
     def _process_via_fft_worker(self, samples) -> Optional[List[float]]:
@@ -339,7 +347,8 @@ class SpotifyVisualizerAudioWorker(QObject):
                                 top_k = min(2, channel_count)
                                 top_idx = np_mod.argsort(energy)[-top_k:]
                                 selected = arr[:, top_idx]
-                            except Exception:
+                            except Exception as e:
+                                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                                 selected = arr[:, :2]
                         mono = np_mod.mean(selected, axis=1, dtype=np_mod.float32)
                 else:
@@ -361,7 +370,8 @@ class SpotifyVisualizerAudioWorker(QObject):
                     self._frame_debug_counter += 1
                     if self._frame_debug_counter % 60 == 1:
                         logger.debug("[SPOTIFY_VIS][VERBOSE] loopback frame: samples=%d peak=%.4f", mono.size, peak)
-            except Exception:
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                 if is_verbose_logging():
                     logger.debug("[SPOTIFY_VIS] Audio callback failed", exc_info=True)
 
@@ -386,8 +396,8 @@ class SpotifyVisualizerAudioWorker(QObject):
         if self._backend is not None:
             try:
                 self._backend.stop()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             self._backend = None
         logger.info("[SPOTIFY_VIS] Audio worker stopped")
 
@@ -422,7 +432,8 @@ class SpotifyVisualizerAudioWorker(QObject):
             if np.iscomplexobj(mag):
                 mag = np.abs(mag)
             mag = mag.astype("float32", copy=False)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             return self._get_zero_bars()
 
         n = int(mag.size)
@@ -443,9 +454,10 @@ class SpotifyVisualizerAudioWorker(QObject):
                         self._smooth_kernel = np.array([0.25, 0.5, 0.25], dtype="float32")
                     # convolve always allocates, but kernel is cached
                     mag = np.convolve(mag, self._smooth_kernel, mode="same")
-                except Exception:
-                    pass
-        except Exception:
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             return self._get_zero_bars()
 
         # Center-out frequency mapping with logarithmic binning
@@ -519,7 +531,8 @@ class SpotifyVisualizerAudioWorker(QObject):
                     user_sens = float(self._user_sensitivity)
                     use_dynamic_floor = bool(self._use_dynamic_floor)
                     manual_floor = float(self._manual_floor)
-            except Exception:
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                 use_recommended = True
                 user_sens = 1.0
                 use_dynamic_floor = True
@@ -549,7 +562,8 @@ class SpotifyVisualizerAudioWorker(QObject):
                 base_noise_floor = max(self._min_floor, min(self._max_floor, noise_floor_base / user_sens))
                 try:
                     expansion = expansion_base * (user_sens ** 0.35)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                     expansion = expansion_base
 
             noise_floor = base_noise_floor
@@ -559,7 +573,8 @@ class SpotifyVisualizerAudioWorker(QObject):
                 avg = getattr(self, "_raw_bass_avg", base_noise_floor)
                 try:
                     floor_mid_weight = float(self._floor_mid_weight)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                     floor_mid_weight = 0.5
                 floor_mid_weight = max(0.0, min(1.0, floor_mid_weight))
                 if low_resolution:
@@ -567,7 +582,8 @@ class SpotifyVisualizerAudioWorker(QObject):
                 floor_signal = (raw_bass * (1.0 - floor_mid_weight)) + (raw_mid * floor_mid_weight)
                 try:
                     silence_threshold = float(self._silence_floor_threshold)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                     silence_threshold = 0.0
                 silence_threshold = max(0.0, silence_threshold)
                 if floor_signal < silence_threshold:
@@ -575,11 +591,13 @@ class SpotifyVisualizerAudioWorker(QObject):
                     floor_signal = raw_bass
                 try:
                     alpha_rise = float(self._dynamic_floor_alpha)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                     alpha_rise = 0.05
                 try:
                     alpha_decay = float(self._dynamic_floor_decay_alpha)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                     alpha_decay = alpha_rise
                 alpha_rise = max(0.0, min(1.0, alpha_rise))
                 alpha_decay = max(0.0, min(1.0, alpha_decay))
@@ -597,7 +615,8 @@ class SpotifyVisualizerAudioWorker(QObject):
                 target_floor = base_target
                 try:
                     headroom = float(self._floor_headroom)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                     headroom = 0.0
                 if headroom > 0.0:
                     headroom = min(1.0, headroom)
@@ -611,7 +630,8 @@ class SpotifyVisualizerAudioWorker(QObject):
 
             try:
                 applied_floor = getattr(self, "_applied_noise_floor", target_floor)
-            except Exception:
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                 applied_floor = target_floor
             response = self._floor_response
             if response < 0.05:
@@ -801,7 +821,8 @@ class SpotifyVisualizerAudioWorker(QObject):
                     arr[-1] = tmp[-1] * 0.64 + tmp[-2] * 0.36
             self._last_bass_drop_ratio = drop_signal
             
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             return self._get_zero_bars()
 
         # REACTIVE SMOOTHING: Fast attack, very aggressive decay for visible drops
@@ -874,7 +895,8 @@ class SpotifyVisualizerAudioWorker(QObject):
         # Adaptive normalization: keep long-term peaks from pinning at 1.0.
         try:
             peak_val = float(arr.max())
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             peak_val = 0.0
         max_tracked_peak = 1.35
         if peak_val > max_tracked_peak:
@@ -882,7 +904,8 @@ class SpotifyVisualizerAudioWorker(QObject):
         running_peak = getattr(self, "_running_peak", 0.5)
         try:
             floor_baseline = float(self._applied_noise_floor)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             floor_baseline = 2.0
         base_headroom = 0.45 + 0.1 * max(0.0, min(4.0, floor_baseline))
         _ = max(0.7, min(1.0, base_headroom))  # headroom_scale kept for future tuning
@@ -908,7 +931,8 @@ class SpotifyVisualizerAudioWorker(QObject):
         # Dedicated Spotify log snapshot (sparse, routed to screensaver_spotify_vis.log)
         try:
             now = time.time()
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             now = 0.0
         last_snapshot = getattr(self, "_bars_log_last_ts", 0.0)
         min_interval = max(1.0, float(getattr(self, "_bars_log_interval", 5.0) or 5.0))
@@ -917,8 +941,8 @@ class SpotifyVisualizerAudioWorker(QObject):
             logger.info("[SPOTIFY_VIS][BARS] raw_bass=%.3f Bars=[%s]", float(raw_bass), bar_str)
             try:
                 self._bars_log_last_ts = now
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
         
         # tolist() still allocates, but this is unavoidable for the return type
         return arr.tolist()
@@ -937,7 +961,8 @@ class SpotifyVisualizerAudioWorker(QObject):
         """Throttled logging for noise-floor diagnostics."""
         try:
             now = time.time()
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             return
 
         last_ts = getattr(self, "_floor_log_last_ts", 0.0) or 0.0
@@ -948,7 +973,8 @@ class SpotifyVisualizerAudioWorker(QObject):
         def _changed(a: float, b: float, threshold: float = 0.05) -> bool:
             try:
                 return abs(float(a) - float(b)) > threshold
-            except Exception:
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                 return True
 
         state_changed = (
@@ -972,7 +998,8 @@ class SpotifyVisualizerAudioWorker(QObject):
                 float(raw_treble),
                 float(expansion),
             )
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             return
         finally:
             try:
@@ -980,8 +1007,8 @@ class SpotifyVisualizerAudioWorker(QObject):
                 self._floor_log_last_mode = mode
                 self._floor_log_last_applied = applied_floor
                 self._floor_log_last_manual = manual_floor
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
     def compute_bars_from_samples(self, samples) -> Optional[List[float]]:
         """Compute visualizer bars from audio samples.
@@ -997,17 +1024,19 @@ class SpotifyVisualizerAudioWorker(QObject):
             if hasattr(mono, "ndim") and mono.ndim > 1:
                 try:
                     mono = mono.reshape(-1)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                     return None
             try:
                 mono = mono.astype("float32", copy=False)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
             # Measure peak once (used for both silence detection and optional gain).
             try:
                 peak_raw = float(np_mod.abs(mono).max()) if getattr(mono, "size", 0) > 0 else 0.0
-            except Exception:
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                 peak_raw = 0.0
 
             # Input gain calibration (cheap): some loopback backends provide
@@ -1026,8 +1055,8 @@ class SpotifyVisualizerAudioWorker(QObject):
                         gain = 2.8
                     if gain != 1.0:
                         mono = mono * gain
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             size = getattr(mono, "size", 0)
             if size <= 0:
                 return None
@@ -1069,7 +1098,8 @@ class SpotifyVisualizerAudioWorker(QObject):
                     bars = bars[:target]
             # bars already clamped in _fft_to_bars, no need for extra list comprehension
             return bars
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             if is_verbose_logging():
                 logger.debug("[SPOTIFY_VIS] compute_bars_from_samples failed", exc_info=True)
             return None
@@ -1110,7 +1140,7 @@ class _SpotifyBeatEngine(QObject):
         """Set the ProcessSupervisor for FFTWorker integration."""
         try:
             self._audio_worker.set_process_supervisor(supervisor)
-        except Exception:
+        except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to set process supervisor", exc_info=True)
     
     def set_smoothing(self, tau: float) -> None:
@@ -1120,13 +1150,13 @@ class _SpotifyBeatEngine(QObject):
     def set_sensitivity_config(self, recommended: bool, sensitivity: float) -> None:
         try:
             self._audio_worker.set_sensitivity_config(recommended, sensitivity)
-        except Exception:
+        except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to apply sensitivity config", exc_info=True)
     
     def set_floor_config(self, dynamic_enabled: bool, manual_floor: float) -> None:
         try:
             self._audio_worker.set_floor_config(dynamic_enabled, manual_floor)
-        except Exception:
+        except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to apply floor config", exc_info=True)
 
     def set_playback_state(self, is_playing: bool) -> None:
@@ -1199,13 +1229,13 @@ class _SpotifyBeatEngine(QObject):
         try:
             if not self._audio_worker.is_running():
                 self._audio_worker.start()
-        except Exception:
+        except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to start audio worker in shared engine", exc_info=True)
 
     def _stop_worker(self) -> None:
         try:
             self._audio_worker.stop()
-        except Exception:
+        except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to stop audio worker in shared engine", exc_info=True)
 
     def _schedule_compute_bars_task(self, samples: object) -> None:
@@ -1275,14 +1305,15 @@ class _SpotifyBeatEngine(QObject):
                     self._last_smooth_ts = ts
                 try:
                     self._last_audio_ts = time.time()
-                except Exception:
-                    pass
-            except Exception:
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+            except Exception as e:
                 logger.debug("[SPOTIFY_VIS] compute task callback failed", exc_info=True)
 
         try:
             tm.submit_compute_task(_job, callback=_on_result)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             self._compute_task_active = False
 
     def tick(self) -> Optional[List[float]]:
@@ -1295,8 +1326,8 @@ class _SpotifyBeatEngine(QObject):
             if samples is not None:
                 try:
                     self._last_audio_ts = now_ts
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                 
                 # CRITICAL: Gate FFT processing when Spotify is not playing
                 # This prevents wasteful FFT calculations when music is paused/stopped
@@ -1317,8 +1348,8 @@ class _SpotifyBeatEngine(QObject):
                     if isinstance(bars_inline, list):
                         try:
                             self._bars_result_buffer.publish(bars_inline)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                         self._latest_bars = bars_inline
 
         # If we have not seen any audio for a short window, treat this as
@@ -1326,7 +1357,8 @@ class _SpotifyBeatEngine(QObject):
         # together instead of holding stale peaks.
         try:
             last_ts = float(self._last_audio_ts)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             last_ts = 0.0
         if last_ts > 0.0:
             try:
@@ -1335,8 +1367,8 @@ class _SpotifyBeatEngine(QObject):
                     if isinstance(self._latest_bars, list) and self._bar_count > 0:
                         if any(b > 0.0 for b in self._latest_bars):
                             self._latest_bars = [0.0] * self._bar_count
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
         return self._latest_bars
     
@@ -1359,7 +1391,8 @@ def get_shared_spotify_beat_engine(bar_count: int) -> _SpotifyBeatEngine:
     else:
         try:
             existing = int(getattr(_global_beat_engine, "_bar_count", bar_count))
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             existing = bar_count
         if existing != int(bar_count):
             try:
@@ -1368,8 +1401,8 @@ def get_shared_spotify_beat_engine(bar_count: int) -> _SpotifyBeatEngine:
                     existing,
                     bar_count,
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
     return _global_beat_engine
 
 
@@ -1444,7 +1477,8 @@ class SpotifyVisualizerWidget(QWidget):
                 # Canonical bar_count is driven by the shared engine.
                 try:
                     engine_bar_count = int(getattr(engine, "_bar_count", self._bar_count))
-                except Exception:
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                     engine_bar_count = self._bar_count
                 if engine_bar_count > 0 and engine_bar_count != self._bar_count:
                     self._bar_count = engine_bar_count
@@ -1456,7 +1490,7 @@ class SpotifyVisualizerWidget(QWidget):
                 self._bars_buffer = engine._audio_buffer  # type: ignore[attr-defined]
                 self._audio_worker = engine._audio_worker  # type: ignore[attr-defined]
                 self._bars_result_buffer = engine._bars_result_buffer  # type: ignore[attr-defined]
-        except Exception:
+        except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to attach shared beat engine", exc_info=True)
 
         self._enabled: bool = False
@@ -1547,20 +1581,22 @@ class SpotifyVisualizerWidget(QWidget):
             return
         try:
             floor_dyn, floor_value = self._last_floor_config
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             floor_dyn, floor_value = True, 2.1
         try:
             sens_rec, sens_value = self._last_sensitivity_config
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             sens_rec, sens_value = True, 1.0
 
         try:
             engine.set_floor_config(floor_dyn, floor_value)
-        except Exception:
+        except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to replay floor config", exc_info=True)
         try:
             engine.set_sensitivity_config(sens_rec, sens_value)
-        except Exception:
+        except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to replay sensitivity config", exc_info=True)
 
     # ------------------------------------------------------------------
@@ -1574,7 +1610,7 @@ class SpotifyVisualizerWidget(QWidget):
             self._engine = engine
             engine.set_thread_manager(thread_manager)
             self._replay_engine_config(engine)
-        except Exception:
+        except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to propagate ThreadManager to shared beat engine", exc_info=True)
 
     def set_process_supervisor(self, supervisor: Optional[ProcessSupervisor]) -> None:
@@ -1588,7 +1624,7 @@ class SpotifyVisualizerWidget(QWidget):
             if engine is not None:
                 engine.set_process_supervisor(supervisor)
                 logger.debug("[SPOTIFY_VIS] ProcessSupervisor set on beat engine")
-        except Exception:
+        except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to set ProcessSupervisor on beat engine", exc_info=True)
         if self._enabled:
             self._ensure_tick_source()
@@ -1598,12 +1634,13 @@ class SpotifyVisualizerWidget(QWidget):
         self._last_floor_config = (bool(dynamic_enabled), float(manual_floor))
         try:
             engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             engine = None
         if engine is not None:
             try:
                 engine.set_floor_config(dynamic_enabled, manual_floor)
-            except Exception:
+            except Exception as e:
                 logger.debug("[SPOTIFY_VIS] Failed to push floor config via apply_floor_config", exc_info=True)
 
     # Backwards-compat alias for legacy callers/tests
@@ -1615,12 +1652,13 @@ class SpotifyVisualizerWidget(QWidget):
         self._last_sensitivity_config = (bool(recommended), float(sensitivity))
         try:
             engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             engine = None
         if engine is not None:
             try:
                 engine.set_sensitivity_config(recommended, sensitivity)
-            except Exception:
+            except Exception as e:
                 logger.debug("[SPOTIFY_VIS] Failed to push sensitivity config via apply_sensitivity_config", exc_info=True)
 
     def set_sensitivity_config(self, recommended: bool, sensitivity: float) -> None:
@@ -1638,7 +1676,8 @@ class SpotifyVisualizerWidget(QWidget):
 
         try:
             self._software_visualizer_enabled = bool(enabled)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             self._software_visualizer_enabled = bool(enabled)
 
     def attach_to_animation_manager(self, animation_manager) -> None:
@@ -1647,7 +1686,7 @@ class SpotifyVisualizerWidget(QWidget):
             try:
                 if hasattr(self._animation_manager, "remove_tick_listener"):
                     self._animation_manager.remove_tick_listener(self._anim_listener_id)
-            except Exception:
+            except Exception as e:
                 logger.debug("[SPOTIFY_VIS] Failed to remove previous AnimationManager listener", exc_info=True)
 
         self._animation_manager = animation_manager
@@ -1667,7 +1706,7 @@ class SpotifyVisualizerWidget(QWidget):
 
             listener_id = animation_manager.add_tick_listener(_tick_listener)
             self._anim_listener_id = listener_id
-        except Exception:
+        except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to attach to AnimationManager", exc_info=True)
         finally:
             self._ensure_tick_source()
@@ -1678,7 +1717,7 @@ class SpotifyVisualizerWidget(QWidget):
         if am is not None and listener_id is not None and hasattr(am, "remove_tick_listener"):
             try:
                 am.remove_tick_listener(listener_id)
-            except Exception:
+            except Exception as e:
                 logger.debug("[SPOTIFY_VIS] Failed to detach from AnimationManager", exc_info=True)
         self._animation_manager = None
         self._anim_listener_id = None
@@ -1700,7 +1739,7 @@ class SpotifyVisualizerWidget(QWidget):
             try:
                 self._bars_timer = self._thread_manager.schedule_recurring(16, self._on_tick)
                 self._current_timer_interval_ms = 16
-            except Exception:
+            except Exception as e:
                 logger.debug("[SPOTIFY_VIS] Failed to create tick source timer", exc_info=True)
                 self._bars_timer = None
 
@@ -1761,12 +1800,14 @@ class SpotifyVisualizerWidget(QWidget):
 
         try:
             self._ghosting_enabled = bool(enabled)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             self._ghosting_enabled = True
 
         try:
             ga = float(alpha)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             ga = 0.4
         if ga < 0.0:
             ga = 0.0
@@ -1776,7 +1817,8 @@ class SpotifyVisualizerWidget(QWidget):
 
         try:
             gd = float(decay)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             gd = 0.4
         if gd < 0.0:
             gd = 0.0
@@ -1795,7 +1837,8 @@ class SpotifyVisualizerWidget(QWidget):
 
         try:
             state = str(payload.get("state", "")).lower()
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             state = ""
         prev = self._spotify_playing
         self._spotify_playing = state == "playing"
@@ -1806,13 +1849,14 @@ class SpotifyVisualizerWidget(QWidget):
         try:
             if self._engine is not None:
                 self._engine.set_playback_state(self._spotify_playing)
-        except Exception:
+        except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to set beat engine playback state", exc_info=True)
 
         if logger.isEnabledFor(logging.INFO):
             try:
                 track = payload.get("track_name") or payload.get("title") or ""
-            except Exception:
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                 track = ""
             logger.info(
                 "[SPOTIFY_VIS] media_update state=%s -> playing=%s (prev=%s) track=%s",
@@ -1836,8 +1880,8 @@ class SpotifyVisualizerWidget(QWidget):
                     prev,
                     self._spotify_playing,
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
         
         self.sync_visibility_with_anchor()
 
@@ -1854,8 +1898,8 @@ class SpotifyVisualizerWidget(QWidget):
                     # Media widget hidden - hide visualizer and clear GL overlay
                     self.hide()
                     self._clear_gl_overlay()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
     
     def _clear_gl_overlay(self) -> None:
         """Clear the GL bars overlay when visualizer hides."""
@@ -1878,8 +1922,8 @@ class SpotifyVisualizerWidget(QWidget):
                         False,
                         visible=False,
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
         
     def _is_media_state_stale(self) -> bool:
         """Return True if Spotify state has not updated within fallback timeout."""
@@ -1888,7 +1932,8 @@ class SpotifyVisualizerWidget(QWidget):
             return True
         try:
             timeout = float(self._media_fallback_timeout)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             timeout = 8.0
         return (time.time() - last) >= max(1.0, timeout)
 
@@ -1904,7 +1949,8 @@ class SpotifyVisualizerWidget(QWidget):
         threshold = 0.01
         try:
             return max(candidates) >= threshold
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             return any((b or 0.0) >= threshold for b in candidates)
 
     def _is_fallback_forced(self) -> bool:
@@ -1948,7 +1994,7 @@ class SpotifyVisualizerWidget(QWidget):
             engine.acquire()
             self._replay_engine_config(engine)
             engine.ensure_started()
-        except Exception:
+        except Exception as e:
             logger.debug("[LIFECYCLE] Failed to start shared beat engine", exc_info=True)
         
         # Start dedicated timer for continuous visualizer updates
@@ -1956,7 +2002,8 @@ class SpotifyVisualizerWidget(QWidget):
             try:
                 self._bars_timer = self._thread_manager.schedule_recurring(16, self._on_tick)
                 self._current_timer_interval_ms = 16
-            except Exception:
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                 self._bars_timer = None
         
         logger.debug("[LIFECYCLE] SpotifyVisualizerWidget activated")
@@ -1965,24 +2012,25 @@ class SpotifyVisualizerWidget(QWidget):
         """Deactivate visualizer - stop audio capture (lifecycle hook)."""
         try:
             engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             engine = None
         if engine is not None:
             try:
                 engine.release()
-            except Exception:
+            except Exception as e:
                 logger.debug("[LIFECYCLE] Failed to release shared beat engine", exc_info=True)
         
         try:
             self.detach_from_animation_manager()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
         
         if self._bars_timer is not None:
             try:
                 self._bars_timer.stop()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             self._bars_timer = None
         self._using_animation_ticks = False
         
@@ -2006,8 +2054,8 @@ class SpotifyVisualizerWidget(QWidget):
 
         try:
             self.hide()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
         # Start audio capture via the shared beat engine so the buffer can
         # begin filling. Each widget acquires a reference so the engine can
@@ -2025,7 +2073,7 @@ class SpotifyVisualizerWidget(QWidget):
             engine.set_playback_state(self._spotify_playing)
             
             engine.ensure_started()
-        except Exception:
+        except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to start shared beat engine", exc_info=True)
 
         # Always start the dedicated timer for continuous visualizer updates.
@@ -2036,7 +2084,8 @@ class SpotifyVisualizerWidget(QWidget):
             try:
                 self._bars_timer = self._thread_manager.schedule_recurring(16, self._on_tick)
                 self._current_timer_interval_ms = 16
-            except Exception:
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                 self._bars_timer = None
         elif self._animation_manager is not None and self._anim_listener_id is not None:
             self._using_animation_ticks = True
@@ -2057,21 +2106,23 @@ class SpotifyVisualizerWidget(QWidget):
                     if not anchor.isVisible():
                         # Media widget not visible - don't show visualizer yet
                         return
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             
             try:
                 self._start_widget_fade_in(1500)
-            except Exception:
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                 try:
                     self.show()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
         if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
             try:
                 parent.request_overlay_fade_sync("spotify_visualizer", _starter)
-            except Exception:
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                 _starter()
         else:
             _starter()
@@ -2083,24 +2134,25 @@ class SpotifyVisualizerWidget(QWidget):
 
         try:
             engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             engine = None
         if engine is not None:
             try:
                 engine.release()
-            except Exception:
+            except Exception as e:
                 logger.debug("[SPOTIFY_VIS] Failed to release shared beat engine", exc_info=True)
 
         try:
             self.detach_from_animation_manager()
-        except Exception:
+        except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to detach from AnimationManager on stop", exc_info=True)
 
         try:
             if self._bars_timer is not None:
                 self._bars_timer.stop()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
         self._bars_timer = None
         self._using_animation_ticks = False
 
@@ -2111,8 +2163,8 @@ class SpotifyVisualizerWidget(QWidget):
 
         try:
             self.hide()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
     def cleanup(self) -> None:
         self.stop()
@@ -2127,8 +2179,8 @@ class SpotifyVisualizerWidget(QWidget):
         try:
             self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
             self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
         # Slightly taller default so bars and card border have breathing
         # room and match the visual weight of other widgets.
         self.setMinimumHeight(88)
@@ -2138,15 +2190,15 @@ class SpotifyVisualizerWidget(QWidget):
         if duration_ms <= 0:
             try:
                 self.show()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             try:
                 ShadowFadeProfile.attach_shadow(
                     self,
                     self._shadow_config,
                     has_background_frame=self._show_background,
                 )
-            except Exception:
+            except Exception as e:
                 logger.debug(
                     "[SPOTIFY_VIS] Failed to attach shadow in no-fade path",
                     exc_info=True,
@@ -2159,15 +2211,15 @@ class SpotifyVisualizerWidget(QWidget):
                 self._shadow_config,
                 has_background_frame=self._show_background,
             )
-        except Exception:
+        except Exception as e:
             logger.debug(
                 "[SPOTIFY_VIS] _start_widget_fade_in fallback path triggered",
                 exc_info=True,
             )
             try:
                 self.show()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             if self._shadow_config is not None:
                 try:
                     apply_widget_shadow(
@@ -2175,7 +2227,7 @@ class SpotifyVisualizerWidget(QWidget):
                         self._shadow_config,
                         has_background_frame=self._show_background,
                     )
-                except Exception:
+                except Exception as e:
                     logger.debug(
                         "[SPOTIFY_VIS] Failed to apply widget shadow in fallback path",
                         exc_info=True,
@@ -2191,7 +2243,8 @@ class SpotifyVisualizerWidget(QWidget):
 
         try:
             prog = getattr(self, "_shadowfade_progress", None)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             prog = None
 
         if isinstance(prog, (float, int)):
@@ -2223,8 +2276,8 @@ class SpotifyVisualizerWidget(QWidget):
             completed = getattr(self, "_shadowfade_completed", False)
             if completed and self.isVisible():
                 return 1.0
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
         return 0.0
 
     def _rebuild_geometry_cache(self, rect: QRect) -> None:
@@ -2357,7 +2410,8 @@ class SpotifyVisualizerWidget(QWidget):
         if hasattr(parent, "get_transition_snapshot"):
             try:
                 snapshot = parent.get_transition_snapshot()
-            except Exception:
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                 snapshot = None
         if isinstance(snapshot, dict):
             ctx.update(snapshot)
@@ -2396,8 +2450,8 @@ class SpotifyVisualizerWidget(QWidget):
             try:
                 timer.setInterval(new_interval)
                 self._current_timer_interval_ms = new_interval
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
     
     def _pause_timer_during_transition(self, is_transition_active: bool) -> None:
         """Pause dedicated timer during transitions to avoid contention.
@@ -2421,8 +2475,8 @@ class SpotifyVisualizerWidget(QWidget):
                 # No transition or no AnimationManager - ensure timer is running
                 if not timer.isActive() and self._enabled:
                     timer.start()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
     def _log_tick_spike(self, dt: float, transition_ctx: Dict[str, Any]) -> None:
         """Log dt spikes with surrounding transition context."""
@@ -2593,7 +2647,8 @@ class SpotifyVisualizerWidget(QWidget):
         if parent is not None and hasattr(parent, "push_spotify_visualizer_frame"):
             try:
                 current_geom = self.geometry()
-            except Exception:
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                 current_geom = None
             last_geom = self._last_gpu_geom
             geom_changed = last_geom is None or (current_geom is not None and current_geom != last_geom)
@@ -2635,7 +2690,8 @@ class SpotifyVisualizerWidget(QWidget):
                     if current_geom is None:
                         current_geom = self.geometry()
                     self._last_gpu_geom = QRect(current_geom)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                     self._last_gpu_geom = None
                 # Card/background/shadow still repaint via stylesheet
                 # Only request QWidget repaint when fade changes
@@ -2660,8 +2716,8 @@ class SpotifyVisualizerWidget(QWidget):
         painter = QPainter(self)
         try:
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
         rect = self.rect()
         if is_verbose_logging() and not getattr(self, "_paint_debug_logged", False):
@@ -2684,12 +2740,12 @@ class SpotifyVisualizerWidget(QWidget):
                     self._show_background,
                     anchor_geom_ok,
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             try:
                 self._paint_debug_logged = True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
         if rect.width() <= 0 or rect.height() <= 0:
             painter.end()
             return
@@ -2726,7 +2782,7 @@ class SpotifyVisualizerWidget(QWidget):
                     # First paint event
                     self._perf_paint_start_ts = now
                 self._perf_paint_last_ts = now
-            except Exception:
+            except Exception as e:
                 logger.debug("[SPOTIFY_VIS] Paint PERF accounting failed", exc_info=True)
 
         # Note: paintEvent itself does not trigger PERF snapshots; these are
@@ -2886,9 +2942,9 @@ class SpotifyVisualizerWidget(QWidget):
                         self._perf_audio_lag_min_ms,
                         self._perf_audio_lag_max_ms,
                     )
-            except Exception:
+            except Exception as e:
                 logger.debug("[SPOTIFY_VIS] AudioLag PERF metrics logging failed", exc_info=True)
-        except Exception:
+        except Exception as e:
             logger.debug("[SPOTIFY_VIS] PERF metrics logging failed", exc_info=True)
         finally:
             if reset:

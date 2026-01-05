@@ -153,7 +153,8 @@ class GLProgramCache:
                 except Exception:
                     # If we cannot validate, assume the cached program is OK.
                     return int(program_id)
-            except Exception:
+            except Exception as e:
+                logger.debug("[MISC] Exception suppressed: %s", e)
                 return int(program_id)
 
         # Need to compile

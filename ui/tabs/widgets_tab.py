@@ -1395,8 +1395,8 @@ class WidgetsTab(QWidget):
         if scroll is not None:
             try:
                 state["scroll"] = int(scroll.verticalScrollBar().value())
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
         return state
 
     def restore_view_state(self, state: Dict[str, Any]) -> None:
@@ -1417,8 +1417,8 @@ class WidgetsTab(QWidget):
             if scroll is not None:
                 try:
                     scroll.verticalScrollBar().setValue(int(scroll_value))
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
     
     def _load_settings(self) -> None:
         """Load settings from settings manager."""
@@ -1587,12 +1587,14 @@ class WidgetsTab(QWidget):
             bg_color_data = clock_config.get('bg_color', [64, 64, 64, 255])
             try:
                 self._clock_bg_color = QColor(*bg_color_data)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
                 self._clock_bg_color = QColor(64, 64, 64, 255)
             border_color_data = clock_config.get('border_color', [128, 128, 128, 255])
             try:
                 self._clock_border_color = QColor(*border_color_data)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
                 self._clock_border_color = QColor(128, 128, 128, 255)
             border_opacity_pct = int(clock_config.get('border_opacity', 0.8) * 100)
             self.clock_border_opacity.setValue(border_opacity_pct)
@@ -1647,7 +1649,7 @@ class WidgetsTab(QWidget):
                         widgets['weather'] = weather_config
                         self._settings.set('widgets', widgets)
                         self._settings.save()
-            except Exception:
+            except Exception as e:
                 logger.debug("Failed to auto-derive weather location from timezone", exc_info=True)
 
             self.weather_enabled.setChecked(weather_config.get('enabled', False))
@@ -1677,12 +1679,14 @@ class WidgetsTab(QWidget):
             bg_color_data = weather_config.get('bg_color', [64, 64, 64, 255])
             try:
                 self._weather_bg_color = QColor(*bg_color_data)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
                 self._weather_bg_color = QColor(64, 64, 64, 255)
             border_color_data = weather_config.get('border_color', [128, 128, 128, 255])
             try:
                 self._weather_border_color = QColor(*border_color_data)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
                 self._weather_border_color = QColor(128, 128, 128, 255)
             border_opacity_pct = int(weather_config.get('border_opacity', 0.8) * 100)
             self.weather_border_opacity.setValue(border_opacity_pct)
@@ -1720,7 +1724,8 @@ class WidgetsTab(QWidget):
             artwork_size = media_config.get('artwork_size', 100)
             try:
                 self._media_artwork_size = int(artwork_size)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
                 self._media_artwork_size = 100
             self.media_artwork_size.setValue(self._media_artwork_size)
 
@@ -1748,12 +1753,14 @@ class WidgetsTab(QWidget):
             media_bg_color_data = media_config.get('bg_color', [64, 64, 64, 255])
             try:
                 self._media_bg_color = QColor(*media_bg_color_data)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
                 self._media_bg_color = QColor(64, 64, 64, 255)
             media_border_color_data = media_config.get('border_color', [128, 128, 128, 255])
             try:
                 self._media_border_color = QColor(*media_border_color_data)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
                 self._media_border_color = QColor(128, 128, 128, 255)
             media_border_opacity_pct = int(media_config.get('border_opacity', 0.8) * 100)
             self.media_border_opacity.setValue(media_border_opacity_pct)
@@ -1762,7 +1769,8 @@ class WidgetsTab(QWidget):
             volume_fill_data = media_config.get('spotify_volume_fill_color', [255, 255, 255, 230])
             try:
                 self._media_volume_fill_color = QColor(*volume_fill_data)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
                 self._media_volume_fill_color = QColor(255, 255, 255, 230)
 
             m_monitor_sel = media_config.get('monitor', 'ALL')
@@ -1793,7 +1801,8 @@ class WidgetsTab(QWidget):
             sens_val = spotify_vis_config.get('sensitivity', 1.0)
             try:
                 sens_f = float(sens_val)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
                 sens_f = 1.0
             sens_slider = int(max(0.25, min(2.5, sens_f)) * 100)
             self.spotify_vis_sensitivity.setValue(sens_slider)
@@ -1805,7 +1814,8 @@ class WidgetsTab(QWidget):
             manual_floor_val = spotify_vis_config.get('manual_floor', 2.1)
             try:
                 manual_floor_f = float(manual_floor_val)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
                 manual_floor_f = 2.1
             manual_slider = int(max(0.12, min(4.0, manual_floor_f)) * 100)
             self.spotify_vis_manual_floor.setValue(manual_slider)
@@ -1818,13 +1828,15 @@ class WidgetsTab(QWidget):
             fill_color_data = spotify_vis_config.get('bar_fill_color', [0, 255, 128, 230])
             try:
                 self._spotify_vis_fill_color = QColor(*fill_color_data)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
                 self._spotify_vis_fill_color = QColor(0, 255, 128, 230)
 
             border_color_data = spotify_vis_config.get('bar_border_color', [255, 255, 255, 230])
             try:
                 self._spotify_vis_border_color = QColor(*border_color_data)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
                 self._spotify_vis_border_color = QColor(255, 255, 255, 230)
 
             border_opacity_pct = int(spotify_vis_config.get('bar_border_opacity', 0.85) * 100)
@@ -1839,7 +1851,8 @@ class WidgetsTab(QWidget):
             ghost_alpha_val = spotify_vis_config.get('ghost_alpha', 0.4)
             try:
                 ghost_alpha_pct = int(float(ghost_alpha_val) * 100)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
                 ghost_alpha_pct = 40
             if ghost_alpha_pct < 0:
                 ghost_alpha_pct = 0
@@ -1851,7 +1864,8 @@ class WidgetsTab(QWidget):
             ghost_decay_val = spotify_vis_config.get('ghost_decay', 0.4)
             try:
                 ghost_decay_f = float(ghost_decay_val)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
                 ghost_decay_f = 0.4
             ghost_decay_slider = int(ghost_decay_f * 100.0)
             if ghost_decay_slider < 10:
@@ -1940,12 +1954,14 @@ class WidgetsTab(QWidget):
             reddit_bg_color_data = reddit_config.get('bg_color', [35, 35, 35, 255])
             try:
                 self._reddit_bg_color = QColor(*reddit_bg_color_data)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
                 self._reddit_bg_color = QColor(35, 35, 35, 255)
             reddit_border_color_data = reddit_config.get('border_color', [255, 255, 255, 255])
             try:
                 self._reddit_border_color = QColor(*reddit_border_color_data)
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
                 self._reddit_border_color = QColor(255, 255, 255, 255)
             
             # Reddit 2 settings
@@ -1977,14 +1993,14 @@ class WidgetsTab(QWidget):
             for w in blockers:
                 try:
                     w.blockSignals(False)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
         
         # Update stack status labels after loading settings
         try:
             self._update_stack_status()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
 
     def _choose_clock_color(self) -> None:
         """Choose clock text color."""
@@ -2112,8 +2128,8 @@ class WidgetsTab(QWidget):
 
         try:
             logger.debug("[WIDGETS_TAB] _save_settings start")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
         # Get timezone from current selection
         tz_data = self.clock_timezone.currentData()
         timezone_str = tz_data if tz_data else 'local'
@@ -2121,7 +2137,8 @@ class WidgetsTab(QWidget):
         format_text = ""
         try:
             format_text = (self.clock_format.currentText() or "").strip().lower()
-        except Exception:
+        except Exception as e:
+            logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
             format_text = ""
         clock_format_value = '12h' if format_text.startswith('12') else '24h'
 
@@ -2243,7 +2260,8 @@ class WidgetsTab(QWidget):
         reddit_limit_text = self.reddit_items.currentText().strip()
         try:
             reddit_limit = int(reddit_limit_text)
-        except Exception:
+        except Exception as e:
+            logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
             reddit_limit = 10
 
         reddit_config = {
@@ -2305,7 +2323,8 @@ class WidgetsTab(QWidget):
         # Reddit 2 config (inherits styling from Reddit 1)
         try:
             reddit2_limit = int(self.reddit2_items.currentText())
-        except Exception:
+        except Exception as e:
+            logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
             reddit2_limit = 4
         reddit2_config = {
             'enabled': self.reddit2_enabled.isChecked(),
@@ -2349,8 +2368,8 @@ class WidgetsTab(QWidget):
                 reddit_config.get('limit'),
                 reddit_config.get('enabled'),
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
 
         self._settings.set('widgets', existing_widgets)
         self._settings.save()
@@ -2358,25 +2377,27 @@ class WidgetsTab(QWidget):
     def _update_spotify_vis_sensitivity_enabled_state(self) -> None:
         try:
             recommended = self.spotify_vis_recommended.isChecked()
-        except Exception:
+        except Exception as e:
+            logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
             recommended = True
         try:
             self.spotify_vis_sensitivity.setEnabled(not recommended)
             self.spotify_vis_sensitivity_label.setEnabled(not recommended)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
 
     def _update_spotify_vis_floor_enabled_state(self) -> None:
         try:
             dynamic = self.spotify_vis_dynamic_floor.isChecked()
-        except Exception:
+        except Exception as e:
+            logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
             dynamic = True
 
         try:
             self.spotify_vis_manual_floor.setEnabled(not dynamic)
             self.spotify_vis_manual_floor_label.setEnabled(not dynamic)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
     
     def _populate_timezones_for_combo(self, combo) -> None:
         timezones = get_common_timezones()
@@ -2510,7 +2531,8 @@ class WidgetsTab(QWidget):
         if reddit_items_combo is not None:
             try:
                 reddit_limit = int(reddit_items_combo.currentText())
-            except Exception:
+            except Exception as e:
+                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
                 reddit_limit = 10
         config['reddit'] = {
             'enabled': getattr(self, 'reddit_enabled', None) and self.reddit_enabled.isChecked(),
@@ -2529,8 +2551,8 @@ class WidgetsTab(QWidget):
         }
         try:
             config['reddit2']['limit'] = int(self.reddit2_items.currentText())
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
         
         # Spotify Visualizer
         config['spotify_visualizer'] = {

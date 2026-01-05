@@ -53,7 +53,8 @@ def _get_gpu_usage() -> Optional[float]:
             import pynvml
             pynvml.nvmlInit()
             _nvml_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SYSTEM_TRAY] Exception suppressed: %s", e)
             _nvml_handle = None
     
     if _nvml_handle is None:
@@ -63,7 +64,8 @@ def _get_gpu_usage() -> Optional[float]:
         import pynvml
         util = pynvml.nvmlDeviceGetUtilizationRates(_nvml_handle)
         return float(util.gpu)
-    except Exception:
+    except Exception as e:
+        logger.debug("[SYSTEM_TRAY] Exception suppressed: %s", e)
         return None
 
 
@@ -85,7 +87,8 @@ def _get_cpu_usage() -> Optional[float]:
         # cpu_percent(interval=None) returns usage since last call
         # First call after baseline returns actual usage
         return proc.cpu_percent(interval=None)
-    except Exception:
+    except Exception as e:
+        logger.debug("[SYSTEM_TRAY] Exception suppressed: %s", e)
         return None
 
 
@@ -101,7 +104,7 @@ def _load_tray_menu_stylesheet() -> str | None:
         if not theme_path.exists():
             return None
         return theme_path.read_text(encoding="utf-8")
-    except Exception:
+    except Exception as e:
         logger.debug("Failed to load dark.qss for tray menu", exc_info=True)
         return None
 
@@ -150,7 +153,7 @@ class ScreensaverTrayIcon(QSystemTrayIcon):
             stylesheet = _load_tray_menu_stylesheet()
             if stylesheet:
                 menu.setStyleSheet(stylesheet)
-        except Exception:
+        except Exception as e:
             logger.debug("Failed to apply dark.qss to tray menu", exc_info=True)
 
         settings_action = QAction("Settings", menu)
@@ -173,7 +176,7 @@ class ScreensaverTrayIcon(QSystemTrayIcon):
         if QSystemTrayIcon.isSystemTrayAvailable():
             try:
                 self.show()
-            except Exception:
+            except Exception as e:
                 logger.debug("Failed to show system tray icon", exc_info=True)
         else:
             logger.info("System tray not available; skipping tray icon")
@@ -237,12 +240,13 @@ class ScreensaverTrayIcon(QSystemTrayIcon):
                 try:
                     if eco_callback():
                         parts.append("ECO MODE ON")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[SYSTEM_TRAY] Exception suppressed: %s", e)
             
             tooltip = " | ".join(parts) if len(parts) > 1 else parts[0]
             self.setToolTip(tooltip)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SYSTEM_TRAY] Exception suppressed: %s", e)
             self.setToolTip("SRPSS")
 
     def refresh_tooltip(self) -> None:

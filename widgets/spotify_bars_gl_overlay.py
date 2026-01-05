@@ -38,20 +38,20 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # This must happen BEFORE any other setup to avoid a visible frame.
         try:
             self.hide()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
         try:
             self.setAutoFillBackground(False)
             self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
             self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
             self.setAttribute(Qt.WidgetAttribute.WA_AlwaysStackOnTop, True)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
         try:
             self.setUpdateBehavior(QOpenGLWidget.UpdateBehavior.NoPartialUpdate)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
         self._enabled: bool = False
         self._bars: List[float] = []
@@ -159,12 +159,14 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # zero so only the solid bars remain.
         try:
             self._ghosting_enabled = bool(ghosting_enabled)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             self._ghosting_enabled = True
 
         try:
             ga = float(ghost_alpha)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             ga = 0.4
         if ga < 0.0:
             ga = 0.0
@@ -174,44 +176,48 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
         try:
             gd = float(ghost_decay)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             gd = -1.0
         if gd >= 0.0:
             self._peak_decay_per_sec = max(0.0, gd)
 
         try:
             count = int(bar_count)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             count = 0
         try:
             segs = int(segments)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             segs = 0
 
         if count <= 0 or segs <= 0:
             self._enabled = False
             try:
                 self.hide()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             return
 
         try:
             bars_seq = list(bars)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             self._enabled = False
             try:
                 self.hide()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             return
 
         if not bars_seq:
             self._enabled = False
             try:
                 self.hide()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             return
 
         if len(bars_seq) > count:
@@ -223,7 +229,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         for v in bars_seq:
             try:
                 f = float(v)
-            except Exception:
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                 f = 0.0
             if f < 0.0:
                 f = 0.0
@@ -235,30 +242,33 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._enabled = False
             try:
                 self.hide()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             return
 
         # Update per-bar peak state using the latest clamped values.
         try:
             now_ts = time.monotonic()
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             now_ts = 0.0
         dt = 0.0
         try:
             last_ts = self._last_peak_ts
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             last_ts = 0.0
         if last_ts > 0.0 and now_ts > last_ts:
             dt = now_ts - last_ts
         try:
             self._last_peak_ts = now_ts
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
         try:
             peaks = list(self._peaks)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             peaks = []
 
         if not peaks or len(peaks) != len(clamped):
@@ -297,7 +307,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                         # residual peaks decay more gently.
                         try:
                             gap_factor = 0.75 + min(1.0, float(delta)) * 0.75
-                        except Exception:
+                        except Exception as e:
+                            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                             gap_factor = 1.0
                         p = max(v, p - decay * gap_factor)
                 if p < 0.0:
@@ -323,7 +334,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._border_color = QColor(border_color)
         try:
             self._fade = max(0.0, min(1.0, float(fade)))
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             self._fade = 1.0
         self._playing = bool(playing)
 
@@ -332,11 +344,12 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             cur_geom = None
             try:
                 cur_geom = self.geometry()
-            except Exception:
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                 cur_geom = None
             if cur_geom is None or cur_geom != rect:
                 self.setGeometry(rect)
-        except Exception:
+        except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to set overlay geometry", exc_info=True)
         _geom_elapsed = (time.time() - _geom_start) * 1000.0
 
@@ -356,7 +369,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     self.show()
                 # Skip raise_() entirely - it's expensive and unnecessary
                 # The overlay is created on top and stays there
-        except Exception:
+        except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to show overlay", exc_info=True)
         _show_elapsed = (time.time() - _show_start) * 1000.0
 
@@ -417,7 +430,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
         try:
             fade = float(self._fade)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             fade = 0.0
         if fade <= 0.0:
             return
@@ -432,8 +446,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             gl.glDisable(gl.GL_SCISSOR_TEST)
             gl.glClearColor(0.0, 0.0, 0.0, 0.0)
             gl.glClear(gl.GL_COLOR_BUFFER_BIT)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
         # Prefer the shader path when available; fall back to QPainter when
         # the GL program or buffers are not ready or fail at runtime.
@@ -447,12 +461,12 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "[SPOTIFY_VIS] paintGL path: %s",
                     "shader" if used_shader else "qpainter",
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             try:
                 self._debug_paint_logged = True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
     # ------------------------------------------------------------------
     # Internal rendering helpers
@@ -829,7 +843,8 @@ void main() {
         try:
             if self._gl_program is None or self._gl_vao is None:
                 self._init_gl_pipeline()
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             self._gl_disabled = True
             logger.debug("[SPOTIFY_VIS] GL pipeline unavailable, falling back to QPainter", exc_info=True)
             return False
@@ -840,7 +855,8 @@ void main() {
         try:
             count = int(self._bar_count)
             segments = int(self._segments)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             return False
         if count <= 0 or segments <= 0:
             return False
@@ -871,24 +887,28 @@ void main() {
                     dpr = 1.0
                     try:
                         win = self.windowHandle()  # type: ignore[attr-defined]
-                    except Exception:
+                    except Exception as e:
+                        logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                         win = None
                     if win is not None:
                         try:
                             dpr = float(win.devicePixelRatio())
-                        except Exception:
+                        except Exception as e:
+                            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                             dpr = 1.0
                     else:
                         try:
                             dpr = float(self.devicePixelRatioF())
-                        except Exception:
+                        except Exception as e:
+                            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                             dpr = 1.0
                     if dpr <= 0.0:
                         dpr = 1.0
                     if dpr > 4.0:
                         dpr = 4.0
                     _gl.glUniform1f(self._u_dpr, dpr)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                     _gl.glUniform1f(self._u_dpr, 1.0)
 
             bars = list(self._bars)
@@ -915,12 +935,12 @@ void main() {
                         mn,
                         mx,
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                 try:
                     self._debug_bars_logged = True
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
             if self._u_bars is not None:
                 # Use pre-allocated buffer to avoid per-frame allocation
@@ -969,7 +989,8 @@ void main() {
             if self._u_ghost_alpha is not None:
                 try:
                     ga = float(self._ghost_alpha if self._ghosting_enabled else 0.0)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                     ga = 0.0
                 if ga < 0.0:
                     ga = 0.0
@@ -980,7 +1001,7 @@ void main() {
             _gl.glDrawArrays(_gl.GL_TRIANGLE_STRIP, 0, 4)
             _gl.glBindVertexArray(0)
             _gl.glUseProgram(0)
-        except Exception:
+        except Exception as e:
             logger.debug("[SPOTIFY_VIS] Shader-based bar rendering failed", exc_info=True)
             return False
 
@@ -1022,15 +1043,15 @@ void main() {
             fade_clamped = max(0.0, min(1.0, fade))
             fill.setAlpha(int(fill.alpha() * fade_clamped))
             border.setAlpha(int(border.alpha() * fade_clamped))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
         painter = QPainter(self)
         try:
             try:
                 painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
             painter.setBrush(fill)
             painter.setPen(border)
@@ -1042,7 +1063,8 @@ void main() {
                 x = bar_x[i]
                 try:
                     value = float(self._bars[i])
-                except Exception:
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                     value = 0.0
                 if value <= 0.0:
                     continue

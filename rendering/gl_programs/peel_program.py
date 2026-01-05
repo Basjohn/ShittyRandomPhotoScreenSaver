@@ -229,7 +229,8 @@ void main() {
             if uniforms.get("u_strips", -1) != -1:
                 try:
                     strips = max(1, int(getattr(state, "strips", 1)))
-                except Exception:
+                except Exception as e:
+                    logger.debug("[MISC] Exception suppressed: %s", e)
                     strips = 1
                 gl.glUniform1f(uniforms["u_strips"], float(strips))
 
@@ -275,8 +276,8 @@ void main() {
                 return (0.0, 1.0)
             elif direction == SlideDirection.UP:
                 return (0.0, -1.0)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[MISC] Exception suppressed: %s", e)
         return (-1.0, 0.0)
 
 

@@ -210,8 +210,8 @@ class BeatEngine:
             try:
                 bars, peaks, _ = self.get_state()
                 self._on_update(bars, peaks)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[MISC] Exception suppressed: %s", e)
     
     def tick(self, dt: float) -> None:
         """

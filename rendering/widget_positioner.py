@@ -179,8 +179,8 @@ class WidgetPositioner:
         
         try:
             widget.setGeometry(geometry)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[POSITIONER] Exception suppressed: %s", e)
         
         return geometry
     
@@ -201,8 +201,8 @@ class WidgetPositioner:
                 rect=rect,
                 anchor=anchor,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[POSITIONER] Exception suppressed: %s", e)
     
     def unregister_widget_bounds(self, name: str) -> None:
         """Remove a widget from collision tracking."""
@@ -293,7 +293,8 @@ class WidgetPositioner:
                     prev_height = prev_widget.sizeHint().height()
                     if prev_height <= 0:
                         prev_height = prev_widget.height()
-                except Exception:
+                except Exception as e:
+                    logger.debug("[POSITIONER] Exception suppressed: %s", e)
                     prev_height = 100
                 
                 cumulative_offset += prev_height + spacing
@@ -352,7 +353,8 @@ class WidgetPositioner:
             geometry = QRect(x, y, widget_size.width(), widget_size.height())
             widget.setGeometry(geometry)
             return geometry
-        except Exception:
+        except Exception as e:
+            logger.debug("[POSITIONER] Exception suppressed: %s", e)
             return QRect()
     
     def clear(self) -> None:

@@ -118,22 +118,26 @@ class ShadowConfig:
                 enabled = enabled_val.lower() not in ("false", "0", "no", "off", "")
             else:
                 enabled = bool(enabled_val)
-        except Exception:
+        except Exception as e:
+            logger.debug("[SHADOW] Exception suppressed: %s", e)
             enabled = True
             
         try:
             blur_radius = int(config.get("blur_radius", 18))
-        except Exception:
+        except Exception as e:
+            logger.debug("[SHADOW] Exception suppressed: %s", e)
             blur_radius = 18
             
         try:
             offset_x = int(config.get("offset_x", 4))
-        except Exception:
+        except Exception as e:
+            logger.debug("[SHADOW] Exception suppressed: %s", e)
             offset_x = 4
             
         try:
             offset_y = int(config.get("offset_y", 4))
-        except Exception:
+        except Exception as e:
+            logger.debug("[SHADOW] Exception suppressed: %s", e)
             offset_y = 4
             
         # Parse color
@@ -149,12 +153,13 @@ class ShadowConfig:
                     color = QColor(color_val[0], color_val[1], color_val[2], color_val[3])
                 else:
                     color = QColor(color_val[0], color_val[1], color_val[2])
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[SHADOW] Exception suppressed: %s", e)
             
         try:
             opacity = float(config.get("opacity", 1.0))
-        except Exception:
+        except Exception as e:
+            logger.debug("[SHADOW] Exception suppressed: %s", e)
             opacity = 1.0
             
         return cls(
@@ -868,5 +873,6 @@ def prerender_widget_shadow(
         if size.isEmpty():
             return False
         return AsyncShadowRenderer.prerender_async(size, config, corner_radius)
-    except Exception:
+    except Exception as e:
+        logger.debug("[SHADOW] Exception suppressed: %s", e)
         return False

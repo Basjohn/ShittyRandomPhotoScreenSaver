@@ -209,8 +209,8 @@ class RedditWidget(BaseOverlayWidget):
         try:
             # Non-interactive; DisplayWidget owns input routing.
             self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[REDDIT] Exception suppressed: %s", e)
 
         font = QFont(self._font_family, self._font_size, QFont.Weight.Normal)
         self.setFont(font)
@@ -225,8 +225,8 @@ class RedditWidget(BaseOverlayWidget):
 
         try:
             self.move(10000, 10000)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[REDDIT] Exception suppressed: %s", e)
     
     def _update_content(self) -> None:
         """Required by BaseOverlayWidget - refresh reddit display."""
@@ -254,16 +254,16 @@ class RedditWidget(BaseOverlayWidget):
         if self._update_timer_handle is not None:
             try:
                 self._update_timer_handle.stop()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[REDDIT] Exception suppressed: %s", e)
             self._update_timer_handle = None
         
         if self._update_timer is not None:
             try:
                 self._update_timer.stop()
                 self._update_timer.deleteLater()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[REDDIT] Exception suppressed: %s", e)
             self._update_timer = None
         
         self._posts.clear()
@@ -277,8 +277,8 @@ class RedditWidget(BaseOverlayWidget):
             try:
                 self._hover_timer.stop()
                 self._hover_timer.deleteLater()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[REDDIT] Exception suppressed: %s", e)
             self._hover_timer = None
         logger.debug("[LIFECYCLE] RedditWidget cleaned up")
     
@@ -308,16 +308,16 @@ class RedditWidget(BaseOverlayWidget):
         if self._update_timer_handle is not None:
             try:
                 self._update_timer_handle.stop()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[REDDIT] Exception suppressed: %s", e)
             self._update_timer_handle = None
 
         if self._update_timer is not None:
             try:
                 self._update_timer.stop()
                 self._update_timer.deleteLater()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[REDDIT] Exception suppressed: %s", e)
             self._update_timer = None
 
         self._enabled = False
@@ -325,8 +325,8 @@ class RedditWidget(BaseOverlayWidget):
         self._row_hit_rects.clear()
         try:
             self.hide()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[REDDIT] Exception suppressed: %s", e)
 
     def cleanup(self) -> None:
         logger.debug("Cleaning up Reddit widget")
@@ -335,8 +335,8 @@ class RedditWidget(BaseOverlayWidget):
             if self._hover_timer is not None:
                 self._hover_timer.stop()
                 self._hover_timer.deleteLater()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[REDDIT] Exception suppressed: %s", e)
         self._hover_timer = None
 
     def is_running(self) -> bool:
@@ -392,7 +392,8 @@ class RedditWidget(BaseOverlayWidget):
         self._update_timer_handle = handle
         try:
             self._update_timer = getattr(handle, "_timer", None)
-        except Exception:
+        except Exception as e:
+            logger.debug("[REDDIT] Exception suppressed: %s", e)
             self._update_timer = None
 
     def _fetch_feed(self) -> None:
@@ -443,11 +444,13 @@ class RedditWidget(BaseOverlayWidget):
                     continue
                 try:
                     score = int(data.get("score") or 0)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[REDDIT] Exception suppressed: %s", e)
                     score = 0
                 try:
                     created_utc = float(data.get("created_utc") or 0.0)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[REDDIT] Exception suppressed: %s", e)
                     created_utc = 0.0
                 permalink = data.get("permalink")
                 if permalink:
@@ -504,8 +507,8 @@ class RedditWidget(BaseOverlayWidget):
             if not self._has_displayed_valid_data:
                 try:
                     self.hide()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[REDDIT] Exception suppressed: %s", e)
             return
 
         posts: List[RedditPost] = []
@@ -519,12 +522,14 @@ class RedditWidget(BaseOverlayWidget):
 
             try:
                 score = int(raw.get("score") or 0)
-            except Exception:
+            except Exception as e:
+                logger.debug("[REDDIT] Exception suppressed: %s", e)
                 score = 0
 
             try:
                 created_utc = float(raw.get("created_utc") or 0.0)
-            except Exception:
+            except Exception as e:
+                logger.debug("[REDDIT] Exception suppressed: %s", e)
                 created_utc = 0.0
 
             posts.append(
@@ -540,8 +545,8 @@ class RedditWidget(BaseOverlayWidget):
             if not self._has_displayed_valid_data:
                 try:
                     self.hide()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[REDDIT] Exception suppressed: %s", e)
             return
 
         # Order posts so that the newest entries appear at the top of the
@@ -556,15 +561,16 @@ class RedditWidget(BaseOverlayWidget):
                 return (0, -ts)
 
             posts.sort(key=_sort_key)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[REDDIT] Exception suppressed: %s", e)
 
         # Only keep as many posts as we can actually display for the
         # current limit; oversampling still happens at fetch time for
         # filtering, but the rendered list is always capped.
         try:
             visible_limit = max(1, int(self._limit))
-        except Exception:
+        except Exception as e:
+            logger.debug("[REDDIT] Exception suppressed: %s", e)
             visible_limit = max(1, len(posts))
 
         self._posts = posts[:visible_limit]
@@ -590,8 +596,8 @@ class RedditWidget(BaseOverlayWidget):
             if hasattr(self.parent(), 'recalculate_stacking'):
                 try:
                     self.parent().recalculate_stacking()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[REDDIT] Exception suppressed: %s", e)
 
         first_sample = not self._has_seen_first_sample
         if first_sample:
@@ -609,15 +615,16 @@ class RedditWidget(BaseOverlayWidget):
                     # Use configured overlay name (defaults to "reddit")
                     overlay_name = getattr(self, '_overlay_name', None) or "reddit"
                     parent.request_overlay_fade_sync(overlay_name, _starter)
-                except Exception:
+                except Exception as e:
+                    logger.debug("[REDDIT] Exception suppressed: %s", e)
                     _starter()
             else:
                 _starter()
         else:
             try:
                 self.show()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[REDDIT] Exception suppressed: %s", e)
 
         self._has_displayed_valid_data = True
 
@@ -634,8 +641,8 @@ class RedditWidget(BaseOverlayWidget):
         if not self._has_displayed_valid_data:
             try:
                 self.hide()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[REDDIT] Exception suppressed: %s", e)
 
     # ------------------------------------------------------------------
     # Painting & hit testing
@@ -653,8 +660,8 @@ class RedditWidget(BaseOverlayWidget):
         try:
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[REDDIT] Exception suppressed: %s", e)
 
         margins = self.contentsMargins()
         rect = self.rect().adjusted(
@@ -681,7 +688,8 @@ class RedditWidget(BaseOverlayWidget):
         if self._brand_pixmap is not None and not self._brand_pixmap.isNull() and logo_size > 0:
             try:
                 dpr = float(self.devicePixelRatioF())
-            except Exception:
+            except Exception as e:
+                logger.debug("[REDDIT] Exception suppressed: %s", e)
                 dpr = 1.0
             scale_dpr = max(1.0, dpr)
             target_px = int(logo_size * scale_dpr)
@@ -694,8 +702,8 @@ class RedditWidget(BaseOverlayWidget):
                 )
                 try:
                     pm.setDevicePixelRatio(scale_dpr)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[REDDIT] Exception suppressed: %s", e)
 
                 line_height = header_metrics.height()
                 line_centre = header_top + (line_height * 0.6)
@@ -840,8 +848,8 @@ class RedditWidget(BaseOverlayWidget):
                 right = rect.right()
                 for y_line in row_bottoms[:-1]:
                     painter.drawLine(left, y_line, right, y_line)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[REDDIT] Exception suppressed: %s", e)
 
     def resolve_click_target(self, local_pos: QPoint) -> Optional[str]:
         """Return the Reddit URL associated with the given click, if any."""
@@ -874,7 +882,7 @@ class RedditWidget(BaseOverlayWidget):
             QDesktopServices.openUrl(QUrl(url))
             logger.info("[REDDIT] Opened %s", url)
             return True
-        except Exception:
+        except Exception as e:
             logger.debug("[REDDIT] Failed to open URL %s", url, exc_info=True)
             return False
 
@@ -885,7 +893,8 @@ class RedditWidget(BaseOverlayWidget):
     def _update_card_height_from_content(self, visible_rows: Optional[int] = None) -> None:
         try:
             rows = int(visible_rows) if visible_rows is not None else 0
-        except Exception:
+        except Exception as e:
+            logger.debug("[REDDIT] Exception suppressed: %s", e)
             rows = 0
         if rows <= 0:
             rows = len(self._posts) or self._limit or 1
@@ -919,7 +928,8 @@ class RedditWidget(BaseOverlayWidget):
             margins = self.contentsMargins()
             margin_top = margins.top()
             margin_bottom = margins.bottom()
-        except Exception:
+        except Exception as e:
+            logger.debug("[REDDIT] Exception suppressed: %s", e)
             margin_top = 0
             margin_bottom = 0
 
@@ -937,11 +947,12 @@ class RedditWidget(BaseOverlayWidget):
         try:
             self.setMinimumHeight(target)
             self.setMaximumHeight(target)
-        except Exception:
+        except Exception as e:
+            logger.debug("[REDDIT] Exception suppressed: %s", e)
             try:
                 self.setMinimumHeight(target)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[REDDIT] Exception suppressed: %s", e)
 
     def _update_card_height_from_limit(self) -> None:
         # Fallback used when the limit changes before we have data.
@@ -976,19 +987,19 @@ class RedditWidget(BaseOverlayWidget):
             if self.parent():
                 try:
                     self._update_position()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[REDDIT] Exception suppressed: %s", e)
             try:
                 self.show()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[REDDIT] Exception suppressed: %s", e)
             try:
                 ShadowFadeProfile.attach_shadow(
                     self,
                     self._shadow_config,
                     has_background_frame=self._show_background,
                 )
-            except Exception:
+            except Exception as e:
                 logger.debug(
                     "[REDDIT] Failed to attach shadow without fade",
                     exc_info=True,
@@ -998,8 +1009,8 @@ class RedditWidget(BaseOverlayWidget):
         if self.parent():
             try:
                 self._update_position()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[REDDIT] Exception suppressed: %s", e)
 
         try:
             ShadowFadeProfile.start_fade_in(
@@ -1007,15 +1018,15 @@ class RedditWidget(BaseOverlayWidget):
                 self._shadow_config,
                 has_background_frame=self._show_background,
             )
-        except Exception:
+        except Exception as e:
             logger.debug(
                 "[REDDIT] _start_widget_fade_in fallback: ShadowFadeProfile failed",
                 exc_info=True,
             )
             try:
                 self.show()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[REDDIT] Exception suppressed: %s", e)
             if self._shadow_config is not None:
                 try:
                     apply_widget_shadow(
@@ -1023,7 +1034,7 @@ class RedditWidget(BaseOverlayWidget):
                         self._shadow_config,
                         has_background_frame=self._show_background,
                     )
-                except Exception:
+                except Exception as e:
                     logger.debug(
                         "[REDDIT] Failed to apply widget shadow in fallback path",
                         exc_info=True,
@@ -1034,8 +1045,8 @@ class RedditWidget(BaseOverlayWidget):
         if self._enabled and self._has_seen_first_sample and self.parent():
             try:
                 self._update_position()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[REDDIT] Exception suppressed: %s", e)
 
     def handle_hover(self, local_pos: QPoint, global_pos: QPoint) -> None:
         if not self._row_hit_rects:
@@ -1084,8 +1095,8 @@ class RedditWidget(BaseOverlayWidget):
             return
         try:
             QToolTip.showText(pos, self._hover_title, self)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[REDDIT] Exception suppressed: %s", e)
 
     def _paint_header_frame(self, painter: QPainter) -> None:
         """Paint a rounded sub-frame around the logo + subreddit header.
@@ -1106,7 +1117,8 @@ class RedditWidget(BaseOverlayWidget):
 
         try:
             header_font_pt = int(self._header_font_pt) if self._header_font_pt > 0 else self._font_size
-        except Exception:
+        except Exception as e:
+            logger.debug("[REDDIT] Exception suppressed: %s", e)
             header_font_pt = self._font_size
 
         font = QFont(self._font_family, header_font_pt, QFont.Weight.Bold)
@@ -1238,7 +1250,7 @@ class RedditWidget(BaseOverlayWidget):
                     pm.isNull(),
                 )
                 return pm
-        except Exception:
+        except Exception as e:
             logger.debug("[REDDIT] Failed to load Reddit_Logo_C.png", exc_info=True)
         return None
 
@@ -1261,8 +1273,8 @@ class RedditWidget(BaseOverlayWidget):
             try:
                 parts = lower.split("/r/")[1]
                 slug = parts.split("/")[0]
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[REDDIT] Exception suppressed: %s", e)
         elif lower.startswith("/r/"):
             slug = slug[3:]
         elif lower.startswith("r/"):
@@ -1285,12 +1297,14 @@ def _try_bring_reddit_window_to_front() -> None:
 
     try:
         user32 = ctypes.windll.user32  # type: ignore[attr-defined]
-    except Exception:
+    except Exception as e:
+        logger.debug("[REDDIT] Exception suppressed: %s", e)
         return
 
     try:
         EnumWindowsProc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-    except Exception:
+    except Exception as e:
+        logger.debug("[REDDIT] Exception suppressed: %s", e)
         return
 
     try:
@@ -1298,7 +1312,8 @@ def _try_bring_reddit_window_to_front() -> None:
         user32.IsWindowVisible.argtypes = [wintypes.HWND]
         user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
         user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
-    except Exception:
+    except Exception as e:
+        logger.debug("[REDDIT] Exception suppressed: %s", e)
         return
 
     candidates: list[wintypes.HWND] = []
@@ -1323,7 +1338,8 @@ def _try_bring_reddit_window_to_front() -> None:
 
     try:
         user32.EnumWindows(_enum_proc, 0)
-    except Exception:
+    except Exception as e:
+        logger.debug("[REDDIT] Exception suppressed: %s", e)
         return
 
     if not candidates:

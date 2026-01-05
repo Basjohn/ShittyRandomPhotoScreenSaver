@@ -102,8 +102,8 @@ def enqueue_url(url: str, *, source: str = "screensaver") -> bool:
         try:
             if tmp_path.exists():
                 tmp_path.unlink()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[MISC] Exception suppressed: %s", e)
         return False
     return True
 

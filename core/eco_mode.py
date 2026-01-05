@@ -268,7 +268,8 @@ class EcoModeManager:
                 self._display_widget.mapToGlobal(widget_rect.topLeft()),
                 widget_rect.size()
             )
-        except Exception:
+        except Exception as e:
+            logger.debug("[ECO_MODE] Exception suppressed: %s", e)
             return 0.0
         
         widget_area = widget_global.width() * widget_global.height()
@@ -301,8 +302,8 @@ class EcoModeManager:
                 intersection = widget_global.intersected(other_global)
                 if not intersection.isEmpty():
                     occluded_area += intersection.width() * intersection.height()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[ECO_MODE] Exception suppressed: %s", e)
         
         # Clamp to [0, 1] (overlapping windows could double-count)
         return min(1.0, occluded_area / widget_area)
@@ -332,8 +333,8 @@ class EcoModeManager:
                 if self._transition_was_running:
                     # Note: We don't actually pause mid-transition, just prevent new ones
                     logger.debug("[MC] [ECO MODE] Transition controller noted as running")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[ECO_MODE] Exception suppressed: %s", e)
         
         # Pause visualizer
         if self._config.pause_visualizer and self._visualizer is not None:
@@ -342,16 +343,16 @@ class EcoModeManager:
                 if hasattr(self._visualizer, 'set_eco_mode'):
                     self._visualizer.set_eco_mode(True)
                 logger.debug("[MC] [ECO MODE] Visualizer paused")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[ECO_MODE] Exception suppressed: %s", e)
         
         # Pause prefetching
         if self._config.pause_prefetch and self._prefetch_pause_callback is not None:
             try:
                 self._prefetch_pause_callback()
                 logger.debug("[MC] [ECO MODE] Prefetching paused")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[ECO_MODE] Exception suppressed: %s", e)
         
         # Stop workers to save CPU (P1 fix from architectural audit)
         if self._process_supervisor is not None:
@@ -403,16 +404,16 @@ class EcoModeManager:
                 if hasattr(self._visualizer, 'set_eco_mode'):
                     self._visualizer.set_eco_mode(False)
                 logger.debug("[MC] [ECO MODE] Visualizer resumed")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[ECO_MODE] Exception suppressed: %s", e)
         
         # Resume prefetching
         if self._config.pause_prefetch and self._prefetch_resume_callback is not None:
             try:
                 self._prefetch_resume_callback()
                 logger.debug("[MC] [ECO MODE] Prefetching resumed")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[ECO_MODE] Exception suppressed: %s", e)
         
         # Restart workers that were running before eco mode
         if self._process_supervisor is not None and self._workers_were_running:
@@ -502,7 +503,7 @@ def is_mc_build() -> bool:
         mgr = SettingsManager()
         app_name = mgr.get_application_name()
         return 'MC' in app_name or 'mc' in app_name.lower()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[ECO_MODE] Exception suppressed: %s", e)
     
     return False

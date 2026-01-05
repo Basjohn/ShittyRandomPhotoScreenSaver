@@ -113,7 +113,8 @@ class DisplayManager(QObject):
 
         try:
             raw = self.settings_manager.get('display.show_on_monitors', 'ALL')
-        except Exception:
+        except Exception as e:
+            logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
             raw = 'ALL'
 
         # Default: all screens
@@ -127,13 +128,13 @@ class DisplayManager(QObject):
                 if not isinstance(parsed, (list, tuple, set)):
                     return indices
                 values = {int(x) for x in parsed}
-            except Exception:
+            except Exception as e:
                 logger.debug("[DISPLAY] Failed to parse show_on_monitors=%r; defaulting to ALL", raw)
                 return indices
         elif isinstance(raw, (list, tuple, set)):
             try:
                 values = {int(x) for x in raw}
-            except Exception:
+            except Exception as e:
                 logger.debug("[DISPLAY] Invalid show_on_monitors=%r; defaulting to ALL", raw)
                 return indices
         else:
@@ -293,7 +294,7 @@ class DisplayManager(QObject):
         for display in self.displays:
             try:
                 display.set_process_supervisor(supervisor)
-            except Exception:
+            except Exception as e:
                 logger.debug("Failed to set ProcessSupervisor on display", exc_info=True)
     
     def show_image(self, pixmap: QPixmap, image_path: str = "", 
@@ -369,16 +370,17 @@ class DisplayManager(QObject):
             try:
                 if hasattr(display, "reset_after_settings"):
                     display.reset_after_settings()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
             try:
                 display.show_on_screen()
-            except Exception:
+            except Exception as e:
+                logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
                 display.show()
             try:
                 hide_all_overlays(display)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
         logger.info("All displays shown")
     
     def set_display_mode(self, mode: DisplayMode) -> None:
@@ -421,8 +423,8 @@ class DisplayManager(QObject):
                 comp = getattr(display, "_gl_compositor", None)
                 if comp is not None and hasattr(comp, "set_dimming"):
                     comp.set_dimming(enabled, opacity)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
         logger.debug("Dimming updated on all %d displays: enabled=%s, opacity=%.0f%%",
                      len(self.displays), enabled, opacity * 100)
     
@@ -450,9 +452,11 @@ class DisplayManager(QObject):
                 try:
                     if hasattr(display, "has_running_transition") and display.has_running_transition():
                         return True
-                except Exception:
+                except Exception as e:
+                    logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
                     continue
-        except Exception:
+        except Exception as e:
+            logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
             return False
         return False
     
@@ -594,8 +598,8 @@ class DisplayManager(QObject):
                     app = QGuiApplication.instance()
                     if app is not None:
                         app.removeEventFilter(owner)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
             
             DisplayWidget._global_ctrl_held = False
             DisplayWidget._halo_owner = None
@@ -605,15 +609,16 @@ class DisplayManager(QObject):
             # Clear the screen-to-widget cache to avoid stale references
             DisplayWidget._instances_by_screen.clear()
             logger.debug("[CLEANUP] Reset all DisplayWidget global state")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
 
         pending_reddit_urls: list[str] = []
 
         for idx, display in enumerate(self.displays):
             try:
                 screen_index = getattr(display, "screen_index", idx)
-            except Exception:
+            except Exception as e:
+                logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
                 screen_index = idx
             logger.debug(
                 "Cleaning up display widget (index=%d/%d, screen_index=%s)",
@@ -628,8 +633,8 @@ class DisplayManager(QObject):
                     pending_reddit_urls.append(url)
                     try:
                         setattr(display, "_pending_reddit_url", None)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
                 # Ensure per-display cleanup (pan & scan, transitions, overlays)
                 try:
                     display.clear()
@@ -675,7 +680,7 @@ class DisplayManager(QObject):
                 app = QGuiApplication.instance()
                 if app is not None:
                     app.processEvents()
-            except Exception:
+            except Exception as e:
                 logger.debug("[REDDIT] processEvents failed before flush", exc_info=True)
 
         if REDDIT_FLUSH_LOGGING:
@@ -690,7 +695,7 @@ class DisplayManager(QObject):
         if helper_module is not None:
             try:
                 use_helper = helper_module.should_use_session_launcher()
-            except Exception:
+            except Exception as e:
                 logger.debug("[REDDIT] Helper capability check failed", exc_info=True)
                 use_helper = False
         if helper_bridge is not None and helper_bridge.is_bridge_available():
@@ -705,7 +710,7 @@ class DisplayManager(QObject):
                     if launched:
                         logger.info("[REDDIT] Deferred URL queued via ProgramData bridge: %s", url)
                         continue
-                except Exception:
+                except Exception as e:
                     logger.warning("[REDDIT] Bridge enqueue failed; falling back", exc_info=True)
                     launched = False
 
@@ -716,7 +721,7 @@ class DisplayManager(QObject):
                         logger.info("[REDDIT] Helper launched deferred URL: %s", url)
                     else:
                         logger.debug("[REDDIT] Helper declined to launch URL; falling back")
-                except Exception:
+                except Exception as e:
                     logger.warning("[REDDIT] Helper launch failed; falling back", exc_info=True)
                     launched = False
 

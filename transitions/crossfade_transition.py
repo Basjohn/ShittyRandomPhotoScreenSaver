@@ -33,8 +33,8 @@ class _SWFadeOverlay(QWidget):
             self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
             self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
             self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[TRANSITION] Exception suppressed: %s", e)
         self._old = old_pixmap
         self._new = new_pixmap
         self._alpha: float = 0.0
@@ -64,7 +64,8 @@ class _SWFadeOverlay(QWidget):
         try:
             with self._state_lock:
                 return self._first_frame_drawn
-        except Exception:
+        except Exception as e:
+            logger.debug("[TRANSITION] Exception suppressed: %s", e)
             return False
 
     def paintEvent(self, _event) -> None:  # type: ignore[override]
@@ -175,12 +176,12 @@ class CrossfadeTransition(BaseTransition):
             overlay.setVisible(True)
             try:
                 overlay.update()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITION] Exception suppressed: %s", e)
             try:
                 schedule_raise_when_ready(widget, overlay, stage="initial_raise_sw")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITION] Exception suppressed: %s", e)
 
             # Drive via centralized AnimationManager
             am = self._get_animation_manager(widget)
@@ -214,8 +215,8 @@ class CrossfadeTransition(BaseTransition):
             try:
                 am = self._get_animation_manager(self._widget)
                 am.cancel_animation(self._animation_id)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITION] Exception suppressed: %s", e)
             self._animation_id = None
         # Set cancelled state before cleanup
         self._set_state(TransitionState.CANCELLED)
@@ -231,15 +232,15 @@ class CrossfadeTransition(BaseTransition):
             try:
                 am = self._get_animation_manager(self._widget)
                 am.cancel_animation(self._animation_id)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITION] Exception suppressed: %s", e)
             self._animation_id = None
         # Hide persistent overlay (do not delete)
         if self._overlay:
             try:
                 self._overlay.hide()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITION] Exception suppressed: %s", e)
             self._overlay = None
         # Only clear widget reference
         self._widget = None
@@ -261,8 +262,8 @@ class CrossfadeTransition(BaseTransition):
         try:
             self._overlay.set_alpha(progress)
             self._overlay.update()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[TRANSITION] Exception suppressed: %s", e)
         self._emit_progress(progress)
 
     def _on_anim_complete(self) -> None:
@@ -275,8 +276,8 @@ class CrossfadeTransition(BaseTransition):
             try:
                 self._overlay.set_alpha(1.0)
                 self._overlay.update()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITION] Exception suppressed: %s", e)
         self._set_state(TransitionState.FINISHED)
         self._emit_progress(1.0)
         self.finished.emit()

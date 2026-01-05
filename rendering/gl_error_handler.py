@@ -226,7 +226,7 @@ class GLErrorHandler:
                     callback(level)
                 finally:
                     self._state_lock.acquire()
-            except Exception:
+            except Exception as e:
                 logger.debug("[GL ERROR] Capability change callback failed", exc_info=True)
     
     def get_status(self) -> dict:

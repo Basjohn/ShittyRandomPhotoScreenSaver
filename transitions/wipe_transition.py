@@ -203,8 +203,8 @@ class WipeTransition(BaseTransition):
         if self._resource_manager:
             try:
                 self._resource_manager.register_qt(self._old_label, description="WipeTransition old label")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITION] Exception suppressed: %s", e)
 
         self._new_label = QLabel(widget)
         self._new_label.setGeometry(0, 0, widget.width(), widget.height())
@@ -217,13 +217,13 @@ class WipeTransition(BaseTransition):
         self._new_label.setMask(QRegion())
         try:
             self._new_label.raise_()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[TRANSITION] Exception suppressed: %s", e)
         if self._resource_manager:
             try:
                 self._resource_manager.register_qt(self._new_label, description="WipeTransition new label")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITION] Exception suppressed: %s", e)
         
         # Drive animation via centralized AnimationManager
         am = self._get_animation_manager(widget)
@@ -252,8 +252,8 @@ class WipeTransition(BaseTransition):
             try:
                 am = self._get_animation_manager(self._widget)
                 am.cancel_animation(self._animation_id)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITION] Exception suppressed: %s", e)
             self._animation_id = None
         
         self._set_state(TransitionState.CANCELLED)
@@ -313,8 +313,8 @@ class WipeTransition(BaseTransition):
             try:
                 am = self._get_animation_manager(self._widget)
                 am.cancel_animation(self._animation_id)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITION] Exception suppressed: %s", e)
             self._animation_id = None
         
         # Clear mask and ensure new label fully visible before finishing

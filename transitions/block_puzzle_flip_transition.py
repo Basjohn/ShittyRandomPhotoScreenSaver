@@ -43,8 +43,8 @@ class _BlockFlipWidget(QWidget):
             self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
             self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
             self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[TRANSITION] Exception suppressed: %s", e)
         
         self._old = old_pixmap
         self._new = new_pixmap
@@ -301,8 +301,8 @@ class BlockPuzzleFlipTransition(BaseTransition):
                 if self._resource_manager:
                     try:
                         self._resource_manager.register_qt(overlay, description="SW Block QPainter overlay")
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[TRANSITION] Exception suppressed: %s", e)
             else:
                 logger.debug("[SW BLOCK] Reusing persistent QPainter overlay")
                 # Update pixmaps and blocks
@@ -317,15 +317,15 @@ class BlockPuzzleFlipTransition(BaseTransition):
                 overlay.show()
             try:
                 overlay.raise_()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITION] Exception suppressed: %s", e)
             
             # Keep clock widget above overlay if present
             try:
                 if hasattr(widget, "clock_widget") and getattr(widget, "clock_widget"):
                     widget.clock_widget.raise_()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITION] Exception suppressed: %s", e)
             
             # Store reference
             self._overlay = overlay
@@ -333,8 +333,8 @@ class BlockPuzzleFlipTransition(BaseTransition):
             # Present initial frame synchronously to avoid a one-frame flash
             try:
                 widget.update()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITION] Exception suppressed: %s", e)
             
             # Drive via centralized AnimationManager
             am = self._get_animation_manager(widget)
@@ -375,8 +375,8 @@ class BlockPuzzleFlipTransition(BaseTransition):
             try:
                 am = self._get_animation_manager(self._widget)
                 am.cancel_animation(self._animation_id)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITION] Exception suppressed: %s", e)
         
         self._set_state(TransitionState.CANCELLED)
         self._emit_progress(1.0)
@@ -391,8 +391,8 @@ class BlockPuzzleFlipTransition(BaseTransition):
             try:
                 am = self._get_animation_manager(self._widget)
                 am.cancel_animation(self._animation_id)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TRANSITION] Exception suppressed: %s", e)
             self._animation_id = None
         
         # Note: overlay is persistent and managed by parent widget

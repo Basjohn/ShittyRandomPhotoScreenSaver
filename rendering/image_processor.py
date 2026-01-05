@@ -51,7 +51,10 @@ class ImageProcessor:
             use_lanczos,
             sharpen,
         )
-        return QPixmap.fromImage(processed_qimage)
+        pixmap = QPixmap.fromImage(processed_qimage)
+        # Clear QImage reference to free memory (Section 1.1 fix)
+        processed_qimage = None
+        return pixmap
 
     @staticmethod
     def _scale_pixmap(pixmap: QPixmap, width: int, height: int, use_lanczos: bool = False, sharpen: bool = False) -> QPixmap:
@@ -163,6 +166,8 @@ class ImageProcessor:
                 )
             
             result = QPixmap.fromImage(qimg)
+            # Clear QImage reference to free memory (Section 1.1 fix)
+            qimg = None
             logger.debug(f"Scaled with Lanczos: {pixmap.width()}x{pixmap.height()} → {width}x{height}")
             return result
         

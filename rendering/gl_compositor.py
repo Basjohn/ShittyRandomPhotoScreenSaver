@@ -359,12 +359,12 @@ class GLCompositorWidget(QOpenGLWidget):
             self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
             self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
             self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
         try:
             self.setUpdateBehavior(QOpenGLWidget.UpdateBehavior.NoPartialUpdate)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
 
         self._base_pixmap: Optional[QPixmap] = None
         self._crossfade: Optional[CrossfadeState] = None
@@ -589,8 +589,8 @@ class GLCompositorWidget(QOpenGLWidget):
                 display_hz = int(screen.refreshRate())
                 if display_hz <= 0:
                     display_hz = 60
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
         
         # Adaptive rate selection - target achievable FPS
         if display_hz <= 60:
@@ -673,11 +673,13 @@ class GLCompositorWidget(QOpenGLWidget):
 
         try:
             count = int(bar_count)
-        except Exception:
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
             count = 0
         try:
             segs = int(segments)
-        except Exception:
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
             segs = 0
 
         if count <= 0 or segs <= 0:
@@ -686,7 +688,8 @@ class GLCompositorWidget(QOpenGLWidget):
 
         try:
             bars_seq = list(bars)
-        except Exception:
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
             self._spotify_vis_enabled = False
             return
 
@@ -703,7 +706,8 @@ class GLCompositorWidget(QOpenGLWidget):
         for v in bars_seq:
             try:
                 f = float(v)
-            except Exception:
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
                 f = 0.0
             if f < 0.0:
                 f = 0.0
@@ -724,7 +728,8 @@ class GLCompositorWidget(QOpenGLWidget):
         self._spotify_vis_border_color = QColor(border_color)
         try:
             self._spotify_vis_fade = max(0.0, min(1.0, float(fade)))
-        except Exception:
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
             self._spotify_vis_fade = 1.0
 
     def _clear_all_transitions(self) -> None:
@@ -732,11 +737,11 @@ class GLCompositorWidget(QOpenGLWidget):
         self._cancel_current_animation()
         try:
             self._stop_frame_pacing()
-        except Exception:
+        except Exception as e:
             logger.debug("[GL COMPOSITOR] Frame pacing stop failed during clear", exc_info=True)
         try:
             self._release_transition_textures()
-        except Exception:
+        except Exception as e:
             logger.debug("[GL COMPOSITOR] Texture release failed during clear", exc_info=True)
         self._finalize_paint_metrics(outcome="cleared")
         self._crossfade = None
@@ -764,7 +769,7 @@ class GLCompositorWidget(QOpenGLWidget):
         if on_finished:
             try:
                 on_finished()
-            except Exception:
+            except Exception as e:
                 logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
         return True
 
@@ -784,8 +789,8 @@ class GLCompositorWidget(QOpenGLWidget):
         if self._current_anim_id and self._animation_manager:
             try:
                 self._animation_manager.cancel_animation(self._current_anim_id)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
             self._current_anim_id = None
             self._finalize_animation_metrics(outcome="cancelled")
             self._finalize_paint_metrics(outcome="cancelled")
@@ -1034,8 +1039,8 @@ class GLCompositorWidget(QOpenGLWidget):
             if state is not None:
                 try:
                     self._base_pixmap = state.new_pixmap
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
             setattr(self, state_attr, None)
             self._current_anim_id = None
             try:
@@ -1045,7 +1050,7 @@ class GLCompositorWidget(QOpenGLWidget):
             if on_finished:
                 try:
                     on_finished()
-                except Exception:
+                except Exception as e:
                     logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
         except Exception as e:
             logger.debug("[GL COMPOSITOR] %s complete handler failed: %s", name.capitalize(), e, exc_info=True)
@@ -1059,7 +1064,8 @@ class GLCompositorWidget(QOpenGLWidget):
 
         try:
             self.makeCurrent()
-        except Exception:
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
             return False
 
         try:
@@ -1069,14 +1075,14 @@ class GLCompositorWidget(QOpenGLWidget):
                 self._gl_disabled_for_session = False
             self._init_gl_pipeline()
             return self._gl_pipeline is not None and self._gl_pipeline.initialized
-        except Exception:
+        except Exception as e:
             logger.debug("[GL COMPOSITOR] Failed to initialise GL pipeline", exc_info=True)
             return False
         finally:
             try:
                 self.doneCurrent()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
 
     def _with_temp_state(self, attr_name: str, state, prep_fn: Callable[[], bool]) -> bool:
         """Assign a temporary state, invoke prep_fn, then restore the original state."""
@@ -1128,13 +1134,14 @@ class GLCompositorWidget(QOpenGLWidget):
 
         try:
             self.makeCurrent()
-        except Exception:
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
             return False
 
         try:
             self._ensure_texture_manager()
             return warmer(warm_old, new_pixmap)
-        except Exception:
+        except Exception as e:
             logger.debug(
                 "[GL COMPOSITOR] Transition state warmup failed for %s",
                 transition_name,
@@ -1144,8 +1151,8 @@ class GLCompositorWidget(QOpenGLWidget):
         finally:
             try:
                 self.doneCurrent()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
 
     def _warm_blockflip_state(self, old_pixmap: QPixmap, new_pixmap: QPixmap) -> bool:
         cols, rows = self._estimate_grid_dimensions(new_pixmap, min_cols=6)
@@ -1243,7 +1250,8 @@ class GLCompositorWidget(QOpenGLWidget):
 
         try:
             self.makeCurrent()
-        except Exception:
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
             return False
 
         try:
@@ -1258,14 +1266,14 @@ class GLCompositorWidget(QOpenGLWidget):
             if new_pixmap is not None and not new_pixmap.isNull():
                 success = bool(manager.get_or_create_texture(new_pixmap)) and success
             return success
-        except Exception:
+        except Exception as e:
             logger.debug("[GL COMPOSITOR] Failed to warm pixmap textures", exc_info=True)
             return False
         finally:
             try:
                 self.doneCurrent()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
 
     def start_crossfade(
         self,
@@ -1504,8 +1512,8 @@ class GLCompositorWidget(QOpenGLWidget):
             try:
                 if self._blockflip is not None:
                     self._blockflip.progress = max(0.0, min(1.0, float(progress)))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
             _inner(progress)
 
         return self._start_transition_animation(
@@ -1591,8 +1599,8 @@ class GLCompositorWidget(QOpenGLWidget):
             try:
                 if self._diffuse is not None:
                     self._diffuse.progress = max(0.0, min(1.0, float(progress)))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
             _inner(progress)
 
         return self._start_transition_animation(
@@ -1638,8 +1646,8 @@ class GLCompositorWidget(QOpenGLWidget):
             try:
                 if self._blinds is not None:
                     self._blinds.progress = max(0.0, min(1.0, float(progress)))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
             _inner(progress)
 
         return self._start_transition_animation(
@@ -1888,38 +1896,45 @@ class GLCompositorWidget(QOpenGLWidget):
         if self._crossfade is not None:
             try:
                 new_pm = self._crossfade.new_pixmap
-            except Exception:
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
                 new_pm = None
         elif self._slide is not None:
             try:
                 new_pm = self._slide.new_pixmap
-            except Exception:
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
                 new_pm = None
         elif self._wipe is not None:
             try:
                 new_pm = self._wipe.new_pixmap
-            except Exception:
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
                 new_pm = None
         elif self._blockflip is not None:
             try:
                 new_pm = self._blockflip.new_pixmap
-            except Exception:
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
                 new_pm = None
         elif self._blinds is not None:
             try:
                 new_pm = self._blinds.new_pixmap
-            except Exception:
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
                 new_pm = None
         elif self._diffuse is not None:
             try:
                 new_pm = self._diffuse.new_pixmap
-            except Exception:
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
                 new_pm = None
 
         if new_pm is None and self._raindrops is not None:
             try:
                 new_pm = self._raindrops.new_pixmap
-            except Exception:
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
                 new_pm = None
 
         # Peel keeps its own state but participates in snap-to-new when
@@ -1927,25 +1942,29 @@ class GLCompositorWidget(QOpenGLWidget):
         if new_pm is None and self._peel is not None:
             try:
                 new_pm = self._peel.new_pixmap
-            except Exception:
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
                 new_pm = None
 
         if new_pm is None and self._blockspin is not None:
             try:
                 new_pm = self._blockspin.new_pixmap
-            except Exception:
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
                 new_pm = None
 
         if new_pm is None and self._warp is not None:
             try:
                 new_pm = self._warp.new_pixmap
-            except Exception:
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
                 new_pm = None
 
         if new_pm is None and self._crumble is not None:
             try:
                 new_pm = self._crumble.new_pixmap
-            except Exception:
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
                 new_pm = None
 
         # NOTE: _shooting_stars and _shuffle snap-to-new removed - these transitions are retired.
@@ -1969,7 +1988,7 @@ class GLCompositorWidget(QOpenGLWidget):
         # cancelled so we do not leak VRAM across many rotations.
         try:
             self._release_transition_textures()
-        except Exception:
+        except Exception as e:
             logger.debug("[GL COMPOSITOR] Failed to release blockspin textures on cancel", exc_info=True)
         self.update()
 
@@ -2015,7 +2034,8 @@ class GLCompositorWidget(QOpenGLWidget):
                         if isinstance(val, (bytes, bytearray)):
                             try:
                                 return val.decode("ascii", "ignore")
-                            except Exception:
+                            except Exception as e:
+                                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
                                 return ""
                         return str(val) if val is not None else ""
 
@@ -2036,7 +2056,7 @@ class GLCompositorWidget(QOpenGLWidget):
                     if self._error_handler.is_software_gl:
                         self._gl_disabled_for_session = True
                         self._use_shaders = False
-                except Exception:
+                except Exception as e:
                     logger.debug("[GL COMPOSITOR] Failed to query OpenGL adapter strings", exc_info=True)
 
             # Prepare an empty pipeline container tied to this context and, if
@@ -2144,7 +2164,7 @@ class GLCompositorWidget(QOpenGLWidget):
                 logger.warning("[PERF] [GL COMPOSITOR] Shader pipeline init took %.2fms", _pipeline_elapsed)
             else:
                 logger.info("[GL COMPOSITOR] Shader pipeline initialized (%.1fms)", _pipeline_elapsed)
-        except Exception:
+        except Exception as e:
             logger.debug("[GL SHADER] Failed to initialize shader pipeline", exc_info=True)
             self._gl_disabled_for_session = True
             self._use_shaders = False
@@ -2177,12 +2197,13 @@ class GLCompositorWidget(QOpenGLWidget):
             if callable(is_valid) and not is_valid():
                 self._reset_pipeline_state()
                 return
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
 
         try:
             self.makeCurrent()
-        except Exception:
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
             self._reset_pipeline_state()
             return
 
@@ -2191,7 +2212,7 @@ class GLCompositorWidget(QOpenGLWidget):
             try:
                 if self._texture_manager is not None:
                     self._texture_manager.cleanup()
-            except Exception:
+            except Exception as e:
                 logger.debug("[GL COMPOSITOR] Failed to cleanup texture manager", exc_info=True)
 
             # Delete shader programs
@@ -2205,7 +2226,7 @@ class GLCompositorWidget(QOpenGLWidget):
                     prog_id = getattr(self._gl_pipeline, attr, 0)
                     if prog_id:
                         gl.glDeleteProgram(int(prog_id))
-            except Exception:
+            except Exception as e:
                 logger.debug("[GL COMPOSITOR] Failed to delete shader program", exc_info=True)
 
             # Delete geometry buffers
@@ -2220,15 +2241,15 @@ class GLCompositorWidget(QOpenGLWidget):
                     if vao_id:
                         arr = (ctypes.c_uint * 1)(int(vao_id))
                         gl.glDeleteVertexArrays(1, arr)
-            except Exception:
+            except Exception as e:
                 logger.debug("[GL COMPOSITOR] Failed to delete geometry buffers", exc_info=True)
 
             self._reset_pipeline_state()
         finally:
             try:
                 self.doneCurrent()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
 
     def cleanup(self) -> None:
         """Clean up GL resources and transition to DESTROYED state."""
@@ -2236,7 +2257,7 @@ class GLCompositorWidget(QOpenGLWidget):
         self._gl_state.transition(GLContextState.DESTROYING)
         try:
             self._cleanup_gl_pipeline()
-        except Exception:
+        except Exception as e:
             logger.debug("[GL COMPOSITOR] cleanup() failed", exc_info=True)
         finally:
             # Transition to DESTROYED state
@@ -2479,7 +2500,8 @@ void main() {
         vert = self._compile_shader(vs_source, gl.GL_VERTEX_SHADER)
         try:
             frag = self._compile_shader(fs_source, gl.GL_FRAGMENT_SHADER)
-        except Exception:
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
             gl.glDeleteShader(vert)
             raise
 
@@ -2662,7 +2684,7 @@ void main() {
                 cache = get_program_cache()
                 if not cache.is_compiled(program_key):
                     cache.get_program(program_key)
-            except Exception:
+            except Exception as e:
                 logger.debug(
                     "[GL COMPOSITOR] Failed to precompile shader program for %s",
                     transition_name,
@@ -2693,7 +2715,7 @@ void main() {
                 self._gl_disabled_for_session = True
                 self._use_shaders = False
             return result
-        except Exception:
+        except Exception as e:
             logger.debug("[GL SHADER] Failed to upload transition textures", exc_info=True)
             self._release_transition_textures()
             self._gl_disabled_for_session = True
@@ -2766,7 +2788,8 @@ void main() {
         # Recalculate viewport size
         try:
             dpr = float(self.devicePixelRatioF())
-        except Exception:
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
             dpr = 1.0
         w = max(1, int(round(current_size[0] * dpr)))
         h = max(1, int(round(current_size[1] * dpr)))
@@ -2942,7 +2965,8 @@ void main() {
 
         try:
             fade = float(self._spotify_vis_fade)
-        except Exception:
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
             fade = 0.0
         if fade <= 0.0:
             return
@@ -2988,8 +3012,8 @@ void main() {
             fade_clamped = max(0.0, min(1.0, fade))
             fill.setAlpha(int(fill.alpha() * fade_clamped))
             border.setAlpha(int(border.alpha() * fade_clamped))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
 
         painter.save()
         try:
@@ -3003,7 +3027,8 @@ void main() {
                 x = bar_x[i]
                 try:
                     value = float(bars[i])
-                except Exception:
+                except Exception as e:
+                    logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
                     value = 0.0
                 if value <= 0.0:
                     continue
@@ -3077,8 +3102,8 @@ void main() {
             if _is_transition_active:
                 frame_budget.begin_frame()
                 frame_budget.begin_category(frame_budget.CATEGORY_GL_RENDER)
-        except Exception:
-            pass  # Non-critical - continue without frame budget
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)  # Non-critical - continue without frame budget
         
         try:
             self._paintGL_impl()
@@ -3097,8 +3122,8 @@ void main() {
                         remaining = frame_budget.get_frame_remaining()
                         if remaining > 5.0:  # 5ms+ remaining
                             gc_controller.run_idle_gc(remaining)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
             
             if paint_elapsed > 50.0 and is_perf_metrics_enabled():
                 # Phase 8: Include GLStateManager transition history on dt_max spikes
@@ -3122,7 +3147,7 @@ void main() {
             if is_perf_metrics_enabled():
                 self._paint_debug_overlay_gl()
             return True
-        except Exception:
+        except Exception as e:
             logger.debug("[GL SHADER] Shader %s path failed; disabling shader pipeline", name, exc_info=True)
             self._gl_disabled_for_session = True
             self._use_shaders = False
@@ -3250,8 +3275,8 @@ void main() {
             painter.setOpacity(self._dimming_opacity)
             painter.fillRect(self.rect(), Qt.GlobalColor.black)
             painter.restore()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
     
     def _paint_dimming_gl(self) -> None:
         """Paint dimming overlay using native GL blending (faster than QPainter)."""

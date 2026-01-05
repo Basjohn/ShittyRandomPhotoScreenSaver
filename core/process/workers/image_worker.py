@@ -411,8 +411,8 @@ class ImageWorker(BaseWorker):
             try:
                 shm.close()
                 shm.unlink()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[MISC] Exception suppressed: %s", e)
         self._shared_memories.clear()
         
         if self._logger:

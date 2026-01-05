@@ -44,11 +44,13 @@ def get_screen_info() -> List[Tuple[int, int, float]]:
                 dpr = screen.devicePixelRatio()
                 # Use logical size (what widgets see)
                 result.append((geom.width(), geom.height(), dpr))
-            except Exception:
+            except Exception as e:
+                logger.debug("[UI] Exception suppressed: %s", e)
                 result.append((1920, 1080, 1.0))
         
         return result if result else [(1920, 1080, 1.0)]
-    except Exception:
+    except Exception as e:
+        logger.debug("[UI] Exception suppressed: %s", e)
         return [(1920, 1080, 1.0)]
 
 
@@ -136,8 +138,8 @@ def estimate_clock_size(
             font = QFont('Segoe UI', font_size)
             metrics = QFontMetrics(font)
             actual_font_height = metrics.height()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[UI] Exception suppressed: %s", e)
     
     if actual_font_height is None:
         # Fallback formula
@@ -239,8 +241,8 @@ def estimate_reddit_size(font_size: int, item_count: int) -> Tuple[int, int]:
                 + shadow_buffer
             )
             return (width, height)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[UI] Exception suppressed: %s", e)
     
     # Fallback: formula-based estimation
     # Use conservative multiplier to account for DPI variance
