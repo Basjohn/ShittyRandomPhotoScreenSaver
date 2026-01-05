@@ -134,6 +134,21 @@ class GLGeometryManager:
             gl.glBindVertexArray(0)
             gl.glBindBuffer(gl.GL_ARRAY_BUFFER, 0)
             
+            # Register GL handles with ResourceManager for VRAM leak prevention
+            try:
+                from core.resources.manager import ResourceManager
+                rm = ResourceManager()
+                self._quad_vao_rid = rm.register_gl_vao(
+                    self._quad_vao, description="GeometryManager quad VAO"
+                )
+                self._quad_vbo_rid = rm.register_gl_vbo(
+                    self._quad_vbo, description="GeometryManager quad VBO"
+                )
+            except Exception as e:
+                logger.debug("[GL GEOMETRY] Failed to register quad handles: %s", e)
+                self._quad_vao_rid = None
+                self._quad_vbo_rid = None
+            
             logger.debug("[GL GEOMETRY] Quad geometry created: VAO=%d, VBO=%d", self._quad_vao, self._quad_vbo)
             return True
         except Exception as e:
@@ -232,6 +247,21 @@ class GLGeometryManager:
             
             gl.glBindVertexArray(0)
             gl.glBindBuffer(gl.GL_ARRAY_BUFFER, 0)
+            
+            # Register GL handles with ResourceManager for VRAM leak prevention
+            try:
+                from core.resources.manager import ResourceManager
+                rm = ResourceManager()
+                self._box_vao_rid = rm.register_gl_vao(
+                    self._box_vao, description="GeometryManager box VAO"
+                )
+                self._box_vbo_rid = rm.register_gl_vbo(
+                    self._box_vbo, description="GeometryManager box VBO"
+                )
+            except Exception as e:
+                logger.debug("[GL GEOMETRY] Failed to register box handles: %s", e)
+                self._box_vao_rid = None
+                self._box_vbo_rid = None
             
             logger.debug("[GL GEOMETRY] Box geometry created: VAO=%d, VBO=%d, vertices=%d",
                         self._box_vao, self._box_vbo, self._box_vertex_count)

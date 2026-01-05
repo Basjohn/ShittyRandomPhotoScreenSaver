@@ -218,6 +218,14 @@ class GLTextureManager:
             logger.warning("[PERF] [GL TEXTURE] Slow upload: %.2fms (%dx%d, pbo=%s)", 
                           _upload_elapsed, w, h, use_pbo)
         
+        # Register texture with ResourceManager for VRAM leak prevention
+        try:
+            from core.resources.manager import ResourceManager
+            rm = ResourceManager()
+            rm.register_gl_texture(tex_id, description=f"GLTextureManager {w}x{h}")
+        except Exception:
+            pass  # Non-critical - texture still usable
+        
         return tex_id
     
     # -------------------------------------------------------------------------
@@ -334,6 +342,15 @@ class GLTextureManager:
                 gl.glBufferData(gl.GL_PIXEL_UNPACK_BUFFER, required_size, None, gl.GL_STREAM_DRAW)
                 gl.glBindBuffer(gl.GL_PIXEL_UNPACK_BUFFER, 0)
                 self._pbo_pool.append(PBOEntry(pbo_id, required_size, True))
+                
+                # Register PBO with ResourceManager for VRAM leak prevention
+                try:
+                    from core.resources.manager import ResourceManager
+                    rm = ResourceManager()
+                    rm.register_gl_vbo(pbo_id, description=f"GLTextureManager PBO {required_size}B")
+                except Exception:
+                    pass  # Non-critical
+                
                 return pbo_id
         except Exception:
             pass

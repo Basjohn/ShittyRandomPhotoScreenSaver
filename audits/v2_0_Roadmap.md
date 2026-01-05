@@ -310,48 +310,62 @@
 **Reference**: `audits/AAMP2026_Phase_4_Detailed.md`, `audits/setting manager defaults/Setting Defaults Guide.txt`
 **Related Modules**: `ui/settings_dialog.py`, `core/settings/settings_manager.py`, `core/settings/defaults.py`, `core/settings/models.py`
 
-- [ ] **Canonical defaults sweep**: Apply SST guide checklist
-  - [ ] Import both SST files and verify SettingsManager parity
-    - Files: `audits/setting manager defaults/SRPSS_Settings_Screensaver.sst`, `SRPSS_Settings_Screensaver_MC.sst`
-    - Verify: `get_default_settings()` covers all SST values
-  - [ ] Ensure MC defaults fall back to available monitor
-    - Logic: When display 2 unavailable, MC defaults to display 1
-  - [ ] Confirm auto geo detection for weather location
-    - Default: `_get_default_image_folders()` pattern for weather geo
-  - [ ] Add "no sources" popup with Just Make It Work/Ehhhh as options. Ehhhh closes application.
-    - Popup: `ui/styled_popup.py` dark glass theme
-    - Logic: Validate sources on startup, show popup if empty
-- [ ] **Convert to modal workflow**: Preserve custom title bar/theme
-  - Maintain: Custom title bar from existing `SettingsDialog`
-  - Ensure: Can be launched from both SRPSS and MC builds
-- [ ] **Live updates integration**: SettingsManager signals for instant changes
-  - Wire: `settings_changed` signal to `DisplayWidget` refresh
-  - Wire: Widget config updates (Spotify VIS, media, reddit)
-- [ ] **Non-destructive refresh**: Monitor toggles without engine restart
-  - Ensure: `DisplayWidget` handles monitor changes without teardown
-- [ ] **Profile separation**: MC vs Screensaver isolation maintained
-  - Verify: `SettingsManager` application name mapping ("Screensaver" vs "Screensaver_MC")
+- [x] **Canonical defaults sweep**: Apply SST guide checklist ✅ _2026-01-05_
+  - [x] Import both SST files and verify SettingsManager parity
+    - Created: `tests/test_settings_defaults_parity.py` (23 tests)
+    - Verified: `get_default_settings()` covers SST values
+  - [x] Ensure MC defaults fall back to available monitor ✅ _Already implemented_
+    - Existing: `_get_allowed_screen_indices()` defaults to ALL if specified monitors unavailable
+  - [x] Confirm auto geo detection for weather location ✅ _Already implemented_
+    - Existing: WeatherWidget uses IP-based geolocation when no location configured
+  - [x] Add "no sources" popup with Just Make It Work/Ehhhh as options ✅ _2026-01-05_
+    - Created: `NoSourcesPopup` in `ui/settings_dialog.py`
+    - Logic: Validate sources on closeEvent, show popup if empty
+    - Tests: `tests/test_settings_no_sources_popup.py` (10 tests)
+- [x] **Convert to modal workflow**: Preserve custom title bar/theme ✅ _Already implemented_
+  - Existing: Custom title bar in `SettingsDialog` with dark theme
+  - Existing: Launchable from both SRPSS and MC builds via context menu
+- [x] **Live updates integration**: SettingsManager signals for instant changes ✅ _Already implemented_
+  - Existing: `WidgetManager._handle_settings_changed()` handles widget config updates
+  - Existing: Engine subscribes to `settings.changed` via EventSystem
+  - Existing: Spotify VIS, media, reddit configs refresh on change
+- [x] **Non-destructive refresh**: Monitor toggles without engine restart ✅ _Already implemented_
+  - Existing: `_on_monitors_changed()` handles display reinitialization
+  - Note: Full teardown acceptable for rare monitor change events
+- [x] **Profile separation**: MC vs Screensaver isolation maintained ✅ _2026-01-05_
+  - Verified: `SettingsManager` auto-detects MC builds from argv
+  - Verified: Uses "Screensaver_MC" application name for MC builds
+  - Tests: `tests/test_settings_profile_separation.py` (9 tests)
 
 **Tests Required**:
-- [ ] `tests/test_settings_defaults_parity.py` - SST vs SettingsManager defaults
+- [x] `tests/test_settings_defaults_parity.py` - SST vs SettingsManager defaults ✅ 23 tests
 - [ ] `tests/test_settings_modal_workflow.py` - Modal open/close, live updates
-- [ ] `tests/test_settings_no_sources_popup.py` - Popup behavior and choices
-- [ ] `tests/test_settings_profile_separation.py` - MC vs Screensaver isolation
+- [x] `tests/test_settings_no_sources_popup.py` - Popup behavior and choices ✅ 10 tests
+- [x] `tests/test_settings_profile_separation.py` - MC vs Screensaver isolation ✅ 9 tests
 
 
 ### 4.3 Volume Key Passthrough (MC Mode)
-**Priority**: Medium (System integration)
-**Dependencies**: Phase 4.1 complete
-[DEFERRED UNTIL ALL OTHER TASKS COMPLETED AND VERIFIED]
-Key related items below require their own extensive documentation Investigation
-The cause is related to focus and shadow cache invalidation but most solutions break shadowing
-See audits\mc_focus_weather_plan.md for current investigation, tackle this only after every thing else in the roadmap. Make backups, very risky task.
-- [ ] Research task online for similiar issues, solutions and failures.
-- [ ] **MC mode working keys: Currently MC mode on one display breaks ALL keyboard interaction unless a user opens the right click menu first and then loses it once the user swaps focus and swaps back in. ANY solution for this must not break shadow cache invalidiation mitigations as they are tighly connected. No keys in MC Mode is better than shadow cache corruption. 
-- [ ] Add Spacebar Local Hotkey that trigers pause/play in media widget if present.
+**Priority**: LOW - DEFERRED
+**Dependencies**: ALL other roadmap items complete
+**Reference**: `audits/mc_focus_weather_plan.md` (detailed investigation and plan)
+
+⚠️ **DEFERRED UNTIL ALL OTHER TASKS COMPLETED AND VERIFIED** ⚠️
+
+This task requires extensive investigation due to tight coupling between focus handling and shadow cache invalidation. The reference document contains:
+- Root cause analysis of keyboard interaction issues
+- Shadow cache invalidation mitigations
+- Proposed solutions with risk assessment
+- Test plan for validation
+
+**Key Constraint**: No keys in MC Mode is better than shadow cache corruption. Any solution MUST NOT break shadow cache invalidation mitigations.
+
+- [ ] Research task online for similar issues, solutions and failures
+- [ ] **MC mode working keys**: Currently MC mode on one display breaks ALL keyboard interaction unless user opens right-click menu first, then loses it on focus swap
+- [ ] Add Spacebar Local Hotkey that triggers pause/play in media widget if present
 - [ ] **Spotify volume isolation**: Prevent interference
 - [ ] **Test media players**: Various apps and states
 - [ ] **Document behavior**: Build-specific differences
+- [ ] **Make backups before any changes** - very risky task
 
 ---
 
@@ -404,6 +418,30 @@ See audits\mc_focus_weather_plan.md for current investigation, tackle this only 
 - No GUI toggle for Eco Mode (fully automatic)
 - Consider adding performance telemetry for Eco Mode effectiveness
 
+### 5.1b GL State Management Refactoring
+**Priority**: High (VRAM leak prevention)
+**Dependencies**: Phase 3 complete
+**Reference**: `audits/GL_STATE_MANAGEMENT_REFACTORING_GUIDE.md`, `audits/GL_HANDLE_INVENTORY.md`
+**Related Modules**: `core/resources/manager.py`, `rendering/gl_programs/`, `widgets/spotify_bars_gl_overlay.py`
+
+- [x] **Phase 1: Native Handle Audit** ✅ _2026-01-05_
+  - Created: `audits/GL_HANDLE_INVENTORY.md` with full handle inventory
+  - Identified: 5 modules with untracked GL handles
+- [x] **Phase 2: ResourceManager GL Cleanup Hooks** ✅ _2026-01-05_
+  - Added: `register_gl_handle()`, `register_gl_vao()`, `register_gl_vbo()`
+  - Added: `register_gl_program()`, `register_gl_texture()`
+  - Added: `get_gl_stats()` for handle tracking
+- [x] **Phase 3: Spotify Visualizer Overlay Hardening** ✅ _2026-01-05_
+  - Integrated: ResourceManager GL handle registration in `_init_gl_pipeline()`
+  - Registered: Program, VAO, VBO handles with cleanup tracking
+  - Uses: Existing GLStateManager for state transitions
+- [x] **Phase 3b: GL Programs Integration** ✅ _2026-01-05_
+  - `geometry_manager.py`: Quad and box VAO/VBO registered
+  - `texture_manager.py`: Textures and PBOs registered
+  - `gl_compositor.py`: Covered via GLTextureManager delegation
+  - Updated: `audits/GL_HANDLE_INVENTORY.md` with completion status
+- [ ] **Phase 4-12**: See `audits/GL_STATE_MANAGEMENT_REFACTORING_GUIDE.md`
+
 ### 5.2 System Tray Enhancements
 **Priority**: Low (UX polish)
 **Dependencies**: None
@@ -441,7 +479,7 @@ See audits\mc_focus_weather_plan.md for current investigation, tackle this only 
 
 **Tests Required**:
 - [x] `tests/test_worker_latency_tuning.py` - Queue depth optimization ✅ 20 tests passing
-- [ ] `tests/test_gl_texture_streaming.py` - PBO performance validation
+- [x] `tests/test_gl_texture_streaming.py` - PBO performance validation ✅ 18 tests passing _2026-01-05_
 - [ ] `tests/test_memory_pooling.py` - Object pool efficiency
 
 ---

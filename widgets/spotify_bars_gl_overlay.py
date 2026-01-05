@@ -86,6 +86,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._gl_program = None
         self._gl_vao = None
         self._gl_vbo = None
+        # ResourceManager resource IDs for GL handles (for cleanup tracking)
+        self._gl_program_rid = None
+        self._gl_vao_rid = None
+        self._gl_vbo_rid = None
         self._u_resolution = None
         self._u_bar_count = None
         self._u_segments = None
@@ -785,6 +789,27 @@ void main() {
         self._gl_program = prog
         self._gl_vao = vao
         self._gl_vbo = vbo
+        
+        # Register GL handles with ResourceManager for VRAM leak prevention
+        try:
+            from core.resources.manager import ResourceManager
+            rm = ResourceManager()
+            self._gl_program_rid = rm.register_gl_program(
+                prog, description="SpotifyBarsGLOverlay shader program"
+            )
+            self._gl_vao_rid = rm.register_gl_vao(
+                vao, description="SpotifyBarsGLOverlay VAO"
+            )
+            self._gl_vbo_rid = rm.register_gl_vbo(
+                vbo, description="SpotifyBarsGLOverlay VBO"
+            )
+            logger.debug("[SPOTIFY_VIS] GL handles registered with ResourceManager")
+        except Exception as e:
+            logger.debug(f"[SPOTIFY_VIS] Failed to register GL handles: {e}")
+            self._gl_program_rid = None
+            self._gl_vao_rid = None
+            self._gl_vbo_rid = None
+        
         self._u_resolution = _gl.glGetUniformLocation(prog, "u_resolution")
         self._u_bar_count = _gl.glGetUniformLocation(prog, "u_bar_count")
         self._u_segments = _gl.glGetUniformLocation(prog, "u_segments")

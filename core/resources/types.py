@@ -25,6 +25,7 @@ class ResourceType(Enum):
     TEMP_IMAGE = auto()
     NETWORK_REQUEST = auto()
     CUSTOM = auto()
+    NATIVE_HANDLE = auto()  # GL handles (VAO, VBO, textures, programs)
     
     @classmethod
     def from_string(cls, value: str) -> 'ResourceType':

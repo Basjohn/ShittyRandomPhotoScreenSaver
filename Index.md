@@ -147,7 +147,24 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - `tests/test_mc_context_menu.py` - 12 tests for MC context menu features
 - `tests/test_settings_defaults_parity.py` - 23 tests for settings defaults and SST parity
 - `tests/test_widget_visual_padding.py` - 15 tests for BaseOverlayWidget visual padding helpers
-- **Total: 224 new tests** for process isolation, GL state, widgets, MC features, settings, and performance tuning
+- `tests/test_settings_no_sources_popup.py` - 10 tests for no-sources popup validation
+- `tests/test_settings_profile_separation.py` - 9 tests for MC vs Screensaver profile isolation
+- `tests/test_gl_texture_streaming.py` - 18 tests for GL texture streaming and PBO optimization
+- **Total: 261 new tests** for process isolation, GL state, widgets, MC features, settings, and performance tuning
+
+## GL Resource Management (Jan 2026)
+- `core/resources/manager.py` - ResourceManager GL cleanup hooks:
+  - `register_gl_handle()` - Generic GL handle registration with custom cleanup
+  - `register_gl_vao()` - VAO registration with glDeleteVertexArrays cleanup
+  - `register_gl_vbo()` - VBO registration with glDeleteBuffers cleanup
+  - `register_gl_program()` - Shader program registration with glDeleteProgram cleanup
+  - `register_gl_texture()` - Texture registration with glDeleteTextures cleanup
+  - `get_gl_stats()` - Statistics on registered GL handles
+- **Integrated Modules** (all GL handles now tracked):
+  - `widgets/spotify_bars_gl_overlay.py` - Program, VAO, VBO
+  - `rendering/gl_programs/geometry_manager.py` - Quad/box VAO, VBO
+  - `rendering/gl_programs/texture_manager.py` - Textures, PBOs
+- `audits/GL_HANDLE_INVENTORY.md` - Full inventory of GL handle creation points
 
 - **ARCHIVED**: Gmail modules moved to `archive/gmail_feature/` (Dec 2025)
   - Google OAuth verification requirements block unverified apps from using sensitive Gmail scopes

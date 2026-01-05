@@ -159,6 +159,153 @@ class CornerSizeGrip(QSizeGrip):
                 painter.drawLine(x1, y1, x2, y2)
 
 
+class NoSourcesPopup(QDialog):
+    """Popup shown when user tries to close settings without any image sources configured.
+    
+    Offers two choices:
+    - "Just Make It Work" - adds curated RSS feeds as default sources
+    - "Ehhhh" - closes the application (no sources = can't run)
+    """
+    
+    # Signal emitted when user chooses to add default sources
+    add_defaults_requested = Signal()
+    # Signal emitted when user chooses to exit
+    exit_requested = Signal()
+    
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setModal(True)
+        
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+        
+        card = QWidget(self)
+        card.setObjectName("noSourcesPopupCard")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(0, 0, 0, 0)
+        card_layout.setSpacing(0)
+        
+        # Title bar
+        title_bar = CustomTitleBar(card)
+        title_bar.title_label.setText("No Image Sources")
+        title_bar.minimize_btn.hide()
+        title_bar.maximize_btn.hide()
+        title_bar.close_btn.hide()  # No close button - must choose an option
+        card_layout.addWidget(title_bar)
+        
+        # Body
+        body = QWidget(card)
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(24, 20, 24, 24)
+        body_layout.setSpacing(16)
+        
+        # Warning message
+        message = QLabel(
+            "You haven't configured any image sources!\n\n"
+            "The screensaver needs at least one folder or RSS feed to display images.\n\n"
+            "What would you like to do?"
+        )
+        message.setWordWrap(True)
+        message.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        message.setStyleSheet("color: #ffffff; font-size: 14px;")
+        body_layout.addWidget(message)
+        
+        # Buttons
+        buttons_row = QHBoxLayout()
+        buttons_row.setSpacing(12)
+        
+        # "Just Make It Work" button - adds curated feeds
+        make_it_work_btn = QPushButton("Just Make It Work")
+        make_it_work_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 5px;
+                font-weight: bold;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+            QPushButton:pressed {
+                background-color: #3d8b40;
+            }
+        """)
+        make_it_work_btn.clicked.connect(self._on_make_it_work)
+        buttons_row.addWidget(make_it_work_btn)
+        
+        # "Ehhhh" button - exits application
+        exit_btn = QPushButton("Ehhhh")
+        exit_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #666666;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 5px;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background-color: #555555;
+            }
+            QPushButton:pressed {
+                background-color: #444444;
+            }
+        """)
+        exit_btn.clicked.connect(self._on_exit)
+        buttons_row.addWidget(exit_btn)
+        
+        body_layout.addLayout(buttons_row)
+        card_layout.addWidget(body)
+        
+        # Shadow effect
+        shadow = QGraphicsDropShadowEffect(card)
+        shadow.setBlurRadius(30)
+        shadow.setXOffset(0)
+        shadow.setYOffset(5)
+        shadow.setColor(QColor(0, 0, 0, 200))
+        card.setGraphicsEffect(shadow)
+        
+        card.setStyleSheet(
+            "QWidget#noSourcesPopupCard {"
+            "background-color: rgba(20, 20, 20, 245);"
+            "border-radius: 12px;"
+            "border: 1px solid rgba(255, 255, 255, 30);"
+            "}"
+        )
+        
+        outer_layout.addWidget(card)
+        self.setFixedWidth(420)
+        self.adjustSize()
+    
+    def _on_make_it_work(self) -> None:
+        """User chose to add default sources."""
+        self.add_defaults_requested.emit()
+        self.accept()
+    
+    def _on_exit(self) -> None:
+        """User chose to exit the application."""
+        self.exit_requested.emit()
+        self.reject()
+    
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        parent = self.parentWidget()
+        if parent is not None:
+            try:
+                geom = parent.rect()
+                self.move(
+                    parent.mapToGlobal(geom.center()) - self.rect().center()
+                )
+            except Exception:
+                pass
+
+
 class ResetDefaultsDialog(QWidget):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -1292,6 +1439,12 @@ class SettingsDialog(QDialog):
             self._suppress_scroll_capture = False
 
     def closeEvent(self, event):
+        # Check if user has configured any image sources
+        if not self._has_image_sources():
+            event.ignore()
+            self._show_no_sources_popup()
+            return
+        
         try:
             current_index = self.content_stack.currentIndex()
             if current_index >= 0:
@@ -1308,6 +1461,59 @@ class SettingsDialog(QDialog):
             logger.debug("Failed to save dialog geometry on close", exc_info=True)
         
         super().closeEvent(event)
+    
+    def _has_image_sources(self) -> bool:
+        """Check if user has configured at least one image source (folder or RSS feed)."""
+        try:
+            folders = self._settings.get('sources.folders', [])
+            rss_feeds = self._settings.get('sources.rss_feeds', [])
+            return bool(folders) or bool(rss_feeds)
+        except Exception:
+            return False
+    
+    def _show_no_sources_popup(self) -> None:
+        """Show popup when user tries to close without configuring sources."""
+        popup = NoSourcesPopup(self)
+        popup.add_defaults_requested.connect(self._on_add_default_sources)
+        popup.exit_requested.connect(self._on_exit_without_sources)
+        popup.exec()
+    
+    def _on_add_default_sources(self) -> None:
+        """Add curated RSS feeds as default sources."""
+        try:
+            # Use the same curated feeds as the sources tab
+            curated_feeds = [
+                "https://www.bing.com/HPImageArchive.aspx?format=rss&idx=0&n=8&mkt=en-US",
+                "https://www.nasa.gov/feeds/iotd-feed",
+                "https://www.reddit.com/r/EarthPorn/top/.json?t=day&limit=25",
+                "https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25",
+                "https://www.reddit.com/r/CityPorn/top/.json?t=day&limit=25",
+                "https://www.reddit.com/r/ArchitecturePorn/top/.json?t=day&limit=25",
+                "https://www.reddit.com/r/WaterPorn/top/.json?t=day&limit=25",
+                "https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limit=25",
+                "https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=25",
+                "https://www.reddit.com/r/AbandonedPorn/top/.json?t=day&limit=25",
+            ]
+            
+            self._settings.set('sources.rss_feeds', curated_feeds)
+            self._settings.save()
+            
+            # Reload sources tab if it exists
+            if hasattr(self, 'sources_tab'):
+                self.sources_tab._load_settings()
+            
+            logger.info("Added %d curated RSS feeds as default sources", len(curated_feeds))
+            
+            # Now close the dialog
+            self.close()
+        except Exception:
+            logger.exception("Failed to add default sources")
+    
+    def _on_exit_without_sources(self) -> None:
+        """User chose to exit the application without sources."""
+        import sys
+        logger.info("User chose to exit without configuring sources")
+        sys.exit(0)
 
     def _on_reset_to_defaults_clicked(self) -> None:
         """Reset all application settings back to defaults and show a styled notice."""

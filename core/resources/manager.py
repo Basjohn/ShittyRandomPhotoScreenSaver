@@ -237,6 +237,170 @@ class ResourceManager:
         
         return resource_id
     
+    def register_gl_handle(
+        self,
+        handle: int,
+        handle_type: str,
+        cleanup_func: Callable[[int], None],
+        description: str = "",
+        group: str = "gl",
+        **metadata
+    ) -> str:
+        """
+        Register an OpenGL handle for managed cleanup.
+        
+        GL handles (VAOs, VBOs, textures, programs) must be registered
+        immediately after creation to prevent VRAM leaks on engine restarts.
+        
+        Args:
+            handle: The GL handle (integer from glGen*/glCreate*)
+            handle_type: Type of handle ("vao", "vbo", "texture", "program", "shader")
+            cleanup_func: Function to delete the handle (e.g., lambda h: gl.glDeleteBuffers(1, [h]))
+            description: Human-readable description
+            group: Resource group for batch cleanup (default "gl")
+            **metadata: Additional metadata
+        
+        Returns:
+            str: Resource ID
+        
+        Example:
+            vbo = gl.glGenBuffers(1)
+            self._resources.register_gl_handle(
+                vbo, "vbo",
+                lambda h: gl.glDeleteBuffers(1, [h]),
+                description="Quad VBO"
+            )
+        """
+        # Create a wrapper object to hold the handle since int can't be weak-referenced
+        class GLHandleRef:
+            def __init__(self, h: int, t: str):
+                self.handle = h
+                self.handle_type = t
+        
+        ref = GLHandleRef(handle, handle_type)
+        
+        def gl_cleanup(obj):
+            try:
+                # Validate handle before cleanup
+                if obj.handle and obj.handle > 0:
+                    cleanup_func(obj.handle)
+                    self._logger.debug(f"Deleted GL {obj.handle_type}: {obj.handle}")
+            except Exception as e:
+                self._logger.warning(f"Failed to delete GL {obj.handle_type} {obj.handle}: {e}")
+        
+        resource_id = self.register(
+            ref,
+            ResourceType.NATIVE_HANDLE,
+            description or f"GL {handle_type}: {handle}",
+            cleanup_handler=gl_cleanup,
+            gl_handle=handle,
+            gl_handle_type=handle_type,
+            group=group,
+            **metadata
+        )
+        
+        # Keep strong reference to prevent GC before explicit cleanup
+        with self._lock:
+            self._strong_refs[resource_id] = ref
+        
+        return resource_id
+    
+    def register_gl_program(
+        self,
+        program: int,
+        description: str = "",
+        group: str = "gl",
+        **metadata
+    ) -> str:
+        """Register a GL shader program for managed cleanup."""
+        try:
+            from OpenGL import GL as gl
+            return self.register_gl_handle(
+                program, "program",
+                lambda h: gl.glDeleteProgram(h),
+                description=description or f"GL Program {program}",
+                group=group,
+                **metadata
+            )
+        except ImportError:
+            self._logger.warning("OpenGL not available for program registration")
+            return ""
+    
+    def register_gl_vao(
+        self,
+        vao: int,
+        description: str = "",
+        group: str = "gl",
+        **metadata
+    ) -> str:
+        """Register a GL VAO for managed cleanup."""
+        try:
+            from OpenGL import GL as gl
+            return self.register_gl_handle(
+                vao, "vao",
+                lambda h: gl.glDeleteVertexArrays(1, [h]),
+                description=description or f"GL VAO {vao}",
+                group=group,
+                **metadata
+            )
+        except ImportError:
+            self._logger.warning("OpenGL not available for VAO registration")
+            return ""
+    
+    def register_gl_vbo(
+        self,
+        vbo: int,
+        description: str = "",
+        group: str = "gl",
+        **metadata
+    ) -> str:
+        """Register a GL VBO for managed cleanup."""
+        try:
+            from OpenGL import GL as gl
+            return self.register_gl_handle(
+                vbo, "vbo",
+                lambda h: gl.glDeleteBuffers(1, [h]),
+                description=description or f"GL VBO {vbo}",
+                group=group,
+                **metadata
+            )
+        except ImportError:
+            self._logger.warning("OpenGL not available for VBO registration")
+            return ""
+    
+    def register_gl_texture(
+        self,
+        texture: int,
+        description: str = "",
+        group: str = "gl",
+        **metadata
+    ) -> str:
+        """Register a GL texture for managed cleanup."""
+        try:
+            from OpenGL import GL as gl
+            return self.register_gl_handle(
+                texture, "texture",
+                lambda h: gl.glDeleteTextures(1, [h]),
+                description=description or f"GL Texture {texture}",
+                group=group,
+                **metadata
+            )
+        except ImportError:
+            self._logger.warning("OpenGL not available for texture registration")
+            return ""
+    
+    def get_gl_stats(self) -> Dict[str, int]:
+        """Get statistics about registered GL handles."""
+        with self._lock:
+            stats = {"vao": 0, "vbo": 0, "texture": 0, "program": 0, "shader": 0, "total": 0}
+            for rid, info in self._resources.items():
+                if info.resource_type == ResourceType.NATIVE_HANDLE:
+                    handle_type = info.metadata.get("gl_handle_type", "")
+                    if handle_type in stats:
+                        stats[handle_type] += 1
+                        stats["total"] += 1
+            return stats
+    
     def get(self, resource_id: str) -> Optional[Any]:
         """
         Get a resource by ID.
