@@ -36,6 +36,13 @@ from core.threading import ThreadManager
 from core.settings import SettingsManager
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.animation import AnimationManager
+from core.process import ProcessSupervisor, WorkerType, MessageType
+from core.process.workers import (
+    image_worker_main,
+    rss_worker_main,
+    fft_worker_main,
+    transition_worker_main,
+)
 
 from engine.display_manager import DisplayManager
 from engine.image_queue import ImageQueue
@@ -167,6 +174,9 @@ class ScreensaverEngine(QObject):
         self._rss_refresh_timer: Optional[QTimer] = None
         self._rss_merge_lock = threading.Lock()
         
+        # Process Supervisor for multiprocessing workers
+        self._process_supervisor: Optional[ProcessSupervisor] = None
+        
         logger.info("ScreensaverEngine created")
     
     # -------------------------------------------------------------------------
@@ -292,6 +302,9 @@ class ScreensaverEngine(QObject):
             # Enable background RSS refresh if applicable
             self._start_rss_background_refresh_if_needed()
             
+            # Start multiprocessing workers (non-blocking, fallback if workers fail)
+            self._start_workers()
+            
             # Transition to STOPPED state (ready to start)
             self._transition_state(EngineState.STOPPED)
             
@@ -343,6 +356,20 @@ class ScreensaverEngine(QObject):
             except ValueError:
                 self._current_transition_index = 0
                 logger.debug(f"Unknown transition '{current_transition}', defaulting to index 0")
+            
+            # Initialize ProcessSupervisor for multiprocessing workers
+            self._process_supervisor = ProcessSupervisor(
+                resource_manager=self.resource_manager,
+                settings_manager=self.settings_manager,
+                event_system=self.event_system,
+            )
+            
+            # Register worker factories
+            self._process_supervisor.register_worker_factory(WorkerType.IMAGE, image_worker_main)
+            self._process_supervisor.register_worker_factory(WorkerType.RSS, rss_worker_main)
+            self._process_supervisor.register_worker_factory(WorkerType.FFT, fft_worker_main)
+            self._process_supervisor.register_worker_factory(WorkerType.TRANSITION, transition_worker_main)
+            logger.info("ProcessSupervisor initialized with 4 worker factories")
             
             logger.info("Core systems initialized successfully")
             return True
@@ -531,6 +558,89 @@ class ScreensaverEngine(QObject):
             logger.exception(f"Image queue build failed: {e}")
             return False
     
+    def _fetch_rss_via_worker(
+        self,
+        feed_url: str,
+        cache_dir: Optional[str] = None,
+        max_images: int = 8,
+        timeout_ms: int = 30000,
+    ) -> Optional[List[Dict]]:
+        """
+        Fetch RSS feed using RSSWorker process.
+        
+        Uses the RSSWorker for fetch/parse in a separate process,
+        avoiding blocking the main process. Falls back to None if worker unavailable.
+        
+        Args:
+            feed_url: URL of the RSS feed
+            cache_dir: Directory to cache downloaded images
+            max_images: Maximum images to fetch
+            timeout_ms: Timeout for worker response
+            
+        Returns:
+            List of image info dicts if successful, None if worker unavailable or failed
+        """
+        if not self._process_supervisor or not self._process_supervisor.is_running(WorkerType.RSS):
+            return None
+        
+        try:
+            import time
+            
+            # Send fetch request to RSSWorker
+            correlation_id = self._process_supervisor.send_message(
+                WorkerType.RSS,
+                MessageType.RSS_FETCH,
+                payload={
+                    "feed_url": feed_url,
+                    "cache_dir": cache_dir,
+                    "max_images": max_images,
+                },
+            )
+            
+            if not correlation_id:
+                logger.debug("[WORKER] Failed to send message to RSSWorker")
+                return None
+            
+            # Poll for response with timeout
+            start_time = time.time()
+            timeout_s = timeout_ms / 1000.0
+            
+            while (time.time() - start_time) < timeout_s:
+                # Check for shutdown
+                if self._shutting_down:
+                    return None
+                
+                responses = self._process_supervisor.poll_responses(WorkerType.RSS, max_count=10)
+                
+                for response in responses:
+                    if response.correlation_id == correlation_id:
+                        if response.success:
+                            payload = response.payload
+                            images = payload.get("images", [])
+                            
+                            if is_perf_metrics_enabled():
+                                proc_time = response.processing_time_ms or 0
+                                logger.info(
+                                    "[PERF] [WORKER] RSSWorker fetch: %d images in %.1fms",
+                                    len(images), proc_time
+                                )
+                            
+                            return images
+                        else:
+                            error = response.error or "Unknown error"
+                            logger.warning("[WORKER] RSSWorker failed: %s", error)
+                            return None
+                
+                # Brief sleep to avoid busy-waiting
+                time.sleep(0.05)
+            
+            logger.warning("[WORKER] RSSWorker timeout after %dms", timeout_ms)
+            return None
+            
+        except Exception as e:
+            logger.warning("[WORKER] RSSWorker error: %s", e)
+            return None
+    
     def _load_rss_images_async(self) -> None:
         """Load RSS images asynchronously in the background.
         
@@ -563,11 +673,23 @@ class ScreensaverEngine(QObject):
             Respects engine shutdown - exits immediately when _running is False.
             Processes non-Reddit sources first for faster cache building.
             Downloads limited images per source to avoid blocking.
+            
+            Uses RSSWorker process when available for network I/O isolation.
             """
             import time
+            from pathlib import Path
             from sources.rss_source import _get_source_priority
             
             rss_images: List[ImageMetadata] = []
+            
+            # Check if RSSWorker is available
+            use_worker = (
+                engine._process_supervisor is not None and 
+                engine._process_supervisor.is_running(WorkerType.RSS)
+            )
+            
+            if use_worker:
+                logger.info("[ASYNC RSS] Using RSSWorker process for RSS loading")
             
             # Sort sources by priority - non-Reddit first (higher priority = earlier)
             # Each RSSSource has feed_urls attribute with the feed URL(s)
@@ -577,6 +699,13 @@ class ScreensaverEngine(QObject):
                 return 50
             
             sources = sorted(engine.rss_sources, key=get_source_priority, reverse=True)
+            
+            # Get cache directory from first source if available
+            cache_dir = None
+            for src in sources:
+                if hasattr(src, '_cache_dir') and src._cache_dir:
+                    cache_dir = str(src._cache_dir)
+                    break
             
             for i, rss_source in enumerate(sources):
                 # CHECK FOR SHUTDOWN - only abort if actually shutting down
@@ -589,9 +718,48 @@ class ScreensaverEngine(QObject):
                     logger.info(f"[ASYNC RSS] Processing source {i+1}/{len(sources)}: {feed_url[:60]}...")
                     
                     images_before = len(rss_images)
-                    # refresh() now respects max_images_per_source and shutdown callback
-                    rss_source.refresh(max_images_per_source=8)  # Limit to 8 per source for faster cycling
-                    images = rss_source.get_images()
+                    images: List[ImageMetadata] = []
+                    worker_succeeded = False
+                    
+                    # Try RSSWorker first if available
+                    if use_worker:
+                        worker_result = engine._fetch_rss_via_worker(
+                            feed_url,
+                            cache_dir=cache_dir,
+                            max_images=8,
+                            timeout_ms=30000,
+                        )
+                        
+                        if worker_result is not None:
+                            # Convert worker response dicts to ImageMetadata objects
+                            for img_dict in worker_result:
+                                try:
+                                    local_path = img_dict.get("local_path")
+                                    if local_path:
+                                        local_path = Path(local_path)
+                                    
+                                    meta = ImageMetadata(
+                                        source_type=ImageSourceType.RSS,
+                                        source_id=img_dict.get("source_id", ""),
+                                        url=img_dict.get("url"),
+                                        local_path=local_path,
+                                        title=img_dict.get("title", ""),
+                                    )
+                                    images.append(meta)
+                                except Exception as e:
+                                    logger.debug(f"[ASYNC RSS] Failed to convert worker result: {e}")
+                            
+                            if images:
+                                worker_succeeded = True
+                                logger.debug(f"[ASYNC RSS] RSSWorker returned {len(images)} images")
+                    
+                    # Fallback to RSSSource if worker failed or unavailable
+                    if not worker_succeeded:
+                        if use_worker:
+                            logger.debug("[ASYNC RSS] RSSWorker failed, falling back to RSSSource")
+                        rss_source.refresh(max_images_per_source=8)
+                        images = rss_source.get_images()
+                    
                     rss_images.extend(images)
                     images_added = len(rss_images) - images_before
                     
@@ -618,7 +786,8 @@ class ScreensaverEngine(QObject):
                     
                     # Add delay between sources to avoid rate limiting
                     # Use shorter delays and check for shutdown during wait
-                    if i < len(sources) - 1:
+                    # Skip delay if using worker (worker handles rate limiting internally)
+                    if i < len(sources) - 1 and not worker_succeeded:
                         for _ in range(4):  # 4 x 0.5s = 2s total, but can exit early
                             if engine._shutting_down:
                                 logger.info("[ASYNC RSS] Engine shutting down during delay, aborting")
@@ -1117,6 +1286,11 @@ class ScreensaverEngine(QObject):
             display_count = self.display_manager.initialize_displays()
             logger.info(f"Display initialized with {display_count} screens")
             
+            # Wire up ProcessSupervisor to displays for FFTWorker integration
+            if self._process_supervisor and display_count > 0:
+                self.display_manager.set_process_supervisor(self._process_supervisor)
+                logger.debug("ProcessSupervisor wired to display manager")
+            
             # Set flag on success
             if display_count > 0:
                 self._display_initialized = True
@@ -1165,6 +1339,61 @@ class ScreensaverEngine(QObject):
             self.display_manager.monitors_changed.connect(self._on_monitors_changed)
         
         logger.debug("Event subscriptions configured")
+    
+    def _start_workers(self) -> None:
+        """Start multiprocessing workers based on settings.
+        
+        Workers are optional - if they fail to start, the engine falls back
+        to ThreadManager-based processing. This is non-blocking.
+        
+        Respects max_workers setting: 'auto' = half CPU cores, or explicit 1-8.
+        """
+        if not self._process_supervisor:
+            logger.debug("ProcessSupervisor not initialized, skipping worker startup")
+            return
+        
+        # Determine max workers based on settings and CPU cores
+        import os
+        cpu_count = os.cpu_count() or 4
+        max_workers_setting = self.settings_manager.get('workers.max_workers', 'auto')
+        
+        if max_workers_setting == 'auto':
+            # Half CPU cores for background app, minimum 2, maximum 4
+            max_workers = max(2, min(4, cpu_count // 2))
+        else:
+            try:
+                max_workers = int(max_workers_setting)
+                max_workers = max(1, min(8, max_workers))
+            except (ValueError, TypeError):
+                max_workers = 4
+        
+        logger.info(f"Worker pool: max_workers={max_workers} (CPU cores={cpu_count})")
+        
+        workers_started = 0
+        workers_failed = 0
+        
+        # Priority order: Image > FFT only
+        # RSS and Transition workers removed - low value, use ThreadManager instead
+        # This reduces process overhead and improves performance
+        worker_configs = [
+            (WorkerType.IMAGE, 'workers.image.enabled', "ImageWorker", "ThreadManager fallback"),
+            (WorkerType.FFT, 'workers.fft.enabled', "FFTWorker", "local processing"),
+        ]
+        
+        for worker_type, setting_key, name, fallback_msg in worker_configs:
+            if workers_started >= max_workers:
+                logger.debug(f"{name} skipped - max_workers limit reached ({max_workers})")
+                continue
+                
+            if self.settings_manager.get(setting_key, True):
+                if self._process_supervisor.start(worker_type):
+                    logger.info(f"{name} started successfully")
+                    workers_started += 1
+                else:
+                    logger.warning(f"{name} failed to start - using {fallback_msg}")
+                    workers_failed += 1
+        
+        logger.info(f"Worker startup complete: {workers_started} started, {workers_failed} failed")
     
     def start(self) -> bool:
         """
@@ -1307,6 +1536,15 @@ class ScreensaverEngine(QObject):
             
             # Stop any pending image loads
             self._loading_in_progress = False
+            
+            # Shutdown ProcessSupervisor and all workers
+            if exit_app and self._process_supervisor:
+                logger.info("Shutting down ProcessSupervisor...")
+                try:
+                    self._process_supervisor.shutdown()
+                    logger.info("ProcessSupervisor shutdown complete")
+                except Exception as e:
+                    logger.warning("ProcessSupervisor shutdown failed: %s", e, exc_info=True)
             
             self.stopped.emit()
             logger.info("Screensaver engine stopped")
@@ -1509,6 +1747,135 @@ class ScreensaverEngine(QObject):
             logger.exception(f"Show next image failed: {e}")
             self._loading_in_progress = False
             return False
+    
+    def _load_image_via_worker(
+        self, 
+        image_path: str, 
+        target_width: int, 
+        target_height: int,
+        display_mode: str = "fill",
+        sharpen: bool = False,
+        timeout_ms: int = 500,
+    ) -> Optional[QImage]:
+        """
+        Load and prescale image using ImageWorker process.
+        
+        Uses the ImageWorker for decode/prescale in a separate process,
+        avoiding GIL contention. Falls back to None if worker unavailable.
+        
+        Args:
+            image_path: Path to image file
+            target_width: Target width in pixels
+            target_height: Target height in pixels
+            display_mode: Display mode (fill, fit, shrink)
+            sharpen: Whether to apply sharpening
+            timeout_ms: Timeout for worker response
+            
+        Returns:
+            QImage if successful, None if worker unavailable or failed
+        """
+        if not self._process_supervisor or not self._process_supervisor.is_running(WorkerType.IMAGE):
+            return None
+        
+        try:
+            import time
+            
+            # Send prescale request to ImageWorker
+            correlation_id = self._process_supervisor.send_message(
+                WorkerType.IMAGE,
+                MessageType.IMAGE_PRESCALE,
+                payload={
+                    "path": image_path,
+                    "target_width": target_width,
+                    "target_height": target_height,
+                    "mode": display_mode,
+                    "use_lanczos": True,
+                    "sharpen": sharpen,
+                },
+            )
+            
+            if not correlation_id:
+                logger.debug("[WORKER] Failed to send message to ImageWorker")
+                return None
+            
+            # Poll for response with timeout
+            start_time = time.time()
+            timeout_s = timeout_ms / 1000.0
+            
+            while (time.time() - start_time) < timeout_s:
+                responses = self._process_supervisor.poll_responses(WorkerType.IMAGE, max_count=10)
+                
+                for response in responses:
+                    # Skip WORKER_BUSY/IDLE messages - they're handled internally
+                    if response.msg_type in (MessageType.WORKER_BUSY, MessageType.WORKER_IDLE, MessageType.HEARTBEAT_ACK):
+                        continue
+                    
+                    if response.correlation_id == correlation_id:
+                        if response.success:
+                            payload = response.payload
+                            width = payload.get("width", 0)
+                            height = payload.get("height", 0)
+                            
+                            if width <= 0 or height <= 0:
+                                logger.warning("[WORKER] ImageWorker returned invalid dimensions")
+                                return None
+                            
+                            # Check for shared memory response (large images)
+                            shm_name = payload.get("shared_memory_name")
+                            if shm_name:
+                                try:
+                                    from multiprocessing.shared_memory import SharedMemory
+                                    shm_size = payload.get("shared_memory_size", width * height * 4)
+                                    shm = SharedMemory(name=shm_name, create=False)
+                                    rgba_data = bytes(shm.buf[:shm_size])
+                                    shm.close()
+                                    # Don't unlink - worker will clean up
+                                    
+                                    if is_perf_metrics_enabled():
+                                        logger.debug(
+                                            "[PERF] [WORKER] ImageWorker used shared memory: %.1f MB",
+                                            shm_size / (1024 * 1024)
+                                        )
+                                except Exception as shm_err:
+                                    logger.warning("[WORKER] Failed to read shared memory: %s", shm_err)
+                                    return None
+                            else:
+                                # Queue-based transfer (smaller images)
+                                rgba_data = payload.get("rgba_data")
+                            
+                            if rgba_data and width > 0 and height > 0:
+                                qimage = QImage(
+                                    rgba_data,
+                                    width,
+                                    height,
+                                    width * 4,  # bytes per line
+                                    QImage.Format.Format_RGBA8888,
+                                )
+                                # Make a deep copy since rgba_data may be invalidated
+                                qimage = qimage.copy()
+                                
+                                if is_perf_metrics_enabled():
+                                    proc_time = response.processing_time_ms or 0
+                                    logger.info(
+                                        "[PERF] [WORKER] ImageWorker prescale: %dx%d in %.1fms",
+                                        width, height, proc_time
+                                    )
+                                
+                                return qimage
+                        else:
+                            error = response.error or "Unknown error"
+                            logger.warning("[WORKER] ImageWorker failed: %s", error)
+                            return None
+                
+                # Brief sleep to avoid busy-waiting
+                time.sleep(0.005)
+            
+            logger.warning("[WORKER] ImageWorker timeout after %dms", timeout_ms)
+            return None
+            
+        except Exception as e:
+            logger.warning("[WORKER] ImageWorker error: %s", e)
+            return None
     
     def _load_image_task(self, image_meta: ImageMetadata, preferred_size: Optional[tuple] = None) -> Optional[QPixmap]:
         """
@@ -1736,20 +2103,50 @@ class ScreensaverEngine(QObject):
                         
                         # Get display mode
                         display_mode = getattr(display, 'display_mode', DisplayMode.FILL)
+                        display_mode_str = display_mode.value if hasattr(display_mode, 'value') else str(display_mode).lower()
                         
-                        # Process image for this display (thread-safe QImage operation)
-                        processed_qimage = AsyncImageProcessor.process_qimage(
-                            qimage,
-                            target_size,
-                            display_mode,
-                            use_lanczos=False,
-                            sharpen=sharpen,
-                        )
+                        # Try ImageWorker first (separate process, avoids GIL)
+                        processed_qimage = None
+                        
+                        if self._process_supervisor and self._process_supervisor.is_running(WorkerType.IMAGE):
+                            worker_qimage = self._load_image_via_worker(
+                                img_path,
+                                target_size.width(),
+                                target_size.height(),
+                                display_mode=display_mode_str,
+                                sharpen=sharpen,
+                                timeout_ms=1500,  # Increased from 500ms - worker avg is 253ms, large images need more
+                            )
+                            if worker_qimage and not worker_qimage.isNull():
+                                processed_qimage = worker_qimage
+                                logger.debug(f"[ASYNC] Image loaded via ImageWorker for display {i}")
+                        
+                        # Fallback to local processing if worker unavailable or failed
+                        if processed_qimage is None or processed_qimage.isNull():
+                            # Load QImage locally if not already loaded
+                            if qimage is None or qimage.isNull():
+                                qimage = QImage(img_path)
+                                if qimage.isNull():
+                                    logger.warning(f"[ASYNC] Failed to load QImage locally: {img_path}")
+                                    continue
+                            
+                            # Process image for this display (thread-safe QImage operation)
+                            processed_qimage = AsyncImageProcessor.process_qimage(
+                                qimage,
+                                target_size,
+                                display_mode,
+                                use_lanczos=False,
+                                sharpen=sharpen,
+                            )
                         
                         # Convert to QPixmap on worker thread (Qt 6 allows this)
                         # This moves the expensive conversion off the UI thread
                         processed_pixmap = QPixmap.fromImage(processed_qimage)
-                        original_pixmap = QPixmap.fromImage(qimage)
+                        
+                        # For original pixmap, use qimage if available, otherwise load it
+                        if qimage is None or qimage.isNull():
+                            qimage = QImage(img_path)
+                        original_pixmap = QPixmap.fromImage(qimage) if qimage and not qimage.isNull() else processed_pixmap
                         
                         processed_images[i] = {
                             'pixmap': processed_pixmap,

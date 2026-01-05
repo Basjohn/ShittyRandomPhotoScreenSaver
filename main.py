@@ -306,6 +306,22 @@ def run_screensaver(app: QApplication) -> int:
 
                 tray_icon.settings_requested.connect(_on_tray_settings)
                 tray_icon.exit_requested.connect(_on_tray_exit)
+                
+                # Wire up Eco Mode indicator callback
+                def _check_eco_mode() -> bool:
+                    try:
+                        if hasattr(engine, 'display_manager') and engine.display_manager:
+                            displays = getattr(engine.display_manager, '_displays', [])
+                            for display in displays:
+                                eco_manager = getattr(display, '_eco_mode_manager', None)
+                                if eco_manager and hasattr(eco_manager, 'is_eco_mode_active'):
+                                    if eco_manager.is_eco_mode_active():
+                                        return True
+                        return False
+                    except Exception:
+                        return False
+                
+                tray_icon.set_eco_mode_callback(_check_eco_mode)
 
         logger.info("Screensaver engine started - entering event loop")
         return app.exec()

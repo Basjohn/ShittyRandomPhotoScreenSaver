@@ -28,6 +28,9 @@ from core.process.types import (
 
 logger = get_logger(__name__)
 
+# Type alias for response callbacks
+ResponseCallback = Callable[[WorkerResponse], None]
+
 
 class ProcessSupervisor:
     """
@@ -87,6 +90,11 @@ class ProcessSupervisor:
         # Heartbeat monitoring
         self._heartbeat_timer: Optional[threading.Timer] = None
         self._heartbeat_interval_s = HealthStatus.HEARTBEAT_INTERVAL_MS / 1000.0
+        
+        # Async response handling - callbacks keyed by correlation_id
+        self._response_callbacks: Dict[str, ResponseCallback] = {}
+        self._response_listener_thread: Optional[threading.Thread] = None
+        self._response_listener_running = False
         
         # Initialize health status for all worker types
         for wt in WorkerType:
@@ -390,11 +398,40 @@ class ProcessSupervisor:
                 if response.msg_type == MessageType.HEARTBEAT_ACK:
                     with self._lock:
                         self._health[worker_type].record_heartbeat()
+                
+                # Handle worker busy/idle state changes
+                elif response.msg_type == MessageType.WORKER_BUSY:
+                    with self._lock:
+                        self._health[worker_type].set_busy(True)
+                        if is_perf_metrics_enabled():
+                            logger.debug(
+                                "[PERF] [WORKER] %s marked as BUSY",
+                                worker_type.value,
+                            )
+                
+                elif response.msg_type == MessageType.WORKER_IDLE:
+                    with self._lock:
+                        self._health[worker_type].set_busy(False)
+                        self._health[worker_type].record_heartbeat()  # Reset heartbeat on idle
                         
             except Exception:
                 break
         
         return responses
+    
+    def is_running(self, worker_type: WorkerType) -> bool:
+        """Check if a worker is currently running.
+        
+        Args:
+            worker_type: Type of worker to check
+            
+        Returns:
+            True if worker process is alive and running
+        """
+        with self._lock:
+            if worker_type not in self._workers:
+                return False
+            return self._workers[worker_type].is_alive()
     
     def get_health(self, worker_type: WorkerType) -> HealthStatus:
         """Get health status for a worker."""
@@ -409,6 +446,196 @@ class ProcessSupervisor:
         with self._lock:
             return {wt: self._health[wt] for wt in WorkerType}
     
+    def register_response_callback(
+        self,
+        correlation_id: str,
+        callback: ResponseCallback,
+        timeout_ms: int = 5000,
+    ) -> None:
+        """
+        Register a callback for async response handling.
+        
+        The callback will be invoked from the response listener thread
+        when a response with the matching correlation_id is received.
+        Callbacks are automatically removed after invocation or timeout.
+        
+        Args:
+            correlation_id: The correlation ID to match
+            callback: Function to call with the WorkerResponse
+            timeout_ms: Timeout after which callback is removed (default 5s)
+        """
+        with self._lock:
+            self._response_callbacks[correlation_id] = callback
+            
+            # Start response listener if not running
+            self._ensure_response_listener()
+            
+            # Schedule timeout cleanup
+            def _timeout_cleanup():
+                with self._lock:
+                    if correlation_id in self._response_callbacks:
+                        del self._response_callbacks[correlation_id]
+                        if is_perf_metrics_enabled():
+                            logger.debug(
+                                "[PERF] [WORKER] Response callback timeout: %s",
+                                correlation_id[:8],
+                            )
+            
+            timer = threading.Timer(timeout_ms / 1000.0, _timeout_cleanup)
+            timer.daemon = True
+            timer.start()
+    
+    def send_message_async(
+        self,
+        worker_type: WorkerType,
+        msg_type: MessageType,
+        payload: Dict[str, Any],
+        callback: ResponseCallback,
+        timeout_ms: int = 5000,
+    ) -> Optional[str]:
+        """
+        Send a message and register a callback for the response.
+        
+        This is the preferred method for non-blocking worker communication.
+        The callback will be invoked from a background thread when the
+        response arrives.
+        
+        Args:
+            worker_type: Target worker type
+            msg_type: Message type
+            payload: Message payload
+            callback: Function to call with the response
+            timeout_ms: Timeout for response
+            
+        Returns:
+            Correlation ID if sent, None if failed
+        """
+        correlation_id = self.send_message(worker_type, msg_type, payload)
+        if correlation_id:
+            self.register_response_callback(correlation_id, callback, timeout_ms)
+        return correlation_id
+    
+    def _ensure_response_listener(self) -> None:
+        """Start response listener thread if not already running.
+        
+        NOTE: The response listener is DISABLED for now because it conflicts
+        with the existing poll_responses() pattern used by _load_image_via_worker.
+        The async callback system (send_message_async) is available but not
+        recommended until the image loading is refactored to use callbacks.
+        """
+        # DISABLED: Response listener conflicts with poll_responses()
+        # The listener drains the queue, preventing poll_responses from seeing responses
+        # TODO: Refactor image loading to use send_message_async callbacks
+        return
+        
+        if self._response_listener_running or self._shutdown:
+            return
+        
+        self._response_listener_running = True
+        self._response_listener_thread = threading.Thread(
+            target=self._response_listener_loop,
+            name="SRPSS_ResponseListener",
+            daemon=True,
+        )
+        self._response_listener_thread.start()
+        logger.debug("Response listener thread started")
+    
+    def _response_listener_loop(self) -> None:
+        """Background thread that polls response queues ONLY for registered callbacks.
+        
+        IMPORTANT: This thread only processes responses that have registered callbacks.
+        Responses without callbacks are left in the queue for poll_responses() to handle.
+        This prevents the listener from consuming responses meant for synchronous polling.
+        """
+        while not self._shutdown and self._response_listener_running:
+            try:
+                # Only run if there are pending callbacks
+                with self._lock:
+                    if not self._response_callbacks:
+                        time.sleep(0.01)  # Sleep longer when no callbacks
+                        continue
+                    pending_ids = set(self._response_callbacks.keys())
+                
+                # Poll all worker response queues
+                for worker_type in WorkerType:
+                    with self._lock:
+                        resp_queue = self._response_queues.get(worker_type)
+                        if not resp_queue:
+                            continue
+                    
+                    # Peek and selectively consume responses
+                    try:
+                        # Collect responses to process
+                        responses_to_process = []
+                        responses_to_requeue = []
+                        
+                        # Drain queue
+                        while True:
+                            try:
+                                data = resp_queue.get_nowait()
+                            except Exception:
+                                break
+                            
+                            response = WorkerResponse.from_dict(data)
+                            
+                            # Handle internal messages (always consume)
+                            if response.msg_type == MessageType.HEARTBEAT_ACK:
+                                with self._lock:
+                                    self._health[worker_type].record_heartbeat()
+                                continue
+                            
+                            if response.msg_type == MessageType.WORKER_BUSY:
+                                with self._lock:
+                                    self._health[worker_type].set_busy(True)
+                                continue
+                            
+                            if response.msg_type == MessageType.WORKER_IDLE:
+                                with self._lock:
+                                    self._health[worker_type].set_busy(False)
+                                    self._health[worker_type].record_heartbeat()
+                                continue
+                            
+                            # Check if this response has a registered callback
+                            if response.correlation_id in pending_ids:
+                                responses_to_process.append(response)
+                            else:
+                                # Requeue for poll_responses() to handle
+                                responses_to_requeue.append(data)
+                        
+                        # Requeue responses without callbacks
+                        for data in responses_to_requeue:
+                            try:
+                                resp_queue.put_nowait(data)
+                            except Exception:
+                                pass  # Queue full - drop
+                        
+                        # Process responses with callbacks
+                        for response in responses_to_process:
+                            callback = None
+                            with self._lock:
+                                callback = self._response_callbacks.pop(
+                                    response.correlation_id, None
+                                )
+                            
+                            if callback:
+                                try:
+                                    callback(response)
+                                except Exception as e:
+                                    logger.error(
+                                        "Response callback error: %s", e
+                                    )
+                    except Exception as e:
+                        logger.debug("Response poll error for %s: %s", worker_type.value, e)
+                
+                # Brief sleep to avoid busy-waiting (1ms)
+                time.sleep(0.001)
+                
+            except Exception as e:
+                logger.error("Response listener error: %s", e)
+                time.sleep(0.01)
+        
+        logger.debug("Response listener thread stopped")
+    
     def shutdown(self, timeout: float = 10.0) -> None:
         """
         Shutdown all workers and cleanup.
@@ -422,10 +649,19 @@ class ProcessSupervisor:
         logger.info("ProcessSupervisor shutting down...")
         self._shutdown = True
         
+        # Stop response listener
+        self._response_listener_running = False
+        if self._response_listener_thread and self._response_listener_thread.is_alive():
+            self._response_listener_thread.join(timeout=1.0)
+        
         # Stop heartbeat monitoring
         if self._heartbeat_timer:
             self._heartbeat_timer.cancel()
             self._heartbeat_timer = None
+        
+        # Clear pending callbacks
+        with self._lock:
+            self._response_callbacks.clear()
         
         # Stop all workers
         per_worker_timeout = timeout / max(len(self._workers), 1)

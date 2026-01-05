@@ -111,6 +111,15 @@ class WidgetManager:
         self._factory_registry = WidgetFactoryRegistry(settings, thread_manager)
         logger.debug("[WIDGET_MANAGER] Factory registry initialized")
     
+    def set_process_supervisor(self, supervisor) -> None:
+        """Set the ProcessSupervisor on the factory registry.
+        
+        This enables FFTWorker integration for the Spotify visualizer.
+        """
+        if self._factory_registry is not None:
+            self._factory_registry.set_process_supervisor(supervisor)
+            logger.debug("[WIDGET_MANAGER] ProcessSupervisor set on factory registry")
+    
     def create_widget_from_factory(
         self,
         widget_type: str,

@@ -9,10 +9,11 @@ from __future__ import annotations
 import random
 from typing import Optional, TYPE_CHECKING, Callable
 
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.settings.defaults import get_default_settings
 from core.settings.settings_manager import SettingsManager
 from core.resources.manager import ResourceManager
+from core.process import ProcessSupervisor, WorkerType, MessageType
 
 # Transition imports
 from transitions.base_transition import BaseTransition
@@ -94,6 +95,94 @@ class TransitionFactory:
         self._resources = resource_manager
         self._check_compositor = compositor_checker or (lambda: False)
         self._ensure_compositor = compositor_ensurer or (lambda: None)
+        
+        # ProcessSupervisor for TransitionWorker integration
+        self._process_supervisor: Optional[ProcessSupervisor] = None
+        self._precompute_cache: dict = {}  # Cache precomputed transition data
+    
+    def set_process_supervisor(self, supervisor: Optional[ProcessSupervisor]) -> None:
+        """Set the ProcessSupervisor for TransitionWorker integration.
+        
+        When set and TransitionWorker is running, transition precomputation
+        is offloaded to a separate process for better startup performance.
+        """
+        self._process_supervisor = supervisor
+        if supervisor is not None:
+            try:
+                if supervisor.is_running(WorkerType.TRANSITION):
+                    logger.info("[TRANSITION_FACTORY] TransitionWorker available for precomputation")
+            except Exception:
+                pass
+    
+    def _precompute_via_worker(
+        self,
+        transition_type: str,
+        width: int = 1920,
+        height: int = 1080,
+        params: Optional[dict] = None,
+        timeout_ms: int = 100,
+    ) -> Optional[dict]:
+        """Precompute transition data using TransitionWorker.
+        
+        Returns precomputed data if successful, None if worker unavailable or failed.
+        """
+        if not self._process_supervisor:
+            return None
+        
+        try:
+            if not self._process_supervisor.is_running(WorkerType.TRANSITION):
+                return None
+            
+            import time
+            
+            payload = {
+                "transition_type": transition_type,
+                "params": {
+                    "screen_width": width,
+                    "screen_height": height,
+                    **(params or {}),
+                },
+                "use_cache": True,
+            }
+            
+            correlation_id = self._process_supervisor.send_message(
+                WorkerType.TRANSITION,
+                MessageType.TRANSITION_PRECOMPUTE,
+                payload=payload,
+            )
+            
+            if not correlation_id:
+                return None
+            
+            # Poll for response with short timeout
+            start_time = time.time()
+            timeout_s = timeout_ms / 1000.0
+            
+            while (time.time() - start_time) < timeout_s:
+                responses = self._process_supervisor.poll_responses(WorkerType.TRANSITION, max_count=5)
+                
+                for response in responses:
+                    if response.correlation_id == correlation_id:
+                        if response.success:
+                            data = response.payload.get("data", {})
+                            if is_perf_metrics_enabled():
+                                proc_time = response.processing_time_ms or 0
+                                cached = response.payload.get("cached", False)
+                                logger.info(
+                                    "[PERF] [WORKER] TransitionWorker precompute: %s in %.1fms (cached=%s)",
+                                    transition_type, proc_time, cached
+                                )
+                            return data
+                        else:
+                            return None
+                
+                time.sleep(0.005)
+            
+            return None
+            
+        except Exception as e:
+            logger.debug("[TRANSITION_FACTORY] TransitionWorker precompute error: %s", e)
+            return None
     
     def create_transition(self) -> Optional[BaseTransition]:
         """Create the next transition based on current settings.
@@ -378,7 +467,13 @@ class TransitionFactory:
         particle_settings = settings.get('particle', {}) if isinstance(settings.get('particle', {}), dict) else {}
         
         mode_str = particle_settings.get('mode', canonical.get('mode', 'Converge'))
-        mode = 2 if mode_str == 'Converge' else (1 if mode_str == 'Swirl' else 0)
+        mode_map = {
+            'Directional': 0,
+            'Swirl': 1,
+            'Random': 2,
+            'Converge': 0,  # Legacy alias for Directional
+        }
+        mode = mode_map.get(mode_str, 0)
         
         direction_str = particle_settings.get('direction', canonical.get('direction', 'Left to Right'))
         direction_map = {

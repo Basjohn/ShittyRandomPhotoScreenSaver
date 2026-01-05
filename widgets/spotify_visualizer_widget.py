@@ -17,6 +17,7 @@ from shiboken6 import Shiboken
 
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.threading.manager import ThreadManager
+from core.process import ProcessSupervisor, WorkerType, MessageType
 from utils.lockfree import TripleBuffer
 from utils.audio_capture import create_audio_capture, AudioCaptureConfig
 from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile, configure_overlay_widget_attributes
@@ -54,6 +55,7 @@ class SpotifyVisualizerAudioWorker(QObject):
         bar_count: int = 32,
         buffer: Optional[TripleBuffer[_AudioFrame]] = None,
         parent: Optional[QWidget] = None,
+        process_supervisor: Optional[ProcessSupervisor] = None,
     ) -> None:
         super().__init__(parent)
         self._bar_count = max(1, int(bar_count))
@@ -61,6 +63,11 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._running: bool = False
         self._backend = None  # AudioCaptureBackend instance
         self._np = None
+        # ProcessSupervisor for FFTWorker integration
+        self._process_supervisor = process_supervisor
+        self._fft_worker_available: bool = False
+        self._fft_worker_failed_count: int = 0
+        self._fft_worker_max_failures: int = 5  # Disable after 5 consecutive failures
         # FFT band caching
         self._band_cache_key = None
         self._band_log_idx = None
@@ -193,6 +200,97 @@ class SpotifyVisualizerAudioWorker(QObject):
         if val > 1.8:
             val = 1.8
         self._energy_boost = val
+
+    def set_process_supervisor(self, supervisor: Optional[ProcessSupervisor]) -> None:
+        """Set the ProcessSupervisor for FFTWorker integration.
+        
+        When set and FFTWorker is running, FFT processing is offloaded to a
+        separate process for better performance (avoids GIL contention).
+        """
+        self._process_supervisor = supervisor
+        self._fft_worker_available = False
+        self._fft_worker_failed_count = 0
+        
+        if supervisor is not None:
+            try:
+                self._fft_worker_available = supervisor.is_running(WorkerType.FFT)
+                if self._fft_worker_available:
+                    logger.info("[SPOTIFY_VIS] FFTWorker available for audio processing")
+            except Exception:
+                self._fft_worker_available = False
+
+    def _process_via_fft_worker(self, samples) -> Optional[List[float]]:
+        """Process audio samples using FFTWorker in separate process.
+        
+        Returns bar heights if successful, None if worker unavailable or failed.
+        Falls back to local processing on failure.
+        """
+        if not self._process_supervisor or not self._fft_worker_available:
+            return None
+        
+        if self._fft_worker_failed_count >= self._fft_worker_max_failures:
+            return None
+        
+        try:
+            # Check if worker is still running
+            if not self._process_supervisor.is_running(WorkerType.FFT):
+                self._fft_worker_available = False
+                return None
+            
+            # Convert samples to list for serialization
+            samples_list = samples.tolist() if hasattr(samples, 'tolist') else list(samples)
+            
+            # Get current sensitivity config
+            with self._cfg_lock:
+                use_recommended = bool(self._use_recommended)
+                user_sens = float(self._user_sensitivity)
+                use_dynamic_floor = bool(self._use_dynamic_floor)
+            
+            sensitivity = user_sens if not use_recommended else 1.0
+            
+            # Send FFT_FRAME message to worker
+            correlation_id = self._process_supervisor.send_message(
+                WorkerType.FFT,
+                MessageType.FFT_FRAME,
+                payload={
+                    "samples": samples_list,
+                    "sample_rate": 48000,
+                    "sensitivity": sensitivity,
+                    "use_dynamic_floor": use_dynamic_floor,
+                },
+            )
+            
+            if not correlation_id:
+                self._fft_worker_failed_count += 1
+                return None
+            
+            # Poll for response with short timeout (audio is real-time)
+            start_time = time.time()
+            timeout_s = 0.015  # 15ms max for real-time audio
+            
+            while (time.time() - start_time) < timeout_s:
+                responses = self._process_supervisor.poll_responses(WorkerType.FFT, max_count=5)
+                
+                for response in responses:
+                    if response.correlation_id == correlation_id:
+                        if response.success:
+                            bars = response.payload.get("bars", [])
+                            if bars and len(bars) > 0:
+                                self._fft_worker_failed_count = 0  # Reset on success
+                                return bars
+                        else:
+                            self._fft_worker_failed_count += 1
+                            return None
+                
+                time.sleep(0.001)  # 1ms poll interval
+            
+            # Timeout - don't count as failure (worker may be busy)
+            return None
+            
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] FFTWorker processing error: %s", e)
+            self._fft_worker_failed_count += 1
+            return None
 
     def is_running(self) -> bool:
         return self._running
@@ -941,6 +1039,21 @@ class SpotifyVisualizerAudioWorker(QObject):
             if peak_raw < 1e-3:
                 return self._get_zero_bars()
 
+            # Try FFTWorker first (separate process, avoids GIL contention)
+            bars = None
+            if self._fft_worker_available and self._fft_worker_failed_count < self._fft_worker_max_failures:
+                bars = self._process_via_fft_worker(mono)
+                if bars is not None:
+                    # FFTWorker succeeded - adjust to target bar count if needed
+                    target = int(self._bar_count)
+                    if len(bars) != target:
+                        if len(bars) < target:
+                            bars = bars + [0.0] * (target - len(bars))
+                        else:
+                            bars = bars[:target]
+                    return bars
+            
+            # Fallback to local FFT processing
             fft = np_mod.fft.rfft(mono)
             np_mod.abs(fft, out=fft)  # In-place abs
             bars = self._fft_to_bars(fft)
@@ -992,6 +1105,13 @@ class _SpotifyBeatEngine(QObject):
 
     def set_thread_manager(self, thread_manager: Optional[ThreadManager]) -> None:
         self._thread_manager = thread_manager
+    
+    def set_process_supervisor(self, supervisor: Optional[ProcessSupervisor]) -> None:
+        """Set the ProcessSupervisor for FFTWorker integration."""
+        try:
+            self._audio_worker.set_process_supervisor(supervisor)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to set process supervisor", exc_info=True)
     
     def set_smoothing(self, tau: float) -> None:
         """Set the base smoothing time constant."""
@@ -1456,6 +1576,20 @@ class SpotifyVisualizerWidget(QWidget):
             self._replay_engine_config(engine)
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to propagate ThreadManager to shared beat engine", exc_info=True)
+
+    def set_process_supervisor(self, supervisor: Optional[ProcessSupervisor]) -> None:
+        """Set the ProcessSupervisor for FFTWorker integration.
+        
+        When set and FFTWorker is running, FFT processing is offloaded to a
+        separate process for better performance (avoids GIL contention).
+        """
+        try:
+            engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
+            if engine is not None:
+                engine.set_process_supervisor(supervisor)
+                logger.debug("[SPOTIFY_VIS] ProcessSupervisor set on beat engine")
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to set ProcessSupervisor on beat engine", exc_info=True)
         if self._enabled:
             self._ensure_tick_source()
 

@@ -130,37 +130,65 @@ class TestParticleTransition:
         """Test particle transition can be created."""
         from transitions.gl_compositor_particle_transition import GLCompositorParticleTransition
         
-        mock_compositor = MagicMock()
         transition = GLCompositorParticleTransition(
-            compositor=mock_compositor,
             duration_ms=1000,
         )
         assert transition is not None
-        assert transition.get_duration() == 1000
+        assert transition.duration_ms == 1000
 
     def test_particle_transition_modes(self):
         """Test particle transition supports different modes."""
         from transitions.gl_compositor_particle_transition import GLCompositorParticleTransition
         
-        mock_compositor = MagicMock()
-        
-        for mode in [0, 1, 2]:  # Directional, Swirl, Converge
+        # Test Directional and Swirl modes (0 and 1)
+        for mode in [0, 1]:
             transition = GLCompositorParticleTransition(
-                compositor=mock_compositor,
                 duration_ms=500,
                 mode=mode,
             )
             assert transition._mode == mode
+    
+    def test_particle_transition_random_mode(self):
+        """Test particle transition Random mode resolves to Directional or Swirl."""
+        from transitions.gl_compositor_particle_transition import GLCompositorParticleTransition
+        
+        # Random mode (2) should resolve to either Directional (0) or Swirl (1)
+        resolved_modes = set()
+        for _ in range(20):  # Run multiple times to verify randomness
+            transition = GLCompositorParticleTransition(
+                duration_ms=500,
+                mode=2,  # Random mode
+            )
+            assert transition._mode in [0, 1], f"Random mode resolved to unexpected mode: {transition._mode}"
+            resolved_modes.add(transition._mode)
+        
+        # With 20 iterations, we should see both modes (statistically very likely)
+        # But don't fail if we only see one - just verify the mode is valid
+        assert len(resolved_modes) >= 1
+    
+    def test_particle_transition_random_mode_sets_direction(self):
+        """Test Random mode sets random direction for Directional mode."""
+        from transitions.gl_compositor_particle_transition import GLCompositorParticleTransition
+        
+        directions_seen = set()
+        for _ in range(30):
+            transition = GLCompositorParticleTransition(
+                duration_ms=500,
+                mode=2,  # Random mode
+            )
+            if transition._mode == 0:  # Directional
+                directions_seen.add(transition._direction)
+        
+        # If we got any Directional modes, verify direction is in valid range
+        for d in directions_seen:
+            assert 0 <= d <= 9, f"Invalid direction: {d}"
 
     def test_particle_transition_directions(self):
         """Test particle transition supports different directions."""
         from transitions.gl_compositor_particle_transition import GLCompositorParticleTransition
         
-        mock_compositor = MagicMock()
-        
         for direction in range(10):  # 0-9 directions including random
             transition = GLCompositorParticleTransition(
-                compositor=mock_compositor,
                 duration_ms=500,
                 direction=direction,
             )
@@ -170,11 +198,8 @@ class TestParticleTransition:
         """Test particle transition supports different swirl orders."""
         from transitions.gl_compositor_particle_transition import GLCompositorParticleTransition
         
-        mock_compositor = MagicMock()
-        
-        for order in [0, 1, 2]:  # Typical, Center Outward, Edges Inward
+        for order in [0, 1, 2]:  # Outside-In, Inside-Out, Random
             transition = GLCompositorParticleTransition(
-                compositor=mock_compositor,
                 duration_ms=500,
                 mode=1,  # Swirl mode
                 swirl_order=order,
@@ -203,9 +228,10 @@ class TestSettingsDefaults:
         transitions = manager.get('transitions', {})
         assert 'particle' in transitions, "Particle settings missing from defaults"
         particle = transitions['particle']
-        assert particle.get('mode') == 'Converge'
-        assert particle.get('swirl_order') == 2  # Edges Inward
-        assert particle.get('particle_radius') == 24
+        # Mode should be Directional (was Converge in legacy)
+        assert particle.get('mode') == 'Directional', f"Expected 'Directional', got '{particle.get('mode')}'"
+        assert particle.get('swirl_order') == 0  # Outside-In default
+        assert particle.get('particle_radius') == 10.0
         assert particle.get('use_3d_shading') is True
         assert particle.get('texture_mapping') is True
 

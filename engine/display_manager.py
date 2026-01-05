@@ -285,6 +285,17 @@ class DisplayManager(QObject):
         self.current_images[screen_index] = image_path
         logger.debug(f"Image displayed on screen {screen_index}: {image_path}")
     
+    def set_process_supervisor(self, supervisor) -> None:
+        """Set the ProcessSupervisor on all display widgets.
+        
+        This enables FFTWorker integration for the Spotify visualizer.
+        """
+        for display in self.displays:
+            try:
+                display.set_process_supervisor(supervisor)
+            except Exception:
+                logger.debug("Failed to set ProcessSupervisor on display", exc_info=True)
+    
     def show_image(self, pixmap: QPixmap, image_path: str = "", 
                    screen_index: Optional[int] = None) -> None:
         """

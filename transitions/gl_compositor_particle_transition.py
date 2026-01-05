@@ -7,9 +7,11 @@ GLCompositorWidget via its particle API.
 Modes:
 - Directional: Particles come from one direction (L→R, R→L, T→B, B→T, diagonals)
 - Swirl: Particles spiral in from edges toward center
+- Random: Randomly choose between modes and their sub-options
 """
 from __future__ import annotations
 
+import random
 from typing import Optional
 
 from PySide6.QtGui import QPixmap
@@ -48,6 +50,7 @@ class GLCompositorParticleTransition(BaseTransition):
     # Mode constants
     MODE_DIRECTIONAL = 0
     MODE_SWIRL = 1
+    MODE_RANDOM = 2  # Randomly choose between modes and sub-options
 
     def __init__(
         self,
@@ -68,8 +71,26 @@ class GLCompositorParticleTransition(BaseTransition):
         swirl_order: int = 0,
     ) -> None:
         super().__init__(duration_ms)
-        self._mode = mode
-        self._direction = direction
+        
+        # Handle Random mode - resolve to actual mode and sub-options
+        if mode == self.MODE_RANDOM:
+            resolved_mode = random.choice([self.MODE_DIRECTIONAL, self.MODE_SWIRL])
+            if resolved_mode == self.MODE_DIRECTIONAL:
+                # Random direction for directional mode
+                resolved_direction = random.randint(0, 9)  # All direction options
+            else:
+                # Random swirl order for swirl mode
+                swirl_order = random.randint(0, 2)
+                resolved_direction = direction  # Direction less relevant for swirl
+            self._mode = resolved_mode
+            self._direction = resolved_direction
+            logger.debug(
+                "[PARTICLE] Random mode resolved: mode=%d, direction=%d, swirl_order=%d",
+                resolved_mode, resolved_direction, swirl_order
+            )
+        else:
+            self._mode = mode
+            self._direction = direction
         self._particle_radius = max(8.0, particle_radius)
         self._overlap = max(0.0, overlap)
         self._trail_length = max(0.0, min(1.0, trail_length))

@@ -37,6 +37,8 @@ class MessageType(Enum):
     HEARTBEAT = "heartbeat"
     HEARTBEAT_ACK = "heartbeat_ack"
     CONFIG_UPDATE = "config_update"
+    WORKER_BUSY = "worker_busy"       # Worker is busy with long operation
+    WORKER_IDLE = "worker_idle"       # Worker finished long operation
     
     # Image worker messages
     IMAGE_DECODE = "image_decode"
@@ -339,10 +341,13 @@ class HealthStatus:
     last_restart: float = 0.0
     error_message: Optional[str] = None
     metrics: Dict[str, Any] = field(default_factory=dict)
+    is_busy: bool = False              # Worker is processing a long operation
+    busy_since: float = 0.0            # Timestamp when worker became busy
     
     # Health thresholds
-    HEARTBEAT_INTERVAL_MS = 1000       # Expected heartbeat interval
-    MISSED_HEARTBEAT_THRESHOLD = 3     # Restart after this many misses
+    # Increased interval to 3s - workers may be busy processing for 500ms+
+    HEARTBEAT_INTERVAL_MS = 3000       # Expected heartbeat interval (was 1000ms)
+    MISSED_HEARTBEAT_THRESHOLD = 5     # Restart after this many misses (was 3)
     MAX_RESTARTS_PER_WINDOW = 5        # Max restarts in time window
     RESTART_WINDOW_SECONDS = 300       # 5 minute window for restart counting
     RESTART_BACKOFF_BASE_MS = 1000     # Base backoff for restarts
@@ -352,6 +357,9 @@ class HealthStatus:
         """Check if worker is considered healthy."""
         if self.state != WorkerState.RUNNING:
             return False
+        # Don't count missed heartbeats while worker is busy
+        if self.is_busy:
+            return True
         if self.missed_heartbeats >= self.MISSED_HEARTBEAT_THRESHOLD:
             return False
         return True
@@ -360,9 +368,24 @@ class HealthStatus:
         """Check if worker should be restarted."""
         if self.state == WorkerState.ERROR:
             return self._can_restart()
+        # Don't restart while worker is busy processing
+        if self.is_busy:
+            # But if busy for too long (>30s), something is wrong
+            if time.time() - self.busy_since > 30.0:
+                return self._can_restart()
+            return False
         if self.missed_heartbeats >= self.MISSED_HEARTBEAT_THRESHOLD:
             return self._can_restart()
         return False
+    
+    def set_busy(self, busy: bool) -> None:
+        """Set worker busy state."""
+        self.is_busy = busy
+        if busy:
+            self.busy_since = time.time()
+            self.missed_heartbeats = 0  # Reset on busy start
+        else:
+            self.busy_since = 0.0
     
     def _can_restart(self) -> bool:
         """Check if restart is allowed based on limits."""
@@ -408,5 +431,6 @@ class HealthStatus:
             "last_restart": self.last_restart,
             "error_message": self.error_message,
             "is_healthy": self.is_healthy(),
+            "is_busy": self.is_busy,
             "metrics": self.metrics,
         }

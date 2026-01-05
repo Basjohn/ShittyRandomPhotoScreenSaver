@@ -609,6 +609,14 @@ class RedditWidgetFactory(WidgetFactory):
 class SpotifyVisualizerFactory(WidgetFactory):
     """Factory for creating SpotifyVisualizerWidget instances."""
     
+    def __init__(self, settings: SettingsManager, thread_manager: Optional["ThreadManager"] = None):
+        super().__init__(settings, thread_manager)
+        self._process_supervisor = None
+    
+    def set_process_supervisor(self, supervisor) -> None:
+        """Set the ProcessSupervisor for FFTWorker integration."""
+        self._process_supervisor = supervisor
+    
     def get_widget_name(self) -> str:
         return "spotify_visualizer"
     
@@ -638,6 +646,10 @@ class SpotifyVisualizerFactory(WidgetFactory):
             # Set thread manager
             if self._thread_manager:
                 widget.set_thread_manager(self._thread_manager)
+            
+            # Set process supervisor for FFTWorker integration
+            if self._process_supervisor:
+                widget.set_process_supervisor(self._process_supervisor)
             
             logger.debug("[SPOTIFY_VIS_FACTORY] Created SpotifyVisualizerWidget")
             return widget
@@ -761,3 +773,13 @@ class WidgetFactoryRegistry:
     def get_all_factory_names(self) -> list:
         """Get names of all registered factories."""
         return list(self._factories.keys())
+    
+    def set_process_supervisor(self, supervisor) -> None:
+        """Set the ProcessSupervisor on factories that support it.
+        
+        Currently only SpotifyVisualizerFactory uses this for FFTWorker integration.
+        """
+        spotify_factory = self._factories.get("spotify_visualizer")
+        if spotify_factory and hasattr(spotify_factory, "set_process_supervisor"):
+            spotify_factory.set_process_supervisor(supervisor)
+            logger.debug("[FACTORY_REGISTRY] ProcessSupervisor set on spotify_visualizer factory")

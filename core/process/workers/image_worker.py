@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import os
 import time
+import uuid
 from multiprocessing import Queue
+from multiprocessing.shared_memory import SharedMemory
 from typing import Optional, Tuple
 
 from core.process.types import (
@@ -42,12 +44,17 @@ class ImageWorker(BaseWorker):
     - IMAGE_PRESCALE: Decode and prescale to target size
     
     Returns processed RGBA bytes that can be converted to QImage
-    on the UI thread.
+    on the UI thread. Uses shared memory for large images (>5MB)
+    to avoid queue serialization overhead.
     """
     
     # Quality settings
     LANCZOS_RESAMPLE = Image.Resampling.LANCZOS if PIL_AVAILABLE else None
     SHARPEN_THRESHOLD = 0.5  # Apply sharpening when scale < 0.5
+    
+    # Shared memory threshold: 2MB (lowered from 5MB to catch 2560x1438 images)
+    # 2560x1438 RGBA = 14.7MB, so this threshold ensures shared memory is used
+    SHARED_MEMORY_THRESHOLD = 2 * 1024 * 1024
     
     def __init__(self, request_queue: Queue, response_queue: Queue):
         super().__init__(request_queue, response_queue)
@@ -55,6 +62,7 @@ class ImageWorker(BaseWorker):
         self._prescale_count = 0
         self._total_decode_ms = 0.0
         self._total_prescale_ms = 0.0
+        self._shared_memories: list[SharedMemory] = []  # Track for cleanup
     
     @property
     def worker_type(self) -> WorkerType:
@@ -175,6 +183,9 @@ class ImageWorker(BaseWorker):
                 error=f"Invalid target size: {target_width}x{target_height}",
             )
         
+        # Send WORKER_BUSY to prevent heartbeat timeout during long processing
+        self._send_busy_notification(msg.correlation_id)
+        
         start = time.time()
         try:
             # Decode
@@ -216,6 +227,7 @@ class ImageWorker(BaseWorker):
             
             width, height = final_img.size
             rgba_data = final_img.tobytes("raw", "RGBA")
+            data_size = len(rgba_data)
             
             # Generate cache key
             cache_key = f"{path}|scaled:{target_width}x{target_height}"
@@ -223,6 +235,47 @@ class ImageWorker(BaseWorker):
             prescale_ms = (time.time() - start) * 1000
             self._prescale_count += 1
             self._total_prescale_ms += prescale_ms
+            
+            # Send WORKER_IDLE to resume heartbeat monitoring
+            self._send_idle_notification(msg.correlation_id)
+            
+            # Use shared memory for large images to avoid queue serialization
+            if data_size > self.SHARED_MEMORY_THRESHOLD:
+                try:
+                    shm_name = f"srpss_img_{uuid.uuid4().hex[:12]}"
+                    shm = SharedMemory(name=shm_name, create=True, size=data_size)
+                    shm.buf[:data_size] = rgba_data
+                    self._shared_memories.append(shm)
+                    
+                    if self._logger:
+                        self._logger.debug(
+                            "Using shared memory for %dx%d image (%.1f MB): %s",
+                            width, height, data_size / (1024 * 1024), shm_name
+                        )
+                    
+                    return WorkerResponse(
+                        msg_type=MessageType.IMAGE_RESULT,
+                        seq_no=msg.seq_no,
+                        correlation_id=msg.correlation_id,
+                        success=True,
+                        payload={
+                            "path": path,
+                            "original_width": original_size[0],
+                            "original_height": original_size[1],
+                            "width": width,
+                            "height": height,
+                            "format": "RGBA",
+                            "shared_memory_name": shm_name,
+                            "shared_memory_size": data_size,
+                            "cache_key": cache_key,
+                            "mode": mode,
+                        },
+                        processing_time_ms=prescale_ms,
+                    )
+                except Exception as shm_err:
+                    if self._logger:
+                        self._logger.warning("Shared memory failed, using queue: %s", shm_err)
+                    # Fall through to queue-based transfer
             
             return WorkerResponse(
                 msg_type=MessageType.IMAGE_RESULT,
@@ -244,6 +297,8 @@ class ImageWorker(BaseWorker):
             )
             
         except Exception as e:
+            # Send WORKER_IDLE even on error to resume heartbeat monitoring
+            self._send_idle_notification(msg.correlation_id)
             if self._logger:
                 self._logger.exception("Prescale failed: %s", e)
             return WorkerResponse(
@@ -350,7 +405,16 @@ class ImageWorker(BaseWorker):
         )
     
     def _cleanup(self) -> None:
-        """Log final statistics."""
+        """Log final statistics and clean up shared memory."""
+        # Clean up any shared memory segments we created
+        for shm in self._shared_memories:
+            try:
+                shm.close()
+                shm.unlink()
+            except Exception:
+                pass
+        self._shared_memories.clear()
+        
         if self._logger:
             if self._decode_count > 0:
                 avg_decode = self._total_decode_ms / self._decode_count

@@ -3061,11 +3061,40 @@ void main() {
 
     def paintGL(self) -> None:  # type: ignore[override]
         _paint_start = time.time()
+        
+        # Phase 4: Disable GC during frame rendering to prevent GC pauses
+        gc_controller = None
+        try:
+            from core.performance.frame_budget import get_gc_controller, get_frame_budget
+            gc_controller = get_gc_controller()
+            gc_controller.disable_gc()
+            
+            # Track frame budget
+            frame_budget = get_frame_budget()
+            frame_budget.begin_frame()
+            frame_budget.begin_category(frame_budget.CATEGORY_GL_RENDER)
+        except Exception:
+            pass  # Non-critical - continue without frame budget
+        
         try:
             self._paintGL_impl()
         finally:
             paint_elapsed = (time.time() - _paint_start) * 1000.0
             self._record_paint_metrics(paint_elapsed)
+            
+            # End frame budget tracking and re-enable GC
+            try:
+                if gc_controller:
+                    gc_controller.enable_gc()
+                    # Run idle GC if we have time remaining
+                    frame_budget = get_frame_budget()
+                    frame_budget.end_category(frame_budget.CATEGORY_GL_RENDER)
+                    remaining = frame_budget.get_frame_remaining()
+                    if remaining > 5.0:  # 5ms+ remaining
+                        gc_controller.run_idle_gc(remaining)
+            except Exception:
+                pass
+            
             if paint_elapsed > 50.0 and is_perf_metrics_enabled():
                 # Phase 8: Include GLStateManager transition history on dt_max spikes
                 history = self._gl_state.get_transition_history(limit=5)

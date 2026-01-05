@@ -312,7 +312,7 @@ class TransitionsTab(QWidget):
         mode_row = QHBoxLayout()
         mode_row.addWidget(QLabel("Mode:"))
         self.particle_mode_combo = QComboBox()
-        self.particle_mode_combo.addItems(["Directional", "Swirl", "Converge"])
+        self.particle_mode_combo.addItems(["Directional", "Swirl", "Random"])
         self.particle_mode_combo.currentIndexChanged.connect(self._on_particle_mode_changed)
         self.particle_mode_combo.currentIndexChanged.connect(self._save_settings)
         mode_row.addWidget(self.particle_mode_combo)
@@ -670,10 +670,11 @@ class TransitionsTab(QWidget):
 
             # Note: GPU acceleration is controlled globally in Display tab
             
-            # Load block flip settings
+            # Load block flip settings - use canonical defaults from defaults.py
+            canonical_block_flip = canonical_transitions.get('block_flip', {})
             block_flip = transitions_config.get('block_flip', {})
-            self.grid_rows_spin.setValue(block_flip.get('rows', 12))
-            self.grid_cols_spin.setValue(block_flip.get('cols', 24))
+            self.grid_rows_spin.setValue(block_flip.get('rows', canonical_block_flip.get('rows', 12)))
+            self.grid_cols_spin.setValue(block_flip.get('cols', canonical_block_flip.get('cols', 24)))
 
             # Load 3D Block Spins settings
             try:
@@ -684,10 +685,11 @@ class TransitionsTab(QWidget):
             except Exception:
                 pass
 
-            # Load diffuse settings
+            # Load diffuse settings - use canonical defaults from defaults.py
+            canonical_diffuse = canonical_transitions.get('diffuse', {})
             diffuse = transitions_config.get('diffuse', {})
-            self.block_size_spin.setValue(diffuse.get('block_size', 18))
-            shape = diffuse.get('shape', 'Rectangle')
+            self.block_size_spin.setValue(diffuse.get('block_size', canonical_diffuse.get('block_size', 18)))
+            shape = diffuse.get('shape', canonical_diffuse.get('shape', 'Rectangle'))
             index = self.diffuse_shape_combo.findText(shape)
             if index >= 0:
                 self.diffuse_shape_combo.setCurrentIndex(index)
@@ -856,9 +858,9 @@ class TransitionsTab(QWidget):
         mode = self.particle_mode_combo.currentText()
         is_directional = mode == "Directional"
         is_swirl = mode == "Swirl"
-        # Direction only applies to Directional mode
+        # Direction only applies to Directional mode (disabled for Random - auto-selected)
         self.particle_direction_combo.setEnabled(is_directional)
-        # Swirl settings only apply to Swirl mode
+        # Swirl settings only apply to Swirl mode (disabled for Random - auto-selected)
         self.particle_swirl_turns_spin.setEnabled(is_swirl)
         self.particle_swirl_order_combo.setEnabled(is_swirl)
 

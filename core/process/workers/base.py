@@ -209,6 +209,26 @@ class BaseWorker:
             if self._logger:
                 self._logger.error("Failed to send response: %s", e)
     
+    def _send_busy_notification(self, correlation_id: str) -> None:
+        """Send WORKER_BUSY notification to prevent heartbeat timeout during long operations."""
+        self._send_response(WorkerResponse(
+            msg_type=MessageType.WORKER_BUSY,
+            seq_no=self._next_seq(),
+            correlation_id=correlation_id,
+            success=True,
+            payload={"worker_type": self.worker_type.value},
+        ))
+    
+    def _send_idle_notification(self, correlation_id: str) -> None:
+        """Send WORKER_IDLE notification after completing a long operation."""
+        self._send_response(WorkerResponse(
+            msg_type=MessageType.WORKER_IDLE,
+            seq_no=self._next_seq(),
+            correlation_id=correlation_id,
+            success=True,
+            payload={"worker_type": self.worker_type.value},
+        ))
+    
     def _cleanup(self) -> None:
         """
         Clean up resources before shutdown.

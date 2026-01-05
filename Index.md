@@ -16,6 +16,36 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - **InputHandler**: Global media key passthrough; Double-click "Next Image" navigation.
   - **SettingsDialog**: Multi-monitor aware window state persistence (geometry clamping, screen-at detection).
 
+- v2.1 Production Integration (Jan 2026)
+  - **ProcessSupervisor Integration**: Initialized in ScreensaverEngine with 4 worker factories (Image, RSS, FFT, Transition)
+  - **ImageWorker Integration**: Wired into `_do_load_and_process` for decode/prescale in separate process
+  - **RSSWorker Integration**: Wired into `load_rss_task` with fallback to RSSSource
+  - **FFTWorker Integration**: Wired into SpotifyVisualizerAudioWorker with 15ms timeout and fallback
+  - **TransitionWorker Integration**: Wired into TransitionFactory for precomputation offloading
+  - **EcoModeManager Integration**: Instantiated in DisplayWidget for MC builds (auto-pause when occluded)
+  - **ProcessSupervisor wiring**: Engine → DisplayManager → DisplayWidget → WidgetManager/TransitionFactory
+  - **Particle Transition Random Mode**: Added "Random" mode that randomly selects between Directional/Swirl with random sub-options
+  - **Settings Audit**: Fixed hardcoded defaults in UI to use canonical defaults from `defaults.py`
+  - **Worker Settings**: Added `workers.*` and `mc.eco_mode.*` settings to `defaults.py`
+  - **Tests**: Added 3 new tests for Particle Random mode, fixed 3 existing tests
+  - **Performance Fixes (Jan 5, 2026)**:
+    - Fixed ImageWorker timeout (500ms→1500ms) - eliminates timeout fallback to main thread
+    - Implemented shared memory for large images (>5MB) - avoids queue serialization overhead
+    - Implemented worker pool tuning (`workers.max_workers`: auto = half CPU cores, min 2, max 4)
+    - Increased heartbeat tolerance (1s→3s interval, 3→5 missed threshold) - prevents false restarts
+    - Added 10 real integration tests for worker processes (`tests/test_worker_integration.py`)
+    - **Result**: FPS improved from 21.5 to 45-47 fps (+10-25 fps gain)
+  - **Performance Deep Dive (Jan 5, 2026)**:
+    - Added `WORKER_BUSY`/`WORKER_IDLE` message types for heartbeat skip during processing
+    - Lowered shared memory threshold from 5MB to 2MB (catches 2560x1438 images)
+    - Added `HealthStatus.is_busy` flag to skip heartbeat checks during long operations
+    - Created `core/performance/frame_budget.py` with `FrameBudget` and `GCController` classes
+    - Integrated GC tuning into `GLCompositor.paintGL()` (disable GC during render, idle-time collection)
+    - Increased GC thresholds (10000, 50, 50) to reduce GC frequency
+    - Removed RSS and Transition workers (use ThreadManager instead) - reduces process overhead
+    - Fixed ImageWorker response handling (skip BUSY/IDLE messages in polling loop)
+    - **Result**: Transition FPS improved to 52 fps, ImageWorker now using shared memory correctly
+
 - v2.0 Roadmap Progress (Jan 2026)
   - **Phase 4.2**: Modal Settings Conversion complete (no-sources popup, profile separation, live updates)
   - **Phase 4.1b**: Visual padding helpers complete (BaseOverlayWidget, WeatherWidget migration)
@@ -57,6 +87,11 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - EventSystem pub/sub (thread-safe)
 - core/events/event_types.py
   - Event type definitions (ImageChanged, TransitionStarted, etc.)
+- core/performance/frame_budget.py
+  - FrameBudget: Frame time budget allocation for GL render, visualizer, image loading
+  - FrameBudgetConfig: Configuration for target FPS and budget allocation
+  - GCController: Frame-aware garbage collection (disable during render, idle-time collection)
+  - get_frame_budget(), get_gc_controller(): Global singleton accessors
 - core/settings/settings_manager.py
   - SettingsManager (get/set, dot-notation, section helpers, JSON SST snapshot import/export)
   - Maps application name "Screensaver" to "Screensaver_MC" when running under the MC executable (e.g. `SRPSS MC`, `SRPSS_MC`, `main_mc.py`) so QSettings are isolated between the normal screensaver and MC profiles.
