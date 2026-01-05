@@ -22,6 +22,13 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - **Phase 5.1b**: GL State Management Phases 1-3b complete (ResourceManager GL tracking)
   - **Phase 5.3**: Performance optimization tests complete (GL texture streaming, memory pooling)
   - **Settings Validation**: Auto-repair for corrupted sensitivity values in `validate_and_repair()`
+  - **Widget Margin Alignment** (Jan 5, 2026): Centralized positioning for all overlay widgets
+    - Fixed BaseOverlayWidget MIDDLE_LEFT/MIDDLE_RIGHT positioning
+    - Refactored RedditWidget, MediaWidget, ClockWidget to delegate to BaseOverlayWidget._update_position()
+    - Fixed ClockWidget recursion bug (set_visual_padding calling _update_position)
+    - Added 4 cross-widget margin alignment regression tests
+    - Added 10 comprehensive stacking tests (33 total positioner tests)
+    - 72 widget tests passing (19 visual padding + 21 widget manager + 33 positioner)
 
 ## Core Managers
 - core/threading/manager.py

@@ -210,5 +210,83 @@ class TestIsMcBuild:
         assert isinstance(result, bool)
 
 
+class TestMultiMonitorEcoMode:
+    """Tests for Eco Mode multi-monitor edge cases."""
+    
+    def test_eco_mode_per_display_widget(self):
+        """Test that each display widget can have independent Eco Mode state."""
+        manager1 = EcoModeManager()
+        manager2 = EcoModeManager()
+        
+        # Start monitoring on both
+        manager1.start_monitoring()
+        manager2.start_monitoring()
+        
+        # Both should be monitoring
+        assert manager1.get_state() == EcoModeState.MONITORING
+        assert manager2.get_state() == EcoModeState.MONITORING
+        
+        # Simulate one going to Eco Mode
+        manager1._state = EcoModeState.ECO_ACTIVE
+        
+        # They should be independent
+        assert manager1.get_state() == EcoModeState.ECO_ACTIVE
+        assert manager2.get_state() == EcoModeState.MONITORING
+    
+    def test_on_top_affects_only_own_manager(self):
+        """Test that on-top setting only affects its own manager."""
+        manager1 = EcoModeManager()
+        manager2 = EcoModeManager()
+        
+        manager1.start_monitoring()
+        manager2.start_monitoring()
+        
+        # Set on-top for manager1 only
+        manager1.set_always_on_top(True)
+        
+        # Manager1 should be disabled, manager2 still monitoring
+        assert manager1.get_state() == EcoModeState.DISABLED
+        assert manager2.get_state() == EcoModeState.MONITORING
+    
+    def test_cleanup_independent(self):
+        """Test that cleanup is independent per manager."""
+        manager1 = EcoModeManager()
+        manager2 = EcoModeManager()
+        
+        manager1.start_monitoring()
+        manager2.start_monitoring()
+        
+        # Cleanup only manager1
+        manager1.cleanup()
+        
+        # Manager1 disabled, manager2 still monitoring
+        assert manager1.get_state() == EcoModeState.DISABLED
+        assert manager2.get_state() == EcoModeState.MONITORING
+    
+    def test_different_configs_per_monitor(self):
+        """Test that different monitors can have different Eco Mode configs."""
+        config1 = EcoModeConfig(occlusion_threshold=0.90)
+        config2 = EcoModeConfig(occlusion_threshold=0.80)
+        
+        manager1 = EcoModeManager(config1)
+        manager2 = EcoModeManager(config2)
+        
+        assert manager1._config.occlusion_threshold == 0.90
+        assert manager2._config.occlusion_threshold == 0.80
+    
+    def test_stats_independent_per_manager(self):
+        """Test that statistics are tracked independently per manager."""
+        manager1 = EcoModeManager()
+        manager2 = EcoModeManager()
+        
+        # Record activations on manager1 only
+        manager1._stats.record_activation()
+        manager1._stats.record_activation()
+        
+        # Manager1 should have 2 activations, manager2 should have 0
+        assert manager1.get_stats().activations == 2
+        assert manager2.get_stats().activations == 0
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

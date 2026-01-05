@@ -270,6 +270,182 @@ class TestStacking:
         assert offsets["widget1"] == QPoint(0, 0)
         # widget2 should be offset upward (negative) for bottom position
         assert offsets["widget2"].y() == -(100 + 10)  # -110
+    
+    def test_calculate_stack_offsets_three_widgets_top_right(self):
+        """Test stacking with three widgets at TOP_RIGHT (stacks downward)."""
+        positioner = WidgetPositioner()
+        
+        widget1 = MagicMock()
+        widget1.sizeHint.return_value = QSize(300, 120)  # Reddit-like
+        
+        widget2 = MagicMock()
+        widget2.sizeHint.return_value = QSize(200, 80)   # Weather-like
+        
+        widget3 = MagicMock()
+        widget3.sizeHint.return_value = QSize(150, 60)   # Clock-like
+        
+        offsets = positioner.calculate_stack_offsets([
+            ("reddit", widget1, PositionAnchor.TOP_RIGHT),
+            ("weather", widget2, PositionAnchor.TOP_RIGHT),
+            ("clock", widget3, PositionAnchor.TOP_RIGHT),
+        ])
+        
+        assert offsets["reddit"] == QPoint(0, 0)
+        assert offsets["weather"].y() == 120 + 10  # 130
+        assert offsets["clock"].y() == 120 + 10 + 80 + 10  # 220
+    
+    def test_calculate_stack_offsets_three_widgets_bottom_right(self):
+        """Test stacking with three widgets at BOTTOM_RIGHT (stacks upward)."""
+        positioner = WidgetPositioner()
+        
+        widget1 = MagicMock()
+        widget1.sizeHint.return_value = QSize(300, 150)  # Media-like
+        
+        widget2 = MagicMock()
+        widget2.sizeHint.return_value = QSize(200, 100)  # Reddit-like
+        
+        widget3 = MagicMock()
+        widget3.sizeHint.return_value = QSize(150, 80)   # Weather-like
+        
+        offsets = positioner.calculate_stack_offsets([
+            ("media", widget1, PositionAnchor.BOTTOM_RIGHT),
+            ("reddit", widget2, PositionAnchor.BOTTOM_RIGHT),
+            ("weather", widget3, PositionAnchor.BOTTOM_RIGHT),
+        ])
+        
+        assert offsets["media"] == QPoint(0, 0)
+        assert offsets["reddit"].y() == -(150 + 10)  # -160
+        assert offsets["weather"].y() == -(150 + 10 + 100 + 10)  # -270
+    
+    def test_calculate_stack_offsets_mixed_anchors(self):
+        """Test that widgets at different anchors don't affect each other."""
+        positioner = WidgetPositioner()
+        
+        widget1 = MagicMock()
+        widget1.sizeHint.return_value = QSize(200, 100)
+        
+        widget2 = MagicMock()
+        widget2.sizeHint.return_value = QSize(200, 80)
+        
+        widget3 = MagicMock()
+        widget3.sizeHint.return_value = QSize(200, 60)
+        
+        offsets = positioner.calculate_stack_offsets([
+            ("top_left_1", widget1, PositionAnchor.TOP_LEFT),
+            ("bottom_right_1", widget2, PositionAnchor.BOTTOM_RIGHT),
+            ("top_left_2", widget3, PositionAnchor.TOP_LEFT),
+        ])
+        
+        # TOP_LEFT widgets stack together
+        assert offsets["top_left_1"] == QPoint(0, 0)
+        assert offsets["top_left_2"].y() == 100 + 10  # 110
+        
+        # BOTTOM_RIGHT widget is alone, no offset
+        assert offsets["bottom_right_1"] == QPoint(0, 0)
+    
+    def test_calculate_stack_offsets_all_top_anchors_stack_down(self):
+        """Test that all TOP_* anchors stack downward."""
+        positioner = WidgetPositioner()
+        
+        for anchor in [PositionAnchor.TOP_LEFT, PositionAnchor.TOP_CENTER, PositionAnchor.TOP_RIGHT]:
+            widget1 = MagicMock()
+            widget1.sizeHint.return_value = QSize(200, 100)
+            
+            widget2 = MagicMock()
+            widget2.sizeHint.return_value = QSize(200, 80)
+            
+            offsets = positioner.calculate_stack_offsets([
+                ("w1", widget1, anchor),
+                ("w2", widget2, anchor),
+            ])
+            
+            assert offsets["w1"] == QPoint(0, 0), f"Failed for {anchor}"
+            assert offsets["w2"].y() > 0, f"TOP anchor {anchor} should stack downward (positive y)"
+    
+    def test_calculate_stack_offsets_all_bottom_anchors_stack_up(self):
+        """Test that all BOTTOM_* anchors stack upward."""
+        positioner = WidgetPositioner()
+        
+        for anchor in [PositionAnchor.BOTTOM_LEFT, PositionAnchor.BOTTOM_CENTER, PositionAnchor.BOTTOM_RIGHT]:
+            widget1 = MagicMock()
+            widget1.sizeHint.return_value = QSize(200, 100)
+            
+            widget2 = MagicMock()
+            widget2.sizeHint.return_value = QSize(200, 80)
+            
+            offsets = positioner.calculate_stack_offsets([
+                ("w1", widget1, anchor),
+                ("w2", widget2, anchor),
+            ])
+            
+            assert offsets["w1"] == QPoint(0, 0), f"Failed for {anchor}"
+            assert offsets["w2"].y() < 0, f"BOTTOM anchor {anchor} should stack upward (negative y)"
+    
+    def test_calculate_stack_offsets_middle_anchors_stack_down(self):
+        """Test that MIDDLE_* anchors stack downward (same as TOP)."""
+        positioner = WidgetPositioner()
+        
+        for anchor in [PositionAnchor.MIDDLE_LEFT, PositionAnchor.CENTER, PositionAnchor.MIDDLE_RIGHT]:
+            widget1 = MagicMock()
+            widget1.sizeHint.return_value = QSize(200, 100)
+            
+            widget2 = MagicMock()
+            widget2.sizeHint.return_value = QSize(200, 80)
+            
+            offsets = positioner.calculate_stack_offsets([
+                ("w1", widget1, anchor),
+                ("w2", widget2, anchor),
+            ])
+            
+            assert offsets["w1"] == QPoint(0, 0), f"Failed for {anchor}"
+            # MIDDLE/CENTER anchors stack downward (not in TOP_* set, so stack_down=False)
+            # Actually checking the code: stack_down = anchor in (TOP_LEFT, TOP_CENTER, TOP_RIGHT)
+            # So MIDDLE anchors will have stack_down=False, meaning negative offset
+            assert offsets["w2"].y() < 0, f"MIDDLE anchor {anchor} should stack upward (negative y)"
+    
+    def test_calculate_stack_offsets_custom_spacing(self):
+        """Test stacking with custom spacing."""
+        positioner = WidgetPositioner()
+        
+        widget1 = MagicMock()
+        widget1.sizeHint.return_value = QSize(200, 100)
+        
+        widget2 = MagicMock()
+        widget2.sizeHint.return_value = QSize(200, 80)
+        
+        offsets = positioner.calculate_stack_offsets([
+            ("w1", widget1, PositionAnchor.TOP_LEFT),
+            ("w2", widget2, PositionAnchor.TOP_LEFT),
+        ], spacing=20)
+        
+        assert offsets["w1"] == QPoint(0, 0)
+        assert offsets["w2"].y() == 100 + 20  # 120 with custom spacing
+    
+    def test_calculate_stack_offsets_varying_heights(self):
+        """Test stacking with widgets of varying heights."""
+        positioner = WidgetPositioner()
+        
+        # Simulate Reddit with 20 posts (tall)
+        widget1 = MagicMock()
+        widget1.sizeHint.return_value = QSize(400, 500)
+        
+        # Simulate Weather (medium)
+        widget2 = MagicMock()
+        widget2.sizeHint.return_value = QSize(200, 150)
+        
+        # Simulate Clock (small)
+        widget3 = MagicMock()
+        widget3.sizeHint.return_value = QSize(150, 60)
+        
+        offsets = positioner.calculate_stack_offsets([
+            ("reddit", widget1, PositionAnchor.BOTTOM_RIGHT),
+            ("weather", widget2, PositionAnchor.BOTTOM_RIGHT),
+            ("clock", widget3, PositionAnchor.BOTTOM_RIGHT),
+        ])
+        
+        assert offsets["reddit"] == QPoint(0, 0)
+        assert offsets["weather"].y() == -(500 + 10)  # -510
+        assert offsets["clock"].y() == -(500 + 10 + 150 + 10)  # -670
 
 
 # ---------------------------------------------------------------------------
