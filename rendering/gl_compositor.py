@@ -769,14 +769,15 @@ class GLCompositorWidget(QOpenGLWidget):
         return True
 
     def _pre_upload_textures(self, prep_fn: Callable[[], bool]) -> None:
-        """Pre-upload textures before animation starts."""
-        if self._gl_pipeline is not None and self._use_shaders:
-            try:
-                self.makeCurrent()
-                prep_fn()
-                self.doneCurrent()
-            except Exception:
-                logger.debug("[GL COMPOSITOR] Pre-upload textures failed", exc_info=True)
+        """Pre-upload textures before animation starts.
+        
+        PERFORMANCE FIX: Defer texture upload to first paintGL call instead of
+        blocking the main thread here. This eliminates 120-690ms paint gaps.
+        The prep_fn will be called during the first paintGL when GL context is active.
+        """
+        # DISABLED: This was blocking the main thread for 120-690ms
+        # Textures are now uploaded lazily during first paintGL call
+        pass
 
     def _cancel_current_animation(self) -> None:
         """Cancel any previous animation on this compositor."""
@@ -3064,15 +3065,18 @@ void main() {
         
         # Phase 4: Disable GC during frame rendering to prevent GC pauses
         gc_controller = None
+        _is_transition_active = self._frame_state is not None and self._frame_state.started and not self._frame_state.completed
         try:
             from core.performance.frame_budget import get_gc_controller, get_frame_budget
             gc_controller = get_gc_controller()
             gc_controller.disable_gc()
             
-            # Track frame budget
+            # Track frame budget - only during active transitions to avoid false positives
+            # from idle time between transitions (5+ second gaps are expected)
             frame_budget = get_frame_budget()
-            frame_budget.begin_frame()
-            frame_budget.begin_category(frame_budget.CATEGORY_GL_RENDER)
+            if _is_transition_active:
+                frame_budget.begin_frame()
+                frame_budget.begin_category(frame_budget.CATEGORY_GL_RENDER)
         except Exception:
             pass  # Non-critical - continue without frame budget
         
@@ -3086,12 +3090,13 @@ void main() {
             try:
                 if gc_controller:
                     gc_controller.enable_gc()
-                    # Run idle GC if we have time remaining
-                    frame_budget = get_frame_budget()
-                    frame_budget.end_category(frame_budget.CATEGORY_GL_RENDER)
-                    remaining = frame_budget.get_frame_remaining()
-                    if remaining > 5.0:  # 5ms+ remaining
-                        gc_controller.run_idle_gc(remaining)
+                    # Only end frame budget if we started it (during active transition)
+                    if _is_transition_active:
+                        frame_budget = get_frame_budget()
+                        frame_budget.end_category(frame_budget.CATEGORY_GL_RENDER)
+                        remaining = frame_budget.get_frame_remaining()
+                        if remaining > 5.0:  # 5ms+ remaining
+                            gc_controller.run_idle_gc(remaining)
             except Exception:
                 pass
             

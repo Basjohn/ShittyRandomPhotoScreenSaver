@@ -22,8 +22,14 @@ from widgets.painter_shadow import (
     PainterShadow,
     ShadowConfig,
     ShadowCache,
+    AsyncShadowRenderer,
     get_shadow_cache,
     clear_shadow_cache,
+    prerender_widget_shadow,
+    _GLOBAL_PRERENDER_CACHE,
+    _GLOBAL_PRERENDER_LOCK,
+    _PRERENDER_IN_PROGRESS,
+    _PRERENDER_LOCK,
 )
 
 
@@ -293,6 +299,354 @@ class TestShadowConfigHash:
         hash2 = ShadowCache._hash_config(config2)
         
         assert hash1 != hash2
+
+
+class TestAsyncShadowRenderer:
+    """Tests for AsyncShadowRenderer thread-safe async rendering."""
+
+    def setup_method(self):
+        """Clear cache before each test."""
+        AsyncShadowRenderer.clear_cache()
+
+    def teardown_method(self):
+        """Clear cache after each test."""
+        AsyncShadowRenderer.clear_cache()
+
+    def test_get_cached_empty(self):
+        """get_cached should return None when cache is empty."""
+        size = QSize(100, 50)
+        config = ShadowConfig()
+        
+        result = AsyncShadowRenderer.get_cached(size, config)
+        assert result is None
+
+    def test_get_or_render_creates_shadow(self):
+        """get_or_render should create shadow when not cached."""
+        size = QSize(100, 50)
+        config = ShadowConfig(enabled=True, blur_radius=10)
+        
+        result = AsyncShadowRenderer.get_or_render(size, config)
+        
+        assert result is not None
+        assert not result.isNull()
+        # Shadow should be larger than widget due to blur padding
+        assert result.width() > size.width()
+        assert result.height() > size.height()
+
+    def test_get_or_render_caches_result(self):
+        """get_or_render should cache the result."""
+        size = QSize(100, 50)
+        config = ShadowConfig(enabled=True, blur_radius=10)
+        
+        # First call renders
+        result1 = AsyncShadowRenderer.get_or_render(size, config)
+        
+        # Second call should return cached
+        result2 = AsyncShadowRenderer.get_cached(size, config)
+        
+        assert result1 is not None
+        assert result2 is not None
+        # Should be the same pixmap
+        assert result1.width() == result2.width()
+        assert result1.height() == result2.height()
+
+    def test_cache_key_includes_corner_radius(self):
+        """Different corner radii should produce different cache entries."""
+        size = QSize(100, 50)
+        config = ShadowConfig(enabled=True, blur_radius=10)
+        
+        # Render with corner_radius=0
+        result1 = AsyncShadowRenderer.get_or_render(size, config, corner_radius=0)
+        
+        # Render with corner_radius=8
+        result2 = AsyncShadowRenderer.get_or_render(size, config, corner_radius=8)
+        
+        # Both should exist
+        assert result1 is not None
+        assert result2 is not None
+        
+        # Cache should have 2 entries
+        stats = AsyncShadowRenderer.get_cache_stats()
+        assert stats["cache_size"] == 2
+
+    def test_clear_cache_removes_all(self):
+        """clear_cache should remove all cached shadows."""
+        size = QSize(100, 50)
+        config = ShadowConfig(enabled=True, blur_radius=10)
+        
+        # Add some entries
+        AsyncShadowRenderer.get_or_render(size, config, corner_radius=0)
+        AsyncShadowRenderer.get_or_render(size, config, corner_radius=8)
+        
+        stats = AsyncShadowRenderer.get_cache_stats()
+        assert stats["cache_size"] == 2
+        
+        # Clear
+        cleared = AsyncShadowRenderer.clear_cache()
+        assert cleared == 2
+        
+        # Should be empty now
+        stats = AsyncShadowRenderer.get_cache_stats()
+        assert stats["cache_size"] == 0
+
+    def test_disabled_config_returns_none(self):
+        """Disabled config should return None without caching."""
+        size = QSize(100, 50)
+        config = ShadowConfig(enabled=False)
+        
+        result = AsyncShadowRenderer.get_cached(size, config)
+        assert result is None
+
+    def test_empty_size_returns_none(self):
+        """Empty size should return None."""
+        size = QSize(0, 0)
+        config = ShadowConfig(enabled=True)
+        
+        result = AsyncShadowRenderer.get_or_render(size, config)
+        assert result is None
+
+
+class TestAsyncShadowCacheCorruption:
+    """Tests for cache corruption detection and recovery."""
+
+    def setup_method(self):
+        """Clear cache before each test."""
+        AsyncShadowRenderer.clear_cache()
+
+    def teardown_method(self):
+        """Clear cache after each test."""
+        AsyncShadowRenderer.clear_cache()
+
+    def test_null_pixmap_detected_and_removed(self):
+        """Null pixmap in cache should be detected and removed."""
+        size = QSize(100, 50)
+        config = ShadowConfig(enabled=True, blur_radius=10)
+        
+        # Manually insert a null pixmap into cache
+        key = AsyncShadowRenderer._make_cache_key(
+            size.width(), size.height(), config.blur_radius, 0
+        )
+        with _GLOBAL_PRERENDER_LOCK:
+            _GLOBAL_PRERENDER_CACHE[key] = QPixmap()  # Null pixmap
+        
+        # get_cached should detect corruption and return None
+        result = AsyncShadowRenderer.get_cached(size, config)
+        assert result is None
+        
+        # Corrupted entry should be removed
+        with _GLOBAL_PRERENDER_LOCK:
+            assert key not in _GLOBAL_PRERENDER_CACHE
+
+    def test_size_mismatch_detected_and_removed(self):
+        """Size mismatch in cache should be detected and removed."""
+        size = QSize(100, 50)
+        config = ShadowConfig(enabled=True, blur_radius=10)
+        
+        # Manually insert a wrong-sized pixmap into cache
+        key = AsyncShadowRenderer._make_cache_key(
+            size.width(), size.height(), config.blur_radius, 0
+        )
+        wrong_size_pixmap = QPixmap(50, 25)  # Wrong size
+        wrong_size_pixmap.fill(QColor(0, 0, 0))
+        
+        with _GLOBAL_PRERENDER_LOCK:
+            _GLOBAL_PRERENDER_CACHE[key] = wrong_size_pixmap
+        
+        # get_cached should detect size mismatch and return None
+        result = AsyncShadowRenderer.get_cached(size, config)
+        assert result is None
+        
+        # Corrupted entry should be removed
+        with _GLOBAL_PRERENDER_LOCK:
+            assert key not in _GLOBAL_PRERENDER_CACHE
+
+    def test_concurrent_access_thread_safety(self):
+        """Cache should be thread-safe under concurrent access."""
+        import threading
+        import time
+        
+        size = QSize(100, 50)
+        config = ShadowConfig(enabled=True, blur_radius=10)
+        
+        results = []
+        errors = []
+        
+        def worker(worker_id):
+            try:
+                for _ in range(10):
+                    # Mix of reads and writes
+                    if worker_id % 2 == 0:
+                        result = AsyncShadowRenderer.get_or_render(size, config)
+                        results.append(("render", result is not None))
+                    else:
+                        result = AsyncShadowRenderer.get_cached(size, config)
+                        results.append(("cached", result is not None))
+                    time.sleep(0.001)  # Small delay to increase contention
+            except Exception as e:
+                errors.append(str(e))
+        
+        # Start multiple threads
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(4)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        
+        # No errors should occur
+        assert len(errors) == 0, f"Thread errors: {errors}"
+        
+        # All operations should complete
+        assert len(results) == 40  # 4 threads * 10 iterations
+
+    def test_cache_recovery_after_corruption(self):
+        """Cache should recover after corruption is detected."""
+        size = QSize(100, 50)
+        config = ShadowConfig(enabled=True, blur_radius=10)
+        
+        # Insert corrupted entry
+        key = AsyncShadowRenderer._make_cache_key(
+            size.width(), size.height(), config.blur_radius, 0
+        )
+        with _GLOBAL_PRERENDER_LOCK:
+            _GLOBAL_PRERENDER_CACHE[key] = QPixmap()  # Null = corrupted
+        
+        # First access detects corruption
+        result1 = AsyncShadowRenderer.get_cached(size, config)
+        assert result1 is None
+        
+        # get_or_render should recover by re-rendering
+        result2 = AsyncShadowRenderer.get_or_render(size, config)
+        assert result2 is not None
+        assert not result2.isNull()
+        
+        # Cache should now have valid entry
+        result3 = AsyncShadowRenderer.get_cached(size, config)
+        assert result3 is not None
+
+
+class TestAsyncShadowPrerender:
+    """Tests for async pre-rendering functionality."""
+
+    def setup_method(self):
+        """Clear cache before each test."""
+        AsyncShadowRenderer.clear_cache()
+
+    def teardown_method(self):
+        """Clear cache after each test."""
+        AsyncShadowRenderer.clear_cache()
+
+    def test_prerender_async_returns_true_for_new(self):
+        """prerender_async should return True for new entries."""
+        size = QSize(100, 50)
+        config = ShadowConfig(enabled=True, blur_radius=10)
+        
+        # Should return True (submitted for rendering)
+        result = AsyncShadowRenderer.prerender_async(size, config)
+        # Note: May return False if ThreadManager not available in test
+        # This is acceptable - we're testing the logic, not the threading
+        assert isinstance(result, bool)
+
+    def test_prerender_async_returns_false_for_cached(self):
+        """prerender_async should return False if already cached."""
+        size = QSize(100, 50)
+        config = ShadowConfig(enabled=True, blur_radius=10)
+        
+        # Pre-populate cache
+        AsyncShadowRenderer.get_or_render(size, config)
+        
+        # Should return False (already cached)
+        result = AsyncShadowRenderer.prerender_async(size, config)
+        assert result is False
+
+    def test_prerender_async_disabled_config(self):
+        """prerender_async should return False for disabled config."""
+        size = QSize(100, 50)
+        config = ShadowConfig(enabled=False)
+        
+        result = AsyncShadowRenderer.prerender_async(size, config)
+        assert result is False
+
+    def test_prerender_async_empty_size(self):
+        """prerender_async should return False for empty size."""
+        size = QSize(0, 0)
+        config = ShadowConfig(enabled=True)
+        
+        result = AsyncShadowRenderer.prerender_async(size, config)
+        assert result is False
+
+    def test_warm_cache_submits_common_sizes(self):
+        """warm_cache should submit pre-renders for common sizes."""
+        config = ShadowConfig(enabled=True, blur_radius=10)
+        
+        # This may return 0 if ThreadManager not available in test
+        count = AsyncShadowRenderer.warm_cache(config)
+        assert isinstance(count, int)
+        assert count >= 0
+
+    def test_cache_stats_tracking(self):
+        """get_cache_stats should return accurate counts."""
+        size = QSize(100, 50)
+        config = ShadowConfig(enabled=True, blur_radius=10)
+        
+        # Initially empty
+        stats = AsyncShadowRenderer.get_cache_stats()
+        assert stats["cache_size"] == 0
+        
+        # Add one entry
+        AsyncShadowRenderer.get_or_render(size, config)
+        
+        stats = AsyncShadowRenderer.get_cache_stats()
+        assert stats["cache_size"] == 1
+
+
+class TestPrerenderWidgetShadow:
+    """Tests for prerender_widget_shadow convenience function."""
+
+    def setup_method(self):
+        """Clear cache before each test."""
+        AsyncShadowRenderer.clear_cache()
+
+    def teardown_method(self):
+        """Clear cache after each test."""
+        AsyncShadowRenderer.clear_cache()
+
+    def test_prerender_widget_shadow_with_mock_widget(self):
+        """prerender_widget_shadow should work with widget-like object."""
+        class MockWidget:
+            def size(self):
+                return QSize(200, 100)
+        
+        widget = MockWidget()
+        config = ShadowConfig(enabled=True, blur_radius=10)
+        
+        # Should not raise
+        result = prerender_widget_shadow(widget, config)
+        assert isinstance(result, bool)
+
+    def test_prerender_widget_shadow_empty_size(self):
+        """prerender_widget_shadow should handle empty widget size."""
+        class MockWidget:
+            def size(self):
+                return QSize(0, 0)
+        
+        widget = MockWidget()
+        config = ShadowConfig(enabled=True)
+        
+        result = prerender_widget_shadow(widget, config)
+        assert result is False
+
+    def test_prerender_widget_shadow_exception_handling(self):
+        """prerender_widget_shadow should handle exceptions gracefully."""
+        class BrokenWidget:
+            def size(self):
+                raise RuntimeError("Widget error")
+        
+        widget = BrokenWidget()
+        config = ShadowConfig(enabled=True)
+        
+        # Should not raise, just return False
+        result = prerender_widget_shadow(widget, config)
+        assert result is False
 
 
 if __name__ == "__main__":

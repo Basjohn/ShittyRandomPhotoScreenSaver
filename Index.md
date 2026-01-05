@@ -45,6 +45,20 @@ A living map of modules, purposes, and key classes. Keep this up to date.
     - Removed RSS and Transition workers (use ThreadManager instead) - reduces process overhead
     - Fixed ImageWorker response handling (skip BUSY/IDLE messages in polling loop)
     - **Result**: Transition FPS improved to 52 fps, ImageWorker now using shared memory correctly
+  - **Solution 3: Main Thread Blocking Fixes (Jan 5, 2026)**:
+    - Moved prefetch `QPixmap.fromImage()` from UI thread to compute pool (`screensaver_engine.py`)
+    - Added `AsyncShadowRenderer` class with thread-safe caching and corruption protection (`painter_shadow.py`)
+    - Added cache size limits (MAX_SHADOW_CACHE_SIZE=50) with FIFO eviction
+    - Updated `PainterShadow.render()` to use async cache as fallback
+    - Added comprehensive tests for shadow cache corruption scenarios (`test_painter_shadow.py`)
+    - Fixed eco mode bug: `set_always_on_top()` not called on toggle (`display_widget.py`)
+    - Fixed CPU % bug: delayed first tooltip update for psutil baseline (`system_tray.py`)
+    - Added eco mode worker control: stops ImageWorker/FFTWorker when window occluded (`eco_mode.py`)
+    - **Audit Documents Created**:
+      - `audits/Solution_3_Implementation_Plan.md` - Task breakdown for worker offloading
+      - `audits/Main_Thread_Blocking_Audit.md` - Complete audit of blocking operations
+      - `audits/Solution_1_VSync_Driven_Analysis.md` - Deep analysis of VSync-driven rendering
+      - `audits/Full_Architectural_Audit_Jan_2026.md` - Comprehensive codebase audit
 
 - v2.0 Roadmap Progress (Jan 2026)
   - **Phase 4.2**: Modal Settings Conversion complete (no-sources popup, profile separation, live updates)

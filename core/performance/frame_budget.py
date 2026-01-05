@@ -90,12 +90,24 @@ class FrameBudget:
     def frame_time_ms(self) -> float:
         return self._config.frame_time_ms
     
+    def reset_timing(self) -> None:
+        """Reset frame timing to avoid false positives from idle gaps.
+        
+        Call this when a transition starts to prevent the first frame
+        from measuring the entire idle gap as a 'spike'.
+        """
+        with self._lock:
+            self._frame_start = 0.0
+            self._category_times.clear()
+            self._category_starts.clear()
+    
     def begin_frame(self) -> None:
         """Mark the start of a new frame."""
         with self._lock:
             now = time.perf_counter()
             
-            # Record previous frame metrics
+            # Record previous frame metrics - only if we have a valid previous frame
+            # Skip spike detection if frame_start is 0 (reset after idle period)
             if self._frame_start > 0:
                 frame_time = (now - self._frame_start) * 1000.0
                 self._last_frame_time_ms = frame_time
@@ -105,7 +117,9 @@ class FrameBudget:
                 if frame_time > self._config.frame_time_ms + self._config.overrun_threshold_ms:
                     self._overrun_count += 1
                 
-                if frame_time > self._config.spike_threshold_ms:
+                # Only log spikes for frames within reasonable range (< 500ms)
+                # Larger gaps are idle time between transitions, not actual spikes
+                if frame_time > self._config.spike_threshold_ms and frame_time < 500.0:
                     self._spike_count += 1
                     if is_perf_metrics_enabled():
                         logger.warning(

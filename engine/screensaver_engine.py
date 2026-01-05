@@ -1190,21 +1190,38 @@ class ScreensaverEngine(QObject):
                 except Exception:
                     skip_heavy_ui_work = False
                 # UI warmup: convert first cached QImage to QPixmap to reduce on-demand conversion
+                # PERFORMANCE FIX: Move QPixmap.fromImage to compute pool (Qt 6 allows this)
+                # Only invoke UI thread for final cache storage
                 try:
                     if not skip_heavy_ui_work and self.thread_manager and self._image_cache:
                         first = paths[0]
-                        def _ui_convert():
+                        def _compute_convert():
+                            """Compute pool: Convert QImage to QPixmap (Qt 6 thread-safe)"""
                             try:
                                 from PySide6.QtGui import QPixmap, QImage
                                 cached = self._image_cache.get(first)
                                 if isinstance(cached, QImage):
-                                    pm = QPixmap.fromImage(cached)
+                                    pm = QPixmap.fromImage(cached)  # ← Now on worker thread
                                     if not pm.isNull():
-                                        self._image_cache.put(first, pm)
-                                        logger.debug(f"UI warmup: cached QPixmap for {first}")
+                                        return (first, pm)
                             except Exception as e:
-                                logger.debug(f"UI warmup failed for {first}: {e}")
-                        self.thread_manager.run_on_ui_thread(_ui_convert)
+                                logger.debug(f"Prefetch convert failed for {first}: {e}")
+                            return None
+                        
+                        def _ui_cache(result):
+                            """UI thread: Store result in cache"""
+                            try:
+                                if result and result.success and result.result:
+                                    path, pixmap = result.result
+                                    self._image_cache.put(path, pixmap)
+                                    logger.debug(f"Prefetch warmup: cached QPixmap for {path}")
+                            except Exception as e:
+                                logger.debug(f"Prefetch cache failed: {e}")
+                        
+                        self.thread_manager.submit_compute_task(
+                            _compute_convert,
+                            callback=lambda r: self.thread_manager.run_on_ui_thread(lambda: _ui_cache(r))
+                        )
                 except Exception:
                     pass
                 # Pre-scale proposal: safely compute scaled QImages for distinct display sizes (multi-monitor safe)
@@ -2022,6 +2039,7 @@ class ScreensaverEngine(QObject):
 
         def _do_load_and_process() -> Optional[Dict]:
             """Background task: load and process images for all displays."""
+            import time
             from PySide6.QtGui import QPixmap
             try:
                 processed_images = {}
@@ -2054,40 +2072,30 @@ class ScreensaverEngine(QObject):
                         elif isinstance(cached, QPixmap) and not cached.isNull():
                             qimage = cached.toImage()
                     
-                    # Load from disk if not cached
+                    # PERFORMANCE FIX: Skip synchronous QImage load - let ImageWorker handle it
+                    # The old code loaded the full image here (5+ seconds for large images),
+                    # then tried to use ImageWorker. Now we go straight to ImageWorker.
+                    # Only load synchronously if ImageWorker fails or is unavailable.
+                    
+                    # Validate file exists before trying worker
                     if qimage is None or qimage.isNull():
-                        qimage = QImage(img_path)
-                        if qimage.isNull():
-                            logger.warning(f"[ASYNC] Failed to load QImage: {img_path}")
-                            # Try to remove corrupt file if it's in RSS cache
-                            try:
-                                from pathlib import Path
-                                path = Path(img_path)
-                                if 'screensaver_rss_cache' in str(path):
-                                    path.unlink(missing_ok=True)
-                                    logger.info(f"[ASYNC] Removed corrupt RSS cache file: {path.name}")
-                            except Exception:
-                                pass
-                            
+                        from pathlib import Path
+                        if not Path(img_path).exists():
+                            logger.warning(f"[ASYNC] Image file not found: {img_path}")
                             # Try to get a replacement image for this display
                             for retry in range(3):
                                 replacement = self.image_queue.next() if self.image_queue else None
                                 if replacement and replacement.local_path:
                                     replacement_path = str(replacement.local_path)
-                                    qimage = QImage(replacement_path)
-                                    if not qimage.isNull():
+                                    if Path(replacement_path).exists():
                                         img_path = replacement_path
                                         meta = replacement
                                         logger.info(f"[ASYNC] Using replacement image for display {i}: {Path(replacement_path).name}")
                                         break
                             
-                            if qimage is None or qimage.isNull():
+                            if not Path(img_path).exists():
                                 logger.warning(f"[ASYNC] No valid replacement found for display {i}")
                                 continue
-                        
-                        # Cache the loaded QImage
-                        if self._image_cache:
-                            self._image_cache.put(img_path, qimage)
                     
                     try:
                         # Get target size from display
@@ -2105,7 +2113,9 @@ class ScreensaverEngine(QObject):
                         display_mode = getattr(display, 'display_mode', DisplayMode.FILL)
                         display_mode_str = display_mode.value if hasattr(display_mode, 'value') else str(display_mode).lower()
                         
-                        # Try ImageWorker first (separate process, avoids GIL)
+                        # Try ImageWorker (separate process, avoids GIL)
+                        # PERFORMANCE: No fallback to sync QImage load - that blocks for 5+ seconds
+                        # If worker fails, skip this image entirely and try next one
                         processed_qimage = None
                         
                         if self._process_supervisor and self._process_supervisor.is_running(WorkerType.IMAGE):
@@ -2115,38 +2125,47 @@ class ScreensaverEngine(QObject):
                                 target_size.height(),
                                 display_mode=display_mode_str,
                                 sharpen=sharpen,
-                                timeout_ms=1500,  # Increased from 500ms - worker avg is 253ms, large images need more
+                                timeout_ms=3000,  # 3s timeout: worker needs 273ms × 2 displays + overhead
                             )
                             if worker_qimage and not worker_qimage.isNull():
                                 processed_qimage = worker_qimage
                                 logger.debug(f"[ASYNC] Image loaded via ImageWorker for display {i}")
-                        
-                        # Fallback to local processing if worker unavailable or failed
-                        if processed_qimage is None or processed_qimage.isNull():
-                            # Load QImage locally if not already loaded
-                            if qimage is None or qimage.isNull():
-                                qimage = QImage(img_path)
-                                if qimage.isNull():
-                                    logger.warning(f"[ASYNC] Failed to load QImage locally: {img_path}")
-                                    continue
-                            
-                            # Process image for this display (thread-safe QImage operation)
-                            processed_qimage = AsyncImageProcessor.process_qimage(
-                                qimage,
-                                target_size,
-                                display_mode,
-                                use_lanczos=False,
-                                sharpen=sharpen,
-                            )
+                            else:
+                                logger.warning(f"[ASYNC] ImageWorker failed for display {i}, skipping image")
+                                continue  # Skip this display - don't block with sync fallback
+                        else:
+                            # Worker not available - use cached image if available, otherwise skip
+                            if qimage is not None and not qimage.isNull():
+                                processed_qimage = AsyncImageProcessor.process_qimage(
+                                    qimage,
+                                    target_size,
+                                    display_mode,
+                                    use_lanczos=False,
+                                    sharpen=sharpen,
+                                )
+                            else:
+                                logger.warning(f"[ASYNC] No ImageWorker and no cache for display {i}, skipping")
+                                continue
                         
                         # Convert to QPixmap on worker thread (Qt 6 allows this)
-                        # This moves the expensive conversion off the UI thread
+                        # PERF INSTRUMENTATION: Track conversion time
+                        _conv_start = time.time()
                         processed_pixmap = QPixmap.fromImage(processed_qimage)
+                        _conv_elapsed = (time.time() - _conv_start) * 1000
+                        if _conv_elapsed > 50 and is_perf_metrics_enabled():
+                            logger.warning(f"[PERF] [ASYNC] QPixmap.fromImage took {_conv_elapsed:.1f}ms for display {i}")
                         
-                        # For original pixmap, use qimage if available, otherwise load it
+                        # PERFORMANCE FIX: Don't load original image synchronously (5+ seconds)
+                        # Use processed image for both pixmaps - original is only used for fallback
                         if qimage is None or qimage.isNull():
-                            qimage = QImage(img_path)
-                        original_pixmap = QPixmap.fromImage(qimage) if qimage and not qimage.isNull() else processed_pixmap
+                            # Use processed image as original instead of loading full image
+                            original_pixmap = processed_pixmap
+                        else:
+                            _conv2_start = time.time()
+                            original_pixmap = QPixmap.fromImage(qimage)
+                            _conv2_elapsed = (time.time() - _conv2_start) * 1000
+                            if _conv2_elapsed > 50 and is_perf_metrics_enabled():
+                                logger.warning(f"[PERF] [ASYNC] Original QPixmap.fromImage took {_conv2_elapsed:.1f}ms for display {i}")
                         
                         processed_images[i] = {
                             'pixmap': processed_pixmap,

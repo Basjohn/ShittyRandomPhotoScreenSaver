@@ -2385,9 +2385,9 @@ class SpotifyVisualizerWidget(QWidget):
     def _update_timer_interval(self, max_fps: float) -> None:
         """Retune the ThreadManager recurring timer interval if needed."""
         interval_ms = max(4, int(round(1000.0 / max_fps)))
-        self._current_timer_interval_ms = interval_ms
         if interval_ms == self._current_timer_interval_ms:
             return
+        self._current_timer_interval_ms = interval_ms
         # Add a tiny jitter so we don't align perfectly with compositor vsync.
         jitter = random.randint(0, 2) if interval_ms >= 8 else 0
         new_interval = interval_ms + jitter
@@ -2398,6 +2398,31 @@ class SpotifyVisualizerWidget(QWidget):
                 self._current_timer_interval_ms = new_interval
             except Exception:
                 pass
+    
+    def _pause_timer_during_transition(self, is_transition_active: bool) -> None:
+        """Pause dedicated timer during transitions to avoid contention.
+        
+        PERFORMANCE FIX: When AnimationManager is active during transitions,
+        it provides tick callbacks. Running BOTH the dedicated timer AND
+        AnimationManager causes timer contention and 50-100ms dt spikes.
+        
+        Pause the dedicated timer during transitions, resume when idle.
+        """
+        timer = self._bars_timer
+        if timer is None:
+            return
+        
+        try:
+            if is_transition_active and self._using_animation_ticks:
+                # Transition active with AnimationManager - pause dedicated timer
+                if timer.isActive():
+                    timer.stop()
+            else:
+                # No transition or no AnimationManager - ensure timer is running
+                if not timer.isActive() and self._enabled:
+                    timer.start()
+        except Exception:
+            pass
 
     def _log_tick_spike(self, dt: float, transition_ctx: Dict[str, Any]) -> None:
         """Log dt spikes with surrounding transition context."""
@@ -2444,6 +2469,12 @@ class SpotifyVisualizerWidget(QWidget):
         now_ts = time.time()
         parent = self.parent()
         transition_ctx = self._get_transition_context(parent)
+        is_transition_active = transition_ctx.get("running", False)
+        
+        # PERFORMANCE: Pause dedicated timer during transitions when AnimationManager is active
+        # This prevents timer contention that causes 50-100ms dt spikes
+        self._pause_timer_during_transition(is_transition_active)
+        
         max_fps = self._resolve_max_fps(transition_ctx)
         self._update_timer_interval(max_fps)
 

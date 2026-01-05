@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from rendering.display_widget import DisplayWidget
     from rendering.transition_controller import TransitionController
     from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
+    from core.process.supervisor import ProcessSupervisor
 
 logger = get_logger(__name__)
 
@@ -110,6 +111,10 @@ class EcoModeManager:
         self._prefetch_pause_callback: Optional[Callable[[], None]] = None
         self._prefetch_resume_callback: Optional[Callable[[], None]] = None
         
+        # Process supervisor for worker control
+        self._process_supervisor: Optional["ProcessSupervisor"] = None
+        self._workers_were_running: dict = {}  # Track which workers were running before eco mode
+        
         # Monitoring timer
         self._monitor_timer: Optional[QTimer] = None
         self._recovery_timer: Optional[QTimer] = None
@@ -147,6 +152,18 @@ class EcoModeManager:
         """Set callbacks for pausing/resuming image prefetching."""
         self._prefetch_pause_callback = pause_callback
         self._prefetch_resume_callback = resume_callback
+    
+    def set_process_supervisor(self, supervisor: "ProcessSupervisor") -> None:
+        """Set the process supervisor for worker control.
+        
+        When eco mode activates, workers will be stopped to save CPU.
+        When eco mode deactivates, workers will be restarted.
+        
+        Args:
+            supervisor: ProcessSupervisor instance
+        """
+        self._process_supervisor = supervisor
+        logger.debug("[MC] [ECO MODE] ProcessSupervisor set")
     
     def set_always_on_top(self, on_top: bool) -> None:
         """
@@ -335,6 +352,27 @@ class EcoModeManager:
                 logger.debug("[MC] [ECO MODE] Prefetching paused")
             except Exception:
                 pass
+        
+        # Stop workers to save CPU (P1 fix from architectural audit)
+        if self._process_supervisor is not None:
+            try:
+                from core.process.types import WorkerType
+                
+                # Track which workers were running before stopping
+                self._workers_were_running = {}
+                for worker_type in [WorkerType.IMAGE, WorkerType.FFT]:
+                    try:
+                        was_running = self._process_supervisor.is_running(worker_type)
+                        self._workers_were_running[worker_type] = was_running
+                        if was_running:
+                            self._process_supervisor.stop(worker_type, timeout=2.0)
+                            logger.debug("[MC] [ECO MODE] Stopped %s worker", worker_type.value)
+                    except Exception as e:
+                        logger.debug("[MC] [ECO MODE] Failed to stop %s worker: %s", worker_type.value, e)
+                
+                logger.info("[MC] [ECO MODE] Workers stopped to save CPU")
+            except Exception as e:
+                logger.debug("[MC] [ECO MODE] Failed to stop workers: %s", e)
     
     def _schedule_recovery(self) -> None:
         """Schedule recovery from Eco Mode after a short delay."""
@@ -375,6 +413,24 @@ class EcoModeManager:
                 logger.debug("[MC] [ECO MODE] Prefetching resumed")
             except Exception:
                 pass
+        
+        # Restart workers that were running before eco mode
+        if self._process_supervisor is not None and self._workers_were_running:
+            try:
+                from core.process.types import WorkerType
+                
+                for worker_type, was_running in self._workers_were_running.items():
+                    if was_running:
+                        try:
+                            self._process_supervisor.start(worker_type)
+                            logger.debug("[MC] [ECO MODE] Restarted %s worker", worker_type.value)
+                        except Exception as e:
+                            logger.debug("[MC] [ECO MODE] Failed to restart %s worker: %s", worker_type.value, e)
+                
+                self._workers_were_running = {}
+                logger.info("[MC] [ECO MODE] Workers restarted")
+            except Exception as e:
+                logger.debug("[MC] [ECO MODE] Failed to restart workers: %s", e)
         
         # Transitions resume automatically (we just prevented new ones)
     

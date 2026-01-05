@@ -71,6 +71,10 @@ def _get_cpu_usage() -> Optional[float]:
     """Get CPU usage percentage for this process.
     
     Returns None if psutil is unavailable.
+    
+    Note: cpu_percent(interval=None) is non-blocking but requires a baseline.
+    The first call after process start returns 0.0. Subsequent calls return
+    actual CPU usage since the last call.
     """
     psutil = _get_psutil()
     if psutil is None:
@@ -78,6 +82,8 @@ def _get_cpu_usage() -> Optional[float]:
     
     try:
         proc = psutil.Process(os.getpid())
+        # cpu_percent(interval=None) returns usage since last call
+        # First call after baseline returns actual usage
         return proc.cpu_percent(interval=None)
     except Exception:
         return None
@@ -125,9 +131,11 @@ class ScreensaverTrayIcon(QSystemTrayIcon):
             self.setIcon(tray_icon)
 
         # Initialize CPU baseline for accurate readings
-        _get_cpu_usage()  # Prime psutil's cpu_percent
+        _get_cpu_usage()  # Prime psutil's cpu_percent (returns 0.0)
         
-        self._update_tooltip()
+        # Delay first tooltip update to allow CPU measurement to accumulate
+        # cpu_percent needs time between calls to measure actual usage
+        QTimer.singleShot(1000, self._update_tooltip)
         
         # Periodic tooltip refresh timer (every 5 seconds)
         self._tooltip_timer = QTimer(self)

@@ -3062,6 +3062,14 @@ class DisplayWidget(QWidget):
                 self.settings_manager.set("mc.always_on_top", on_top)
                 self.settings_manager.save()
             
+            # Notify EcoModeManager of always-on-top state change
+            if self._eco_mode_manager is not None:
+                try:
+                    self._eco_mode_manager.set_always_on_top(on_top)
+                    logger.debug("[MC] EcoModeManager notified: always_on_top=%s", on_top)
+                except Exception:
+                    logger.debug("[MC] Failed to notify EcoModeManager of always-on-top change", exc_info=True)
+            
             logger.info("[MC] Context menu: always on top set to %s", on_top)
         except Exception:
             logger.debug("Failed to toggle always on top from context menu", exc_info=True)
