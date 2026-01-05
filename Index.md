@@ -16,6 +16,13 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - **InputHandler**: Global media key passthrough; Double-click "Next Image" navigation.
   - **SettingsDialog**: Multi-monitor aware window state persistence (geometry clamping, screen-at detection).
 
+- v2.0 Roadmap Progress (Jan 2026)
+  - **Phase 4.2**: Modal Settings Conversion complete (no-sources popup, profile separation, live updates)
+  - **Phase 4.1b**: Visual padding helpers complete (BaseOverlayWidget, WeatherWidget migration)
+  - **Phase 5.1b**: GL State Management Phases 1-3b complete (ResourceManager GL tracking)
+  - **Phase 5.3**: Performance optimization tests complete (GL texture streaming, memory pooling)
+  - **Settings Validation**: Auto-repair for corrupted sensitivity values in `validate_and_repair()`
+
 ## Core Managers
 - core/threading/manager.py
   - ThreadManager, ThreadPoolType, TaskPriority
@@ -150,7 +157,8 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - `tests/test_settings_no_sources_popup.py` - 10 tests for no-sources popup validation
 - `tests/test_settings_profile_separation.py` - 9 tests for MC vs Screensaver profile isolation
 - `tests/test_gl_texture_streaming.py` - 18 tests for GL texture streaming and PBO optimization
-- **Total: 261 new tests** for process isolation, GL state, widgets, MC features, settings, and performance tuning
+- `tests/test_memory_pooling.py` - 19 tests for ResourceManager object pooling efficiency
+- **Total: 280 new tests** for process isolation, GL state, widgets, MC features, settings, and performance tuning
 
 ## GL Resource Management (Jan 2026)
 - `core/resources/manager.py` - ResourceManager GL cleanup hooks:

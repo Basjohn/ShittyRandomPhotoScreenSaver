@@ -554,6 +554,26 @@ class SettingsManager(QObject):
                 self._settings.setValue('display.hw_accel', expected_hw)
                 repairs['display.hw_accel'] = "Missing key"
             
+            # Validate spotify visualizer sensitivity - must be in valid range (0.25-2.5)
+            # Fix for corrupted sensitivity values that cause poor visualizer performance
+            vis_sensitivity = self._settings.value('widgets.spotify_visualizer.sensitivity')
+            if vis_sensitivity is not None:
+                try:
+                    sens_val = float(vis_sensitivity)
+                    # If sensitivity is below 0.5, it's likely corrupted - reset to default 1.0
+                    if sens_val < 0.5:
+                        logger.warning(f"Repairing widgets.spotify_visualizer.sensitivity: {sens_val} < 0.5 (likely corrupted)")
+                        self._settings.setValue('widgets.spotify_visualizer.sensitivity', 1.0)
+                        repairs['widgets.spotify_visualizer.sensitivity'] = f"Out of range: {sens_val}"
+                    elif sens_val > 2.5:
+                        logger.warning(f"Repairing widgets.spotify_visualizer.sensitivity: {sens_val} > 2.5")
+                        self._settings.setValue('widgets.spotify_visualizer.sensitivity', 1.0)
+                        repairs['widgets.spotify_visualizer.sensitivity'] = f"Out of range: {sens_val}"
+                except (ValueError, TypeError):
+                    logger.warning(f"Repairing widgets.spotify_visualizer.sensitivity: invalid value {vis_sensitivity!r}")
+                    self._settings.setValue('widgets.spotify_visualizer.sensitivity', 1.0)
+                    repairs['widgets.spotify_visualizer.sensitivity'] = f"Invalid value: {vis_sensitivity!r}"
+
             # Validate widgets - must be dict
             widgets = self._settings.value('widgets')
             if widgets is not None and not isinstance(widgets, Mapping):

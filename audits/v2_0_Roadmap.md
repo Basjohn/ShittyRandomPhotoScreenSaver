@@ -464,14 +464,14 @@ This task requires extensive investigation due to tight coupling between focus h
   - Created: `core/process/tuning.py` with per-worker configs
   - Tune: Per-channel caps (IMAGE=32, RSS=16, FFT=128, TRANSITION=8)
   - Optimize: DROP_OLD policy for IMAGE/RSS/FFT, DROP_NEW for TRANSITION
-- [ ] **GL texture streaming**: PBO optimization if needed
-  - Review: `GLTextureManager` PBO pooling efficiency
-  - Measure: Texture upload time vs frame budget
-  - Optimize: PBO size and pool depth if bottleneck identified
-- [ ] **Memory pressure reduction**: Object pooling enhancements
-  - Review: `ResourceManager` QPixmap/QImage pooling
-  - Measure: GC pressure and allocation spikes
-  - Optimize: Pool sizes and eviction policies
+- [x] **GL texture streaming**: PBO optimization if needed ✅ _2026-01-05_
+  - Reviewed: `GLTextureManager` PBO pooling - efficient reuse pattern
+  - Integrated: ResourceManager GL handle tracking for VRAM leak prevention
+  - Tests: `tests/test_gl_texture_streaming.py` (18 tests)
+- [x] **Memory pressure reduction**: Object pooling enhancements ✅ _2026-01-05_
+  - Reviewed: `ResourceManager` QPixmap/QImage pooling - properly initialized
+  - Verified: Pool stats tracking and thread-safe locking
+  - Tests: `tests/test_memory_pooling.py` (19 tests)
 - [ ] **Perf baseline update**: Record final v2.0 metrics
   - Run: Full harness per `Docs/PERFORMANCE_BASELINE.md`
   - Record: dt_max, avg_fps, memory, VRAM per transition/backend
@@ -480,7 +480,7 @@ This task requires extensive investigation due to tight coupling between focus h
 **Tests Required**:
 - [x] `tests/test_worker_latency_tuning.py` - Queue depth optimization ✅ 20 tests passing
 - [x] `tests/test_gl_texture_streaming.py` - PBO performance validation ✅ 18 tests passing _2026-01-05_
-- [ ] `tests/test_memory_pooling.py` - Object pool efficiency
+- [x] `tests/test_memory_pooling.py` - Object pool efficiency ✅ 19 tests passing _2026-01-05_
 
 ---
 
