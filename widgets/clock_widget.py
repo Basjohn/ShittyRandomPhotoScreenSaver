@@ -991,19 +991,22 @@ class ClockWidget(BaseOverlayWidget):
                 marker_path.lineTo(outer_x, outer_y)
 
             if self._analog_face_shadow:
-                base_alpha = max(110, int(self._text_color.alpha() * (0.55 if self._analog_shadow_intense else 0.4)))
+                # Circle/notches shadow: 10% larger, 10% darker than before
+                base_alpha = max(121, int(self._text_color.alpha() * (0.605 if self._analog_shadow_intense else 0.44)))
                 shadow_color = QColor(0, 0, 0, _scaled_alpha(base_alpha))
 
                 ring_path = QPainterPath()
                 ring_path.addEllipse(center_x - radius, center_y - radius, radius * 2, radius * 2)
                 ring_stroke = QPainterPathStroker()
-                ring_stroke.setWidth(max(4.0, radius * (0.035 if self._analog_shadow_intense else 0.02)))
+                # Ring stroke 10% wider
+                ring_stroke.setWidth(max(4.4, radius * (0.0385 if self._analog_shadow_intense else 0.022)))
                 ring_stroke.setCapStyle(Qt.PenCapStyle.RoundCap)
                 ring_stroke.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
                 ring_shape = ring_stroke.createStroke(ring_path)
 
                 marker_stroke = QPainterPathStroker()
-                marker_stroke.setWidth(max(2.0, radius * (0.012 if self._analog_shadow_intense else 0.008)))
+                # Marker stroke 10% wider
+                marker_stroke.setWidth(max(2.2, radius * (0.0132 if self._analog_shadow_intense else 0.0088)))
                 marker_stroke.setCapStyle(Qt.PenCapStyle.RoundCap)
                 marker_stroke.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
                 marker_shape = marker_stroke.createStroke(marker_path)
@@ -1067,11 +1070,12 @@ class ClockWidget(BaseOverlayWidget):
 
                     # Subtle drop shadow for numerals, matching the analogue
                     # face/hand shadow so the entire dial reads as a single lit element.
+                    # Numerals: 20% larger shadows, 20% darker
                     if self._analog_face_shadow:
-                        base_numeral_alpha = max(81, int(self._text_color.alpha() * 0.504))
+                        base_numeral_alpha = max(97, int(self._text_color.alpha() * 0.605))
                         numeral_shadow = QColor(0, 0, 0, _scaled_alpha(base_numeral_alpha))
                         painter.setPen(QPen(numeral_shadow))
-                        numeral_offset = max(1, int(round(shadow_scale)))
+                        numeral_offset = max(1, int(round(shadow_scale * 1.2)))
                         painter.drawText(tx - tw // 2 + numeral_offset, ty + th // 4 + numeral_offset, text)
 
                     painter.setPen(QPen(self._text_color))

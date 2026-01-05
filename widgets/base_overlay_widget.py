@@ -205,6 +205,13 @@ class BaseOverlayWidget(QLabel):
         # Stack offset for widget stacking
         self._stack_offset = QPoint(0, 0)
         
+        # Visual padding - accounts for widget chrome vs visible content
+        # Used to align the visible card edge (not QLabel frame) to margins
+        self._visual_padding_top = 0
+        self._visual_padding_right = 0
+        self._visual_padding_bottom = 0
+        self._visual_padding_left = 0
+        
     def _apply_base_styling(self) -> None:
         """Apply base widget attributes and styling. Call in subclass _setup_ui()."""
         configure_overlay_widget_attributes(self)
@@ -340,6 +347,68 @@ class BaseOverlayWidget(QLabel):
         self._stack_offset = offset
         self._update_position()
     
+    def set_visual_padding(
+        self,
+        top: int = 0,
+        right: int = 0,
+        bottom: int = 0,
+        left: int = 0
+    ) -> None:
+        """Set visual padding to align visible content edge to margins.
+        
+        Visual padding accounts for the difference between the QLabel frame
+        and the actual visible content (e.g., card background with padding).
+        When positioning, the visible content edge will align to margins,
+        not the QLabel frame edge.
+        
+        Args:
+            top: Padding from QLabel top to visible content top
+            right: Padding from QLabel right to visible content right
+            bottom: Padding from QLabel bottom to visible content bottom
+            left: Padding from QLabel left to visible content left
+        """
+        self._visual_padding_top = max(0, int(top))
+        self._visual_padding_right = max(0, int(right))
+        self._visual_padding_bottom = max(0, int(bottom))
+        self._visual_padding_left = max(0, int(left))
+        self._update_position()
+    
+    def get_visual_padding(self) -> Tuple[int, int, int, int]:
+        """Get visual padding (top, right, bottom, left)."""
+        return (
+            self._visual_padding_top,
+            self._visual_padding_right,
+            self._visual_padding_bottom,
+            self._visual_padding_left,
+        )
+    
+    def _compute_visual_offset(self) -> QPoint:
+        """Compute position offset to align visible content to margins.
+        
+        Returns offset to apply based on current position and visual padding.
+        For left-anchored positions, shift left by left padding.
+        For right-anchored positions, shift right by right padding.
+        For top-anchored positions, shift up by top padding.
+        For bottom-anchored positions, shift down by bottom padding.
+        """
+        dx, dy = 0, 0
+        
+        # Horizontal adjustment
+        if self._position in (OverlayPosition.TOP_LEFT, OverlayPosition.MIDDLE_LEFT, OverlayPosition.BOTTOM_LEFT):
+            dx = -self._visual_padding_left
+        elif self._position in (OverlayPosition.TOP_RIGHT, OverlayPosition.MIDDLE_RIGHT, OverlayPosition.BOTTOM_RIGHT):
+            dx = self._visual_padding_right
+        # Center positions: no horizontal adjustment (centered on content)
+        
+        # Vertical adjustment
+        if self._position in (OverlayPosition.TOP_LEFT, OverlayPosition.TOP_CENTER, OverlayPosition.TOP_RIGHT):
+            dy = -self._visual_padding_top
+        elif self._position in (OverlayPosition.BOTTOM_LEFT, OverlayPosition.BOTTOM_CENTER, OverlayPosition.BOTTOM_RIGHT):
+            dy = self._visual_padding_bottom
+        # Middle positions: no vertical adjustment (centered on content)
+        
+        return QPoint(dx, dy)
+    
     def _update_position(self) -> None:
         """Update widget position based on current settings."""
         parent = self.parentWidget()
@@ -377,6 +446,11 @@ class BaseOverlayWidget(QLabel):
             y = parent_size.height() - widget_size.height() - margin
         elif self._position == OverlayPosition.CENTER:
             y = (parent_size.height() - widget_size.height()) // 2
+        
+        # Apply visual padding offset (aligns visible content to margins)
+        visual_offset = self._compute_visual_offset()
+        x += visual_offset.x()
+        y += visual_offset.y()
         
         # Apply pixel shift and stack offset
         x += self._pixel_shift_offset.x() + self._stack_offset.x()

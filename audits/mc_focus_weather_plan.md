@@ -4,15 +4,20 @@
 
 ---
 
+Short summary of problem:
+In MC mode no keys work at all until the user right clicks, then keys work until the user changes focus and tries to come back in.
+Right click is importantly conntected to trying to prevent shadow cache corruption. We have/had a lot of this.
+Shadows would suddenly "double up" or distort on clicks or changing windows and we have mechanisms in place (like right click) to fix them. Ideally we'd not have the corruption at all but this is a QT problem. Do online research.
+Shadows still occasioanlly corrupt on focus changes as things are now, most attempts at a solution to the keys issues resulted in worse/more frequent shadow corruption.
+
+We would like to get this to work but avoiding shadow corruption is a higher priority than keys.
+
+Shadow corruption happens in both builds but almost never in non-mc ones with current mitigations.
+
 ## Goals
 
-1. **Weather Widget Layout** [Planned fix is in Roadmap and Refactor Guide]
-   - Audit `widgets/weather_widget.py` for hardcoded offsets.
-   - Cross-check against `Docs/10_WIDGET_GUIDELINES.md` and ensure we reuse the shared spacing helpers.
-   - Add regression tests (screenshot diff or geometry assertions) that instantiate `WeatherWidget` in each position and verify `geometry().margins()` respect the configured values.
-
-2. **MC Focus / Shadow Stability**
-   - Left-click repair must restore media keys without forcing halo hides or triggering shadow invalidations while inactive.
+1. **MC Focus / Shadow Stability**
+   - Left-click repair must restore keys without forcing halo hides or triggering shadow invalidations while inactive.
    - Right-click context menu remains the “gold standard” reference: it never corrupts shadows when switching focus. We must extract the minimal subset of that pipeline and reapply it safely for left-clicks.
    - Provide a design that works in both script and Nuitka builds.
 [Problem of keys being swallowed is solved if we mimic right click activity for left clicks but this 1. Introduces shadow artifacts EVERY single time we go into a different application window and 2. Makes Cntrl Halo vanish. Both unacceptable tradoffs and higher priority than keys.]
@@ -30,20 +35,14 @@
 
 ## Investigation Steps
 
-1. **Weather Widget**
-   1. Capture current geometry for each anchor using a tiny diagnostic script (`tests/manual/weather_layout_probe.py`).
-   2. Compare with guideline values (margins, spacing tokens). Document discrepancies.
-   3. Patch widget to use centralized spacing helpers rather than inline `+/- 10` offsets.
-   4. Add geometry assertions to `tests/test_widget_layouts.py` (new file if necessary).
-
-2. **MC Focus Baseline**
+1. **MC Focus Baseline**
    1. Roll back the recent `_pending_light_click_refresh` changes and re-run MC script build.
    2. Collect logs showing:
       - `[MC TOOL FOCUS]` entries when right-clicking vs. left-clicking.
       - Shadow corruption (or lack thereof) when focus changes.
    3. Confirm halo behavior matches expectations (only hides when Ctrl/Hard-Exit is active).
 
-3. **Design Document**
+2. **Design Document**
    1. Diagram the event order for both right-click and left-click:
       - InputHandler → DisplayWidget → WidgetManager → MultiMonitorCoordinator → Qt native events.
    2. Explicitly list which methods touch `_pending_effect_invalidation`, `_invalidate_overlay_effects`, and the GL compositor.
@@ -74,7 +73,7 @@
 - [ ] Design doc/diagram explaining the final approach.
 - [ ] Revised implementation with guarded activation refresh.
 - [ ] Regression tests covering:
-  - Media key passthrough.
+  - All key passthrough.
   - Halo visibility rules.
   - Shadow stability on focus changes.
 - [ ] TestSuite.md update with new regression coverage.

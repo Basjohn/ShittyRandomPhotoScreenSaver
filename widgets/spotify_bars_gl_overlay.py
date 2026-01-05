@@ -97,7 +97,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._u_playing = None
         self._u_ghost_alpha = None
         self._gl_disabled: bool = False
-        self._gl_initialized: bool = False  # True after initializeGL completes
+        # Note: _gl_initialized flag removed - use self._gl_state.is_ready() instead
         self._debug_bars_logged: bool = False
         self._debug_paint_logged: bool = False
         
@@ -399,13 +399,13 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             logger.debug("[SPOTIFY_VIS] Failed to initialise GL pipeline for SpotifyBarsGLOverlay", exc_info=True)
             self._gl_state.transition(GLContextState.ERROR, str(e))
         
-        # Mark GL as initialized so paintGL knows it's safe to render
-        self._gl_initialized = True
+        # GLStateManager now tracks initialization state - no separate flag needed
 
     def paintGL(self) -> None:  # type: ignore[override]
         # Skip rendering until initializeGL has completed to avoid
         # uninitialized buffer artifacts (green dots on first frame)
-        if not self._gl_initialized:
+        # Use GLStateManager for proper state tracking
+        if not self._gl_state.is_ready() and not self._gl_state.is_error():
             return
         
         if not self._enabled:

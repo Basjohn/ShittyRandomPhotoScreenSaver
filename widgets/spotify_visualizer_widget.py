@@ -1550,6 +1550,26 @@ class SpotifyVisualizerWidget(QWidget):
         self._anim_listener_id = None
         self._ensure_tick_source()
 
+    def _ensure_tick_source(self) -> None:
+        """Ensure the visualizer has a tick source for continuous updates.
+        
+        This method ensures the dedicated _bars_timer is running when the
+        visualizer is enabled and no AnimationManager tick listener is active.
+        The timer provides continuous 60Hz updates between transitions.
+        """
+        if not self._enabled:
+            return
+        
+        # If we have an AnimationManager listener, we're covered during transitions
+        # but still need the dedicated timer for between-transition updates
+        if self._thread_manager is not None and self._bars_timer is None:
+            try:
+                self._bars_timer = self._thread_manager.schedule_recurring(16, self._on_tick)
+                self._current_timer_interval_ms = 16
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to create tick source timer", exc_info=True)
+                self._bars_timer = None
+
     def set_shadow_config(self, config) -> None:
         self._shadow_config = config
 

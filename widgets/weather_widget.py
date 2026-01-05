@@ -10,7 +10,7 @@ from pathlib import Path
 import os
 import json
 from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import QTimer, Qt, Signal, QObject, QSize
+from PySide6.QtCore import QTimer, Qt, Signal, QObject
 from PySide6.QtGui import QFont, QPainter, QPen, QColor, QFontMetrics
 from shiboken6 import Shiboken
 
@@ -146,6 +146,15 @@ class WeatherWidget(BaseOverlayWidget):
         self._padding_bottom = 8
         self._padding_left = 21  # +5 to align with overlay cards
         self._padding_right = 28  # wider to match visual spacing on right-anchored layouts
+        
+        # Set visual padding for base class positioning (aligns visible content to margins)
+        # This replaces the custom horizontal_margin adjustment in _update_position
+        self.set_visual_padding(
+            top=self._padding_top,
+            right=self._padding_right,
+            bottom=self._padding_bottom,
+            left=self._padding_left,
+        )
         
         # Optional forecast line
         self._show_forecast = False
@@ -666,64 +675,31 @@ class WeatherWidget(BaseOverlayWidget):
             self.setText("Weather: Error")
 
     def _update_position(self) -> None:
-        """Update widget position with padding-aware margins and stack offsets."""
-        parent = self.parentWidget()
-        if parent is None:
-            return
-
-        parent_size = parent.size()
-        widget_size = self.size()
-        if widget_size.width() <= 0 or widget_size.height() <= 0:
-            widget_size = self.sizeHint()
-        if widget_size.width() <= 0 or widget_size.height() <= 0:
-            widget_size = QSize(100, 50)
-
-        margin = self._margin
-        horizontal_margin = margin
-        if self._weather_position in (
-            WeatherPosition.TOP_RIGHT,
-            WeatherPosition.MIDDLE_RIGHT,
-            WeatherPosition.BOTTOM_RIGHT,
-        ):
-            pad_adjust = max(0, self._padding_right - self._padding_left)
-            horizontal_margin = max(0, margin - pad_adjust)
-
-        pos = self._weather_position
-        if pos == WeatherPosition.TOP_LEFT:
-            x = horizontal_margin
-            y = margin
-        elif pos == WeatherPosition.TOP_CENTER:
-            x = (parent_size.width() - widget_size.width()) // 2
-            y = margin
-        elif pos == WeatherPosition.TOP_RIGHT:
-            x = parent_size.width() - widget_size.width() - horizontal_margin
-            y = margin
-        elif pos == WeatherPosition.MIDDLE_LEFT:
-            x = horizontal_margin
-            y = (parent_size.height() - widget_size.height()) // 2
-        elif pos == WeatherPosition.CENTER:
-            x = (parent_size.width() - widget_size.width()) // 2
-            y = (parent_size.height() - widget_size.height()) // 2
-        elif pos == WeatherPosition.MIDDLE_RIGHT:
-            x = parent_size.width() - widget_size.width() - horizontal_margin
-            y = (parent_size.height() - widget_size.height()) // 2
-        elif pos == WeatherPosition.BOTTOM_LEFT:
-            x = horizontal_margin
-            y = parent_size.height() - widget_size.height() - margin
-        elif pos == WeatherPosition.BOTTOM_CENTER:
-            x = (parent_size.width() - widget_size.width()) // 2
-            y = parent_size.height() - widget_size.height() - margin
-        elif pos == WeatherPosition.BOTTOM_RIGHT:
-            x = parent_size.width() - widget_size.width() - horizontal_margin
-            y = parent_size.height() - widget_size.height() - margin
-        else:
-            x = horizontal_margin
-            y = parent_size.height() - widget_size.height() - margin
-
-        x += self._pixel_shift_offset.x() + self._stack_offset.x()
-        y += self._pixel_shift_offset.y() + self._stack_offset.y()
-
-        self.move(x, y)
+        """Update widget position using base class visual padding helpers.
+        
+        The base class _update_position() now handles visual padding offsets,
+        so we just need to sync our position enum and delegate to the base class.
+        """
+        # Sync WeatherPosition to OverlayPosition for base class
+        from widgets.base_overlay_widget import OverlayPosition
+        
+        position_map = {
+            WeatherPosition.TOP_LEFT: OverlayPosition.TOP_LEFT,
+            WeatherPosition.TOP_CENTER: OverlayPosition.TOP_CENTER,
+            WeatherPosition.TOP_RIGHT: OverlayPosition.TOP_RIGHT,
+            WeatherPosition.MIDDLE_LEFT: OverlayPosition.MIDDLE_LEFT,
+            WeatherPosition.CENTER: OverlayPosition.CENTER,
+            WeatherPosition.MIDDLE_RIGHT: OverlayPosition.MIDDLE_RIGHT,
+            WeatherPosition.BOTTOM_LEFT: OverlayPosition.BOTTOM_LEFT,
+            WeatherPosition.BOTTOM_CENTER: OverlayPosition.BOTTOM_CENTER,
+            WeatherPosition.BOTTOM_RIGHT: OverlayPosition.BOTTOM_RIGHT,
+        }
+        
+        # Update base class position and let it handle visual padding
+        self._position = position_map.get(self._weather_position, OverlayPosition.TOP_LEFT)
+        
+        # Delegate to base class which handles visual padding, pixel shift, and stack offset
+        super()._update_position()
 
     def set_location(self, location: str) -> None:
         """

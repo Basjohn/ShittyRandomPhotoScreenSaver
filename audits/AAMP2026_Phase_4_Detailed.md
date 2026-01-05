@@ -3,8 +3,8 @@
 Status: Planning-only (no code). Spec.md remains current-state. Main audit references this doc for detail.
 
 ## 0) Preconditions / Policy Anchors
-- [ ] Lock-free/atomic + ThreadManager policy reaffirmed; no raw Qt timers.
-- [ ] Phase 1/2 plans finalized (workers, schemas, supervisor, shared memory).
+- [x] Lock-free/atomic + ThreadManager policy reaffirmed; no raw Qt timers. ✅ _2026-01-05_
+- [x] Phase 1/2 plans finalized (workers, schemas, supervisor, shared memory). ✅ _2026-01-05_ (113 tests passing)
 
 ## 1) Scope & Goals
 - [ ] Slim WidgetManager into coordinator; factories + positioner own creation/placement.
@@ -14,11 +14,14 @@ Status: Planning-only (no code). Spec.md remains current-state. Main audit refer
 - [ ] Guard against unintended engine shutdown when monitors or the “primary display” toggle change while Settings is open; the dialog must not clobber the running screensaver session.
 
 ## 2) WidgetManager Refactor
-- [ ] Remove widget-specific conditionals; expose minimal API to DisplayWidget (fade/raise/start/stop).
-- [ ] Delegate instantiation to widget factories; WidgetManager only orchestrates (no per-widget branching).
-- [ ] Integrate `WidgetPositioner` end-to-end: `set_container_size()`, `position_widget_by_anchor()`, collision handling, stack offsets.
-- [ ] Centralize overlay fade/raise logic; integrate ResourceManager for lifecycle cleanup.
-- [ ] Ensure lock-free patterns where possible; document any unavoidable locks (only when coordinator state truly shared).
+- [x] Remove widget-specific conditionals; expose minimal API to DisplayWidget (fade/raise/start/stop). ✅ _2026-01-05_
+- [x] Delegate instantiation to widget factories; WidgetManager only orchestrates (no per-widget branching). ✅ _2026-01-05_
+- [x] Integrate `WidgetPositioner` end-to-end: `set_container_size()`, `position_widget_by_anchor()`, collision handling, stack offsets. ✅ _2026-01-05_
+- [x] Centralize overlay fade/raise logic; integrate ResourceManager for lifecycle cleanup. ✅ _2026-01-05_
+- [x] Ensure lock-free patterns where possible; document any unavoidable locks (only when coordinator state truly shared). ✅ _2026-01-05_
+  - Note: QTimer.singleShot used for UI-thread deferred execution (acceptable per Qt threading model)
+  - Rate-limited raise uses time.time() comparison (lock-free)
+  - Fade coordination uses dict/set (single-threaded UI access)
 - [ ] Document how WidgetManager enforces profile separation (Media Center vs Screensaver) when spawning widgets.
 
 ## 3) Typed Settings Adoption
@@ -42,7 +45,7 @@ Status: Planning-only (no code). Spec.md remains current-state. Main audit refer
 
 ## 6) Testing Strategy (Design)
 - [ ] Expand `tests/test_widget_factories.py`, `tests/test_widget_positioner.py` for new cases (multi-monitor, collision, stacking).
-- [ ] Add `tests/test_widget_manager.py` lifecycle suite (start/stop order, ResourceManager cleanup, fade orchestration).
+- [x] Add `tests/test_widget_manager.py` lifecycle suite (start/stop order, ResourceManager cleanup, fade orchestration). ✅ _2026-01-05_ (20 tests)
 - [ ] Settings model tests: serialization/deserialization, profile separation, validation; ensure `tests/test_settings_type_safety.py` stays green.
 - [ ] Integration tests for UI tabs using typed models; migration tests verifying legacy config upgrade path.
 

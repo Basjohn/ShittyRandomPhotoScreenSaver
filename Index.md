@@ -77,6 +77,78 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - `VerboseLogFilter` - Captures all DEBUG/INFO for deep debugging
 - core/logging/overlay_telemetry.py
   - Overlay telemetry logging for debugging widget behavior
+- core/eco_mode.py
+  - `EcoModeManager`: MC build resource conservation when window occluded
+  - `EcoModeState`: DISABLED, MONITORING, ECO_ACTIVE states
+  - `EcoModeConfig`: Occlusion threshold (95%), check interval, pause settings
+  - `is_mc_build()`: Detect MC build entry point
+  - **21 unit tests** in `tests/test_mc_eco_mode.py`
+- core/process/__init__.py
+  - Process isolation module for SRPSS v2.0 multiprocessing
+  - Exports: WorkerType, WorkerState, MessageType, WorkerMessage, WorkerResponse, SharedMemoryHeader, RGBAHeader, FFTHeader, HealthStatus, ProcessSupervisor
+- core/process/types.py
+  - `WorkerType`: IMAGE, RSS, FFT, TRANSITION worker types
+  - `WorkerState`: STOPPED, STARTING, RUNNING, STOPPING, ERROR, RESTARTING states
+  - `MessageType`: Control (SHUTDOWN, HEARTBEAT) and worker-specific message types
+  - `WorkerMessage`, `WorkerResponse`: Immutable request/response with seq_no, correlation_id, timestamps
+  - `SharedMemoryHeader`, `RGBAHeader`, `FFTHeader`: Shared memory buffer headers with generation tracking
+  - `HealthStatus`: Worker health monitoring with heartbeat tracking, restart backoff
+  - **33 unit tests** in `tests/test_process_supervisor.py`
+- core/process/supervisor.py
+  - `ProcessSupervisor`: Worker lifecycle management (start/stop/restart)
+  - Health monitoring via heartbeat with exponential backoff restart policy
+  - Non-blocking message passing with drop-old backpressure policy
+  - Integration with ResourceManager for cleanup, EventSystem for health broadcasts
+  - Settings-based worker enable/disable via `workers.<type>.enabled` keys
+- core/process/workers/__init__.py
+  - Worker implementations for process isolation
+  - Exports: BaseWorker, ImageWorker, RSSWorker, FFTWorker, TransitionWorker
+- core/process/workers/base.py
+  - `BaseWorker`: Base class for all workers with message loop, heartbeat, graceful shutdown
+  - `setup_worker_logging()`: Per-worker log file setup
+- core/process/workers/image_worker.py
+  - `ImageWorker`: Decode/prescale images using PIL (no Qt in worker process)
+  - `ImageWorker._fft_to_bars()`: Display modes (fill, fit, shrink), Lanczos scaling, sharpening
+  - Cache key strategy: `path|scaled:WxH` for prescaled images
+  - **11 unit tests** in `tests/test_image_worker.py`
+- core/process/workers/rss_worker.py
+  - `RSSWorker`: Fetch/parse RSS/Atom/Reddit JSON feeds
+  - Priority ordering (Bing > NASA > Reddit for rate limiting)
+  - Image download with cache/mirror directories
+  - **12 unit tests** in `tests/test_rss_worker.py`
+- core/process/workers/fft_worker.py
+  - `FFTWorker`: FFT computation preserving exact math from VISUALIZER_DEBUG.md
+  - `FFTConfig`: Preserves smoothing tau, decay rates, profile template, convolution kernel
+  - log1p + power(1.2) normalization, center-out frequency mapping
+  - **13 unit tests** in `tests/test_fft_worker.py`
+- core/process/workers/transition_worker.py
+  - `TransitionWorker`: Precompute transition data (block patterns, particles, etc.)
+  - Supports Diffuse, BlockFlip, Particle, Warp, RainDrops, Crumble transitions
+  - Cache key generation and result caching
+  - **11 unit tests** in `tests/test_transition_worker.py`
+- core/process/tuning.py
+  - `WorkerTuningConfig`: Per-worker queue sizes, backpressure, latency targets
+  - `BackpressurePolicy`: BLOCK, DROP_OLD, DROP_NEW policies
+  - `LatencyMetrics`: Track min/max/avg latency per worker
+  - `LatencyMonitor`: Centralized latency monitoring with alert callbacks
+  - **20 unit tests** in `tests/test_worker_latency_tuning.py`
+
+## v2.0 Roadmap Test Summary
+- `tests/test_process_supervisor.py` - 33 tests for ProcessSupervisor, message schemas, shared memory
+- `tests/test_image_worker.py` - 11 tests for ImageWorker decode/prescale
+- `tests/test_rss_worker.py` - 12 tests for RSSWorker fetch/parse
+- `tests/test_fft_worker.py` - 13 tests for FFTWorker math preservation
+- `tests/test_transition_worker.py` - 11 tests for TransitionWorker precompute
+- `tests/test_gl_state_manager_overlay.py` - 21 tests for GLStateManager overlay integration
+- `tests/test_transition_state_manager.py` - 12 tests for transition state dataclasses
+- `tests/test_widget_manager.py` - 20 tests for WidgetManager lifecycle
+- `tests/test_mc_eco_mode.py` - 21 tests for MC Eco Mode
+- `tests/test_worker_latency_tuning.py` - 20 tests for worker latency configuration
+- `tests/test_mc_context_menu.py` - 12 tests for MC context menu features
+- `tests/test_settings_defaults_parity.py` - 23 tests for settings defaults and SST parity
+- `tests/test_widget_visual_padding.py` - 15 tests for BaseOverlayWidget visual padding helpers
+- **Total: 224 new tests** for process isolation, GL state, widgets, MC features, settings, and performance tuning
+
 - **ARCHIVED**: Gmail modules moved to `archive/gmail_feature/` (Dec 2025)
   - Google OAuth verification requirements block unverified apps from using sensitive Gmail scopes
   - See `archive/gmail_feature/RESTORE_GMAIL.md` for restoration instructions

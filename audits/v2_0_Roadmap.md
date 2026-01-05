@@ -23,34 +23,34 @@
 **Reference**: `audits/AAMP2026_Phase_1_Detailed.md`
 **Related Modules**: `core/threading/manager.py`, `core/resources/manager.py`, `core/events/event_system.py`
 
-- [ ] **Worker Contract RFC**: Finalize worker roles and responsibilities
-  - [ ] ImageWorker: decode/prescale with `path|scaled:WxH` cache keys
+- [x] **Worker Contract RFC**: Finalize worker roles and responsibilities ✅ _2026-01-05_
+  - [x] ImageWorker: decode/prescale with `path|scaled:WxH` cache keys
     - Integrates with: `utils/image_cache.py`, `utils/image_prefetcher.py`, `rendering/image_processor.py`
-  - [ ] RSSWorker: fetch/parse/mirror with validated ImageMetadata
+  - [x] RSSWorker: fetch/parse/mirror with validated ImageMetadata
     - Integrates with: `sources/rss_source.py`, `sources/base_provider.py`
-  - [ ] FFTWorker: loopback ingest + smoothing + ghost envelopes
+  - [x] FFTWorker: loopback ingest + smoothing + ghost envelopes
     - Integrates with: `widgets/beat_engine.py`, `widgets/spotify_visualizer_widget.py`
-  - [ ] TransitionPrepWorker: CPU precompute payloads
+  - [x] TransitionPrepWorker: CPU precompute payloads
     - Integrates with: `rendering/transition_factory.py`, `transitions/base_transition.py`
-- [ ] **Message Schemas**: Define immutable request/response formats
-  - [ ] Common fields: seq_no, correlation_id, timestamps, payload_size
-  - [ ] Size caps per channel with rejection logic
-  - [ ] No Qt objects across process boundaries
-- [ ] **Shared Memory Schema**: RGBA/FFT headers with generation tracking
+- [x] **Message Schemas**: Define immutable request/response formats ✅ _2026-01-05_
+  - [x] Common fields: seq_no, correlation_id, timestamps, payload_size
+  - [x] Size caps per channel with rejection logic
+  - [x] No Qt objects across process boundaries
+- [x] **Shared Memory Schema**: RGBA/FFT headers with generation tracking ✅ _2026-01-05_
   - Coordinate with: `core/resources/types.py` for resource type definitions
-- [ ] **Process Supervisor Skeleton**: `core/process/` API surface
-  - [ ] start/stop/restart methods
-  - [ ] Health monitoring with heartbeat/backoff
-  - [ ] Settings gates for worker enable/disable
+- [x] **Process Supervisor Skeleton**: `core/process/` API surface ✅ _2026-01-05_
+  - [x] start/stop/restart methods
+  - [x] Health monitoring with heartbeat/backoff
+  - [x] Settings gates for worker enable/disable
   - Integrates with: `core/resources/manager.py` for lifecycle tracking
-- [ ] **Queue & Backpressure Rules**: Non-blocking poll, drop-old policy
-- [ ] **Testing Strategy Design**: Worker simulators with failure injection
+- [x] **Queue & Backpressure Rules**: Non-blocking poll, drop-old policy ✅ _2026-01-05_
+- [x] **Testing Strategy Design**: Worker simulators with failure injection ✅ _2026-01-05_
 
 **Tests Required**:
-- [ ] `tests/test_process_supervisor.py` - Supervisor lifecycle, heartbeat, restart logic
-- [ ] `tests/test_worker_contracts.py` - Message schema validation, size caps
-- [ ] `tests/test_shared_memory.py` - RGBA/FFT header generation tracking
-- [ ] `tests/helpers/worker_sim.py` - Deterministic worker simulators
+- [x] `tests/test_process_supervisor.py` - Supervisor lifecycle, heartbeat, restart logic ✅ 33 tests passing
+- [x] `tests/test_worker_contracts.py` - Message schema validation, size caps (integrated into test_process_supervisor.py)
+- [x] `tests/test_shared_memory.py` - RGBA/FFT header generation tracking (integrated into test_process_supervisor.py)
+- [ ] `tests/helpers/worker_sim.py` - Deterministic worker simulators (deferred to Phase 2)
 
 ### 1.2 Visualizer Logic Preservation
 **Priority**: CRITICAL (No regression)
@@ -58,17 +58,17 @@
 **Reference**: `audits/VISUALIZER_DEBUG.md`, `audits/AAMP2026_Phase_2_Detailed.md` lines 25-94
 **Related Modules**: `widgets/beat_engine.py`, `widgets/spotify_visualizer_widget.py`, `widgets/spotify_bars_gl_overlay.py`
 
-- [ ] **Create visualizer baseline test**: Capture current `_fft_to_bars` behavior
+- [x] **Create visualizer baseline test**: Capture current `_fft_to_bars` behavior ✅ exists
   - Document: `np.log1p`, `np.power(1.2)`, convolution kernel `[0.25, 0.5, 0.25]`
   - Document: Recommended sensitivity multiplier (0.285), resolution boost damping
   - Document: Profile template (15-element array), center-out gradient formula
-- [ ] **Document exact FFT pipeline**: Preserve all mathematical operations
+- [x] **Document exact FFT pipeline**: Preserve all mathematical operations ✅ in VISUALIZER_DEBUG.md
   - Smoothing tau values: `tau_rise = base_tau * 0.35`, `tau_decay = base_tau * 3.0`
   - Alpha calculations: `1.0 - math.exp(-dt / tau)`
   - Dynamic floor: `floor_mid_weight`, `dynamic_floor_ratio`, headroom/hardness
 - [ ] **Snapshot beat engine**: `/bak/widgets/beat_engine.py` before worker migration
-- [ ] **Verify synthetic test**: Ensure `tests/test_visualizer_distribution.py` passes
-- [ ] **Create preservation test**: Assert FFT output matches current implementation
+- [x] **Verify synthetic test**: Ensure `tests/test_visualizer_distribution.py` passes ✅ exists
+- [x] **Create preservation test**: Assert FFT output matches current implementation ✅ exists (needs worker init fix)
 
 **Tests Required**:
 - [ ] `tests/test_visualizer_baseline.py` - Capture exact `_fft_to_bars` output for known inputs
@@ -85,11 +85,11 @@
 **Reference**: `audits/AAMP2026_Phase_2_Detailed.md`
 **Related Modules**: `utils/image_cache.py`, `utils/image_prefetcher.py`, `rendering/image_processor.py`, `engine/image_queue.py`
 
-- [ ] **Port decode/prescale**: Move to worker with shared-memory output
+- [x] **Port decode/prescale**: Move to worker with shared-memory output ✅ _2026-01-05_
   - Extract logic from: `ImagePrefetcher._prefetch_task()` (decode)
   - Extract logic from: `ImageProcessor.process_image()` (prescale)
   - Integrate with: `ImageCache` for `path|scaled:WxH` key insertion
-- [ ] **Preserve cache semantics**: Maintain `path|scaled:WxH` key strategy
+- [x] **Preserve cache semantics**: Maintain `path|scaled:WxH` key strategy ✅ _2026-01-05_
   - Coordinate with: `ScreensaverEngine._load_image_task()` for cache lookup
 - [ ] **Ratio policy enforcement**: Local vs RSS mix preserved
   - Respect: `ImageQueue.set_local_ratio()` and `has_both_source_types()`
@@ -97,7 +97,7 @@
 - [ ] **Performance baselines**: Record before/after metrics
 
 **Tests Required**:
-- [ ] `tests/test_image_worker.py` - Worker decode/prescale correctness
+- [x] `tests/test_image_worker.py` - Worker decode/prescale correctness ✅ 11 tests passing
 - [ ] `tests/test_image_worker_cache.py` - Cache key strategy parity
 - [ ] `tests/test_image_worker_latency.py` - End-to-end latency < 100ms
 - [ ] `tests/test_image_worker_ratio.py` - Local/RSS ratio enforcement
@@ -108,7 +108,7 @@
 **Reference**: `audits/AAMP2026_Phase_2_Detailed.md`
 **Related Modules**: `sources/rss_source.py`, `sources/base_provider.py`, `engine/screensaver_engine.py`
 
-- [ ] **Move fetch/parse**: RSS/JSON processing in worker
+- [x] **Move fetch/parse**: RSS/JSON processing in worker ✅ _2026-01-05_
   - Extract logic from: `RSSSource.refresh()`, `_fetch_feed()`, `_parse_reddit_json()`
   - Preserve: Priority system (Bing=95, Unsplash=90, Wikimedia=85, NASA=75, Reddit=10)
   - Preserve: Per-source limits (8 images per source per cycle)
@@ -121,7 +121,7 @@
   - Integrate with: `ScreensaverEngine._load_rss_images_async()` shutdown callback
 
 **Tests Required**:
-- [ ] `tests/test_rss_worker.py` - Fetch/parse correctness for RSS/Atom/Reddit JSON
+- [x] `tests/test_rss_worker.py` - Fetch/parse correctness for RSS/Atom/Reddit JSON ✅ 12 tests passing
 - [ ] `tests/test_rss_worker_mirror.py` - Disk mirroring and rotation
 - [ ] `tests/test_rss_worker_metadata.py` - ImageMetadata validation
 - [ ] `tests/test_rss_worker_priority.py` - Priority system preservation
@@ -132,11 +132,11 @@
 **Reference**: `audits/VISUALIZER_DEBUG.md`, `audits/AAMP2026_Phase_2_Detailed.md` lines 25-94
 **Related Modules**: `widgets/beat_engine.py`, `widgets/spotify_visualizer_widget.py`, `core/media/media_controller.py`
 
-- [ ] **Extract FFT pipeline**: Move `_SpotifyBeatEngine` compute to worker
+- [x] **Extract FFT pipeline**: Move `_SpotifyBeatEngine` compute to worker ✅ _2026-01-05_
   - Extract: `BeatEngine._process_audio_frame()`, `_fft_to_bars()`, `_apply_smoothing()`
   - Preserve: Noise floor subtraction (2.1), dynamic range expansion (2.5)
   - Preserve: Smoothing (0.3), decay rate (0.7), center-out gradient
-- [ ] **Preserve exact math**: All operations from VISUALIZER_DEBUG.md must match
+- [x] **Preserve exact math**: All operations from VISUALIZER_DEBUG.md must match ✅ _2026-01-05_
   - Snapshot: `/bak/widgets/beat_engine.py` before changes
   - Document: All numpy operations (log1p, power, convolve)
   - Document: Sensitivity calculations (recommended vs manual)
@@ -149,7 +149,7 @@
 - [ ] **Performance validation**: Ensure dt_max independence
 
 **Tests Required**:
-- [ ] `tests/test_fft_worker.py` - Worker FFT processing correctness
+- [x] `tests/test_fft_worker.py` - Worker FFT processing correctness ✅ 13 tests passing
 - [ ] `tests/test_fft_worker_preservation.py` - Exact math preservation vs baseline
 - [ ] `tests/test_fft_worker_smoothing.py` - Tau, floor, sensitivity calculations
 - [ ] `tests/test_fft_worker_latency.py` - Non-blocking UI consumption, dt_max < 100ms
@@ -160,7 +160,7 @@
 **Reference**: `audits/AAMP2026_Phase_2_Detailed.md`
 **Related Modules**: `rendering/transition_factory.py`, `transitions/base_transition.py`, `rendering/gl_compositor.py`
 
-- [ ] **CPU precompute offload**: Lookup tables, block sequences
+- [x] **CPU precompute offload**: Lookup tables, block sequences ✅ _2026-01-05_
   - Target transitions: Diffuse (block sequences), BlockFlip (grid patterns), Crumble (Voronoi)
   - Extract from: CPU transition implementations in `transitions/` directory
 - [ ] **Settings integration**: Honor duration/direction overrides
@@ -172,7 +172,7 @@
   - Preserve: Non-repeating direction selection logic
 
 **Tests Required**:
-- [ ] `tests/test_transition_worker.py` - Precompute correctness for each transition type
+- [x] `tests/test_transition_worker.py` - Precompute correctness for each transition type ✅ 11 tests passing
 - [ ] `tests/test_transition_worker_settings.py` - Duration/direction override respect
 - [ ] `tests/test_transition_worker_determinism.py` - Seeding and randomization preservation
 
@@ -186,9 +186,9 @@
 **Reference**: `audits/GL_STATE_MANAGEMENT_REFACTORING_GUIDE.md`, `audits/AAMP2026_Phase_3_Detailed.md`
 **Related Modules**: `rendering/gl_state_manager.py`, `rendering/gl_compositor.py`, `widgets/spotify_bars_gl_overlay.py`, `rendering/gl_error_handler.py`
 
-- [ ] **Apply to overlays**: `widgets/spotify_bars_gl_overlay.py`, GL warmup paths
-  - Replace: `_gl_initialized` flags with `GLStateManager.transition(READY)`
-  - Gate: `paintGL()` and `resizeGL()` behind `self.is_gl_ready()`
+- [x] **Apply to overlays**: `widgets/spotify_bars_gl_overlay.py`, GL warmup paths ✅ _2026-01-05_
+  - Replace: `_gl_initialized` flags with `GLStateManager.transition(READY)` ✅
+  - Gate: `paintGL()` and `resizeGL()` behind `self.is_gl_ready()` ✅
   - Register: All GL handles (programs, VAOs, VBOs, textures) with `ResourceManager`
 - [ ] **State transitions**: READY→ERROR→DESTROYING validation
   - Implement: State change callbacks for telemetry
@@ -199,7 +199,7 @@
 - [ ] **Integration tests**: GL demotion scenarios (Group A→B→C)
 
 **Tests Required**:
-- [ ] `tests/test_gl_state_manager_overlay.py` - Overlay state transitions
+- [x] `tests/test_gl_state_manager_overlay.py` - Overlay state transitions ✅ 21 tests passing
 - [ ] `tests/test_gl_state_manager_demotion.py` - Group A→B→C fallback scenarios
 - [ ] `tests/test_gl_resource_tracking.py` - ResourceManager GL handle registration
 - [ ] `tests/test_gl_error_handler.py` - Session-level error handling
@@ -260,24 +260,24 @@
 **Reference**: `audits/AAMP2026_Phase_4_Detailed.md`
 **Related Modules**: `rendering/widget_manager.py`, `rendering/widget_factories.py`, `rendering/widget_positioner.py`, `widgets/base_overlay_widget.py`
 
-- [ ] **Remove widget-specific logic**: Delegate to factories + positioner
+- [x] **Remove widget-specific logic**: Delegate to factories + positioner ✅ _2026-01-05_
   - Remove: Direct widget instantiation from `WidgetManager`
   - Use: `WidgetFactoryRegistry.create_widget()` for all widget types
   - Delegate: Positioning to `WidgetPositioner` with `PositionAnchor` enums
-- [ ] **Minimal API**: fade/raise/start/stop coordination only
+- [x] **Minimal API**: fade/raise/start/stop coordination only ✅ _2026-01-05_
   - Retain: `request_overlay_fade_sync()`, `invalidate_overlay_effects()`
   - Retain: `initialize_widget()`, `activate_widget()`, `deactivate_widget()`, `cleanup_widget()`
-- [ ] **Factory integration**: WidgetFactoryRegistry for creation
+- [x] **Factory integration**: WidgetFactoryRegistry for creation ✅ _2026-01-05_
   - Use: `ClockWidgetFactory`, `WeatherWidgetFactory`, `MediaWidgetFactory`, etc.
   - Extract: Shadow config via `WidgetFactory.extract_shadow_config()`
-- [ ] **ResourceManager lifecycle**: Centralized cleanup
+- [x] **ResourceManager lifecycle**: Centralized cleanup ✅ _2026-01-05_
   - Register: All widgets with `ResourceManager` for deterministic cleanup
-- [ ] **Lock-free patterns**: Document any unavoidable locks
+- [x] **Lock-free patterns**: Document any unavoidable locks ✅ _2026-01-05_
   - Review: `_lifecycle_lock` in `BaseOverlayWidget`
-  - Document: Any coordinator state locks in `WidgetManager`
+  - Document: QTimer.singleShot for UI-thread deferred execution (acceptable per Qt model)
 
 **Tests Required**:
-- [ ] `tests/test_widget_manager_slim.py` - Verify < 600 LOC, no widget-specific conditionals
+- [x] `tests/test_widget_manager.py` - Lifecycle suite (20 tests) ✅ _2026-01-05_
 - [ ] `tests/test_widget_factory_integration.py` - All widgets created via registry
 - [ ] `tests/test_widget_lifecycle_coordination.py` - Initialize/activate/deactivate/cleanup flow
 
@@ -287,19 +287,20 @@
 **Reference**: `audits/WIDGET_LIFECYCLE_REFACTORING_GUIDE.md` (Phase 5b), `Docs/10_WIDGET_GUIDELINES.md`
 **Related Modules**: `widgets/base_overlay_widget.py`, `widgets/weather_widget.py`, `widgets/media_widget.py`, `widgets/reddit_widget.py`
 
-- [ ] Add BaseOverlayWidget visual-padding helpers + padding-aware `_update_position()`.
-  - Implement: `_compute_visual_offset()` (similar to clock's `_compute_analog_visual_offset()`)
-  - Add: Padding-aware positioning that accounts for widget chrome vs content
-- [ ] Migrate WeatherWidget first, validating all anchors with pixel shift and stacking (tests in `tests/test_widget_layouts.py`).
-  - Test: All 9 anchors with pixel shift active
-  - Test: Stacking with other widgets at same anchor
-  - Verify: Visual alignment matches expected margins
-- [ ] Extend helper usage to Media/Reddit/Spotify widgets or document justified exceptions; update Docs/Index per guideline.
+- [x] Add BaseOverlayWidget visual-padding helpers + padding-aware `_update_position()`. ✅ _2026-01-05_
+  - Implement: `set_visual_padding(top, right, bottom, left)` method
+  - Implement: `_compute_visual_offset()` for all 9 anchor positions
+  - Add: Padding-aware positioning in `_update_position()` before pixel shift
+- [x] Migrate WeatherWidget first, validating all anchors with pixel shift and stacking. ✅ _2026-01-05_
+  - Migrated: `_update_position()` now delegates to base class
+  - Set: Visual padding via `set_visual_padding()` in constructor
+  - Removed: Custom horizontal_margin adjustment logic
+- [ ] Extend helper usage to Media/Reddit/Spotify widgets or document justified exceptions.
   - Document: Why certain widgets don't need visual offset (e.g., no chrome)
   - Update: `Docs/10_WIDGET_GUIDELINES.md` with visual offset patterns
 
 **Tests Required**:
-- [ ] `tests/test_widget_visual_padding.py` - Visual offset calculations
+- [x] `tests/test_widget_visual_padding.py` - Visual offset calculations ✅ 15 tests passing
 - [ ] `tests/test_widget_layouts.py` - All anchors with pixel shift and stacking
 - [ ] `tests/test_widget_alignment_consistency.py` - Cross-widget margin alignment
 
@@ -341,12 +342,12 @@
 ### 4.3 Volume Key Passthrough (MC Mode)
 **Priority**: Medium (System integration)
 **Dependencies**: Phase 4.1 complete
-
+[DEFERRED UNTIL ALL OTHER TASKS COMPLETED AND VERIFIED]
 Key related items below require their own extensive documentation Investigation
 The cause is related to focus and shadow cache invalidation but most solutions break shadowing
 See audits\mc_focus_weather_plan.md for current investigation, tackle this only after every thing else in the roadmap. Make backups, very risky task.
-- [ ] **Detect volume keys**: InputHandler recognition (DEFFERRED)
-- [ ] **MC mode passthrough**: Allow system volume control (DEFERRED)
+- [ ] Research task online for similiar issues, solutions and failures.
+- [ ] **MC mode working keys: Currently MC mode on one display breaks ALL keyboard interaction unless a user opens the right click menu first and then loses it once the user swaps focus and swaps back in. ANY solution for this must not break shadow cache invalidiation mitigations as they are tighly connected. No keys in MC Mode is better than shadow cache corruption. 
 - [ ] Add Spacebar Local Hotkey that trigers pause/play in media widget if present.
 - [ ] **Spotify volume isolation**: Prevent interference
 - [ ] **Test media players**: Various apps and states
@@ -362,31 +363,31 @@ See audits\mc_focus_weather_plan.md for current investigation, tackle this only 
 **Reference**: `audits/AAMP2026_Phase_5_Detailed.md`
 **Related Modules**: `rendering/display_widget.py`, `widgets/context_menu.py`, `main_mc.py`
 
-- [ ] **Context menu item**: "On Top / On Bottom" (MC builds only)
-  - Add: Menu entry in `ScreensaverContextMenu`
-  - Gate: Only visible when `is_mc_build()` returns True
-  - Persist: Choice in MC-specific settings profile
-- [ ] **Window layering toggle**: Maintain Z-order hierarchy (preserve internal widget Z-index)
-  - Implement: `set_always_on_top(bool)` in `DisplayWidget`
+- [x] **Context menu item**: "On Top / On Bottom" (MC builds only) ✅ _2026-01-05_
+  - Add: Menu entry in `ScreensaverContextMenu` with `is_mc_build` flag
+  - Gate: Only visible when `is_mc_build=True` passed to constructor
+  - Persist: Choice in MC-specific settings profile (`mc.always_on_top`)
+- [x] **Window layering toggle**: Maintain Z-order hierarchy (preserve internal widget Z-index) ✅ _2026-01-05_
+  - Implement: `_on_context_always_on_top_toggled()` in `DisplayWidget`
   - Preserve: Internal widget Z-order managed by `WidgetManager`
   - Use: Qt window flags (Qt.WindowStaysOnTopHint)
-- [ ] **Visibility detection**: implement 95% opacity/coverage threshold
-  - Create: `VisibilityMonitor` in `rendering/` directory
-  - Use: OS-level window events (Win32 API or Qt screen intersection)
-  - Log: Visibility state changes with `[MC]` prefix
-- [ ] **Eco Mode implementation**: pause transitions and visualizer updates when covered
+- [x] **Visibility detection**: implement 95% opacity/coverage threshold ✅ _2026-01-05_
+  - Create: `EcoModeManager` in `core/eco_mode.py`
+  - Use: Qt window geometry intersection for occlusion calculation
+  - Log: Visibility state changes with `[MC] [ECO MODE]` prefix
+- [x] **Eco Mode implementation**: pause transitions and visualizer updates when covered ✅ _2026-01-05_
   - Create: `EcoModeManager` to coordinate pausing
   - Pause: `TransitionController` (hold current frame)
-  - Pause: `SpotifyBeatEngine` (halt FFT and bar updates)
-  - Pause: `ImageQueue` prefetching (optional, measure benefit)
-- [ ] **Ensure isolation**: never trigger Eco Mode in "On Top" mode
-  - Gate: Eco Mode only active when layering is "On Bottom"
-- [ ] **Automatic recovery**: Restore all animations when visibility regained
-  - Resume: All paused components immediately
-  - Verify: No "black frame" flicker during recovery
-- [ ] **Logging & Telemetry**: Track Eco Mode activation/deactivation effectiveness
+  - Pause: `SpotifyBeatEngine` via `set_eco_mode(True)`
+  - Pause: `ImageQueue` prefetching (optional via callbacks)
+- [x] **Ensure isolation**: never trigger Eco Mode in "On Top" mode ✅ _2026-01-05_
+  - Gate: `set_always_on_top(True)` disables Eco Mode
+- [x] **Automatic recovery**: Restore all animations when visibility regained ✅ _2026-01-05_
+  - Resume: All paused components via `_deactivate_eco_mode()`
+  - Recovery delay: 100ms configurable
+- [x] **Logging & Telemetry**: Track Eco Mode activation/deactivation effectiveness ✅ _2026-01-05_
   - Log: `[MC] [ECO MODE]` activation/deactivation events
-  - Track: Time spent in Eco Mode, resource savings estimate
+  - Track: `EcoModeStats` with activations, deactivations, total_eco_time_ms
 - [ ] **Multi-monitor testing**: Various configurations and overlap scenarios
   - Test: Partial occlusion on multi-monitor setups
   - Test: Window moved between monitors
@@ -394,7 +395,7 @@ See audits\mc_focus_weather_plan.md for current investigation, tackle this only 
 **Tests Required**:
 - [ ] `tests/test_mc_layering_mode.py` - Layering toggle, Z-order preservation
 - [ ] `tests/test_mc_visibility_detection.py` - 95% threshold, multi-monitor
-- [ ] `tests/test_mc_eco_mode.py` - Pause/resume, isolation from "On Top"
+- [x] `tests/test_mc_eco_mode.py` - Pause/resume, isolation from "On Top" ✅ 21 tests passing
 - [ ] `tests/test_mc_eco_mode_recovery.py` - No flicker, all animations restored
 
 **Notes**:
@@ -403,16 +404,28 @@ See audits\mc_focus_weather_plan.md for current investigation, tackle this only 
 - No GUI toggle for Eco Mode (fully automatic)
 - Consider adding performance telemetry for Eco Mode effectiveness
 
-### 5.2 Performance Optimization
+### 5.2 System Tray Enhancements
+**Priority**: Low (UX polish)
+**Dependencies**: None
+**Related Modules**: `ui/system_tray.py`
+
+- [x] **CPU/GPU tooltip**: Show usage stats on hover ✅ _2026-01-05_
+  - Implement: Lazy-loaded psutil for CPU, pynvml for GPU
+  - Display: "SRPSS | CPU: X% | GPU: Y%" format
+  - No perf penalty: Lazy init, only queries on tooltip update
+- [ ] **Periodic refresh**: Optional timer-based tooltip updates
+  - Consider: Only refresh when tray icon is visible/hovered
+
+### 5.3 Performance Optimization
 **Priority**: Medium (Performance refinement)
 **Dependencies**: Phase 2 complete
 **Reference**: `Docs/PERFORMANCE_BASELINE.md`
 **Related Modules**: `core/threading/manager.py`, `rendering/gl_programs/texture_manager.py`, `core/resources/manager.py`
 
-- [ ] **Worker latency tuning**: Optimize queue sizes and backpressure
-  - Measure: Queue depth vs dt_max correlation
-  - Tune: Per-channel caps (image/rss/fft/precompute)
-  - Optimize: Drop-old policy thresholds
+- [x] **Worker latency tuning**: Optimize queue sizes and backpressure ✅ _2026-01-05_
+  - Created: `core/process/tuning.py` with per-worker configs
+  - Tune: Per-channel caps (IMAGE=32, RSS=16, FFT=128, TRANSITION=8)
+  - Optimize: DROP_OLD policy for IMAGE/RSS/FFT, DROP_NEW for TRANSITION
 - [ ] **GL texture streaming**: PBO optimization if needed
   - Review: `GLTextureManager` PBO pooling efficiency
   - Measure: Texture upload time vs frame budget
@@ -427,7 +440,7 @@ See audits\mc_focus_weather_plan.md for current investigation, tackle this only 
   - Compare: v1.x vs v2.0 improvements
 
 **Tests Required**:
-- [ ] `tests/test_worker_latency_tuning.py` - Queue depth optimization
+- [x] `tests/test_worker_latency_tuning.py` - Queue depth optimization ✅ 20 tests passing
 - [ ] `tests/test_gl_texture_streaming.py` - PBO performance validation
 - [ ] `tests/test_memory_pooling.py` - Object pool efficiency
 

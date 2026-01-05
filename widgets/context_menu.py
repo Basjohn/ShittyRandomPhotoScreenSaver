@@ -117,6 +117,7 @@ class ScreensaverContextMenu(QMenu):
     settings_requested = Signal()
     dimming_toggled = Signal(bool)  # new state
     hard_exit_toggled = Signal(bool)  # new state
+    always_on_top_toggled = Signal(bool)  # new state (MC mode only)
     exit_requested = Signal()
     
     def __init__(
@@ -126,9 +127,13 @@ class ScreensaverContextMenu(QMenu):
         current_transition: str = "Crossfade",
         dimming_enabled: bool = False,
         hard_exit_enabled: bool = False,
+        is_mc_build: bool = False,
+        always_on_top: bool = False,
     ):
         super().__init__(parent)
         
+        self._is_mc_build = is_mc_build
+        self._always_on_top = always_on_top
         self._transition_types = transition_types or [
             "Ripple", "Wipe", "3D Block Spins", "Diffuse", "Slide",
             "Crossfade", "Peel", "Block Puzzle Flip", "Warp Dissolve",
@@ -201,6 +206,14 @@ class ScreensaverContextMenu(QMenu):
         self._hard_exit_action.setChecked(self._hard_exit_enabled)
         self._hard_exit_action.triggered.connect(self._on_hard_exit_toggled)
         
+        # Always On Top toggle (MC mode only) - monochrome pin
+        self._on_top_action: Optional[QAction] = None
+        if self._is_mc_build:
+            self._on_top_action = self.addAction("📌  Always On Top")
+            self._on_top_action.setCheckable(True)
+            self._on_top_action.setChecked(self._always_on_top)
+            self._on_top_action.triggered.connect(self._on_always_on_top_toggled)
+        
         self.addSeparator()
         
         # Exit - monochrome X
@@ -243,3 +256,16 @@ class ScreensaverContextMenu(QMenu):
         """Update the hard exit checkbox state."""
         self._hard_exit_enabled = enabled
         self._hard_exit_action.setChecked(enabled)
+    
+    def _on_always_on_top_toggled(self) -> None:
+        """Handle always on top toggle."""
+        if self._on_top_action is not None:
+            self._always_on_top = self._on_top_action.isChecked()
+            self.always_on_top_toggled.emit(self._always_on_top)
+            logger.debug("Context menu: always on top toggled: %s", self._always_on_top)
+    
+    def update_always_on_top_state(self, on_top: bool) -> None:
+        """Update the always on top checkbox state."""
+        self._always_on_top = on_top
+        if self._on_top_action is not None:
+            self._on_top_action.setChecked(on_top)

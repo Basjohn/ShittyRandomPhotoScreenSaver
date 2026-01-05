@@ -73,6 +73,7 @@ from transitions.overlay_manager import (
     SW_OVERLAY_KEYS,
 )
 from core.events import EventSystem
+from core.eco_mode import is_mc_build
 from rendering.backends import BackendSelectionResult, create_backend_from_settings
 from rendering.backends.base import RendererBackend, RenderSurface, SurfaceDescriptor
 
@@ -275,6 +276,18 @@ class DisplayWidget(QWidget):
         self._context_menu_active: bool = False
         self._context_menu_prewarmed: bool = False
         self._pending_effect_invalidation: bool = False
+        
+        # MC mode state - default to always on top for MC builds
+        self._is_mc_build: bool = is_mc_build()
+        self._always_on_top: bool = self._is_mc_build  # Default ON for MC builds
+        if self._is_mc_build and self.settings_manager:
+            try:
+                # Load persisted value, defaulting to True for MC builds
+                self._always_on_top = SettingsManager.to_bool(
+                    self.settings_manager.get("mc.always_on_top", True), True
+                )
+            except Exception:
+                self._always_on_top = True  # Default ON for MC builds
 
         # Central ResourceManager wiring
         self._resource_manager: Optional[ResourceManager] = resource_manager
@@ -474,9 +487,11 @@ class DisplayWidget(QWidget):
             f"DPR={self._device_pixel_ratio}"
         )
 
-        # Borderless fullscreen: frameless, always-on-top window sized to the
-        # target screen. Avoid exclusive fullscreen mode to reduce compositor
-        # and driver-induced flicker on modern Windows.
+        # Borderless fullscreen: frameless window sized to the target screen.
+        # Avoid exclusive fullscreen mode to reduce compositor and driver-induced
+        # flicker on modern Windows. For MC builds, apply always-on-top flag.
+        if self._is_mc_build and self._always_on_top:
+            self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
         self.setGeometry(geom)
         # Seed with a placeholder snapshot of the current screen to avoid a hard
         # wallpaper->black flash while GL prewarm runs. If this fails, fall back
@@ -625,6 +640,8 @@ class DisplayWidget(QWidget):
                 current_transition=current_transition,
                 dimming_enabled=dimming_enabled,
                 hard_exit_enabled=hard_exit,
+                is_mc_build=self._is_mc_build,
+                always_on_top=self._always_on_top,
             )
             self._context_menu.previous_requested.connect(self.previous_requested.emit)
             self._context_menu.next_requested.connect(self.next_requested.emit)
@@ -632,6 +649,7 @@ class DisplayWidget(QWidget):
             self._context_menu.settings_requested.connect(self.settings_requested.emit)
             self._context_menu.dimming_toggled.connect(self._on_context_dimming_toggled)
             self._context_menu.hard_exit_toggled.connect(self._on_context_hard_exit_toggled)
+            self._context_menu.always_on_top_toggled.connect(self._on_context_always_on_top_toggled)
             self._context_menu.exit_requested.connect(self._on_context_exit_requested)
 
             try:
@@ -1022,11 +1040,21 @@ class DisplayWidget(QWidget):
             gl_available = GL is not None
 
         try:
+            # Use GLStateManager if available (preferred approach)
+            gl_state = getattr(overlay, "_gl_state", None)
+            if gl_state is not None and hasattr(gl_state, "is_ready"):
+                if not gl_state.is_ready():
+                    # Force transition to READY state
+                    try:
+                        from rendering.gl_state_manager import GLContextState
+                        gl_state.force_state(GLContextState.READY, "force_overlay_ready")
+                    except Exception:
+                        pass
+            
+            # Legacy flag support for overlays not yet using GLStateManager
             lock = getattr(overlay, "_state_lock", None)
             if lock:
                 with lock:  # type: ignore[arg-type]
-                    if hasattr(overlay, "_gl_initialized"):
-                        overlay._gl_initialized = True  # type: ignore[attr-defined]
                     if hasattr(overlay, "_first_frame_drawn"):
                         overlay._first_frame_drawn = True  # type: ignore[attr-defined]
                     if hasattr(overlay, "_has_drawn"):
@@ -1038,8 +1066,6 @@ class DisplayWidget(QWidget):
                     if hasattr(overlay, "_is_ready"):
                         overlay._is_ready = True  # type: ignore[attr-defined]
             else:
-                if hasattr(overlay, "_gl_initialized"):
-                    overlay._gl_initialized = True  # type: ignore[attr-defined]
                 if hasattr(overlay, "_first_frame_drawn"):
                     overlay._first_frame_drawn = True  # type: ignore[attr-defined]
                 if hasattr(overlay, "_has_drawn"):
@@ -2740,6 +2766,8 @@ class DisplayWidget(QWidget):
                     current_transition=current_transition,
                     dimming_enabled=dimming_enabled,
                     hard_exit_enabled=hard_exit,
+                    is_mc_build=self._is_mc_build,
+                    always_on_top=self._always_on_top,
                 )
                 # Connect signals
                 self._context_menu.previous_requested.connect(self.previous_requested.emit)
@@ -2748,6 +2776,7 @@ class DisplayWidget(QWidget):
                 self._context_menu.settings_requested.connect(self.settings_requested.emit)
                 self._context_menu.dimming_toggled.connect(self._on_context_dimming_toggled)
                 self._context_menu.hard_exit_toggled.connect(self._on_context_hard_exit_toggled)
+                self._context_menu.always_on_top_toggled.connect(self._on_context_always_on_top_toggled)
                 self._context_menu.exit_requested.connect(self._on_context_exit_requested)
                 try:
                     self._context_menu.aboutToShow.connect(lambda: self._invalidate_overlay_effects("menu_about_to_show"))
@@ -2779,6 +2808,7 @@ class DisplayWidget(QWidget):
                 self._context_menu.update_current_transition(current_transition)
                 self._context_menu.update_dimming_state(dimming_enabled)
                 self._context_menu.update_hard_exit_state(hard_exit)
+                self._context_menu.update_always_on_top_state(self._always_on_top)
             
             try:
                 self._context_menu_active = True
@@ -2925,6 +2955,48 @@ class DisplayWidget(QWidget):
                 logger.info("Context menu: hard exit mode set to %s", enabled)
         except Exception:
             logger.debug("Failed to toggle hard exit from context menu", exc_info=True)
+    
+    def _on_context_always_on_top_toggled(self, on_top: bool) -> None:
+        """Handle always on top toggle from context menu (MC mode only)."""
+        try:
+            self._always_on_top = on_top
+            
+            # Block updates during flag change to prevent flash
+            self.setUpdatesEnabled(False)
+            
+            # Update window flags without hiding
+            flags = self.windowFlags()
+            if on_top:
+                flags |= Qt.WindowType.WindowStaysOnTopHint
+            else:
+                flags &= ~Qt.WindowType.WindowStaysOnTopHint
+            
+            # Apply new flags - this requires re-showing the window
+            self.setWindowFlags(flags)
+            
+            # Restore geometry and show without flash
+            if hasattr(self, '_screen') and self._screen is not None:
+                self.setGeometry(self._screen.geometry())
+            
+            self.show()
+            self.raise_()
+            
+            # Re-enable updates
+            self.setUpdatesEnabled(True)
+            
+            # Persist to settings
+            if self.settings_manager:
+                self.settings_manager.set("mc.always_on_top", on_top)
+                self.settings_manager.save()
+            
+            logger.info("[MC] Context menu: always on top set to %s", on_top)
+        except Exception:
+            logger.debug("Failed to toggle always on top from context menu", exc_info=True)
+            # Ensure updates are re-enabled on error
+            try:
+                self.setUpdatesEnabled(True)
+            except Exception:
+                pass
     
     def _on_context_exit_requested(self) -> None:
         """Handle exit request from context menu."""
