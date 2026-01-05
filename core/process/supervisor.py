@@ -836,6 +836,16 @@ class ProcessSupervisor:
         
         workers_to_restart = []
         
+        # First, poll ALL worker response queues to process any pending HEARTBEAT_ACKs
+        # This is CRITICAL - without this, heartbeat responses are never processed
+        # and workers get restarted unnecessarily
+        with self._lock:
+            worker_types = list(self._workers.keys())
+        
+        for worker_type in worker_types:
+            # Poll responses to process HEARTBEAT_ACK messages
+            self.poll_responses(worker_type, max_count=20)
+        
         with self._lock:
             for worker_type, process in list(self._workers.items()):
                 if not process.is_alive():
@@ -895,10 +905,13 @@ class ProcessSupervisor:
             health = self._health[worker_type]
             self._event_system.publish(
                 "worker.health_changed",
-                worker_type=worker_type.value,
-                state=health.state.name,
-                is_healthy=health.is_healthy(),
-                pid=health.pid,
+                data={
+                    "worker_type": worker_type.value,
+                    "state": health.state.name,
+                    "is_healthy": health.is_healthy(),
+                    "pid": health.pid,
+                },
+                source=self,
             )
         except Exception as e:
             logger.debug("Failed to broadcast health: %s", e)

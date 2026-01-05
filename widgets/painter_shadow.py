@@ -71,8 +71,13 @@ from core.logging.logger import get_logger
 logger = get_logger(__name__)
 
 # Thread-safe global shadow cache for pre-rendered common sizes
+# Using a simple dict with lock - Python dicts are thread-safe for single operations
+# but we need lock for compound operations (check-then-set)
 _GLOBAL_PRERENDER_CACHE: Dict[Tuple[int, int, int, int], QPixmap] = {}
 _GLOBAL_PRERENDER_LOCK = threading.Lock()
+
+# Track in-progress renders to avoid duplicate work
+# Using a set with lock - could use atomic set but Python lacks native atomic set
 _PRERENDER_IN_PROGRESS: set = set()
 _PRERENDER_LOCK = threading.Lock()
 

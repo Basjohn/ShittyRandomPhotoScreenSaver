@@ -438,8 +438,49 @@ class FFTWorker(BaseWorker):
 
 def fft_worker_main(request_queue: Queue, response_queue: Queue) -> None:
     """Entry point for FFT worker process."""
-    if not NUMPY_AVAILABLE:
-        raise RuntimeError("NumPy is required for FFTWorker")
+    import sys
     
-    worker = FFTWorker(request_queue, response_queue)
-    worker.run()
+    # Pre-import logging to stderr (before any imports that might fail)
+    sys.stderr.write("=== FFT Worker: Process started ===\n")
+    sys.stderr.flush()
+    
+    try:
+        sys.stderr.write("FFT Worker: Importing traceback...\n")
+        sys.stderr.flush()
+        import traceback
+        
+        sys.stderr.write("FFT Worker: Importing logger...\n")
+        sys.stderr.flush()
+        from core.logging.logger import get_logger
+        logger = get_logger(__name__)
+        
+        sys.stderr.write("FFT Worker: Checking NumPy availability...\n")
+        sys.stderr.flush()
+        if not NUMPY_AVAILABLE:
+            sys.stderr.write("FFT Worker FATAL: NumPy is NOT available\n")
+            sys.stderr.flush()
+            logger.error("FFT Worker FATAL: NumPy is not available")
+            raise RuntimeError("NumPy is required for FFTWorker")
+        
+        sys.stderr.write("FFT Worker: NumPy is available, creating worker instance...\n")
+        sys.stderr.flush()
+        logger.info("FFT Worker starting...")
+        
+        worker = FFTWorker(request_queue, response_queue)
+        
+        sys.stderr.write("FFT Worker: Starting main loop...\n")
+        sys.stderr.flush()
+        worker.run()
+        
+        sys.stderr.write("FFT Worker: Exiting normally\n")
+        sys.stderr.flush()
+        logger.info("FFT Worker exiting normally")
+    except Exception as e:
+        sys.stderr.write(f"FFT Worker CRASHED: {e}\n")
+        sys.stderr.write(f"FFT Worker crash traceback:\n{''.join(traceback.format_exception(*sys.exc_info()))}\n")
+        sys.stderr.flush()
+        try:
+            logger.exception(f"FFT Worker CRASHED: {e}")
+        except:
+            pass
+        raise

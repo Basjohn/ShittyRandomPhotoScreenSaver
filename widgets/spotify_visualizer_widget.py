@@ -1381,29 +1381,8 @@ class _SpotifyBeatEngine(QObject):
         return list(self._smoothed_bars)
 
 
-_global_beat_engine: Optional[_SpotifyBeatEngine] = None
-
-
-def get_shared_spotify_beat_engine(bar_count: int) -> _SpotifyBeatEngine:
-    global _global_beat_engine
-    if _global_beat_engine is None:
-        _global_beat_engine = _SpotifyBeatEngine(bar_count)
-    else:
-        try:
-            existing = int(getattr(_global_beat_engine, "_bar_count", bar_count))
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            existing = bar_count
-        if existing != int(bar_count):
-            try:
-                logger.debug(
-                    "[SPOTIFY_VIS] Shared beat engine already initialised with bar_count=%s (requested=%s)",
-                    existing,
-                    bar_count,
-                )
-            except Exception as e:
-                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-    return _global_beat_engine
+# Import the singleton from the beat_engine module instead of duplicating it here
+from widgets.spotify_visualizer.beat_engine import get_shared_spotify_beat_engine
 
 
 class SpotifyVisualizerWidget(QWidget):

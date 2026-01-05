@@ -480,10 +480,35 @@ class RSSWorker(BaseWorker):
 
 def rss_worker_main(request_queue: Queue, response_queue: Queue) -> None:
     """Entry point for RSS worker process."""
-    if not FEEDPARSER_AVAILABLE:
-        raise RuntimeError("feedparser is required for RSSWorker")
-    if not REQUESTS_AVAILABLE:
-        raise RuntimeError("requests is required for RSSWorker")
+    import sys
+    import traceback
     
-    worker = RSSWorker(request_queue, response_queue)
-    worker.run()
+    sys.stderr.write("=== RSS Worker: Process started ===\n")
+    sys.stderr.flush()
+    
+    try:
+        if not FEEDPARSER_AVAILABLE:
+            sys.stderr.write("RSS Worker FATAL: feedparser not available\n")
+            sys.stderr.flush()
+            raise RuntimeError("feedparser is required for RSSWorker")
+        
+        sys.stderr.write("RSS Worker: Creating worker instance...\n")
+        sys.stderr.flush()
+        worker = RSSWorker(request_queue, response_queue)
+        
+        sys.stderr.write("RSS Worker: Starting main loop...\n")
+        sys.stderr.flush()
+        worker.run()
+        
+        sys.stderr.write("RSS Worker: Exiting normally\n")
+        sys.stderr.flush()
+    except Exception as e:
+        sys.stderr.write(f"RSS Worker CRASHED: {e}\n")
+        sys.stderr.write(f"RSS Worker crash traceback:\n{''.join(traceback.format_exc())}\n")
+        sys.stderr.flush()
+        raise
+    
+    if not REQUESTS_AVAILABLE:
+        sys.stderr.write("RSS Worker FATAL: requests not available\n")
+        sys.stderr.flush()
+        raise RuntimeError("requests is required for RSSWorker")

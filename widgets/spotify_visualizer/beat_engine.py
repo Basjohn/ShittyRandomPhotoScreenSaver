@@ -49,6 +49,10 @@ class _SpotifyBeatEngine(QObject):
         self._last_smooth_ts: float = -1.0
         self._smoothing_tau: float = 0.12  # Base smoothing time constant
         
+        # Anti-flicker: Solution 1+2 ONLY (stronger intensity, NO temporal stability)
+        self._segment_hysteresis: float = 0.08  # 8% buffer - strong boundary resistance
+        self._min_change_threshold: float = 0.05  # 5% threshold - filters noise
+        
         # Playback state gating for FFT processing
         self._is_spotify_playing: bool = False
         self._last_playback_state_ts: float = 0.0
@@ -92,7 +96,7 @@ class _SpotifyBeatEngine(QObject):
             )
 
     def _apply_smoothing(self, target_bars: List[float]) -> List[float]:
-        """Apply time-based exponential smoothing to bars."""
+        """Apply time-based exponential smoothing with anti-flicker (Solution 1+2)."""
         now_ts = time.time()
         last_ts = self._last_smooth_ts
         dt = max(0.0, now_ts - last_ts) if last_ts >= 0.0 else 0.0
@@ -111,12 +115,31 @@ class _SpotifyBeatEngine(QObject):
         
         bar_count = self._bar_count
         smoothed = self._smoothed_bars
+        hysteresis = self._segment_hysteresis
+        min_change = self._min_change_threshold
         
         for i in range(bar_count):
             cur = smoothed[i] if i < len(smoothed) else 0.0
             tgt = target_bars[i] if i < len(target_bars) else 0.0
-            alpha = alpha_rise if tgt >= cur else alpha_decay
-            nxt = cur + (tgt - cur) * alpha
+            
+            # Solution 2: Minimum change threshold - filter micro-oscillations
+            delta = abs(tgt - cur)
+            if delta < min_change:
+                smoothed[i] = cur
+                continue
+            
+            # Solution 1: Segment hysteresis - prevent boundary oscillation
+            if tgt > cur:
+                tgt_adjusted = tgt + hysteresis
+            elif tgt < cur:
+                tgt_adjusted = tgt - hysteresis
+            else:
+                tgt_adjusted = tgt
+            
+            tgt_adjusted = max(0.0, min(1.0, tgt_adjusted))
+            
+            alpha = alpha_rise if tgt_adjusted >= cur else alpha_decay
+            nxt = cur + (tgt_adjusted - cur) * alpha
             if abs(nxt) < 1e-3:
                 nxt = 0.0
             smoothed[i] = nxt
@@ -156,6 +179,8 @@ class _SpotifyBeatEngine(QObject):
         last_smooth_ts = self._last_smooth_ts
         smoothing_tau = self._smoothing_tau
         bar_count = self._bar_count
+        hysteresis = self._segment_hysteresis
+        min_change = self._min_change_threshold
 
         def _job(local_samples=samples):
             """FFT + smoothing on COMPUTE pool - keeps UI thread free."""
@@ -181,8 +206,25 @@ class _SpotifyBeatEngine(QObject):
             for i in range(bar_count):
                 cur = smoothed_copy[i] if i < len(smoothed_copy) else 0.0
                 tgt = raw_bars[i] if i < len(raw_bars) else 0.0
-                alpha = alpha_rise if tgt >= cur else alpha_decay
-                nxt = cur + (tgt - cur) * alpha
+                
+                # Solution 2: Minimum change threshold
+                delta = abs(tgt - cur)
+                if delta < min_change:
+                    smoothed.append(cur)
+                    continue
+                
+                # Solution 1: Segment hysteresis
+                if tgt > cur:
+                    tgt_adjusted = tgt + hysteresis
+                elif tgt < cur:
+                    tgt_adjusted = tgt - hysteresis
+                else:
+                    tgt_adjusted = tgt
+                
+                tgt_adjusted = max(0.0, min(1.0, tgt_adjusted))
+                
+                alpha = alpha_rise if tgt_adjusted >= cur else alpha_decay
+                nxt = cur + (tgt_adjusted - cur) * alpha
                 if abs(nxt) < 1e-3:
                     nxt = 0.0
                 smoothed.append(nxt)
@@ -272,28 +314,71 @@ class _SpotifyBeatEngine(QObject):
         return list(self._smoothed_bars)
 
 
-# Module-level singleton
+class BeatEngineRegistry:
+    """Registry for beat engine instances - supports dependency injection.
+    
+    This replaces the module-level singleton with a registry pattern that:
+    1. Allows DI by passing engine instances to widgets
+    2. Maintains backward compatibility via get_shared_spotify_beat_engine()
+    3. Supports testing by allowing engine replacement
+    """
+    _instance: Optional["BeatEngineRegistry"] = None
+    _lock = __import__("threading").Lock()
+    
+    def __init__(self):
+        self._engines: dict[int, _SpotifyBeatEngine] = {}  # bar_count -> engine
+        self._default_engine: Optional[_SpotifyBeatEngine] = None
+    
+    @classmethod
+    def get_instance(cls) -> "BeatEngineRegistry":
+        """Get singleton registry instance."""
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = cls()
+        return cls._instance
+    
+    def get_engine(self, bar_count: int) -> _SpotifyBeatEngine:
+        """Get or create engine for given bar count."""
+        bar_count = max(1, int(bar_count))
+        if bar_count not in self._engines:
+            self._engines[bar_count] = _SpotifyBeatEngine(bar_count)
+            if self._default_engine is None:
+                self._default_engine = self._engines[bar_count]
+        return self._engines[bar_count]
+    
+    def set_engine(self, bar_count: int, engine: _SpotifyBeatEngine) -> None:
+        """Inject a custom engine (for testing)."""
+        self._engines[bar_count] = engine
+    
+    def clear(self) -> None:
+        """Clear all engines (for testing)."""
+        self._engines.clear()
+        self._default_engine = None
+
+
+# Backward compatibility: module-level singleton via registry
 _global_beat_engine: Optional[_SpotifyBeatEngine] = None
 
 
 def get_shared_spotify_beat_engine(bar_count: int) -> _SpotifyBeatEngine:
-    """Get or create the shared Spotify beat engine singleton."""
+    """Get or create the shared Spotify beat engine.
+    
+    This function maintains backward compatibility while using the registry
+    internally. For new code, prefer using BeatEngineRegistry directly.
+    """
     global _global_beat_engine
+    registry = BeatEngineRegistry.get_instance()
+    engine = registry.get_engine(bar_count)
+    
+    # Update module-level reference for backward compatibility
     if _global_beat_engine is None:
-        _global_beat_engine = _SpotifyBeatEngine(bar_count)
-    else:
-        try:
-            existing = int(getattr(_global_beat_engine, "_bar_count", bar_count))
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            existing = bar_count
-        if existing != int(bar_count):
-            try:
-                logger.debug(
-                    "[SPOTIFY_VIS] Shared beat engine already initialised with bar_count=%s (requested=%s)",
-                    existing,
-                    bar_count,
-                )
-            except Exception as e:
-                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-    return _global_beat_engine
+        _global_beat_engine = engine
+    elif _global_beat_engine._bar_count != bar_count:
+        logger.debug(
+            "[SPOTIFY_VIS] Shared beat engine bar_count mismatch: existing=%d, requested=%d",
+            _global_beat_engine._bar_count,
+            bar_count,
+        )
+    
+    return engine

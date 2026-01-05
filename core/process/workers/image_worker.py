@@ -431,14 +431,31 @@ class ImageWorker(BaseWorker):
 
 
 def image_worker_main(request_queue: Queue, response_queue: Queue) -> None:
-    """
-    Entry point for image worker process.
+    """Entry point for image worker process."""
+    import sys
+    import traceback
     
-    This function is passed to ProcessSupervisor.register_worker_factory()
-    and called when starting the worker process.
-    """
-    if not PIL_AVAILABLE:
-        raise RuntimeError("PIL/Pillow is required for ImageWorker")
+    sys.stderr.write("=== IMAGE Worker: Process started ===\n")
+    sys.stderr.flush()
     
-    worker = ImageWorker(request_queue, response_queue)
-    worker.run()
+    try:
+        if not PIL_AVAILABLE:
+            sys.stderr.write("IMAGE Worker FATAL: PIL/Pillow not available\n")
+            sys.stderr.flush()
+            raise RuntimeError("PIL/Pillow is required for ImageWorker")
+        
+        sys.stderr.write("IMAGE Worker: Creating worker instance...\n")
+        sys.stderr.flush()
+        worker = ImageWorker(request_queue, response_queue)
+        
+        sys.stderr.write("IMAGE Worker: Starting main loop...\n")
+        sys.stderr.flush()
+        worker.run()
+        
+        sys.stderr.write("IMAGE Worker: Exiting normally\n")
+        sys.stderr.flush()
+    except Exception as e:
+        sys.stderr.write(f"IMAGE Worker CRASHED: {e}\n")
+        sys.stderr.write(f"IMAGE Worker crash traceback:\n{''.join(traceback.format_exc())}\n")
+        sys.stderr.flush()
+        raise

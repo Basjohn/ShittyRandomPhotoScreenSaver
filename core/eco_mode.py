@@ -355,13 +355,18 @@ class EcoModeManager:
                 logger.debug("[ECO_MODE] Exception suppressed: %s", e)
         
         # Stop workers to save CPU (P1 fix from architectural audit)
+        # NOTE: FFT worker is NOT stopped during eco mode because:
+        # 1. FFT processing is lightweight (minimal CPU overhead)
+        # 2. Stopping FFT interrupts visualizer even while music plays
+        # 3. The main CPU savings come from stopping IMAGE worker (no image loading)
         if self._process_supervisor is not None:
             try:
                 from core.process.types import WorkerType
                 
                 # Track which workers were running before stopping
+                # Only stop IMAGE worker - FFT is too lightweight to matter
                 self._workers_were_running = {}
-                for worker_type in [WorkerType.IMAGE, WorkerType.FFT]:
+                for worker_type in [WorkerType.IMAGE]:  # FFT removed - causes visualizer stalls
                     try:
                         was_running = self._process_supervisor.is_running(worker_type)
                         self._workers_were_running[worker_type] = was_running

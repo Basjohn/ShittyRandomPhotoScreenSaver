@@ -2,6 +2,7 @@
 from collections import defaultdict
 from typing import Optional, Iterable, Tuple, Callable, Dict, Any, List, Set
 import logging
+import os
 import time
 import weakref
 import sys
@@ -1908,6 +1909,20 @@ class DisplayWidget(QWidget):
                 comp.setObjectName("_srpss_gl_compositor")
                 comp.setGeometry(0, 0, self.width(), self.height())
                 comp.hide()
+                
+                # Configure VSync render strategy from settings or environment override
+                vsync_render_enabled = False
+                # Environment override takes precedence (for testing)
+                if os.environ.get('SRPSS_VSYNC_RENDER') == '1':
+                    vsync_render_enabled = True
+                elif self.settings_manager is not None:
+                    try:
+                        raw = self.settings_manager.get("display.vsync_render", False)
+                        vsync_render_enabled = SettingsManager.to_bool(raw, False)
+                    except Exception:
+                        pass
+                comp.set_vsync_enabled(vsync_render_enabled)
+                
                 if self._resource_manager is not None:
                     try:
                         self._resource_manager.register_qt(
@@ -1917,7 +1932,8 @@ class DisplayWidget(QWidget):
                     except Exception as e:
                         logger.debug("[GL COMPOSITOR] Failed to register compositor with ResourceManager", exc_info=True)
                 self._gl_compositor = comp
-                logger.info("[GL COMPOSITOR] Created shared compositor for screen %s", self.screen_index)
+                logger.info("[GL COMPOSITOR] Created shared compositor for screen %s (vsync_render=%s)", 
+                           self.screen_index, vsync_render_enabled)
             except Exception as exc:
                 logger.warning("[GL COMPOSITOR] Failed to create compositor: %s", exc)
                 self._gl_compositor = None

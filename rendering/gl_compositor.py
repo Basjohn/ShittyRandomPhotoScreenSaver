@@ -12,13 +12,24 @@ compositor over time.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field  # Still needed for _GLPipelineState
 from typing import Dict, Optional, Callable
 
 import ctypes
 import time
 
-from PySide6.QtCore import Qt, QPoint, QRect, QTimer
+# Import metrics classes from extracted package
+from rendering.gl_compositor_pkg.metrics import (
+    _GLPipelineState,
+    _AnimationRunMetrics,
+    _PaintMetrics,
+    _RenderTimerMetrics,
+)
+from rendering.render_strategy import (
+    RenderStrategyManager,
+    RenderStrategyConfig,
+)
+
+from PySide6.QtCore import Qt, QPoint, QRect
 from PySide6.QtGui import QPainter, QPixmap, QRegion, QImage, QColor
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
@@ -147,196 +158,8 @@ def _blockspin_spin_from_progress(p: float) -> float:
 # BlockFlipState, RaindropsState, BlockSpinState, PeelState, BlindsState,
 # DiffuseState, CrumbleState) are imported from rendering.transition_state
 
-
-@dataclass
-class _GLPipelineState:
-    """GL pipeline state for shader-backed transitions.
-    
-    Holds OpenGL object IDs and uniform location dicts.
-    Texture management delegated to GLTextureManager.
-    """
-    # Geometry IDs
-    quad_vao: int = 0
-    quad_vbo: int = 0
-    box_vao: int = 0
-    box_vbo: int = 0
-    box_vertex_count: int = 0
-    
-    # Shader program IDs
-    basic_program: int = 0
-    raindrops_program: int = 0
-    warp_program: int = 0
-    diffuse_program: int = 0
-    blockflip_program: int = 0
-    peel_program: int = 0
-    crossfade_program: int = 0
-    slide_program: int = 0
-    wipe_program: int = 0
-    blinds_program: int = 0
-    crumble_program: int = 0
-    particle_program: int = 0
-
-    # Uniform locations for basic card-flip program
-    u_angle_loc: int = -1
-    u_aspect_loc: int = -1
-    u_old_tex_loc: int = -1
-    u_new_tex_loc: int = -1
-    u_spec_dir_loc: int = -1
-    u_axis_mode_loc: int = -1
-    u_block_rect_loc: int = -1
-    u_block_uv_rect_loc: int = -1
-
-    # Uniform location dicts (populated by program helpers)
-    raindrops_uniforms: dict = field(default_factory=dict)
-    warp_uniforms: dict = field(default_factory=dict)
-    diffuse_uniforms: dict = field(default_factory=dict)
-    blockflip_uniforms: dict = field(default_factory=dict)
-    peel_uniforms: dict = field(default_factory=dict)
-    blinds_uniforms: dict = field(default_factory=dict)
-    crumble_uniforms: dict = field(default_factory=dict)
-    particle_uniforms: dict = field(default_factory=dict)
-    crossfade_uniforms: dict = field(default_factory=dict)
-    slide_uniforms: dict = field(default_factory=dict)
-    wipe_uniforms: dict = field(default_factory=dict)
-
-    initialized: bool = False
-
-
-@dataclass
-class _AnimationRunMetrics:
-    """Lightweight animation tick telemetry for compositor-driven transitions."""
-
-    name: str
-    duration_ms: int
-    target_fps: int
-    dt_spike_threshold_ms: float
-    start_ts: float = field(default_factory=time.time)
-    last_tick_ts: Optional[float] = None
-    frame_count: int = 0
-    min_dt: float = 0.0
-    max_dt: float = 0.0
-    last_progress: float = 0.0
-    dt_spike_count: int = 0
-    last_spike_log_ts: float = 0.0
-
-    def record_tick(self, progress: float) -> Optional[float]:
-        """Record an animation tick and return dt in seconds if available."""
-        now = time.time()
-        dt = None
-        if self.last_tick_ts is not None:
-            dt = now - self.last_tick_ts
-            if dt > 0.0:
-                if self.min_dt == 0.0 or dt < self.min_dt:
-                    self.min_dt = dt
-                if dt > self.max_dt:
-                    self.max_dt = dt
-        self.last_tick_ts = now
-        self.last_progress = progress
-        self.frame_count += 1
-        return dt
-
-    def should_log_spike(self, dt: float, cooldown_s: float = 0.4) -> bool:
-        """Return True when this dt exceeds the spike threshold and cooldown."""
-        if dt * 1000.0 < self.dt_spike_threshold_ms:
-            return False
-        now = time.time()
-        if self.last_spike_log_ts and (now - self.last_spike_log_ts) < cooldown_s:
-            return False
-        self.last_spike_log_ts = now
-        self.dt_spike_count += 1
-        return True
-
-    def elapsed_seconds(self) -> float:
-        return max(0.0, time.time() - self.start_ts)
-
-
-@dataclass
-class _PaintMetrics:
-    """Tracks paintGL cadence and duration for transitions."""
-
-    label: str
-    slow_threshold_ms: float
-    start_ts: float = field(default_factory=time.time)
-    last_paint_ts: Optional[float] = None
-    frame_count: int = 0
-    min_dt: float = 0.0
-    max_dt: float = 0.0
-    min_duration_ms: float = 0.0
-    max_duration_ms: float = 0.0
-    slow_count: int = 0
-
-    def record(self, paint_duration_ms: float) -> Optional[float]:
-        """Record a paint duration and return dt seconds when available."""
-        now = time.time()
-        dt = None
-        if self.last_paint_ts is not None:
-            dt = now - self.last_paint_ts
-            if dt > 0.0:
-                if self.min_dt == 0.0 or dt < self.min_dt:
-                    self.min_dt = dt
-                if dt > self.max_dt:
-                    self.max_dt = dt
-        self.last_paint_ts = now
-        self.frame_count += 1
-        if self.min_duration_ms == 0.0 or paint_duration_ms < self.min_duration_ms:
-            self.min_duration_ms = paint_duration_ms
-        if paint_duration_ms > self.max_duration_ms:
-            self.max_duration_ms = paint_duration_ms
-        if paint_duration_ms > self.slow_threshold_ms:
-            self.slow_count += 1
-        return dt
-
-    def elapsed_seconds(self) -> float:
-        return max(0.0, time.time() - self.start_ts)
-
-
-@dataclass
-class _RenderTimerMetrics:
-    """Telemetry for render timer cadence."""
-
-    target_fps: int
-    interval_ms: int
-    stall_threshold_ms: float = 120.0
-    stall_factor: float = 2.5
-    start_ts: float = field(default_factory=time.time)
-    last_tick_ts: Optional[float] = None
-    frame_count: int = 0
-    min_dt: float = 0.0
-    max_dt: float = 0.0
-    stall_count: int = 0
-    last_stall_log_ts: float = 0.0
-
-    def record_tick(self) -> Optional[float]:
-        """Record a render timer tick and return dt seconds when available."""
-        now = time.time()
-        dt = None
-        if self.last_tick_ts is not None:
-            dt = now - self.last_tick_ts
-            if dt > 0.0:
-                if self.min_dt == 0.0 or dt < self.min_dt:
-                    self.min_dt = dt
-                if dt > self.max_dt:
-                    self.max_dt = dt
-                threshold_ms = max(self.stall_threshold_ms, self.interval_ms * self.stall_factor)
-                if dt * 1000.0 > threshold_ms:
-                    self.stall_count += 1
-        self.last_tick_ts = now
-        self.frame_count += 1
-        return dt
-
-    def should_log_stall(self, dt_seconds: float, cooldown_s: float = 0.5) -> bool:
-        """Return True when this tick gap should be logged as a stall."""
-        threshold_ms = max(self.stall_threshold_ms, self.interval_ms * self.stall_factor)
-        if dt_seconds * 1000.0 <= threshold_ms:
-            return False
-        now = time.time()
-        if self.last_stall_log_ts and (now - self.last_stall_log_ts) < cooldown_s:
-            return False
-        self.last_stall_log_ts = now
-        return True
-
-    def elapsed_seconds(self) -> float:
-        return max(0.0, time.time() - self.start_ts)
+# NOTE: Metrics dataclasses (_GLPipelineState, _AnimationRunMetrics, 
+# _PaintMetrics, _RenderTimerMetrics) are imported from rendering.gl_compositor.metrics
 
 
 class GLCompositorWidget(QOpenGLWidget):
@@ -390,13 +213,15 @@ class GLCompositorWidget(QOpenGLWidget):
         # interpolates to actual render time for smooth motion.
         self._frame_state: Optional[FrameState] = None
         
-        # RENDER TIMER: Drives repaints at display refresh rate during transitions.
-        # This decouples rendering from animation timer jitter - the animation timer
-        # updates the FrameState, the render timer triggers repaints, and paintGL
-        # interpolates to the actual render time.
-        self._render_timer: Optional[QTimer] = None
+        # VSYNC RENDERING: Uses timer-based rendering with VSync approximation.
+        # True threaded VSync is not achievable with QOpenGLWidget.
+        self._vsync_enabled: bool = False  # Feature flag - read from settings
+        self._vsync_connected: bool = False  # Whether frameSwapped is connected
         self._render_timer_fps: int = 60  # Will be set from display refresh rate
         self._render_timer_metrics: Optional[_RenderTimerMetrics] = None
+        
+        # Render strategy manager for timer-based rendering (fallback only)
+        self._render_strategy_manager: Optional[RenderStrategyManager] = None
         self._paint_metrics: Optional[_PaintMetrics] = None
         self._paint_slow_threshold_ms: float = 24.0
         self._paint_warning_last_ts: float = 0.0
@@ -552,22 +377,34 @@ class GLCompositorWidget(QOpenGLWidget):
             self._frame_state.mark_complete()
         self._frame_state = None
     
-    def _start_render_timer(self) -> None:
-        """Start the render timer to drive repaints during transitions.
+    def set_vsync_enabled(self, enabled: bool) -> None:
+        """Enable or disable VSync-driven rendering.
         
-        Uses adaptive rate selection based on display refresh rate:
-        - 60Hz or below: target full refresh rate
-        - 61-120Hz: target half refresh rate (e.g., 120Hz → 60Hz)
-        - Above 120Hz: target third refresh rate (e.g., 165Hz → 55Hz)
+        When enabled, uses a dedicated render thread synchronized with display VSync.
+        When disabled, uses QTimer-based rendering (default).
         
-        This ensures we target achievable frame rates rather than impossible ones.
-        The interpolation system smooths the visual result regardless of actual FPS.
+        Args:
+            enabled: True to enable VSync rendering, False for timer-based
         """
-        if self._render_timer is not None:
-            return  # Already running
+        if self._vsync_enabled == enabled:
+            return
         
-        # Get refresh rate from parent DisplayWidget's stored screen reference
-        # (more reliable than self.screen() which may return wrong screen for child widgets)
+        self._vsync_enabled = enabled
+        logger.info("[GL COMPOSITOR] VSync rendering %s", "enabled" if enabled else "disabled")
+        
+        # If render strategy is active, restart with new setting
+        if self._render_strategy_manager is not None:
+            was_active = self._render_strategy_manager.get_current_strategy_type() is not None
+            if was_active:
+                self._stop_render_strategy()
+                self._start_render_strategy()
+    
+    def _get_display_refresh_rate(self) -> int:
+        """Get the display refresh rate for this compositor's screen.
+        
+        Returns:
+            Display refresh rate in Hz (defaults to 60 if detection fails)
+        """
         display_hz = 60
         try:
             screen = None
@@ -589,52 +426,173 @@ class GLCompositorWidget(QOpenGLWidget):
                 display_hz = int(screen.refreshRate())
                 if display_hz <= 0:
                     display_hz = 60
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
+        except Exception:
+            pass
+        return display_hz
+    
+    def _calculate_target_fps(self, display_hz: int) -> int:
+        """Calculate target FPS based on display refresh rate.
         
-        # Adaptive rate selection - target achievable FPS
+        Uses adaptive rate selection:
+        - 60Hz or below: target full refresh rate
+        - 61-120Hz: target half refresh rate (e.g., 120Hz → 60Hz)
+        - Above 120Hz: target third refresh rate (e.g., 165Hz → 55Hz)
+        
+        Args:
+            display_hz: Display refresh rate in Hz
+            
+        Returns:
+            Target FPS (minimum 30)
+        """
         if display_hz <= 60:
-            target_fps = display_hz  # Full rate for 60Hz and below
+            target_fps = display_hz
         elif display_hz <= 120:
-            target_fps = display_hz // 2  # Half rate for 61-120Hz (e.g., 120→60, 90→45)
+            target_fps = display_hz // 2
         else:
-            target_fps = display_hz // 3  # Third rate for >120Hz (e.g., 165→55, 144→48)
+            target_fps = display_hz // 3
+        return max(30, target_fps)
+    
+    def _start_render_strategy(self) -> None:
+        """Start the render strategy to drive repaints during transitions.
         
-        # Ensure minimum of 30 FPS
-        target_fps = max(30, target_fps)
+        Uses VSync-driven rendering when enabled:
+        - Connects to frameSwapped signal for VSync timing
+        - Each frame swap triggers the next update() call
+        - Falls back to timer-based if VSync is disabled
+        """
+        # Check if already running
+        if self._vsync_connected:
+            logger.debug("[GL COMPOSITOR] Render strategy already active (VSync)")
+            return
+        if self._render_strategy_manager is not None:
+            strategy_type = self._render_strategy_manager.get_current_strategy_type()
+            if strategy_type is not None:
+                logger.debug("[GL COMPOSITOR] Render strategy already active (timer: %s)", strategy_type)
+                return
         
+        display_hz = self._get_display_refresh_rate()
+        target_fps = self._calculate_target_fps(display_hz)
         self._render_timer_fps = target_fps
-        interval_ms = max(1, 1000 // target_fps)
         
-        self._render_timer = QTimer(self)
-        self._render_timer.setTimerType(Qt.TimerType.PreciseTimer)
-        self._render_timer.timeout.connect(self._on_render_tick)
-        self._render_timer.start(interval_ms)
         if is_perf_metrics_enabled():
             self._render_timer_metrics = _RenderTimerMetrics(
                 target_fps=target_fps,
-                interval_ms=interval_ms,
+                interval_ms=max(1, 1000 // target_fps),
             )
         else:
             self._render_timer_metrics = None
-        logger.debug("[GL COMPOSITOR] Render timer started: display=%dHz, target=%dHz (interval=%dms)", 
-                    display_hz, target_fps, interval_ms)
+        
+        # Use VSync-driven rendering if enabled
+        if self._vsync_enabled:
+            success = self._start_vsync_driven(target_fps, display_hz)
+            if success:
+                return
+            logger.warning("[GL COMPOSITOR] VSync-driven rendering failed, falling back to timer")
+        
+        # Fallback to timer-based rendering
+        self._start_timer_fallback(target_fps, display_hz)
+    
+    def _start_vsync_driven(self, target_fps: int, display_hz: int) -> bool:
+        """Start VSync-driven rendering using frameSwapped signal.
+        
+        This connects to Qt's frameSwapped signal which is emitted after
+        swapBuffers completes (i.e., after VSync). We immediately request
+        the next frame for smooth VSync-locked animation.
+        
+        Returns:
+            True if started successfully, False otherwise
+        """
+        try:
+            if not self._vsync_connected:
+                self.frameSwapped.connect(self._on_frame_swapped)
+                self._vsync_connected = True
+            
+            logger.info(
+                "[GL COMPOSITOR] VSync-driven rendering started: display=%dHz, target=%dHz",
+                display_hz, target_fps
+            )
+            
+            # Trigger first frame
+            self.update()
+            return True
+            
+        except Exception as e:
+            logger.error("[GL COMPOSITOR] VSync-driven rendering error: %s", e)
+            return False
+    
+    def _on_frame_swapped(self) -> None:
+        """Called after swapBuffers completes (after VSync).
+        
+        This is the key to VSync-driven rendering - we immediately request
+        the next frame after VSync, ensuring smooth animation locked to
+        the display's refresh rate.
+        """
+        self._record_render_timer_tick()
+        
+        if self._frame_state is None or not self._frame_state.started or self._frame_state.completed:
+            return
+        
+        # Immediately request next frame - this gives us VSync-locked timing
+        self.update()
+    
+    def _start_timer_fallback(self, target_fps: int, display_hz: int) -> None:
+        """Start timer-based rendering as fallback."""
+        if self._render_strategy_manager is None:
+            self._render_strategy_manager = RenderStrategyManager(self)
+        
+        config = RenderStrategyConfig(
+            target_fps=target_fps,
+            vsync_enabled=False,  # Timer mode
+            fallback_on_failure=True,
+            min_frame_time_ms=max(1.0, 1000.0 / target_fps),
+        )
+        self._render_strategy_manager.configure(config)
+        
+        from rendering.render_strategy import RenderStrategyType
+        success = self._render_strategy_manager.start(RenderStrategyType.TIMER)
+        
+        logger.info(
+            "[GL COMPOSITOR] Timer fallback started: display=%dHz, target=%dHz, success=%s",
+            display_hz, target_fps, success
+        )
+    
+    def _stop_render_strategy(self) -> None:
+        """Stop the render strategy."""
+        # Stop VSync-driven rendering
+        if self._vsync_connected:
+            try:
+                self.frameSwapped.disconnect(self._on_frame_swapped)
+            except Exception:
+                pass
+            self._vsync_connected = False
+        
+        # Stop timer fallback
+        if self._render_strategy_manager is not None:
+            self._render_strategy_manager.stop()
+        
+        self._finalize_render_timer_metrics()
+        logger.debug("[GL COMPOSITOR] Render strategy stopped")
+    
+    def _start_render_timer(self) -> None:
+        """Start the render timer to drive repaints during transitions.
+        
+        This is now a wrapper around _start_render_strategy() for backward compatibility.
+        """
+        self._start_render_strategy()
     
     def _stop_render_timer(self) -> None:
-        """Stop the render timer."""
-        if self._render_timer is not None:
-            self._render_timer.stop()
-            self._render_timer.deleteLater()
-            self._render_timer = None
-            self._finalize_render_timer_metrics()
-            logger.debug("[GL COMPOSITOR] Render timer stopped")
-        else:
-            self._finalize_render_timer_metrics()
+        """Stop the render timer.
+        
+        This is now a wrapper around _stop_render_strategy() for backward compatibility.
+        """
+        self._stop_render_strategy()
     
     def _on_render_tick(self) -> None:
-        """Called by render timer to trigger a repaint.
+        """Called by render strategy to trigger a repaint.
         
-        The actual progress interpolation happens in paintGL using the FrameState.
+        Note: This is now primarily called by the RenderStrategyManager's internal
+        timer or VSync thread. The actual progress interpolation happens in paintGL
+        using the FrameState.
         """
         self._record_render_timer_tick()
         if self._frame_state is not None and self._frame_state.started and not self._frame_state.completed:

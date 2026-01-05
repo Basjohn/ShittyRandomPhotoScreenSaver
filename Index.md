@@ -187,6 +187,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - `EcoModeState`: DISABLED, MONITORING, ECO_ACTIVE states
   - `EcoModeConfig`: Occlusion threshold (95%), check interval, pause settings
   - `is_mc_build()`: Detect MC build entry point
+  - **Jan 6, 2026**: FFT worker removed from eco mode stop list (causes visualizer stalls)
   - **21 unit tests** in `tests/test_mc_eco_mode.py`
 - core/process/__init__.py
   - Process isolation module for SRPSS v2.0 multiprocessing
@@ -346,6 +347,18 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - `base_program.py`: `BaseGLProgram` ABC with shared vertex shader and compilation helpers.
   - `peel_program.py`: `PeelProgram` for the Peel transition GLSL.
   - `blockflip_program.py`: `BlockFlipProgram` for the BlockFlip transition GLSL.
+- rendering/gl_compositor_pkg/
+  - **Jan 6, 2026**: Extracted metrics package from gl_compositor.py
+  - `__init__.py`: Package exports for metrics dataclasses
+  - `metrics.py`: `_GLPipelineState`, `_AnimationRunMetrics`, `_PaintMetrics`, `_RenderTimerMetrics`
+- rendering/render_strategy.py
+  - **Jan 6, 2026**: VSync infrastructure for future VSync-driven rendering
+  - `RenderStrategy`: Abstract base class for render strategies
+  - `RenderStrategyConfig`: Configuration (target_fps, vsync_enabled, fallback_on_failure)
+  - `RenderMetrics`: Performance tracking (frame_count, min/max dt, avg_fps)
+  - `TimerRenderStrategy`: QTimer-based rendering (current default)
+  - `VSyncRenderStrategy`: VSync-driven via dedicated thread with automatic fallback
+  - `RenderStrategyManager`: Runtime strategy switching
   - `crossfade_program.py`: `CrossfadeProgram` for the Crossfade transition GLSL.
   - `blinds_program.py`: `BlindsProgram` for the Blinds transition GLSL.
   - `diffuse_program.py`: `DiffuseProgram` for the Diffuse transition GLSL.

@@ -455,5 +455,25 @@ class TransitionWorker(BaseWorker):
 
 def transition_worker_main(request_queue: Queue, response_queue: Queue) -> None:
     """Entry point for transition worker process."""
-    worker = TransitionWorker(request_queue, response_queue)
-    worker.run()
+    import sys
+    import traceback
+    
+    sys.stderr.write("=== TRANSITION Worker: Process started ===\n")
+    sys.stderr.flush()
+    
+    try:
+        sys.stderr.write("TRANSITION Worker: Creating worker instance...\n")
+        sys.stderr.flush()
+        worker = TransitionWorker(request_queue, response_queue)
+        
+        sys.stderr.write("TRANSITION Worker: Starting main loop...\n")
+        sys.stderr.flush()
+        worker.run()
+        
+        sys.stderr.write("TRANSITION Worker: Exiting normally\n")
+        sys.stderr.flush()
+    except Exception as e:
+        sys.stderr.write(f"TRANSITION Worker CRASHED: {e}\n")
+        sys.stderr.write(f"TRANSITION Worker crash traceback:\n{''.join(traceback.format_exc())}\n")
+        sys.stderr.flush()
+        raise
