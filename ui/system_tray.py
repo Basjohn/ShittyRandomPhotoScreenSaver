@@ -10,7 +10,7 @@ import os
 from typing import Optional
 from pathlib import Path
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Signal, QTimer
 from PySide6.QtGui import QIcon, QAction
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
@@ -128,6 +128,11 @@ class ScreensaverTrayIcon(QSystemTrayIcon):
         _get_cpu_usage()  # Prime psutil's cpu_percent
         
         self._update_tooltip()
+        
+        # Periodic tooltip refresh timer (every 5 seconds)
+        self._tooltip_timer = QTimer(self)
+        self._tooltip_timer.timeout.connect(self._update_tooltip)
+        self._tooltip_timer.start(5000)  # 5 second refresh
 
         # Build a small context menu and apply the dark theme so it
         # matches other context menus styled in dark.qss.
@@ -151,6 +156,9 @@ class ScreensaverTrayIcon(QSystemTrayIcon):
         menu.addAction(exit_action)
 
         self.setContextMenu(menu)
+        
+        # Connect double-click to bring window to top
+        self.activated.connect(self._on_tray_activated)
 
         # Only show the icon if the system tray is available; if not,
         # log and leave the instance inert.
@@ -176,8 +184,31 @@ class ScreensaverTrayIcon(QSystemTrayIcon):
             # Never let tray registration failure affect startup.
             logger.debug("Failed to register tray icon with ResourceManager", exc_info=True)
 
+    def _on_tray_activated(self, reason):
+        """Handle tray icon activation (clicks).
+        
+        Args:
+            reason: QSystemTrayIcon.ActivationReason
+        """
+        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+            # Bring all screensaver windows to the front
+            app = QApplication.instance()
+            if app:
+                for widget in app.topLevelWidgets():
+                    if widget.isVisible() and hasattr(widget, 'raise_'):
+                        widget.raise_()
+                        widget.activateWindow()
+    
+    def set_eco_mode_callback(self, callback) -> None:
+        """Set callback to check Eco Mode status.
+        
+        Args:
+            callback: Function that returns True if Eco Mode is active
+        """
+        self._eco_mode_callback = callback
+    
     def _update_tooltip(self) -> None:
-        """Update tooltip with current CPU/GPU usage.
+        """Update tooltip with current CPU/GPU usage and Eco Mode status.
         
         Called on init and can be called periodically if needed.
         Uses lazy-loaded monitoring to avoid startup penalty.
@@ -191,6 +222,15 @@ class ScreensaverTrayIcon(QSystemTrayIcon):
                 parts.append(f"CPU: {cpu:.0f}%")
             if gpu is not None:
                 parts.append(f"GPU: {gpu:.0f}%")
+            
+            # Add Eco Mode indicator if active
+            eco_callback = getattr(self, '_eco_mode_callback', None)
+            if eco_callback is not None:
+                try:
+                    if eco_callback():
+                        parts.append("ECO MODE ON")
+                except Exception:
+                    pass
             
             tooltip = " | ".join(parts) if len(parts) > 1 else parts[0]
             self.setToolTip(tooltip)

@@ -16,22 +16,12 @@ from core.logging.logger import get_logger, is_verbose_logging
 from core.resources.manager import ResourceManager
 from core.settings.settings_manager import SettingsManager
 from rendering.widget_setup import parse_color_to_qcolor, compute_expected_overlays
-from widgets.clock_widget import ClockWidget, TimeFormat, ClockPosition
-from widgets.weather_widget import WeatherWidget, WeatherPosition
-from widgets.media_widget import MediaWidget, MediaPosition
-from widgets.reddit_widget import RedditWidget, RedditPosition
+from widgets.media_widget import MediaWidget
 # Gmail widget archived - see archive/gmail_feature/RESTORE_GMAIL.md
 # from widgets.gmail_widget import GmailWidget, GmailPosition
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
-from core.settings.models import (
-    SpotifyVisualizerSettings,
-    MediaWidgetSettings,
-    RedditWidgetSettings,
-    WidgetPosition,
-    coerce_widget_position,
-)
+from core.settings.models import SpotifyVisualizerSettings, MediaWidgetSettings, RedditWidgetSettings
 from widgets.spotify_volume_widget import SpotifyVolumeWidget
-from widgets.shadow_utils import apply_widget_shadow
 from rendering.widget_positioner import WidgetPositioner, PositionAnchor
 from rendering.widget_factories import WidgetFactoryRegistry
 
@@ -1485,656 +1475,16 @@ class WidgetManager:
         self._spotify_secondary_fade_starters.append(starter)
 
     # =========================================================================
-    # Widget Factory Methods (Phase 1b)
+    # Widget Factory Methods (Phase 2 - Jan 2026)
+    # Legacy create_*_widget methods removed - now using WidgetFactoryRegistry
+    # See rendering/widget_factories.py for ClockWidgetFactory, WeatherWidgetFactory,
+    # MediaWidgetFactory, RedditWidgetFactory implementations
     # =========================================================================
 
-    def create_clock_widget(
-        self,
-        settings_key: str,
-        attr_name: str,
-        default_position: str,
-        default_font_size: int,
-        widgets_config: dict,
-        shadows_config: dict,
-        base_clock_settings: dict,
-        screen_index: int,
-        thread_manager: Optional["ThreadManager"] = None,
-    ) -> Optional[ClockWidget]:
-        """
-        Create and configure a clock widget.
-        
-        Args:
-            settings_key: Settings key ('clock', 'clock2', 'clock3')
-            attr_name: Attribute name on parent widget
-            default_position: Default position string
-            default_font_size: Default font size
-            widgets_config: Full widgets configuration dict
-            shadows_config: Shadow configuration dict
-            base_clock_settings: Base clock settings for inheritance
-            screen_index: Screen index for monitor selection
-            thread_manager: Optional ThreadManager for async operations
-            
-        Returns:
-            Created ClockWidget or None if disabled
-        """
-        clock_settings = widgets_config.get(settings_key, {}) if isinstance(widgets_config, dict) else {}
-        clock_enabled = SettingsManager.to_bool(clock_settings.get('enabled', False), False)
-        clock_monitor_sel = clock_settings.get('monitor', 'ALL')
-        
-        try:
-            show_on_this = (clock_monitor_sel == 'ALL') or (int(clock_monitor_sel) == (screen_index + 1))
-        except Exception:
-            show_on_this = True
-
-        if not (clock_enabled and show_on_this):
-            logger.debug("%s widget disabled in settings", settings_key)
-            return None
-
-        # Add to expected overlays for fade coordination (syncs to parent)
-        self.add_expected_overlay(settings_key)
-
-        def _resolve_style(key: str, default):
-            """Resolve style with inheritance for secondary clocks."""
-            if settings_key == 'clock':
-                if isinstance(clock_settings, dict) and key in clock_settings:
-                    return clock_settings[key]
-                return default
-            if isinstance(base_clock_settings, dict) and key in base_clock_settings:
-                return base_clock_settings[key]
-            return default
-
-        position_map = {
-            WidgetPosition.TOP_LEFT: ClockPosition.TOP_LEFT,
-            WidgetPosition.TOP_CENTER: ClockPosition.TOP_CENTER,
-            WidgetPosition.TOP_RIGHT: ClockPosition.TOP_RIGHT,
-            WidgetPosition.MIDDLE_LEFT: ClockPosition.MIDDLE_LEFT,
-            WidgetPosition.CENTER: ClockPosition.CENTER,
-            WidgetPosition.MIDDLE_RIGHT: ClockPosition.MIDDLE_RIGHT,
-            WidgetPosition.BOTTOM_LEFT: ClockPosition.BOTTOM_LEFT,
-            WidgetPosition.BOTTOM_CENTER: ClockPosition.BOTTOM_CENTER,
-            WidgetPosition.BOTTOM_RIGHT: ClockPosition.BOTTOM_RIGHT,
-        }
-
-        default_widget_position = coerce_widget_position(default_position, WidgetPosition.TOP_RIGHT)
-        resolved_widget_position = coerce_widget_position(
-            _resolve_style('position', default_position),
-            default_widget_position,
-        )
-
-        raw_format = _resolve_style('format', '12h')
-        time_format = TimeFormat.TWELVE_HOUR if raw_format == '12h' else TimeFormat.TWENTY_FOUR_HOUR
-        position_str = resolved_widget_position.value.replace("_", " ").title()
-        show_seconds = SettingsManager.to_bool(_resolve_style('show_seconds', False), False)
-        timezone_str = clock_settings.get('timezone', 'local')
-        show_timezone = SettingsManager.to_bool(_resolve_style('show_timezone', False), False)
-        font_size = _resolve_style('font_size', default_font_size)
-        margin = _resolve_style('margin', 20)
-        color = _resolve_style('color', [255, 255, 255, 230])
-        bg_color_data = _resolve_style('bg_color', [64, 64, 64, 255])
-        border_color_data = _resolve_style('border_color', [128, 128, 128, 255])
-        border_opacity_val = _resolve_style('border_opacity', 0.8)
-
-        position = position_map.get(resolved_widget_position, position_map.get(default_widget_position, ClockPosition.TOP_RIGHT))
-
-        try:
-            clock = ClockWidget(self._parent, time_format, position, show_seconds, timezone_str, show_timezone)
-
-            font_family = _resolve_style('font_family', 'Segoe UI')
-            if hasattr(clock, 'set_font_family'):
-                clock.set_font_family(font_family)
-
-            clock.set_font_size(font_size)
-            clock.set_margin(margin)
-
-            qcolor = parse_color_to_qcolor(color)
-            if qcolor:
-                clock.set_text_color(qcolor)
-
-            bg_qcolor = parse_color_to_qcolor(bg_color_data)
-            if bg_qcolor and hasattr(clock, "set_background_color"):
-                clock.set_background_color(bg_qcolor)
-
-            try:
-                bo = float(border_opacity_val)
-            except Exception:
-                bo = 0.8
-            border_qcolor = parse_color_to_qcolor(border_color_data, opacity_override=bo)
-            if border_qcolor and hasattr(clock, "set_background_border"):
-                clock.set_background_border(2, border_qcolor)
-
-            show_bg_val = _resolve_style('show_background', False)
-            show_background = SettingsManager.to_bool(show_bg_val, False)
-            clock.set_show_background(show_background)
-
-            bg_opacity = _resolve_style('bg_opacity', 0.9)
-            clock.set_background_opacity(bg_opacity)
-
-            try:
-                display_mode_val = _resolve_style('display_mode', 'digital')
-                if hasattr(clock, 'set_display_mode'):
-                    clock.set_display_mode(display_mode_val)
-            except Exception:
-                pass
-
-            try:
-                show_numerals_val = _resolve_style('show_numerals', True)
-                show_numerals = SettingsManager.to_bool(show_numerals_val, True)
-                if hasattr(clock, 'set_show_numerals'):
-                    clock.set_show_numerals(show_numerals)
-            except Exception:
-                pass
-
-            try:
-                analog_shadow_val = _resolve_style('analog_face_shadow', True)
-                analog_shadow = SettingsManager.to_bool(analog_shadow_val, True)
-                if hasattr(clock, 'set_analog_face_shadow'):
-                    clock.set_analog_face_shadow(analog_shadow)
-            except Exception:
-                pass
-
-            try:
-                intense_shadow_val = _resolve_style('analog_shadow_intense', False)
-                intense_shadow = SettingsManager.to_bool(intense_shadow_val, False)
-                if hasattr(clock, 'set_analog_shadow_intense'):
-                    clock.set_analog_shadow_intense(intense_shadow)
-            except Exception:
-                pass
-
-            try:
-                digital_intense_val = _resolve_style('digital_shadow_intense', False)
-                digital_intense = SettingsManager.to_bool(digital_intense_val, False)
-                if hasattr(clock, 'set_digital_shadow_intense'):
-                    clock.set_digital_shadow_intense(digital_intense)
-            except Exception:
-                pass
-
-            try:
-                if hasattr(clock, "set_shadow_config"):
-                    clock.set_shadow_config(shadows_config)
-                else:
-                    apply_widget_shadow(clock, shadows_config, has_background_frame=show_background)
-            except Exception:
-                pass
-
-            try:
-                if hasattr(clock, "set_overlay_name"):
-                    clock.set_overlay_name(settings_key)
-            except Exception:
-                pass
-
-            # Register with WidgetManager (but DON'T start yet - defer until all widgets created)
-            self.register_widget(settings_key, clock)
-
-            clock.raise_()
-            # NOTE: start() is deferred to setup_all_widgets after all widgets are created
-            # This ensures fade sync has the complete expected overlay set
-            logger.info(
-                "✅ %s widget created: %s, %s, font=%spx, seconds=%s",
-                settings_key, position_str, time_format.value, font_size, show_seconds,
-            )
-            return clock
-        except Exception as e:
-            logger.error("Failed to create/configure %s widget: %s", settings_key, e, exc_info=True)
-            return None
-
-    def create_weather_widget(
-        self,
-        widgets_config: dict,
-        shadows_config: dict,
-        screen_index: int,
-        thread_manager: Optional["ThreadManager"] = None,
-    ) -> Optional[WeatherWidget]:
-        """
-        Create and configure a weather widget.
-        
-        Args:
-            widgets_config: Full widgets configuration dict
-            shadows_config: Shadow configuration dict
-            screen_index: Screen index for monitor selection
-            thread_manager: Optional ThreadManager for async operations
-            
-        Returns:
-            Created WeatherWidget or None if disabled
-        """
-        weather_settings = widgets_config.get('weather', {}) if isinstance(widgets_config, dict) else {}
-        weather_enabled = SettingsManager.to_bool(weather_settings.get('enabled', False), False)
-        weather_monitor_sel = weather_settings.get('monitor', 'ALL')
-        
-        try:
-            show_on_this = (weather_monitor_sel == 'ALL') or (int(weather_monitor_sel) == (screen_index + 1))
-        except Exception:
-            show_on_this = False
-
-        if not (weather_enabled and show_on_this):
-            return None
-
-        self.add_expected_overlay("weather")
-
-        weather_widget_position = coerce_widget_position(weather_settings.get('position', 'Top Left'), WidgetPosition.TOP_LEFT)
-        position_str = weather_widget_position.value.replace("_", " ").title()
-        location = weather_settings.get('location', 'New York')
-        font_size = weather_settings.get('font_size', 24)
-        color = weather_settings.get('color', [255, 255, 255, 230])
-
-        weather_position_map = {
-            WidgetPosition.TOP_LEFT: WeatherPosition.TOP_LEFT,
-            WidgetPosition.TOP_CENTER: WeatherPosition.TOP_CENTER,
-            WidgetPosition.TOP_RIGHT: WeatherPosition.TOP_RIGHT,
-            WidgetPosition.MIDDLE_LEFT: WeatherPosition.MIDDLE_LEFT,
-            WidgetPosition.CENTER: WeatherPosition.CENTER,
-            WidgetPosition.MIDDLE_RIGHT: WeatherPosition.MIDDLE_RIGHT,
-            WidgetPosition.BOTTOM_LEFT: WeatherPosition.BOTTOM_LEFT,
-            WidgetPosition.BOTTOM_CENTER: WeatherPosition.BOTTOM_CENTER,
-            WidgetPosition.BOTTOM_RIGHT: WeatherPosition.BOTTOM_RIGHT,
-        }
-        position = weather_position_map.get(weather_widget_position, WeatherPosition.TOP_LEFT)
-
-        try:
-            widget = WeatherWidget(self._parent, location, position)
-            
-            if thread_manager is not None and hasattr(widget, "set_thread_manager"):
-                try:
-                    widget.set_thread_manager(thread_manager)
-                except Exception:
-                    pass
-
-            font_family = weather_settings.get('font_family', 'Segoe UI')
-            if hasattr(widget, 'set_font_family'):
-                widget.set_font_family(font_family)
-
-            widget.set_font_size(font_size)
-
-            qcolor = parse_color_to_qcolor(color)
-            if qcolor:
-                widget.set_text_color(qcolor)
-
-            show_background = SettingsManager.to_bool(weather_settings.get('show_background', True), True)
-            widget.set_show_background(show_background)
-
-            bg_color_data = weather_settings.get('bg_color', [35, 35, 35, 255])
-            bg_qcolor = parse_color_to_qcolor(bg_color_data)
-            if bg_qcolor:
-                widget.set_background_color(bg_qcolor)
-
-            bg_opacity = weather_settings.get('bg_opacity', 0.7)
-            widget.set_background_opacity(bg_opacity)
-
-            border_color_data = weather_settings.get('border_color', [255, 255, 255, 255])
-            border_opacity = weather_settings.get('border_opacity', 1.0)
-            try:
-                bo = float(border_opacity)
-            except Exception:
-                bo = 1.0
-            border_qcolor = parse_color_to_qcolor(border_color_data, opacity_override=bo)
-            if border_qcolor:
-                widget.set_background_border(2, border_qcolor)
-
-            show_forecast = SettingsManager.to_bool(weather_settings.get('show_forecast', False), False)
-            widget.set_show_forecast(show_forecast)
-
-            # Apply margin setting
-            margin = weather_settings.get('margin', 20)
-            try:
-                widget.set_margin(int(margin))
-            except Exception:
-                pass
-
-            try:
-                intense_shadow = SettingsManager.to_bool(weather_settings.get('intense_shadow', False), False)
-                if hasattr(widget, 'set_intense_shadow'):
-                    widget.set_intense_shadow(intense_shadow)
-            except Exception:
-                pass
-
-            try:
-                if hasattr(widget, "set_shadow_config"):
-                    widget.set_shadow_config(shadows_config)
-                else:
-                    apply_widget_shadow(widget, shadows_config, has_background_frame=show_background)
-            except Exception:
-                pass
-
-            self.register_widget("weather", widget)
-            widget.raise_()
-            # NOTE: start() deferred to setup_all_widgets for fade sync
-            logger.info("✅ Weather widget created: %s, %s, font=%spx", location, position_str, font_size)
-            return widget
-        except Exception as e:
-            logger.error("Failed to create weather widget: %s", e, exc_info=True)
-            return None
-
-    def create_media_widget(
-        self,
-        widgets_config: dict,
-        shadows_config: dict,
-        screen_index: int,
-        thread_manager: Optional["ThreadManager"] = None,
-    ) -> Optional[MediaWidget]:
-        """
-        Create and configure a media widget.
-        
-        Args:
-            widgets_config: Full widgets configuration dict
-            shadows_config: Shadow configuration dict
-            screen_index: Screen index for monitor selection
-            thread_manager: Optional ThreadManager for async operations
-            
-        Returns:
-            Created MediaWidget or None if disabled
-        """
-        media_settings = widgets_config.get('media', {}) if isinstance(widgets_config, dict) else {}
-        media_model = MediaWidgetSettings.from_mapping(media_settings if isinstance(media_settings, Mapping) else {})
-        enabled = SettingsManager.to_bool(media_model.enabled, False)
-        monitor_sel = media_model.monitor
-        try:
-            show_on_this = (monitor_sel == 'ALL') or (int(monitor_sel) == (screen_index + 1))
-        except Exception:
-            show_on_this = False
-
-        if not (enabled and show_on_this):
-            return None
-
-        self.add_expected_overlay("media")
-
-        # Resolve position with full legacy normalization.
-        try:
-            normalized = coerce_widget_position(media_model.position, WidgetPosition.BOTTOM_LEFT)
-            position_lookup = {
-                WidgetPosition.TOP_LEFT: MediaPosition.TOP_LEFT,
-                WidgetPosition.TOP_CENTER: MediaPosition.TOP_CENTER,
-                WidgetPosition.TOP_RIGHT: MediaPosition.TOP_RIGHT,
-                WidgetPosition.MIDDLE_LEFT: MediaPosition.MIDDLE_LEFT,
-                WidgetPosition.CENTER: MediaPosition.CENTER,
-                WidgetPosition.MIDDLE_RIGHT: MediaPosition.MIDDLE_RIGHT,
-                WidgetPosition.BOTTOM_LEFT: MediaPosition.BOTTOM_LEFT,
-                WidgetPosition.BOTTOM_CENTER: MediaPosition.BOTTOM_CENTER,
-                WidgetPosition.BOTTOM_RIGHT: MediaPosition.BOTTOM_RIGHT,
-            }
-            position = position_lookup.get(normalized, MediaPosition.BOTTOM_LEFT)
-            position_str = normalized.value.replace("_", " ").title()
-        except Exception as e:
-            logger.error(f"[WIDGET_MANAGER] Error resolving media position: {e}")
-            position = MediaPosition.BOTTOM_LEFT
-            position_str = "Bottom Left"
-
-        try:
-            widget = MediaWidget(self._parent, position=position)
-
-            if thread_manager is not None and hasattr(widget, "set_thread_manager"):
-                try:
-                    widget.set_thread_manager(thread_manager)
-                except Exception:
-                    pass
-
-            font_family = media_model.font_family
-            if hasattr(widget, 'set_font_family'):
-                widget.set_font_family(font_family)
-
-            try:
-                font_size = int(media_model.font_size)
-            except Exception:
-                font_size = 20
-
-            try:
-                widget.set_background_opacity(0.9)
-            except Exception:
-                widget.set_background_opacity(0.9)
-
-            try:
-                margin_val = int(media_model.margin)
-            except Exception:
-                margin_val = 20
-            widget.set_margin(margin_val)
-
-            # Artwork size, border shape, and controls visibility
-            try:
-                if hasattr(widget, 'set_artwork_size'):
-                    widget.set_artwork_size(int(media_model.artwork_size))
-            except Exception:
-                pass
-            try:
-                if hasattr(widget, 'set_rounded_artwork_border'):
-                    widget.set_rounded_artwork_border(bool(media_model.rounded_artwork_border))
-            except Exception:
-                pass
-            try:
-                if hasattr(widget, 'set_show_controls'):
-                    widget.set_show_controls(SettingsManager.to_bool(media_model.show_controls, True))
-            except Exception:
-                pass
-            try:
-                if hasattr(widget, 'set_show_header_frame'):
-                    widget.set_show_header_frame(SettingsManager.to_bool(media_model.show_header_frame, True))
-            except Exception:
-                pass
-
-            qcolor = parse_color_to_qcolor(media_model.color)
-            if qcolor:
-                widget.set_text_color(qcolor)
-
-            show_background = SettingsManager.to_bool(media_model.show_background, True)
-            widget.set_show_background(show_background)
-
-            bg_qcolor = parse_color_to_qcolor(media_model.bg_color)
-            if bg_qcolor:
-                widget.set_background_color(bg_qcolor)
-
-            try:
-                bg_opacity = float(media_model.background_opacity)
-            except Exception:
-                bg_opacity = 0.9
-            widget.set_background_opacity(bg_opacity)
-
-            # Border color and opacity
-            try:
-                bo = float(media_model.border_opacity)
-            except Exception:
-                bo = 0.8
-            border_qcolor = parse_color_to_qcolor(media_model.border_color, opacity_override=bo)
-            if border_qcolor:
-                widget.set_background_border(2, border_qcolor)
-
-            try:
-                intense_shadow = SettingsManager.to_bool(media_model.intense_shadow, False)
-                if hasattr(widget, 'set_intense_shadow'):
-                    widget.set_intense_shadow(intense_shadow)
-            except Exception:
-                pass
-
-            try:
-                if hasattr(widget, "set_shadow_config"):
-                    widget.set_shadow_config(shadows_config)
-                else:
-                    apply_widget_shadow(widget, shadows_config, has_background_frame=show_background)
-            except Exception:
-                pass
-
-            self.register_widget("media", widget)
-            widget.raise_()
-            # NOTE: start() deferred to setup_all_widgets for fade sync
-            logger.info("✅ Media widget created: %s, font=%spx, margin=%d", position_str, font_size, margin_val)
-            return widget
-        except Exception as e:
-            logger.error("Failed to create media widget: %s", e, exc_info=True)
-            return None
-
-    def create_reddit_widget(
-        self,
-        settings_key: str,
-        widgets_config: dict,
-        shadows_config: dict,
-        screen_index: int,
-        thread_manager: Optional["ThreadManager"] = None,
-        base_reddit_settings: Optional[dict] = None,
-    ) -> Optional[RedditWidget]:
-        """
-        Create and configure a Reddit widget.
-        
-        Args:
-            settings_key: Settings key ('reddit' or 'reddit2')
-            widgets_config: Full widgets configuration dict
-            shadows_config: Shadow configuration dict
-            screen_index: Screen index for monitor selection
-            thread_manager: Optional ThreadManager for async operations
-            base_reddit_settings: For reddit2, inherit styling from reddit1
-            
-        Returns:
-            Created RedditWidget or None if disabled
-        """
-        try:
-            reddit_settings = widgets_config.get(settings_key, {}) if isinstance(widgets_config, dict) else {}
-            base_model = RedditWidgetSettings.from_mapping(base_reddit_settings if isinstance(base_reddit_settings, Mapping) else {})
-            reddit_model = RedditWidgetSettings.from_mapping(reddit_settings if isinstance(reddit_settings, Mapping) else {})
-            reddit_enabled = SettingsManager.to_bool(reddit_model.enabled, False)
-            reddit_monitor_sel = reddit_model.monitor
-            
-            try:
-                show_on_this = (reddit_monitor_sel == 'ALL') or (int(reddit_monitor_sel) == (screen_index + 1))
-            except Exception:
-                show_on_this = False
-
-            if not (reddit_enabled and show_on_this):
-                return None
-
-            self.add_expected_overlay(settings_key)
-
-            # For reddit2, inherit styling from reddit1 when present.
-            style_model = base_model if (settings_key == 'reddit2' and base_reddit_settings) else reddit_model
-            style_fallback = base_reddit_settings if (settings_key == 'reddit2' and isinstance(base_reddit_settings, Mapping)) else None
-
-            def inherit_style(key: str, default=None):
-                if isinstance(reddit_settings, Mapping) and key in reddit_settings:
-                    return reddit_settings.get(key)
-                if isinstance(style_fallback, Mapping) and key in style_fallback:
-                    return style_fallback.get(key)
-                return default
-
-            widget_position = coerce_widget_position(reddit_model.position, WidgetPosition.TOP_LEFT)
-            position_str = widget_position.value.replace("_", " ").title()
-            subreddit = reddit_model.subreddit or 'wallpapers'
-            
-            # Styling inheritance with fallback to reddit1 when configuring reddit2.
-            font_size = inherit_style('font_size', style_model.font_size)
-            margin = inherit_style('margin', getattr(style_model, "margin", 20))
-            color = inherit_style('color', [255, 255, 255, 230])
-            bg_color_data = inherit_style('bg_color', [35, 35, 35, 255])
-            border_color_data = inherit_style('border_color', [255, 255, 255, 255])
-            border_opacity = inherit_style('border_opacity', 1.0)
-            show_background = SettingsManager.to_bool(inherit_style('show_background', style_model.show_background), True)
-            show_separators = SettingsManager.to_bool(inherit_style('show_separators', style_model.show_separators), True)
-            bg_opacity = inherit_style('bg_opacity', 1.0)
-            font_family = inherit_style('font_family', style_model.font_family)
-            
-            # Limit comes from own settings
-            try:
-                limit_val = int(reddit_settings.get('limit', 10))
-            except Exception:
-                limit_val = 10
-            limit_val = max(4, min(limit_val, 25))
-
-            reddit_position_map = {
-                WidgetPosition.TOP_LEFT: RedditPosition.TOP_LEFT,
-                WidgetPosition.TOP_CENTER: RedditPosition.TOP_CENTER,
-                WidgetPosition.TOP_RIGHT: RedditPosition.TOP_RIGHT,
-                WidgetPosition.MIDDLE_LEFT: RedditPosition.MIDDLE_LEFT,
-                WidgetPosition.CENTER: RedditPosition.CENTER,
-                WidgetPosition.MIDDLE_RIGHT: RedditPosition.MIDDLE_RIGHT,
-                WidgetPosition.BOTTOM_LEFT: RedditPosition.BOTTOM_LEFT,
-                WidgetPosition.BOTTOM_CENTER: RedditPosition.BOTTOM_CENTER,
-                WidgetPosition.BOTTOM_RIGHT: RedditPosition.BOTTOM_RIGHT,
-            }
-            position = reddit_position_map.get(widget_position, RedditPosition.BOTTOM_RIGHT)
-
-            widget = RedditWidget(self._parent, subreddit=subreddit, position=position)
-
-            if thread_manager is not None and hasattr(widget, "set_thread_manager"):
-                try:
-                    widget.set_thread_manager(thread_manager)
-                except Exception:
-                    pass
-
-            if hasattr(widget, 'set_font_family'):
-                widget.set_font_family(font_family)
-
-            try:
-                widget.set_font_size(int(font_size))
-            except Exception:
-                widget.set_font_size(14)
-
-            try:
-                margin_val = int(margin)
-            except Exception:
-                margin_val = 20
-            widget.set_margin(margin_val)
-
-            qcolor = parse_color_to_qcolor(color)
-            if qcolor:
-                widget.set_text_color(qcolor)
-
-            widget.set_show_background(show_background)
-
-            try:
-                widget.set_show_separators(show_separators)
-            except Exception:
-                pass
-
-            bg_qcolor = parse_color_to_qcolor(bg_color_data)
-            if bg_qcolor:
-                widget.set_background_color(bg_qcolor)
-
-            try:
-                bg_opacity_f = float(bg_opacity)
-            except Exception:
-                bg_opacity_f = 0.9
-            widget.set_background_opacity(bg_opacity_f)
-
-            # Border color and opacity
-            try:
-                bo = float(border_opacity)
-            except Exception:
-                bo = 0.8
-            border_qcolor = parse_color_to_qcolor(border_color_data, opacity_override=bo)
-            if border_qcolor:
-                widget.set_background_border(2, border_qcolor)
-
-            # Item limit
-            try:
-                widget.set_item_limit(limit_val)
-            except Exception:
-                pass
-
-            # Intense shadow
-            try:
-                intense_shadow = SettingsManager.to_bool(style_model.intense_shadow, False)
-                if hasattr(widget, 'set_intense_shadow'):
-                    widget.set_intense_shadow(intense_shadow)
-            except Exception:
-                pass
-
-            # Shadow config
-            try:
-                if hasattr(widget, "set_shadow_config"):
-                    widget.set_shadow_config(shadows_config)
-                else:
-                    apply_widget_shadow(widget, shadows_config, has_background_frame=show_background)
-            except Exception:
-                pass
-
-            # Overlay name for fade coordination
-            try:
-                if hasattr(widget, 'set_overlay_name'):
-                    widget.set_overlay_name(settings_key)
-            except Exception:
-                pass
-
-            self.register_widget(settings_key, widget)
-            widget.raise_()
-            # NOTE: start() deferred to setup_all_widgets for fade sync
-            logger.info("✅ %s widget created: r/%s, %s, font=%spx, limit=%d", settings_key, subreddit, position_str, font_size, limit_val)
-            return widget
-        except Exception as e:
-            logger.error("Failed to create %s widget: %s", settings_key, e, exc_info=True)
-            return None
+    # NOTE: create_clock_widget, create_weather_widget, create_media_widget,
+    # create_reddit_widget have been removed. setup_all_widgets() now uses
+    # the WidgetFactoryRegistry for these widgets. Spotify widgets still use
+    # direct methods below due to complex media widget anchoring logic.
 
     def setup_all_widgets(
         self,
@@ -2143,10 +1493,13 @@ class WidgetManager:
         thread_manager: Optional["ThreadManager"] = None,
     ) -> dict:
         """
-        Set up all overlay widgets based on settings.
+        Set up all overlay widgets based on settings using the factory registry.
         
         This is the main entry point for widget creation, replacing the
         monolithic _setup_widgets method in DisplayWidget.
+        
+        Phase 2 Refactor (Jan 2026): Now delegates to WidgetFactoryRegistry
+        for widget creation instead of inline create_*_widget methods.
         
         Args:
             settings_manager: SettingsManager instance
@@ -2161,14 +1514,19 @@ class WidgetManager:
             return {}
 
         self._attach_settings_manager(settings_manager)
+        
+        # Initialize factory registry if not already done
+        if self._factory_registry is None:
+            self.set_factory_registry(settings_manager, thread_manager)
 
-        logger.debug("Setting up overlay widgets for screen %d", screen_index)
+        logger.debug("Setting up overlay widgets for screen %d via factory registry", screen_index)
 
         widgets_config = settings_manager.get('widgets', {})
         if not isinstance(widgets_config, dict):
             widgets_config = {}
 
         base_clock_settings = widgets_config.get('clock', {}) if isinstance(widgets_config, dict) else {}
+        base_reddit_settings = widgets_config.get('reddit', {}) if isinstance(widgets_config, dict) else {}
         shadows_config = widgets_config.get('shadows', {}) if isinstance(widgets_config, dict) else {}
 
         # Reset fade coordination
@@ -2176,43 +1534,111 @@ class WidgetManager:
 
         created = {}
 
-        # Create clock widgets
+        # Helper to check monitor selection
+        def _show_on_this_monitor(monitor_sel) -> bool:
+            try:
+                return (monitor_sel == 'ALL') or (int(monitor_sel) == (screen_index + 1))
+            except Exception:
+                return True
+
+        # Get factory instances
+        clock_factory = self._factory_registry.get_factory("clock")
+        weather_factory = self._factory_registry.get_factory("weather")
+        media_factory = self._factory_registry.get_factory("media")
+        reddit_factory = self._factory_registry.get_factory("reddit")
+
+        # Create clock widgets via factory
         for settings_key, attr_name, default_pos, default_size in [
             ('clock', 'clock_widget', 'Top Right', 48),
             ('clock2', 'clock2_widget', 'Bottom Right', 32),
             ('clock3', 'clock3_widget', 'Bottom Left', 32),
         ]:
-            widget = self.create_clock_widget(
-                settings_key, attr_name, default_pos, default_size,
-                widgets_config, shadows_config, base_clock_settings,
-                screen_index, thread_manager,
-            )
-            if widget:
-                created[attr_name] = widget
+            clock_settings = widgets_config.get(settings_key, {})
+            monitor_sel = clock_settings.get('monitor', 'ALL')
+            if not _show_on_this_monitor(monitor_sel):
+                continue
+            
+            # Add expected overlay for fade coordination
+            if SettingsManager.to_bool(clock_settings.get('enabled', False), False):
+                self.add_expected_overlay(settings_key)
+            
+            # Inject defaults for factory
+            clock_settings['_default_position'] = default_pos
+            clock_settings['_default_font_size'] = default_size
+            
+            if clock_factory:
+                widget = clock_factory.create(
+                    self._parent, clock_settings,
+                    settings_key=settings_key,
+                    base_clock_settings=base_clock_settings if settings_key != 'clock' else None,
+                    shadows_config=shadows_config,
+                    overlay_name=settings_key,
+                )
+                if widget:
+                    self.register_widget(settings_key, widget)
+                    widget.raise_()
+                    created[attr_name] = widget
 
-        # Create weather widget
-        widget = self.create_weather_widget(widgets_config, shadows_config, screen_index, thread_manager)
-        if widget:
-            created['weather_widget'] = widget
+        # Create weather widget via factory
+        weather_settings = widgets_config.get('weather', {})
+        monitor_sel = weather_settings.get('monitor', 'ALL')
+        if _show_on_this_monitor(monitor_sel):
+            if SettingsManager.to_bool(weather_settings.get('enabled', False), False):
+                self.add_expected_overlay("weather")
+            
+            if weather_factory:
+                widget = weather_factory.create(
+                    self._parent, weather_settings,
+                    shadows_config=shadows_config,
+                )
+                if widget:
+                    self.register_widget("weather", widget)
+                    widget.raise_()
+                    created['weather_widget'] = widget
 
-        # Create media widget
-        media_widget = self.create_media_widget(widgets_config, shadows_config, screen_index, thread_manager)
-        if media_widget:
-            created['media_widget'] = media_widget
+        # Create media widget via factory
+        media_settings = widgets_config.get('media', {})
+        monitor_sel = media_settings.get('monitor', 'ALL')
+        if _show_on_this_monitor(monitor_sel):
+            if SettingsManager.to_bool(media_settings.get('enabled', False), False):
+                self.add_expected_overlay("media")
+            
+            if media_factory:
+                media_widget = media_factory.create(
+                    self._parent, media_settings,
+                    shadows_config=shadows_config,
+                )
+                if media_widget:
+                    self.register_widget("media", media_widget)
+                    media_widget.raise_()
+                    created['media_widget'] = media_widget
 
-        # Create reddit widgets (reddit2 inherits styling from reddit1)
-        base_reddit_settings = widgets_config.get('reddit', {}) if isinstance(widgets_config, dict) else {}
+        # Create reddit widgets via factory (reddit2 inherits styling from reddit1)
         for settings_key, attr_name in [('reddit', 'reddit_widget'), ('reddit2', 'reddit2_widget')]:
-            widget = self.create_reddit_widget(
-                settings_key, widgets_config, shadows_config, screen_index, thread_manager,
-                base_reddit_settings=base_reddit_settings if settings_key == 'reddit2' else None,
-            )
-            if widget:
-                created[attr_name] = widget
+            reddit_settings = widgets_config.get(settings_key, {})
+            monitor_sel = reddit_settings.get('monitor', 'ALL')
+            if not _show_on_this_monitor(monitor_sel):
+                continue
+            
+            if SettingsManager.to_bool(reddit_settings.get('enabled', False), False):
+                self.add_expected_overlay(settings_key)
+            
+            if reddit_factory:
+                widget = reddit_factory.create(
+                    self._parent, reddit_settings,
+                    settings_key=settings_key,
+                    base_reddit_settings=base_reddit_settings if settings_key == 'reddit2' else None,
+                    shadows_config=shadows_config,
+                )
+                if widget:
+                    self.register_widget(settings_key, widget)
+                    widget.raise_()
+                    created[attr_name] = widget
 
         # Gmail widget archived - see archive/gmail_feature/
 
-        # Create Spotify widgets (require media widget)
+        # Create Spotify widgets (require media widget) - still use direct methods
+        # as they have complex media widget anchoring logic
         media_widget = created.get('media_widget')
         if media_widget:
             # Spotify volume widget
@@ -2242,7 +1668,7 @@ class WidgetManager:
                 except Exception as e:
                     logger.debug("Failed to start %s: %s", attr_name, e)
 
-        logger.info("Widget setup complete: %d widgets created and started", len(created))
+        logger.info("Widget setup complete: %d widgets created and started via factories", len(created))
         return created
 
     def create_spotify_volume_widget(

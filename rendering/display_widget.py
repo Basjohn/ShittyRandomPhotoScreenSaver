@@ -2979,7 +2979,13 @@ class DisplayWidget(QWidget):
                 self.setGeometry(self._screen.geometry())
             
             self.show()
-            self.raise_()
+            
+            if on_top:
+                # Bring to front when enabling on-top
+                self.raise_()
+            else:
+                # Lower behind other windows when disabling on-top
+                self.lower()
             
             # Re-enable updates
             self.setUpdatesEnabled(True)

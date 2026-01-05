@@ -28,7 +28,21 @@ A living map of modules, purposes, and key classes. Keep this up to date.
     - Fixed ClockWidget recursion bug (set_visual_padding calling _update_position)
     - Added 4 cross-widget margin alignment regression tests
     - Added 10 comprehensive stacking tests (33 total positioner tests)
-    - 72 widget tests passing (19 visual padding + 21 widget manager + 33 positioner)
+  - **WidgetManager Factory Refactoring** (Jan 5, 2026): Delegated widget creation to factories
+    - Enhanced `ClockWidgetFactory` with full settings inheritance (clock2/clock3 from clock)
+    - Enhanced `WeatherWidgetFactory` with full settings support
+    - Enhanced `MediaWidgetFactory` with MediaWidgetSettings model integration
+    - Enhanced `RedditWidgetFactory` with full settings inheritance (reddit2 from reddit)
+    - Refactored `setup_all_widgets()` to use `WidgetFactoryRegistry`
+    - **Phase 2**: Removed legacy `create_*_widget` methods (2577→1926 LOC, ~650 lines removed)
+    - Fixed `test_settings_no_sources_popup.py` to use isolated settings (prevents `/some/folder` corruption)
+    - Added Eco Mode systray indicator (`set_eco_mode_callback()` in `ScreensaverTrayIcon`)
+  - **Bug Fixes** (Jan 5, 2026):
+    - Fixed `RedditWidgetFactory` using wrong model attributes (`subreddits` → `subreddit`, `length` → `item_limit`)
+    - Fixed MC mode On Top disable to lower window behind others (was raising)
+    - Added periodic CPU refresh timer (5 seconds) to systray tooltip
+    - Created `tests/test_worker_consolidated.py` with 30 parameterized tests
+    - **1348 tests collected** (150 widget/worker tests passing)
 
 ## Core Managers
 - core/threading/manager.py

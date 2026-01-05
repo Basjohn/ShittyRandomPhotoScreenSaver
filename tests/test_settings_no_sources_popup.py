@@ -5,11 +5,33 @@ Tests cover:
 - Popup creation and display
 - Signal emission for both choices
 - Integration with SettingsDialog source validation
+
+IMPORTANT: Tests use temporary settings files to avoid corrupting user settings.
 """
 import pytest
 from unittest.mock import patch
 
 from ui.settings_dialog import NoSourcesPopup
+
+
+@pytest.fixture
+def isolated_settings():
+    """Create an isolated settings dict for testing without touching real settings.
+    
+    Uses a simple dict-based mock to avoid any file I/O or real SettingsManager state.
+    """
+    class MockSettings:
+        """Simple mock settings manager for isolated testing."""
+        def __init__(self):
+            self._data = {}
+        
+        def get(self, key, default=None):
+            return self._data.get(key, default)
+        
+        def set(self, key, value):
+            self._data[key] = value
+    
+    return MockSettings()
 
 
 class TestNoSourcesPopupCreation:
@@ -66,14 +88,15 @@ class TestNoSourcesPopupSignals:
 
 
 class TestSettingsDialogSourceValidation:
-    """Tests for SettingsDialog source validation logic (unit tests without full dialog)."""
+    """Tests for SettingsDialog source validation logic (unit tests without full dialog).
     
-    def test_has_sources_logic_with_folders(self):
+    IMPORTANT: Uses isolated_settings fixture to avoid corrupting user settings.
+    """
+    
+    def test_has_sources_logic_with_folders(self, isolated_settings):
         """Test source validation logic with folders."""
-        from core.settings.settings_manager import SettingsManager
-        
-        settings = SettingsManager()
-        settings.set('sources.folders', ['/some/folder'])
+        settings = isolated_settings
+        settings.set('sources.folders', ['/test/folder'])
         settings.set('sources.rss_feeds', [])
         
         folders = settings.get('sources.folders', [])
@@ -82,11 +105,9 @@ class TestSettingsDialogSourceValidation:
         
         assert has_sources is True
     
-    def test_has_sources_logic_with_rss(self):
+    def test_has_sources_logic_with_rss(self, isolated_settings):
         """Test source validation logic with RSS feeds."""
-        from core.settings.settings_manager import SettingsManager
-        
-        settings = SettingsManager()
+        settings = isolated_settings
         settings.set('sources.folders', [])
         settings.set('sources.rss_feeds', ['https://example.com/feed'])
         
@@ -96,11 +117,9 @@ class TestSettingsDialogSourceValidation:
         
         assert has_sources is True
     
-    def test_has_sources_logic_empty(self):
+    def test_has_sources_logic_empty(self, isolated_settings):
         """Test source validation logic with no sources."""
-        from core.settings.settings_manager import SettingsManager
-        
-        settings = SettingsManager()
+        settings = isolated_settings
         settings.set('sources.folders', [])
         settings.set('sources.rss_feeds', [])
         
@@ -110,12 +129,10 @@ class TestSettingsDialogSourceValidation:
         
         assert has_sources is False
     
-    def test_has_sources_logic_with_both(self):
+    def test_has_sources_logic_with_both(self, isolated_settings):
         """Test source validation logic with both sources."""
-        from core.settings.settings_manager import SettingsManager
-        
-        settings = SettingsManager()
-        settings.set('sources.folders', ['/some/folder'])
+        settings = isolated_settings
+        settings.set('sources.folders', ['/test/folder'])
         settings.set('sources.rss_feeds', ['https://example.com/feed'])
         
         folders = settings.get('sources.folders', [])
@@ -143,11 +160,9 @@ class TestAddDefaultSourcesLogic:
         assert any('nasa.gov' in feed for feed in curated_feeds)
         assert any('reddit.com' in feed for feed in curated_feeds)
     
-    def test_add_feeds_to_settings(self):
+    def test_add_feeds_to_settings(self, isolated_settings):
         """Test adding feeds to settings manager."""
-        from core.settings.settings_manager import SettingsManager
-        
-        settings = SettingsManager()
+        settings = isolated_settings
         settings.set('sources.rss_feeds', [])
         
         curated_feeds = [

@@ -85,3 +85,32 @@ Shadow corruption happens in both builds but almost never in non-mc ones with cu
 - Keep logging concise: use `[MC TOOL FOCUS]` with structured key/value pairs so we can grep easily.
 - Avoid touching `Spec.md` until the design is approved (to prevent churn).
 - Once weather widget fix lands, schedule time to audit other overlays for margin drift.
+---------------------
+
+Alternative document insights pulled from Roadmap
+
+### 4.3 Volume Key Passthrough (MC Mode)
+**Priority**: LOW - DEFERRED
+**Dependencies**: ALL other roadmap items complete
+**Reference**: `audits/mc_focus_weather_plan.md` (detailed investigation and plan)
+
+⚠️ **DEFERRED UNTIL ALL OTHER TASKS COMPLETED AND VERIFIED** ⚠️
+
+This task requires extensive investigation due to tight coupling between focus handling and shadow cache invalidation. The reference document contains:
+- Root cause analysis of keyboard interaction issues
+- Shadow cache invalidation mitigations
+- Proposed solutions with risk assessment
+- Test plan for validation
+
+**Key Constraint**: No keys in MC Mode is better than shadow cache corruption. Any solution MUST NOT break shadow cache invalidation mitigations.
+
+- [ ] Research task online for similar issues, solutions and failures
+- [ ] **MC mode working keys**: Currently MC mode on one display breaks ALL keyboard interaction unless user opens right-click menu first, then loses it on focus swap
+- [ ] Add Spacebar Local Hotkey that triggers pause/play in media widget if present
+- [ ] **Spotify volume isolation**: Prevent interference
+- [ ] **Test media players**: Various apps and states
+- [ ] **Document behavior**: Build-specific differences
+- [ ] **Make backups before any changes** - very risky task
+
+We are not to implement this task unless explicitly requested as it has more risks than benefits.
+You can however consolidate this document into a neater version of itself.
