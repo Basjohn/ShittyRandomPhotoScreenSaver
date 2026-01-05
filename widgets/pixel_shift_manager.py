@@ -371,8 +371,14 @@ class PixelShiftManager:
         return (self._offset_x, self._offset_y)
     
     def _apply_offset(self) -> None:
-        """Apply the current offset to all registered widgets."""
+        """Apply the current offset to all registered widgets.
+        
+        For widgets that support apply_pixel_shift() (BaseOverlayWidget subclasses),
+        we use that method so the offset is integrated into their position calculation.
+        For other widgets, we move them directly.
+        """
         from shiboken6 import Shiboken
+        from PySide6.QtCore import QPoint
         
         # Clean up destroyed widgets - use in-place filtering to avoid list recreation
         valid_widgets = []
@@ -385,42 +391,55 @@ class PixelShiftManager:
                     pass
         self._widgets = valid_widgets
         
+        offset_point = QPoint(self._offset_x, self._offset_y)
+        
         for widget in self._widgets:
             widget_id = id(widget)
-            if widget_id not in self._original_positions:
-                continue
             
             try:
-                orig = self._original_positions[widget_id]
-                new_x = orig.x() + self._offset_x
-                new_y = orig.y() + self._offset_y
-                
-                # Block signals during move to prevent flicker from layout updates
-                was_blocked = widget.signalsBlocked()
-                widget.blockSignals(True)
-                try:
-                    widget.move(new_x, new_y)
-                finally:
-                    widget.blockSignals(was_blocked)
+                # Prefer apply_pixel_shift() for BaseOverlayWidget subclasses
+                # This integrates the offset into their position calculation
+                if hasattr(widget, 'apply_pixel_shift'):
+                    widget.apply_pixel_shift(offset_point)
+                elif widget_id in self._original_positions:
+                    # Fallback: direct move for non-overlay widgets
+                    orig = self._original_positions[widget_id]
+                    new_x = orig.x() + self._offset_x
+                    new_y = orig.y() + self._offset_y
+                    
+                    # Block signals during move to prevent flicker from layout updates
+                    was_blocked = widget.signalsBlocked()
+                    widget.blockSignals(True)
+                    try:
+                        widget.move(new_x, new_y)
+                    finally:
+                        widget.blockSignals(was_blocked)
             except Exception:
                 # Widget may have been destroyed
                 pass
     
     def _reset_positions(self) -> None:
         """Reset all widgets to their original positions."""
+        from PySide6.QtCore import QPoint
+        
         self._offset_x = 0
         self._offset_y = 0
+        
+        zero_offset = QPoint(0, 0)
         
         for widget in self._widgets:
             if widget is None:
                 continue
             
             widget_id = id(widget)
-            if widget_id not in self._original_positions:
-                continue
             
             try:
-                orig = self._original_positions[widget_id]
-                widget.move(orig)
+                # Prefer apply_pixel_shift() for BaseOverlayWidget subclasses
+                if hasattr(widget, 'apply_pixel_shift'):
+                    widget.apply_pixel_shift(zero_offset)
+                elif widget_id in self._original_positions:
+                    # Fallback: direct move for non-overlay widgets
+                    orig = self._original_positions[widget_id]
+                    widget.move(orig)
             except Exception:
                 pass

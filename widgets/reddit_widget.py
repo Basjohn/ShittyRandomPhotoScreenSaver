@@ -1192,65 +1192,34 @@ class RedditWidget(BaseOverlayWidget):
             )
 
     def _update_position(self) -> None:
-        if not self.parent():
-            return
-
-        parent_width = self.parent().width()
-        parent_height = self.parent().height()
-        widget_width = self.width()
-        widget_height = self.height()
-
-        edge = max(10, self._margin)
-        pos = self._reddit_position
+        """Update widget position using centralized base class logic.
         
-        if pos == RedditPosition.TOP_LEFT:
-            x = edge
-            y = edge
-        elif pos == RedditPosition.TOP_CENTER:
-            x = (parent_width - widget_width) // 2
-            y = edge
-        elif pos == RedditPosition.TOP_RIGHT:
-            x = parent_width - widget_width - edge
-            y = edge
-        elif pos == RedditPosition.MIDDLE_LEFT:
-            x = edge
-            y = (parent_height - widget_height) // 2
-        elif pos == RedditPosition.CENTER:
-            x = (parent_width - widget_width) // 2
-            y = (parent_height - widget_height) // 2
-        elif pos == RedditPosition.MIDDLE_RIGHT:
-            x = parent_width - widget_width - edge
-            y = (parent_height - widget_height) // 2
-        elif pos == RedditPosition.BOTTOM_LEFT:
-            x = edge
-            y = parent_height - widget_height - edge
-        elif pos == RedditPosition.BOTTOM_CENTER:
-            x = (parent_width - widget_width) // 2
-            y = parent_height - widget_height - edge
-        elif pos == RedditPosition.BOTTOM_RIGHT:
-            x = parent_width - widget_width - edge
-            y = parent_height - widget_height - edge
-        else:
-            x = edge
-            y = edge
-
-        # Apply pixel shift and stack offset (inherited from BaseOverlayWidget)
-        x += self._pixel_shift_offset.x() + self._stack_offset.x()
-        y += self._pixel_shift_offset.y() + self._stack_offset.y()
-
-        self.move(x, y)
+        Delegates to BaseOverlayWidget._update_position() which handles:
+        - Margin-based positioning for all 9 anchor positions
+        - Visual padding offsets (when background is disabled)
+        - Pixel shift and stack offset application
+        - Bounds clamping to prevent off-screen drift
         
-        # Notify PixelShiftManager of our new "original" position so it doesn't
-        # apply offsets to a stale position. This prevents the teleport bug where
-        # the widget briefly appears at an old position during transitions.
-        parent = self.parent()
-        if parent is not None:
-            psm = getattr(parent, "_pixel_shift_manager", None)
-            if psm is not None and hasattr(psm, "update_original_position"):
-                try:
-                    psm.update_original_position(self)
-                except Exception:
-                    pass
+        This ensures consistent margin alignment across all overlay widgets.
+        """
+        # Sync RedditPosition to OverlayPosition for base class
+        position_map = {
+            RedditPosition.TOP_LEFT: OverlayPosition.TOP_LEFT,
+            RedditPosition.TOP_CENTER: OverlayPosition.TOP_CENTER,
+            RedditPosition.TOP_RIGHT: OverlayPosition.TOP_RIGHT,
+            RedditPosition.MIDDLE_LEFT: OverlayPosition.MIDDLE_LEFT,
+            RedditPosition.CENTER: OverlayPosition.CENTER,
+            RedditPosition.MIDDLE_RIGHT: OverlayPosition.MIDDLE_RIGHT,
+            RedditPosition.BOTTOM_LEFT: OverlayPosition.BOTTOM_LEFT,
+            RedditPosition.BOTTOM_CENTER: OverlayPosition.BOTTOM_CENTER,
+            RedditPosition.BOTTOM_RIGHT: OverlayPosition.BOTTOM_RIGHT,
+        }
+        
+        # Update base class position
+        self._position = position_map.get(self._reddit_position, OverlayPosition.TOP_RIGHT)
+        
+        # Delegate to base class for centralized margin/positioning logic
+        super()._update_position()
 
     def _load_brand_pixmap(self) -> Optional[QPixmap]:
         """Load Reddit logo glyph from images/Reddit_Logo_C.png if present."""

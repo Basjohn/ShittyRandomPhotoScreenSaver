@@ -321,90 +321,43 @@ class MediaWidget(BaseOverlayWidget):
             self._update_timer = None
 
     def _update_position(self) -> None:
-        if not self.parent():
-            return
-
-        parent_width = self.parent().width()
-        parent_height = self.parent().height()
-        widget_width = self.width()
-        widget_height = self.height()
+        """Update widget position using centralized base class logic.
         
+        Delegates to BaseOverlayWidget._update_position() which handles:
+        - Margin-based positioning for all 9 anchor positions
+        - Visual padding offsets (when background is disabled)
+        - Pixel shift and stack offset application
+        - Bounds clamping to prevent off-screen drift
+        
+        This ensures consistent margin alignment across all overlay widgets.
+        """
         # Guard against positioning before widget has valid size
-        # This prevents the "jump from top-left to bottom-left" issue
-        if widget_width <= 0 or widget_height <= 0:
-            # Schedule a deferred position update after the widget gets its size
+        if self.width() <= 0 or self.height() <= 0:
             QTimer.singleShot(16, self._update_position)
             return
-
-        edge_margin = max(0, int(self._margin))
-        pos = self._media_position
-
-        if pos == MediaPosition.TOP_LEFT:
-            x = edge_margin
-            y = edge_margin
-        elif pos == MediaPosition.TOP_CENTER:
-            x = (parent_width - widget_width) // 2
-            y = edge_margin
-        elif pos == MediaPosition.TOP_RIGHT:
-            x = parent_width - widget_width - edge_margin
-            y = edge_margin
-        elif pos == MediaPosition.MIDDLE_LEFT:
-            x = edge_margin
-            y = (parent_height - widget_height) // 2
-        elif pos == MediaPosition.CENTER:
-            x = (parent_width - widget_width) // 2
-            y = (parent_height - widget_height) // 2
-        elif pos == MediaPosition.MIDDLE_RIGHT:
-            x = parent_width - widget_width - edge_margin
-            y = (parent_height - widget_height) // 2
-        elif pos == MediaPosition.BOTTOM_LEFT:
-            x = edge_margin
-            y = parent_height - widget_height - edge_margin
-        elif pos == MediaPosition.BOTTOM_CENTER:
-            x = (parent_width - widget_width) // 2
-            y = parent_height - widget_height - edge_margin
-        elif pos == MediaPosition.BOTTOM_RIGHT:
-            x = parent_width - widget_width - edge_margin
-            y = parent_height - widget_height - edge_margin
-        else:
-            x = edge_margin
-            y = parent_height - widget_height - edge_margin
-
-        x += self._pixel_shift_offset.x() + self._stack_offset.x()
-        y += self._pixel_shift_offset.y() + self._stack_offset.y()
-
-        # Log unexpected position changes (helps debug teleport issues)
-        old_pos = self.pos()
-        if old_pos.x() != x or old_pos.y() != y:
-            # Only log if moving more than 10 pixels (ignore minor adjustments)
-            if abs(old_pos.x() - x) > 10 or abs(old_pos.y() - y) > 10:
-                logger.debug(
-                    "[MEDIA_WIDGET] Position changed: (%d,%d) → (%d,%d), size=%dx%d, parent=%dx%d",
-                    old_pos.x(), old_pos.y(), x, y,
-                    widget_width, widget_height, parent_width, parent_height
-                )
         
-        self.move(x, y)
+        # Sync MediaPosition to OverlayPosition for base class
+        position_map = {
+            MediaPosition.TOP_LEFT: OverlayPosition.TOP_LEFT,
+            MediaPosition.TOP_CENTER: OverlayPosition.TOP_CENTER,
+            MediaPosition.TOP_RIGHT: OverlayPosition.TOP_RIGHT,
+            MediaPosition.MIDDLE_LEFT: OverlayPosition.MIDDLE_LEFT,
+            MediaPosition.CENTER: OverlayPosition.CENTER,
+            MediaPosition.MIDDLE_RIGHT: OverlayPosition.MIDDLE_RIGHT,
+            MediaPosition.BOTTOM_LEFT: OverlayPosition.BOTTOM_LEFT,
+            MediaPosition.BOTTOM_CENTER: OverlayPosition.BOTTOM_CENTER,
+            MediaPosition.BOTTOM_RIGHT: OverlayPosition.BOTTOM_RIGHT,
+        }
         
-        # Notify PixelShiftManager of our new "original" position so it doesn't
-        # apply offsets to a stale position. This prevents the teleport bug where
-        # the widget briefly appears at (0,0) or an old position during transitions.
+        # Update base class position
+        self._position = position_map.get(self._media_position, OverlayPosition.BOTTOM_LEFT)
+        
+        # Delegate to base class for centralized margin/positioning logic
+        super()._update_position()
+
+        # Keep Spotify-related overlays anchored to the card
         parent = self.parent()
         if parent is not None:
-            psm = getattr(parent, "_pixel_shift_manager", None)
-            if psm is not None and hasattr(psm, "update_original_position"):
-                try:
-                    psm.update_original_position(self)
-                except Exception:
-                    pass
-
-        # Keep the Spotify Beat Visualizer anchored just above the media
-        # card whenever we recompute our own position. We duck-type the
-        # parent so MediaWidget remains reusable outside DisplayWidget.
-        if parent is not None:
-            # Keep Spotify-related overlays anchored to the card whenever we
-            # recompute our own position. We duck-type the parent so
-            # MediaWidget remains reusable outside DisplayWidget.
             if hasattr(parent, "_position_spotify_visualizer"):
                 try:
                     parent._position_spotify_visualizer()

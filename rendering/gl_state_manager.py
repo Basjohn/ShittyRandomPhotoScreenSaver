@@ -353,6 +353,18 @@ class GLStateManager:
                     self._state_callbacks[state] = []
                 self._state_callbacks[state].append(callback)
     
+    def add_callback(
+        self, 
+        callback: Callable[[GLContextState, GLContextState], None]
+    ) -> None:
+        """
+        Add callback for any state change (convenience method).
+        
+        Args:
+            callback: Function(old_state, new_state) to call on any state change
+        """
+        self.register_callback(None, callback)
+    
     def unregister_callback(
         self, 
         state: Optional[GLContextState], 

@@ -598,58 +598,45 @@ class ClockWidget(BaseOverlayWidget):
             self.update()
     
     def _update_position(self) -> None:
-        """Update widget position based on settings."""
-        if not self.parent():
-            return
+        """Update widget position using centralized base class logic.
         
-        parent_width = self.parent().width()
-        parent_height = self.parent().height()
-        widget_width = self.width()
-        widget_height = self.height()
+        Delegates to BaseOverlayWidget._update_position() which handles:
+        - Margin-based positioning for all 9 anchor positions
+        - Visual padding offsets (when background is disabled)
+        - Pixel shift and stack offset application
+        - Bounds clamping to prevent off-screen drift
         
-        # Use base class margin
-        edge_margin = self._margin
-        pos = self._clock_position
+        For analog mode without background, we set visual padding based on
+        the computed analog visual offset so the clock face aligns with
+        other widgets at the same margin.
+        """
+        # Sync ClockPosition to OverlayPosition for base class
+        position_map = {
+            ClockPosition.TOP_LEFT: OverlayPosition.TOP_LEFT,
+            ClockPosition.TOP_CENTER: OverlayPosition.TOP_CENTER,
+            ClockPosition.TOP_RIGHT: OverlayPosition.TOP_RIGHT,
+            ClockPosition.MIDDLE_LEFT: OverlayPosition.MIDDLE_LEFT,
+            ClockPosition.CENTER: OverlayPosition.CENTER,
+            ClockPosition.MIDDLE_RIGHT: OverlayPosition.MIDDLE_RIGHT,
+            ClockPosition.BOTTOM_LEFT: OverlayPosition.BOTTOM_LEFT,
+            ClockPosition.BOTTOM_CENTER: OverlayPosition.BOTTOM_CENTER,
+            ClockPosition.BOTTOM_RIGHT: OverlayPosition.BOTTOM_RIGHT,
+        }
         
-        # For analogue mode without background, compensate for the visual offset
-        # so the clock face aligns with other widgets at the same margin
+        # Update base class position
+        self._position = position_map.get(self._clock_position, OverlayPosition.TOP_RIGHT)
+        
+        # For analog mode without background, set visual padding based on
+        # the computed analog visual offset so the clock face aligns properly
+        # NOTE: Set padding directly to avoid recursion (set_visual_padding calls _update_position)
         visual_offset_x, visual_offset_y = self._compute_analog_visual_offset()
+        self._visual_padding_top = visual_offset_y
+        self._visual_padding_right = visual_offset_x
+        self._visual_padding_bottom = visual_offset_y
+        self._visual_padding_left = visual_offset_x
         
-        if pos == ClockPosition.TOP_LEFT:
-            x = edge_margin - visual_offset_x
-            y = edge_margin - visual_offset_y
-        elif pos == ClockPosition.TOP_CENTER:
-            x = (parent_width - widget_width) // 2
-            y = edge_margin - visual_offset_y
-        elif pos == ClockPosition.TOP_RIGHT:
-            x = parent_width - widget_width - edge_margin + visual_offset_x
-            y = edge_margin - visual_offset_y
-        elif pos == ClockPosition.MIDDLE_LEFT:
-            x = edge_margin - visual_offset_x
-            y = (parent_height - widget_height) // 2
-        elif pos == ClockPosition.CENTER:
-            x = (parent_width - widget_width) // 2
-            y = (parent_height - widget_height) // 2
-        elif pos == ClockPosition.MIDDLE_RIGHT:
-            x = parent_width - widget_width - edge_margin + visual_offset_x
-            y = (parent_height - widget_height) // 2
-        elif pos == ClockPosition.BOTTOM_LEFT:
-            x = edge_margin - visual_offset_x
-            y = parent_height - widget_height - edge_margin + visual_offset_y
-        elif pos == ClockPosition.BOTTOM_CENTER:
-            x = (parent_width - widget_width) // 2
-            y = parent_height - widget_height - edge_margin + visual_offset_y
-        elif pos == ClockPosition.BOTTOM_RIGHT:
-            x = parent_width - widget_width - edge_margin + visual_offset_x
-            y = parent_height - widget_height - edge_margin + visual_offset_y
-        else:
-            x = edge_margin - visual_offset_x
-            y = edge_margin - visual_offset_y
-
-        x += self._pixel_shift_offset.x() + self._stack_offset.x()
-        y += self._pixel_shift_offset.y() + self._stack_offset.y()
-
-        self.move(x, y)
+        # Delegate to base class for centralized margin/positioning logic
+        super()._update_position()
         
         # Position timezone label inside the background frame (bottom-right)
         if self._show_timezone and self._tz_label:

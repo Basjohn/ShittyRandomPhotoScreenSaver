@@ -3067,7 +3067,13 @@ void main() {
             paint_elapsed = (time.time() - _paint_start) * 1000.0
             self._record_paint_metrics(paint_elapsed)
             if paint_elapsed > 50.0 and is_perf_metrics_enabled():
-                logger.warning("[PERF] [GL COMPOSITOR] Slow paintGL: %.2fms", paint_elapsed)
+                # Phase 8: Include GLStateManager transition history on dt_max spikes
+                history = self._gl_state.get_transition_history(limit=5)
+                history_str = ", ".join(f"{h[0].name}→{h[1].name}" for h in history) if history else "none"
+                logger.warning(
+                    "[PERF] [GL COMPOSITOR] Slow paintGL: %.2fms (recent transitions: %s)",
+                    paint_elapsed, history_str
+                )
 
     def _try_shader_path(self, name: str, state, can_use_fn, paint_fn, target, prep_fn=None) -> bool:
         """Try to render a transition via shader path. Returns True if successful."""
@@ -3089,7 +3095,15 @@ void main() {
             return False
 
     def _paintGL_impl(self) -> None:
-        """Internal paintGL implementation."""
+        """Internal paintGL implementation.
+        
+        Phase 6 GL Warmup Protection: Gate rendering behind GLStateManager.is_ready()
+        to prevent paintGL from firing before initialization is complete.
+        """
+        # Phase 6: Prevent rendering until GL context is fully ready
+        if not self._gl_state.is_ready():
+            return
+        
         target = self.rect()
 
         # Try shader paths in priority order. On failure, fall back to QPainter.

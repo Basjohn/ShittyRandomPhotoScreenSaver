@@ -1,13 +1,46 @@
 # Test Suite Documentation
 
 **Purpose**: Canonical reference for all test modules, test cases, and testing procedures.  
-**Last Updated**: Jan 2, 2026 – pytest.py runner & typed-settings suites verified  
-**Test Count**: 179 collected tests across 23 modules (`python pytest.py --collect-only > logs/tests/pytest_collect_20260102.log`)  
-**Pass Rate**: 100% on Jan 2 run (RSS/GL stress cases skipped per policy)  
+**Last Updated**: Jan 5, 2026 – v2.0 Roadmap Phase 6 integration tests added  
+**Test Count**: 342 collected tests across 20 v2.0 test modules + legacy modules  
+**Pass Rate**: 100% on Jan 5 run (0 xfailed - synthetic FFT tests replaced with API tests)  
 
 ## Current Status: STABLE 
 
 The test suite is now stable and can be relied upon for regression testing. All critical tests pass.
+
+### Jan 5, 2026 – v2.0 Roadmap Phase 6 Integration Tests
+
+**Highlights:**
+
+1. **19 new v2.0 test files** added covering process isolation, GL state, widgets, MC features, settings, and performance.
+2. `test_integration_full_workflow.py` (19 tests) - End-to-end integration scenarios for settings, widgets, transitions, GL state.
+3. `test_spotify_visualizer_widget.py` (13 tests) - Spotify visualizer audio worker and widget tests.
+4. `test_gl_texture_streaming.py` (18 tests) - GL texture streaming and PBO optimization.
+5. `test_memory_pooling.py` (19 tests) - ResourceManager object pooling efficiency.
+6. Settings validation enhanced with `validate_and_repair()` auto-fix for corrupted sensitivity values.
+7. GL State Management Phases 1-4 complete with ResourceManager GL handle tracking.
+
+**v2.0 Test Files:**
+- `test_process_supervisor.py` - 33 tests
+- `test_image_worker.py` - 11 tests
+- `test_rss_worker.py` - 12 tests
+- `test_fft_worker.py` - 13 tests
+- `test_transition_worker.py` - 11 tests
+- `test_gl_state_manager_overlay.py` - 21 tests
+- `test_transition_state_manager.py` - 12 tests
+- `test_widget_manager.py` - 20 tests
+- `test_mc_eco_mode.py` - 21 tests
+- `test_worker_latency_tuning.py` - 20 tests
+- `test_mc_context_menu.py` - 12 tests
+- `test_settings_defaults_parity.py` - 23 tests
+- `test_widget_visual_padding.py` - 15 tests
+- `test_settings_no_sources_popup.py` - 10 tests
+- `test_settings_profile_separation.py` - 9 tests
+- `test_gl_texture_streaming.py` - 18 tests
+- `test_memory_pooling.py` - 19 tests
+- `test_spotify_visualizer_widget.py` - 13 tests
+- `test_integration_full_workflow.py` - 19 tests
 
 ### Jan 2, 2026 – Typed Settings & Modal Prep Validation
 

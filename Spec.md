@@ -405,5 +405,21 @@ The current Windows mixer approach is simpler and works for all users. Implement
 
 This is a **low-priority enhancement** that could be added post-v1.2 if users request Spotify-synced volume.
 
-**Version**: 1.250  
-**Last Updated**: Jan 04, 2026 - Phase 0 complete: Double-click navigation, media key passthrough, robust widget positioning normalization, and settings geometry persistence added. Removed legacy URL logic and retired redundant Shuffle transition keys. Updated ARCHITECTURE_AND_MULTIPROCESSING_PLAN_2026 for Phase 5 (MC Specialization).
+## v2.0 Architecture Updates (Jan 2026)
+
+### GL State Management Refactoring
+- **GLStateManager** (`rendering/gl_state_manager.py`) provides centralized GL context state management with validated state transitions.
+- **ResourceManager GL Hooks** (`core/resources/manager.py`): Added `register_gl_handle()`, `register_gl_vao()`, `register_gl_vbo()`, `register_gl_program()`, `register_gl_texture()` for VRAM leak prevention.
+- **TransitionController** (`rendering/transition_controller.py`): Added `snap_to_new` parameter to `stop_current()` for clean transition interruption.
+- All GL handles in `spotify_bars_gl_overlay.py`, `geometry_manager.py`, and `texture_manager.py` are now tracked by ResourceManager.
+
+### Settings Validation
+- **validate_and_repair()** in SettingsManager auto-fixes corrupted settings values on startup.
+- Sensitivity validation: Values below 0.5 are reset to default 1.0 to prevent visualizer regression.
+
+### Test Coverage
+- **307 unit tests** across 19 test files covering process isolation, GL state, widgets, MC features, settings, performance tuning, and integration.
+- Key test files: `test_integration_full_workflow.py` (19 tests), `test_spotify_visualizer_widget.py` (13 tests), `test_gl_texture_streaming.py` (18 tests).
+
+**Version**: 2.0.0-dev  
+**Last Updated**: Jan 05, 2026 - v2.0 Roadmap Phase 4-6 in progress: GL State Management Phases 1-4 complete, integration tests added, settings validation enhanced, 307 tests passing.

@@ -88,32 +88,85 @@ widget:
 
 ## 3. Visual Offset & Margin Alignment
 
-**Clock Widget Positioning (Analogue Mode)**
+### Centralized Positioning (REQUIRED)
 
-When positioning overlay widgets, the visual content must align with the specified margins, not the widget bounds. The clock widget demonstrates this with `_compute_analog_visual_offset()`:
+**All overlay widgets MUST delegate positioning to `BaseOverlayWidget._update_position()`.**
 
-- **With background**: No offset needed (0, 0) - background defines visual boundary
-- **Without background + with numerals**: Offset to XII numeral position (numerals are the visual boundary)
-- **Without background + without numerals**: Offset to clock face edge (face is the visual boundary)
-- **Timezone setting**: Affects bottom margin but is correctly handled in padding calculations
+The base class provides centralized margin handling that ensures:
+- Consistent margin-based positioning for all 9 anchor positions
+- Visual padding offsets (when background is disabled)
+- Pixel shift and stack offset application
+- Bounds clamping to prevent off-screen drift
 
-The offset is applied in `_update_position()` by adjusting the widget's position:
+**Implementation Pattern:**
+
 ```python
-x = edge_margin - visual_offset_x
-y = edge_margin - visual_offset_y
+def _update_position(self) -> None:
+    """Update widget position using centralized base class logic."""
+    # Sync widget-specific position enum to OverlayPosition
+    position_map = {
+        MyWidgetPosition.TOP_LEFT: OverlayPosition.TOP_LEFT,
+        MyWidgetPosition.TOP_CENTER: OverlayPosition.TOP_CENTER,
+        # ... all 9 positions
+    }
+    
+    # Update base class position
+    self._position = position_map.get(self._my_position, OverlayPosition.TOP_LEFT)
+    
+    # Delegate to base class for centralized margin/positioning logic
+    super()._update_position()
 ```
 
-This ensures the **visual content** (not widget bounds) aligns with other widgets at the same margin.
+**DO NOT** duplicate the positioning logic in subclasses. This was a source of margin alignment bugs.
 
-**Testing Requirements**
+### Margin Alignment Rules
+
+Widgets with the **same margin value** must align their **visible outer edges**:
+
+| Background State | Alignment Target |
+|------------------|------------------|
+| **Background ON** | Card border edge (no visual offset) |
+| **Background OFF** | Content edge (visual padding offset applied) |
+
+The `_compute_visual_offset()` method in `BaseOverlayWidget` handles this automatically:
+- Returns `QPoint(0, 0)` when `_show_background` is True
+- Returns appropriate offsets based on anchor position when background is disabled
+
+### Visual Padding for Custom Content
+
+Widgets with non-rectangular visual content (e.g., analog clock face) should use `set_visual_padding()` to define the offset from widget bounds to visible content:
+
+```python
+# In _update_position(), before calling super():
+visual_offset_x, visual_offset_y = self._compute_my_visual_offset()
+if visual_offset_x > 0 or visual_offset_y > 0:
+    self.set_visual_padding(
+        top=visual_offset_y,
+        right=visual_offset_x,
+        bottom=visual_offset_y,
+        left=visual_offset_x,
+    )
+else:
+    self.set_visual_padding(top=0, right=0, bottom=0, left=0)
+```
+
+### Clock Widget Analog Mode Example
+
+The clock widget demonstrates visual padding for non-rectangular content:
+
+- **With background**: No offset needed (0, 0) - background defines visual boundary
+- **Without background + with numerals**: Offset to XII numeral position
+- **Without background + without numerals**: Offset to clock face edge
+
+### Testing Requirements
 
 All positioning scenarios must be tested:
 1. With/without background
-2. With/without numerals
-3. With/without timezone
-4. All position combinations (9-grid)
+2. Cross-widget margin alignment (widgets at same margin must align)
+3. All 9 anchor positions
+4. Pixel shift integration
 
-See `tests/test_clock_widget.py` for comprehensive examples.
+See `tests/test_widget_visual_padding.py` for comprehensive examples.
 
 ---
 

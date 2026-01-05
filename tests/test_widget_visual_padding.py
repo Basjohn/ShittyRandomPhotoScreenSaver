@@ -288,5 +288,132 @@ class TestVisualPaddingWithPixelShift:
         assert pos.y() == 18
 
 
+class TestCrossWidgetMarginAlignment:
+    """Regression tests for cross-widget margin alignment.
+    
+    Widgets with the same margin value must align their visible outer edges:
+    - Background ON: Card border edge aligns (no visual offset)
+    - Background OFF: Content edge aligns (visual padding offset applied)
+    """
+    
+    def test_widgets_with_same_margin_align_with_background(self, qtbot):
+        """Test that widgets with same margin align when background is ON."""
+        parent = QWidget()
+        parent.resize(1920, 1080)
+        qtbot.addWidget(parent)
+        
+        # Create two widgets at same position with same margin
+        widget1 = ConcreteOverlayWidget(parent, OverlayPosition.TOP_LEFT)
+        widget1.set_content_size(200, 100)
+        widget1.set_margin(40)
+        widget1._show_background = True
+        qtbot.addWidget(widget1)
+        
+        widget2 = ConcreteOverlayWidget(parent, OverlayPosition.TOP_LEFT)
+        widget2.set_content_size(150, 80)
+        widget2.set_margin(40)
+        widget2._show_background = True
+        qtbot.addWidget(widget2)
+        
+        widget1._update_position()
+        widget2._update_position()
+        
+        # With background ON, both should be at margin position (no visual offset)
+        assert widget1.pos().x() == 40
+        assert widget1.pos().y() == 40
+        assert widget2.pos().x() == 40
+        assert widget2.pos().y() == 40
+    
+    def test_widgets_with_same_margin_align_without_background(self, qtbot):
+        """Test that widgets with same margin align when background is OFF."""
+        parent = QWidget()
+        parent.resize(1920, 1080)
+        qtbot.addWidget(parent)
+        
+        # Create two widgets at same position with same margin but different visual padding
+        widget1 = ConcreteOverlayWidget(parent, OverlayPosition.TOP_LEFT)
+        widget1.set_content_size(200, 100)
+        widget1.set_margin(40)
+        widget1._show_background = False
+        widget1.set_visual_padding(left=15, top=10)
+        qtbot.addWidget(widget1)
+        
+        widget2 = ConcreteOverlayWidget(parent, OverlayPosition.TOP_LEFT)
+        widget2.set_content_size(150, 80)
+        widget2.set_margin(40)
+        widget2._show_background = False
+        widget2.set_visual_padding(left=20, top=12)
+        qtbot.addWidget(widget2)
+        
+        widget1._update_position()
+        widget2._update_position()
+        
+        # With background OFF, visual offset is applied
+        # Widget1: 40 - 15 = 25, 40 - 10 = 30
+        # Widget2: 40 - 20 = 20, 40 - 12 = 28
+        # The VISIBLE content edges should align at margin (40, 40)
+        # So widget1.x + visual_padding_left = 40, widget2.x + visual_padding_left = 40
+        assert widget1.pos().x() + 15 == 40  # Visible left edge at margin
+        assert widget1.pos().y() + 10 == 40  # Visible top edge at margin
+        assert widget2.pos().x() + 20 == 40  # Visible left edge at margin
+        assert widget2.pos().y() + 12 == 40  # Visible top edge at margin
+    
+    def test_bottom_right_alignment_with_background(self, qtbot):
+        """Test bottom-right alignment with background ON."""
+        parent = QWidget()
+        parent.resize(1920, 1080)
+        qtbot.addWidget(parent)
+        
+        widget1 = ConcreteOverlayWidget(parent, OverlayPosition.BOTTOM_RIGHT)
+        widget1.set_content_size(200, 100)
+        widget1.resize(200, 100)
+        widget1.set_margin(40)
+        widget1._show_background = True
+        qtbot.addWidget(widget1)
+        
+        widget2 = ConcreteOverlayWidget(parent, OverlayPosition.BOTTOM_RIGHT)
+        widget2.set_content_size(150, 80)
+        widget2.resize(150, 80)
+        widget2.set_margin(40)
+        widget2._show_background = True
+        qtbot.addWidget(widget2)
+        
+        widget1._update_position()
+        widget2._update_position()
+        
+        # Both should have their right edge at parent_width - margin
+        # and bottom edge at parent_height - margin
+        assert widget1.pos().x() + widget1.width() == 1920 - 40
+        assert widget1.pos().y() + widget1.height() == 1080 - 40
+        assert widget2.pos().x() + widget2.width() == 1920 - 40
+        assert widget2.pos().y() + widget2.height() == 1080 - 40
+    
+    def test_different_margins_do_not_align(self, qtbot):
+        """Test that widgets with different margins do NOT align."""
+        parent = QWidget()
+        parent.resize(1920, 1080)
+        qtbot.addWidget(parent)
+        
+        widget1 = ConcreteOverlayWidget(parent, OverlayPosition.TOP_LEFT)
+        widget1.set_content_size(200, 100)
+        widget1.set_margin(20)
+        widget1._show_background = True
+        qtbot.addWidget(widget1)
+        
+        widget2 = ConcreteOverlayWidget(parent, OverlayPosition.TOP_LEFT)
+        widget2.set_content_size(150, 80)
+        widget2.set_margin(60)
+        widget2._show_background = True
+        qtbot.addWidget(widget2)
+        
+        widget1._update_position()
+        widget2._update_position()
+        
+        # Different margins = different positions
+        assert widget1.pos().x() == 20
+        assert widget2.pos().x() == 60
+        assert widget1.pos().x() != widget2.pos().x()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

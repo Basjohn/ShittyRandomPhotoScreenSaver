@@ -158,7 +158,10 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - `tests/test_settings_profile_separation.py` - 9 tests for MC vs Screensaver profile isolation
 - `tests/test_gl_texture_streaming.py` - 18 tests for GL texture streaming and PBO optimization
 - `tests/test_memory_pooling.py` - 19 tests for ResourceManager object pooling efficiency
-- **Total: 280 new tests** for process isolation, GL state, widgets, MC features, settings, and performance tuning
+- `tests/test_spotify_visualizer_widget.py` - 12 tests for Spotify visualizer audio worker and widget
+- `tests/test_integration_full_workflow.py` - 19 tests for end-to-end integration scenarios
+- `tests/test_gl_state_and_error_handling.py` - 31 tests for GL state management and error handling (consolidated)
+- **Total: 389 tests** for process isolation, GL state, widgets, MC features, settings, performance tuning, and integration (including widget factories/positioner)
 
 ## GL Resource Management (Jan 2026)
 - `core/resources/manager.py` - ResourceManager GL cleanup hooks:

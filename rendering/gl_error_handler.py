@@ -14,9 +14,12 @@ from __future__ import annotations
 import threading
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Optional, Callable, Set
+from typing import Optional, Callable, Set, TYPE_CHECKING
 
 from core.logging.logger import get_logger
+
+if TYPE_CHECKING:
+    from rendering.gl_state_manager import GLStateManager, GLContextState
 
 logger = get_logger(__name__)
 
@@ -50,6 +53,12 @@ class GLErrorHandler:
     Thread-safe singleton that tracks GL errors and manages capability demotion.
     All GL components should check capabilities through this handler before
     attempting shader operations.
+    
+    Phase 5 Integration:
+        GLStateManager instances can subscribe to this handler via
+        `subscribe_state_manager()`. When any subscribed GLStateManager
+        transitions to ERROR or CONTEXT_LOST, this handler triggers
+        session-wide demotion (Group A→B→C).
     """
     
     _instance: Optional["GLErrorHandler"] = None
@@ -79,6 +88,7 @@ class GLErrorHandler:
         self._state = GLErrorState()
         self._state_lock = threading.Lock()
         self._on_capability_change: Optional[Callable[[GLCapabilityLevel], None]] = None
+        self._subscribed_managers: Set[str] = set()  # Track subscribed GLStateManager names
         self._initialized = True
     
     @property
@@ -181,9 +191,13 @@ class GLErrorHandler:
             self._demote_to_level(GLCapabilityLevel.COMPOSITOR_ONLY, reason)
     
     def _demote_to_level(self, level: GLCapabilityLevel, reason: str) -> None:
-        """Demote capability level (internal, must hold lock)."""
-        if self._state.capability_level.value <= level.value:
-            return  # Already at or below this level
+        """Demote capability level (internal, must hold lock).
+        
+        Capability levels: FULL_SHADERS(1) > COMPOSITOR_ONLY(2) > SOFTWARE_ONLY(3)
+        Higher enum value = lower capability. We demote when target level value is higher.
+        """
+        if self._state.capability_level.value >= level.value:
+            return  # Already at or below this capability level
         
         old_level = self._state.capability_level
         self._state.capability_level = level
@@ -235,6 +249,59 @@ class GLErrorHandler:
         """Reset error state (for testing only)."""
         with self._state_lock:
             self._state = GLErrorState()
+            self._subscribed_managers = set()
+            self._on_capability_change = None
+    
+    def subscribe_state_manager(self, manager_name: str, state_manager: "GLStateManager") -> None:
+        """Subscribe a GLStateManager to receive error state callbacks.
+        
+        When the subscribed GLStateManager transitions to ERROR or CONTEXT_LOST,
+        this handler will trigger session-wide capability demotion.
+        
+        Args:
+            manager_name: Unique name for the state manager (e.g., "compositor", "visualizer")
+            state_manager: The GLStateManager instance to subscribe
+        """
+        from rendering.gl_state_manager import GLContextState
+        
+        with self._state_lock:
+            if manager_name in self._subscribed_managers:
+                return  # Already subscribed
+            self._subscribed_managers.add(manager_name)
+        
+        # Register callback for state changes
+        def on_state_change(old_state: "GLContextState", new_state: "GLContextState") -> None:
+            if new_state == GLContextState.ERROR:
+                self.record_gl_state_error(manager_name, "GLStateManager entered ERROR state")
+            elif new_state == GLContextState.CONTEXT_LOST:
+                self.record_gl_state_error(manager_name, "GLStateManager context lost")
+        
+        state_manager.add_callback(on_state_change)
+        logger.debug(f"[GL ERROR] Subscribed GLStateManager '{manager_name}' for error callbacks")
+    
+    def record_gl_state_error(self, manager_name: str, error: str) -> None:
+        """Record an error from a subscribed GLStateManager.
+        
+        This triggers session-wide demotion based on the error type.
+        Visualizer errors demote to COMPOSITOR_ONLY (Group B).
+        Compositor errors demote to SOFTWARE_ONLY (Group C).
+        """
+        with self._state_lock:
+            self._state.failed_operations += 1
+            
+            # Determine demotion level based on which component failed
+            if "compositor" in manager_name.lower():
+                # Compositor failure = demote to software
+                self._demote_to_level(
+                    GLCapabilityLevel.SOFTWARE_ONLY,
+                    f"Compositor '{manager_name}' error: {error}"
+                )
+            else:
+                # Other GL component failure = demote to compositor only
+                self._demote_to_level(
+                    GLCapabilityLevel.COMPOSITOR_ONLY,
+                    f"GL component '{manager_name}' error: {error}"
+                )
 
 
 def get_gl_error_handler() -> GLErrorHandler:

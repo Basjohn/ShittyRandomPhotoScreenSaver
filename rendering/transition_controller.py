@@ -205,13 +205,27 @@ class TransitionController(QObject):
             self._cleanup_transition(transition)
             return False
     
-    def stop_current(self) -> None:
-        """Stop the current transition if running."""
+    def stop_current(self, snap_to_new: bool = True) -> None:
+        """Stop the current transition if running.
+        
+        Args:
+            snap_to_new: If True, signal compositor to snap to new image
+                         to avoid visual pops when interrupted.
+        """
         if self._current_transition is None:
             return
         
         transition = self._current_transition
         self._current_transition = None
+        
+        # Signal compositor to snap to new image if requested
+        if snap_to_new:
+            try:
+                compositor = getattr(self._parent, "_compositor", None)
+                if compositor is not None and hasattr(compositor, "cancel_current_transition"):
+                    compositor.cancel_current_transition(snap_to_new=True)
+            except Exception:
+                pass
         
         try:
             transition.stop()
@@ -358,8 +372,16 @@ class TransitionController(QObject):
         transition = self._current_transition
         self._cancel_watchdog()
         
-        # Force cleanup the stuck transition
+        # Force cleanup the stuck transition with snap_to_new to avoid visual pops
         if transition:
+            # Signal compositor to snap to new image
+            try:
+                compositor = getattr(self._parent, "_compositor", None)
+                if compositor is not None and hasattr(compositor, "cancel_current_transition"):
+                    compositor.cancel_current_transition(snap_to_new=True)
+            except Exception:
+                pass
+            
             try:
                 transition.stop()
             except Exception:

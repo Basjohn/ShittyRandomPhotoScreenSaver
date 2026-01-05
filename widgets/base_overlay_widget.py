@@ -383,29 +383,21 @@ class BaseOverlayWidget(QLabel):
         )
     
     def _compute_visual_offset(self) -> QPoint:
-        """Compute position offset to align visible content to margins.
+        """Compute position offset to align visible content to margins."""
+        if self._show_background:
+            return QPoint(0, 0)
         
-        Returns offset to apply based on current position and visual padding.
-        For left-anchored positions, shift left by left padding.
-        For right-anchored positions, shift right by right padding.
-        For top-anchored positions, shift up by top padding.
-        For bottom-anchored positions, shift down by bottom padding.
-        """
         dx, dy = 0, 0
         
-        # Horizontal adjustment
         if self._position in (OverlayPosition.TOP_LEFT, OverlayPosition.MIDDLE_LEFT, OverlayPosition.BOTTOM_LEFT):
             dx = -self._visual_padding_left
         elif self._position in (OverlayPosition.TOP_RIGHT, OverlayPosition.MIDDLE_RIGHT, OverlayPosition.BOTTOM_RIGHT):
             dx = self._visual_padding_right
-        # Center positions: no horizontal adjustment (centered on content)
         
-        # Vertical adjustment
         if self._position in (OverlayPosition.TOP_LEFT, OverlayPosition.TOP_CENTER, OverlayPosition.TOP_RIGHT):
             dy = -self._visual_padding_top
         elif self._position in (OverlayPosition.BOTTOM_LEFT, OverlayPosition.BOTTOM_CENTER, OverlayPosition.BOTTOM_RIGHT):
             dy = self._visual_padding_bottom
-        # Middle positions: no vertical adjustment (centered on content)
         
         return QPoint(dx, dy)
     
@@ -421,40 +413,44 @@ class BaseOverlayWidget(QLabel):
             old_geo = QRect()
         
         parent_size = parent.size()
-        widget_size = self.sizeHint()
-        
-        # Ensure we have valid sizes
+        widget_size = self.size()
         if widget_size.width() <= 0 or widget_size.height() <= 0:
-            widget_size = self.size()
+            widget_size = self.sizeHint()
         if widget_size.width() <= 0:
             widget_size = QSize(100, 50)
         
         margin = self._margin
         x, y = 0, 0
         
-        # Calculate base position
-        if self._position in (OverlayPosition.TOP_LEFT, OverlayPosition.BOTTOM_LEFT):
+        if self._position in (OverlayPosition.TOP_LEFT, OverlayPosition.MIDDLE_LEFT, OverlayPosition.BOTTOM_LEFT):
             x = margin
-        elif self._position in (OverlayPosition.TOP_RIGHT, OverlayPosition.BOTTOM_RIGHT):
+        elif self._position in (OverlayPosition.TOP_RIGHT, OverlayPosition.MIDDLE_RIGHT, OverlayPosition.BOTTOM_RIGHT):
             x = parent_size.width() - widget_size.width() - margin
-        elif self._position in (OverlayPosition.TOP_CENTER, OverlayPosition.BOTTOM_CENTER, OverlayPosition.CENTER):
+        elif self._position in (OverlayPosition.TOP_CENTER, OverlayPosition.CENTER, OverlayPosition.BOTTOM_CENTER):
             x = (parent_size.width() - widget_size.width()) // 2
         
-        if self._position in (OverlayPosition.TOP_LEFT, OverlayPosition.TOP_RIGHT, OverlayPosition.TOP_CENTER):
+        if self._position in (OverlayPosition.TOP_LEFT, OverlayPosition.TOP_CENTER, OverlayPosition.TOP_RIGHT):
             y = margin
-        elif self._position in (OverlayPosition.BOTTOM_LEFT, OverlayPosition.BOTTOM_RIGHT, OverlayPosition.BOTTOM_CENTER):
-            y = parent_size.height() - widget_size.height() - margin
-        elif self._position == OverlayPosition.CENTER:
+        elif self._position in (OverlayPosition.MIDDLE_LEFT, OverlayPosition.CENTER, OverlayPosition.MIDDLE_RIGHT):
             y = (parent_size.height() - widget_size.height()) // 2
+        elif self._position in (OverlayPosition.BOTTOM_LEFT, OverlayPosition.BOTTOM_CENTER, OverlayPosition.BOTTOM_RIGHT):
+            y = parent_size.height() - widget_size.height() - margin
         
-        # Apply visual padding offset (aligns visible content to margins)
         visual_offset = self._compute_visual_offset()
         x += visual_offset.x()
         y += visual_offset.y()
         
-        # Apply pixel shift and stack offset
         x += self._pixel_shift_offset.x() + self._stack_offset.x()
         y += self._pixel_shift_offset.y() + self._stack_offset.y()
+        
+        min_visible = 10
+        max_x = parent_size.width() - min_visible
+        max_y = parent_size.height() - min_visible
+        min_x = min_visible - widget_size.width()
+        min_y = min_visible - widget_size.height()
+        
+        x = max(min_x, min(x, max_x))
+        y = max(min_y, min(y, max_y))
         
         self.move(x, y)
 
