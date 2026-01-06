@@ -147,10 +147,14 @@ void main() {
         direction = getattr(state, "direction", None)
         mode = self._direction_to_mode(direction)
 
+        # OPTIMIZATION: Use state tracker to eliminate redundant GL calls
+        from rendering.gl_programs.gl_state_tracker import get_gl_state_tracker
+        state_tracker = get_gl_state_tracker()
+        
         gl.glViewport(0, 0, vp_w, vp_h)
-        gl.glDisable(gl.GL_DEPTH_TEST)
+        state_tracker.set_depth_test(False)
 
-        gl.glUseProgram(program)
+        state_tracker.use_program(program)
         try:
             if uniforms.get("u_progress", -1) != -1:
                 gl.glUniform1f(uniforms["u_progress"], float(progress))
@@ -159,21 +163,21 @@ void main() {
                 gl.glUniform1i(uniforms["u_mode"], mode)
 
             if uniforms.get("uOldTex", -1) != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE0)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, old_tex)
+                state_tracker.active_texture(gl.GL_TEXTURE0)
+                state_tracker.bind_texture_2d(old_tex)
                 gl.glUniform1i(uniforms["uOldTex"], 0)
 
             if uniforms.get("uNewTex", -1) != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE1)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, new_tex)
+                state_tracker.active_texture(gl.GL_TEXTURE1)
+                state_tracker.bind_texture_2d(new_tex)
                 gl.glUniform1i(uniforms["uNewTex"], 1)
 
             self._draw_fullscreen_quad(quad_vao)
 
         finally:
-            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
-            gl.glActiveTexture(gl.GL_TEXTURE0)
-            gl.glUseProgram(0)
+            # Don't unbind - next shader will bind its own state
+            # This eliminates redundant glUseProgram(0) calls
+            pass
 
 
 # Singleton instance for convenience

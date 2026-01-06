@@ -508,8 +508,12 @@ class GLCompositorWidget(QOpenGLWidget):
                 self._vsync_connected = True
             
             logger.info(
-                "[GL COMPOSITOR] VSync-driven rendering started: display=%dHz, target=%dHz",
-                display_hz, target_fps
+                "[GL COMPOSITOR] Starting render strategy (vsync_enabled=%s, display=%dHz, target=%dHz)",
+                self._vsync_enabled, display_hz, target_fps
+            )
+            logger.debug(
+                "[GL COMPOSITOR] Render strategy details: vsync_connected=%s, strategy_manager=%s",
+                self._vsync_connected, self._render_strategy_manager is not None
             )
             
             # Trigger first frame
@@ -540,11 +544,12 @@ class GLCompositorWidget(QOpenGLWidget):
         if self._render_strategy_manager is None:
             self._render_strategy_manager = RenderStrategyManager(self)
         
+        interval_ms = max(1.0, 1000.0 / target_fps)
         config = RenderStrategyConfig(
             target_fps=target_fps,
             vsync_enabled=False,  # Timer mode
             fallback_on_failure=True,
-            min_frame_time_ms=max(1.0, 1000.0 / target_fps),
+            min_frame_time_ms=interval_ms,
         )
         self._render_strategy_manager.configure(config)
         
@@ -552,8 +557,8 @@ class GLCompositorWidget(QOpenGLWidget):
         success = self._render_strategy_manager.start(RenderStrategyType.TIMER)
         
         logger.info(
-            "[GL COMPOSITOR] Timer fallback started: display=%dHz, target=%dHz, success=%s",
-            display_hz, target_fps, success
+            "[GL COMPOSITOR] Timer fallback started: display=%dHz, target=%dHz, interval=%.2fms, success=%s",
+            display_hz, target_fps, interval_ms, success
         )
     
     def _stop_render_strategy(self) -> None:
@@ -599,8 +604,25 @@ class GLCompositorWidget(QOpenGLWidget):
             self.update()
 
     def set_base_pixmap(self, pixmap: Optional[QPixmap]) -> None:
-        """Set the base image when no transition is active."""
+        """Set the base image when no transition is active.
+        
+        OPTIMIZATION: Pre-upload texture to GPU now, not at transition start.
+        This spreads the upload cost across idle time instead of blocking transitions.
+        """
         self._base_pixmap = pixmap
+        
+        # Pre-upload texture to GPU cache for future transitions
+        # This happens during idle time, not during transition start
+        if pixmap is not None and not pixmap.isNull():
+            try:
+                from rendering.gl_programs.texture_manager import get_texture_manager
+                tex_mgr = get_texture_manager()
+                if tex_mgr.is_initialized():
+                    # Cache the texture - will be reused when transition starts
+                    tex_mgr.get_or_create_texture(pixmap)
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Texture pre-upload failed: %s", e)
+        
         # If no crossfade is active, repaint immediately.
         if self._crossfade is None:
             self.update()
@@ -3121,9 +3143,21 @@ void main() {
         if not self._gl_state.is_ready():
             return
         
+        # Profile paintGL sections to identify bottlenecks
+        _section_times = {}
+        _last_time = time.perf_counter()
+        
+        def _mark_section(name: str):
+            nonlocal _last_time
+            now = time.perf_counter()
+            _section_times[name] = (now - _last_time) * 1000.0
+            _last_time = now
+        
         target = self.rect()
+        _mark_section("init")
 
         # Try shader paths in priority order. On failure, fall back to QPainter.
+        _mark_section("pre_shader")
         shader_paths = [
             ("blockspin", self._blockspin, self._can_use_blockspin_shader,
              self._paint_blockspin_shader, self._prepare_blockspin_textures),
@@ -3151,9 +3185,24 @@ void main() {
              self._paint_wipe_shader, None),
         ]
 
+        shader_success = False
         for name, state, can_use_fn, paint_fn, prep_fn in shader_paths:
             if self._try_shader_path(name, state, can_use_fn, paint_fn, target, prep_fn):
-                return
+                shader_success = True
+                break
+
+        # If all shader paths failed or are inactive, fall back to QPainter
+        if not shader_success:
+            _mark_section("shader_attempt")
+        else:
+            _mark_section("shader_render")
+            # Log section times if any section took >10ms
+            if is_perf_metrics_enabled() and _section_times:
+                total = sum(_section_times.values())
+                if total > 10.0:
+                    sections_str = ", ".join(f"{k}={v:.1f}ms" for k, v in _section_times.items() if v > 1.0)
+                    logger.debug("[PERF] [GL PAINT] Section times (total=%.1fms): %s", total, sections_str)
+            return
 
         # QPainter fallback path (Group B) - delegates to GLTransitionRenderer
         painter = QPainter(self)
@@ -3213,6 +3262,14 @@ void main() {
             self._paint_debug_overlay(painter)
         finally:
             painter.end()
+            _mark_section("qpainter_fallback")
+            
+        # Log section times if any section took >10ms
+        if is_perf_metrics_enabled() and _section_times:
+            total = sum(_section_times.values())
+            if total > 10.0:
+                sections_str = ", ".join(f"{k}={v:.1f}ms" for k, v in _section_times.items() if v > 1.0)
+                logger.debug("[PERF] [GL PAINT] Section times (total=%.1fms): %s", total, sections_str)
 
     def _paint_spotify_visualizer_gl(self) -> None:
         if not self._spotify_vis_enabled:

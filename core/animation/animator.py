@@ -143,25 +143,15 @@ class Animation(QObject):
         if self.frame_state is not None:
             self.frame_state.push(eased_progress)
         
-        # Emit progress - PERF: measure signal emission time
-        _emit_start = time.time()
+        # Emit progress - removed per-frame timing overhead
         self.progress_changed.emit(eased_progress)
-        _emit_elapsed = (time.time() - _emit_start) * 1000.0
-        if _emit_elapsed > 30.0 and is_perf_metrics_enabled():
-            logger.warning("[PERF] [ANIM] Slow progress_changed.emit: %.2fms (anim=%s)", 
-                          _emit_elapsed, self.animation_id[:8])
         
         # Check if complete
         if progress >= 1.0:
             self.state = AnimationState.COMPLETE
             if self.frame_state is not None:
                 self.frame_state.mark_complete()
-            _complete_start = time.time()
             self.completed.emit()
-            _complete_elapsed = (time.time() - _complete_start) * 1000.0
-            if _complete_elapsed > 30.0 and is_perf_metrics_enabled():
-                logger.warning("[PERF] [ANIM] Slow completed.emit: %.2fms (anim=%s)",
-                              _complete_elapsed, self.animation_id[:8])
             logger.debug(f"Animation completed: {self.animation_id}")
             return False
         
@@ -651,6 +641,12 @@ class AnimationManager(QObject):
         animations regardless of timer jitter. The delta_time is clamped
         to prevent teleporting on major stalls (>500ms) but otherwise
         reflects actual elapsed time for accurate animation progress.
+        
+        OPTIMIZATION: Minimized overhead by:
+        - Single time.time() call per frame
+        - Direct dict iteration (no list() copy)
+        - Removed per-animation timing (only log on exceptions)
+        - Batched profiling updates
         """
         current_time = time.time()
 
@@ -686,22 +682,23 @@ class AnimationManager(QObject):
         self._profile_last_ts = current_time
         self._profile_frame_count += 1
 
-        # Update all animations
-        for anim_id, animator in list(self._animations.items()):
-            _anim_start = time.time()
-            animator.update(delta_time)
-            _anim_elapsed = (time.time() - _anim_start) * 1000.0
-            if _anim_elapsed > 50.0 and is_perf_metrics_enabled():
-                logger.warning("[PERF] [ANIM] Slow animation update (%s): %.2fms", anim_id[:8], _anim_elapsed)
-
-        if self._tick_listeners:
-            for cb in list(self._tick_listeners.values()):
+        # Update all animations - snapshot keys to avoid dict modification during iteration
+        # Animations can complete and remove themselves, so we need a stable iteration
+        anim_ids = tuple(self._animations.keys())  # Tuple is faster than list for iteration
+        for anim_id in anim_ids:
+            animator = self._animations.get(anim_id)
+            if animator is not None:  # Animation might have been removed
                 try:
-                    _cb_start = time.time()
+                    animator.update(delta_time)
+                except Exception as e:
+                    logger.warning("[ANIM] Animation update failed (%s): %s", anim_id[:8], e, exc_info=True)
+
+        # Update tick listeners - snapshot to avoid modification during iteration
+        if self._tick_listeners:
+            callbacks = tuple(self._tick_listeners.values())
+            for cb in callbacks:
+                try:
                     cb(delta_time)
-                    _cb_elapsed = (time.time() - _cb_start) * 1000.0
-                    if _cb_elapsed > 50.0 and is_perf_metrics_enabled():
-                        logger.warning("[PERF] [ANIM] Slow tick listener: %.2fms", _cb_elapsed)
                 except Exception as e:
                     logger.debug("[ANIM] Tick listener failed: %s", e, exc_info=True)
 

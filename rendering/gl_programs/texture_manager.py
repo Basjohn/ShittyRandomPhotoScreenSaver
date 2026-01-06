@@ -173,14 +173,16 @@ class GLTextureManager:
                     logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
                 pbo_id = 0
         
-        # Upload texture
+        # Upload texture - bind once, set all parameters in batch
         gl.glBindTexture(gl.GL_TEXTURE_2D, tex_id)
         try:
+            # Batch GL state changes to reduce driver overhead
+            gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 1)
+            # Set texture parameters - these are per-texture state, set once
             gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR)
             gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
             gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_S, gl.GL_CLAMP_TO_EDGE)
             gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_T, gl.GL_CLAMP_TO_EDGE)
-            gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 1)
             
             if use_pbo:
                 gl.glTexImage2D(
