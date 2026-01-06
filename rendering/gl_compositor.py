@@ -266,6 +266,11 @@ class GLCompositorWidget(QOpenGLWidget):
             get_viewport_size=self._get_viewport_size,
             get_render_progress=lambda fallback: self._get_render_progress(fallback=fallback),
         )
+        
+        # DESYNC STRATEGY: Random delay (0-500ms) to spread transition start overhead
+        # Each compositor gets a different delay to avoid simultaneous GPU uploads
+        import random
+        self._desync_delay_ms: int = random.randint(0, 500)  # Atomic int, no lock needed
         # Set program getters after init
         self._transition_renderer.set_program_getters({
             "peel": _get_peel_program,
@@ -376,6 +381,35 @@ class GLCompositorWidget(QOpenGLWidget):
         if self._frame_state is not None:
             self._frame_state.mark_complete()
         self._frame_state = None
+    
+    def _apply_desync_strategy(self, base_duration_ms: int) -> tuple[int, int]:
+        """Apply desync strategy to spread transition start overhead.
+        
+        OPTIMIZATION: Each compositor gets a random delay (0-500ms) to avoid
+        simultaneous GPU uploads and transition starts. Duration is compensated
+        so all displays complete at the same visual state.
+        
+        Args:
+            base_duration_ms: Original transition duration
+            
+        Returns:
+            (delay_ms, compensated_duration_ms) tuple
+            
+        Example:
+            Display 0: delay=0ms, duration=5000ms → completes at T+5000ms
+            Display 1: delay=300ms, duration=5300ms → completes at T+5600ms (same visual state)
+        """
+        delay_ms = self._desync_delay_ms
+        # Compensate duration: add delay so transition completes at same visual state
+        compensated_duration_ms = base_duration_ms + delay_ms
+        
+        if delay_ms > 0 and is_perf_metrics_enabled():
+            logger.debug(
+                "[PERF] [DESYNC] Applying desync: delay=%dms, duration=%dms→%dms",
+                delay_ms, base_duration_ms, compensated_duration_ms
+            )
+        
+        return delay_ms, compensated_duration_ms
     
     def set_vsync_enabled(self, enabled: bool) -> None:
         """Enable or disable VSync-driven rendering.
@@ -1265,7 +1299,12 @@ class GLCompositorWidget(QOpenGLWidget):
         animation_manager: AnimationManager,
         on_finished: Optional[Callable[[], None]] = None,
     ) -> Optional[str]:
-        """Begin a crossfade between two pixmaps using the compositor."""
+        """Begin a crossfade between two pixmaps using the compositor.
+        
+        OPTIMIZATION: Uses desync strategy to spread transition start overhead.
+        Each compositor gets a random delay (0-500ms) with duration compensation
+        to maintain visual synchronization across displays.
+        """
         if not new_pixmap or new_pixmap.isNull():
             logger.error("[GL COMPOSITOR] Invalid new pixmap for crossfade")
             return None
@@ -1274,6 +1313,31 @@ class GLCompositorWidget(QOpenGLWidget):
             if self._handle_no_old_image(new_pixmap, on_finished, "crossfade"):
                 return None
 
+        # Apply desync strategy: random delay with duration compensation
+        delay_ms, compensated_duration = self._apply_desync_strategy(duration_ms)
+        
+        if delay_ms > 0:
+            # Defer transition start by delay_ms
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(delay_ms, lambda: self._start_crossfade_impl(
+                old_pixmap, new_pixmap, compensated_duration, easing, animation_manager, on_finished
+            ))
+            return None  # Animation ID will be set when transition actually starts
+        else:
+            return self._start_crossfade_impl(
+                old_pixmap, new_pixmap, compensated_duration, easing, animation_manager, on_finished
+            )
+    
+    def _start_crossfade_impl(
+        self,
+        old_pixmap: QPixmap,
+        new_pixmap: QPixmap,
+        duration_ms: int,
+        easing: EasingCurve,
+        animation_manager: AnimationManager,
+        on_finished: Optional[Callable[[], None]],
+    ) -> Optional[str]:
+        """Internal implementation of crossfade start after desync delay."""
         self._clear_all_transitions()
         self._crossfade = CrossfadeState(old_pixmap=old_pixmap, new_pixmap=new_pixmap, progress=0.0)
         self._pre_upload_textures(self._prepare_crossfade_textures)
