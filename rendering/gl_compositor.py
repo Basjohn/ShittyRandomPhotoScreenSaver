@@ -818,27 +818,51 @@ class GLCompositorWidget(QOpenGLWidget):
         on_complete: Callable[[], None],
         transition_label: Optional[str] = None,
     ) -> str:
-        """Start a transition animation and return the animation ID."""
+        """Start a transition animation and return the animation ID.
+        
+        OPTIMIZATION: Defer non-critical initialization to reduce transition start overhead.
+        Metrics and render strategy start are deferred to first frame update.
+        """
         self._animation_manager = animation_manager
         self._current_easing = easing
         self._cancel_current_animation()
         duration_sec = max(0.001, duration_ms / 1000.0)
-        frame_state = self._start_frame_pacing(duration_sec)
-        self._begin_paint_metrics(transition_label or "transition")
-        profiled_callback = self._wrap_animation_update(
-            update_callback,
-            self._begin_animation_metrics(
-                transition_label or "transition",
-                duration_ms,
-                animation_manager,
-            ),
-        )
+        
+        # Create frame state but defer render strategy start
+        self._frame_state = FrameState(duration=duration_sec)
+        
+        # Defer metrics initialization - will be initialized on first frame update
+        # Use list to allow mutation in closure (avoid dict overhead on every frame)
+        initialized = [False]
+        profiled_callback = [None]
+        
+        # Wrap callback to initialize metrics on first call (lazy init)
+        def lazy_init_callback(progress: float) -> None:
+            if not initialized[0]:
+                initialized[0] = True
+                # Start render strategy on first frame (not at transition start)
+                self._start_render_timer()
+                # Initialize metrics on first frame
+                self._begin_paint_metrics(transition_label or "transition")
+                metrics = self._begin_animation_metrics(
+                    transition_label or "transition",
+                    duration_ms,
+                    animation_manager,
+                )
+                # Wrap the original callback with metrics
+                profiled_callback[0] = self._wrap_animation_update(update_callback, metrics)
+                # Call it for this first frame
+                profiled_callback[0](progress)
+            else:
+                # Use cached profiled callback (direct list access, no dict lookup)
+                profiled_callback[0](progress)
+        
         anim_id = animation_manager.animate_custom(
             duration=duration_sec,
             easing=easing,
-            update_callback=profiled_callback,
+            update_callback=lazy_init_callback,
             on_complete=on_complete,
-            frame_state=frame_state,
+            frame_state=self._frame_state,
         )
         self._current_anim_id = anim_id
         return anim_id
@@ -1317,11 +1341,23 @@ class GLCompositorWidget(QOpenGLWidget):
         delay_ms, compensated_duration = self._apply_desync_strategy(duration_ms)
         
         if delay_ms > 0:
-            # Defer transition start by delay_ms
+            # BUG FIX: Store current base pixmap as old_pixmap for deferred transition
+            # If we capture old_pixmap in lambda, it could become stale if another transition starts
+            # Instead, use current base pixmap at the time the timer fires
             from PySide6.QtCore import QTimer
-            QTimer.singleShot(delay_ms, lambda: self._start_crossfade_impl(
-                old_pixmap, new_pixmap, compensated_duration, easing, animation_manager, on_finished
-            ))
+            def deferred_start():
+                # Use current base pixmap as old image (what's currently displayed)
+                current_old = self._base_pixmap
+                if current_old is None or current_old.isNull():
+                    # No old image - show new image immediately without transition
+                    self._handle_no_old_image(new_pixmap, on_finished, "crossfade")
+                else:
+                    self._start_crossfade_impl(
+                        current_old, new_pixmap, compensated_duration, easing, animation_manager, on_finished
+                    )
+            QTimer.singleShot(delay_ms, deferred_start)
+            # Set base pixmap immediately so it's available when timer fires
+            self._base_pixmap = new_pixmap
             return None  # Animation ID will be set when transition actually starts
         else:
             return self._start_crossfade_impl(
@@ -3123,6 +3159,9 @@ void main() {
         if image is None:
             return
 
+        # BUG FIX: Unbind shader before using QPainter
+        gl.glUseProgram(0)
+
         painter = QPainter(self)
         try:
             painter.drawImage(0, 0, image)
@@ -3372,6 +3411,9 @@ void main() {
             return
         
         try:
+            # BUG FIX: Unbind shader before drawing dimming overlay
+            gl.glUseProgram(0)
+            
             # Use native GL blending for dimming - much faster than QPainter
             gl.glEnable(gl.GL_BLEND)
             gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
