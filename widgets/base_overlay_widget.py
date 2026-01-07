@@ -148,7 +148,7 @@ class BaseOverlayWidget(QLabel):
     # Default styling
     DEFAULT_FONT_FAMILY = "Segoe UI"
     DEFAULT_FONT_SIZE = 18
-    DEFAULT_MARGIN = 20
+    DEFAULT_MARGIN = 30
     DEFAULT_BG_OPACITY = 0.9
     DEFAULT_BG_COLOR = QColor(64, 64, 64, 230)
     DEFAULT_BORDER_WIDTH = 2

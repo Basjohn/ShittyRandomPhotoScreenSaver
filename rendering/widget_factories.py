@@ -332,7 +332,7 @@ class WeatherWidgetFactory(WidgetFactory):
             widget.set_show_forecast(show_forecast)
             
             # Margin
-            margin = config.get('margin', 20)
+            margin = config.get('margin', 30)
             try:
                 widget.set_margin(int(margin))
             except Exception as e:

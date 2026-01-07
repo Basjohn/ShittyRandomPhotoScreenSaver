@@ -779,7 +779,8 @@ class SettingsManager(QObject):
                     self._settings.setValue('widgets', widgets_dict)
             
             self._settings.sync()
-        
+            self._cache.clear()
+
         logger.info("Settings reset to defaults (preserved: %s)", list(preserved.keys()))
         self.settings_changed.emit('*', None)  # Signal that all changed
     
@@ -1053,6 +1054,7 @@ class SettingsManager(QObject):
                         self._settings.setValue(section_key, coerced)
 
                 self._settings.sync()
+                self._cache.clear()
 
             # Wildcard signal so listeners that care about global changes can
             # refresh their view.

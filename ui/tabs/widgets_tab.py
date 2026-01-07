@@ -5,7 +5,7 @@ Allows users to configure overlay widgets:
 - Clock widget (enable, position, format, size, font, style)
 - Weather widget (enable, position, location, API key, size, font, style)
 """
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Mapping
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QSpinBox, QGroupBox, QCheckBox, QLineEdit, QPushButton,
@@ -16,6 +16,7 @@ from PySide6.QtGui import QColor, QFont
 
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger
+from core.settings.defaults import get_default_settings
 from ui.styled_popup import StyledColorPicker
 from ui.widget_stack_predictor import WidgetType, get_position_status_for_widget
 from widgets.timezone_utils import get_local_timezone, get_common_timezones
@@ -45,33 +46,137 @@ class WidgetsTab(QWidget):
         super().__init__(parent)
         
         self._settings = settings
+        self._widget_defaults = self._load_widget_defaults()
         self._current_subtab = 0
         self._scroll_area: Optional[QScrollArea] = None
-        self._clock_color = QColor(255, 255, 255, 230)
-        self._weather_color = QColor(255, 255, 255, 230)
-        self._clock_border_color = QColor(128, 128, 128, 255)
-        self._clock_bg_color = QColor(64, 64, 64, 255)
+        self._clock_color = self._color_from_default('clock', 'color', [255, 255, 255, 230])
+        self._weather_color = self._color_from_default('weather', 'color', [255, 255, 255, 230])
+        self._clock_border_color = self._color_from_default('clock', 'border_color', [128, 128, 128, 255])
+        self._clock_bg_color = self._color_from_default('clock', 'bg_color', [64, 64, 64, 255])
         # Weather widget frame defaults mirror WeatherWidget internals
-        self._weather_bg_color = QColor(64, 64, 64, 255)
-        self._weather_border_color = QColor(128, 128, 128, 255)
+        self._weather_bg_color = self._color_from_default('weather', 'bg_color', [64, 64, 64, 255])
+        self._weather_border_color = self._color_from_default('weather', 'border_color', [128, 128, 128, 255])
         # Media widget frame defaults mirror other overlay widgets
-        self._media_color = QColor(255, 255, 255, 230)
-        self._media_bg_color = QColor(64, 64, 64, 255)
-        self._media_border_color = QColor(128, 128, 128, 255)
+        self._media_color = self._color_from_default('media', 'color', [255, 255, 255, 230])
+        self._media_bg_color = self._color_from_default('media', 'bg_color', [64, 64, 64, 255])
+        self._media_border_color = self._color_from_default('media', 'border_color', [128, 128, 128, 255])
         # Spotify Beat Visualizer frame defaults inherit Spotify/media styling
-        self._spotify_vis_fill_color = QColor(255, 255, 255, 230)
-        self._spotify_vis_border_color = QColor(255, 255, 255, 230)
+        self._spotify_vis_fill_color = self._color_from_default(
+            'spotify_visualizer', 'bar_fill_color', [255, 255, 255, 230]
+        )
+        self._spotify_vis_border_color = self._color_from_default(
+            'spotify_visualizer', 'bar_border_color', [255, 255, 255, 230]
+        )
         # Reddit widget frame defaults mirror Spotify/media widget styling
-        self._reddit_color = QColor(255, 255, 255, 230)
-        self._reddit_bg_color = QColor(64, 64, 64, 255)
-        self._reddit_border_color = QColor(128, 128, 128, 255)
-        self._media_artwork_size = 100
+        self._reddit_color = self._color_from_default('reddit', 'color', [255, 255, 255, 230])
+        self._reddit_bg_color = self._color_from_default('reddit', 'bg_color', [64, 64, 64, 255])
+        self._reddit_border_color = self._color_from_default('reddit', 'border_color', [128, 128, 128, 255])
+        self._media_artwork_size = int(self._widget_default('media', 'artwork_size', 200))
         self._loading = True
         self._setup_ui()
         self._load_settings()
         self._loading = False
         
         logger.debug("WidgetsTab created")
+    
+    def _load_widget_defaults(self) -> Dict[str, Dict[str, Any]]:
+        """Load canonical widget defaults once for reuse."""
+        try:
+            defaults = get_default_settings()
+            widgets_defaults = defaults.get('widgets', {})
+            return widgets_defaults if isinstance(widgets_defaults, dict) else {}
+        except Exception:
+            logger.debug("[WIDGETS_TAB] Failed to load widget defaults", exc_info=True)
+            return {}
+    
+    def _widget_default(self, section: str, key: str, fallback: Any) -> Any:
+        """Fetch a default value for a widget section/key combo."""
+        section_defaults = self._widget_defaults.get(section, {})
+        if isinstance(section_defaults, dict) and key in section_defaults:
+            return section_defaults[key]
+        return fallback
+    
+    def _color_from_default(self, section: str, key: str, fallback: list[int]) -> QColor:
+        """Return a QColor built from canonical defaults with fallback."""
+        value = self._widget_default(section, key, fallback)
+        try:
+            if isinstance(value, (list, tuple)) and len(value) >= 3:
+                return QColor(*value)
+        except Exception:
+            logger.debug("[WIDGETS_TAB] Invalid color default for %s.%s", section, key, exc_info=True)
+        return QColor(*fallback)
+    
+    def _default_int(self, section: str, key: str, fallback: int) -> int:
+        """Return widget default coerced to int."""
+        value = self._widget_default(section, key, fallback)
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return int(fallback)
+    
+    def _default_float(self, section: str, key: str, fallback: float) -> float:
+        """Return widget default coerced to float."""
+        value = self._widget_default(section, key, fallback)
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return float(fallback)
+    
+    def _default_bool(self, section: str, key: str, fallback: bool) -> bool:
+        """Return widget default coerced to bool via SettingsManager helper."""
+        value = self._widget_default(section, key, fallback)
+        return SettingsManager.to_bool(value, fallback)
+    
+    def _default_str(self, section: str, key: str, fallback: str) -> str:
+        """Return widget default coerced to string."""
+        value = self._widget_default(section, key, fallback)
+        if value is None:
+            return fallback
+        return str(value)
+    
+    def _config_bool(self, section: str, config: Mapping[str, Any], key: str, fallback: bool) -> bool:
+        default = self._default_bool(section, key, fallback)
+        raw = config.get(key, default) if isinstance(config, Mapping) else default
+        return SettingsManager.to_bool(raw, default)
+    
+    def _config_int(self, section: str, config: Mapping[str, Any], key: str, fallback: int) -> int:
+        default = self._default_int(section, key, fallback)
+        raw = config.get(key, default) if isinstance(config, Mapping) else default
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return default
+    
+    def _config_float(self, section: str, config: Mapping[str, Any], key: str, fallback: float) -> float:
+        default = self._default_float(section, key, fallback)
+        raw = config.get(key, default) if isinstance(config, Mapping) else default
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return default
+    
+    def _config_str(self, section: str, config: Mapping[str, Any], key: str, fallback: str) -> str:
+        default = self._default_str(section, key, fallback)
+        raw = config.get(key, default) if isinstance(config, Mapping) else default
+        if raw is None:
+            return default
+        return str(raw)
+    
+    @staticmethod
+    def _set_combo_text(combo: QComboBox, text: str) -> None:
+        """Select combo entry by visible text if present."""
+        if text is None:
+            return
+        idx = combo.findText(text, Qt.MatchFlag.MatchFixedString)
+        if idx >= 0:
+            combo.setCurrentIndex(idx)
+    
+    @staticmethod
+    def _set_combo_data(combo: QComboBox, data: Any) -> None:
+        """Select combo entry by user data if present."""
+        idx = combo.findData(data)
+        if idx >= 0:
+            combo.setCurrentIndex(idx)
     
     def _setup_ui(self) -> None:
         """Setup tab UI with scroll area."""
@@ -109,6 +214,7 @@ class WidgetsTab(QWidget):
         # Global widget options
         global_row = QHBoxLayout()
         self.widget_shadows_enabled = QCheckBox("Enable Widget Drop Shadows")
+        self.widget_shadows_enabled.setChecked(self._default_bool('shadows', 'enabled', True))
         self.widget_shadows_enabled.setToolTip(
             "Applies a subtle bottom-right drop shadow to overlay widgets (clocks, "
             "weather, media) when enabled."
@@ -167,6 +273,7 @@ class WidgetsTab(QWidget):
         
         # Enable clock
         self.clock_enabled = QCheckBox("Enable Clock")
+        self.clock_enabled.setChecked(self._default_bool('clock', 'enabled', True))
         self.clock_enabled.stateChanged.connect(self._save_settings)
         self.clock_enabled.stateChanged.connect(self._update_stack_status)
         clock_layout.addWidget(self.clock_enabled)
@@ -177,12 +284,16 @@ class WidgetsTab(QWidget):
         self.clock_format = QComboBox()
         self.clock_format.addItems(["12 Hour", "24 Hour"])
         self.clock_format.currentTextChanged.connect(self._save_settings)
+        default_format = self._default_str('clock', 'format', '24h').lower()
+        format_map = {'12h': "12 Hour", '24h': "24 Hour"}
+        self._set_combo_text(self.clock_format, format_map.get(default_format, "24 Hour"))
         format_row.addWidget(self.clock_format)
         format_row.addStretch()
         clock_layout.addLayout(format_row)
         
         # Show seconds
         self.clock_seconds = QCheckBox("Show Seconds")
+        self.clock_seconds.setChecked(self._default_bool('clock', 'show_seconds', True))
         self.clock_seconds.stateChanged.connect(self._save_settings)
         self.clock_seconds.stateChanged.connect(self._update_stack_status)
         clock_layout.addWidget(self.clock_seconds)
@@ -195,6 +306,8 @@ class WidgetsTab(QWidget):
         
         # Populate timezone dropdown
         self._populate_timezones()
+        default_timezone = self._default_str('clock', 'timezone', 'local')
+        self._set_combo_data(self.clock_timezone, default_timezone)
         
         self.clock_timezone.currentTextChanged.connect(self._save_settings)
         tz_row.addWidget(self.clock_timezone)
@@ -208,12 +321,15 @@ class WidgetsTab(QWidget):
         
         # Show timezone abbreviation
         self.clock_show_tz = QCheckBox("Show Timezone Abbreviation")
+        self.clock_show_tz.setChecked(self._default_bool('clock', 'show_timezone', True))
         self.clock_show_tz.stateChanged.connect(self._save_settings)
         self.clock_show_tz.stateChanged.connect(self._update_stack_status)
         clock_layout.addWidget(self.clock_show_tz)
 
         # Analogue mode options
         self.clock_analog_mode = QCheckBox("Use Analogue Clock")
+        default_display_mode = self._default_str('clock', 'display_mode', 'analog').lower()
+        self.clock_analog_mode.setChecked(default_display_mode == 'analog')
         self.clock_analog_mode.setToolTip(
             "Render the main clock as an analogue clock face with hour/minute/second hands."
         )
@@ -222,6 +338,7 @@ class WidgetsTab(QWidget):
         clock_layout.addWidget(self.clock_analog_mode)
 
         self.clock_analog_shadow = QCheckBox("Analogue Face Shadow")
+        self.clock_analog_shadow.setChecked(self._default_bool('clock', 'analog_face_shadow', True))
         self.clock_analog_shadow.setToolTip(
             "Enable a subtle drop shadow under the analogue clock face and hands."
         )
@@ -229,6 +346,7 @@ class WidgetsTab(QWidget):
         clock_layout.addWidget(self.clock_analog_shadow)
 
         self.clock_analog_shadow_intense = QCheckBox("Intense Analogue Shadows")
+        self.clock_analog_shadow_intense.setChecked(self._default_bool('clock', 'analog_shadow_intense', False))
         self.clock_analog_shadow_intense.setToolTip(
             "Doubles analogue shadow opacity and enlarges the drop shadow by ~50% for dramatic lighting."
         )
@@ -236,6 +354,7 @@ class WidgetsTab(QWidget):
         clock_layout.addWidget(self.clock_analog_shadow_intense)
 
         self.clock_digital_shadow_intense = QCheckBox("Intense Digital Shadows")
+        self.clock_digital_shadow_intense.setChecked(self._default_bool('clock', 'digital_shadow_intense', False))
         self.clock_digital_shadow_intense.setToolTip(
             "Doubles digital clock shadow blur, opacity, and offset for dramatic effect on large displays."
         )
@@ -243,6 +362,7 @@ class WidgetsTab(QWidget):
         clock_layout.addWidget(self.clock_digital_shadow_intense)
 
         self.clock_show_numerals = QCheckBox("Show Hour Numerals (Analogue)")
+        self.clock_show_numerals.setChecked(self._default_bool('clock', 'show_numerals', True))
         self.clock_show_numerals.stateChanged.connect(self._save_settings)
         clock_layout.addWidget(self.clock_show_numerals)
         
@@ -258,6 +378,7 @@ class WidgetsTab(QWidget):
         self.clock_position.currentTextChanged.connect(self._save_settings)
         self.clock_position.currentTextChanged.connect(self._update_stack_status)
         position_row.addWidget(self.clock_position)
+        self._set_combo_text(self.clock_position, self._default_str('clock', 'position', 'Top Right'))
         self.clock_stack_status = QLabel("")
         self.clock_stack_status.setMinimumWidth(100)
         position_row.addWidget(self.clock_stack_status)
@@ -272,6 +393,8 @@ class WidgetsTab(QWidget):
         self.clock_monitor_combo.currentTextChanged.connect(self._save_settings)
         self.clock_monitor_combo.currentTextChanged.connect(self._update_stack_status)
         clock_disp_row.addWidget(self.clock_monitor_combo)
+        clock_monitor_default = self._widget_default('clock', 'monitor', 'ALL')
+        self._set_combo_text(self.clock_monitor_combo, str(clock_monitor_default))
         clock_disp_row.addStretch()
         clock_layout.addLayout(clock_disp_row)
         
@@ -279,7 +402,8 @@ class WidgetsTab(QWidget):
         font_family_row = QHBoxLayout()
         font_family_row.addWidget(QLabel("Font:"))
         self.clock_font_combo = QFontComboBox()
-        self.clock_font_combo.setCurrentFont("Segoe UI")
+        default_clock_font = self._default_str('clock', 'font_family', 'Segoe UI')
+        self.clock_font_combo.setCurrentFont(QFont(default_clock_font))
         self.clock_font_combo.setMinimumWidth(220)
         self.clock_font_combo.currentFontChanged.connect(self._save_settings)
         font_family_row.addWidget(self.clock_font_combo)
@@ -291,7 +415,7 @@ class WidgetsTab(QWidget):
         font_row.addWidget(QLabel("Font Size:"))
         self.clock_font_size = QSpinBox()
         self.clock_font_size.setRange(12, 144)
-        self.clock_font_size.setValue(48)
+        self.clock_font_size.setValue(self._default_int('clock', 'font_size', 48))
         self.clock_font_size.setAccelerated(True)
         self.clock_font_size.valueChanged.connect(self._save_settings)
         self.clock_font_size.valueChanged.connect(self._update_stack_status)
@@ -314,7 +438,7 @@ class WidgetsTab(QWidget):
         margin_row.addWidget(QLabel("Margin:"))
         self.clock_margin = QSpinBox()
         self.clock_margin.setRange(0, 100)
-        self.clock_margin.setValue(20)
+        self.clock_margin.setValue(self._default_int('clock', 'margin', 30))
         self.clock_margin.setAccelerated(True)
         self.clock_margin.valueChanged.connect(self._save_settings)
         margin_row.addWidget(self.clock_margin)
@@ -324,6 +448,7 @@ class WidgetsTab(QWidget):
         
         # Background frame
         self.clock_show_background = QCheckBox("Show Background Frame")
+        self.clock_show_background.setChecked(self._default_bool('clock', 'show_background', True))
         self.clock_show_background.stateChanged.connect(self._save_settings)
         clock_layout.addWidget(self.clock_show_background)
         
@@ -333,12 +458,13 @@ class WidgetsTab(QWidget):
         self.clock_bg_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
         self.clock_bg_opacity.setMinimum(0)
         self.clock_bg_opacity.setMaximum(100)
-        self.clock_bg_opacity.setValue(90)
+        clock_bg_opacity_pct = int(self._default_float('clock', 'bg_opacity', 0.6) * 100)
+        self.clock_bg_opacity.setValue(clock_bg_opacity_pct)
         self.clock_bg_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.clock_bg_opacity.setTickInterval(10)
         self.clock_bg_opacity.valueChanged.connect(self._save_settings)
         opacity_row.addWidget(self.clock_bg_opacity)
-        self.clock_opacity_label = QLabel("90%")
+        self.clock_opacity_label = QLabel(f"{clock_bg_opacity_pct}%")
         self.clock_bg_opacity.valueChanged.connect(lambda v: self.clock_opacity_label.setText(f"{v}%"))
         opacity_row.addWidget(self.clock_opacity_label)
         clock_layout.addLayout(opacity_row)
@@ -367,12 +493,13 @@ class WidgetsTab(QWidget):
         self.clock_border_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
         self.clock_border_opacity.setMinimum(0)
         self.clock_border_opacity.setMaximum(100)
-        self.clock_border_opacity.setValue(80)
+        clock_border_opacity_pct = int(self._default_float('clock', 'border_opacity', 0.8) * 100)
+        self.clock_border_opacity.setValue(clock_border_opacity_pct)
         self.clock_border_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.clock_border_opacity.setTickInterval(10)
         self.clock_border_opacity.valueChanged.connect(self._save_settings)
         clock_border_opacity_row.addWidget(self.clock_border_opacity)
-        self.clock_border_opacity_label = QLabel("80%")
+        self.clock_border_opacity_label = QLabel(f"{clock_border_opacity_pct}%")
         self.clock_border_opacity.valueChanged.connect(
             lambda v: self.clock_border_opacity_label.setText(f"{v}%")
         )
@@ -433,6 +560,7 @@ class WidgetsTab(QWidget):
         
         # Enable weather
         self.weather_enabled = QCheckBox("Enable Weather Widget")
+        self.weather_enabled.setChecked(self._default_bool('weather', 'enabled', True))
         self.weather_enabled.stateChanged.connect(self._save_settings)
         self.weather_enabled.stateChanged.connect(self._update_stack_status)
         weather_layout.addWidget(self.weather_enabled)
@@ -446,6 +574,8 @@ class WidgetsTab(QWidget):
         location_row = QHBoxLayout()
         location_row.addWidget(QLabel("Location:"))
         self.weather_location = QLineEdit()
+        default_city = self._default_str('weather', 'location', '')
+        self.weather_location.setText(default_city)
         self.weather_location.setPlaceholderText("City name...")
         self.weather_location.textChanged.connect(self._save_settings)
         
@@ -492,6 +622,7 @@ class WidgetsTab(QWidget):
         self.weather_position.currentTextChanged.connect(self._save_settings)
         self.weather_position.currentTextChanged.connect(self._update_stack_status)
         weather_pos_row.addWidget(self.weather_position)
+        self._set_combo_text(self.weather_position, self._default_str('weather', 'position', 'Top Left'))
         self.weather_stack_status = QLabel("")
         self.weather_stack_status.setMinimumWidth(100)
         weather_pos_row.addWidget(self.weather_stack_status)
@@ -506,6 +637,8 @@ class WidgetsTab(QWidget):
         self.weather_monitor_combo.currentTextChanged.connect(self._save_settings)
         self.weather_monitor_combo.currentTextChanged.connect(self._update_stack_status)
         weather_disp_row.addWidget(self.weather_monitor_combo)
+        monitor_default = self._widget_default('weather', 'monitor', 'ALL')
+        self._set_combo_text(self.weather_monitor_combo, str(monitor_default))
         weather_disp_row.addStretch()
         weather_layout.addLayout(weather_disp_row)
         
@@ -513,7 +646,8 @@ class WidgetsTab(QWidget):
         weather_font_family_row = QHBoxLayout()
         weather_font_family_row.addWidget(QLabel("Font:"))
         self.weather_font_combo = QFontComboBox()
-        self.weather_font_combo.setCurrentFont("Segoe UI")
+        default_weather_font = self._default_str('weather', 'font_family', 'Segoe UI')
+        self.weather_font_combo.setCurrentFont(QFont(default_weather_font))
         self.weather_font_combo.setMinimumWidth(220)
         self.weather_font_combo.currentFontChanged.connect(self._save_settings)
         weather_font_family_row.addWidget(self.weather_font_combo)
@@ -525,7 +659,7 @@ class WidgetsTab(QWidget):
         weather_font_row.addWidget(QLabel("Font Size:"))
         self.weather_font_size = QSpinBox()
         self.weather_font_size.setRange(12, 72)
-        self.weather_font_size.setValue(24)
+        self.weather_font_size.setValue(self._default_int('weather', 'font_size', 24))
         self.weather_font_size.setAccelerated(True)
         self.weather_font_size.valueChanged.connect(self._save_settings)
         self.weather_font_size.valueChanged.connect(self._update_stack_status)
@@ -545,6 +679,7 @@ class WidgetsTab(QWidget):
         
         # Show forecast line
         self.weather_show_forecast = QCheckBox("Show Forecast Line")
+        self.weather_show_forecast.setChecked(self._default_bool('weather', 'show_forecast', True))
         self.weather_show_forecast.setToolTip("Display tomorrow's forecast below current weather")
         self.weather_show_forecast.stateChanged.connect(self._save_settings)
         self.weather_show_forecast.stateChanged.connect(self._update_stack_status)
@@ -552,6 +687,7 @@ class WidgetsTab(QWidget):
 
         # Intense shadow
         self.weather_intense_shadow = QCheckBox("Intense Shadows")
+        self.weather_intense_shadow.setChecked(self._default_bool('weather', 'intense_shadow', False))
         self.weather_intense_shadow.setToolTip(
             "Doubles shadow blur, opacity, and offset for dramatic effect on large displays."
         )
@@ -560,6 +696,7 @@ class WidgetsTab(QWidget):
         
         # Background frame
         self.weather_show_background = QCheckBox("Show Background Frame")
+        self.weather_show_background.setChecked(self._default_bool('weather', 'show_background', True))
         self.weather_show_background.stateChanged.connect(self._save_settings)
         weather_layout.addWidget(self.weather_show_background)
         
@@ -569,12 +706,13 @@ class WidgetsTab(QWidget):
         self.weather_bg_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
         self.weather_bg_opacity.setMinimum(0)
         self.weather_bg_opacity.setMaximum(100)
-        self.weather_bg_opacity.setValue(90)
+        weather_bg_opacity_pct = int(self._default_float('weather', 'bg_opacity', 0.6) * 100)
+        self.weather_bg_opacity.setValue(weather_bg_opacity_pct)
         self.weather_bg_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.weather_bg_opacity.setTickInterval(10)
         self.weather_bg_opacity.valueChanged.connect(self._save_settings)
         weather_opacity_row.addWidget(self.weather_bg_opacity)
-        self.weather_opacity_label = QLabel("90%")
+        self.weather_opacity_label = QLabel(f"{weather_bg_opacity_pct}%")
         self.weather_bg_opacity.valueChanged.connect(lambda v: self.weather_opacity_label.setText(f"{v}%"))
         weather_opacity_row.addWidget(self.weather_opacity_label)
         weather_layout.addLayout(weather_opacity_row)
@@ -603,12 +741,13 @@ class WidgetsTab(QWidget):
         self.weather_border_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
         self.weather_border_opacity.setMinimum(0)
         self.weather_border_opacity.setMaximum(100)
-        self.weather_border_opacity.setValue(80)
+        weather_border_opacity_pct = int(self._default_float('weather', 'border_opacity', 1.0) * 100)
+        self.weather_border_opacity.setValue(weather_border_opacity_pct)
         self.weather_border_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.weather_border_opacity.setTickInterval(10)
         self.weather_border_opacity.valueChanged.connect(self._save_settings)
         weather_border_opacity_row.addWidget(self.weather_border_opacity)
-        self.weather_border_opacity_label = QLabel("80%")
+        self.weather_border_opacity_label = QLabel(f"{weather_border_opacity_pct}%")
         self.weather_border_opacity.valueChanged.connect(
             lambda v: self.weather_border_opacity_label.setText(f"{v}%")
         )
@@ -620,7 +759,7 @@ class WidgetsTab(QWidget):
         weather_margin_row.addWidget(QLabel("Margin:"))
         self.weather_margin = QSpinBox()
         self.weather_margin.setRange(0, 200)
-        self.weather_margin.setValue(20)
+        self.weather_margin.setValue(self._default_int('weather', 'margin', 30))
         self.weather_margin.setSuffix(" px")
         self.weather_margin.setToolTip("Distance from screen edge in pixels")
         self.weather_margin.valueChanged.connect(self._save_settings)
@@ -665,6 +804,7 @@ class WidgetsTab(QWidget):
         self.media_position.currentTextChanged.connect(self._save_settings)
         self.media_position.currentTextChanged.connect(self._update_stack_status)
         media_pos_row.addWidget(self.media_position)
+        self._set_combo_text(self.media_position, self._default_str('media', 'position', 'Bottom Left'))
         self.media_stack_status = QLabel("")
         self.media_stack_status.setMinimumWidth(100)
         media_pos_row.addWidget(self.media_stack_status)
@@ -678,13 +818,16 @@ class WidgetsTab(QWidget):
         self.media_monitor_combo.currentTextChanged.connect(self._save_settings)
         self.media_monitor_combo.currentTextChanged.connect(self._update_stack_status)
         media_disp_row.addWidget(self.media_monitor_combo)
+        media_monitor_default = self._widget_default('media', 'monitor', 'ALL')
+        self._set_combo_text(self.media_monitor_combo, str(media_monitor_default))
         media_disp_row.addStretch()
         media_layout.addLayout(media_disp_row)
 
         media_font_family_row = QHBoxLayout()
         media_font_family_row.addWidget(QLabel("Font:"))
         self.media_font_combo = QFontComboBox()
-        self.media_font_combo.setCurrentFont("Segoe UI")
+        default_media_font = self._default_str('media', 'font_family', 'Segoe UI')
+        self.media_font_combo.setCurrentFont(QFont(default_media_font))
         self.media_font_combo.setMinimumWidth(220)
         self.media_font_combo.currentFontChanged.connect(self._save_settings)
         media_font_family_row.addWidget(self.media_font_combo)
@@ -695,7 +838,7 @@ class WidgetsTab(QWidget):
         media_font_row.addWidget(QLabel("Font Size:"))
         self.media_font_size = QSpinBox()
         self.media_font_size.setRange(10, 72)
-        self.media_font_size.setValue(20)
+        self.media_font_size.setValue(self._default_int('media', 'font_size', 20))
         self.media_font_size.setAccelerated(True)
         self.media_font_size.valueChanged.connect(self._save_settings)
         self.media_font_size.valueChanged.connect(self._update_stack_status)
@@ -708,7 +851,7 @@ class WidgetsTab(QWidget):
         media_margin_row.addWidget(QLabel("Margin:"))
         self.media_margin = QSpinBox()
         self.media_margin.setRange(0, 100)
-        self.media_margin.setValue(20)
+        self.media_margin.setValue(self._default_int('media', 'margin', 30))
         self.media_margin.setAccelerated(True)
         self.media_margin.valueChanged.connect(self._save_settings)
         media_margin_row.addWidget(self.media_margin)
@@ -725,11 +868,13 @@ class WidgetsTab(QWidget):
         media_layout.addLayout(media_color_row)
 
         self.media_show_background = QCheckBox("Show Background Frame")
+        self.media_show_background.setChecked(self._default_bool('media', 'show_background', True))
         self.media_show_background.stateChanged.connect(self._save_settings)
         media_layout.addWidget(self.media_show_background)
 
         # Intense shadow
         self.media_intense_shadow = QCheckBox("Intense Shadows")
+        self.media_intense_shadow.setChecked(self._default_bool('media', 'intense_shadow', False))
         self.media_intense_shadow.setToolTip(
             "Doubles shadow blur, opacity, and offset for dramatic effect on large displays."
         )
@@ -741,12 +886,13 @@ class WidgetsTab(QWidget):
         self.media_bg_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
         self.media_bg_opacity.setMinimum(0)
         self.media_bg_opacity.setMaximum(100)
-        self.media_bg_opacity.setValue(90)
+        media_bg_opacity_pct = int(self._default_float('media', 'bg_opacity', 0.6) * 100)
+        self.media_bg_opacity.setValue(media_bg_opacity_pct)
         self.media_bg_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.media_bg_opacity.setTickInterval(10)
         self.media_bg_opacity.valueChanged.connect(self._save_settings)
         media_opacity_row.addWidget(self.media_bg_opacity)
-        self.media_bg_opacity_label = QLabel("90%")
+        self.media_bg_opacity_label = QLabel(f"{media_bg_opacity_pct}%")
         self.media_bg_opacity.valueChanged.connect(
             lambda v: self.media_bg_opacity_label.setText(f"{v}%")
         )
@@ -774,12 +920,13 @@ class WidgetsTab(QWidget):
         self.media_border_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
         self.media_border_opacity.setMinimum(0)
         self.media_border_opacity.setMaximum(100)
-        self.media_border_opacity.setValue(80)
+        media_border_opacity_pct = int(self._default_float('media', 'border_opacity', 1.0) * 100)
+        self.media_border_opacity.setValue(media_border_opacity_pct)
         self.media_border_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.media_border_opacity.setTickInterval(10)
         self.media_border_opacity.valueChanged.connect(self._save_settings)
         media_border_opacity_row.addWidget(self.media_border_opacity)
-        self.media_border_opacity_label = QLabel("80%")
+        self.media_border_opacity_label = QLabel(f"{media_border_opacity_pct}%")
         self.media_border_opacity.valueChanged.connect(
             lambda v: self.media_border_opacity_label.setText(f"{v}%")
         )
@@ -801,7 +948,7 @@ class WidgetsTab(QWidget):
         # Artwork size is in logical pixels; allow a comfortable range while
         # preventing values that would likely clip inside the widget.
         self.media_artwork_size.setRange(100, 300)
-        self.media_artwork_size.setValue(200)
+        self.media_artwork_size.setValue(self._default_int('media', 'artwork_size', 200))
         self.media_artwork_size.setAccelerated(True)
         self.media_artwork_size.valueChanged.connect(self._save_settings)
         self.media_artwork_size.valueChanged.connect(self._update_stack_status)
@@ -812,19 +959,25 @@ class WidgetsTab(QWidget):
 
         # Artwork border style
         self.media_rounded_artwork = QCheckBox("Rounded Artwork Border")
-        self.media_rounded_artwork.setChecked(True)
+        self.media_rounded_artwork.setChecked(
+            self._default_bool('media', 'rounded_artwork_border', True)
+        )
         self.media_rounded_artwork.stateChanged.connect(self._save_settings)
         media_layout.addWidget(self.media_rounded_artwork)
 
         # Header frame around logo + title
         self.media_show_header_frame = QCheckBox("Header Border Around Logo + Title")
-        self.media_show_header_frame.setChecked(True)
+        self.media_show_header_frame.setChecked(
+            self._default_bool('media', 'show_header_frame', True)
+        )
         self.media_show_header_frame.stateChanged.connect(self._save_settings)
         media_layout.addWidget(self.media_show_header_frame)
 
         # Controls visibility
         self.media_show_controls = QCheckBox("Show Transport Controls")
-        self.media_show_controls.setChecked(True)
+        self.media_show_controls.setChecked(
+            self._default_bool('media', 'show_controls', True)
+        )
         self.media_show_controls.stateChanged.connect(self._save_settings)
         media_layout.addWidget(self.media_show_controls)
 
@@ -834,7 +987,9 @@ class WidgetsTab(QWidget):
             "Show a slim vertical volume slider next to the Spotify card when Core Audio/pycaw is available. "
             "The slider only affects the Spotify session volume and is gated by hard-exit / Ctrl interaction modes."
         )
-        self.media_spotify_volume_enabled.setChecked(True)
+        self.media_spotify_volume_enabled.setChecked(
+            self._default_bool('media', 'spotify_volume_enabled', True)
+        )
         self.media_spotify_volume_enabled.stateChanged.connect(self._save_settings)
         media_layout.addWidget(self.media_spotify_volume_enabled)
 
@@ -846,6 +1001,7 @@ class WidgetsTab(QWidget):
         # Enable/disable row with FORCE Software Visualizer on the same line.
         spotify_vis_enable_row = QHBoxLayout()
         self.spotify_vis_enabled = QCheckBox("Enable Spotify Beat Visualizer")
+        self.spotify_vis_enabled.setChecked(self._default_bool('spotify_visualizer', 'enabled', True))
         self.spotify_vis_enabled.setToolTip(
             "Shows a thin bar visualizer tied to Spotify playback, positioned just above the Spotify widget."
         )
@@ -856,6 +1012,9 @@ class WidgetsTab(QWidget):
         # QWidget-based bar renderer is allowed to draw when OpenGL is
         # unavailable or when the renderer backend is set to Software.
         self.spotify_vis_software_enabled = QCheckBox("FORCE Software Visualizer")
+        self.spotify_vis_software_enabled.setChecked(
+            self._default_bool('spotify_visualizer', 'software_visualizer_enabled', False)
+        )
         self.spotify_vis_software_enabled.setToolTip(
             "Force the legacy CPU bar visualizer even when the renderer backend is set to Software or when OpenGL is unavailable."
         )
@@ -869,7 +1028,7 @@ class WidgetsTab(QWidget):
         spotify_vis_bar_row.addWidget(QLabel("Bar Count:"))
         self.spotify_vis_bar_count = QSpinBox()
         self.spotify_vis_bar_count.setRange(8, 96)
-        self.spotify_vis_bar_count.setValue(32)
+        self.spotify_vis_bar_count.setValue(self._default_int('spotify_visualizer', 'bar_count', 32))
         self.spotify_vis_bar_count.setAccelerated(True)
         self.spotify_vis_bar_count.setToolTip("Number of frequency bars to display (8-96)")
         self.spotify_vis_bar_count.valueChanged.connect(self._save_settings)
@@ -888,6 +1047,10 @@ class WidgetsTab(QWidget):
         self.spotify_vis_block_size.addItem("1024 samples", 1024)
         self.spotify_vis_block_size.currentIndexChanged.connect(self._save_settings)
         spotify_vis_block_row.addWidget(self.spotify_vis_block_size)
+        default_block = self._default_int('spotify_visualizer', 'audio_block_size', 512)
+        block_idx = self.spotify_vis_block_size.findData(default_block)
+        if block_idx >= 0:
+            self.spotify_vis_block_size.setCurrentIndex(block_idx)
         spotify_vis_block_row.addStretch()
         spotify_vis_layout.addLayout(spotify_vis_block_row)
 
@@ -912,12 +1075,15 @@ class WidgetsTab(QWidget):
         self.spotify_vis_border_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
         self.spotify_vis_border_opacity.setMinimum(0)
         self.spotify_vis_border_opacity.setMaximum(100)
-        self.spotify_vis_border_opacity.setValue(85)
+        spotify_vis_border_opacity_pct = int(
+            self._default_float('spotify_visualizer', 'bar_border_opacity', 0.85) * 100
+        )
+        self.spotify_vis_border_opacity.setValue(spotify_vis_border_opacity_pct)
         self.spotify_vis_border_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.spotify_vis_border_opacity.setTickInterval(5)
         self.spotify_vis_border_opacity.valueChanged.connect(self._save_settings)
         spotify_vis_border_opacity_row.addWidget(self.spotify_vis_border_opacity)
-        self.spotify_vis_border_opacity_label = QLabel("85%")
+        self.spotify_vis_border_opacity_label = QLabel(f"{spotify_vis_border_opacity_pct}%")
         self.spotify_vis_border_opacity.valueChanged.connect(
             lambda v: self.spotify_vis_border_opacity_label.setText(f"{v}%")
         )
@@ -926,6 +1092,9 @@ class WidgetsTab(QWidget):
 
         spotify_vis_sensitivity_row = QHBoxLayout()
         self.spotify_vis_recommended = QCheckBox("Adaptive")
+        self.spotify_vis_recommended.setChecked(
+            self._default_bool('spotify_visualizer', 'adaptive_sensitivity', True)
+        )
         self.spotify_vis_recommended.setToolTip(
             "When enabled, the visualizer uses the adaptive (v1.4) sensitivity baseline. Disable to adjust manually."
         )
@@ -940,12 +1109,13 @@ class WidgetsTab(QWidget):
         self.spotify_vis_sensitivity = NoWheelSlider(Qt.Orientation.Horizontal)
         self.spotify_vis_sensitivity.setMinimum(25)
         self.spotify_vis_sensitivity.setMaximum(250)
-        self.spotify_vis_sensitivity.setValue(100)
+        spotify_sens_slider = int(max(0.25, min(2.5, self._default_float('spotify_visualizer', 'sensitivity', 1.0))) * 100)
+        self.spotify_vis_sensitivity.setValue(spotify_sens_slider)
         self.spotify_vis_sensitivity.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.spotify_vis_sensitivity.setTickInterval(25)
         self.spotify_vis_sensitivity.valueChanged.connect(self._save_settings)
         spotify_vis_sensitivity_slider_row.addWidget(self.spotify_vis_sensitivity)
-        self.spotify_vis_sensitivity_label = QLabel("1.00x")
+        self.spotify_vis_sensitivity_label = QLabel(f"{spotify_sens_slider / 100.0:.2f}x")
         self.spotify_vis_sensitivity.valueChanged.connect(
             lambda v: self.spotify_vis_sensitivity_label.setText(f"{v / 100.0:.2f}x")
         )
@@ -954,6 +1124,9 @@ class WidgetsTab(QWidget):
 
         spotify_vis_floor_row = QHBoxLayout()
         self.spotify_vis_dynamic_floor = QCheckBox("Dynamic Noise Floor")
+        self.spotify_vis_dynamic_floor.setChecked(
+            self._default_bool('spotify_visualizer', 'dynamic_range_enabled', True)
+        )
         self.spotify_vis_dynamic_floor.setToolTip(
             "Automatically adjust the noise floor based on recent Spotify loopback energy."
         )
@@ -971,12 +1144,13 @@ class WidgetsTab(QWidget):
         self.spotify_vis_manual_floor = NoWheelSlider(Qt.Orientation.Horizontal)
         self.spotify_vis_manual_floor.setMinimum(12)   # 0.12
         self.spotify_vis_manual_floor.setMaximum(400)  # 4.00
-        self.spotify_vis_manual_floor.setValue(210)    # 2.10 default
+        manual_floor_default = self._default_float('spotify_visualizer', 'manual_floor', 2.1)
+        self.spotify_vis_manual_floor.setValue(int(max(0.12, min(4.0, manual_floor_default)) * 100))
         self.spotify_vis_manual_floor.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.spotify_vis_manual_floor.setTickInterval(10)
         self.spotify_vis_manual_floor.valueChanged.connect(self._save_settings)
         spotify_vis_manual_floor_row.addWidget(self.spotify_vis_manual_floor)
-        self.spotify_vis_manual_floor_label = QLabel("2.10")
+        self.spotify_vis_manual_floor_label = QLabel(f"{manual_floor_default:.2f}")
         self.spotify_vis_manual_floor.valueChanged.connect(
             lambda v: self.spotify_vis_manual_floor_label.setText(f"{v / 100.0:.2f}")
         )
@@ -986,7 +1160,9 @@ class WidgetsTab(QWidget):
         # Ghosting controls: global enable, opacity and decay speed.
         spotify_vis_ghost_enable_row = QHBoxLayout()
         self.spotify_vis_ghost_enabled = QCheckBox("Enable Ghosting")
-        self.spotify_vis_ghost_enabled.setChecked(True)
+        self.spotify_vis_ghost_enabled.setChecked(
+            self._default_bool('spotify_visualizer', 'ghosting_enabled', True)
+        )
         self.spotify_vis_ghost_enabled.setToolTip(
             "When enabled, the visualizer draws trailing ghost bars above the current height."
         )
@@ -1000,12 +1176,13 @@ class WidgetsTab(QWidget):
         self.spotify_vis_ghost_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
         self.spotify_vis_ghost_opacity.setMinimum(0)
         self.spotify_vis_ghost_opacity.setMaximum(100)
-        self.spotify_vis_ghost_opacity.setValue(40)
+        ghost_alpha_pct = int(self._default_float('spotify_visualizer', 'ghost_alpha', 0.4) * 100)
+        self.spotify_vis_ghost_opacity.setValue(ghost_alpha_pct)
         self.spotify_vis_ghost_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.spotify_vis_ghost_opacity.setTickInterval(5)
         self.spotify_vis_ghost_opacity.valueChanged.connect(self._save_settings)
         spotify_vis_ghost_opacity_row.addWidget(self.spotify_vis_ghost_opacity)
-        self.spotify_vis_ghost_opacity_label = QLabel("40%")
+        self.spotify_vis_ghost_opacity_label = QLabel(f"{ghost_alpha_pct}%")
         self.spotify_vis_ghost_opacity.valueChanged.connect(
             lambda v: self.spotify_vis_ghost_opacity_label.setText(f"{v}%")
         )
@@ -1017,12 +1194,13 @@ class WidgetsTab(QWidget):
         self.spotify_vis_ghost_decay = NoWheelSlider(Qt.Orientation.Horizontal)
         self.spotify_vis_ghost_decay.setMinimum(10)   # 0.10x
         self.spotify_vis_ghost_decay.setMaximum(100)  # 1.00x
-        self.spotify_vis_ghost_decay.setValue(40)     # 0.40x default
+        ghost_decay_slider = int(self._default_float('spotify_visualizer', 'ghost_decay', 0.4) * 100)
+        self.spotify_vis_ghost_decay.setValue(max(10, min(100, ghost_decay_slider)))
         self.spotify_vis_ghost_decay.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.spotify_vis_ghost_decay.setTickInterval(5)
         self.spotify_vis_ghost_decay.valueChanged.connect(self._save_settings)
         spotify_vis_ghost_decay_row.addWidget(self.spotify_vis_ghost_decay)
-        self.spotify_vis_ghost_decay_label = QLabel("0.40x")
+        self.spotify_vis_ghost_decay_label = QLabel(f"{self.spotify_vis_ghost_decay.value() / 100.0:.2f}x")
         self.spotify_vis_ghost_decay.valueChanged.connect(
             lambda v: self.spotify_vis_ghost_decay_label.setText(f"{v / 100.0:.2f}x")
         )
@@ -1044,6 +1222,7 @@ class WidgetsTab(QWidget):
         self.reddit_enabled.setToolTip(
             "Shows a small list of posts from a subreddit using Reddit's public JSON feed."
         )
+        self.reddit_enabled.setChecked(self._default_bool('reddit', 'enabled', True))
         self.reddit_enabled.stateChanged.connect(self._save_settings)
         self.reddit_enabled.stateChanged.connect(self._update_stack_status)
         reddit_layout.addWidget(self.reddit_enabled)
@@ -1060,6 +1239,7 @@ class WidgetsTab(QWidget):
         self.reddit_exit_on_click.setToolTip(
             "When enabled, clicking a Reddit link will exit the screensaver and open the link in your browser."
         )
+        self.reddit_exit_on_click.setChecked(self._default_bool('reddit', 'exit_on_click', True))
         self.reddit_exit_on_click.stateChanged.connect(self._save_settings)
         reddit_layout.addWidget(self.reddit_exit_on_click)
 
@@ -1067,6 +1247,8 @@ class WidgetsTab(QWidget):
         reddit_sub_row = QHBoxLayout()
         reddit_sub_row.addWidget(QLabel("Subreddit:"))
         self.reddit_subreddit = QLineEdit()
+        default_subreddit = self._default_str('reddit', 'subreddit', 'wallpapers')
+        self.reddit_subreddit.setText(default_subreddit)
         self.reddit_subreddit.setPlaceholderText("e.g. wallpapers")
         self.reddit_subreddit.setToolTip("Enter the subreddit name (without r/ prefix)")
         self.reddit_subreddit.textChanged.connect(self._save_settings)
@@ -1083,6 +1265,14 @@ class WidgetsTab(QWidget):
         self.reddit_items.currentTextChanged.connect(self._save_settings)
         self.reddit_items.currentTextChanged.connect(self._update_stack_status)
         reddit_items_row.addWidget(self.reddit_items)
+        reddit_limit_default = self._default_int('reddit', 'limit', 10)
+        if reddit_limit_default <= 5:
+            default_items_text = "4"
+        elif reddit_limit_default >= 20:
+            default_items_text = "20"
+        else:
+            default_items_text = "10"
+        self._set_combo_text(self.reddit_items, default_items_text)
         reddit_items_row.addStretch()
         reddit_layout.addLayout(reddit_items_row)
 
@@ -1099,6 +1289,7 @@ class WidgetsTab(QWidget):
         self.reddit_position.currentTextChanged.connect(self._save_settings)
         self.reddit_position.currentTextChanged.connect(self._update_stack_status)
         reddit_pos_row.addWidget(self.reddit_position)
+        self._set_combo_text(self.reddit_position, self._default_str('reddit', 'position', 'Bottom Right'))
         self.reddit_stack_status = QLabel("")
         self.reddit_stack_status.setMinimumWidth(100)
         reddit_pos_row.addWidget(self.reddit_stack_status)
@@ -1114,6 +1305,8 @@ class WidgetsTab(QWidget):
         self.reddit_monitor_combo.currentTextChanged.connect(self._save_settings)
         self.reddit_monitor_combo.currentTextChanged.connect(self._update_stack_status)
         reddit_disp_row.addWidget(self.reddit_monitor_combo)
+        reddit_monitor_default = self._widget_default('reddit', 'monitor', 'ALL')
+        self._set_combo_text(self.reddit_monitor_combo, str(reddit_monitor_default))
         reddit_disp_row.addStretch()
         reddit_layout.addLayout(reddit_disp_row)
 
@@ -1121,7 +1314,8 @@ class WidgetsTab(QWidget):
         reddit_font_family_row = QHBoxLayout()
         reddit_font_family_row.addWidget(QLabel("Font:"))
         self.reddit_font_combo = QFontComboBox()
-        self.reddit_font_combo.setCurrentFont("Segoe UI")
+        default_reddit_font = self._default_str('reddit', 'font_family', 'Segoe UI')
+        self.reddit_font_combo.setCurrentFont(QFont(default_reddit_font))
         self.reddit_font_combo.setMinimumWidth(220)
         self.reddit_font_combo.setToolTip("Font family for Reddit post titles")
         self.reddit_font_combo.currentFontChanged.connect(self._save_settings)
@@ -1134,7 +1328,7 @@ class WidgetsTab(QWidget):
         reddit_font_row.addWidget(QLabel("Font Size:"))
         self.reddit_font_size = QSpinBox()
         self.reddit_font_size.setRange(10, 72)
-        self.reddit_font_size.setValue(18)
+        self.reddit_font_size.setValue(self._default_int('reddit', 'font_size', 18))
         self.reddit_font_size.setAccelerated(True)
         self.reddit_font_size.setToolTip("Font size for Reddit post titles (10-72px)")
         self.reddit_font_size.valueChanged.connect(self._save_settings)
@@ -1149,7 +1343,7 @@ class WidgetsTab(QWidget):
         reddit_margin_row.addWidget(QLabel("Margin:"))
         self.reddit_margin = QSpinBox()
         self.reddit_margin.setRange(0, 100)
-        self.reddit_margin.setValue(20)
+        self.reddit_margin.setValue(self._default_int('reddit', 'margin', 30))
         self.reddit_margin.setAccelerated(True)
         self.reddit_margin.valueChanged.connect(self._save_settings)
         reddit_margin_row.addWidget(self.reddit_margin)
@@ -1168,11 +1362,13 @@ class WidgetsTab(QWidget):
 
         # Background frame
         self.reddit_show_background = QCheckBox("Show Background Frame")
+        self.reddit_show_background.setChecked(self._default_bool('reddit', 'show_background', True))
         self.reddit_show_background.stateChanged.connect(self._save_settings)
         reddit_layout.addWidget(self.reddit_show_background)
 
         # Intense shadow
         self.reddit_intense_shadow = QCheckBox("Intense Shadows")
+        self.reddit_intense_shadow.setChecked(self._default_bool('reddit', 'intense_shadow', False))
         self.reddit_intense_shadow.setToolTip(
             "Doubles shadow blur, opacity, and offset for dramatic effect on large displays."
         )
@@ -1180,6 +1376,7 @@ class WidgetsTab(QWidget):
         reddit_layout.addWidget(self.reddit_intense_shadow)
 
         self.reddit_show_separators = QCheckBox("Show separator lines between posts")
+        self.reddit_show_separators.setChecked(self._default_bool('reddit', 'show_separators', True))
         self.reddit_show_separators.stateChanged.connect(self._save_settings)
         reddit_layout.addWidget(self.reddit_show_separators)
 
@@ -1189,12 +1386,13 @@ class WidgetsTab(QWidget):
         self.reddit_bg_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
         self.reddit_bg_opacity.setMinimum(0)
         self.reddit_bg_opacity.setMaximum(100)
-        self.reddit_bg_opacity.setValue(90)
+        reddit_bg_opacity_pct = int(self._default_float('reddit', 'bg_opacity', 0.6) * 100)
+        self.reddit_bg_opacity.setValue(reddit_bg_opacity_pct)
         self.reddit_bg_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.reddit_bg_opacity.setTickInterval(10)
         self.reddit_bg_opacity.valueChanged.connect(self._save_settings)
         reddit_opacity_row.addWidget(self.reddit_bg_opacity)
-        self.reddit_bg_opacity_label = QLabel("90%")
+        self.reddit_bg_opacity_label = QLabel(f"{reddit_bg_opacity_pct}%")
         self.reddit_bg_opacity.valueChanged.connect(
             lambda v: self.reddit_bg_opacity_label.setText(f"{v}%")
         )
@@ -1225,15 +1423,13 @@ class WidgetsTab(QWidget):
         self.reddit_border_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
         self.reddit_border_opacity.setMinimum(0)
         self.reddit_border_opacity.setMaximum(100)
-        # Canonical default is 100% (1.0) to match SettingsManager
-        # defaults; this will be overridden on load when a saved value
-        # exists.
-        self.reddit_border_opacity.setValue(100)
+        reddit_border_opacity_pct = int(self._default_float('reddit', 'border_opacity', 1.0) * 100)
+        self.reddit_border_opacity.setValue(reddit_border_opacity_pct)
         self.reddit_border_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.reddit_border_opacity.setTickInterval(10)
         self.reddit_border_opacity.valueChanged.connect(self._save_settings)
         reddit_border_opacity_row.addWidget(self.reddit_border_opacity)
-        self.reddit_border_opacity_label = QLabel("100%")
+        self.reddit_border_opacity_label = QLabel(f"{reddit_border_opacity_pct}%")
         self.reddit_border_opacity.valueChanged.connect(
             lambda v: self.reddit_border_opacity_label.setText(f"{v}%")
         )
@@ -1524,79 +1720,73 @@ class WidgetsTab(QWidget):
 
             # Load clock settings
             clock_config = widgets.get('clock', {})
-            self.clock_enabled.setChecked(clock_config.get('enabled', False))
+            self.clock_enabled.setChecked(self._config_bool('clock', clock_config, 'enabled', True))
             
-            format_text = "12 Hour" if clock_config.get('format', '12h') == '12h' else "24 Hour"
+            format_raw = self._config_str('clock', clock_config, 'format', '24h').lower()
+            format_text = "12 Hour" if format_raw == '12h' else "24 Hour"
             index = self.clock_format.findText(format_text)
             if index >= 0:
                 self.clock_format.setCurrentIndex(index)
             
-            self.clock_seconds.setChecked(clock_config.get('show_seconds', True))
+            self.clock_seconds.setChecked(self._config_bool('clock', clock_config, 'show_seconds', True))
             
             # Load timezone settings
-            timezone_str = clock_config.get('timezone', 'local')
+            timezone_str = self._config_str('clock', clock_config, 'timezone', 'local')
             tz_index = self.clock_timezone.findData(timezone_str)
             if tz_index >= 0:
                 self.clock_timezone.setCurrentIndex(tz_index)
             
-            self.clock_show_tz.setChecked(clock_config.get('show_timezone', False))
+            self.clock_show_tz.setChecked(self._config_bool('clock', clock_config, 'show_timezone', True))
 
             # Analogue mode configuration (main clock only). Secondary clocks
             # inherit style from Clock 1 in DisplayWidget._setup_widgets().
-            display_mode = str(clock_config.get('display_mode', 'digital')).lower()
+            display_mode = self._config_str('clock', clock_config, 'display_mode', 'analog').lower()
             self.clock_analog_mode.setChecked(display_mode == 'analog')
 
-            show_numerals_val = clock_config.get('show_numerals', True)
-            show_numerals = SettingsManager.to_bool(show_numerals_val, True)
-            self.clock_show_numerals.setChecked(show_numerals)
-
-            analog_shadow_val = clock_config.get('analog_face_shadow', True)
-            analog_shadow = SettingsManager.to_bool(analog_shadow_val, True)
-            self.clock_analog_shadow.setChecked(analog_shadow)
-
-            intense_shadow_val = clock_config.get('analog_shadow_intense', False)
-            intense_shadow = SettingsManager.to_bool(intense_shadow_val, False)
-            self.clock_analog_shadow_intense.setChecked(intense_shadow)
-
-            digital_intense_val = clock_config.get('digital_shadow_intense', False)
-            digital_intense = SettingsManager.to_bool(digital_intense_val, False)
-            self.clock_digital_shadow_intense.setChecked(digital_intense)
+            self.clock_show_numerals.setChecked(self._config_bool('clock', clock_config, 'show_numerals', True))
+            self.clock_analog_shadow.setChecked(self._config_bool('clock', clock_config, 'analog_face_shadow', True))
+            self.clock_analog_shadow_intense.setChecked(
+                self._config_bool('clock', clock_config, 'analog_shadow_intense', False)
+            )
+            self.clock_digital_shadow_intense.setChecked(
+                self._config_bool('clock', clock_config, 'digital_shadow_intense', False)
+            )
             
-            position = clock_config.get('position', 'Top Right')
+            position = self._config_str('clock', clock_config, 'position', 'Top Right')
             index = self.clock_position.findText(position)
             if index >= 0:
                 self.clock_position.setCurrentIndex(index)
             
-            self.clock_font_combo.setCurrentFont(QFont(clock_config.get('font_family', 'Segoe UI')))
-            self.clock_font_size.setValue(clock_config.get('font_size', 48))
-            self.clock_margin.setValue(clock_config.get('margin', 20))
-            self.clock_show_background.setChecked(clock_config.get('show_background', False))
-            opacity_pct = int(clock_config.get('bg_opacity', 0.9) * 100)
+            self.clock_font_combo.setCurrentFont(QFont(self._config_str('clock', clock_config, 'font_family', 'Segoe UI')))
+            self.clock_font_size.setValue(self._config_int('clock', clock_config, 'font_size', 48))
+            self.clock_margin.setValue(self._config_int('clock', clock_config, 'margin', 30))
+            self.clock_show_background.setChecked(self._config_bool('clock', clock_config, 'show_background', True))
+            opacity_pct = int(self._config_float('clock', clock_config, 'bg_opacity', 0.6) * 100)
             self.clock_bg_opacity.setValue(opacity_pct)
             self.clock_opacity_label.setText(f"{opacity_pct}%")
             # Monitor selection
-            monitor_sel = clock_config.get('monitor', 'ALL')
+            monitor_sel = clock_config.get('monitor', self._widget_default('clock', 'monitor', 'ALL'))
             mon_text = str(monitor_sel) if isinstance(monitor_sel, (int, str)) else 'ALL'
             idx = self.clock_monitor_combo.findText(mon_text)
             if idx >= 0:
                 self.clock_monitor_combo.setCurrentIndex(idx)
             
             # Load clock color
-            color_data = clock_config.get('color', [255, 255, 255, 230])
+            color_data = clock_config.get('color', self._widget_default('clock', 'color', [255, 255, 255, 230]))
             self._clock_color = QColor(*color_data)
-            bg_color_data = clock_config.get('bg_color', [64, 64, 64, 255])
+            bg_color_data = clock_config.get('bg_color', self._widget_default('clock', 'bg_color', [64, 64, 64, 255]))
             try:
                 self._clock_bg_color = QColor(*bg_color_data)
             except Exception as e:
                 logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
                 self._clock_bg_color = QColor(64, 64, 64, 255)
-            border_color_data = clock_config.get('border_color', [128, 128, 128, 255])
+            border_color_data = clock_config.get('border_color', self._widget_default('clock', 'border_color', [128, 128, 128, 255]))
             try:
                 self._clock_border_color = QColor(*border_color_data)
             except Exception as e:
                 logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
                 self._clock_border_color = QColor(128, 128, 128, 255)
-            border_opacity_pct = int(clock_config.get('border_opacity', 0.8) * 100)
+            border_opacity_pct = int(clock_config.get('border_opacity', self._default_float('clock', 'border_opacity', 0.8)) * 100)
             self.clock_border_opacity.setValue(border_opacity_pct)
             self.clock_border_opacity_label.setText(f"{border_opacity_pct}%")
 
@@ -1649,52 +1839,51 @@ class WidgetsTab(QWidget):
                         widgets['weather'] = weather_config
                         self._settings.set('widgets', widgets)
                         self._settings.save()
-            except Exception as e:
+            except Exception:
                 logger.debug("Failed to auto-derive weather location from timezone", exc_info=True)
 
-            self.weather_enabled.setChecked(weather_config.get('enabled', False))
-            # No API key needed with Open-Meteo!
-            self.weather_location.setText(weather_config.get('location', 'New York'))
+            self.weather_enabled.setChecked(self._config_bool('weather', weather_config, 'enabled', True))
+            self.weather_location.setText(self._config_str('weather', weather_config, 'location', ''))
             
-            weather_pos = weather_config.get('position', 'Bottom Left')
+            weather_pos = self._config_str('weather', weather_config, 'position', 'Top Left')
             index = self.weather_position.findText(weather_pos)
             if index >= 0:
                 self.weather_position.setCurrentIndex(index)
             
-            self.weather_font_combo.setCurrentFont(QFont(weather_config.get('font_family', 'Segoe UI')))
-            self.weather_font_size.setValue(weather_config.get('font_size', 24))
-            self.weather_show_forecast.setChecked(weather_config.get('show_forecast', False))
+            self.weather_font_combo.setCurrentFont(QFont(self._config_str('weather', weather_config, 'font_family', 'Segoe UI')))
+            self.weather_font_size.setValue(self._config_int('weather', weather_config, 'font_size', 24))
+            self.weather_show_forecast.setChecked(self._config_bool('weather', weather_config, 'show_forecast', True))
             self.weather_intense_shadow.setChecked(
-                SettingsManager.to_bool(weather_config.get('intense_shadow', False), False)
+                self._config_bool('weather', weather_config, 'intense_shadow', False)
             )
-            self.weather_show_background.setChecked(weather_config.get('show_background', False))
-            weather_opacity_pct = int(weather_config.get('bg_opacity', 0.9) * 100)
+            self.weather_show_background.setChecked(self._config_bool('weather', weather_config, 'show_background', True))
+            weather_opacity_pct = int(self._config_float('weather', weather_config, 'bg_opacity', 0.6) * 100)
             self.weather_bg_opacity.setValue(weather_opacity_pct)
             self.weather_opacity_label.setText(f"{weather_opacity_pct}%")
             
             # Load weather color
-            weather_color_data = weather_config.get('color', [255, 255, 255, 230])
+            weather_color_data = weather_config.get('color', self._widget_default('weather', 'color', [255, 255, 255, 230]))
             self._weather_color = QColor(*weather_color_data)
             # Load weather background and border colors
-            bg_color_data = weather_config.get('bg_color', [64, 64, 64, 255])
+            bg_color_data = weather_config.get('bg_color', self._widget_default('weather', 'bg_color', [64, 64, 64, 255]))
             try:
                 self._weather_bg_color = QColor(*bg_color_data)
-            except Exception as e:
-                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
+            except Exception:
+                logger.debug("[WIDGETS_TAB] Exception suppressed: invalid weather bg color", exc_info=True)
                 self._weather_bg_color = QColor(64, 64, 64, 255)
-            border_color_data = weather_config.get('border_color', [128, 128, 128, 255])
+            border_color_data = weather_config.get('border_color', self._widget_default('weather', 'border_color', [128, 128, 128, 255]))
             try:
                 self._weather_border_color = QColor(*border_color_data)
-            except Exception as e:
-                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
+            except Exception:
+                logger.debug("[WIDGETS_TAB] Exception suppressed: invalid weather border color", exc_info=True)
                 self._weather_border_color = QColor(128, 128, 128, 255)
-            border_opacity_pct = int(weather_config.get('border_opacity', 0.8) * 100)
+            border_opacity_pct = int(self._config_float('weather', weather_config, 'border_opacity', 1.0) * 100)
             self.weather_border_opacity.setValue(border_opacity_pct)
             self.weather_border_opacity_label.setText(f"{border_opacity_pct}%")
             # Margin
-            self.weather_margin.setValue(weather_config.get('margin', 20))
+            self.weather_margin.setValue(self._config_int('weather', weather_config, 'margin', 30))
             # Monitor selection
-            w_monitor_sel = weather_config.get('monitor', 'ALL')
+            w_monitor_sel = weather_config.get('monitor', self._widget_default('weather', 'monitor', 'ALL'))
             w_mon_text = str(w_monitor_sel) if isinstance(w_monitor_sel, (int, str)) else 'ALL'
             idx = self.weather_monitor_combo.findText(w_mon_text)
             if idx >= 0:
@@ -1702,78 +1891,67 @@ class WidgetsTab(QWidget):
             
             # Load media settings
             media_config = widgets.get('media', {})
-            self.media_enabled.setChecked(media_config.get('enabled', False))
+            self.media_enabled.setChecked(self._config_bool('media', media_config, 'enabled', True))
 
-            media_pos = media_config.get('position', 'Bottom Left')
+            media_pos = self._config_str('media', media_config, 'position', 'Bottom Left')
             index = self.media_position.findText(media_pos)
             if index >= 0:
                 self.media_position.setCurrentIndex(index)
 
-            self.media_font_combo.setCurrentFont(QFont(media_config.get('font_family', 'Segoe UI')))
-            self.media_font_size.setValue(media_config.get('font_size', 20))
-            self.media_margin.setValue(media_config.get('margin', 20))
-            self.media_show_background.setChecked(media_config.get('show_background', False))
-            self.media_intense_shadow.setChecked(
-                SettingsManager.to_bool(media_config.get('intense_shadow', False), False)
-            )
-            media_opacity_pct = int(media_config.get('bg_opacity', 0.9) * 100)
+            self.media_font_combo.setCurrentFont(QFont(self._config_str('media', media_config, 'font_family', 'Segoe UI')))
+            self.media_font_size.setValue(self._config_int('media', media_config, 'font_size', 20))
+            self.media_margin.setValue(self._config_int('media', media_config, 'margin', 30))
+            self.media_show_background.setChecked(self._config_bool('media', media_config, 'show_background', True))
+            self.media_intense_shadow.setChecked(self._config_bool('media', media_config, 'intense_shadow', False))
+            media_opacity_pct = int(self._config_float('media', media_config, 'bg_opacity', 0.6) * 100)
             self.media_bg_opacity.setValue(media_opacity_pct)
             self.media_bg_opacity_label.setText(f"{media_opacity_pct}%")
 
             # Artwork size and controls visibility
-            artwork_size = media_config.get('artwork_size', 100)
-            try:
-                self._media_artwork_size = int(artwork_size)
-            except Exception as e:
-                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
-                self._media_artwork_size = 100
+            self._media_artwork_size = self._config_int('media', media_config, 'artwork_size', 200)
             self.media_artwork_size.setValue(self._media_artwork_size)
 
-            rounded_art = SettingsManager.to_bool(
-                media_config.get('rounded_artwork_border', True), True
+            self.media_rounded_artwork.setChecked(
+                self._config_bool('media', media_config, 'rounded_artwork_border', True)
             )
-            self.media_rounded_artwork.setChecked(rounded_art)
 
-            show_header_frame = SettingsManager.to_bool(
-                media_config.get('show_header_frame', True), True
+            self.media_show_header_frame.setChecked(
+                self._config_bool('media', media_config, 'show_header_frame', True)
             )
-            self.media_show_header_frame.setChecked(show_header_frame)
 
-            show_controls = SettingsManager.to_bool(media_config.get('show_controls', True), True)
-            self.media_show_controls.setChecked(show_controls)
+            self.media_show_controls.setChecked(self._config_bool('media', media_config, 'show_controls', True))
 
-            spotify_volume_enabled = SettingsManager.to_bool(
-                media_config.get('spotify_volume_enabled', True), True
+            self.media_spotify_volume_enabled.setChecked(
+                self._config_bool('media', media_config, 'spotify_volume_enabled', True)
             )
-            self.media_spotify_volume_enabled.setChecked(spotify_volume_enabled)
 
             # Load media colors
-            media_color_data = media_config.get('color', [255, 255, 255, 230])
+            media_color_data = media_config.get('color', self._widget_default('media', 'color', [255, 255, 255, 230]))
             self._media_color = QColor(*media_color_data)
-            media_bg_color_data = media_config.get('bg_color', [64, 64, 64, 255])
+            media_bg_color_data = media_config.get('bg_color', self._widget_default('media', 'bg_color', [35, 35, 35, 255]))
             try:
                 self._media_bg_color = QColor(*media_bg_color_data)
-            except Exception as e:
-                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
-                self._media_bg_color = QColor(64, 64, 64, 255)
-            media_border_color_data = media_config.get('border_color', [128, 128, 128, 255])
+            except Exception:
+                logger.debug("[WIDGETS_TAB] Exception suppressed: invalid media bg color", exc_info=True)
+                self._media_bg_color = QColor(35, 35, 35, 255)
+            media_border_color_data = media_config.get('border_color', self._widget_default('media', 'border_color', [255, 255, 255, 255]))
             try:
                 self._media_border_color = QColor(*media_border_color_data)
-            except Exception as e:
-                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
-                self._media_border_color = QColor(128, 128, 128, 255)
-            media_border_opacity_pct = int(media_config.get('border_opacity', 0.8) * 100)
+            except Exception:
+                logger.debug("[WIDGETS_TAB] Exception suppressed: invalid media border color", exc_info=True)
+                self._media_border_color = QColor(255, 255, 255, 255)
+            media_border_opacity_pct = int(self._config_float('media', media_config, 'border_opacity', 1.0) * 100)
             self.media_border_opacity.setValue(media_border_opacity_pct)
             self.media_border_opacity_label.setText(f"{media_border_opacity_pct}%")
 
-            volume_fill_data = media_config.get('spotify_volume_fill_color', [255, 255, 255, 230])
+            volume_fill_data = media_config.get('spotify_volume_fill_color', self._widget_default('media', 'spotify_volume_fill_color', [255, 255, 255, 230]))
             try:
                 self._media_volume_fill_color = QColor(*volume_fill_data)
-            except Exception as e:
-                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
+            except Exception:
+                logger.debug("[WIDGETS_TAB] Exception suppressed: invalid media volume fill color", exc_info=True)
                 self._media_volume_fill_color = QColor(255, 255, 255, 230)
 
-            m_monitor_sel = media_config.get('monitor', 'ALL')
+            m_monitor_sel = media_config.get('monitor', self._widget_default('media', 'monitor', 'ALL'))
             m_mon_text = str(m_monitor_sel) if isinstance(m_monitor_sel, (int, str)) else 'ALL'
             midx = self.media_monitor_combo.findText(m_mon_text)
             if midx >= 0:
@@ -1781,79 +1959,67 @@ class WidgetsTab(QWidget):
 
             # Load Spotify Beat Visualizer settings
             spotify_vis_config = widgets.get('spotify_visualizer', {})
-            self.spotify_vis_enabled.setChecked(spotify_vis_config.get('enabled', False))
+            self.spotify_vis_enabled.setChecked(
+                self._config_bool('spotify_visualizer', spotify_vis_config, 'enabled', True)
+            )
             
             # Mode selection removed - only spectrum mode supported
             
-            bar_count = int(spotify_vis_config.get('bar_count', 32))
+            bar_count = self._config_int('spotify_visualizer', spotify_vis_config, 'bar_count', 32)
             self.spotify_vis_bar_count.setValue(bar_count)
 
-            block_size_val = int(spotify_vis_config.get('audio_block_size', 0) or 0)
+            block_size_val = self._config_int('spotify_visualizer', spotify_vis_config, 'audio_block_size', 0)
             block_idx = self.spotify_vis_block_size.findData(block_size_val)
             if block_idx < 0:
                 block_idx = 0
             self.spotify_vis_block_size.setCurrentIndex(block_idx)
 
-            recommended_raw = spotify_vis_config.get('adaptive_sensitivity', True)
-            recommended = SettingsManager.to_bool(recommended_raw, True)
-            self.spotify_vis_recommended.setChecked(recommended)
+            self.spotify_vis_recommended.setChecked(
+                self._config_bool('spotify_visualizer', spotify_vis_config, 'adaptive_sensitivity', True)
+            )
 
-            sens_val = spotify_vis_config.get('sensitivity', 1.0)
-            try:
-                sens_f = float(sens_val)
-            except Exception as e:
-                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
-                sens_f = 1.0
+            sens_f = self._config_float('spotify_visualizer', spotify_vis_config, 'sensitivity', 1.0)
             sens_slider = int(max(0.25, min(2.5, sens_f)) * 100)
             self.spotify_vis_sensitivity.setValue(sens_slider)
             self.spotify_vis_sensitivity_label.setText(f"{sens_slider / 100.0:.2f}x")
             self._update_spotify_vis_sensitivity_enabled_state()
 
-            dynamic_floor = SettingsManager.to_bool(spotify_vis_config.get('dynamic_floor', True), True)
+            dynamic_floor = self._config_bool('spotify_visualizer', spotify_vis_config, 'dynamic_range_enabled', True)
             self.spotify_vis_dynamic_floor.setChecked(dynamic_floor)
-            manual_floor_val = spotify_vis_config.get('manual_floor', 2.1)
-            try:
-                manual_floor_f = float(manual_floor_val)
-            except Exception as e:
-                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
-                manual_floor_f = 2.1
+            manual_floor_f = self._config_float('spotify_visualizer', spotify_vis_config, 'manual_floor', 2.1)
             manual_slider = int(max(0.12, min(4.0, manual_floor_f)) * 100)
             self.spotify_vis_manual_floor.setValue(manual_slider)
             self.spotify_vis_manual_floor_label.setText(f"{manual_slider / 100.0:.2f}")
             self._update_spotify_vis_floor_enabled_state()
 
-            software_enabled = bool(spotify_vis_config.get('software_visualizer_enabled', False))
-            self.spotify_vis_software_enabled.setChecked(software_enabled)
+            self.spotify_vis_software_enabled.setChecked(
+                self._config_bool('spotify_visualizer', spotify_vis_config, 'software_visualizer_enabled', False)
+            )
 
-            fill_color_data = spotify_vis_config.get('bar_fill_color', [0, 255, 128, 230])
+            fill_color_data = spotify_vis_config.get('bar_fill_color', self._widget_default('spotify_visualizer', 'bar_fill_color', [0, 255, 128, 230]))
             try:
                 self._spotify_vis_fill_color = QColor(*fill_color_data)
-            except Exception as e:
-                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
+            except Exception:
+                logger.debug("[WIDGETS_TAB] Exception suppressed: invalid spotify fill color", exc_info=True)
                 self._spotify_vis_fill_color = QColor(0, 255, 128, 230)
 
-            border_color_data = spotify_vis_config.get('bar_border_color', [255, 255, 255, 230])
+            border_color_data = spotify_vis_config.get('bar_border_color', self._widget_default('spotify_visualizer', 'bar_border_color', [255, 255, 255, 230]))
             try:
                 self._spotify_vis_border_color = QColor(*border_color_data)
-            except Exception as e:
-                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
+            except Exception:
+                logger.debug("[WIDGETS_TAB] Exception suppressed: invalid spotify border color", exc_info=True)
                 self._spotify_vis_border_color = QColor(255, 255, 255, 230)
 
-            border_opacity_pct = int(spotify_vis_config.get('bar_border_opacity', 0.85) * 100)
+            border_opacity_pct = int(self._config_float('spotify_visualizer', spotify_vis_config, 'bar_border_opacity', 0.85) * 100)
             self.spotify_vis_border_opacity.setValue(border_opacity_pct)
             self.spotify_vis_border_opacity_label.setText(f"{border_opacity_pct}%")
 
             # Ghosting settings
-            ghost_enabled_raw = spotify_vis_config.get('ghosting_enabled', True)
-            ghost_enabled = SettingsManager.to_bool(ghost_enabled_raw, True)
-            self.spotify_vis_ghost_enabled.setChecked(ghost_enabled)
+            self.spotify_vis_ghost_enabled.setChecked(
+                self._config_bool('spotify_visualizer', spotify_vis_config, 'ghosting_enabled', True)
+            )
 
-            ghost_alpha_val = spotify_vis_config.get('ghost_alpha', 0.4)
-            try:
-                ghost_alpha_pct = int(float(ghost_alpha_val) * 100)
-            except Exception as e:
-                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
-                ghost_alpha_pct = 40
+            ghost_alpha_pct = int(self._config_float('spotify_visualizer', spotify_vis_config, 'ghost_alpha', 0.4) * 100)
             if ghost_alpha_pct < 0:
                 ghost_alpha_pct = 0
             if ghost_alpha_pct > 100:
@@ -1861,12 +2027,7 @@ class WidgetsTab(QWidget):
             self.spotify_vis_ghost_opacity.setValue(ghost_alpha_pct)
             self.spotify_vis_ghost_opacity_label.setText(f"{ghost_alpha_pct}%")
 
-            ghost_decay_val = spotify_vis_config.get('ghost_decay', 0.4)
-            try:
-                ghost_decay_f = float(ghost_decay_val)
-            except Exception as e:
-                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
-                ghost_decay_f = 0.4
+            ghost_decay_f = self._config_float('spotify_visualizer', spotify_vis_config, 'ghost_decay', 0.4)
             ghost_decay_slider = int(ghost_decay_f * 100.0)
             if ghost_decay_slider < 10:
                 ghost_decay_slider = 10
@@ -1895,19 +2056,14 @@ class WidgetsTab(QWidget):
                     # still apply reasonable hard-coded defaults.
                     reddit_config = {}
 
-            # Widget defaults to disabled even if config is present
-            self.reddit_enabled.setChecked(SettingsManager.to_bool(reddit_config.get('enabled', False), False))
+            self.reddit_enabled.setChecked(self._config_bool('reddit', reddit_config, 'enabled', True))
 
-            exit_on_click_val = reddit_config.get('exit_on_click', True)
-            exit_on_click = SettingsManager.to_bool(exit_on_click_val, True)
-            self.reddit_exit_on_click.setChecked(exit_on_click)
+            self.reddit_exit_on_click.setChecked(self._config_bool('reddit', reddit_config, 'exit_on_click', True))
 
-            subreddit = str(reddit_config.get('subreddit', '') or '')
-            if not subreddit:
-                subreddit = 'wallpapers'
+            subreddit = self._config_str('reddit', reddit_config, 'subreddit', 'All')
             self.reddit_subreddit.setText(subreddit)
 
-            limit_val = int(reddit_config.get('limit', 10))
+            limit_val = self._config_int('reddit', reddit_config, 'limit', 10)
             if limit_val <= 5:
                 items_text = "4"
             elif limit_val >= 20:
@@ -1918,57 +2074,56 @@ class WidgetsTab(QWidget):
             if idx_items >= 0:
                 self.reddit_items.setCurrentIndex(idx_items)
 
-            reddit_pos = reddit_config.get('position', 'Bottom Right')
+            reddit_pos = self._config_str('reddit', reddit_config, 'position', 'Bottom Right')
             idx_pos = self.reddit_position.findText(reddit_pos)
             if idx_pos >= 0:
                 self.reddit_position.setCurrentIndex(idx_pos)
 
-            r_monitor_sel = reddit_config.get('monitor', 1)
-            r_mon_text = str(r_monitor_sel) if isinstance(r_monitor_sel, (int, str)) else '1'
+            r_monitor_sel = reddit_config.get('monitor', self._widget_default('reddit', 'monitor', 'ALL'))
+            r_mon_text = str(r_monitor_sel) if isinstance(r_monitor_sel, (int, str)) else 'ALL'
             r_idx = self.reddit_monitor_combo.findText(r_mon_text)
             if r_idx >= 0:
                 self.reddit_monitor_combo.setCurrentIndex(r_idx)
 
-            reddit_font_size_data = reddit_config.get('font_size', 14)
-            self.reddit_font_size.setValue(reddit_font_size_data)
-            self.reddit_margin.setValue(reddit_config.get('margin', 20))
+            self.reddit_font_combo.setCurrentFont(QFont(self._config_str('reddit', reddit_config, 'font_family', 'Segoe UI')))
+            self.reddit_font_size.setValue(self._config_int('reddit', reddit_config, 'font_size', 18))
+            self.reddit_margin.setValue(self._config_int('reddit', reddit_config, 'margin', 30))
 
-            show_bg_reddit = SettingsManager.to_bool(reddit_config.get('show_background', True), True)
-            self.reddit_show_background.setChecked(show_bg_reddit)
+            self.reddit_show_background.setChecked(self._config_bool('reddit', reddit_config, 'show_background', True))
             self.reddit_intense_shadow.setChecked(
-                SettingsManager.to_bool(reddit_config.get('intense_shadow', False), False)
+                self._config_bool('reddit', reddit_config, 'intense_shadow', False)
             )
-            show_separators_val = reddit_config.get('show_separators', True)
-            show_separators = SettingsManager.to_bool(show_separators_val, True)
-            self.reddit_show_separators.setChecked(show_separators)
-            reddit_opacity_pct = int(reddit_config.get('bg_opacity', 1.0) * 100)
+            self.reddit_show_separators.setChecked(
+                self._config_bool('reddit', reddit_config, 'show_separators', True)
+            )
+            reddit_opacity_pct = int(self._config_float('reddit', reddit_config, 'bg_opacity', 0.6) * 100)
             self.reddit_bg_opacity.setValue(reddit_opacity_pct)
             self.reddit_bg_opacity_label.setText(f"{reddit_opacity_pct}%")
 
-            reddit_border_opacity_pct = int(reddit_config.get('border_opacity', 1.0) * 100)
+            reddit_border_opacity_pct = int(self._config_float('reddit', reddit_config, 'border_opacity', 1.0) * 100)
             self.reddit_border_opacity.setValue(reddit_border_opacity_pct)
             self.reddit_border_opacity_label.setText(f"{reddit_border_opacity_pct}%")
 
-            reddit_color_data = reddit_config.get('color', [255, 255, 255, 230])
+            reddit_color_data = reddit_config.get('color', self._widget_default('reddit', 'color', [255, 255, 255, 230]))
             self._reddit_color = QColor(*reddit_color_data)
-            reddit_bg_color_data = reddit_config.get('bg_color', [35, 35, 35, 255])
+            reddit_bg_color_data = reddit_config.get('bg_color', self._widget_default('reddit', 'bg_color', [35, 35, 35, 255]))
             try:
                 self._reddit_bg_color = QColor(*reddit_bg_color_data)
-            except Exception as e:
-                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
+            except Exception:
+                logger.debug("[WIDGETS_TAB] Exception suppressed: invalid reddit bg color", exc_info=True)
                 self._reddit_bg_color = QColor(35, 35, 35, 255)
-            reddit_border_color_data = reddit_config.get('border_color', [255, 255, 255, 255])
+            reddit_border_color_data = reddit_config.get('border_color', self._widget_default('reddit', 'border_color', [255, 255, 255, 255]))
             try:
                 self._reddit_border_color = QColor(*reddit_border_color_data)
-            except Exception as e:
-                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
+            except Exception:
+                logger.debug("[WIDGETS_TAB] Exception suppressed: invalid reddit border color", exc_info=True)
                 self._reddit_border_color = QColor(255, 255, 255, 255)
             
             # Reddit 2 settings
             reddit2_config = widgets.get('reddit2', {})
-            self.reddit2_enabled.setChecked(SettingsManager.to_bool(reddit2_config.get('enabled', False), False))
-            self.reddit2_subreddit.setText(reddit2_config.get('subreddit', ''))
-            reddit2_limit = int(reddit2_config.get('limit', 4))
+            self.reddit2_enabled.setChecked(self._config_bool('reddit2', reddit2_config, 'enabled', False))
+            self.reddit2_subreddit.setText(self._config_str('reddit2', reddit2_config, 'subreddit', ''))
+            reddit2_limit = self._config_int('reddit2', reddit2_config, 'limit', 4)
             if reddit2_limit <= 5:
                 reddit2_limit_text = "4"
             elif reddit2_limit >= 20:
@@ -1978,11 +2133,11 @@ class WidgetsTab(QWidget):
             reddit2_items_idx = self.reddit2_items.findText(reddit2_limit_text)
             if reddit2_items_idx >= 0:
                 self.reddit2_items.setCurrentIndex(reddit2_items_idx)
-            reddit2_pos = reddit2_config.get('position', 'Top Left')
+            reddit2_pos = self._config_str('reddit2', reddit2_config, 'position', 'Top Left')
             reddit2_pos_idx = self.reddit2_position.findText(reddit2_pos)
             if reddit2_pos_idx >= 0:
                 self.reddit2_position.setCurrentIndex(reddit2_pos_idx)
-            reddit2_monitor = reddit2_config.get('monitor', 'ALL')
+            reddit2_monitor = reddit2_config.get('monitor', self._widget_default('reddit2', 'monitor', 'ALL'))
             reddit2_mon_text = str(reddit2_monitor) if isinstance(reddit2_monitor, (int, str)) else 'ALL'
             reddit2_mon_idx = self.reddit2_monitor_combo.findText(reddit2_mon_text)
             if reddit2_mon_idx >= 0:
