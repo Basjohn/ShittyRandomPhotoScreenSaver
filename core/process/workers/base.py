@@ -21,6 +21,7 @@ from core.process.types import (
     WorkerResponse,
     WorkerType,
 )
+from core.logging.logger import get_log_dir, is_perf_metrics_enabled
 
 
 def setup_worker_logging(worker_type: WorkerType) -> logging.Logger:
@@ -32,22 +33,31 @@ def setup_worker_logging(worker_type: WorkerType) -> logging.Logger:
     """
     logger = logging.getLogger(f"worker.{worker_type.value}")
     logger.setLevel(logging.DEBUG)
-    
-    # Create file handler in logs directory
-    log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
-        os.path.dirname(os.path.abspath(__file__))))), "logs")
+
+    # Prevent duplicate handlers if run() is invoked multiple times.
+    for handler in list(logger.handlers):
+        logger.removeHandler(handler)
+
+    if not is_perf_metrics_enabled():
+        # Suppress worker logs entirely unless perf metrics are enabled.
+        logger.addHandler(logging.NullHandler())
+        logger.propagate = False
+        return logger
+
+    log_dir = get_log_dir()
     os.makedirs(log_dir, exist_ok=True)
-    
-    log_file = os.path.join(log_dir, f"worker_{worker_type.value}.log")
-    handler = logging.FileHandler(log_file, mode='a')
+
+    log_file = log_dir / f"worker_{worker_type.value}.log"
+    handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
     handler.setLevel(logging.DEBUG)
-    
+
     formatter = logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
-    
+    logger.propagate = False
+
     return logger
 
 
@@ -128,7 +138,8 @@ class BaseWorker:
                     try:
                         msg_data = self._request_queue.get_nowait()
                     except Exception as e:
-                        logger.debug("[MISC] Exception suppressed: %s", e)
+                        if self._logger:
+                            self._logger.debug("[MISC] Exception suppressed: %s", e)
                         continue
                     
                     # Parse message

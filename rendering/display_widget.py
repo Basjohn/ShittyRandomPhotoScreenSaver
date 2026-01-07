@@ -815,14 +815,11 @@ class DisplayWidget(QWidget):
             detected = int(round(self._detect_refresh_rate()))
             # Apply adaptive rate selection to prevent judder on high-Hz displays:
             # - 60Hz or below: full refresh rate
-            # - 61-120Hz: half refresh rate (e.g., 120Hz → 60Hz)
-            # - Above 120Hz: third refresh rate (e.g., 165Hz → 55Hz)
+            # - Above 60Hz: half refresh rate (e.g., 120Hz → 60Hz, 165Hz → 82Hz)
             if detected <= 60:
                 target = detected
-            elif detected <= 120:
-                target = detected // 2
             else:
-                target = detected // 3
+                target = max(1, detected // 2)
             target = max(30, min(240, target))  # Clamp to reasonable range
             self._target_fps = target
             logger.info(f"Detected refresh rate: {detected} Hz, adaptive target FPS: {self._target_fps}")

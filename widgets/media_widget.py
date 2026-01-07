@@ -31,6 +31,7 @@ from core.threading.manager import ThreadManager
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
 from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile, draw_rounded_rect_with_shadow
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
+from utils.text_utils import smart_title_case
 
 if TYPE_CHECKING:
     from rendering.widget_manager import WidgetManager
@@ -754,8 +755,8 @@ class MediaWidget(BaseOverlayWidget):
 
         # Metadata: title and artist on separate lines; album is intentionally
         # omitted to keep the block compact. Apply Title Case for readability.
-        title = (info.title or "").strip().title()
-        artist = (info.artist or "").strip().title()
+        title = smart_title_case((info.title or "").strip())
+        artist = smart_title_case((info.artist or "").strip())
 
         # Snapshot of current visibility, used at the end of the update to
         # decide whether to run a one-shot fade-in or just keep the card
