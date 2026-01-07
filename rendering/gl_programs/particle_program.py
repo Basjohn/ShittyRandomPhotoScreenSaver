@@ -8,9 +8,10 @@ all particles.
 Modes:
 - Directional: Particles come from one direction (L→R, R→L, T→B, B→T, diagonals)
 - Swirl: Particles spiral in from edges toward center
+- Converge: Particles spawn from all edges and converge to center
 
 Settings:
-- u_mode: 0=Directional, 1=Swirl
+- u_mode: 0=Directional, 1=Swirl, 2=Converge
 - u_direction: Direction for directional mode (0-7)
 - u_particle_radius: Base radius in pixels
 - u_overlap: Overlap in pixels to avoid gaps
@@ -69,7 +70,7 @@ uniform sampler2D uNewTex;
 uniform float u_progress;
 uniform vec2 u_resolution;
 uniform float u_seed;
-uniform float u_mode;           // 0=Directional, 1=Swirl
+uniform float u_mode;           // 0=Directional, 1=Swirl, 2=Converge
 uniform float u_direction;      // 0-7=directions, 8=random, 9=random placement
 uniform float u_particle_radius; // Base radius in pixels
 uniform float u_overlap;        // Overlap in pixels

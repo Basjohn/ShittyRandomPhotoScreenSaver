@@ -473,8 +473,8 @@ class TransitionFactory:
         mode_map = {
             'Directional': 0,
             'Swirl': 1,
-            'Random': 2,
-            'Converge': 0,  # Legacy alias for Directional
+            'Converge': 2,  # Particles converge from all edges to center
+            'Random': 3,
         }
         mode = mode_map.get(mode_str, 0)
         

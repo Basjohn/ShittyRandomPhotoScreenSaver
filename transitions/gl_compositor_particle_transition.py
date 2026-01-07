@@ -7,6 +7,7 @@ GLCompositorWidget via its particle API.
 Modes:
 - Directional: Particles come from one direction (L→R, R→L, T→B, B→T, diagonals)
 - Swirl: Particles spiral in from edges toward center
+- Converge: Particles spawn from all edges and converge to center
 - Random: Randomly choose between modes and their sub-options
 """
 from __future__ import annotations
@@ -50,7 +51,8 @@ class GLCompositorParticleTransition(BaseTransition):
     # Mode constants
     MODE_DIRECTIONAL = 0
     MODE_SWIRL = 1
-    MODE_RANDOM = 2  # Randomly choose between modes and sub-options
+    MODE_CONVERGE = 2  # Particles converge from all edges to center
+    MODE_RANDOM = 3  # Randomly choose between modes and sub-options
 
     def __init__(
         self,
@@ -74,7 +76,7 @@ class GLCompositorParticleTransition(BaseTransition):
         
         # Handle Random mode - resolve to actual mode and sub-options
         if mode == self.MODE_RANDOM:
-            resolved_mode = random.choice([self.MODE_DIRECTIONAL, self.MODE_SWIRL])
+            resolved_mode = random.choice([self.MODE_DIRECTIONAL, self.MODE_SWIRL, self.MODE_CONVERGE])
             if resolved_mode == self.MODE_DIRECTIONAL:
                 # Random direction for directional mode
                 resolved_direction = random.randint(0, 9)  # All direction options
