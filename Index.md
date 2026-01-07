@@ -2,6 +2,12 @@
 
 A living map of modules, purposes, and key classes. Keep this up to date.
 
+**Documentation Cross-References:**
+- **Canonical Specifications**: See `Docs/SPEC.md` for architecture, policies, and implementation details
+- **Module Documentation**: See `Docs/INDEX.md` for detailed module-level documentation
+- **Test Documentation**: See `Docs/TestSuite.md` for test coverage and execution patterns
+- **Active Audits**: See `audits/FULL_CODEBASE_AUDIT_2026_01_06.md` for current audit status and tasks
+
 ## Refactor Status
 - audits/ARCHITECTURE_AND_MULTIPROCESSING_PLAN_2026.md (Main 2026 Execution Plan)
 - audits/v2_0_Roadmap.md (Live Checklist)
@@ -12,19 +18,15 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - 236 unit tests across 9 test files
 
 ## Active Audit Documents (Jan 2026)
-- **audits/Full_Architectural_Audit_Jan_2026.md** - ✅ **P0-P2 COMPLETE + Sections 3.2-3.4 IMPLEMENTED**
-  - ~600 bare except statements fixed across 35+ files
-  - 50% memory reduction (QImage lifecycle cleanup)
-  - 8 new modules created (constants, logging tags, spotify_visualizer package, image_loader)
-  - **NEW:** Constants integration (timing values centralized in 4 files)
-  - **NEW:** Logging tags integration (30+ replacements in engine)
-  - **NEW:** Image loading consolidated (unified ImageLoader interface)
-  - All completed work condensed into collapsible sections
-  - Remaining P3 work clearly tracked with checkboxes
-- **audits/Solution_1_VSync_Driven_Analysis.md** - Future VSync-driven rendering analysis (P3 deferred)
-- **audits/Shadow Invalidation And Key Interaction MC MODE.md** - MC mode shadow invalidation issue
+- **audits/FULL_CODEBASE_AUDIT_2026_01_06.md** - ✅ **LIVE CHECKLIST** (Jan 6, 2026)
+  - Full codebase audit covering runtime, rendering, transitions, widgets, logging, threading, settings, tests, docs
+  - P0-P3 prioritized tasks with difficulty/reward ratings
+  - Documentation parity (SPEC logging v2, Index audits list, TestSuite counts)
+  - Test coverage (transition endframe correctness, GL fallback policy, widget raise order, logging routing, render strategy)
+  - VSync render thread lifecycle standardization
+  - Cross-linking between Index.md, Docs/INDEX.md, and SPEC
 - **audits/VISUALIZER_DEBUG.md** - Visualizer debugging reference
-- **Archived:** `bak/audits_archive_20260105/` - Completed audit documents (Performance_Investigation, Solution_3, etc.)
+- **Archived:** `bak/audits_archive_20260105/` - Completed audit documents (Full_Architectural_Audit_Jan_2026, Performance_Investigation, Solution_3, etc.)
 
 - Phase 0 Improvements (Jan 2026)
   - **WidgetManager**: Robust position normalization (Enum/String/Coerce); Smart positioning logic for Visualizer (Top vs Bottom alignment).
@@ -67,7 +69,6 @@ A living map of modules, purposes, and key classes. Keep this up to date.
     - Updated `PainterShadow.render()` to use async cache as fallback
     - Added comprehensive tests for shadow cache corruption scenarios (`test_painter_shadow.py`)
     - Fixed eco mode bug: `set_always_on_top()` not called on toggle (`display_widget.py`)
-    - Fixed CPU % bug: delayed first tooltip update for psutil baseline (`system_tray.py`)
     - Added eco mode worker control: stops ImageWorker/FFTWorker when window occluded (`eco_mode.py`)
     - **Audit Documents Created**:
       - `audits/Solution_3_Implementation_Plan.md` - Task breakdown for worker offloading ✅ COMPLETED
@@ -112,7 +113,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - **Bug Fixes** (Jan 5, 2026):
     - Fixed `RedditWidgetFactory` using wrong model attributes (`subreddits` → `subreddit`, `length` → `item_limit`)
     - Fixed MC mode On Top disable to lower window behind others (was raising)
-    - Added periodic CPU refresh timer (5 seconds) to systray tooltip
+    - Removed systray CPU polling after it introduced 100–160 ms UI stalls; tray now only shows GPU/Eco flags. **Rule:** never block the UI thread—diagnostics must run off-thread and post updates via `ThreadManager.invoke_in_ui_thread()`.
     - Created `tests/test_worker_consolidated.py` with 30 parameterized tests
     - **1348 tests collected** (150 widget/worker tests passing)
 

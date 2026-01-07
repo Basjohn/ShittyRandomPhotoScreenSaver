@@ -1,4 +1,0 @@
-Traceback (most recent call last):
-  File "F:\Programming\Apps\ShittyRandomPhotoScreenSaver\tests\test_double_click_navigation.py", line 15, in <module>
-    from rendering.display_widget import DisplayWidget
-ModuleNotFoundError: No module named 'rendering'

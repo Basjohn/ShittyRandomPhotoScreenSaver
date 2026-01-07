@@ -207,12 +207,13 @@ class ScreensaverContextMenu(QMenu):
         self._hard_exit_action.triggered.connect(self._on_hard_exit_toggled)
         
         # Always On Top toggle (MC mode only) - monochrome pin
+        # COMMENTED OUT: Removed from MC mode context menu per user request
         self._on_top_action: Optional[QAction] = None
-        if self._is_mc_build:
-            self._on_top_action = self.addAction("📌  Always On Top")
-            self._on_top_action.setCheckable(True)
-            self._on_top_action.setChecked(self._always_on_top)
-            self._on_top_action.triggered.connect(self._on_always_on_top_toggled)
+        # if self._is_mc_build:
+        #     self._on_top_action = self.addAction("📌  Always On Top")
+        #     self._on_top_action.setCheckable(True)
+        #     self._on_top_action.setChecked(self._always_on_top)
+        #     self._on_top_action.triggered.connect(self._on_always_on_top_toggled)
         
         self.addSeparator()
         

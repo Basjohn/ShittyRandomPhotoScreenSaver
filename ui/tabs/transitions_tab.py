@@ -312,7 +312,7 @@ class TransitionsTab(QWidget):
         mode_row = QHBoxLayout()
         mode_row.addWidget(QLabel("Mode:"))
         self.particle_mode_combo = QComboBox()
-        self.particle_mode_combo.addItems(["Directional", "Swirl", "Random"])
+        self.particle_mode_combo.addItems(["Directional", "Swirl", "Converge", "Random"])
         self.particle_mode_combo.currentIndexChanged.connect(self._on_particle_mode_changed)
         self.particle_mode_combo.currentIndexChanged.connect(self._save_settings)
         mode_row.addWidget(self.particle_mode_combo)
@@ -862,8 +862,9 @@ class TransitionsTab(QWidget):
         mode = self.particle_mode_combo.currentText()
         is_directional = mode == "Directional"
         is_swirl = mode == "Swirl"
-        # Direction only applies to Directional mode (disabled for Random - auto-selected)
-        self.particle_direction_combo.setEnabled(is_directional)
+        is_converge = mode == "Converge"
+        # Direction only applies to Directional/Converge modes (disabled for Random - auto-selected)
+        self.particle_direction_combo.setEnabled(is_directional or is_converge)
         # Swirl settings only apply to Swirl mode (disabled for Random - auto-selected)
         self.particle_swirl_turns_spin.setEnabled(is_swirl)
         self.particle_swirl_order_combo.setEnabled(is_swirl)

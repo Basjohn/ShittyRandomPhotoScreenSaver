@@ -28,6 +28,7 @@ Single source of truth for architecture and key decisions.
 - GLStateManager (`rendering/gl_state_manager.py`) provides centralized GL context state management with validated state transitions (UNINITIALIZED→INITIALIZING→READY/ERROR→DESTROYING→DESTROYED), thread-safe access, callbacks, and recovery tracking. Integrated into GLCompositorWidget and SpotifyBarsGLOverlay.
 - TransitionStateManager (extracted from GLCompositor) manages per-transition state with change notifications.
 - BeatEngine (extracted from SpotifyVisualizerWidget) handles FFT processing and bar smoothing on COMPUTE pool.
+- **UI Thread Discipline**: Any new diagnostics or telemetry (tray icons, overlays, animations) must avoid blocking the UI thread. All polling belongs on ThreadManager pools with `invoke_in_ui_thread()` postings; even 100 ms sync calls (e.g. `psutil.cpu_percent(0.1)`) will surface as 100–160 ms dt spikes in transitions.
 
 ## Phase E Status: Context Menu / Effect Cache Corruption ✅ MITIGATED
 - Symptom: overlay shadow/opacity corruption artifacts triggered by Reddit link clicks and context menus.
