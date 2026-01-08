@@ -28,6 +28,7 @@ from PySide6.QtWidgets import QWidget, QToolTip
 from shiboken6 import isValid as shiboken_isValid
 
 from core.logging.logger import get_logger, is_verbose_logging
+from core.performance import widget_paint_sample
 from core.threading.manager import ThreadManager
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
 from widgets.shadow_utils import (
@@ -651,6 +652,10 @@ class RedditWidget(BaseOverlayWidget):
     def paintEvent(self, event) -> None:  # type: ignore[override]
         """Paint background via QLabel then overlay header and posts."""
 
+        with widget_paint_sample(self, "reddit.paint"):
+            self._paint_contents(event)
+
+    def _paint_contents(self, event) -> None:
         super().paintEvent(event)
 
         if not self._posts:

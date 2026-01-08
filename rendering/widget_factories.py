@@ -579,9 +579,8 @@ class RedditWidgetFactory(WidgetFactory):
             if hasattr(widget, 'set_subreddit'):
                 widget.set_subreddit(subreddit)
             
-            item_limit = model.item_limit
-            if hasattr(widget, 'set_item_limit'):
-                widget.set_item_limit(int(item_limit))
+            if hasattr(model, 'limit') and hasattr(widget, 'set_item_limit'):
+                widget.set_item_limit(int(model.limit))
             
             # Intense shadow
             intense_shadow = SettingsManager.to_bool(model.intense_shadow, False)

@@ -93,6 +93,11 @@ class RenderStrategy(ABC):
         self._lock = threading.Lock()
     
     @property
+    def config(self) -> RenderStrategyConfig:
+        """Return the active configuration for this strategy."""
+        return self._config
+    
+    @property
     @abstractmethod
     def strategy_type(self) -> RenderStrategyType:
         """Return the strategy type."""

@@ -687,7 +687,7 @@ class WidgetsTab(QWidget):
 
         # Intense shadow
         self.weather_intense_shadow = QCheckBox("Intense Shadows")
-        self.weather_intense_shadow.setChecked(self._default_bool('weather', 'intense_shadow', False))
+        self.weather_intense_shadow.setChecked(self._default_bool('weather', 'intense_shadow', True))
         self.weather_intense_shadow.setToolTip(
             "Doubles shadow blur, opacity, and offset for dramatic effect on large displays."
         )
@@ -874,7 +874,7 @@ class WidgetsTab(QWidget):
 
         # Intense shadow
         self.media_intense_shadow = QCheckBox("Intense Shadows")
-        self.media_intense_shadow.setChecked(self._default_bool('media', 'intense_shadow', False))
+        self.media_intense_shadow.setChecked(self._default_bool('media', 'intense_shadow', True))
         self.media_intense_shadow.setToolTip(
             "Doubles shadow blur, opacity, and offset for dramatic effect on large displays."
         )
@@ -1368,7 +1368,7 @@ class WidgetsTab(QWidget):
 
         # Intense shadow
         self.reddit_intense_shadow = QCheckBox("Intense Shadows")
-        self.reddit_intense_shadow.setChecked(self._default_bool('reddit', 'intense_shadow', False))
+        self.reddit_intense_shadow.setChecked(self._default_bool('reddit', 'intense_shadow', True))
         self.reddit_intense_shadow.setToolTip(
             "Doubles shadow blur, opacity, and offset for dramatic effect on large displays."
         )
@@ -1854,7 +1854,7 @@ class WidgetsTab(QWidget):
             self.weather_font_size.setValue(self._config_int('weather', weather_config, 'font_size', 24))
             self.weather_show_forecast.setChecked(self._config_bool('weather', weather_config, 'show_forecast', True))
             self.weather_intense_shadow.setChecked(
-                self._config_bool('weather', weather_config, 'intense_shadow', False)
+                self._config_bool('weather', weather_config, 'intense_shadow', True)
             )
             self.weather_show_background.setChecked(self._config_bool('weather', weather_config, 'show_background', True))
             weather_opacity_pct = int(self._config_float('weather', weather_config, 'bg_opacity', 0.6) * 100)
@@ -1902,7 +1902,7 @@ class WidgetsTab(QWidget):
             self.media_font_size.setValue(self._config_int('media', media_config, 'font_size', 20))
             self.media_margin.setValue(self._config_int('media', media_config, 'margin', 30))
             self.media_show_background.setChecked(self._config_bool('media', media_config, 'show_background', True))
-            self.media_intense_shadow.setChecked(self._config_bool('media', media_config, 'intense_shadow', False))
+            self.media_intense_shadow.setChecked(self._config_bool('media', media_config, 'intense_shadow', True))
             media_opacity_pct = int(self._config_float('media', media_config, 'bg_opacity', 0.6) * 100)
             self.media_bg_opacity.setValue(media_opacity_pct)
             self.media_bg_opacity_label.setText(f"{media_opacity_pct}%")
@@ -2091,7 +2091,7 @@ class WidgetsTab(QWidget):
 
             self.reddit_show_background.setChecked(self._config_bool('reddit', reddit_config, 'show_background', True))
             self.reddit_intense_shadow.setChecked(
-                self._config_bool('reddit', reddit_config, 'intense_shadow', False)
+                self._config_bool('reddit', reddit_config, 'intense_shadow', True)
             )
             self.reddit_show_separators.setChecked(
                 self._config_bool('reddit', reddit_config, 'show_separators', True)

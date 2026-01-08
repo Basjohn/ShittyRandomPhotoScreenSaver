@@ -395,13 +395,6 @@ class ShadowFadeProfile:
                     cls.EASING,
                 )
 
-            try:
-                widget.show()
-            except Exception:
-                # Showing may fail during shutdown; in that case we still
-                # allow the animation/shadow logic to proceed.
-                pass
-
             anim = QVariantAnimation(widget)
             anim.setDuration(max(0, int(cls.DURATION_MS)))
             anim.setStartValue(0.0)
@@ -412,12 +405,26 @@ class ShadowFadeProfile:
                 # Easing failures should not break the fade.
                 pass
 
+            # Track whether we've shown the widget yet
+            widget_shown = [False]
+
             def _on_value_changed(value: float) -> None:
                 try:
                     f = float(value)
                 except Exception as e:
                     logger.debug("[SHADOW] Exception suppressed: %s", e)
                     f = 0.0
+                
+                # Show the widget on first animation tick when opacity is confirmed at 0.0
+                if not widget_shown[0]:
+                    try:
+                        widget.show()
+                        widget_shown[0] = True
+                    except Exception:
+                        # Showing may fail during shutdown; in that case we still
+                        # allow the animation/shadow logic to proceed.
+                        pass
+                
                 try:
                     effect.setOpacity(f)
                 except Exception as e:

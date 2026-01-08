@@ -218,8 +218,7 @@ class BaseOverlayWidget(QLabel):
         self._update_font()
         self._update_stylesheet()
         self.hide()
-    
-    # -------------------------------------------------------------------------
+
     # Font Management
     # -------------------------------------------------------------------------
     

@@ -3,9 +3,35 @@ from __future__ import annotations
 import threading
 
 import pytest
-from PySide6.QtCore import QObject, qInstallMessageHandler
+from PySide6.QtCore import QObject, QTimer, Qt, qInstallMessageHandler
 
 from widgets.overlay_timers import create_overlay_timer
+
+
+class _StubThreadManager:
+    """Minimal ThreadManager stand-in that schedules real Qt timers."""
+
+    def __init__(self) -> None:
+        self._timers: list[QTimer] = []
+
+    def schedule_recurring(self, interval_ms: int, callback):
+        timer = QTimer()
+        timer.setTimerType(Qt.TimerType.PreciseTimer)
+        timer.timeout.connect(callback)
+        timer.start(max(1, interval_ms))
+        self._timers.append(timer)
+        return timer
+
+    def shutdown(self) -> None:
+        for timer in self._timers:
+            try:
+                if timer.isActive():
+                    timer.stop()
+                timer.deleteLater()
+            except RuntimeError:
+                # Timer may already be deleted; ignore.
+                pass
+        self._timers.clear()
 
 
 class _DummyWidget(QObject):
@@ -13,6 +39,7 @@ class _DummyWidget(QObject):
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
+        self._thread_manager = _StubThreadManager()
 
 
 @pytest.mark.qt
@@ -55,6 +82,7 @@ def test_overlay_timer_stop_is_safe_from_other_threads(qt_app) -> None:
 
     finally:
         qInstallMessageHandler(previous)
+        widget._thread_manager.shutdown()
 
     # No Qt warning about stopping timers from another thread should appear.
     assert not any("Timers cannot be stopped from another thread" in m for m in messages)

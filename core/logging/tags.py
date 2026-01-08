@@ -15,15 +15,8 @@ Usage:
 TAG_PERF = "[PERF]"
 """Performance metrics - routed to screensaver_perf.log"""
 
-TAG_TIMING = "[TIMING]"
-"""Timing measurements for debugging."""
-
-# =============================================================================
-# Component Tags
-# =============================================================================
-
-TAG_WORKER = "[WORKER]"
-"""Worker process operations."""
+TAG_WIDGET_PERF = "[PERF_WIDGET]"
+"""Per-widget instrumentation metrics routed to perf_widgets.log"""
 
 TAG_ENGINE = "[ENGINE]"
 """Engine lifecycle and state changes."""
@@ -36,6 +29,9 @@ TAG_TRANSITION = "[TRANSITION]"
 
 TAG_RENDER = "[RENDER]"
 """Rendering operations."""
+
+TAG_TIMING = "[TIMING]"
+"""High-frequency timing measurements (non-routed)."""
 
 # =============================================================================
 # Operation Tags
@@ -55,6 +51,9 @@ TAG_IMAGE = "[IMAGE]"
 
 TAG_PREFETCH = "[PREFETCH]"
 """Prefetch operations."""
+
+TAG_WORKER = "[WORKER]"
+"""Worker process operations."""
 
 # =============================================================================
 # Status Tags

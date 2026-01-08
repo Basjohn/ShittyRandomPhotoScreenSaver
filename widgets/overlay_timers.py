@@ -18,6 +18,7 @@ from typing import Any, Callable, Optional
 from PySide6.QtCore import QTimer, QObject, QMetaObject, Qt, QThread
 
 from core.logging.logger import get_logger
+from core.performance import widget_timer_sample
 
 
 logger = get_logger(__name__)
@@ -53,8 +54,8 @@ class OverlayTimerHandle:
                     "stop",
                     Qt.ConnectionType.QueuedConnection,
                 )
-        except Exception as e:
-            logger.debug("[OVERLAY_TIMER] Failed to stop timer", exc_info=True)
+        except Exception as exc:
+            logger.debug("[OVERLAY_TIMER] Failed to stop timer: %s", exc, exc_info=True)
         self._timer = None
 
     def is_active(self) -> bool:
@@ -80,20 +81,20 @@ def _get_thread_manager_for(widget: QObject) -> Optional[Any]:
         tm = getattr(widget, "_thread_manager", None)
         if tm is not None:
             return tm
-    except Exception as e:
-        logger.debug("[OVERLAY] Exception suppressed: %s", e)
+    except Exception as exc:
+        logger.debug("[OVERLAY] Exception suppressed: %s", exc)
 
     try:
         parent = widget.parent()
-    except Exception as e:
-        logger.debug("[OVERLAY] Exception suppressed: %s", e)
+    except Exception as exc:
+        logger.debug("[OVERLAY] Exception suppressed: %s", exc)
         parent = None
 
     if parent is not None:
         try:
             tm = getattr(parent, "_thread_manager", None)
-        except Exception as e:
-            logger.debug("[OVERLAY] Exception suppressed: %s", e)
+        except Exception as exc:
+            logger.debug("[OVERLAY] Exception suppressed: %s", exc)
             tm = None
         return tm
 
@@ -142,7 +143,13 @@ def create_overlay_timer(
             "All overlay timers must be scheduled via ThreadManager."
         )
 
-    timer = tm.schedule_recurring(interval_ms, callback)
+    metric_name = description or getattr(callback, "__qualname__", None) or "overlay_timer"
+
+    def _instrumented_callback() -> None:
+        with widget_timer_sample(widget, metric_name, interval_ms=interval_ms):
+            callback()
+
+    timer = tm.schedule_recurring(interval_ms, _instrumented_callback)
     logger.debug(
         "[OVERLAY_TIMER] Created ThreadManager timer %r (%s ms) for %r (%s)",
         timer,

@@ -71,6 +71,7 @@ class CursorHaloWidget(QWidget):
         """Set the halo opacity (0.0 to 1.0)."""
         try:
             self._opacity = max(0.0, min(1.0, float(value)))
+            self.setWindowOpacity(self._opacity)
         except Exception as e:
             logger.debug("[CURSOR_HALO] Exception suppressed: %s", e)
             self._opacity = 1.0
@@ -282,9 +283,12 @@ class CursorHaloWidget(QWidget):
         
         try:
             if fade_in:
-                self.setOpacity(0.0)
+                self.setWindowOpacity(0.0)
+                # Show widget now that opacity is 0.0 to prevent flash
+                if not self.isVisible():
+                    self.show()
             else:
-                self.setOpacity(1.0)
+                self.setWindowOpacity(1.0)
         except Exception as e:
             logger.debug("[CURSOR_HALO] Exception suppressed: %s", e)
 
@@ -295,7 +299,8 @@ class CursorHaloWidget(QWidget):
         def _on_tick(progress: float) -> None:
             try:
                 value = start_val + (end_val - start_val) * progress
-                self.setOpacity(float(value))
+                self.setWindowOpacity(float(value))
+                self._opacity = float(value)
             except Exception as e:
                 logger.debug("[CURSOR_HALO] Exception suppressed: %s", e)
 
@@ -385,3 +390,17 @@ class CursorHaloWidget(QWidget):
             global_y = y - size.height() // 2
         
         self.move(global_x, global_y)
+    
+    def closeEvent(self, event) -> None:  # type: ignore[override]
+        """Ensure halo fades out when destroyed."""
+        try:
+            # Cancel any running animation
+            self.cancel_animation()
+            # Fade out before closing
+            if self.isVisible():
+                self.fade_out(on_finished=lambda: event.accept())
+            else:
+                event.accept()
+        except Exception as e:
+            logger.debug("[CURSOR_HALO] Exception suppressed during close: %s", e)
+            event.accept()

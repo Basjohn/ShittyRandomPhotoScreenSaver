@@ -1395,12 +1395,20 @@ class DisplayWidget(QWidget):
                     
                     # For compositor-backed 3D Block Spins, seed with old image
                     comp = getattr(self, "_gl_compositor", None)
-                    if (transition.__class__.__name__ == "GLCompositorBlockSpinTransition"
-                        and isinstance(comp, GLCompositorWidget)
-                        and previous_pixmap_ref is not None
-                        and not previous_pixmap_ref.isNull()):
+                    if isinstance(comp, GLCompositorWidget):
                         try:
-                            comp.set_base_pixmap(previous_pixmap_ref)
+                            if (
+                                transition.__class__.__name__ == "GLCompositorCrossfadeTransition"
+                                and previous_pixmap_ref is not None
+                                and not previous_pixmap_ref.isNull()
+                            ):
+                                comp.set_base_pixmap(previous_pixmap_ref)
+                            elif (
+                                transition.__class__.__name__ == "GLCompositorBlockSpinTransition"
+                                and previous_pixmap_ref is not None
+                                and not previous_pixmap_ref.isNull()
+                            ):
+                                comp.set_base_pixmap(previous_pixmap_ref)
                         except Exception as e:
                             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 

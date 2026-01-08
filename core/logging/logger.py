@@ -501,6 +501,17 @@ class PerfLogFilter(logging.Filter):
         return "[PERF]" in msg
 
 
+class WidgetPerfLogFilter(logging.Filter):
+    """Filter that accepts only widget PERF instrumentation records."""
+
+    def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        try:
+            msg = record.getMessage()
+        except Exception:
+            msg = str(record.msg)
+        return "[PERF_WIDGET]" in msg
+
+
 class SpotifyVisLogFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
         try:
@@ -748,6 +759,19 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
     perf_handler.setLevel(logging.INFO)
     perf_handler.addFilter(PerfLogFilter())
     root_logger.addHandler(perf_handler)
+
+    if _PERF_METRICS_ENABLED:
+        widget_perf_log_file = log_dir / "perf_widgets.log"
+        widget_perf_handler = DeduplicatingRotatingFileHandler(
+            widget_perf_log_file,
+            maxBytes=1 * 1024 * 1024,
+            backupCount=5,
+            encoding='utf-8',
+        )
+        widget_perf_handler.setFormatter(formatter)
+        widget_perf_handler.setLevel(logging.INFO)
+        widget_perf_handler.addFilter(WidgetPerfLogFilter())
+        root_logger.addHandler(widget_perf_handler)
 
     spotify_vis_log_file = log_dir / "screensaver_spotify_vis.log"
     spotify_vis_handler = DeduplicatingRotatingFileHandler(

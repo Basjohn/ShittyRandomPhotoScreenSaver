@@ -110,6 +110,8 @@ A living map of modules, purposes, and key classes. Keep this up to date.
     - **Phase 2**: Removed legacy `create_*_widget` methods (2577→1926 LOC, ~650 lines removed)
     - Fixed `test_settings_no_sources_popup.py` to use isolated settings (prevents `/some/folder` corruption)
     - Added Eco Mode systray indicator (`set_eco_mode_callback()` in `ScreensaverTrayIcon`)
+    - **Jan 8, 2026**: Canonical widget defaults synchronized with UI — Reddit `limit` key replaces legacy aliases, all widget "intense shadow" toggles default to **ON**, and SST snapshots regenerated via `tools/regenerate_sst_defaults.py`.
+    - **Jan 8, 2026**: `tests/test_widget_manager_refresh.py` modernized to drive `WidgetManager.setup_all_widgets()` through the factory registry (media/clock/weather/reddit coverage, spotify widgets stubbed, QColor parsing mocked). Ensures the Reddit 20-item mode renders again and enforces the no-shims policy for widget tests.
   - **Bug Fixes** (Jan 5, 2026):
     - Fixed `RedditWidgetFactory` using wrong model attributes (`subreddits` → `subreddit`, `length` → `item_limit`)
     - Fixed MC mode On Top disable to lower window behind others (was raising)

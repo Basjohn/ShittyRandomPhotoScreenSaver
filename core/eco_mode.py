@@ -21,6 +21,7 @@ Usage:
 """
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -38,6 +39,28 @@ if TYPE_CHECKING:
     from core.process.supervisor import ProcessSupervisor
 
 logger = get_logger(__name__)
+
+
+def _env_bool(name: str) -> Optional[bool]:
+    """Best-effort parse of boolean environment overrides."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return None
+    value = raw.strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    return None
+
+
+def is_eco_mode_globally_enabled() -> bool:
+    """Global feature flag for Eco Mode (defaults to disabled)."""
+    override = _env_bool("SRPSS_ENABLE_ECO_MODE")
+    if override is not None:
+        return override
+    # Explicitly disabled until we re-launch the feature.
+    return False
 
 
 class EcoModeState(Enum):

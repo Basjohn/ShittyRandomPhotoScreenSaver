@@ -2823,11 +2823,10 @@ class ScreensaverEngine(QObject):
                 try:
                     from utils.image_prefetcher import ImagePrefetcher
                     self._prefetcher = ImagePrefetcher(
-                        self.image_queue,
-                        prefetch_count=3,
                         thread_manager=self.thread_manager,
+                        cache=self.image_cache,
+                        max_concurrent=2,
                     )
-                    self._prefetcher.start()
                     logger.info("Prefetcher restarted with updated queue")
                 except Exception as e:
                     logger.warning(f"Failed to restart prefetcher: {e}")

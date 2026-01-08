@@ -402,16 +402,38 @@ class SpotifyVolumeWidget(QWidget):
         painter.setBrush(self._track_bg_color)
         painter.drawRoundedRect(track_rect, radius, radius)
 
-        # Filled region: volume 0.0 at bottom, 1.0 at top. The filled area
-        # grows upwards from the bottom of the track rather than acting as a
-        # small thumb, matching the mockup.
+        # Filled region: volume 1.0 = entire track, and reductions shrink
+        # symmetrically from both the top and bottom toward the center so the
+        # fill always remains centered vertically.
         vol = max(0.0, min(1.0, float(self._volume)))
         if vol <= 0.0:
             return
 
-        fill_height = max(2, int(track_rect.height() * vol))
-        fill_top = track_rect.bottom() - fill_height + 1
-        fill_rect = QRect(track_rect.left(), fill_top, track_rect.width(), fill_height)
+        track_height = track_rect.height()
+        fill_height = max(2, int(track_height * vol))
+        fill_height = min(track_height, fill_height)
+
+        center_y = track_rect.center().y()
+        half = fill_height // 2
+        fill_top = center_y - half
+        fill_bottom = fill_top + fill_height
+
+        # Clamp to track bounds to avoid spilling over rounded corners.
+        if fill_top < track_rect.top():
+            delta = track_rect.top() - fill_top
+            fill_top += delta
+            fill_bottom += delta
+        if fill_bottom > track_rect.bottom() + 1:
+            delta = fill_bottom - (track_rect.bottom() + 1)
+            fill_top -= delta
+            fill_bottom -= delta
+
+        fill_rect = QRect(
+            track_rect.left(),
+            fill_top,
+            track_rect.width(),
+            max(1, fill_bottom - fill_top),
+        )
 
         painter.setBrush(self._fill_color)
         painter.drawRoundedRect(fill_rect, radius, radius)

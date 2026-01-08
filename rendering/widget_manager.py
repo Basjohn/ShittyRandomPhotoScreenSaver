@@ -16,6 +16,10 @@ from core.logging.logger import get_logger, is_verbose_logging
 from core.resources.manager import ResourceManager
 from core.settings.settings_manager import SettingsManager
 from rendering.widget_setup import parse_color_to_qcolor, compute_expected_overlays
+from widgets.shadow_utils import apply_widget_shadow as _apply_widget_shadow
+
+# Re-export for tests that monkeypatch rendering.widget_manager.apply_widget_shadow.
+apply_widget_shadow = _apply_widget_shadow
 from widgets.media_widget import MediaWidget
 # Gmail widget archived - see archive/gmail_feature/RESTORE_GMAIL.md
 # from widgets.gmail_widget import GmailWidget, GmailPosition

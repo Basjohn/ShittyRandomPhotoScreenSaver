@@ -1341,23 +1341,20 @@ class GLCompositorWidget(QOpenGLWidget):
         delay_ms, compensated_duration = self._apply_desync_strategy(duration_ms)
         
         if delay_ms > 0:
-            # BUG FIX: Store current base pixmap as old_pixmap for deferred transition
-            # If we capture old_pixmap in lambda, it could become stale if another transition starts
-            # Instead, use current base pixmap at the time the timer fires
+            # Use the exact pixmaps we were asked to transition between; do not mutate the
+            # compositor base until the animation actually starts.
             from PySide6.QtCore import QTimer
+
             def deferred_start():
-                # Use current base pixmap as old image (what's currently displayed)
-                current_old = self._base_pixmap
-                if current_old is None or current_old.isNull():
-                    # No old image - show new image immediately without transition
+                if old_pixmap is None or old_pixmap.isNull():
+                    # If the caller did not provide a previous frame, we cannot animate.
                     self._handle_no_old_image(new_pixmap, on_finished, "crossfade")
-                else:
-                    self._start_crossfade_impl(
-                        current_old, new_pixmap, compensated_duration, easing, animation_manager, on_finished
-                    )
+                    return
+                self._start_crossfade_impl(
+                    old_pixmap, new_pixmap, compensated_duration, easing, animation_manager, on_finished
+                )
+
             QTimer.singleShot(delay_ms, deferred_start)
-            # Set base pixmap immediately so it's available when timer fires
-            self._base_pixmap = new_pixmap
             return None  # Animation ID will be set when transition actually starts
         else:
             return self._start_crossfade_impl(

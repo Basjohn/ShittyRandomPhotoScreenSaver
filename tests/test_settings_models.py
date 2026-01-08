@@ -426,7 +426,7 @@ class TestRedditWidgetSettings:
         assert settings.enabled is False
         assert settings.position == WidgetPosition.TOP_LEFT
         assert settings.subreddit == "technology"
-        assert settings.item_limit == 10
+        assert settings.limit == 10
 
     def test_round_trip_from_settings_and_to_dict(self):
         """Ensure loading from settings and writing back preserves values."""
@@ -435,7 +435,7 @@ class TestRedditWidgetSettings:
             "widgets.reddit.monitor": "1",
             "widgets.reddit.position": "bottom_center",
             "widgets.reddit.subreddit": "wallpapers",
-            "widgets.reddit.item_limit": 20,
+            "widgets.reddit.limit": 20,
             "widgets.reddit.font_family": "Segoe UI",
             "widgets.reddit.font_size": 16,
             "widgets.reddit.text_color": "#123456",
@@ -464,7 +464,7 @@ class TestRedditWidgetSettings:
             "monitor": "ALL",
             "position": "top_right",
             "subreddit": "pics",
-            "item_limit": 4,
+            "limit": 4,
             "font_family": "Inter",
             "font_size": 20,
             "text_color": "#ffffff",
@@ -485,7 +485,7 @@ class TestRedditWidgetSettings:
         assert model.monitor == "ALL"
         assert model.position == WidgetPosition.TOP_RIGHT
         assert model.subreddit == "pics"
-        assert model.item_limit == 4
+        assert model.limit == 4
         assert model.font_family == "Inter"
         assert model.font_size == 20
         assert model.text_color == "#ffffff"
