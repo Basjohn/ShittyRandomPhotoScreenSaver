@@ -18,6 +18,13 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - 236 unit tests across 9 test files
 
 ## Active Audit Documents (Jan 2026)
+- **audits/WidgetRefactorPlan.md** - ✅ **COMPLETED** (Jan 9, 2026)
+  - Widget profiling implementation (all widgets have `widget_paint_sample`)
+  - Media widget smart polling (diff gating, idle detection, 2500ms interval)
+  - Reddit API call timing with PERF gating
+  - Lifecycle system documented as dormant (legacy `start()` active)
+  - 79 lint errors fixed (`except Exception as e:` pattern)
+  - Performance verified: Clock avg=2.6ms, Weather avg=0.8ms, Media avg=1.8ms
 - **audits/FULL_CODEBASE_AUDIT_2026_01_06.md** - ✅ **LIVE CHECKLIST** (Jan 6, 2026)
   - Full codebase audit covering runtime, rendering, transitions, widgets, logging, threading, settings, tests, docs
   - P0-P3 prioritized tasks with difficulty/reward ratings

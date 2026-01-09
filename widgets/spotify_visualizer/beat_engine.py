@@ -64,7 +64,7 @@ class _SpotifyBeatEngine(QObject):
         """Set the ProcessSupervisor for FFTWorker integration."""
         try:
             self._audio_worker.set_process_supervisor(supervisor)
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to set process supervisor", exc_info=True)
     
     def set_smoothing(self, tau: float) -> None:
@@ -74,13 +74,13 @@ class _SpotifyBeatEngine(QObject):
     def set_sensitivity_config(self, recommended: bool, sensitivity: float) -> None:
         try:
             self._audio_worker.set_sensitivity_config(recommended, sensitivity)
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to apply sensitivity config", exc_info=True)
     
     def set_floor_config(self, dynamic_enabled: bool, manual_floor: float) -> None:
         try:
             self._audio_worker.set_floor_config(dynamic_enabled, manual_floor)
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to apply floor config", exc_info=True)
 
     def set_playback_state(self, is_playing: bool) -> None:
@@ -159,13 +159,13 @@ class _SpotifyBeatEngine(QObject):
         try:
             if not self._audio_worker.is_running():
                 self._audio_worker.start()
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to start audio worker in shared engine", exc_info=True)
 
     def _stop_worker(self) -> None:
         try:
             self._audio_worker.stop()
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to stop audio worker in shared engine", exc_info=True)
 
     def _schedule_compute_bars_task(self, samples: object) -> None:
@@ -251,7 +251,7 @@ class _SpotifyBeatEngine(QObject):
                     self._last_audio_ts = time.time()
                 except Exception as e:
                     logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            except Exception as e:
+            except Exception:
                 logger.debug("[SPOTIFY_VIS] compute task callback failed", exc_info=True)
 
         try:

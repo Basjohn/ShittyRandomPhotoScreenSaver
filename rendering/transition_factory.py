@@ -299,7 +299,7 @@ class TransitionFactory:
             return False
         try:
             self._ensure_compositor()
-        except Exception as e:
+        except Exception:
             logger.debug("[GL COMPOSITOR] Failed to ensure compositor", exc_info=True)
         return self._check_compositor()
     

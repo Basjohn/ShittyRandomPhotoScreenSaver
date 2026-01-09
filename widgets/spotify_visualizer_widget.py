@@ -182,7 +182,7 @@ class SpotifyVisualizerAudioWorker(QObject):
             if engine is not None:
                 engine.set_floor_config(dyn, floor)
                 self._last_floor_config = (dyn, floor)
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to propagate floor config to shared engine", exc_info=True)
 
     def set_audio_block_size(self, block_size: int) -> None:
@@ -1140,7 +1140,7 @@ class _SpotifyBeatEngine(QObject):
         """Set the ProcessSupervisor for FFTWorker integration."""
         try:
             self._audio_worker.set_process_supervisor(supervisor)
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to set process supervisor", exc_info=True)
     
     def set_smoothing(self, tau: float) -> None:
@@ -1150,13 +1150,13 @@ class _SpotifyBeatEngine(QObject):
     def set_sensitivity_config(self, recommended: bool, sensitivity: float) -> None:
         try:
             self._audio_worker.set_sensitivity_config(recommended, sensitivity)
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to apply sensitivity config", exc_info=True)
     
     def set_floor_config(self, dynamic_enabled: bool, manual_floor: float) -> None:
         try:
             self._audio_worker.set_floor_config(dynamic_enabled, manual_floor)
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to apply floor config", exc_info=True)
 
     def set_playback_state(self, is_playing: bool) -> None:
@@ -1229,13 +1229,13 @@ class _SpotifyBeatEngine(QObject):
         try:
             if not self._audio_worker.is_running():
                 self._audio_worker.start()
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to start audio worker in shared engine", exc_info=True)
 
     def _stop_worker(self) -> None:
         try:
             self._audio_worker.stop()
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to stop audio worker in shared engine", exc_info=True)
 
     def _schedule_compute_bars_task(self, samples: object) -> None:
@@ -1307,7 +1307,7 @@ class _SpotifyBeatEngine(QObject):
                     self._last_audio_ts = time.time()
                 except Exception as e:
                     logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            except Exception as e:
+            except Exception:
                 logger.debug("[SPOTIFY_VIS] compute task callback failed", exc_info=True)
 
         try:
@@ -1469,7 +1469,7 @@ class SpotifyVisualizerWidget(QWidget):
                 self._bars_buffer = engine._audio_buffer  # type: ignore[attr-defined]
                 self._audio_worker = engine._audio_worker  # type: ignore[attr-defined]
                 self._bars_result_buffer = engine._bars_result_buffer  # type: ignore[attr-defined]
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to attach shared beat engine", exc_info=True)
 
         self._enabled: bool = False
@@ -1571,11 +1571,11 @@ class SpotifyVisualizerWidget(QWidget):
 
         try:
             engine.set_floor_config(floor_dyn, floor_value)
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to replay floor config", exc_info=True)
         try:
             engine.set_sensitivity_config(sens_rec, sens_value)
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to replay sensitivity config", exc_info=True)
 
     # ------------------------------------------------------------------
@@ -1589,7 +1589,7 @@ class SpotifyVisualizerWidget(QWidget):
             self._engine = engine
             engine.set_thread_manager(thread_manager)
             self._replay_engine_config(engine)
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to propagate ThreadManager to shared beat engine", exc_info=True)
 
     def set_process_supervisor(self, supervisor: Optional[ProcessSupervisor]) -> None:
@@ -1603,7 +1603,7 @@ class SpotifyVisualizerWidget(QWidget):
             if engine is not None:
                 engine.set_process_supervisor(supervisor)
                 logger.debug("[SPOTIFY_VIS] ProcessSupervisor set on beat engine")
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to set ProcessSupervisor on beat engine", exc_info=True)
         if self._enabled:
             self._ensure_tick_source()
@@ -1619,7 +1619,7 @@ class SpotifyVisualizerWidget(QWidget):
         if engine is not None:
             try:
                 engine.set_floor_config(dynamic_enabled, manual_floor)
-            except Exception as e:
+            except Exception:
                 logger.debug("[SPOTIFY_VIS] Failed to push floor config via apply_floor_config", exc_info=True)
 
     # Backwards-compat alias for legacy callers/tests
@@ -1637,7 +1637,7 @@ class SpotifyVisualizerWidget(QWidget):
         if engine is not None:
             try:
                 engine.set_sensitivity_config(recommended, sensitivity)
-            except Exception as e:
+            except Exception:
                 logger.debug("[SPOTIFY_VIS] Failed to push sensitivity config via apply_sensitivity_config", exc_info=True)
 
     def set_sensitivity_config(self, recommended: bool, sensitivity: float) -> None:
@@ -1665,7 +1665,7 @@ class SpotifyVisualizerWidget(QWidget):
             try:
                 if hasattr(self._animation_manager, "remove_tick_listener"):
                     self._animation_manager.remove_tick_listener(self._anim_listener_id)
-            except Exception as e:
+            except Exception:
                 logger.debug("[SPOTIFY_VIS] Failed to remove previous AnimationManager listener", exc_info=True)
 
         self._animation_manager = animation_manager
@@ -1685,7 +1685,7 @@ class SpotifyVisualizerWidget(QWidget):
 
             listener_id = animation_manager.add_tick_listener(_tick_listener)
             self._anim_listener_id = listener_id
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to attach to AnimationManager", exc_info=True)
         finally:
             self._ensure_tick_source()
@@ -1696,7 +1696,7 @@ class SpotifyVisualizerWidget(QWidget):
         if am is not None and listener_id is not None and hasattr(am, "remove_tick_listener"):
             try:
                 am.remove_tick_listener(listener_id)
-            except Exception as e:
+            except Exception:
                 logger.debug("[SPOTIFY_VIS] Failed to detach from AnimationManager", exc_info=True)
         self._animation_manager = None
         self._anim_listener_id = None
@@ -1718,7 +1718,7 @@ class SpotifyVisualizerWidget(QWidget):
             try:
                 self._bars_timer = self._thread_manager.schedule_recurring(16, self._on_tick)
                 self._current_timer_interval_ms = 16
-            except Exception as e:
+            except Exception:
                 logger.debug("[SPOTIFY_VIS] Failed to create tick source timer", exc_info=True)
                 self._bars_timer = None
 
@@ -1828,7 +1828,7 @@ class SpotifyVisualizerWidget(QWidget):
         try:
             if self._engine is not None:
                 self._engine.set_playback_state(self._spotify_playing)
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to set beat engine playback state", exc_info=True)
 
         if logger.isEnabledFor(logging.INFO):
@@ -1973,7 +1973,7 @@ class SpotifyVisualizerWidget(QWidget):
             engine.acquire()
             self._replay_engine_config(engine)
             engine.ensure_started()
-        except Exception as e:
+        except Exception:
             logger.debug("[LIFECYCLE] Failed to start shared beat engine", exc_info=True)
         
         # Start dedicated timer for continuous visualizer updates
@@ -1997,7 +1997,7 @@ class SpotifyVisualizerWidget(QWidget):
         if engine is not None:
             try:
                 engine.release()
-            except Exception as e:
+            except Exception:
                 logger.debug("[LIFECYCLE] Failed to release shared beat engine", exc_info=True)
         
         try:
@@ -2052,7 +2052,7 @@ class SpotifyVisualizerWidget(QWidget):
             engine.set_playback_state(self._spotify_playing)
             
             engine.ensure_started()
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to start shared beat engine", exc_info=True)
 
         # Always start the dedicated timer for continuous visualizer updates.
@@ -2119,12 +2119,12 @@ class SpotifyVisualizerWidget(QWidget):
         if engine is not None:
             try:
                 engine.release()
-            except Exception as e:
+            except Exception:
                 logger.debug("[SPOTIFY_VIS] Failed to release shared beat engine", exc_info=True)
 
         try:
             self.detach_from_animation_manager()
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to detach from AnimationManager on stop", exc_info=True)
 
         try:
@@ -2177,7 +2177,7 @@ class SpotifyVisualizerWidget(QWidget):
                     self._shadow_config,
                     has_background_frame=self._show_background,
                 )
-            except Exception as e:
+            except Exception:
                 logger.debug(
                     "[SPOTIFY_VIS] Failed to attach shadow in no-fade path",
                     exc_info=True,
@@ -2190,7 +2190,7 @@ class SpotifyVisualizerWidget(QWidget):
                 self._shadow_config,
                 has_background_frame=self._show_background,
             )
-        except Exception as e:
+        except Exception:
             logger.debug(
                 "[SPOTIFY_VIS] _start_widget_fade_in fallback path triggered",
                 exc_info=True,
@@ -2206,7 +2206,7 @@ class SpotifyVisualizerWidget(QWidget):
                         self._shadow_config,
                         has_background_frame=self._show_background,
                     )
-                except Exception as e:
+                except Exception:
                     logger.debug(
                         "[SPOTIFY_VIS] Failed to apply widget shadow in fallback path",
                         exc_info=True,
@@ -2761,7 +2761,7 @@ class SpotifyVisualizerWidget(QWidget):
                     # First paint event
                     self._perf_paint_start_ts = now
                 self._perf_paint_last_ts = now
-            except Exception as e:
+            except Exception:
                 logger.debug("[SPOTIFY_VIS] Paint PERF accounting failed", exc_info=True)
 
         # Note: paintEvent itself does not trigger PERF snapshots; these are
@@ -2921,9 +2921,9 @@ class SpotifyVisualizerWidget(QWidget):
                         self._perf_audio_lag_min_ms,
                         self._perf_audio_lag_max_ms,
                     )
-            except Exception as e:
+            except Exception:
                 logger.debug("[SPOTIFY_VIS] AudioLag PERF metrics logging failed", exc_info=True)
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VIS] PERF metrics logging failed", exc_info=True)
         finally:
             if reset:

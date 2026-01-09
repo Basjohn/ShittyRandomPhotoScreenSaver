@@ -14,8 +14,9 @@ from PySide6.QtCore import QTimer, Qt, Signal, QObject
 from PySide6.QtGui import QFont, QPainter, QPen, QColor, QFontMetrics
 from shiboken6 import Shiboken
 
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.threading.manager import ThreadManager
+from core.performance import widget_paint_sample
 from weather.open_meteo_provider import OpenMeteoProvider
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
 from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
@@ -185,22 +186,23 @@ class WeatherWidget(BaseOverlayWidget):
     
     def paintEvent(self, event) -> None:
         """Override to draw separator line between weather and forecast."""
-        # Let base class draw the text
-        super().paintEvent(event)
-        
-        # Draw separator line if forecast is shown
-        if self._separator_y is not None and self._show_forecast and self._forecast_data:
-            painter = QPainter(self)
-            try:
-                pen = QPen(QColor(255, 255, 255, 153))  # 60% opacity white
-                pen.setWidth(1)
-                painter.setPen(pen)
-                # Draw horizontal line from left padding to right edge minus padding
-                x1 = self._padding_left
-                x2 = self.width() - self._padding_right
-                painter.drawLine(x1, self._separator_y, x2, self._separator_y)
-            finally:
-                painter.end()
+        with widget_paint_sample(self, "weather.paint"):
+            # Let base class draw the text
+            super().paintEvent(event)
+            
+            # Draw separator line if forecast is shown
+            if self._separator_y is not None and self._show_forecast and self._forecast_data:
+                painter = QPainter(self)
+                try:
+                    pen = QPen(QColor(255, 255, 255, 153))  # 60% opacity white
+                    pen.setWidth(1)
+                    painter.setPen(pen)
+                    # Draw horizontal line from left padding to right edge minus padding
+                    x1 = self._padding_left
+                    x2 = self.width() - self._padding_right
+                    painter.drawLine(x1, self._separator_y, x2, self._separator_y)
+                finally:
+                    painter.end()
     
     def _update_content(self) -> None:
         """Required by BaseOverlayWidget - update weather display."""
@@ -418,7 +420,10 @@ class WeatherWidget(BaseOverlayWidget):
 
         # Always try to refresh from the provider; any existing cached data
         # remains available for display if the fetch fails.
-        logger.debug("Fetching fresh weather data")
+        if is_perf_metrics_enabled():
+            logger.debug("[PERF] Weather fetch initiated for %s", self._location)
+        else:
+            logger.debug("Fetching fresh weather data")
 
         if self._thread_manager is not None:
             self._fetch_via_thread_manager()
@@ -428,9 +433,18 @@ class WeatherWidget(BaseOverlayWidget):
     def _fetch_via_thread_manager(self) -> None:
         tm = self._thread_manager
         def _do_fetch(location: str) -> Dict[str, Any]:
-            logger.debug("[ThreadManager] Fetching weather for %s", location)
+            import time
+            start_time = time.perf_counter()
+            if is_perf_metrics_enabled():
+                logger.debug("[PERF] Weather API call starting for %s", location)
+            else:
+                logger.debug("[ThreadManager] Fetching weather for %s", location)
             provider = OpenMeteoProvider(timeout=10)
-            return provider.get_current_weather(location)
+            result = provider.get_current_weather(location)
+            if is_perf_metrics_enabled():
+                elapsed_ms = (time.perf_counter() - start_time) * 1000
+                logger.debug("[PERF] Weather API call completed in %.2fms for %s", elapsed_ms, location)
+            return result
 
         def _on_result(result) -> None:
             try:
@@ -527,7 +541,7 @@ class WeatherWidget(BaseOverlayWidget):
                 return
             raw = _CACHE_FILE.read_text(encoding="utf-8")
             payload = json.loads(raw)
-        except Exception as e:
+        except Exception:
             logger.debug("Failed to load persisted weather cache", exc_info=True)
             return
 
@@ -595,7 +609,7 @@ class WeatherWidget(BaseOverlayWidget):
                 "timestamp": datetime.now().isoformat(),
             }
             _CACHE_FILE.write_text(json.dumps(payload), encoding="utf-8")
-        except Exception as e:
+        except Exception:
             logger.debug("Failed to persist weather cache", exc_info=True)
     
     def _update_display(self, data: Optional[Dict[str, Any]]) -> None:
@@ -826,7 +840,7 @@ class WeatherWidget(BaseOverlayWidget):
                         self._shadow_config,
                         has_background_frame=self._show_background,
                     )
-                except Exception as e:
+                except Exception:
                     logger.debug(
                         "[WEATHER] Failed to apply widget shadow in fallback path",
                         exc_info=True,

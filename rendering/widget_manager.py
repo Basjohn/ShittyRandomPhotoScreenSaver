@@ -284,7 +284,7 @@ class WidgetManager:
         self._settings_manager = settings_manager
         try:
             settings_manager.settings_changed.connect(self._handle_settings_changed)
-        except Exception as e:
+        except Exception:
             logger.debug("[WIDGET_MANAGER] Failed to connect settings_changed signal", exc_info=True)
 
     def _detach_settings_manager(self) -> None:
@@ -343,7 +343,7 @@ class WidgetManager:
                 cfg.get('dynamic_floor'),
                 float(cfg.get('manual_floor', 0.0)),
             )
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VIS][CFG] %s %s", context, cfg, exc_info=True)
 
     def _apply_media_card_style_to_visualizer(
@@ -389,7 +389,7 @@ class WidgetManager:
                 border_width=max(0, border_width),
                 show_background=show_background,
             )
-        except Exception as e:
+        except Exception:
             logger.debug("[WIDGET_MANAGER] Failed to apply media card style to visualizer", exc_info=True)
 
     def _refresh_spotify_visualizer_config(self, widgets_config: Optional[Mapping[str, Any]] = None) -> None:
@@ -419,7 +419,7 @@ class WidgetManager:
             sens_raw = float(model.sensitivity)
             sensitivity = max(0.25, min(2.5, sens_raw))
             vis.set_sensitivity_config(recommended, sensitivity)
-        except Exception as e:
+        except Exception:
             logger.debug("[WIDGET_MANAGER] Failed to reapply Spotify sensitivity config", exc_info=True)
 
         # Noise floor (dynamic/manual)
@@ -427,7 +427,7 @@ class WidgetManager:
             dynamic_floor = SettingsManager.to_bool(model.dynamic_floor, True)
             manual_floor = float(model.manual_floor)
             vis.set_floor_config(dynamic_floor, manual_floor)
-        except Exception as e:
+        except Exception:
             logger.debug("[WIDGET_MANAGER] Failed to reapply Spotify floor config", exc_info=True)
 
         media_cfg = cfg.get('media', {}) if isinstance(cfg, Mapping) else {}
@@ -456,7 +456,7 @@ class WidgetManager:
         try:
             if hasattr(media_widget, 'set_text_color'):
                 media_widget.set_text_color(parse_color_to_qcolor(model.color))
-        except Exception as e:
+        except Exception:
             logger.debug("[WIDGET_MANAGER] Failed to reapply media text color", exc_info=True)
 
         try:
@@ -468,7 +468,7 @@ class WidgetManager:
                 border_qcolor = parse_color_to_qcolor(model.border_color, opacity_override=model.border_opacity)
                 if border_qcolor:
                     media_widget.set_background_border(2, border_qcolor)
-        except Exception as e:
+        except Exception:
             logger.debug("[WIDGET_MANAGER] Failed to reapply media background/border", exc_info=True)
 
         try:
@@ -476,7 +476,7 @@ class WidgetManager:
                 media_widget.set_show_controls(SettingsManager.to_bool(model.show_controls, True))
             if hasattr(media_widget, 'set_show_header_frame'):
                 media_widget.set_show_header_frame(SettingsManager.to_bool(model.show_header_frame, True))
-        except Exception as e:
+        except Exception:
             logger.debug("[WIDGET_MANAGER] Failed to reapply media controls/header", exc_info=True)
 
         vis_widget = self._widgets.get('spotify_visualizer') or self._widgets.get('spotify_visualizer_widget')
@@ -548,7 +548,7 @@ class WidgetManager:
                         widget.set_background_border(2, border_qcolor)
                 if hasattr(widget, 'set_margin'):
                     widget.set_margin(int(margin))
-            except Exception as e:
+            except Exception:
                 logger.debug("[WIDGET_MANAGER] Failed to reapply reddit config for %s", key, exc_info=True)
     
     def show_widget(self, name: str) -> bool:
@@ -830,7 +830,7 @@ class WidgetManager:
                 try:
                     if hasattr(widget, 'cleanup') and callable(widget.cleanup):
                         widget.cleanup()
-                except Exception as e:
+                except Exception:
                     logger.debug("[WIDGET_MANAGER] Failed to cleanup %s", name, exc_info=True)
         
         self._widgets.clear()
@@ -859,7 +859,7 @@ class WidgetManager:
                 widget.initialize()
                 logger.debug("[LIFECYCLE] Widget %s initialized via WidgetManager", name)
                 return True
-        except Exception as e:
+        except Exception:
             logger.debug("[LIFECYCLE] Failed to initialize %s", name, exc_info=True)
         return False
 
@@ -881,7 +881,7 @@ class WidgetManager:
                 widget.activate()
                 logger.debug("[LIFECYCLE] Widget %s activated via WidgetManager", name)
                 return True
-        except Exception as e:
+        except Exception:
             logger.debug("[LIFECYCLE] Failed to activate %s", name, exc_info=True)
         return False
 
@@ -903,7 +903,7 @@ class WidgetManager:
                 widget.deactivate()
                 logger.debug("[LIFECYCLE] Widget %s deactivated via WidgetManager", name)
                 return True
-        except Exception as e:
+        except Exception:
             logger.debug("[LIFECYCLE] Failed to deactivate %s", name, exc_info=True)
         return False
 
@@ -925,7 +925,7 @@ class WidgetManager:
                 widget.cleanup()
                 logger.debug("[LIFECYCLE] Widget %s cleaned up via WidgetManager", name)
                 return True
-        except Exception as e:
+        except Exception:
             logger.debug("[LIFECYCLE] Failed to cleanup %s", name, exc_info=True)
         return False
 
@@ -944,6 +944,12 @@ class WidgetManager:
 
     def activate_all_widgets(self) -> int:
         """Activate all managed widgets using the new lifecycle system.
+        
+        NOTE: This method is DORMANT as of Jan 2026. The legacy start() system
+        is used instead (see setup_all_widgets). Lifecycle methods exist in all
+        widgets but are not called. This is intentional - the lifecycle system
+        is complete but kept dormant to reduce regression risk. Migration to
+        lifecycle activation is planned for v1.3 after stabilization.
         
         Returns:
             Number of widgets successfully activated
@@ -1040,7 +1046,7 @@ class WidgetManager:
         try:
             self._positioner.position_widget(widget, anchor, margin_x=margin, margin_y=margin)
             return True
-        except Exception as e:
+        except Exception:
             logger.debug("[POSITIONER] Failed to position %s", name, exc_info=True)
         return False
 

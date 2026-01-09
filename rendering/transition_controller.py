@@ -334,7 +334,7 @@ class TransitionController(QObject):
                     "[WATCHDOG] Started: timeout=%.1fs overlay=%s transition=%s",
                     timeout_sec, overlay_key, self._watchdog_transition_name,
                 )
-        except Exception as e:
+        except Exception:
             logger.debug("[WATCHDOG] Failed to start watchdog timer", exc_info=True)
     
     def _cancel_watchdog(self) -> None:

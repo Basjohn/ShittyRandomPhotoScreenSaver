@@ -23,6 +23,7 @@ from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
 from widgets.shadow_utils import ShadowFadeProfile, apply_widget_shadow
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 from core.logging.logger import get_logger
+from core.performance import widget_paint_sample
 
 logger = get_logger(__name__)
 
@@ -908,9 +909,15 @@ class ClockWidget(BaseOverlayWidget):
         """Custom paint for analogue mode; fall back to QLabel for digital."""
 
         if self._display_mode != "analog":
-            super().paintEvent(event)
+            with widget_paint_sample(self, "clock.paint.digital"):
+                super().paintEvent(event)
             return
 
+        with widget_paint_sample(self, "clock.paint.analog"):
+            self._paint_analog(event)
+
+    def _paint_analog(self, event: QPaintEvent) -> None:
+        """Paint analog clock face, hands, and numerals."""
         # First let QLabel render its background/frame (via stylesheet), but
         # with an empty text payload.
         super().paintEvent(event)

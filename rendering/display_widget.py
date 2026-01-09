@@ -308,7 +308,7 @@ class DisplayWidget(QWidget):
         self._widget_manager: Optional[WidgetManager] = None
         try:
             self._widget_manager = WidgetManager(self, self._resource_manager)
-        except Exception as e:
+        except Exception:
             logger.debug("[DISPLAY_WIDGET] Failed to create WidgetManager", exc_info=True)
         
         # InputHandler for centralized input event handling (Phase E refactor)
@@ -324,7 +324,7 @@ class DisplayWidget(QWidget):
             self._input_handler.previous_image_requested.connect(self.previous_requested)
             self._input_handler.cycle_transition_requested.connect(self.cycle_transition_requested)
             self._input_handler.context_menu_requested.connect(self._on_context_menu_requested)
-        except Exception as e:
+        except Exception:
             logger.debug("[DISPLAY_WIDGET] Failed to create InputHandler", exc_info=True)
         
         # TransitionController for centralized transition lifecycle (Phase 3 refactor)
@@ -333,7 +333,7 @@ class DisplayWidget(QWidget):
             self._transition_controller = TransitionController(
                 self, self._resource_manager, self._widget_manager
             )
-        except Exception as e:
+        except Exception:
             logger.debug("[DISPLAY_WIDGET] Failed to create TransitionController", exc_info=True)
         
         # EcoModeManager for MC builds (v2.1 integration)
@@ -636,7 +636,7 @@ class DisplayWidget(QWidget):
         # Ensure shared GL compositor and reuse any persistent overlays
         try:
             self._ensure_gl_compositor()
-        except Exception as e:
+        except Exception:
             logger.debug("[GL COMPOSITOR] Failed to ensure compositor during show", exc_info=True)
 
         self._reuse_persistent_gl_overlays()
@@ -706,7 +706,7 @@ class DisplayWidget(QWidget):
                 self._context_menu.ensurePolished()
             except Exception as e:
                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        except Exception as e:
+        except Exception:
             logger.debug("Failed to prewarm context menu", exc_info=True)
         finally:
             try:
@@ -738,7 +738,7 @@ class DisplayWidget(QWidget):
 
         try:
             self._device_pixel_ratio = float(screen.devicePixelRatio())
-        except Exception as e:
+        except Exception:
             logger.debug("[SCREEN] Failed to read devicePixelRatio", exc_info=True)
 
         try:
@@ -752,32 +752,32 @@ class DisplayWidget(QWidget):
                     except Exception as e:
                         logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 self.setGeometry(geom)
-        except Exception as e:
+        except Exception:
             logger.debug("[SCREEN] Failed to apply screen geometry", exc_info=True)
 
         try:
             self._configure_refresh_rate_sync()
-        except Exception as e:
+        except Exception:
             logger.debug("[SCREEN] Refresh rate sync configuration failed", exc_info=True)
 
         try:
             self._ensure_render_surface()
-        except Exception as e:
+        except Exception:
             logger.debug("[SCREEN] Render surface update failed", exc_info=True)
 
         try:
             self._ensure_overlay_stack(stage="screen_change")
-        except Exception as e:
+        except Exception:
             logger.debug("[SCREEN] Overlay stack update failed", exc_info=True)
 
         try:
             self._reuse_persistent_gl_overlays()
-        except Exception as e:
+        except Exception:
             logger.debug("[SCREEN] Persistent overlay reuse failed", exc_info=True)
 
         try:
             self._ensure_gl_compositor()
-        except Exception as e:
+        except Exception:
             logger.debug("[SCREEN] GL compositor update failed", exc_info=True)
 
     def _detect_refresh_rate(self) -> float:
@@ -872,7 +872,7 @@ class DisplayWidget(QWidget):
             if self._eco_mode_manager is not None:
                 try:
                     self._eco_mode_manager.set_visualizer(self.spotify_visualizer_widget)
-                except Exception as e:
+                except Exception:
                     logger.debug("[DISPLAY_WIDGET] Failed to set visualizer on EcoModeManager", exc_info=True)
         
         # Position Spotify volume if created
@@ -886,7 +886,7 @@ class DisplayWidget(QWidget):
         if self._eco_mode_manager is not None:
             try:
                 self._eco_mode_manager.start_monitoring()
-            except Exception as e:
+            except Exception:
                 logger.debug("[DISPLAY_WIDGET] Failed to start EcoModeManager monitoring", exc_info=True)
 
     def _setup_pixel_shift(self) -> None:
@@ -1048,7 +1048,7 @@ class DisplayWidget(QWidget):
         try:
             widgets = self.settings_manager.get('widgets', {}) if self.settings_manager else {}
             self._apply_widget_stacking(widgets)
-        except Exception as e:
+        except Exception:
             logger.debug("Failed to recalculate stacking", exc_info=True)
 
     def _on_animation_manager_ready(self, animation_manager) -> None:
@@ -1071,7 +1071,7 @@ class DisplayWidget(QWidget):
         try:
             if hasattr(vis, "attach_to_animation_manager"):
                 vis.attach_to_animation_manager(animation_manager)
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to attach visualizer to AnimationManager", exc_info=True)
 
     def _ensure_overlay_stack(self, stage: str = "runtime") -> None:
@@ -1357,7 +1357,7 @@ class DisplayWidget(QWidget):
                     # full texture upload cost on their first animated frame.
                     try:
                         comp.warm_shader_textures(previous_pixmap_ref, new_pixmap)
-                    except Exception as e:
+                    except Exception:
                         logger.debug(
                             "[GL COMPOSITOR] warm_shader_textures failed during pre-warm",
                             exc_info=True,
@@ -1377,7 +1377,7 @@ class DisplayWidget(QWidget):
                                 w.raise_()
                             except Exception as e:
                                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                except Exception as e:
+                except Exception:
                     logger.debug("[GL COMPOSITOR] Failed to pre-warm compositor with base frame", exc_info=True)
 
             use_transition = bool(self.settings_manager) and self._has_rendered_first_frame
@@ -1602,7 +1602,7 @@ class DisplayWidget(QWidget):
             warmed = compositor.warm_transition_resources(transition_name, warm_old, new_pixmap)
             if warmed:
                 self._prewarmed_transition_types.add(transition_name)
-        except Exception as e:
+        except Exception:
             logger.debug(
                 "[GL COMPOSITOR] warm_transition_resources failed for %s",
                 transition_name,
@@ -1698,13 +1698,13 @@ class DisplayWidget(QWidget):
                             overlay,
                             description="Spotify bars GL overlay",
                         )
-                    except Exception as e:
+                    except Exception:
                         logger.debug("[SPOTIFY_VIS] Failed to register SpotifyBarsGLOverlay", exc_info=True)
                 pixel_shift_manager = getattr(self, "_pixel_shift_manager", None)
                 if pixel_shift_manager is not None:
                     try:
                         pixel_shift_manager.register_widget(overlay)
-                    except Exception as e:
+                    except Exception:
                         logger.debug("[SPOTIFY_VIS] Failed to register GL overlay with PixelShiftManager", exc_info=True)
             except Exception as e:
                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
@@ -1734,9 +1734,9 @@ class DisplayWidget(QWidget):
             if pixel_shift_manager is not None and hasattr(pixel_shift_manager, "update_original_position"):
                 try:
                     pixel_shift_manager.update_original_position(overlay)
-                except Exception as e:
+                except Exception:
                     logger.debug("[SPOTIFY_VIS] Failed to sync GL overlay baseline with PixelShiftManager", exc_info=True)
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to push frame to SpotifyBarsGLOverlay", exc_info=True)
             return False
 
@@ -1766,7 +1766,7 @@ class DisplayWidget(QWidget):
         if self._backend_fallback_message:
             try:
                 self._refresh_backend_fallback_overlay()
-            except Exception as e:
+            except Exception:
                 logger.debug("[RENDER] Failed to refresh backend fallback overlay geometry", exc_info=True)
         try:
             self._ensure_overlay_stack(stage="resize")
@@ -1827,7 +1827,7 @@ class DisplayWidget(QWidget):
                 f"{selection.resolved_mode.upper()} (requested {selection.requested_mode.upper()})"
             )
             self._update_backend_fallback_overlay()
-        except Exception as e:
+        except Exception:
             logger.exception("[RENDER] Failed to initialize renderer backend", exc_info=True)
             self._renderer_backend = None
             self._backend_selection = None
@@ -1934,7 +1934,7 @@ class DisplayWidget(QWidget):
                             comp,
                             description="Shared GL compositor for DisplayWidget",
                         )
-                    except Exception as e:
+                    except Exception:
                         logger.debug("[GL COMPOSITOR] Failed to register compositor with ResourceManager", exc_info=True)
                 self._gl_compositor = comp
                 logger.info("[GL COMPOSITOR] Created shared compositor for screen %s (vsync_render=%s)", 
@@ -1946,7 +1946,7 @@ class DisplayWidget(QWidget):
         else:
             try:
                 self._gl_compositor.setGeometry(0, 0, self.width(), self.height())
-            except Exception as e:
+            except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to update compositor geometry", exc_info=True)
 
     def _has_gl_compositor(self) -> bool:
@@ -2101,7 +2101,7 @@ class DisplayWidget(QWidget):
                         overlay,
                         description="Backend fallback diagnostic overlay",
                     )
-                except Exception as e:
+                except Exception:
                     logger.debug("[RENDER] Failed to register fallback overlay", exc_info=True)
 
         show_backend_fallback_overlay(
@@ -2590,7 +2590,7 @@ class DisplayWidget(QWidget):
             try:
                 self._eco_mode_manager.stop_monitoring()
                 logger.debug("[LIFECYCLE] EcoModeManager stopped")
-            except Exception as e:
+            except Exception:
                 logger.debug("[LIFECYCLE] EcoModeManager stop failed", exc_info=True)
         
         # Cleanup widgets via lifecycle system (Dec 2025)
@@ -2598,7 +2598,7 @@ class DisplayWidget(QWidget):
             try:
                 self._widget_manager.cleanup()
                 logger.debug("[LIFECYCLE] WidgetManager cleanup complete")
-            except Exception as e:
+            except Exception:
                 logger.debug("[LIFECYCLE] WidgetManager cleanup failed", exc_info=True)
         
         super().closeEvent(event)
@@ -2614,7 +2614,7 @@ class DisplayWidget(QWidget):
                     self._input_handler.handle_ctrl_press(self._coordinator)
                     event.accept()
                     return
-                except Exception as e:
+                except Exception:
                     logger.debug("[KEY] Ctrl press delegation failed", exc_info=True)
             event.accept()
             return
@@ -2628,7 +2628,7 @@ class DisplayWidget(QWidget):
                         self._exiting = True
                     event.accept()
                     return
-            except Exception as e:
+            except Exception:
                 logger.debug("[KEY] Key press delegation failed", exc_info=True)
         
         event.ignore()
@@ -2642,7 +2642,7 @@ class DisplayWidget(QWidget):
                     self._input_handler.handle_ctrl_release(self._coordinator)
                     event.accept()
                     return
-                except Exception as e:
+                except Exception:
                     logger.debug("[KEY] Ctrl release delegation failed", exc_info=True)
             event.accept()
             return
@@ -2689,7 +2689,7 @@ class DisplayWidget(QWidget):
                     )
                     logger.info("[REDDIT] route_widget_click returned: handled=%s reddit_handled=%s screen=%s",
                                handled, reddit_handled, self.screen_index)
-                except Exception as e:
+                except Exception:
                     logger.debug("[INPUT] Widget click routing failed", exc_info=True)
 
             if handled:
@@ -2763,7 +2763,7 @@ class DisplayWidget(QWidget):
                                     logger.info("[REDDIT] MC mode: opened %s immediately", url_to_open)
                                 else:
                                     logger.warning("[REDDIT] MC mode: QDesktopServices rejected %s", url_to_open)
-                            except Exception as e:
+                            except Exception:
                                 logger.debug("[REDDIT] MC mode immediate open failed; falling back", exc_info=True)
                                 url_to_open = None
                         if not url_to_open:
@@ -2858,7 +2858,7 @@ class DisplayWidget(QWidget):
                     ):
                         event.accept()
                         return
-                except Exception as e:
+                except Exception:
                     logger.debug("[WHEEL] routing failed", exc_info=True)
             # In interaction mode, wheel should never exit
             event.accept()
@@ -3038,7 +3038,7 @@ class DisplayWidget(QWidget):
                 except Exception as e:
                     logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
-        except Exception as e:
+        except Exception:
             logger.debug("Failed to show context menu", exc_info=True)
             self._context_menu_active = False
     
@@ -3054,7 +3054,7 @@ class DisplayWidget(QWidget):
                 self.settings_manager.set("transitions", trans_cfg)
                 self.settings_manager.save()
                 logger.info("Context menu: transition changed to %s", name)
-        except Exception as e:
+        except Exception:
             logger.debug("Failed to set transition from context menu", exc_info=True)
     
     def _on_context_dimming_toggled(self, enabled: bool) -> None:
@@ -3073,7 +3073,7 @@ class DisplayWidget(QWidget):
             
             # Emit signal to sync dimming across ALL displays
             self.dimming_changed.emit(enabled, self._dimming_opacity)
-        except Exception as e:
+        except Exception:
             logger.debug("Failed to toggle dimming from context menu", exc_info=True)
     
     def _on_context_hard_exit_toggled(self, enabled: bool) -> None:
@@ -3083,7 +3083,7 @@ class DisplayWidget(QWidget):
                 self.settings_manager.set("input.hard_exit", enabled)
                 self.settings_manager.save()
                 logger.info("Context menu: hard exit mode set to %s", enabled)
-        except Exception as e:
+        except Exception:
             logger.debug("Failed to toggle hard exit from context menu", exc_info=True)
     
     def _on_context_always_on_top_toggled(self, on_top: bool) -> None:
@@ -3130,11 +3130,11 @@ class DisplayWidget(QWidget):
                 try:
                     self._eco_mode_manager.set_always_on_top(on_top)
                     logger.debug("[MC] EcoModeManager notified: always_on_top=%s", on_top)
-                except Exception as e:
+                except Exception:
                     logger.debug("[MC] Failed to notify EcoModeManager of always-on-top change", exc_info=True)
             
             logger.info("[MC] Context menu: always on top set to %s", on_top)
-        except Exception as e:
+        except Exception:
             logger.debug("Failed to toggle always on top from context menu", exc_info=True)
             # Ensure updates are re-enabled on error
             try:
@@ -3161,7 +3161,7 @@ class DisplayWidget(QWidget):
         """
         try:
             self._show_context_menu(global_pos)
-        except Exception as e:
+        except Exception:
             logger.debug("[INPUT_HANDLER] Failed to show context menu", exc_info=True)
     
     def focusOutEvent(self, event: QFocusEvent) -> None:  # type: ignore[override]
@@ -3547,7 +3547,7 @@ class DisplayWidget(QWidget):
                                     target._input_handler.handle_ctrl_press(self._coordinator)
                                     event.accept()
                                     return True
-                                except Exception as e:
+                                except Exception:
                                     logger.debug("[KEY] Ctrl press delegation failed", exc_info=True)
                             event.accept()
                             return True
@@ -3558,7 +3558,7 @@ class DisplayWidget(QWidget):
                                         target._exiting = True
                                     event.accept()
                                     return True
-                            except Exception as e:
+                            except Exception:
                                 logger.debug("[KEY] Key press delegation failed", exc_info=True)
                 except Exception as e:
                     logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
@@ -3576,7 +3576,7 @@ class DisplayWidget(QWidget):
                                     target._input_handler.handle_ctrl_release(self._coordinator)
                                     event.accept()
                                     return True
-                                except Exception as e:
+                                except Exception:
                                     logger.debug("[KEY] Ctrl release delegation failed", exc_info=True)
                             event.accept()
                             return True

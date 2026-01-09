@@ -349,7 +349,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 cur_geom = None
             if cur_geom is None or cur_geom != rect:
                 self.setGeometry(rect)
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to set overlay geometry", exc_info=True)
         _geom_elapsed = (time.time() - _geom_start) * 1000.0
 
@@ -369,7 +369,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     self.show()
                 # Skip raise_() entirely - it's expensive and unnecessary
                 # The overlay is created on top and stays there
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to show overlay", exc_info=True)
         _show_elapsed = (time.time() - _show_start) * 1000.0
 
@@ -1001,7 +1001,7 @@ void main() {
             _gl.glDrawArrays(_gl.GL_TRIANGLE_STRIP, 0, 4)
             _gl.glBindVertexArray(0)
             _gl.glUseProgram(0)
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VIS] Shader-based bar rendering failed", exc_info=True)
             return False
 

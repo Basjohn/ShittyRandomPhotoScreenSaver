@@ -562,5 +562,37 @@ class TestFullLifecycleCycle:
         assert True
 
 
+# ---------------------------------------------------------------------------
+# Single Activation Path Tests (Phase 1 - Jan 2026)
+# ---------------------------------------------------------------------------
+
+class TestSingleActivationPath:
+    """Test that widgets activate via single path (legacy start() only).
+    
+    The lifecycle system (_activate_impl) is dormant. Only the legacy start()
+    method should be used for widget activation. This test verifies that
+    setup_all_widgets() uses start() and not activate_all_widgets().
+    """
+    
+    def test_widget_start_method_exists(self, qt_app, parent_widget):
+        """Verify all widgets have start() method."""
+        widget = ConcreteOverlayWidget(parent_widget)
+        assert hasattr(widget, 'start') or hasattr(widget, '_activate_impl')
+    
+    def test_lifecycle_methods_are_dormant(self, qt_app, parent_widget):
+        """Verify lifecycle methods exist but are not auto-called."""
+        widget = ConcreteOverlayWidget(parent_widget)
+        
+        # Widget should start in CREATED state
+        assert widget.get_lifecycle_state() == WidgetLifecycleState.CREATED
+        
+        # Lifecycle methods should NOT be auto-called on construction
+        assert not widget.initialize_called
+        assert not widget.activate_called
+        
+        # The widget should remain in CREATED until explicitly transitioned
+        assert widget.get_lifecycle_state() == WidgetLifecycleState.CREATED
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

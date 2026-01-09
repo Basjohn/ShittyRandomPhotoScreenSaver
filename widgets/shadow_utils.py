@@ -120,7 +120,7 @@ def apply_widget_shadow(
         if isinstance(existing_effect, QGraphicsDropShadowEffect):
             try:
                 widget.setGraphicsEffect(None)
-            except Exception as e:
+            except Exception:
                 logger.debug("[SHADOWS] Failed to clear drop shadow for %r", widget, exc_info=True)
         return
 
@@ -188,7 +188,7 @@ def apply_widget_shadow(
         effect = QGraphicsDropShadowEffect(widget)
         try:
             widget.setGraphicsEffect(effect)
-        except Exception as e:
+        except Exception:
             logger.debug("[SHADOWS] Failed to attach drop shadow effect for %r", widget, exc_info=True)
             return
 
@@ -228,7 +228,7 @@ class ShadowFadeProfile:
 
         try:
             apply_widget_shadow(widget, config or {}, has_background_frame=has_background_frame)
-        except Exception as e:
+        except Exception:
             logger.debug("[SHADOW_FADE] attach_shadow failed for %r", widget, exc_info=True)
 
     @classmethod
@@ -262,7 +262,7 @@ class ShadowFadeProfile:
             effect = QGraphicsDropShadowEffect(widget)
             try:
                 widget.setGraphicsEffect(effect)
-            except Exception as e:
+            except Exception:
                 logger.debug(
                     "[SHADOW_FADE] Failed to attach drop shadow effect for %r",
                     widget,

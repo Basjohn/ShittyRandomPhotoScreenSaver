@@ -751,11 +751,11 @@ class GLCompositorWidget(QOpenGLWidget):
         self._cancel_current_animation()
         try:
             self._stop_frame_pacing()
-        except Exception as e:
+        except Exception:
             logger.debug("[GL COMPOSITOR] Frame pacing stop failed during clear", exc_info=True)
         try:
             self._release_transition_textures()
-        except Exception as e:
+        except Exception:
             logger.debug("[GL COMPOSITOR] Texture release failed during clear", exc_info=True)
         self._finalize_paint_metrics(outcome="cleared")
         self._crossfade = None
@@ -783,7 +783,7 @@ class GLCompositorWidget(QOpenGLWidget):
         if on_finished:
             try:
                 on_finished()
-            except Exception as e:
+            except Exception:
                 logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
         return True
 
@@ -1088,7 +1088,7 @@ class GLCompositorWidget(QOpenGLWidget):
             if on_finished:
                 try:
                     on_finished()
-                except Exception as e:
+                except Exception:
                     logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
         except Exception as e:
             logger.debug("[GL COMPOSITOR] %s complete handler failed: %s", name.capitalize(), e, exc_info=True)
@@ -1113,7 +1113,7 @@ class GLCompositorWidget(QOpenGLWidget):
                 self._gl_disabled_for_session = False
             self._init_gl_pipeline()
             return self._gl_pipeline is not None and self._gl_pipeline.initialized
-        except Exception as e:
+        except Exception:
             logger.debug("[GL COMPOSITOR] Failed to initialise GL pipeline", exc_info=True)
             return False
         finally:
@@ -1179,7 +1179,7 @@ class GLCompositorWidget(QOpenGLWidget):
         try:
             self._ensure_texture_manager()
             return warmer(warm_old, new_pixmap)
-        except Exception as e:
+        except Exception:
             logger.debug(
                 "[GL COMPOSITOR] Transition state warmup failed for %s",
                 transition_name,
@@ -1304,7 +1304,7 @@ class GLCompositorWidget(QOpenGLWidget):
             if new_pixmap is not None and not new_pixmap.isNull():
                 success = bool(manager.get_or_create_texture(new_pixmap)) and success
             return success
-        except Exception as e:
+        except Exception:
             logger.debug("[GL COMPOSITOR] Failed to warm pixmap textures", exc_info=True)
             return False
         finally:
@@ -2065,7 +2065,7 @@ class GLCompositorWidget(QOpenGLWidget):
         # cancelled so we do not leak VRAM across many rotations.
         try:
             self._release_transition_textures()
-        except Exception as e:
+        except Exception:
             logger.debug("[GL COMPOSITOR] Failed to release blockspin textures on cancel", exc_info=True)
         self.update()
 
@@ -2133,7 +2133,7 @@ class GLCompositorWidget(QOpenGLWidget):
                     if self._error_handler.is_software_gl:
                         self._gl_disabled_for_session = True
                         self._use_shaders = False
-                except Exception as e:
+                except Exception:
                     logger.debug("[GL COMPOSITOR] Failed to query OpenGL adapter strings", exc_info=True)
 
             # Prepare an empty pipeline container tied to this context and, if
@@ -2241,7 +2241,7 @@ class GLCompositorWidget(QOpenGLWidget):
                 logger.warning("[PERF] [GL COMPOSITOR] Shader pipeline init took %.2fms", _pipeline_elapsed)
             else:
                 logger.info("[GL COMPOSITOR] Shader pipeline initialized (%.1fms)", _pipeline_elapsed)
-        except Exception as e:
+        except Exception:
             logger.debug("[GL SHADER] Failed to initialize shader pipeline", exc_info=True)
             self._gl_disabled_for_session = True
             self._use_shaders = False
@@ -2289,7 +2289,7 @@ class GLCompositorWidget(QOpenGLWidget):
             try:
                 if self._texture_manager is not None:
                     self._texture_manager.cleanup()
-            except Exception as e:
+            except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to cleanup texture manager", exc_info=True)
 
             # Delete shader programs
@@ -2303,7 +2303,7 @@ class GLCompositorWidget(QOpenGLWidget):
                     prog_id = getattr(self._gl_pipeline, attr, 0)
                     if prog_id:
                         gl.glDeleteProgram(int(prog_id))
-            except Exception as e:
+            except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to delete shader program", exc_info=True)
 
             # Delete geometry buffers
@@ -2318,7 +2318,7 @@ class GLCompositorWidget(QOpenGLWidget):
                     if vao_id:
                         arr = (ctypes.c_uint * 1)(int(vao_id))
                         gl.glDeleteVertexArrays(1, arr)
-            except Exception as e:
+            except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to delete geometry buffers", exc_info=True)
 
             self._reset_pipeline_state()
@@ -2334,7 +2334,7 @@ class GLCompositorWidget(QOpenGLWidget):
         self._gl_state.transition(GLContextState.DESTROYING)
         try:
             self._cleanup_gl_pipeline()
-        except Exception as e:
+        except Exception:
             logger.debug("[GL COMPOSITOR] cleanup() failed", exc_info=True)
         finally:
             # Transition to DESTROYED state
@@ -2761,7 +2761,7 @@ void main() {
                 cache = get_program_cache()
                 if not cache.is_compiled(program_key):
                     cache.get_program(program_key)
-            except Exception as e:
+            except Exception:
                 logger.debug(
                     "[GL COMPOSITOR] Failed to precompile shader program for %s",
                     transition_name,
@@ -2792,7 +2792,7 @@ void main() {
                 self._gl_disabled_for_session = True
                 self._use_shaders = False
             return result
-        except Exception as e:
+        except Exception:
             logger.debug("[GL SHADER] Failed to upload transition textures", exc_info=True)
             self._release_transition_textures()
             self._gl_disabled_for_session = True
@@ -3227,7 +3227,7 @@ void main() {
             if is_perf_metrics_enabled():
                 self._paint_debug_overlay_gl()
             return True
-        except Exception as e:
+        except Exception:
             logger.debug("[GL SHADER] Shader %s path failed; disabling shader pipeline", name, exc_info=True)
             self._gl_disabled_for_session = True
             self._use_shaders = False

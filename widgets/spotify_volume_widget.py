@@ -85,7 +85,7 @@ class SpotifyVolumeWidget(QWidget):
         self._shadow_config = config
         try:
             apply_widget_shadow(self, config, has_background_frame=False)
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VOL] Failed to apply widget shadow", exc_info=True)
 
     def set_colors(self, *, track_bg: QColor, track_border: QColor, fill: QColor) -> None:
@@ -286,7 +286,7 @@ class SpotifyVolumeWidget(QWidget):
 
             try:
                 self._thread_manager.submit_io_task(_do_read, callback=_on_result)
-            except Exception as e:
+            except Exception:
                 logger.debug("[SPOTIFY_VOL] Failed to schedule initial volume read", exc_info=True)
 
         # Participate in coordinated overlay fade sync like other widgets
@@ -544,7 +544,7 @@ class SpotifyVolumeWidget(QWidget):
                 result = self._controller.set_volume(clamped)
                 if is_verbose_logging():
                     logger.debug("[SPOTIFY_VOL] set_volume direct: %.2f -> %s", clamped, result)
-            except Exception as e:
+            except Exception:
                 logger.debug("[SPOTIFY_VOL] set_volume direct call failed", exc_info=True)
             return
 
@@ -553,12 +553,12 @@ class SpotifyVolumeWidget(QWidget):
                 result = self._controller.set_volume(target)
                 if is_verbose_logging():
                     logger.debug("[SPOTIFY_VOL] set_volume async: %.2f -> %s", target, result)
-            except Exception as e:
+            except Exception:
                 logger.debug("[SPOTIFY_VOL] set_volume task failed", exc_info=True)
 
         try:
             self._thread_manager.submit_io_task(_do_set, clamped)
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VOL] Failed to submit set_volume task", exc_info=True)
 
     def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:
@@ -584,7 +584,7 @@ class SpotifyVolumeWidget(QWidget):
             if self._shadow_config is not None:
                 try:
                     apply_widget_shadow(self, self._shadow_config, has_background_frame=False)
-                except Exception as e:
+                except Exception:
                     logger.debug("[SPOTIFY_VOL] Failed to attach shadow in no-fade path", exc_info=True)
             self._has_faded_in = True
             return
@@ -596,7 +596,7 @@ class SpotifyVolumeWidget(QWidget):
                 has_background_frame=False,
             )
             self._has_faded_in = True
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VOL] _start_widget_fade_in fallback path triggered", exc_info=True)
             try:
                 self.show()
@@ -605,5 +605,5 @@ class SpotifyVolumeWidget(QWidget):
             if self._shadow_config is not None:
                 try:
                     apply_widget_shadow(self, self._shadow_config, has_background_frame=False)
-                except Exception as e:
+                except Exception:
                     logger.debug("[SPOTIFY_VOL] Failed to apply widget shadow in fallback path", exc_info=True)

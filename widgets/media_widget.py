@@ -20,7 +20,8 @@ from PySide6.QtCore import QTimer, Qt, Signal, QVariantAnimation, QEasingCurve, 
 from PySide6.QtGui import QFont, QColor, QPixmap, QPainter, QPainterPath, QFontMetrics
 from shiboken6 import Shiboken
 
-from core.logging.logger import get_logger, is_verbose_logging
+from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
+from core.performance import widget_paint_sample
 from core.media.media_controller import (
     BaseMediaController,
     MediaPlaybackState,
@@ -132,6 +133,14 @@ class MediaWidget(BaseOverlayWidget):
 
         # Central ResourceManager wiring
         self._last_info: Optional[MediaTrackInfo] = None
+        
+        # Smart polling: diff gating to skip unnecessary updates
+        self._last_track_identity: Optional[tuple] = None  # (title, artist, album, state)
+        
+        # Smart polling: idle detection to stop polling when Spotify is closed
+        self._consecutive_none_count: int = 0
+        self._idle_threshold: int = 12  # ~30s at 2500ms interval before entering idle
+        self._is_idle: bool = False
 
         # Fixed widget height once we have seen the first track so that
         # changes in wrapped text do not move the card on screen.
@@ -307,6 +316,44 @@ class MediaWidget(BaseOverlayWidget):
         self._shadow_config = config
 
     # ------------------------------------------------------------------
+    # Smart Polling Helpers
+    # ------------------------------------------------------------------
+    
+    def _compute_track_identity(self, info: MediaTrackInfo) -> tuple:
+        """Compute a tuple representing the track's identity for diff gating.
+        
+        Returns a tuple of (title, artist, album, state) that uniquely identifies
+        the current track state. Used to skip unnecessary _update_display() calls
+        when the track hasn't changed.
+        """
+        try:
+            title = (getattr(info, 'title', None) or '').strip().lower()
+            artist = (getattr(info, 'artist', None) or '').strip().lower()
+            album = (getattr(info, 'album', None) or '').strip().lower()
+            state = getattr(info, 'state', None)
+            state_val = state.value if hasattr(state, 'value') else str(state)
+            return (title, artist, album, state_val)
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Exception in _compute_track_identity: %s", e)
+            # Return a unique tuple on error to force update
+            return (id(info), None, None, None)
+    
+    def wake_from_idle(self) -> None:
+        """Wake the media widget from idle mode to resume polling.
+        
+        Called when user interaction or external event suggests Spotify
+        may have been reopened.
+        """
+        if self._is_idle:
+            self._is_idle = False
+            self._consecutive_none_count = 0
+            if is_perf_metrics_enabled():
+                logger.debug("[PERF] Media widget woken from idle")
+            # Trigger immediate refresh
+            if self._enabled and self._thread_manager is not None:
+                self._refresh_async()
+
+    # ------------------------------------------------------------------
     # Position & layout
     # ------------------------------------------------------------------
     def _ensure_timer(self) -> None:
@@ -314,7 +361,8 @@ class MediaWidget(BaseOverlayWidget):
             return
         if not self._ensure_thread_manager("MediaWidget._ensure_timer"):
             return
-        handle = create_overlay_timer(self, 1000, self._refresh, description="MediaWidget poll")
+        # Smart polling: 2500ms interval (was 1000ms) - acceptable delay for track changes
+        handle = create_overlay_timer(self, 2500, self._refresh, description="MediaWidget smart poll")
         self._update_timer_handle = handle
         try:
             self._update_timer = getattr(handle, "_timer", None)
@@ -375,11 +423,15 @@ class MediaWidget(BaseOverlayWidget):
         """Notify Spotify-related widgets to sync their visibility with this widget.
         
         Called when the media widget shows or hides so the visualizer and
-        volume widgets can show/hide accordingly.
+        volume widgets can show/hide accordingly. Also gates the FFT worker
+        to save compute when Spotify is not active.
         """
         parent = self.parent()
         if parent is None:
             return
+        
+        # Gate FFT worker based on media widget visibility
+        self._gate_fft_worker(self.isVisible())
         
         # Notify visualizer
         vis = getattr(parent, "spotify_visualizer_widget", None)
@@ -494,7 +546,7 @@ class MediaWidget(BaseOverlayWidget):
 
         try:
             self._controller.play_pause()
-        except Exception as e:
+        except Exception:
             logger.debug("[MEDIA] play_pause delegation failed", exc_info=True)
             return
 
@@ -538,12 +590,12 @@ class MediaWidget(BaseOverlayWidget):
         if optimistic is not None:
             try:
                 self._update_display(optimistic)
-            except Exception as e:
+            except Exception:
                 logger.debug("[MEDIA] play_pause optimistic update failed", exc_info=True)
             try:
                 if new_state is not None:
                     self._apply_pending_state_override(new_state)
-            except Exception as e:
+            except Exception:
                 logger.debug("[MEDIA] play_pause optimistic override failed", exc_info=True)
 
     def _apply_pending_state_override(self, state: MediaPlaybackState) -> None:
@@ -579,7 +631,7 @@ class MediaWidget(BaseOverlayWidget):
                         self._refresh_async()
                     else:
                         self._refresh()
-            except Exception as e:
+            except Exception:
                 logger.debug("[MEDIA] pending state refresh failed", exc_info=True)
             try:
                 self.update()
@@ -595,7 +647,7 @@ class MediaWidget(BaseOverlayWidget):
 
         try:
             self._controller.next()
-        except Exception as e:
+        except Exception:
             logger.debug("[MEDIA] next delegation failed", exc_info=True)
             return
 
@@ -605,7 +657,7 @@ class MediaWidget(BaseOverlayWidget):
                     self._refresh_async()
                 else:
                     self._refresh()
-        except Exception as e:
+        except Exception:
             logger.debug("[MEDIA] next post-refresh failed", exc_info=True)
 
     def previous_track(self) -> None:
@@ -613,7 +665,7 @@ class MediaWidget(BaseOverlayWidget):
 
         try:
             self._controller.previous()
-        except Exception as e:
+        except Exception:
             logger.debug("[MEDIA] previous delegation failed", exc_info=True)
             return
 
@@ -623,7 +675,7 @@ class MediaWidget(BaseOverlayWidget):
                     self._refresh_async()
                 else:
                     self._refresh()
-        except Exception as e:
+        except Exception:
             logger.debug("[MEDIA] previous post-refresh failed", exc_info=True)
 
     # ------------------------------------------------------------------
@@ -632,8 +684,17 @@ class MediaWidget(BaseOverlayWidget):
     def _refresh(self) -> None:
         if not self._enabled:
             return
+        
+        # Smart polling: skip refresh if in idle mode (Spotify closed)
+        if self._is_idle:
+            if is_perf_metrics_enabled():
+                logger.debug("[PERF] Media widget poll skipped (idle mode)")
+            return
+        
         if self._thread_manager is not None:
-            if is_verbose_logging():
+            if is_perf_metrics_enabled():
+                logger.debug("[PERF] Media widget poll triggered (2500ms interval)")
+            elif is_verbose_logging():
                 logger.debug("[MEDIA_WIDGET] Scheduling async refresh via ThreadManager")
             self._refresh_async()
             return
@@ -663,7 +724,7 @@ class MediaWidget(BaseOverlayWidget):
         def _do_query():
             try:
                 return self._controller.get_current_track()
-            except Exception as e:
+            except Exception:
                 logger.debug("[MEDIA] get_current_track failed", exc_info=True)
                 if is_verbose_logging():
                     logger.debug("[MEDIA] get_current_track failed", exc_info=True)
@@ -691,7 +752,7 @@ class MediaWidget(BaseOverlayWidget):
                                 getattr(info, "artist", None),
                                 getattr(info, "album", None),
                             )
-                except Exception as e:
+                except Exception:
                     logger.debug("[MEDIA_WIDGET] Failed to log async apply", exc_info=True)
                 self._update_display(info)
 
@@ -737,8 +798,44 @@ class MediaWidget(BaseOverlayWidget):
         # Cache last track snapshot for diagnostics/interaction
         prev_info = self._last_info
         self._last_info = info
+        
+        # Smart polling: diff gating - compute track identity
+        if info is not None:
+            current_identity = self._compute_track_identity(info)
+            
+            # Reset idle counter when we get valid track info
+            if self._consecutive_none_count > 0 or self._is_idle:
+                if is_perf_metrics_enabled():
+                    logger.debug("[PERF] Media widget exiting idle (track detected)")
+                self._consecutive_none_count = 0
+                self._is_idle = False
+            
+            # Diff gating: skip update if track identity unchanged AND we have artwork
+            # Always process first track (when _last_track_identity is None)
+            if current_identity == self._last_track_identity and self._last_track_identity is not None:
+                if is_perf_metrics_enabled():
+                    logger.debug("[PERF] Media widget update skipped (diff gating - no change)")
+                return
+            
+            # Track changed - update identity and proceed
+            self._last_track_identity = current_identity
+            if is_perf_metrics_enabled():
+                logger.debug("[PERF] Media widget update applied (track changed)")
 
         if info is None:
+            # Smart polling: idle detection - track consecutive None results
+            self._consecutive_none_count += 1
+            
+            # Enter idle mode after threshold consecutive None results (~30s)
+            if self._consecutive_none_count >= self._idle_threshold and not self._is_idle:
+                self._is_idle = True
+                self._last_track_identity = None  # Reset identity for next track
+                if is_perf_metrics_enabled():
+                    logger.debug("[PERF] Media widget entering idle mode (Spotify closed)")
+                else:
+                    logger.info("[MEDIA_WIDGET] Entering idle mode after %d consecutive empty polls", 
+                               self._consecutive_none_count)
+            
             # No active media session (e.g. Spotify not playing) – hide widget
             last_vis = self._telemetry_last_visibility
             if last_vis or last_vis is None:
@@ -938,7 +1035,7 @@ class MediaWidget(BaseOverlayWidget):
 
                     if should_fade_artwork:
                         self._start_artwork_fade_in()
-            except Exception as e:
+            except Exception:
                 logger.debug("[MEDIA] Failed to decode artwork pixmap", exc_info=True)
 
         # Reserve space for artwork plus breathing room on the right even
@@ -989,6 +1086,50 @@ class MediaWidget(BaseOverlayWidget):
             # Notify Spotify widgets in case they need to sync visibility
             self._notify_spotify_widgets_visibility()
             self._telemetry_last_visibility = True
+    
+    def _gate_fft_worker(self, should_run: bool) -> None:
+        """Start or stop the FFT worker based on media widget visibility.
+        
+        This saves compute when Spotify is not active by stopping the FFT
+        worker process entirely rather than just gating FFT processing.
+        """
+        parent = self.parent()
+        if parent is None:
+            return
+        
+        # Get ProcessSupervisor from parent chain
+        supervisor = None
+        try:
+            # Try display widget first
+            supervisor = getattr(parent, "_process_supervisor", None)
+            if supervisor is None:
+                # Try via widget manager
+                wm = getattr(parent, "_widget_manager", None)
+                if wm is not None:
+                    supervisor = getattr(wm, "_process_supervisor", None)
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+        
+        if supervisor is None:
+            return
+        
+        try:
+            from core.process import WorkerType
+            
+            is_running = supervisor.is_running(WorkerType.FFT)
+            
+            if should_run and not is_running:
+                # Media visible - start FFT worker
+                if is_perf_metrics_enabled():
+                    logger.debug("[PERF] Starting FFT worker (media widget visible)")
+                supervisor.start(WorkerType.FFT)
+            elif not should_run and is_running:
+                # Media hidden - stop FFT worker to save compute
+                if is_perf_metrics_enabled():
+                    logger.debug("[PERF] Stopping FFT worker (media widget hidden)")
+                supervisor.stop(WorkerType.FFT)
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] FFT worker gating failed: %s", e)
 
     # ------------------------------------------------------------------
     # Painting
@@ -1000,7 +1141,11 @@ class MediaWidget(BaseOverlayWidget):
         that the text content remains legible. All failures are ignored so
         that paint never raises.
         """
+        with widget_paint_sample(self, "media.paint"):
+            self._paint_contents(event)
 
+    def _paint_contents(self, event) -> None:
+        """Internal paint implementation."""
         super().paintEvent(event)
 
         try:
@@ -1177,7 +1322,7 @@ class MediaWidget(BaseOverlayWidget):
             # along the bottom of the text column so its position never
             # drifts between tracks.
             self._paint_controls_row(painter)
-        except Exception as e:
+        except Exception:
             logger.debug("[MEDIA] Failed to paint artwork pixmap", exc_info=True)
 
     def _load_brand_pixmap(self) -> Optional[QPixmap]:
@@ -1201,7 +1346,7 @@ class MediaWidget(BaseOverlayWidget):
                     pm = QPixmap(str(candidate))
                     if not pm.isNull():
                         return pm
-        except Exception as e:
+        except Exception:
             logger.debug("[MEDIA] Failed to load Spotify logo", exc_info=True)
         return None
 
@@ -1484,7 +1629,7 @@ class MediaWidget(BaseOverlayWidget):
                     self._shadow_config,
                     has_background_frame=self._show_background,
                 )
-            except Exception as e:
+            except Exception:
                 logger.debug(
                     "[MEDIA] Failed to attach shadow in no-fade path",
                     exc_info=True,
@@ -1497,7 +1642,7 @@ class MediaWidget(BaseOverlayWidget):
                 self._shadow_config,
                 has_background_frame=self._show_background,
             )
-        except Exception as e:
+        except Exception:
             logger.debug(
                 "[MEDIA] _start_widget_fade_in fallback path triggered",
                 exc_info=True,
@@ -1513,7 +1658,7 @@ class MediaWidget(BaseOverlayWidget):
                         self._shadow_config,
                         has_background_frame=self._show_background,
                     )
-                except Exception as e:
+                except Exception:
                     logger.debug(
                         "[MEDIA] Failed to apply widget shadow in fallback path",
                         exc_info=True,

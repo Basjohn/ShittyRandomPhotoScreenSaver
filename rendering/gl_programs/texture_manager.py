@@ -130,7 +130,7 @@ class GLTextureManager:
                 data = bytes(ptr)
             else:
                 data = ptr.tobytes()
-        except Exception as e:
+        except Exception:
             logger.debug("[GL TEXTURE] Failed to access image bits", exc_info=True)
             return 0
         
@@ -194,7 +194,7 @@ class GLTextureManager:
                     gl.GL_TEXTURE_2D, 0, gl.GL_RGBA8, w, h, 0,
                     gl.GL_BGRA, gl.GL_UNSIGNED_BYTE, data
                 )
-        except Exception as e:
+        except Exception:
             logger.debug("[GL TEXTURE] Upload failed", exc_info=True)
             try:
                 gl.glDeleteTextures(int(tex_id))
@@ -281,7 +281,7 @@ class GLTextureManager:
                     if old_tex:
                         try:
                             gl.glDeleteTextures(int(old_tex))
-                        except Exception as e:
+                        except Exception:
                             logger.debug("[GL TEXTURE] Failed to delete cached texture %s", 
                                         old_tex, exc_info=True)
             except Exception as e:
@@ -303,7 +303,7 @@ class GLTextureManager:
         try:
             self._old_tex_id = self.get_or_create_texture(old_pixmap)
             self._new_tex_id = self.get_or_create_texture(new_pixmap)
-        except Exception as e:
+        except Exception:
             logger.debug("[GL TEXTURE] Failed to prepare transition textures", exc_info=True)
             self.release_transition_textures()
             return False
@@ -393,7 +393,7 @@ class GLTextureManager:
             if ids:
                 arr = (ctypes.c_uint * len(ids))(*ids)
                 gl.glDeleteTextures(len(ids), arr)
-        except Exception as e:
+        except Exception:
             logger.debug("[GL TEXTURE] Failed to delete cached textures", exc_info=True)
         
         self._texture_cache.clear()

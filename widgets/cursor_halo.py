@@ -207,7 +207,7 @@ class CursorHaloWidget(QWidget):
             
             # Post the event to the parent widget
             QApplication.sendEvent(parent, new_event)
-        except Exception as e:
+        except Exception:
             logger.debug("Failed to forward mouse event to parent", exc_info=True)
     
     def _forward_wheel_event(self, event: QWheelEvent) -> None:
@@ -250,14 +250,14 @@ class CursorHaloWidget(QWidget):
                     handled_direct = bool(
                         parent.handle_forwarded_halo_wheel(local_pos, global_pos, event.angleDelta())
                     )
-                except Exception as e:
+                except Exception:
                     logger.debug("[HALO] Direct halo routing failed", exc_info=True)
             if not handled_direct:
                 # DEBUG_WHEEL_TRACE: use postEvent so the app-wide filters observe it.
                 QApplication.sendEvent(parent, new_event)
             event.accept()
             logger.debug("[HALO] Wheel event forwarded to parent (direct=%s)", handled_direct)
-        except Exception as e:
+        except Exception:
             logger.debug("Failed to forward wheel event to parent", exc_info=True)
     
     def cancel_animation(self) -> None:
@@ -330,7 +330,7 @@ class CursorHaloWidget(QWidget):
                 on_complete=_on_anim_finished,
                 easing=EasingCurve.QUAD_OUT,
             )
-        except Exception as e:
+        except Exception:
             logger.debug("Failed to start halo animation via AnimationManager", exc_info=True)
     
     def show_at(self, x: int, y: int) -> None:

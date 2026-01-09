@@ -706,7 +706,7 @@ class InputHandler(QObject):
                     if hasattr(rw, "resolve_click_target"):
                         try:
                             url = rw.resolve_click_target(local_pos)
-                        except Exception as e:
+                        except Exception:
                             logger.debug("[INPUT] resolve_click_target failed", exc_info=True)
                     if not url and hasattr(rw, "handle_click"):
                         result = rw.handle_click(local_pos)
@@ -722,7 +722,7 @@ class InputHandler(QObject):
                         handled = True
                         reddit_handled = True
                         reddit_url = url
-            except Exception as e:
+            except Exception:
                 logger.debug("[INPUT] Reddit click routing failed", exc_info=True)
         
         # Gmail widget
@@ -737,7 +737,7 @@ class InputHandler(QObject):
                         logger.debug("[INPUT] Gmail handle_click returned: %s", result)
                         if result:
                             handled = True
-            except Exception as e:
+            except Exception:
                 logger.debug("[INPUT] Gmail click routing failed", exc_info=True)
         
         logger.debug(
