@@ -89,6 +89,10 @@ class WidgetManager:
         self._overlay_fade_timeout: Optional[QTimer] = None
         self._spotify_secondary_fade_starters: List[Callable[[], None]] = []
         
+        # Wait for compositor first frame before starting widget fades
+        self._compositor_ready: bool = False
+        self._connect_compositor_ready_signal()
+        
         # Widget positioning (Dec 2025)
         self._positioner = WidgetPositioner()
         
@@ -99,6 +103,44 @@ class WidgetManager:
         self._settings_manager: Optional[SettingsManager] = None
         
         logger.debug("[WIDGET_MANAGER] Initialized")
+    
+    def _connect_compositor_ready_signal(self) -> None:
+        """Connect to parent's image_displayed signal to know when compositor is ready."""
+        if self._parent is None:
+            self._compositor_ready = True  # No parent, assume ready
+            return
+        
+        try:
+            # Check if parent already has rendered first frame
+            if getattr(self._parent, "_has_rendered_first_frame", False):
+                self._compositor_ready = True
+                return
+            
+            # Connect to image_displayed signal
+            if hasattr(self._parent, "image_displayed"):
+                self._parent.image_displayed.connect(self._on_compositor_ready)
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Failed to connect compositor ready signal: %s", e)
+            self._compositor_ready = True  # Assume ready on failure
+    
+    def _on_compositor_ready(self, image_path: str) -> None:
+        """Called when compositor displays first image."""
+        if self._compositor_ready:
+            return  # Already marked ready
+        
+        self._compositor_ready = True
+        logger.debug("[FADE_SYNC] Compositor ready (first image displayed)")
+        
+        # Disconnect signal to avoid repeated calls
+        try:
+            if self._parent is not None and hasattr(self._parent, "image_displayed"):
+                self._parent.image_displayed.disconnect(self._on_compositor_ready)
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+        
+        # If we have pending fades waiting for compositor, start them now
+        if self._overlay_fade_pending and not self._overlay_fade_started:
+            self._start_overlay_fades(force=False)
     
     def set_factory_registry(
         self, 
@@ -1419,7 +1461,15 @@ class WidgetManager:
         """Kick off any pending overlay fade callbacks."""
         if self._overlay_fade_started:
             return
+        
+        # Wait for compositor to be ready before starting fades (unless forced)
+        if not force and not self._compositor_ready:
+            logger.debug("[FADE_SYNC] Waiting for compositor to be ready before starting fades")
+            return  # Will be called again when compositor is ready
+        
         self._overlay_fade_started = True
+        logger.debug("[FADE_SYNC] _start_overlay_fades called (force=%s, compositor_ready=%s)", 
+                    force, self._compositor_ready)
 
         if self._overlay_fade_timeout is not None:
             try:
@@ -1627,7 +1677,6 @@ class WidgetManager:
                 )
                 if widget:
                     self.register_widget(settings_key, widget)
-                    widget.raise_()
                     created[attr_name] = widget
 
         # Create weather widget via factory
@@ -1644,7 +1693,6 @@ class WidgetManager:
                 )
                 if widget:
                     self.register_widget("weather", widget)
-                    widget.raise_()
                     created['weather_widget'] = widget
 
         # Create media widget via factory
@@ -1661,7 +1709,6 @@ class WidgetManager:
                 )
                 if media_widget:
                     self.register_widget("media", media_widget)
-                    media_widget.raise_()
                     created['media_widget'] = media_widget
 
         # Create reddit widgets via factory (reddit2 inherits styling from reddit1)
@@ -1683,7 +1730,6 @@ class WidgetManager:
                 )
                 if widget:
                     self.register_widget(settings_key, widget)
-                    widget.raise_()
                     created[attr_name] = widget
 
         # Gmail widget archived - see archive/gmail_feature/
@@ -1718,6 +1764,18 @@ class WidgetManager:
                     widget.start()
                 except Exception as e:
                     logger.debug("Failed to start %s: %s", attr_name, e)
+        
+        # CRITICAL: Raise widgets AFTER start() so fade coordination completes first
+        # This prevents widgets appearing before compositor is ready
+        for attr_name, widget in created.items():
+            if widget is not None:
+                try:
+                    widget.raise_()
+                    # Handle clock timezone labels
+                    if hasattr(widget, '_tz_label') and widget._tz_label:
+                        widget._tz_label.raise_()
+                except Exception as e:
+                    logger.debug("Failed to raise %s: %s", attr_name, e)
 
         logger.info("Widget setup complete: %d widgets created and started via factories", len(created))
         return created
@@ -1798,12 +1856,10 @@ class WidgetManager:
                 logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             
             self.register_widget("spotify_volume", vol)
-            vol.raise_()
             # Add to expected overlays so it participates in coordinated fade
             self.add_expected_overlay("spotify_volume")
-            # Call start() - the widget now uses request_overlay_fade_sync internally
-            vol.start()
-            logger.info("✅ Spotify volume widget started with coordinated fade sync")
+            # Note: start() and raise_() will be called in setup_all_widgets() loop
+            logger.debug("Spotify volume widget created, will start with coordinated fade")
             return vol
         except Exception as e:
             logger.error("Failed to create Spotify volume widget: %s", e, exc_info=True)
@@ -1977,9 +2033,8 @@ class WidgetManager:
                 logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             
             self.register_widget("spotify_visualizer", vis)
-            vis.raise_()
-            vis.start()
-            logger.info("✅ Spotify visualizer widget started: %d bars", bar_count)
+            # Note: start() and raise_() will be called in setup_all_widgets() loop
+            logger.debug("Spotify visualizer widget created: %d bars, will start with coordinated fade", bar_count)
             return vis
         except Exception as e:
             logger.error("Failed to create Spotify visualizer widget: %s", e, exc_info=True)

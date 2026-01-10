@@ -202,6 +202,9 @@ class BaseOverlayWidget(QLabel):
         self._enabled = False
         self._pixel_shift_offset = QPoint(0, 0)
         
+        # Fade sync: if True, set_enabled won't auto-show; visibility is deferred to fade sync
+        self._defer_visibility_for_fade_sync = False
+        
         # Stack offset for widget stacking
         self._stack_offset = QPoint(0, 0)
         
@@ -592,10 +595,16 @@ class BaseOverlayWidget(QLabel):
     # -------------------------------------------------------------------------
     
     def set_enabled(self, enabled: bool) -> None:
-        """Enable or disable the widget."""
+        """Enable or disable the widget.
+        
+        If _defer_visibility_for_fade_sync is True, the widget won't be shown
+        immediately - visibility will be handled by the fade sync mechanism.
+        """
         self._enabled = bool(enabled)
         if enabled:
-            self.show()
+            # Only show if not deferring visibility for fade sync
+            if not self._defer_visibility_for_fade_sync:
+                self.show()
             self._update_position()
         else:
             self.hide()

@@ -121,6 +121,9 @@ class WeatherWidget(BaseOverlayWidget):
         overlay_pos = OverlayPosition(position.value)
         super().__init__(parent, position=overlay_pos, overlay_name="weather")
         
+        # Defer visibility until fade sync triggers
+        self._defer_visibility_for_fade_sync = True
+        
         self._location = location
         self._weather_position = position  # Keep original enum for compatibility
         self._position = OverlayPosition(position.value)

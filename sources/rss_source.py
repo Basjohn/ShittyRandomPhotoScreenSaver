@@ -20,8 +20,10 @@ from core.logging.logger import get_logger
 logger = get_logger(__name__)
 
 # Rate limiting constants - conservative to avoid triggering Reddit's rate limit
-RATE_LIMIT_DELAY_SECONDS = 3.0  # Delay between feed requests (increased from 2)
+# Reddit API limit: 10 requests per minute unauthenticated
+RATE_LIMIT_DELAY_SECONDS = 8.0  # Delay between feed requests (8s = 7.5 req/min, under 10 req/min limit)
 RATE_LIMIT_RETRY_DELAY_SECONDS = 120  # Delay when rate limited (2 minutes)
+MAX_REDDIT_FEEDS_PER_STARTUP = 8  # Maximum Reddit feeds to process per startup (leaves 2 req/min buffer)
 MIN_CACHE_SIZE_BEFORE_CLEANUP = 20  # Don't cleanup until we have at least 20 images
 MAX_CACHED_IMAGES_TO_LOAD = 30  # Maximum cached images to load on startup (matches rss_background_cap)
 
@@ -352,6 +354,25 @@ class RSSSource(ImageProvider):
             key=lambda url: -_get_source_priority(url)  # Negative for descending
         )
         
+        # Limit Reddit feeds to avoid rate limiting (10 req/min limit)
+        reddit_feeds = [url for url in feeds_to_process if 'reddit.com' in url.lower()]
+        non_reddit_feeds = [url for url in feeds_to_process if 'reddit.com' not in url.lower()]
+        
+        if len(reddit_feeds) > MAX_REDDIT_FEEDS_PER_STARTUP:
+            # Rotate which Reddit feeds are processed using day-based rotation
+            # This ensures all feeds eventually get processed over multiple days
+            import hashlib
+            from datetime import datetime
+            day_hash = hashlib.md5(str(datetime.now().date()).encode()).digest()[0]
+            start_idx = day_hash % len(reddit_feeds)
+            # Rotate and take first MAX_REDDIT_FEEDS_PER_STARTUP
+            rotated = reddit_feeds[start_idx:] + reddit_feeds[:start_idx]
+            reddit_feeds = rotated[:MAX_REDDIT_FEEDS_PER_STARTUP]
+            logger.info(f"[RATE_LIMIT] Limited to {MAX_REDDIT_FEEDS_PER_STARTUP} Reddit feeds (total: {len([url for url in feeds_to_process if 'reddit.com' in url.lower()])} configured)")
+        
+        # Rebuild feed list: non-Reddit first, then limited Reddit feeds
+        feeds_to_process = non_reddit_feeds + reddit_feeds
+        
         # Track feeds that returned 0 results for retry
         rate_limited_feeds = []
         
@@ -543,6 +564,25 @@ class RSSSource(ImageProvider):
         
         if existing_paths is None:
             existing_paths = set()
+
+        # Use centralized rate limiter for Reddit feeds
+        is_reddit = 'reddit.com' in request_url.lower()
+        if is_reddit:
+            try:
+                from core.reddit_rate_limiter import RedditRateLimiter
+                wait_time = RedditRateLimiter.wait_if_needed()
+                if wait_time > 0:
+                    logger.info(f"[RATE_LIMIT] Waiting {wait_time:.1f}s before Reddit request")
+                    # Interruptible wait
+                    wait_chunks = int(wait_time / 0.5) + 1
+                    for _ in range(wait_chunks):
+                        if not self._should_continue():
+                            logger.info("[RSS] Shutdown during rate limit wait")
+                            return
+                        time.sleep(0.5)
+                RedditRateLimiter.record_request()
+            except ImportError:
+                logger.debug("[RSS] RedditRateLimiter not available, proceeding without coordination")
 
         try:
             # Use a browser-like user agent - Reddit blocks custom user agents

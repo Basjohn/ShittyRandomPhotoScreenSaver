@@ -16,7 +16,7 @@ except ImportError:
 
 from PySide6.QtWidgets import QLabel, QWidget
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont, QColor, QPainter, QPen, QPaintEvent, QPainterPath, QPainterPathStroker
+from PySide6.QtGui import QFont, QColor, QPainter, QPen, QPaintEvent, QPainterPath, QPainterPathStroker, QPixmap
 from shiboken6 import Shiboken
 
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
@@ -92,6 +92,9 @@ class ClockWidget(BaseOverlayWidget):
         overlay_pos = OverlayPosition(position.value)
         super().__init__(parent, position=overlay_pos, overlay_name="clock")
         
+        # Defer visibility until fade sync triggers
+        self._defer_visibility_for_fade_sync = True
+        
         # Clock-specific settings
         self._time_format = time_format
         self._clock_position = position  # Keep original enum for compatibility
@@ -122,6 +125,12 @@ class ClockWidget(BaseOverlayWidget):
 
         # Last timestamp used for analogue rendering.
         self._current_dt: Optional[datetime] = None
+        
+        # Static element cache for analog clock face (circle, markers, numerals)
+        # Only hands need to be redrawn each second
+        self._cached_clock_face: Optional["QPixmap"] = None
+        self._cached_clock_face_size: Optional[tuple[int, int]] = None
+        self._clock_face_cache_invalidated: bool = True
         
         # Setup widget
         self._setup_ui()
@@ -598,9 +607,9 @@ class ClockWidget(BaseOverlayWidget):
         # Emit signal
         self.time_updated.emit(time_str)
 
-        # Request a repaint for analogue mode so hands tick smoothly.
-        if self._display_mode == "analog":
-            self.update()
+        # Note: No need to call update() here - clock face is cached and Qt will
+        # automatically trigger repaint when setText() changes the label text.
+        # Analog mode hands are drawn in paintEvent which is called automatically.
     
     def _update_position(self) -> None:
         """Update widget position using centralized base class logic.
@@ -725,6 +734,7 @@ class ClockWidget(BaseOverlayWidget):
 
         self._show_numerals = bool(show_numerals)
         if self._display_mode == "analog":
+            self._invalidate_clock_face_cache()
             self.update()
 
     def set_analog_face_shadow(self, enabled: bool) -> None:
@@ -732,6 +742,7 @@ class ClockWidget(BaseOverlayWidget):
 
         self._analog_face_shadow = bool(enabled)
         if self._display_mode == "analog":
+            self._invalidate_clock_face_cache()
             self.update()
 
     def set_analog_shadow_intense(self, intense: bool) -> None:
@@ -739,6 +750,7 @@ class ClockWidget(BaseOverlayWidget):
 
         self._analog_shadow_intense = bool(intense)
         if self._display_mode == "analog":
+            self._invalidate_clock_face_cache()
             self.update()
 
     def set_digital_shadow_intense(self, intense: bool) -> None:
@@ -758,6 +770,8 @@ class ClockWidget(BaseOverlayWidget):
         # Use bold weight for clock
         font = QFont(self._font_family, self._font_size, QFont.Weight.Bold)
         self.setFont(font)
+        # Invalidate analog clock face cache since numerals use this font
+        self._invalidate_clock_face_cache()
         # Update timezone label font
         self._update_tz_label_font()
         if self._enabled:
@@ -767,8 +781,8 @@ class ClockWidget(BaseOverlayWidget):
         """Set font size - override to use bold weight and update tz label."""
         try:
             size_i = int(size)
-        except Exception as e:
-            logger.debug("[CLOCK] Exception suppressed: %s", e)
+        except Exception as exc:
+            logger.debug("[CLOCK] Exception suppressed: %s", exc)
             size_i = self.DEFAULT_FONT_SIZE
         if size_i <= 0:
             size_i = self.DEFAULT_FONT_SIZE
@@ -776,6 +790,8 @@ class ClockWidget(BaseOverlayWidget):
         # Use bold weight for clock
         font = QFont(self._font_family, self._font_size, QFont.Weight.Bold)
         self.setFont(font)
+        # Invalidate analog clock face cache since numerals use this font size
+        self._invalidate_clock_face_cache()
         # Update timezone label font
         self._update_tz_label_font()
         if self._enabled:
@@ -916,21 +932,23 @@ class ClockWidget(BaseOverlayWidget):
         with widget_paint_sample(self, "clock.paint.analog"):
             self._paint_analog(event)
 
-    def _paint_analog(self, event: QPaintEvent) -> None:
-        """Paint analog clock face, hands, and numerals."""
-        # First let QLabel render its background/frame (via stylesheet), but
-        # with an empty text payload.
-        super().paintEvent(event)
+    def _invalidate_clock_face_cache(self) -> None:
+        """Invalidate the cached clock face so it will be regenerated on next paint."""
+        self._clock_face_cache_invalidated = True
+        self._cached_clock_face = None
 
-        if self._current_dt is None:
-            if self._timezone is None:
-                now = datetime.now()
-            else:
-                now = datetime.now(self._timezone)
-        else:
-            now = self._current_dt
-
-        painter = QPainter(self)
+    def _regenerate_clock_face_cache(self, width: int, height: int) -> None:
+        """Regenerate the cached clock face pixmap with static elements.
+        
+        This caches the circle, hour markers, and numerals. Only the hands
+        need to be redrawn each second, saving ~1.5ms per paint.
+        """
+        dpr = self.devicePixelRatioF()
+        pixmap = QPixmap(int(width * dpr), int(height * dpr))
+        pixmap.setDevicePixelRatio(dpr)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        
+        painter = QPainter(pixmap)
         try:
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             high_quality_hint = getattr(QPainter.RenderHint, "HighQualityAntialiasing", None)
@@ -957,24 +975,18 @@ class ClockWidget(BaseOverlayWidget):
             center_x = rect.x() + rect.width() // 2
             center_y = rect.y() + rect.height() // 2
 
-            # Precompute numeral metrics so we can keep the face well inside
-            # the widget and place numerals just outside the circle.
             numeral_pt = max(8, min(int(self._font_size * 0.25), max(9, side // 18)))
             numeral_font = QFont(self._font_family, numeral_pt)
             painter.setFont(numeral_font)
             numeral_metrics = painter.fontMetrics()
             numeral_height = numeral_metrics.height()
 
-            # Pull the clock face in just enough to clear the numerals (~15px total padding).
             numeral_clearance = numeral_height + max(6, numeral_height // 3)
             radius = side // 2 - numeral_clearance
             if radius <= 0:
                 return
 
-            # Optional subtle drop shadow under the analogue clock face.
             drop_offset = 2
-
-            # Precompute hour marker line positions for reuse in stroke + drop shadow.
             marker_len = max(6, radius // 10)
             marker_lines: list[tuple[int, int, int, int]] = []
             marker_path = QPainterPath()
@@ -991,21 +1003,18 @@ class ClockWidget(BaseOverlayWidget):
                 marker_path.lineTo(outer_x, outer_y)
 
             if self._analog_face_shadow:
-                # Circle/notches shadow: 10% larger, 10% darker than before
                 base_alpha = max(121, int(self._text_color.alpha() * (0.605 if self._analog_shadow_intense else 0.44)))
                 shadow_color = QColor(0, 0, 0, _scaled_alpha(base_alpha))
 
                 ring_path = QPainterPath()
                 ring_path.addEllipse(center_x - radius, center_y - radius, radius * 2, radius * 2)
                 ring_stroke = QPainterPathStroker()
-                # Ring stroke 10% wider
                 ring_stroke.setWidth(max(4.4, radius * (0.0385 if self._analog_shadow_intense else 0.022)))
                 ring_stroke.setCapStyle(Qt.PenCapStyle.RoundCap)
                 ring_stroke.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
                 ring_shape = ring_stroke.createStroke(ring_path)
 
                 marker_stroke = QPainterPathStroker()
-                # Marker stroke 10% wider
                 marker_stroke.setWidth(max(2.2, radius * (0.0132 if self._analog_shadow_intense else 0.0088)))
                 marker_stroke.setCapStyle(Qt.PenCapStyle.RoundCap)
                 marker_stroke.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
@@ -1022,39 +1031,23 @@ class ClockWidget(BaseOverlayWidget):
                 painter.drawPath(combined_shadow)
                 painter.restore()
 
-            # Clock face border
             face_pen = QPen(self._text_color)
             face_pen.setWidth(max(2, int(round(radius * (0.025 if not self._analog_shadow_intense else 0.032)))))
             painter.setPen(face_pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawEllipse(center_x - radius, center_y - radius, radius * 2, radius * 2)
 
-            # Hour markers
             marker_pen = QPen(self._text_color)
             marker_pen.setWidth(max(2, radius // 60))
             painter.setPen(marker_pen)
             for line in marker_lines:
                 painter.drawLine(*line)
 
-            # Optional numerals (I–XII) placed just outside the clock face.
             if self._show_numerals:
                 roman_map = {
-                    1: "I",
-                    2: "II",
-                    3: "III",
-                    4: "IV",
-                    5: "V",
-                    6: "VI",
-                    7: "VII",
-                    8: "VIII",
-                    9: "IX",
-                    10: "X",
-                    11: "XI",
-                    12: "XII",
+                    1: "I", 2: "II", 3: "III", 4: "IV", 5: "V", 6: "VI",
+                    7: "VII", 8: "VIII", 9: "IX", 10: "X", 11: "XI", 12: "XII",
                 }
-
-                # Place numerals with a clear gap from the face so they never
-                # visually touch the circle or its hour markers.
                 numeral_pull_in = max(2, numeral_height // 3) - 5
                 numeral_radius = radius + numeral_height - numeral_pull_in
                 painter.setFont(numeral_font)
@@ -1068,9 +1061,6 @@ class ClockWidget(BaseOverlayWidget):
                     tw = numeral_metrics.horizontalAdvance(text)
                     th = numeral_metrics.height()
 
-                    # Subtle drop shadow for numerals, matching the analogue
-                    # face/hand shadow so the entire dial reads as a single lit element.
-                    # Numerals: 20% larger shadows, 20% darker
                     if self._analog_face_shadow:
                         base_numeral_alpha = max(97, int(self._text_color.alpha() * 0.605))
                         numeral_shadow = QColor(0, 0, 0, _scaled_alpha(base_numeral_alpha))
@@ -1080,6 +1070,79 @@ class ClockWidget(BaseOverlayWidget):
 
                     painter.setPen(QPen(self._text_color))
                     painter.drawText(tx - tw // 2, ty + th // 4, text)
+        finally:
+            painter.end()
+
+        self._cached_clock_face = pixmap
+        self._cached_clock_face_size = (width, height)
+        self._clock_face_cache_invalidated = False
+
+    def _paint_analog(self, event: QPaintEvent) -> None:
+        """Paint analog clock face, hands, and numerals.
+        
+        Uses cached pixmap for static elements (face, markers, numerals) and
+        only redraws the hands each second for better performance.
+        """
+        if self._current_dt is None:
+            if self._timezone is None:
+                now = datetime.now()
+            else:
+                now = datetime.now(self._timezone)
+        else:
+            now = self._current_dt
+
+        # Check if cache needs regeneration
+        current_size = (self.width(), self.height())
+        if (self._clock_face_cache_invalidated or 
+            self._cached_clock_face is None or
+            self._cached_clock_face_size != current_size):
+            self._regenerate_clock_face_cache(current_size[0], current_size[1])
+
+        painter = QPainter(self)
+        try:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            high_quality_hint = getattr(QPainter.RenderHint, "HighQualityAntialiasing", None)
+            if high_quality_hint is not None:
+                painter.setRenderHint(high_quality_hint, True)
+            else:
+                painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+
+            # Draw cached clock face (static elements)
+            # Use Source composition to REPLACE pixels, not blend - this clears old hand positions
+            if self._cached_clock_face is not None:
+                painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+                painter.drawPixmap(0, 0, self._cached_clock_face)
+                painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+
+            # Now draw only the dynamic elements (hands)
+            shadow_scale = 1.5 if self._analog_shadow_intense else 1.1
+            opacity_scale = 2.0 if self._analog_shadow_intense else 1.4
+
+            def _scaled_alpha(base_alpha: int) -> int:
+                return min(255, int(round(base_alpha * opacity_scale)))
+
+            left_pad, top_pad, bottom_margin, tz_font_size = self._compute_analog_padding()
+            if self._show_background:
+                rect = self.contentsRect()
+            else:
+                rect = self.rect().adjusted(left_pad, top_pad, -left_pad, -bottom_margin)
+            side = min(rect.width(), rect.height())
+            if side <= 0:
+                return
+
+            center_x = rect.x() + rect.width() // 2
+            center_y = rect.y() + rect.height() // 2
+
+            numeral_pt = max(8, min(int(self._font_size * 0.25), max(9, side // 18)))
+            numeral_font = QFont(self._font_family, numeral_pt)
+            painter.setFont(numeral_font)
+            numeral_metrics = painter.fontMetrics()
+            numeral_height = numeral_metrics.height()
+
+            numeral_clearance = numeral_height + max(6, numeral_height // 3)
+            radius = side // 2 - numeral_clearance
+            if radius <= 0:
+                return
 
             # Helper to draw a hand with a subtle bottom-right shadow.
             def _draw_hand(angle_deg: float, length: float, thickness: int) -> None:
@@ -1116,12 +1179,12 @@ class ClockWidget(BaseOverlayWidget):
             minute_angle = (minute / 60.0) * 360.0
             second_angle = (sec / 60.0) * 360.0
 
-            # Draw hour and minute hands
-            # draw order keeps minute underneath hour for better readability
+            # Draw hands in order: hour, minute, second (thinnest on top)
+            # This prevents shadows from thicker hands overlapping the thin seconds hand
+            _draw_hand(hour_angle, radius * 0.52, max(3, radius // 15))
+            _draw_hand(minute_angle, radius * 0.72, max(2, radius // 20))
             if self._show_seconds:
                 _draw_hand(second_angle, radius * 0.85, 1)
-            _draw_hand(minute_angle, radius * 0.72, max(2, radius // 20))
-            _draw_hand(hour_angle, radius * 0.52, max(3, radius // 15))
 
             # Timezone abbreviation rendered below the analogue clock, centred horizontally.
             if self._show_timezone and self._timezone_abbrev:

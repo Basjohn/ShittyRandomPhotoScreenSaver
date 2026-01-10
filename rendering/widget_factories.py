@@ -518,6 +518,10 @@ class RedditWidgetFactory(WidgetFactory):
             
             widget = RedditWidget(parent=parent, position=position)
             
+            # Set overlay name for fade sync coordination and cache key
+            widget._overlay_name = settings_key
+            widget._cache_key = settings_key  # Use settings_key (reddit/reddit2) for cache persistence
+            
             # Thread manager
             if self._thread_manager and hasattr(widget, "set_thread_manager"):
                 widget.set_thread_manager(self._thread_manager)

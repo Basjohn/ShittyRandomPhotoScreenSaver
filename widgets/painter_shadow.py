@@ -324,6 +324,33 @@ class PainterShadow:
         if shadow_pixmap is None or shadow_pixmap.isNull():
             return
         
+        # Corruption detection: verify pixmap integrity before drawing
+        # Shadow corruption can occur during multi-monitor window position changes
+        try:
+            # Quick integrity checks (minimal dt_max impact)
+            if shadow_pixmap.width() <= 0 or shadow_pixmap.height() <= 0:
+                logger.debug("[PAINTER_SHADOW] Corrupted shadow detected (invalid dimensions), invalidating cache")
+                if cache is not None:
+                    cache.invalidate()
+                return
+            
+            # Check if pixmap size matches expected size (accounting for DPR)
+            expected_w = widget_rect.width() + config.blur_radius * 2
+            expected_h = widget_rect.height() + config.blur_radius * 2
+            actual_w = shadow_pixmap.width()
+            actual_h = shadow_pixmap.height()
+            
+            # Allow some tolerance for DPR scaling
+            if abs(actual_w - expected_w) > expected_w * 0.5 or abs(actual_h - expected_h) > expected_h * 0.5:
+                logger.debug("[PAINTER_SHADOW] Corrupted shadow detected (size mismatch: expected ~%dx%d, got %dx%d), invalidating cache",
+                           expected_w, expected_h, actual_w, actual_h)
+                if cache is not None:
+                    cache.invalidate()
+                return
+        except Exception as e:
+            logger.debug("[PAINTER_SHADOW] Shadow integrity check failed: %s", e)
+            # Continue anyway - better to draw potentially corrupted shadow than nothing
+        
         # Draw shadow at offset position
         try:
             old_opacity = painter.opacity()
@@ -336,6 +363,9 @@ class PainterShadow:
             painter.setOpacity(old_opacity)
         except Exception as e:
             logger.debug("[PAINTER_SHADOW] Failed to draw shadow: %s", e)
+            # Invalidate cache on draw failure - likely corruption
+            if cache is not None:
+                cache.invalidate()
     
     @classmethod
     def _render_shadow_pixmap(

@@ -57,10 +57,11 @@ class CursorHaloWidget(QWidget):
         self.setAutoFillBackground(False)
         # Hide mouse cursor over halo - the halo IS the cursor
         self.setCursor(Qt.CursorShape.BlankCursor)
-        self.resize(60, 60)
+        self.resize(48, 48)  # 20% smaller than original 60x60
         self._opacity = 1.0
         self._animation_id: Optional[str] = None
         self._animation_manager = AnimationManager()
+        self._is_fading_out = False  # Track fade state to prevent interference
 
     def set_parent_widget(self, parent: QWidget) -> None:
         """Refresh the parent widget reference after display rebuilds."""
@@ -88,13 +89,14 @@ class CursorHaloWidget(QWidget):
         
         # No background fill needed - WA_TranslucentBackground handles it
         
+        # Use full alpha in paint - window opacity handles fading
         base_alpha = 200
-        alpha = int(max(0.0, min(1.0, self._opacity)) * base_alpha)
+        alpha = base_alpha  # Don't multiply by self._opacity - window opacity handles it
         color = QColor(255, 255, 255, alpha)
         
-        # Shadow parameters
+        # Shadow parameters - also use full alpha, window opacity handles fading
         shadow_offset = 2
-        shadow_alpha = int(max(0.0, min(1.0, self._opacity)) * 80)
+        shadow_alpha = 80  # Don't multiply by self._opacity - window opacity handles it
         shadow_color = QColor(0, 0, 0, shadow_alpha)
 
         r = min(self.width(), self.height()) - 8
@@ -268,6 +270,7 @@ class CursorHaloWidget(QWidget):
             except Exception as e:
                 logger.debug("[CURSOR_HALO] Exception suppressed: %s", e)
             self._animation_id = None
+        self._is_fading_out = False
     
     def fade_in(self, on_finished: Optional[callable] = None) -> None:
         """Fade in the halo over 600ms."""
@@ -283,12 +286,19 @@ class CursorHaloWidget(QWidget):
         
         try:
             if fade_in:
-                self.setWindowOpacity(0.0)
-                # Show widget now that opacity is 0.0 to prevent flash
+                self._is_fading_out = False
+                # CRITICAL: Show widget BEFORE setting opacity to 0.0
+                # Otherwise the widget stays hidden even after animation
                 if not self.isVisible():
                     self.show()
+                    # Force immediate visibility update
+                    self.raise_()
+                self.setWindowOpacity(0.0)
+                self._opacity = 0.0
             else:
+                self._is_fading_out = True
                 self.setWindowOpacity(1.0)
+                self._opacity = 1.0
         except Exception as e:
             logger.debug("[CURSOR_HALO] Exception suppressed: %s", e)
 
@@ -306,14 +316,18 @@ class CursorHaloWidget(QWidget):
 
         def _on_anim_finished() -> None:
             if not fade_in:
+                self._is_fading_out = False
                 try:
                     self.hide()
                 except Exception as e:
                     logger.debug("[CURSOR_HALO] Exception suppressed: %s", e)
-            try:
-                self.setWindowOpacity(1.0)
-            except Exception as e:
-                logger.debug("[CURSOR_HALO] Exception suppressed: %s", e)
+            else:
+                # Ensure full opacity after fade in completes
+                try:
+                    self.setWindowOpacity(1.0)
+                    self._opacity = 1.0
+                except Exception as e:
+                    logger.debug("[CURSOR_HALO] Exception suppressed: %s", e)
             self._animation_id = None
             if on_finished:
                 try:

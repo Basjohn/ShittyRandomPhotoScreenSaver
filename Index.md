@@ -18,6 +18,10 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - 236 unit tests across 9 test files
 
 ## Active Audit Documents (Jan 2026)
+- **audits/HaloAndFadeSyncAudit_Jan10.md** - ✅ **COMPLETED** (Jan 10, 2026)
+  - Fixed control halo not appearing (double opacity application bug)
+  - Fixed widgets appearing before compositor (added compositor ready signal)
+  - 8 files modified across rendering and widgets
 - **audits/WidgetRefactorPlan.md** - ✅ **COMPLETED** (Jan 9, 2026)
   - Widget profiling implementation (all widgets have `widget_paint_sample`)
   - Media widget smart polling (diff gating, idle detection, 2500ms interval)
@@ -199,6 +203,14 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - `is_mc_build()`: Detect MC build entry point
   - **Jan 6, 2026**: FFT worker removed from eco mode stop list (causes visualizer stalls)
   - **21 unit tests** in `tests/test_mc_eco_mode.py`
+- core/reddit_rate_limiter.py
+  - `RedditRateLimiter`: Centralized Reddit API rate limiting (singleton)
+  - Coordinates all Reddit API calls across RSS source and Reddit widget
+  - Enforces 8 requests per minute (under Reddit's 10 req/min limit)
+  - Thread-safe with `threading.Lock()` for concurrent access
+  - Methods: `can_make_request()`, `record_request()`, `wait_if_needed()`, `reset()`
+  - **Jan 9, 2026**: Created to fix rate limiting issues on startup
+  - **10 unit tests** in `tests/test_reddit_rate_limiter.py`
 - core/process/__init__.py
   - Process isolation module for SRPSS v2.0 multiprocessing
   - Exports: WorkerType, WorkerState, MessageType, WorkerMessage, WorkerResponse, SharedMemoryHeader, RGBAHeader, FFTHeader, HealthStatus, ProcessSupervisor
@@ -408,6 +420,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - **Phase 0.6 (Jan 2026)**: Smart positioning logic for Visualizer (Top vs Bottom alignment).
   - **Phase 0.7 (Jan 2026)**: Robust positioning resolution via `coerce_widget_position` for Media, Reddit, and Clock widgets.
   - **Fade coordination**: `request_overlay_fade_sync()`, `register_spotify_secondary_fade()`, `reset_fade_coordination()`
+  - **Jan 10, 2026 Enhancement**: Added compositor ready signal - widgets now wait for `image_displayed` signal before starting fade-in, preventing premature visibility before first frame
   - **Lifecycle Integration (Dec 2025)**: Added `initialize_widget()`, `activate_widget()`, `deactivate_widget()`, `cleanup_widget()` and batch methods for new lifecycle system
   - **Tests**: `tests/test_visualizer_smart_positioning.py`
 - rendering/widget_positioner.py
@@ -541,6 +554,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
    - `ScreensaverContextMenu`: Dark-themed right-click context menu matching settings dialog styling. Provides Previous/Next image, transition selection submenu, Settings, Background Dimming toggle, Hard Exit Mode toggle, and Exit. Uses monochromatic icons and app-owned dark theme (no Windows accent bleed). Activated by right-click in hard exit mode or Ctrl+right-click in normal mode. Lazy-initialized by DisplayWidget for performance.
 - widgets/cursor_halo.py
    - `CursorHaloWidget`: Visual cursor indicator for Ctrl-held interaction mode. Displays a semi-transparent ring with center dot that follows the cursor. Supports fade-in/fade-out animations via AnimationManager.
+   - **Jan 10, 2026 Fix**: Fixed double opacity application bug (window opacity AND paint alpha were both being applied, resulting in ~20% effective opacity at 50% fade). Now only uses window opacity for fading.
 - widgets/overlay_timers.py
    - Centralised overlay timer helper providing `create_overlay_timer()` and `OverlayTimerHandle` for recurring UI-thread timers (clock/weather/media/Reddit). Prefers `ThreadManager.schedule_recurring` with ResourceManager tracking and falls back to a widget-local `QTimer` when no ThreadManager is available.
 - widgets/beat_engine.py

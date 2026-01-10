@@ -10,7 +10,7 @@ or keyboard input directly.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from enum import Enum
 from typing import Optional, List, Dict, Any
 from datetime import timedelta
@@ -19,6 +19,8 @@ import re
 import sys
 import ctypes
 from ctypes import wintypes
+import json
+from pathlib import Path
 
 import requests
 
@@ -157,22 +159,36 @@ class RedditWidget(BaseOverlayWidget):
         # Convert RedditPosition to OverlayPosition for base class
         overlay_pos = OverlayPosition(position.value)
         super().__init__(parent, position=overlay_pos, overlay_name="reddit")
+        
+        # CRITICAL: Defer visibility until fade sync triggers
+        # This prevents the widget from flashing before the compositor is ready
+        self._defer_visibility_for_fade_sync = True
 
         # Logical placement and source configuration
         self._reddit_position = position  # Keep original enum for compatibility
         self._subreddit: str = self._normalise_subreddit(subreddit)
         self._sort: str = "hot"
-        self._limit: int = 10
+        self._limit: int = 10  # Target limit (may be reduced during progressive loading)
+        self._target_limit: int = 10  # User's desired limit
         self._refresh_interval = timedelta(minutes=10)
 
         self._update_timer: Optional[QTimer] = None
         self._update_timer_handle: Optional[OverlayTimerHandle] = None
+
+        # Progressive loading: start with fewer posts, expand as rate limit allows
+        # Stages: 4 → 10 → target (if target > 10)
+        self._progressive_stage: int = 0  # 0=initial(4), 1=medium(10), 2=full(target)
+        self._progressive_stages: List[int] = [4, 10]  # Will add target if > 10
+        self._all_fetched_posts: List[RedditPost] = []  # Store all posts for progressive reveal
 
         # Cached posts and click hit-rects
         self._posts: List[RedditPost] = []
         self._row_hit_rects: List[tuple[QRect, str, str]] = []
         self._has_displayed_valid_data: bool = False
         self._has_seen_first_sample: bool = False
+        
+        # Cache key for persistent storage (set by factory, fallback to subreddit)
+        self._cache_key: str = self._subreddit
         
         # Paint caching: only repaint when data changes (every 10 min)
         self._cached_content_pixmap: Optional[QPixmap] = None
@@ -300,7 +316,25 @@ class RedditWidget(BaseOverlayWidget):
             return
 
         self._enabled = True
+        
+        # CRITICAL: Hide widget immediately - it will be shown by fade sync
         self.hide()
+        
+        # Setup progressive loading stages based on target limit
+        self._setup_progressive_stages()
+        
+        # Load cached posts for data preparation (widget stays hidden)
+        cached_posts = self._load_cached_posts()
+        if cached_posts:
+            logger.info("[REDDIT] Loaded %d cached posts (cache_key=%s)", 
+                       len(cached_posts), self._cache_key)
+            self._all_fetched_posts = cached_posts
+            self._progressive_stage = self._get_stage_for_post_count(len(cached_posts))
+            # Prepare data but don't show - fade sync will handle visibility
+            self._prepare_posts_for_display(cached_posts)
+        else:
+            logger.info("[REDDIT] No cached posts found (cache_key=%s)", self._cache_key)
+        
         self._schedule_timer()
         self._fetch_feed()
 
@@ -377,11 +411,130 @@ class RedditWidget(BaseOverlayWidget):
 
     def set_item_limit(self, limit: int) -> None:
         self._limit = max(1, min(int(limit), 25))
+        self._target_limit = self._limit  # Store user's desired limit
         self._update_card_height_from_limit()
         if self._enabled and self._posts:
             # Trim existing posts to the new visible limit
             self._posts = self._posts[: self._limit]
             self.update()
+
+    # ------------------------------------------------------------------
+    # Progressive Loading
+    # ------------------------------------------------------------------
+
+    def _setup_progressive_stages(self) -> None:
+        """Setup progressive loading stages based on target limit.
+        
+        Progressive loading allows widgets to display partial data immediately
+        while respecting rate limits. Stages: 4 → 10 → target (if > 10).
+        """
+        self._progressive_stages = [4]
+        if self._target_limit > 4:
+            self._progressive_stages.append(min(10, self._target_limit))
+        if self._target_limit > 10:
+            self._progressive_stages.append(self._target_limit)
+        self._progressive_stage = 0
+        logger.debug("[REDDIT] Progressive stages setup: %s (target=%d)", 
+                    self._progressive_stages, self._target_limit)
+
+    def _get_stage_for_post_count(self, post_count: int) -> int:
+        """Get the appropriate stage index for a given post count."""
+        for i, stage_limit in enumerate(self._progressive_stages):
+            if post_count <= stage_limit:
+                return i
+        return len(self._progressive_stages) - 1
+
+    def _get_current_stage_limit(self) -> int:
+        """Get the post limit for the current progressive stage."""
+        if self._progressive_stage < len(self._progressive_stages):
+            return self._progressive_stages[self._progressive_stage]
+        return self._target_limit
+
+    def _display_progressive_posts(self, fade: bool = False) -> None:
+        """Display posts up to current progressive stage limit.
+        
+        Args:
+            fade: If True, fade in the widget after size change (for stage transitions)
+        """
+        stage_limit = self._get_current_stage_limit()
+        posts_to_show = self._all_fetched_posts[:stage_limit]
+        
+        if not posts_to_show:
+            return
+        
+        # Update posts and trigger fade sync or fade animation
+        self._update_posts_internal(posts_to_show, fade=fade)
+        
+        logger.debug("[REDDIT] Progressive display: stage=%d, showing %d/%d posts (target=%d, fade=%s)",
+                    self._progressive_stage, len(posts_to_show), 
+                    len(self._all_fetched_posts), self._target_limit, fade)
+
+    def _prepare_posts_for_display(self, posts: List[RedditPost]) -> None:
+        """Prepare posts data without showing widget (for startup with cached data)."""
+        if not posts:
+            return
+        
+        # Sort posts
+        try:
+            def _sort_key(p: RedditPost) -> tuple[int, float]:
+                ts = float(getattr(p, "created_utc", 0.0) or 0.0)
+                if ts <= 0.0:
+                    return (1, 0.0)
+                return (0, -ts)
+            posts = sorted(posts, key=_sort_key)
+        except Exception as e:
+            logger.debug("[REDDIT] Exception suppressed: %s", e)
+        
+        stage_limit = self._get_current_stage_limit()
+        self._posts = posts[:stage_limit]
+        self._row_hit_rects.clear()
+        self._invalidate_paint_cache()
+        
+        # Update typography
+        base_font = max(6, self._font_size)
+        header_font = max(6, int(base_font * 1.2))
+        self._header_font_pt = header_font
+        self._header_logo_size = max(12, int(header_font * 1.3))
+        self._header_logo_margin = self._header_logo_size
+        
+        # Size the card
+        self._update_card_height_from_content(len(self._posts))
+        
+        if self.parent():
+            self._update_position()
+        
+        # Register for fade sync (widget stays hidden until sync triggers)
+        self._has_seen_first_sample = True
+        self._has_displayed_valid_data = True
+        parent = self.parent()
+        
+        def _starter() -> None:
+            if not shiboken_isValid(self):
+                return
+            self._start_widget_fade_in(1500)
+        
+        if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
+            try:
+                overlay_name = getattr(self, '_overlay_name', None) or "reddit"
+                parent.request_overlay_fade_sync(overlay_name, _starter)
+            except Exception as e:
+                logger.debug("[REDDIT] Exception suppressed: %s", e)
+                _starter()
+        else:
+            _starter()
+
+    def _advance_progressive_stage(self) -> bool:
+        """Advance to next progressive stage if possible.
+        
+        Returns True if advanced, False if already at final stage.
+        """
+        if self._progressive_stage >= len(self._progressive_stages) - 1:
+            return False
+        
+        self._progressive_stage += 1
+        # Fade in when advancing stages to avoid flash
+        self._display_progressive_posts(fade=True)
+        return True
 
     # ------------------------------------------------------------------
     # Networking
@@ -417,6 +570,17 @@ class RedditWidget(BaseOverlayWidget):
         def _do_fetch(subreddit: str, sort: str, limit: int) -> List[Dict[str, Any]]:
             import time
             start_time = time.perf_counter()
+            
+            # Use centralized rate limiter to coordinate with RSS source
+            try:
+                from core.reddit_rate_limiter import RedditRateLimiter
+                wait_time = RedditRateLimiter.wait_if_needed()
+                if wait_time > 0:
+                    logger.info(f"[RATE_LIMIT] Reddit widget waiting {wait_time:.1f}s for rate limit")
+                    time.sleep(wait_time)
+                RedditRateLimiter.record_request()
+            except ImportError:
+                logger.debug("[REDDIT] RedditRateLimiter not available")
             
             url = f"https://www.reddit.com/r/{subreddit}/{sort}.json"
             headers = {
@@ -561,14 +725,46 @@ class RedditWidget(BaseOverlayWidget):
                     created_utc=created_utc,
                 )
             )
+        
+        # Store all fetched posts for progressive loading
+        self._all_fetched_posts = posts
+        
+        # Save full post list to cache for next startup
+        self._save_cached_posts(posts[:self._target_limit])
 
         if not posts:
+            # Edge case: Rate limited and got 0 posts
+            # If we have cached posts, keep showing them
+            # If not, hide and wait for next fetch attempt
             if not self._has_displayed_valid_data:
+                logger.info("[REDDIT] No posts fetched (likely rate limited), hiding until next attempt")
                 try:
                     self.hide()
                 except Exception as e:
                     logger.debug("[REDDIT] Exception suppressed: %s", e)
+            else:
+                logger.debug("[REDDIT] No new posts fetched, keeping existing display")
             return
+
+        # Determine stage based on how many posts we have vs target
+        new_stage = self._get_stage_for_post_count(len(posts))
+        stage_changed = new_stage != self._progressive_stage
+        self._progressive_stage = new_stage
+        
+        # Display posts progressively, with fade if stage changed
+        self._display_progressive_posts(fade=stage_changed)
+
+    def _update_posts_internal(self, posts: List[RedditPost], fade: bool = False) -> None:
+        """Internal method to update displayed posts (used by progressive loading).
+        
+        Args:
+            posts: Posts to display
+            fade: If True, fade in after update (for stage transitions)
+        """
+        if not posts:
+            return
+        
+        first_sample = not self._has_seen_first_sample
 
         # Order posts so that the newest entries appear at the top of the
         # list, while still using Reddit's hot/top/etc. listing as the
@@ -581,20 +777,11 @@ class RedditWidget(BaseOverlayWidget):
                     return (1, 0.0)
                 return (0, -ts)
 
-            posts.sort(key=_sort_key)
+            posts = sorted(posts, key=_sort_key)
         except Exception as e:
             logger.debug("[REDDIT] Exception suppressed: %s", e)
 
-        # Only keep as many posts as we can actually display for the
-        # current limit; oversampling still happens at fetch time for
-        # filtering, but the rendered list is always capped.
-        try:
-            visible_limit = max(1, int(self._limit))
-        except Exception as e:
-            logger.debug("[REDDIT] Exception suppressed: %s", e)
-            visible_limit = max(1, len(posts))
-
-        self._posts = posts[:visible_limit]
+        self._posts = posts
         self._row_hit_rects.clear()
         
         # Invalidate paint cache since data changed
@@ -612,8 +799,7 @@ class RedditWidget(BaseOverlayWidget):
         # large empty regions while still leaving enough headroom for the
         # chosen limit and current font metrics.
         self._update_card_height_from_content(len(self._posts))
-        self.update()
-
+        
         if self.parent():
             self._update_position()
             # Notify parent to recalculate stacking after height change
@@ -622,8 +808,11 @@ class RedditWidget(BaseOverlayWidget):
                     self.parent().recalculate_stacking()
                 except Exception as e:
                     logger.debug("[REDDIT] Exception suppressed: %s", e)
-
-        first_sample = not self._has_seen_first_sample
+        
+        # Trigger repaint if widget is visible
+        if self.isVisible():
+            self.update()
+        
         if first_sample:
             self._has_seen_first_sample = True
             parent = self.parent()
@@ -644,11 +833,13 @@ class RedditWidget(BaseOverlayWidget):
                     _starter()
             else:
                 _starter()
-        else:
+        elif fade:
+            # Fade in for stage transitions (not first sample)
             try:
-                self.show()
+                self._start_widget_fade_in(600)  # Shorter fade for expansions
             except Exception as e:
                 logger.debug("[REDDIT] Exception suppressed: %s", e)
+        # else: widget is already visible, just update() was called above
 
         self._has_displayed_valid_data = True
 
@@ -816,7 +1007,7 @@ class RedditWidget(BaseOverlayWidget):
                 Qt.TextElideMode.ElideRight,
                 available_header_width,
             )
-            # Draw header text with shadow for better readability
+            # Draw header text with shadow (cached, only regenerated when data changes)
             draw_text_with_shadow(painter, x, baseline_y, drawn_label, font_size=self._header_font_pt)
             header_text_width = header_metrics.horizontalAdvance(drawn_label)
         else:
@@ -872,7 +1063,7 @@ class RedditWidget(BaseOverlayWidget):
             painter.setFont(age_font)
             painter.setPen(QColor(200, 200, 200, 220))
             age_rect = QRect(rect.left(), y, age_col_width, line_height)
-            # Draw age text with shadow (smaller text, less shadow)
+            # Draw age text with shadow (cached, only regenerated when data changes)
             draw_text_rect_with_shadow(
                 painter,
                 age_rect,
@@ -910,7 +1101,7 @@ class RedditWidget(BaseOverlayWidget):
                     available_width,
                 )
             title_y = y + title_metrics.ascent()
-            # Draw title with shadow for better readability
+            # Draw title with shadow (cached, only regenerated when data changes)
             draw_text_with_shadow(painter, title_x, title_y, display_title, font_size=self._font_size)
 
             row_rect = QRect(rect.left(), y, rect.width(), line_height)
@@ -1343,6 +1534,40 @@ class RedditWidget(BaseOverlayWidget):
         except Exception:
             logger.debug("[REDDIT] Failed to load Reddit_Logo_C.png", exc_info=True)
         return None
+
+    def _get_cache_file_path(self) -> Path:
+        """Get cache file path for this widget's posts."""
+        cache_dir = Path(__file__).resolve().parent.parent / "cache" / "reddit"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        return cache_dir / f"{self._cache_key}_posts.json"
+    
+    def _save_cached_posts(self, posts: List[RedditPost]) -> None:
+        """Save posts to cache for next startup."""
+        try:
+            cache_path = self._get_cache_file_path()
+            data = [asdict(post) for post in posts]
+            with open(cache_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2)
+            logger.debug("[REDDIT] Saved %d posts to cache: %s", len(posts), cache_path)
+        except Exception as e:
+            logger.debug("[REDDIT] Failed to save post cache: %s", e)
+    
+    def _load_cached_posts(self) -> List[RedditPost]:
+        """Load cached posts from previous session."""
+        try:
+            cache_path = self._get_cache_file_path()
+            if not cache_path.exists():
+                return []
+            
+            with open(cache_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            posts = [RedditPost(**item) for item in data]
+            logger.debug("[REDDIT] Loaded %d posts from cache: %s", len(posts), cache_path)
+            return posts
+        except Exception as e:
+            logger.debug("[REDDIT] Failed to load post cache: %s", e)
+            return []
 
     @staticmethod
     def _normalise_subreddit(name: str) -> str:

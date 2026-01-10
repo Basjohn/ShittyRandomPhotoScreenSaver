@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
 from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import QTimer, Qt, Signal, QVariantAnimation, QEasingCurve, QRect
+from PySide6.QtCore import QTimer, Qt, Signal, QVariantAnimation, QPoint, QRect, QSize
 from PySide6.QtGui import QFont, QColor, QPixmap, QPainter, QPainterPath, QFontMetrics
 from shiboken6 import Shiboken
 
@@ -80,6 +80,9 @@ class MediaWidget(BaseOverlayWidget):
         # Convert MediaPosition to OverlayPosition for base class
         overlay_pos = OverlayPosition(position.value)
         super().__init__(parent, position=overlay_pos, overlay_name="media")
+        
+        # Defer visibility until fade sync triggers
+        self._defer_visibility_for_fade_sync = True
 
         self._media_position = position  # Keep original enum for compatibility
         self._controller: BaseMediaController = controller or create_media_controller()
@@ -100,6 +103,9 @@ class MediaWidget(BaseOverlayWidget):
 
         # Album artwork state (optional)
         self._artwork_pixmap: Optional[QPixmap] = None
+        # Cached scaled artwork to avoid expensive SmoothTransformation on every paint
+        self._scaled_artwork_cache: Optional[QPixmap] = None
+        self._scaled_artwork_cache_key: Optional[tuple] = None  # (pm_id, frame_w, frame_h, dpr)
         # Default artwork size (logical pixels); overridable via settings.
         self._artwork_size: int = 200
         self._artwork_opacity: float = 1.0
@@ -141,6 +147,12 @@ class MediaWidget(BaseOverlayWidget):
         self._consecutive_none_count: int = 0
         self._idle_threshold: int = 12  # ~30s at 2500ms interval before entering idle
         self._is_idle: bool = False
+        
+        # Adaptive poll interval: 1000ms → 2000ms → 2500ms
+        # Faster initial detection, then slow down for efficiency
+        self._poll_intervals: list[int] = [1000, 2000, 2500]
+        self._current_poll_stage: int = 0  # Index into _poll_intervals
+        self._polls_at_current_stage: int = 0  # Polls completed at current interval
 
         # Fixed widget height once we have seen the first track so that
         # changes in wrapped text do not move the card on screen.
@@ -151,6 +163,7 @@ class MediaWidget(BaseOverlayWidget):
         # *second* update once geometry has settled. This avoids the card
         # jumping size mid-fade or a second after it appears.
         self._has_seen_first_track: bool = False
+        self._fade_in_completed: bool = False
 
         # One-shot flag so we only log the first paintEvent geometry.
         self._paint_debug_logged = False
@@ -239,6 +252,8 @@ class MediaWidget(BaseOverlayWidget):
         """Clean up media resources (lifecycle hook)."""
         self._deactivate_impl()
         self._artwork_pixmap = None
+        self._scaled_artwork_cache = None
+        self._scaled_artwork_cache_key = None
         self._last_info = None
         logger.debug("[LIFECYCLE] MediaWidget cleaned up")
     
@@ -260,7 +275,9 @@ class MediaWidget(BaseOverlayWidget):
             self.hide()
         except Exception as e:
             logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-        self._refresh()
+        
+        # Force initial refresh to load artwork on boot
+        # This ensures the widget shows current track immediately
         self._ensure_timer()
         if self._thread_manager is not None:
             self._refresh_async()
@@ -361,13 +378,58 @@ class MediaWidget(BaseOverlayWidget):
             return
         if not self._ensure_thread_manager("MediaWidget._ensure_timer"):
             return
-        # Smart polling: 2500ms interval (was 1000ms) - acceptable delay for track changes
-        handle = create_overlay_timer(self, 2500, self._refresh, description="MediaWidget smart poll")
+        # Adaptive polling: start at 1000ms, progress to 2000ms, then 2500ms
+        interval = self._poll_intervals[self._current_poll_stage]
+        handle = create_overlay_timer(self, interval, self._refresh, description="MediaWidget smart poll")
         self._update_timer_handle = handle
         try:
             self._update_timer = getattr(handle, "_timer", None)
         except Exception as e:
             logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+            self._update_timer = None
+        if is_perf_metrics_enabled():
+            logger.debug("[PERF] Media widget timer started at %dms (stage %d)", interval, self._current_poll_stage)
+    
+    def _advance_poll_stage(self) -> None:
+        """Advance to next (slower) poll interval if not at max."""
+        if self._current_poll_stage >= len(self._poll_intervals) - 1:
+            return  # Already at slowest
+        
+        self._current_poll_stage += 1
+        self._polls_at_current_stage = 0
+        new_interval = self._poll_intervals[self._current_poll_stage]
+        
+        # Recreate timer with new interval
+        self._stop_timer()
+        self._ensure_timer()
+        
+        if is_perf_metrics_enabled():
+            logger.debug("[PERF] Media widget advanced to poll stage %d (%dms)", 
+                        self._current_poll_stage, new_interval)
+    
+    def _reset_poll_stage(self) -> None:
+        """Reset to fastest poll interval (used when resuming from idle)."""
+        if self._current_poll_stage == 0:
+            return  # Already at fastest
+        
+        self._current_poll_stage = 0
+        self._polls_at_current_stage = 0
+        
+        # Recreate timer with fast interval
+        self._stop_timer()
+        self._ensure_timer()
+        
+        if is_perf_metrics_enabled():
+            logger.debug("[PERF] Media widget reset to fast poll (1000ms)")
+    
+    def _stop_timer(self) -> None:
+        """Stop the current poll timer."""
+        if self._update_timer_handle is not None:
+            try:
+                self._update_timer_handle.stop()
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+            self._update_timer_handle = None
             self._update_timer = None
 
     def _update_position(self) -> None:
@@ -693,7 +755,8 @@ class MediaWidget(BaseOverlayWidget):
         
         if self._thread_manager is not None:
             if is_perf_metrics_enabled():
-                logger.debug("[PERF] Media widget poll triggered (2500ms interval)")
+                interval = self._poll_intervals[self._current_poll_stage]
+                logger.debug("[PERF] Media widget poll triggered (%dms interval)", interval)
             elif is_verbose_logging():
                 logger.debug("[MEDIA_WIDGET] Scheduling async refresh via ThreadManager")
             self._refresh_async()
@@ -808,11 +871,23 @@ class MediaWidget(BaseOverlayWidget):
                 if is_perf_metrics_enabled():
                     logger.debug("[PERF] Media widget exiting idle (track detected)")
                 self._consecutive_none_count = 0
+                was_idle = self._is_idle
                 self._is_idle = False
+                # Reset to fast polling when resuming from idle
+                if was_idle:
+                    self._reset_poll_stage()
             
-            # Diff gating: skip update if track identity unchanged AND we have artwork
+            # Adaptive polling: advance to slower interval after 2 successful polls
+            self._polls_at_current_stage += 1
+            if self._polls_at_current_stage >= 2:
+                self._advance_poll_stage()
+            
+            # Diff gating: skip update if track identity unchanged
             # Always process first track (when _last_track_identity is None)
-            if current_identity == self._last_track_identity and self._last_track_identity is not None:
+            # Also process if we haven't completed fade-in yet (need 2 updates for fade-in)
+            if (current_identity == self._last_track_identity and 
+                self._last_track_identity is not None and 
+                self._fade_in_completed):
                 if is_perf_metrics_enabled():
                     logger.debug("[PERF] Media widget update skipped (diff gating - no change)")
                 return
@@ -841,6 +916,8 @@ class MediaWidget(BaseOverlayWidget):
             if last_vis or last_vis is None:
                 logger.info("[MEDIA_WIDGET] No active media session; hiding media card")
             self._artwork_pixmap = None
+            self._scaled_artwork_cache = None
+            self._scaled_artwork_cache_key = None
             try:
                 self.hide()
             except Exception as e:
@@ -952,6 +1029,26 @@ class MediaWidget(BaseOverlayWidget):
             self.setMinimumHeight(self._fixed_card_height)
             self.setMaximumHeight(self._fixed_card_height)
 
+        # CRITICAL: Decode artwork BEFORE the first-track early return so that
+        # artwork is captured on the very first poll. Without this, the first
+        # update returns early and artwork is never decoded, causing blank
+        # artwork on startup.
+        artwork_bytes = getattr(info, "artwork", None)
+        if isinstance(artwork_bytes, (bytes, bytearray)) and artwork_bytes:
+            try:
+                pm = QPixmap()
+                if pm.loadFromData(bytes(artwork_bytes)) and not pm.isNull():
+                    self._artwork_pixmap = pm
+                    logger.debug("[MEDIA_WIDGET] Artwork decoded: %dx%d", pm.width(), pm.height())
+            except Exception:
+                logger.debug("[MEDIA] Failed to decode artwork pixmap", exc_info=True)
+
+        # CRITICAL: Set content margins BEFORE the first-track early return so
+        # that the text layout accounts for artwork space. Without this, the
+        # text wraps as if there's no artwork, causing overlap on startup.
+        right_margin = max(self._artwork_size + 40, 60)
+        self.setContentsMargins(29, 12, right_margin, 40)
+
         # On the very first non-empty track update we use this call purely
         # to establish a stable layout and fixed height, but keep the widget
         # hidden. The next update with the same track will then perform the
@@ -976,6 +1073,8 @@ class MediaWidget(BaseOverlayWidget):
                 self._start_widget_fade_in(1500)
                 self._notify_spotify_widgets_visibility()
                 self._telemetry_last_visibility = True
+                # Mark fade-in as completed so future updates can be diff-gated
+                self._fade_in_completed = True
             if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
                 try:
                     parent.request_overlay_fade_sync("media", _starter)
@@ -994,7 +1093,7 @@ class MediaWidget(BaseOverlayWidget):
             # Failing to emit rich diagnostics should not break the widget.
             pass
 
-        # Decode optional artwork bytes
+        # Decode optional artwork bytes (for subsequent updates after first track)
         prev_pm = self._artwork_pixmap
         had_artwork_before = prev_pm is not None and not prev_pm.isNull()
         self._artwork_pixmap = None
@@ -1223,20 +1322,26 @@ class MediaWidget(BaseOverlayWidget):
                     # behind the frame, letting the clip path define the
                     # visible region.
                     #
-                    # For non-square frames (e.g., video content), we must
-                    # scale to the actual frame dimensions, not a square.
-                    target_w_px = int(frame_w * scale_dpr)
-                    target_h_px = int(frame_h * scale_dpr)
-                    scaled = pm.scaled(
-                        target_w_px,
-                        target_h_px,
-                        Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                        Qt.TransformationMode.SmoothTransformation,
-                    )
-                    try:
-                        scaled.setDevicePixelRatio(scale_dpr)
-                    except Exception as e:
-                        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+                    # PERF: Cache scaled artwork to avoid expensive SmoothTransformation
+                    # on every paint. Cache key includes pixmap identity, frame size, and DPR.
+                    cache_key = (id(pm), frame_w, frame_h, scale_dpr)
+                    if self._scaled_artwork_cache_key == cache_key and self._scaled_artwork_cache is not None:
+                        scaled = self._scaled_artwork_cache
+                    else:
+                        target_w_px = int(frame_w * scale_dpr)
+                        target_h_px = int(frame_h * scale_dpr)
+                        scaled = pm.scaled(
+                            target_w_px,
+                            target_h_px,
+                            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                            Qt.TransformationMode.SmoothTransformation,
+                        )
+                        try:
+                            scaled.setDevicePixelRatio(scale_dpr)
+                        except Exception as e:
+                            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+                        self._scaled_artwork_cache = scaled
+                        self._scaled_artwork_cache_key = cache_key
 
                     scaled_logical_w = max(1, int(round(scaled.width() / scale_dpr)))
                     scaled_logical_h = max(1, int(round(scaled.height() / scale_dpr)))
@@ -1673,26 +1778,37 @@ class MediaWidget(BaseOverlayWidget):
             self._artwork_anim = None
 
         self._artwork_opacity = 0.0
-
-        anim = QVariantAnimation(self)
-        anim.setDuration(850)
-        anim.setStartValue(0.0)
-        anim.setEndValue(1.0)
-        anim.setEasingCurve(QEasingCurve.InOutCubic)
-
-        def _on_value_changed(value):
-            try:
-                self._artwork_opacity = float(value)
-            except (TypeError, ValueError):
+        
+        # Use AnimationManager instead of QPropertyAnimation to avoid per-frame update() calls
+        # This reduces paint calls from ~10Hz to only when needed
+        try:
+            from core.animation.animator import AnimationManager
+            from core.animation.types import EasingCurve
+            
+            anim_mgr = AnimationManager()
+            
+            def _on_tick(progress: float) -> None:
+                try:
+                    self._artwork_opacity = float(progress)
+                    self.update()
+                except Exception as e:
+                    logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+            
+            def _on_finished() -> None:
+                self._artwork_anim = None
                 self._artwork_opacity = 1.0
-            self.update()
-
-        anim.valueChanged.connect(_on_value_changed)
-
-        def _on_finished() -> None:
-            self._artwork_anim = None
+                self.update()
+            
+            # AnimationManager uses seconds, not milliseconds
+            anim_id = anim_mgr.animate_custom(
+                duration=0.85,  # 850ms
+                update_callback=_on_tick,
+                on_complete=_on_finished,
+                easing=EasingCurve.CUBIC_IN_OUT
+            )
+            self._artwork_anim = anim_id
+        except Exception:
+            logger.debug("[MEDIA] Failed to start artwork fade via AnimationManager", exc_info=True)
+            # Fallback: just set opacity to 1.0 immediately
             self._artwork_opacity = 1.0
-
-        anim.finished.connect(_on_finished)
-        self._artwork_anim = anim
-        anim.start()
+            self.update()

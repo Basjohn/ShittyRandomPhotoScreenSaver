@@ -2513,20 +2513,20 @@ class DisplayWidget(QWidget):
             self._last_halo_activity_ts = time.monotonic()
             self._reset_halo_inactivity_timer()
             hint.move_to(local_point.x(), local_point.y())
-            if not hint.isVisible():
-                hint.show()
         else:
             self._cancel_halo_inactivity_timer()
 
         if mode == "fade_in":
-            if not hint.isVisible():
-                hint.show()
+            # fade_in() handles show() internally
             hint.fade_in()
         elif mode == "fade_out":
             hint.fade_out()
-        elif mode != "fade_out":
-            # Already ensured move/show above
-            pass
+        else:
+            # mode == "none" - just reposition, ensure visible without animation
+            if not hint.isVisible():
+                hint.setWindowOpacity(1.0)
+                hint.show()
+                hint.raise_()
 
     def _hide_ctrl_cursor_hint(self, *, immediate: bool = False) -> None:
         """Hide the cursor halo widget."""
@@ -2800,7 +2800,19 @@ class DisplayWidget(QWidget):
         
         # Phase 5: Use coordinator for global Ctrl state
         ctrl_mode_active = self._coordinator.ctrl_held
-        if self._is_hard_exit_enabled() or ctrl_mode_active:
+        hard_exit = self._is_hard_exit_enabled()
+        if hard_exit or ctrl_mode_active:
+            # Show/update halo position
+            local_pos = event.pos()
+            hint = self._ctrl_cursor_hint
+            if hint is not None:
+                halo_hidden = not hint.isVisible()
+                if halo_hidden:
+                    self._coordinator.set_halo_owner(self)
+                    self._show_ctrl_cursor_hint(local_pos, mode="fade_in")
+                else:
+                    self._show_ctrl_cursor_hint(local_pos, mode="none")
+            
             # Delegate volume drag to InputHandler
             if self._input_handler is not None:
                 try:
