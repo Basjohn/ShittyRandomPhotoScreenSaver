@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
 from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import QTimer, Qt, Signal, QVariantAnimation, QPoint, QRect, QSize
+from PySide6.QtCore import QTimer, Qt, Signal, QVariantAnimation, QRect
 from PySide6.QtGui import QFont, QColor, QPixmap, QPainter, QPainterPath, QFontMetrics
 from shiboken6 import Shiboken
 

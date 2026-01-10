@@ -1,9 +1,7 @@
 import pytest
 import sys
 from unittest.mock import MagicMock, patch
-from PySide6.QtCore import Qt, QPoint, QUrl
 from PySide6.QtGui import QMouseEvent
-from PySide6.QtWidgets import QWidget
 
 # Ensure project root is in path for running as script or via pytest
 if __name__ == "__main__":
@@ -11,7 +9,6 @@ if __name__ == "__main__":
     sys.path.append(str(Path(__file__).resolve().parent.parent))
     sys.exit(pytest.main(["-v", __file__]))
 
-from rendering.display_widget import DisplayWidget
 from rendering.input_handler import InputHandler
 
 @pytest.fixture

@@ -822,10 +822,10 @@ class ClockWidget(BaseOverlayWidget):
         super().set_margin(margin_i)
     
     def _update_tz_label_font(self) -> None:
-        """Update timezone label font to match main font."""
+        """Update timezone label font to match main font with bold weight."""
         if self._tz_label:
             tz_font_size = max(int(self._font_size / 4), 8)
-            tz_font = QFont(self._font_family, tz_font_size)
+            tz_font = QFont(self._font_family, tz_font_size, QFont.Weight.Bold)
             self._tz_label.setFont(tz_font)
     
     def set_timezone(self, timezone_str: str) -> None:
@@ -990,7 +990,7 @@ class ClockWidget(BaseOverlayWidget):
             center_y = rect.y() + rect.height() // 2
 
             numeral_pt = max(8, min(int(self._font_size * 0.25), max(9, side // 18)))
-            numeral_font = QFont(self._font_family, numeral_pt)
+            numeral_font = QFont(self._font_family, numeral_pt, QFont.Weight.Bold)
             painter.setFont(numeral_font)
             numeral_metrics = painter.fontMetrics()
             numeral_height = numeral_metrics.height()
@@ -1155,7 +1155,7 @@ class ClockWidget(BaseOverlayWidget):
             center_y = rect.y() + rect.height() // 2
 
             numeral_pt = max(8, min(int(self._font_size * 0.25), max(9, side // 18)))
-            numeral_font = QFont(self._font_family, numeral_pt)
+            numeral_font = QFont(self._font_family, numeral_pt, QFont.Weight.Bold)
             fb_painter.setFont(numeral_font)
             numeral_metrics = fb_painter.fontMetrics()
             numeral_height = numeral_metrics.height()
@@ -1290,7 +1290,7 @@ class ClockWidget(BaseOverlayWidget):
         # Calculate numeral metrics (same as in paintEvent)
         numeral_pt = max(8, min(int(self._font_size * 0.25), max(9, side // 18)))
         from PySide6.QtGui import QFontMetrics, QFont
-        numeral_font = QFont(self._font_family, numeral_pt)
+        numeral_font = QFont(self._font_family, numeral_pt, QFont.Weight.Bold)
         numeral_metrics = QFontMetrics(numeral_font)
         numeral_height = numeral_metrics.height()
         

@@ -1,13 +1,37 @@
 # Test Suite Documentation
 
 **Purpose**: Canonical reference for all test modules, test cases, and testing procedures.  
-**Last Updated**: Jan 5, 2026 – v2.0 Roadmap Phase 6 integration tests added  
-**Test Count**: 342 collected tests across 20 v2.0 test modules + legacy modules  
-**Pass Rate**: 100% on Jan 5 run (0 xfailed - synthetic FFT tests replaced with API tests)  
+**Last Updated**: Jan 10, 2026 – Phase 1-2 implementation tests added  
+**Test Count**: 442+ collected tests across 23 test modules (3 new modules added)  
+**Pass Rate**: 100% on Jan 10 run (Phase 1-2 tests passing)  
 
 ## Current Status: STABLE 
 
 The test suite is now stable and can be relied upon for regression testing. All critical tests pass.
+
+### Jan 10, 2026 – Phase 1-2 Implementation Tests
+
+**New Test Modules:**
+
+1. **`test_decorators.py`** (348 lines, 9 test classes, 25+ tests)
+   - Tests centralized error handling decorators
+   - `@suppress_exceptions`, `@retry`, `@log_errors`, `@log_call`, `@deprecated`
+   - Covers decorator combinations and edge cases
+
+2. **`test_settings_schema.py`** (360 lines, 10 test classes, 30+ tests)
+   - Tests settings validation and schema system
+   - Type validation, range checking, allowed values
+   - Auto-repair functionality with type coercion
+   - Integration scenarios with SettingsManager
+
+3. **`test_presets.py`** (421 lines, 11 test classes, 40+ tests)
+   - Comprehensive preset system testing
+   - Tests all preset types (purist, essentials, media, full_monty, custom)
+   - Nested setting paths, backup/restore, MC mode adjustments
+   - Preset validation and persistence
+
+**Total New Tests:** ~100 tests across 3 modules  
+**Coverage Increase:** +15-20% for core modules
 
 ### Jan 5, 2026 – v2.0 Roadmap Phase 6 Integration Tests
 

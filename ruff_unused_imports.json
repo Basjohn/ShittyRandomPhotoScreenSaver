@@ -1,0 +1,1190 @@
+[
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 58,
+      "row": 449
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\core\\eco_mode.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 450
+          },
+          "location": {
+            "column": 1,
+            "row": 449
+          }
+        }
+      ],
+      "message": "Remove unused import: `core.process.types.WorkerType`"
+    },
+    "location": {
+      "column": 48,
+      "row": 449
+    },
+    "message": "`core.process.types.WorkerType` imported but unused",
+    "noqa_row": 449,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 71,
+      "row": 35
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\engine\\screensaver_engine.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from core.logging.tags import TAG_WORKER, TAG_PERF, TAG_RSS, TAG_ASYNC",
+          "end_location": {
+            "column": 82,
+            "row": 35
+          },
+          "location": {
+            "column": 1,
+            "row": 35
+          }
+        }
+      ],
+      "message": "Remove unused import: `core.logging.tags.TAG_IMAGE`"
+    },
+    "location": {
+      "column": 62,
+      "row": 35
+    },
+    "message": "`core.logging.tags.TAG_IMAGE` imported but unused",
+    "noqa_row": 35,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 30,
+      "row": 4
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_double_click_navigation.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 5
+          },
+          "location": {
+            "column": 1,
+            "row": 4
+          }
+        }
+      ],
+      "message": "Remove unused import"
+    },
+    "location": {
+      "column": 28,
+      "row": 4
+    },
+    "message": "`PySide6.QtCore.Qt` imported but unused",
+    "noqa_row": 4,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 38,
+      "row": 4
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_double_click_navigation.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 5
+          },
+          "location": {
+            "column": 1,
+            "row": 4
+          }
+        }
+      ],
+      "message": "Remove unused import"
+    },
+    "location": {
+      "column": 32,
+      "row": 4
+    },
+    "message": "`PySide6.QtCore.QPoint` imported but unused",
+    "noqa_row": 4,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 44,
+      "row": 4
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_double_click_navigation.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 5
+          },
+          "location": {
+            "column": 1,
+            "row": 4
+          }
+        }
+      ],
+      "message": "Remove unused import"
+    },
+    "location": {
+      "column": 40,
+      "row": 4
+    },
+    "message": "`PySide6.QtCore.QUrl` imported but unused",
+    "noqa_row": 4,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 38,
+      "row": 6
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_double_click_navigation.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 7
+          },
+          "location": {
+            "column": 1,
+            "row": 6
+          }
+        }
+      ],
+      "message": "Remove unused import: `PySide6.QtWidgets.QWidget`"
+    },
+    "location": {
+      "column": 31,
+      "row": 6
+    },
+    "message": "`PySide6.QtWidgets.QWidget` imported but unused",
+    "noqa_row": 6,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 51,
+      "row": 14
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_double_click_navigation.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 15
+          },
+          "location": {
+            "column": 1,
+            "row": 14
+          }
+        }
+      ],
+      "message": "Remove unused import: `rendering.display_widget.DisplayWidget`"
+    },
+    "location": {
+      "column": 38,
+      "row": 14
+    },
+    "message": "`rendering.display_widget.DisplayWidget` imported but unused",
+    "noqa_row": 14,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 43,
+      "row": 9
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_eco_mode_worker_control.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from unittest.mock import MagicMock",
+          "end_location": {
+            "column": 43,
+            "row": 9
+          },
+          "location": {
+            "column": 1,
+            "row": 9
+          }
+        }
+      ],
+      "message": "Remove unused import: `unittest.mock.patch`"
+    },
+    "location": {
+      "column": 38,
+      "row": 9
+    },
+    "message": "`unittest.mock.patch` imported but unused",
+    "noqa_row": 9,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 14,
+      "row": 4
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_events.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 5
+          },
+          "location": {
+            "column": 1,
+            "row": 4
+          }
+        }
+      ],
+      "message": "Remove unused import: `pytest`"
+    },
+    "location": {
+      "column": 8,
+      "row": 4
+    },
+    "message": "`pytest` imported but unused",
+    "noqa_row": 4,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 37,
+      "row": 9
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_lanczos_scaling.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from PySide6.QtCore import QSize",
+          "end_location": {
+            "column": 37,
+            "row": 9
+          },
+          "location": {
+            "column": 1,
+            "row": 9
+          }
+        }
+      ],
+      "message": "Remove unused import: `PySide6.QtCore.Qt`"
+    },
+    "location": {
+      "column": 35,
+      "row": 9
+    },
+    "message": "`PySide6.QtCore.Qt` imported but unused",
+    "noqa_row": 9,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 14,
+      "row": 9
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_log_throttling.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 10
+          },
+          "location": {
+            "column": 1,
+            "row": 9
+          }
+        }
+      ],
+      "message": "Remove unused import: `pytest`"
+    },
+    "location": {
+      "column": 8,
+      "row": 9
+    },
+    "message": "`pytest` imported but unused",
+    "noqa_row": 9,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 43,
+      "row": 10
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_log_throttling.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from unittest.mock import MagicMock",
+          "end_location": {
+            "column": 43,
+            "row": 10
+          },
+          "location": {
+            "column": 1,
+            "row": 10
+          }
+        }
+      ],
+      "message": "Remove unused import: `unittest.mock.patch`"
+    },
+    "location": {
+      "column": 38,
+      "row": 10
+    },
+    "message": "`unittest.mock.patch` imported but unused",
+    "noqa_row": 10,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 30,
+      "row": 2
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_mc_window_flags.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 3
+          },
+          "location": {
+            "column": 1,
+            "row": 2
+          }
+        }
+      ],
+      "message": "Remove unused import: `PySide6.QtCore.Qt`"
+    },
+    "location": {
+      "column": 28,
+      "row": 2
+    },
+    "message": "`PySide6.QtCore.Qt` imported but unused",
+    "noqa_row": 2,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 43,
+      "row": 3
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_media_keys.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from unittest.mock import MagicMock",
+          "end_location": {
+            "column": 43,
+            "row": 3
+          },
+          "location": {
+            "column": 1,
+            "row": 3
+          }
+        }
+      ],
+      "message": "Remove unused import: `unittest.mock.patch`"
+    },
+    "location": {
+      "column": 38,
+      "row": 3
+    },
+    "message": "`unittest.mock.patch` imported but unused",
+    "noqa_row": 3,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 48,
+      "row": 13
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_multidisplay_sync.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 14
+          },
+          "location": {
+            "column": 1,
+            "row": 13
+          }
+        }
+      ],
+      "message": "Remove unused import: `rendering.display_modes.DisplayMode`"
+    },
+    "location": {
+      "column": 37,
+      "row": 13
+    },
+    "message": "`rendering.display_modes.DisplayMode` imported but unused",
+    "noqa_row": 13,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 27,
+      "row": 31
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_painter_shadow.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from widgets.painter_shadow import (\r\n    PainterShadow,\r\n    ShadowConfig,\r\n    ShadowCache,\r\n    AsyncShadowRenderer,\r\n    get_shadow_cache,\r\n    clear_shadow_cache,\r\n    prerender_widget_shadow,\r\n    _GLOBAL_PRERENDER_CACHE,\r\n    _GLOBAL_PRERENDER_LOCK,\r\n)",
+          "end_location": {
+            "column": 2,
+            "row": 33
+          },
+          "location": {
+            "column": 1,
+            "row": 21
+          }
+        }
+      ],
+      "message": "Remove unused import"
+    },
+    "location": {
+      "column": 5,
+      "row": 31
+    },
+    "message": "`widgets.painter_shadow._PRERENDER_IN_PROGRESS` imported but unused",
+    "noqa_row": 31,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 20,
+      "row": 32
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_painter_shadow.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from widgets.painter_shadow import (\r\n    PainterShadow,\r\n    ShadowConfig,\r\n    ShadowCache,\r\n    AsyncShadowRenderer,\r\n    get_shadow_cache,\r\n    clear_shadow_cache,\r\n    prerender_widget_shadow,\r\n    _GLOBAL_PRERENDER_CACHE,\r\n    _GLOBAL_PRERENDER_LOCK,\r\n)",
+          "end_location": {
+            "column": 2,
+            "row": 33
+          },
+          "location": {
+            "column": 1,
+            "row": 21
+          }
+        }
+      ],
+      "message": "Remove unused import"
+    },
+    "location": {
+      "column": 5,
+      "row": 32
+    },
+    "message": "`widgets.painter_shadow._PRERENDER_LOCK` imported but unused",
+    "noqa_row": 32,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 36,
+      "row": 3
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_particle_transition.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 4
+          },
+          "location": {
+            "column": 1,
+            "row": 3
+          }
+        }
+      ],
+      "message": "Remove unused import: `unittest.mock.MagicMock`"
+    },
+    "location": {
+      "column": 27,
+      "row": 3
+    },
+    "message": "`unittest.mock.MagicMock` imported but unused",
+    "noqa_row": 3,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 12,
+      "row": 27
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_phase_e_effect_corruption.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 28
+          },
+          "location": {
+            "column": 1,
+            "row": 27
+          }
+        }
+      ],
+      "message": "Remove unused import: `time`"
+    },
+    "location": {
+      "column": 8,
+      "row": 27
+    },
+    "message": "`time` imported but unused",
+    "noqa_row": 27,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 15,
+      "row": 28
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_phase_e_effect_corruption.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 29
+          },
+          "location": {
+            "column": 1,
+            "row": 28
+          }
+        }
+      ],
+      "message": "Remove unused import: `weakref`"
+    },
+    "location": {
+      "column": 8,
+      "row": 28
+    },
+    "message": "`weakref` imported but unused",
+    "noqa_row": 28,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 42,
+      "row": 29
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_phase_e_effect_corruption.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from unittest.mock import Mock",
+          "end_location": {
+            "column": 49,
+            "row": 29
+          },
+          "location": {
+            "column": 1,
+            "row": 29
+          }
+        }
+      ],
+      "message": "Remove unused import"
+    },
+    "location": {
+      "column": 33,
+      "row": 29
+    },
+    "message": "`unittest.mock.MagicMock` imported but unused",
+    "noqa_row": 29,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 49,
+      "row": 29
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_phase_e_effect_corruption.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from unittest.mock import Mock",
+          "end_location": {
+            "column": 49,
+            "row": 29
+          },
+          "location": {
+            "column": 1,
+            "row": 29
+          }
+        }
+      ],
+      "message": "Remove unused import"
+    },
+    "location": {
+      "column": 44,
+      "row": 29
+    },
+    "message": "`unittest.mock.patch` imported but unused",
+    "noqa_row": 29,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 28,
+      "row": 30
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_phase_e_effect_corruption.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 31
+          },
+          "location": {
+            "column": 1,
+            "row": 30
+          }
+        }
+      ],
+      "message": "Remove unused import: `typing.Optional`"
+    },
+    "location": {
+      "column": 20,
+      "row": 30
+    },
+    "message": "`typing.Optional` imported but unused",
+    "noqa_row": 30,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 50,
+      "row": 42
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_phase_e_effect_corruption.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from unittest.mock import Mock",
+          "end_location": {
+            "column": 50,
+            "row": 42
+          },
+          "location": {
+            "column": 9,
+            "row": 42
+          }
+        }
+      ],
+      "message": "Remove unused import: `unittest.mock.MagicMock`"
+    },
+    "location": {
+      "column": 41,
+      "row": 42
+    },
+    "message": "`unittest.mock.MagicMock` imported but unused",
+    "noqa_row": 42,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 38,
+      "row": 3
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_pixel_shift.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from PySide6.QtWidgets import QLabel",
+          "end_location": {
+            "column": 46,
+            "row": 3
+          },
+          "location": {
+            "column": 1,
+            "row": 3
+          }
+        }
+      ],
+      "message": "Remove unused import: `PySide6.QtWidgets.QWidget`"
+    },
+    "location": {
+      "column": 31,
+      "row": 3
+    },
+    "message": "`PySide6.QtWidgets.QWidget` imported but unused",
+    "noqa_row": 3,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 34,
+      "row": 4
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_pixel_shift.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 5
+          },
+          "location": {
+            "column": 1,
+            "row": 4
+          }
+        }
+      ],
+      "message": "Remove unused import: `PySide6.QtCore.QPoint`"
+    },
+    "location": {
+      "column": 28,
+      "row": 4
+    },
+    "message": "`PySide6.QtCore.QPoint` imported but unused",
+    "noqa_row": 4,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 49,
+      "row": 8
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_settings_sync.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from unittest.mock import MagicMock, patch",
+          "end_location": {
+            "column": 49,
+            "row": 8
+          },
+          "location": {
+            "column": 1,
+            "row": 8
+          }
+        }
+      ],
+      "message": "Remove unused import: `unittest.mock.call`"
+    },
+    "location": {
+      "column": 45,
+      "row": 8
+    },
+    "message": "`unittest.mock.call` imported but unused",
+    "noqa_row": 8,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 30,
+      "row": 7
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_timezone_support.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from datetime import timezone, timedelta",
+          "end_location": {
+            "column": 51,
+            "row": 7
+          },
+          "location": {
+            "column": 1,
+            "row": 7
+          }
+        }
+      ],
+      "message": "Remove unused import: `datetime.datetime`"
+    },
+    "location": {
+      "column": 22,
+      "row": 7
+    },
+    "message": "`datetime.datetime` imported but unused",
+    "noqa_row": 7,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 30,
+      "row": 9
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_timezone_support.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 1,
+            "row": 10
+          },
+          "location": {
+            "column": 1,
+            "row": 9
+          }
+        }
+      ],
+      "message": "Remove unused import: `PySide6.QtCore.Qt`"
+    },
+    "location": {
+      "column": 28,
+      "row": 9
+    },
+    "message": "`PySide6.QtCore.Qt` imported but unused",
+    "noqa_row": 9,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 72,
+      "row": 11
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_timezone_support.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from widgets.clock_widget import ClockWidget, TimeFormat, PYTZ_AVAILABLE",
+          "end_location": {
+            "column": 88,
+            "row": 11
+          },
+          "location": {
+            "column": 1,
+            "row": 11
+          }
+        }
+      ],
+      "message": "Remove unused import: `widgets.clock_widget.ClockPosition`"
+    },
+    "location": {
+      "column": 59,
+      "row": 11
+    },
+    "message": "`widgets.clock_widget.ClockPosition` imported but unused",
+    "noqa_row": 11,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 55,
+      "row": 6
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_transitions.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from transitions.base_transition import TransitionState",
+          "end_location": {
+            "column": 72,
+            "row": 6
+          },
+          "location": {
+            "column": 1,
+            "row": 6
+          }
+        }
+      ],
+      "message": "Remove unused import: `transitions.base_transition.BaseTransition`"
+    },
+    "location": {
+      "column": 41,
+      "row": 6
+    },
+    "message": "`transitions.base_transition.BaseTransition` imported but unused",
+    "noqa_row": 6,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 41,
+      "row": 4
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tests\\test_visualizer_smart_positioning.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from PySide6.QtCore import QRect",
+          "end_location": {
+            "column": 41,
+            "row": 4
+          },
+          "location": {
+            "column": 1,
+            "row": 4
+          }
+        }
+      ],
+      "message": "Remove unused import: `PySide6.QtCore.QPoint`"
+    },
+    "location": {
+      "column": 35,
+      "row": 4
+    },
+    "message": "`PySide6.QtCore.QPoint` imported but unused",
+    "noqa_row": 4,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 34,
+      "row": 7
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\ui\\tabs\\sources_tab.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from typing import Optional",
+          "end_location": {
+            "column": 39,
+            "row": 7
+          },
+          "location": {
+            "column": 1,
+            "row": 7
+          }
+        }
+      ],
+      "message": "Remove unused import"
+    },
+    "location": {
+      "column": 30,
+      "row": 7
+    },
+    "message": "`typing.Dict` imported but unused",
+    "noqa_row": 7,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 39,
+      "row": 7
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\ui\\tabs\\sources_tab.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from typing import Optional",
+          "end_location": {
+            "column": 39,
+            "row": 7
+          },
+          "location": {
+            "column": 1,
+            "row": 7
+          }
+        }
+      ],
+      "message": "Remove unused import"
+    },
+    "location": {
+      "column": 36,
+      "row": 7
+    },
+    "message": "`typing.Any` imported but unused",
+    "noqa_row": 7,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 73,
+      "row": 19
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\widgets\\media_widget.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from PySide6.QtCore import QTimer, Qt, Signal, QVariantAnimation, QRect",
+          "end_location": {
+            "column": 87,
+            "row": 19
+          },
+          "location": {
+            "column": 1,
+            "row": 19
+          }
+        }
+      ],
+      "message": "Remove unused import"
+    },
+    "location": {
+      "column": 67,
+      "row": 19
+    },
+    "message": "`PySide6.QtCore.QPoint` imported but unused",
+    "noqa_row": 19,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 87,
+      "row": 19
+    },
+    "filename": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\widgets\\media_widget.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "from PySide6.QtCore import QTimer, Qt, Signal, QVariantAnimation, QRect",
+          "end_location": {
+            "column": 87,
+            "row": 19
+          },
+          "location": {
+            "column": 1,
+            "row": 19
+          }
+        }
+      ],
+      "message": "Remove unused import"
+    },
+    "location": {
+      "column": 82,
+      "row": 19
+    },
+    "message": "`PySide6.QtCore.QSize` imported but unused",
+    "noqa_row": 19,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  }
+]

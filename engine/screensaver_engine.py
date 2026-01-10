@@ -32,7 +32,7 @@ from PySide6.QtGui import QPixmap, QImage
 
 from core.constants.timing import TRANSITION_STAGGER_MS
 from core.events import EventSystem, EventType
-from core.logging.tags import TAG_WORKER, TAG_PERF, TAG_RSS, TAG_IMAGE, TAG_ASYNC
+from core.logging.tags import TAG_WORKER, TAG_PERF, TAG_RSS, TAG_ASYNC
 from core.resources import ResourceManager
 from core.threading import ThreadManager
 from core.settings import SettingsManager

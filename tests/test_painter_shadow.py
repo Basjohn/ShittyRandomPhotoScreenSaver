@@ -28,8 +28,6 @@ from widgets.painter_shadow import (
     prerender_widget_shadow,
     _GLOBAL_PRERENDER_CACHE,
     _GLOBAL_PRERENDER_LOCK,
-    _PRERENDER_IN_PROGRESS,
-    _PRERENDER_LOCK,
 )
 
 

@@ -556,3 +556,105 @@ def test_analog_clock_all_scenarios_have_valid_offset(qapp, parent_widget):
         )
     
     clock.cleanup()
+
+
+def test_analog_mode_rendering(qapp, parent_widget):
+    """Test analog clock mode rendering."""
+    clock = ClockWidget(parent=parent_widget)
+    clock.set_display_mode("analog")
+    clock.resize(200, 200)
+    parent_widget.show()
+    clock.show()
+    
+    assert clock._display_mode == "analog"
+    assert clock.width() > 0
+    assert clock.height() > 0
+    
+    clock.cleanup()
+
+
+def test_analog_mode_with_numerals(qapp, parent_widget):
+    """Test analog clock with numerals."""
+    clock = ClockWidget(parent=parent_widget)
+    clock.set_display_mode("analog")
+    clock.set_show_numerals(True)
+    clock.resize(200, 200)
+    parent_widget.show()
+    clock.show()
+    
+    assert clock._show_numerals is True
+    
+    clock.cleanup()
+
+
+def test_analog_mode_without_numerals(qapp, parent_widget):
+    """Test analog clock without numerals."""
+    clock = ClockWidget(parent=parent_widget)
+    clock.set_display_mode("analog")
+    clock.set_show_numerals(False)
+    clock.resize(200, 200)
+    parent_widget.show()
+    clock.show()
+    
+    assert clock._show_numerals is False
+    
+    clock.cleanup()
+
+
+def test_clock_shadow_settings(qapp, parent_widget):
+    """Test clock shadow configuration."""
+    clock = ClockWidget(parent=parent_widget)
+    
+    # Enable shadow
+    clock.set_shadow_enabled(True)
+    assert clock._shadow_enabled is True
+    
+    # Disable shadow
+    clock.set_shadow_enabled(False)
+    assert clock._shadow_enabled is False
+    
+    clock.cleanup()
+
+
+def test_clock_font_family(qapp, parent_widget):
+    """Test setting font family."""
+    clock = ClockWidget(parent=parent_widget)
+    
+    clock.set_font_family("Arial")
+    assert clock._font_family == "Arial"
+    
+    clock.set_font_family("Courier New")
+    assert clock._font_family == "Courier New"
+    
+    clock.cleanup()
+
+
+def test_clock_timezone_display(qapp, parent_widget):
+    """Test timezone display."""
+    clock = ClockWidget(parent=parent_widget)
+    clock.set_display_mode("analog")
+    
+    # Enable timezone
+    clock.set_show_timezone(True)
+    assert clock._show_timezone is True
+    
+    # Disable timezone
+    clock.set_show_timezone(False)
+    assert clock._show_timezone is False
+    
+    clock.cleanup()
+
+
+def test_clock_background_toggle(qapp, parent_widget):
+    """Test background toggle."""
+    clock = ClockWidget(parent=parent_widget)
+    
+    # Enable background
+    clock.set_show_background(True)
+    assert clock._show_background is True
+    
+    # Disable background
+    clock.set_show_background(False)
+    assert clock._show_background is False
+    
+    clock.cleanup()

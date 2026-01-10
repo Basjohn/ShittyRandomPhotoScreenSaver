@@ -1,7 +1,6 @@
 """Tests for pixel shift manager."""
 import pytest
-from PySide6.QtWidgets import QWidget, QLabel
-from PySide6.QtCore import QPoint
+from PySide6.QtWidgets import QLabel
 
 from widgets.pixel_shift_manager import PixelShiftManager
 

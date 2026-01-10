@@ -1901,8 +1901,15 @@ class SpotifyVisualizerWidget(QWidget):
                         False,
                         visible=False,
                     )
+                    # Force overlay to repaint to clear any artifacts
+                    if hasattr(overlay, 'update'):
+                        overlay.update()
                 except Exception as e:
                     logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+            
+            # Request parent repaint to ensure artifacts are cleared
+            if hasattr(parent, 'update'):
+                parent.update()
         
     def _is_media_state_stale(self) -> bool:
         """Return True if Spotify state has not updated within fallback timeout."""

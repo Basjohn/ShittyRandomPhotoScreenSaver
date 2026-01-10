@@ -299,19 +299,38 @@ def apply_preset(settings_manager: "SettingsManager", preset_key: str) -> bool:
 
 
 def _save_custom_backup(settings_manager: "SettingsManager") -> None:
-    """Save current widget settings to custom backup."""
+    """Save current settings to custom backup.
+    
+    Saves all major setting categories:
+    - widgets (all widget configurations)
+    - display (interval, transition_duration, fit_mode, etc.)
+    - transitions (enabled, random, selected effects)
+    - accessibility (high_contrast, reduce_motion, etc.)
+    - sources (image directories, RSS feeds, etc.)
+    """
     backup = {}
     
-    # Get all widget settings
-    widgets = settings_manager.get("widgets", {})
-    if isinstance(widgets, dict):
-        for section, section_data in widgets.items():
-            if isinstance(section_data, dict):
-                for key, value in section_data.items():
-                    backup[f"widgets.{section}.{key}"] = deepcopy(value)
+    # Categories to backup
+    categories = ["widgets", "display", "transitions", "accessibility", "sources"]
+    
+    for category in categories:
+        category_data = settings_manager.get(category, {})
+        if isinstance(category_data, dict):
+            # For nested categories like widgets
+            for section, section_data in category_data.items():
+                if isinstance(section_data, dict):
+                    for key, value in section_data.items():
+                        backup[f"{category}.{section}.{key}"] = deepcopy(value)
+                else:
+                    # For simple key-value pairs
+                    backup[f"{category}.{section}"] = deepcopy(section_data)
+        else:
+            # For non-dict categories, save the whole value
+            backup[category] = deepcopy(category_data)
     
     settings_manager.set("custom_preset_backup", backup)
-    logger.debug("[PRESETS] Saved custom backup with %d settings", len(backup))
+    logger.debug("[PRESETS] Saved custom backup with %d settings across %d categories", 
+                len(backup), len(categories))
 
 
 def _restore_custom_backup(settings_manager: "SettingsManager") -> None:
@@ -392,6 +411,30 @@ def get_current_preset_info(settings_manager: "SettingsManager") -> Dict[str, An
         "description": preset.description,
         "index": get_preset_index(preset_key),
     }
+
+
+def reset_non_custom_presets(settings_manager: "SettingsManager") -> None:
+    """Reset all preset definitions to their defaults, preserving Custom preset.
+    
+    This resets the preset definitions themselves (stored in custom_preset_backup
+    for Custom) but does NOT change the currently active preset selection.
+    
+    Use case: User has modified presets and wants to restore them to defaults
+    without losing their Custom preset configuration.
+    """
+    # Clear the custom preset backup so it doesn't contain stale data
+    # The next time user switches to Custom, it will use current settings
+    current_preset = settings_manager.get("preset", "custom")
+    
+    # If currently on Custom, save current settings as the new Custom backup
+    if current_preset == "custom":
+        _save_custom_backup(settings_manager)
+    
+    # No other action needed - preset definitions are in code (PRESET_DEFINITIONS)
+    # They don't need to be "reset" as they're immutable constants
+    # The only persistent preset data is the custom_preset_backup
+    
+    logger.info("[PRESETS] Non-custom presets reset (custom backup preserved)")
 
 
 def check_and_switch_to_custom(settings_manager: "SettingsManager") -> bool:

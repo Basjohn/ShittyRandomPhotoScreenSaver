@@ -1,7 +1,6 @@
 """
 Tests for EventSystem.
 """
-import pytest
 from core.events import EventSystem, Event
 
 

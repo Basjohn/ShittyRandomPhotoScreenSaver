@@ -1,5 +1,4 @@
 import pytest
-from PySide6.QtCore import Qt
 
 
 @pytest.mark.qt

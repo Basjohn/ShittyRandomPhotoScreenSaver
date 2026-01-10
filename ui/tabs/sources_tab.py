@@ -4,7 +4,7 @@ Allows users to configure image sources:
 - Folder sources (browse and add)
 - RSS/JSON feed sources (add/edit/remove)
 """
-from typing import Optional, Dict, Any
+from typing import Optional
 from pathlib import Path
 import tempfile
 from urllib.parse import urlparse, urlunparse

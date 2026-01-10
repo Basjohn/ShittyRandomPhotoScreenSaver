@@ -6,8 +6,7 @@ to reduce log spam in hot paths like animation frames and visualizer ticks.
 """
 import time
 import logging
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from core.logging.logger import ThrottledLogger, get_throttled_logger
 

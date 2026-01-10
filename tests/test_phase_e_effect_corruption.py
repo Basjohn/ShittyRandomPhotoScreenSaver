@@ -24,10 +24,7 @@ Test approach:
 
 import pytest
 import sys
-import time
-import weakref
-from unittest.mock import Mock, MagicMock, patch
-from typing import Optional
+from unittest.mock import Mock
 
 # Skip entire module if not on Windows (Phase E is Windows-specific)
 pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="Phase E is Windows-specific")
@@ -39,7 +36,7 @@ class TestPhaseEEffectCorruption:
     @pytest.fixture
     def mock_display_widget(self):
         """Create a mock DisplayWidget with QGraphicsEffect-enabled overlays."""
-        from unittest.mock import Mock, MagicMock
+        from unittest.mock import Mock
         
         widget = Mock()
         widget.screen_index = 0

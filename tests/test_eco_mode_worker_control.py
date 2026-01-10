@@ -6,7 +6,7 @@ workers when eco mode activates/deactivates to save CPU.
 """
 
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from core.eco_mode import EcoModeManager, EcoModeState, EcoModeConfig
 

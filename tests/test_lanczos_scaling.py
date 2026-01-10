@@ -6,7 +6,7 @@ Includes regression test for Bug #10 (image tripling/distortion).
 """
 import pytest
 from PySide6.QtGui import QPixmap, QImage, QColor
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QSize
 from rendering.image_processor import ImageProcessor, PILLOW_AVAILABLE
 from rendering.display_modes import DisplayMode
 

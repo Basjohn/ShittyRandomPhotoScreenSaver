@@ -4,11 +4,10 @@ Tests for timezone support in clock widget.
 Tests timezone parsing, auto-detection, and display functionality.
 """
 import pytest
-from datetime import datetime, timezone, timedelta
+from datetime import timezone, timedelta
 from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import Qt
 
-from widgets.clock_widget import ClockWidget, TimeFormat, ClockPosition, PYTZ_AVAILABLE
+from widgets.clock_widget import ClockWidget, TimeFormat, PYTZ_AVAILABLE
 from widgets.timezone_utils import (
     get_local_timezone, get_common_timezones,  
     get_all_pytz_timezones, validate_timezone

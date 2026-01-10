@@ -5,7 +5,7 @@ Verifies that critical settings (transitions, widgets, sources, display)
 are immediately synced to persistent storage to prevent data loss.
 """
 import pytest
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 
 class TestSettingsCriticalSync:

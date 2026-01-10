@@ -1,6 +1,5 @@
 """Tests for particle transition and shader program."""
 import pytest
-from unittest.mock import MagicMock
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt

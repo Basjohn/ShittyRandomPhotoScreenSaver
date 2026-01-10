@@ -446,7 +446,6 @@ class EcoModeManager:
         # Restart workers that were running before eco mode
         if self._process_supervisor is not None and self._workers_were_running:
             try:
-                from core.process.types import WorkerType
                 
                 for worker_type, was_running in self._workers_were_running.items():
                     if was_running:
