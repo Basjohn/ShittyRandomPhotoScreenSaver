@@ -117,6 +117,16 @@ class ScreensaverEngine(QObject):
     image_changed = Signal(str)  # image path
     error_occurred = Signal(str)  # error message
     
+    # Class-level tracking for engine running state
+    _instance_running = False
+    _instance_lock = threading.Lock()
+    
+    @classmethod
+    def _is_engine_running(cls) -> bool:
+        """Check if any engine instance is currently running."""
+        with cls._instance_lock:
+            return cls._instance_running
+    
     def __init__(self):
         """Initialize screensaver engine."""
         super().__init__()
@@ -1472,6 +1482,11 @@ class ScreensaverEngine(QObject):
             
             # Transition to RUNNING state
             self._transition_state(EngineState.RUNNING)
+            
+            # Set class-level flag for widget perf logging
+            with self._instance_lock:
+                self.__class__._instance_running = True
+            
             self.started.emit()
             logger.info("Screensaver engine started")
             
@@ -1609,6 +1624,10 @@ class ScreensaverEngine(QObject):
                         )
                 except Exception as e:
                     logger.debug("[PERF] ImageCache summary logging failed: %s", e, exc_info=True)
+            
+            # Clear class-level flag for widget perf logging
+            with self._instance_lock:
+                self.__class__._instance_running = False
             
             # Transition to final state
             if not exit_app:

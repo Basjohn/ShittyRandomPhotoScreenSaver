@@ -107,7 +107,7 @@ class PresetDescriptionBox(QFrame):
         name_font = QFont(font_family, 14, QFont.Weight.Bold)
         self._name_label.setFont(name_font)
         
-        desc_font = QFont(font_family, 11)
+        desc_font = QFont(font_family, 11, QFont.Weight.Normal)
         self._description_label.setFont(desc_font)
     
     def _setup_style(self) -> None:
@@ -182,7 +182,7 @@ class PresetsTab(QScrollArea):
             "Choose a preset configuration or use Custom to keep your own settings."
         )
         subtitle.setWordWrap(True)
-        subtitle_font = QFont(font_family, 12)
+        subtitle_font = QFont(font_family, 12, QFont.Weight.Normal)
         subtitle.setFont(subtitle_font)
         subtitle.setStyleSheet("color: #aaaaaa;")
         main_layout.addWidget(subtitle)
@@ -212,7 +212,7 @@ class PresetsTab(QScrollArea):
                 continue
             
             label = QLabel(preset.name)
-            label_font = QFont(font_family, 11)
+            label_font = QFont(font_family, 11, QFont.Weight.Normal)
             label.setFont(label_font)
             label.setStyleSheet("color: #ffffff;")
             

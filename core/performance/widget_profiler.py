@@ -180,6 +180,16 @@ def _record_sample(
 ) -> None:
     if not is_perf_metrics_enabled():
         return
+    
+    # Suppress widget perf logging when engine is not running (e.g., settings dialog open)
+    # Check if we're in a screensaver context by looking for active engine state
+    try:
+        from engine.screensaver import ScreensaverEngine
+        if not ScreensaverEngine._is_engine_running():
+            return
+    except (ImportError, AttributeError):
+        # If we can't check engine state, allow logging (dev/test scenarios)
+        pass
 
     now = time.monotonic()
     key = (widget_name, metric_name, kind)
