@@ -22,8 +22,17 @@ from PySide6.QtWidgets import QWidget
 from core.media import media_controller as mc
 from rendering.display_widget import DisplayWidget
 from rendering.display_modes import DisplayMode
-from widgets.media_widget import MediaWidget
+from widgets.media_widget import MediaWidget, MediaPosition
 from widgets import media_widget as media_mod
+
+
+@pytest.fixture
+def mock_parent(qtbot):
+    """Create a parent widget for MediaWidget unit-style tests."""
+    parent = QWidget()
+    parent.resize(1920, 1080)
+    qtbot.addWidget(parent)
+    return parent
 
 
 class _DummyController(mc.BaseMediaController):
@@ -207,6 +216,16 @@ def _bootstrap_display_widget_for_tests(qt_app, qtbot, display: DisplayWidget, t
 
     qtbot.waitUntil(_widgets_ready, timeout=timeout)
     _wait_for_display_media_widget(qt_app, qtbot, display, timeout=timeout)
+
+
+def _create_test_artwork_bytes(size: int = 100) -> bytes:
+    """Create a small ARGB PNG blob for in-memory artwork tests."""
+    img = QImage(size, size, QImage.Format.Format_ARGB32)
+    img.fill(Qt.GlobalColor.red)
+    buf = QBuffer()
+    buf.open(QIODevice.OpenModeFlag.WriteOnly)
+    img.save(buf, "PNG")
+    return bytes(buf.data())
 
 
 @pytest.mark.qt
@@ -395,6 +414,156 @@ def test_media_widget_starts_fade_in_when_artwork_appears(qt_app, qtbot, thread_
     qtbot.waitUntil(lambda: getattr(w, "_artwork_anim", None) is not None, timeout=2000)
     assert getattr(w, "_artwork_anim", None) is not None
     assert 0.0 <= getattr(w, "_artwork_opacity", 1.0) <= 0.4
+
+
+@pytest.mark.qt
+class TestMediaWidgetArtworkLoading:
+    """Focused tests for MediaWidget artwork/diff gating internals."""
+
+    def test_artwork_decoded_on_first_track(self, mock_parent, qtbot):
+        widget = MediaWidget(mock_parent, position=MediaPosition.BOTTOM_LEFT)
+        qtbot.addWidget(widget)
+
+        info = mc.MediaTrackInfo(
+            title="Test Song",
+            artist="Test Artist",
+            album="Album",
+            state=mc.MediaPlaybackState.PLAYING,
+            artwork=_create_test_artwork_bytes(),
+        )
+
+        widget._update_display(info)
+        assert widget._artwork_pixmap is not None
+        assert not widget._artwork_pixmap.isNull()
+        assert widget._has_seen_first_track is True
+
+    def test_artwork_decoded_when_paused(self, mock_parent, qtbot):
+        widget = MediaWidget(mock_parent, position=MediaPosition.BOTTOM_LEFT)
+        qtbot.addWidget(widget)
+
+        info = mc.MediaTrackInfo(
+            title="Paused Song",
+            artist="Artist",
+            album="Album",
+            state=mc.MediaPlaybackState.PAUSED,
+            artwork=_create_test_artwork_bytes(),
+        )
+
+        widget._update_display(info)
+        assert widget._artwork_pixmap is not None
+        assert not widget._artwork_pixmap.isNull()
+
+    def test_first_track_sets_has_seen_flag(self, mock_parent, qtbot):
+        widget = MediaWidget(mock_parent, position=MediaPosition.BOTTOM_LEFT)
+        qtbot.addWidget(widget)
+        assert widget._has_seen_first_track is False
+
+        info = mc.MediaTrackInfo(title="Test", artist="Artist", state=mc.MediaPlaybackState.PLAYING)
+        widget._update_display(info)
+        assert widget._has_seen_first_track is True
+
+    def test_content_margins_set_on_first_track(self, mock_parent, qtbot):
+        widget = MediaWidget(mock_parent, position=MediaPosition.BOTTOM_LEFT)
+        qtbot.addWidget(widget)
+        info = mc.MediaTrackInfo(
+            title="Long Song Title",
+            artist="Artist",
+            state=mc.MediaPlaybackState.PLAYING,
+            artwork=_create_test_artwork_bytes(),
+        )
+
+        widget._update_display(info)
+        margins = widget.contentsMargins()
+        expected_right_margin = max(widget._artwork_size + 40, 60)
+        assert margins.right() == expected_right_margin
+        assert margins.bottom() == 40
+
+
+@pytest.mark.qt
+class TestMediaWidgetDiffGating:
+    def test_diff_gating_allows_updates_before_fade_complete(self, mock_parent, qtbot):
+        widget = MediaWidget(mock_parent, position=MediaPosition.BOTTOM_LEFT)
+        qtbot.addWidget(widget)
+
+        info = mc.MediaTrackInfo(title="Test Song", artist="Artist", state=mc.MediaPlaybackState.PLAYING)
+        widget._fade_in_completed = False
+        widget._has_seen_first_track = True
+        widget._last_track_identity = widget._compute_track_identity(info)
+
+        widget._update_display(info)
+        assert widget._last_info is not None
+
+    def test_diff_gating_skips_after_fade_complete(self, mock_parent, qtbot):
+        widget = MediaWidget(mock_parent, position=MediaPosition.BOTTOM_LEFT)
+        qtbot.addWidget(widget)
+
+        info = mc.MediaTrackInfo(title="Test Song", artist="Artist", state=mc.MediaPlaybackState.PLAYING)
+        widget._update_display(info)
+        widget._fade_in_completed = True
+        widget._last_track_identity = widget._compute_track_identity(info)
+
+        widget._update_display(info)
+        assert widget._fade_in_completed is True
+
+    def test_diff_gating_allows_track_change(self, mock_parent, qtbot):
+        widget = MediaWidget(mock_parent, position=MediaPosition.BOTTOM_LEFT)
+        qtbot.addWidget(widget)
+
+        info1 = mc.MediaTrackInfo(title="Song 1", artist="Artist 1", state=mc.MediaPlaybackState.PLAYING)
+        widget._update_display(info1)
+        widget._fade_in_completed = True
+
+        info2 = mc.MediaTrackInfo(title="Song 2", artist="Artist 2", state=mc.MediaPlaybackState.PLAYING)
+        widget._update_display(info2)
+        assert widget._last_track_identity == widget._compute_track_identity(info2)
+
+    def test_track_identity_includes_state(self, mock_parent, qtbot):
+        widget = MediaWidget(mock_parent, position=MediaPosition.BOTTOM_LEFT)
+        qtbot.addWidget(widget)
+
+        info_playing = mc.MediaTrackInfo(title="Test", artist="Artist", state=mc.MediaPlaybackState.PLAYING)
+        info_paused = mc.MediaTrackInfo(title="Test", artist="Artist", state=mc.MediaPlaybackState.PAUSED)
+
+        assert widget._compute_track_identity(info_playing) != widget._compute_track_identity(info_paused)
+
+
+@pytest.mark.qt
+class TestMediaWidgetIdleDetection:
+    def test_idle_detection_tracks_none_results(self, mock_parent, qtbot):
+        widget = MediaWidget(mock_parent, position=MediaPosition.BOTTOM_LEFT)
+        qtbot.addWidget(widget)
+        assert widget._consecutive_none_count == 0
+        assert widget._is_idle is False
+
+        for _ in range(5):
+            widget._update_display(None)
+
+        assert widget._consecutive_none_count == 5
+        assert widget._is_idle is False
+
+    def test_idle_mode_entered_after_threshold(self, mock_parent, qtbot):
+        widget = MediaWidget(mock_parent, position=MediaPosition.BOTTOM_LEFT)
+        qtbot.addWidget(widget)
+
+        for _ in range(widget._idle_threshold + 1):
+            widget._update_display(None)
+
+        assert widget._is_idle is True
+
+    def test_idle_mode_exits_on_track(self, mock_parent, qtbot):
+        widget = MediaWidget(mock_parent, position=MediaPosition.BOTTOM_LEFT)
+        qtbot.addWidget(widget)
+
+        for _ in range(widget._idle_threshold + 1):
+            widget._update_display(None)
+
+        assert widget._is_idle is True
+
+        info = mc.MediaTrackInfo(title="Song", artist="Artist", state=mc.MediaPlaybackState.PLAYING)
+        widget._update_display(info)
+
+        assert widget._is_idle is False
+        assert widget._consecutive_none_count == 0
 
 
 def test_media_widget_transport_delegates_to_controller():

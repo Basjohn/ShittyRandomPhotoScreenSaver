@@ -2,7 +2,7 @@
 
 **Purpose**: Canonical reference for all test modules, test cases, and testing procedures.  
 **Last Updated**: Jan 10, 2026 – Phase 1-2 implementation tests added  
-**Test Count**: 442+ collected tests across 23 test modules (3 new modules added)  
+**Test Count**: 1,348 collected tests across 90+ modules (per Jan 5 full-suite audit; grows as modules are added)  
 **Pass Rate**: 100% on Jan 10 run (Phase 1-2 tests passing)  
 
 ## Current Status: STABLE 
@@ -31,7 +31,8 @@ The test suite is now stable and can be relied upon for regression testing. All 
    - Preset validation and persistence
 
 **Total New Tests:** ~100 tests across 3 modules  
-**Coverage Increase:** +15-20% for core modules
+**Coverage Increase:** +15-20% for core modules  
+**Current Layout:** All pytest entrypoints, `pytest.ini`, and helper scripts now reside inside the `tests/` directory (wrapper = `tests/pytest.py`, config = `tests/pytest.ini`) to keep tooling co-located with the suite.
 
 ### Jan 5, 2026 – v2.0 Roadmap Phase 6 Integration Tests
 

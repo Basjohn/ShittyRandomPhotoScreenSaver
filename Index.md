@@ -6,7 +6,9 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - **Canonical Specification**: `Spec.md`
 - **Detailed Module Docs**: See the sections below (condensed from the former `Docs/INDEX.md`)
 - **Test Documentation**: `Docs/TestSuite.md`
-- **Active Audits**: `audits/FULL_CODEBASE_AUDIT_2026_01_06.md`
+- **Active Audits & Roadmaps**:
+  - `audits/FULL_CODEBASE_AUDIT_2026_01_06.md` (live checklist)
+  - `audits/Audit_Consolidation_Jan10_2026.md` (current phased plan; supersedes prior audit files)
 
 ## Refactor Status
 - audits/ARCHITECTURE_AND_MULTIPROCESSING_PLAN_2026.md (Main 2026 Execution Plan)
@@ -22,13 +24,6 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - Fixed control halo not appearing (double opacity application bug)
   - Fixed widgets appearing before compositor (added compositor ready signal)
   - 8 files modified across rendering and widgets
-- **audits/WidgetRefactorPlan.md** - ✅ **COMPLETED** (Jan 9, 2026)
-  - Widget profiling implementation (all widgets have `widget_paint_sample`)
-  - Media widget smart polling (diff gating, idle detection, 2500ms interval)
-  - Reddit API call timing with PERF gating
-  - Lifecycle system documented as dormant (legacy `start()` active)
-  - 79 lint errors fixed (`except Exception as e:` pattern)
-  - Performance verified: Clock avg=2.6ms, Weather avg=0.8ms, Media avg=1.8ms
 - **audits/FULL_CODEBASE_AUDIT_2026_01_06.md** - ✅ **LIVE CHECKLIST** (Jan 6, 2026)
   - Full codebase audit covering runtime, rendering, transitions, widgets, logging, threading, settings, tests, docs
   - P0-P3 prioritized tasks with difficulty/reward ratings
@@ -36,6 +31,10 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - Test coverage (transition endframe correctness, GL fallback policy, widget raise order, logging routing, render strategy)
   - VSync render thread lifecycle standardization
   - Cross-linking between Index.md, Docs/INDEX.md, and SPEC
+- **audits/Audit_Consolidation_Jan10_2026.md** - ✅ **PRIMARY ROADMAP**
+  - Collates remaining action items from Codebase Conflicts, Critical Regressions, Production Fixes, Static Element Paint Caching, Test Suite Improvements, and Widget Refactor audits.
+  - Provides phased plan (P0–P3) with effort/reward/risk ratings and acceptance criteria.
+  - All superseded audit documents now carry ARCHIVED headers pointing back to this file.
 - **audits/VISUALIZER_DEBUG.md** - Visualizer debugging reference
 - **Archived:** `bak/audits_archive_20260105/` - Completed audit documents (Full_Architectural_Audit_Jan_2026, Performance_Investigation, Solution_3, etc.)
 
