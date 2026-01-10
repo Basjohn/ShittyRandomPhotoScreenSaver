@@ -23,7 +23,7 @@ from PySide6.QtCore import QPoint, QRect, QSize, Signal
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import QLabel, QWidget
 
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.resources.manager import ResourceManager
 from core.resources.types import ResourceType
 from widgets.shadow_utils import apply_widget_shadow, configure_overlay_widget_attributes
@@ -475,6 +475,14 @@ class BaseOverlayWidget(QLabel):
     def set_shadow_config(self, config: Optional[Dict[str, Any]]) -> None:
         """Set shadow configuration."""
         self._shadow_config = config
+        if is_perf_metrics_enabled():
+            overlay = getattr(self, "_overlay_name", self.__class__.__name__)
+            logger.info(
+                "[PERF][OVERLAY] set_shadow_config overlay=%s has_config=%s has_faded_in=%s",
+                overlay,
+                "yes" if config else "no",
+                self._has_faded_in,
+            )
         if config and self._has_faded_in:
             apply_widget_shadow(self, config, has_background_frame=self._show_background, intense=self._intense_shadow)
     

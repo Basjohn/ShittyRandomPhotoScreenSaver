@@ -765,7 +765,6 @@ class ImageLoadingTest:
     
     def start(self, parent: QWidget, thread_manager: ThreadManager) -> None:
         try:
-            from PySide6.QtGui import QImage, QPixmap
             import os
             
             self._thread_manager = thread_manager

@@ -40,35 +40,32 @@ class PresetSlider(QSlider):
         self._setup_style()
     
     def _setup_style(self) -> None:
-        """Apply custom styling for the preset slider."""
+        """Apply custom styling for the preset slider to match app theme."""
         self.setStyleSheet("""
             QSlider::groove:horizontal {
-                border: 1px solid #555555;
+                border: 2px solid rgba(68, 68, 68, 1.0);
                 height: 8px;
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #3a3a3a, stop:1 #4a4a4a);
+                background: rgba(35, 35, 35, 1.0);
                 margin: 2px 0;
                 border-radius: 4px;
             }
             
             QSlider::handle:horizontal {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #ffffff, stop:1 #cccccc);
-                border: 1px solid #888888;
+                background: rgba(255, 255, 255, 0.95);
+                border: 2px solid rgba(255, 255, 255, 1.0);
                 width: 20px;
                 margin: -6px 0;
                 border-radius: 10px;
             }
             
             QSlider::handle:horizontal:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #ffffff, stop:1 #e0e0e0);
+                background: rgba(255, 255, 255, 1.0);
+                border: 2px solid rgba(153, 153, 153, 1.0);
             }
             
             QSlider::sub-page:horizontal {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #5a8a5a, stop:1 #4a7a4a);
-                border: 1px solid #3a6a3a;
+                background: rgba(58, 58, 58, 1.0);
+                border: 2px solid rgba(102, 102, 102, 1.0);
                 height: 8px;
                 border-radius: 4px;
             }

@@ -24,7 +24,6 @@ try:
 except ImportError:
     gl = None
 
-from core.logging.logger import is_perf_metrics_enabled
 from transitions.slide_transition import SlideDirection
 from transitions.wipe_transition import _compute_wipe_region
 

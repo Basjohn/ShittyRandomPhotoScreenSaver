@@ -1211,7 +1211,7 @@ class ClockWidget(BaseOverlayWidget):
 
             # Timezone abbreviation rendered below the analogue clock, centred horizontally.
             if self._show_timezone and self._timezone_abbrev:
-                tz_font = QFont(self._font_family, tz_font_size)
+                tz_font = QFont(self._font_family, tz_font_size, QFont.Weight.Bold)
                 fb_painter.setFont(tz_font)
                 tz_metrics = fb_painter.fontMetrics()
                 tz_height = tz_metrics.height()

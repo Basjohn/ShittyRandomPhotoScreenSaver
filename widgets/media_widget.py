@@ -30,7 +30,7 @@ from core.media.media_controller import (
 )
 from core.threading.manager import ThreadManager
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
-from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile, draw_rounded_rect_with_shadow
+from widgets.shadow_utils import ShadowFadeProfile, draw_rounded_rect_with_shadow
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 from utils.text_utils import smart_title_case
 
@@ -120,14 +120,6 @@ class MediaWidget(BaseOverlayWidget):
         # Layout/controls behaviour
         self._show_controls: bool = True
 
-        # Widget-level fade state for the first time it becomes visible.
-        # Subsequent track changes update in-place so the card and controls
-        # remain perfectly stable.
-
-        # Shared shadow configuration, passed in from DisplayWidget so we
-        # can re-attach the global drop shadow after each fade.
-        self._shadow_config = None
-
         # Optional Spotify-style brand logo used when album artwork is absent.
         self._brand_pixmap: Optional[QPixmap] = self._load_brand_pixmap()
 
@@ -147,6 +139,7 @@ class MediaWidget(BaseOverlayWidget):
         self._consecutive_none_count: int = 0
         self._idle_threshold: int = 12  # ~30s at 2500ms interval before entering idle
         self._is_idle: bool = False
+        self._idle_poll_interval: int = 5000  # Poll every 5s when idle to detect Spotify opening
         
         # Adaptive poll interval: 1000ms → 2000ms → 2500ms
         # Faster initial detection, then slow down for efficiency
@@ -327,11 +320,6 @@ class MediaWidget(BaseOverlayWidget):
     def set_widget_manager(self, widget_manager: "WidgetManager") -> None:
         self._widget_manager = widget_manager
     
-    def set_shadow_config(self, config) -> None:
-        """Store shared shadow configuration for post-fade drop shadows."""
-
-        self._shadow_config = config
-
     # ------------------------------------------------------------------
     # Smart Polling Helpers
     # ------------------------------------------------------------------
@@ -379,7 +367,8 @@ class MediaWidget(BaseOverlayWidget):
         if not self._ensure_thread_manager("MediaWidget._ensure_timer"):
             return
         # Adaptive polling: start at 1000ms, progress to 2000ms, then 2500ms
-        interval = self._poll_intervals[self._current_poll_stage]
+        # When idle, use slower 5s interval to detect Spotify opening
+        interval = self._idle_poll_interval if self._is_idle else self._poll_intervals[self._current_poll_stage]
         handle = create_overlay_timer(self, interval, self._refresh, description="MediaWidget smart poll")
         self._update_timer_handle = handle
         try:
@@ -480,6 +469,19 @@ class MediaWidget(BaseOverlayWidget):
                     parent._position_spotify_volume()
                 except Exception as e:
                     logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+    
+    def _complete_hide_sequence(self) -> None:
+        """Complete the hide sequence after fade out animation.
+        
+        Called as callback after fade out completes to hide widget and
+        notify Spotify-related widgets.
+        """
+        try:
+            self.hide()
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+        # Notify parent to hide Spotify-related widgets
+        self._notify_spotify_widgets_visibility()
     
     def _notify_spotify_widgets_visibility(self) -> None:
         """Notify Spotify-related widgets to sync their visibility with this widget.
@@ -747,11 +749,11 @@ class MediaWidget(BaseOverlayWidget):
         if not self._enabled:
             return
         
-        # Smart polling: skip refresh if in idle mode (Spotify closed)
+        # Smart polling: when idle, still poll but at slower rate to detect Spotify opening
+        # This allows the widget to spawn when Spotify opens
         if self._is_idle:
             if is_perf_metrics_enabled():
-                logger.debug("[PERF] Media widget poll skipped (idle mode)")
-            return
+                logger.debug("[PERF] Media widget idle poll (detecting Spotify open)")
         
         if self._thread_manager is not None:
             if is_perf_metrics_enabled():
@@ -876,6 +878,9 @@ class MediaWidget(BaseOverlayWidget):
                 # Reset to fast polling when resuming from idle
                 if was_idle:
                     self._reset_poll_stage()
+                    # Update timer interval from idle (5s) to fast (1s)
+                    self._stop_timer()
+                    self._ensure_timer()
             
             # Adaptive polling: advance to slower interval after 2 successful polls
             self._polls_at_current_stage += 1
@@ -910,20 +915,33 @@ class MediaWidget(BaseOverlayWidget):
                 else:
                     logger.info("[MEDIA_WIDGET] Entering idle mode after %d consecutive empty polls", 
                                self._consecutive_none_count)
+                # Update timer interval from active (2.5s) to idle (5s)
+                self._stop_timer()
+                self._ensure_timer()
             
-            # No active media session (e.g. Spotify not playing) – hide widget
+            # No active media session (e.g. Spotify not playing) – hide widget with graceful fade
             last_vis = self._telemetry_last_visibility
             if last_vis or last_vis is None:
                 logger.info("[MEDIA_WIDGET] No active media session; hiding media card")
             self._artwork_pixmap = None
             self._scaled_artwork_cache = None
             self._scaled_artwork_cache_key = None
-            try:
-                self.hide()
-            except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-            # Notify parent to hide Spotify-related widgets
-            self._notify_spotify_widgets_visibility()
+            
+            # Graceful fade out instead of instant hide
+            if self.isVisible():
+                try:
+                    from widgets.shadow_utils import ShadowFadeProfile
+                    ShadowFadeProfile.start_fade_out(
+                        self,
+                        duration_ms=800,
+                        on_complete=lambda: self._complete_hide_sequence()
+                    )
+                except Exception as e:
+                    logger.debug("[MEDIA_WIDGET] Fade out failed, hiding instantly: %s", e)
+                    self._complete_hide_sequence()
+            else:
+                self._complete_hide_sequence()
+            
             self._telemetry_last_visibility = False
             return
 
@@ -1073,8 +1091,6 @@ class MediaWidget(BaseOverlayWidget):
                 self._start_widget_fade_in(1500)
                 self._notify_spotify_widgets_visibility()
                 self._telemetry_last_visibility = True
-                # Mark fade-in as completed so future updates can be diff-gated
-                self._fade_in_completed = True
             if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
                 try:
                     parent.request_overlay_fade_sync("media", _starter)
@@ -1178,10 +1194,13 @@ class MediaWidget(BaseOverlayWidget):
             else:
                 _starter()
         else:
-            try:
-                self.show()
-            except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+            # Widget already visible - just ensure it's shown (no-op if already visible)
+            # Don't call show() repeatedly as it can trigger shadow reapplication
+            if not self.isVisible():
+                try:
+                    self.show()
+                except Exception as e:
+                    logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             # Notify Spotify widgets in case they need to sync visibility
             self._notify_spotify_widgets_visibility()
             self._telemetry_last_visibility = True
@@ -1715,6 +1734,8 @@ class MediaWidget(BaseOverlayWidget):
 
     def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:
         """Fade the entire widget in, then attach the global drop shadow."""
+        # Reset fade completion flag so re-entrancy (wake from idle) reapplies the shadow.
+        self._fade_in_completed = False
         # CRITICAL: Position the widget BEFORE showing to prevent teleport flash
         # The widget starts at (0,0) and must be moved to its correct position
         # before becoming visible to avoid a brief flash in the wrong location.
@@ -1739,6 +1760,7 @@ class MediaWidget(BaseOverlayWidget):
                     "[MEDIA] Failed to attach shadow in no-fade path",
                     exc_info=True,
                 )
+            self._handle_fade_in_complete()
             return
 
         try:
@@ -1746,6 +1768,7 @@ class MediaWidget(BaseOverlayWidget):
                 self,
                 self._shadow_config,
                 has_background_frame=self._show_background,
+                on_finished=self._handle_fade_in_complete,
             )
         except Exception:
             logger.debug(
@@ -1756,18 +1779,24 @@ class MediaWidget(BaseOverlayWidget):
                 self.show()
             except Exception as e:
                 logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-            if self._shadow_config is not None:
-                try:
-                    apply_widget_shadow(
-                        self,
-                        self._shadow_config,
-                        has_background_frame=self._show_background,
-                    )
-                except Exception:
-                    logger.debug(
-                        "[MEDIA] Failed to apply widget shadow in fallback path",
-                        exc_info=True,
-                    )
+            self._handle_fade_in_complete()
+
+    def _handle_fade_in_complete(self) -> None:
+        """Mark fade-in complete and apply shared drop shadow."""
+        if self._fade_in_completed:
+            return
+        self._fade_in_completed = True
+        if is_perf_metrics_enabled():
+            has_config = bool(self._shadow_config)
+            logger.info(
+                "[PERF][MEDIA_WIDGET] Fade-in complete (shadow_config=%s, show_background=%s)",
+                "yes" if has_config else "no",
+                self._show_background,
+            )
+        try:
+            self.on_fade_complete()
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
 
     def _start_artwork_fade_in(self) -> None:
         if self._artwork_anim is not None:

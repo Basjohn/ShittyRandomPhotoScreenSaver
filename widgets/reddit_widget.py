@@ -388,9 +388,6 @@ class RedditWidget(BaseOverlayWidget):
     def set_thread_manager(self, thread_manager: ThreadManager) -> None:
         self._thread_manager = thread_manager
 
-    def set_shadow_config(self, config: Optional[Dict[str, Any]]) -> None:
-        self._shadow_config = config
-
     def set_subreddit(self, subreddit: str) -> None:
         self._subreddit = self._normalise_subreddit(subreddit)
         # Refresh immediately on change

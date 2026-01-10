@@ -2631,6 +2631,17 @@ class ScreensaverEngine(QObject):
         """Handle settings request (S key)."""
         logger.info("Settings requested - pausing screensaver and opening config")
         
+        # Wake media widget from idle mode when returning from settings
+        # This ensures Spotify detection resumes if user opened Spotify while in settings
+        try:
+            if self.display_manager:
+                for display in self.display_manager.get_displays():
+                    media_widget = getattr(display, 'media_widget', None)
+                    if media_widget and hasattr(media_widget, 'wake_from_idle'):
+                        media_widget.wake_from_idle()
+        except Exception as e:
+            logger.debug("[ENGINE] Failed to wake media widget from idle: %s", e)
+        
         # Set settings dialog active flag FIRST - this prevents halo from showing
         try:
             from rendering.multi_monitor_coordinator import get_coordinator

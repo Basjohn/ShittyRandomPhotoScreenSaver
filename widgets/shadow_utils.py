@@ -15,11 +15,12 @@ subtle drop shadows that improve readability on varied backgrounds.
 """
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any, Mapping, Callable, Optional
 
 from PySide6.QtWidgets import QWidget, QGraphicsDropShadowEffect, QGraphicsOpacityEffect
 from PySide6.QtCore import QVariantAnimation, QEasingCurve, Qt, QRect
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
+from shiboken6 import Shiboken
 
 from core.logging.logger import get_logger, is_verbose_logging
 
@@ -132,6 +133,15 @@ def apply_widget_shadow(
             widget,
         )
         return
+    
+    # Clear any existing shadow effect to prevent doubling artifacts
+    if isinstance(existing_effect, QGraphicsDropShadowEffect):
+        try:
+            widget.setGraphicsEffect(None)
+        except Exception as e:
+            logger.debug("[SHADOWS] Exception suppressed: %s", e)
+        finally:
+            existing_effect = None
 
     # Base colour (usually black) with optional alpha from config.
     color_data = config.get("color", [0, 0, 0, 255])
@@ -255,20 +265,27 @@ class ShadowFadeProfile:
         if not enabled:
             return
 
+        # CRITICAL: Always create a fresh effect to avoid shadow doubling
+        # Reusing an existing effect can cause the old shadow to persist
+        # while the new one fades in, creating a "double shadow" artifact
         existing_effect = widget.graphicsEffect()
         if isinstance(existing_effect, QGraphicsDropShadowEffect):
-            effect = existing_effect
-        else:
-            effect = QGraphicsDropShadowEffect(widget)
+            # Clear the old effect first to prevent doubling
             try:
-                widget.setGraphicsEffect(effect)
-            except Exception:
-                logger.debug(
-                    "[SHADOW_FADE] Failed to attach drop shadow effect for %r",
-                    widget,
-                    exc_info=True,
-                )
-                return
+                widget.setGraphicsEffect(None)
+            except Exception as e:
+                logger.debug("[SHADOW] Exception suppressed: %s", e)
+        
+        effect = QGraphicsDropShadowEffect(widget)
+        try:
+            widget.setGraphicsEffect(effect)
+        except Exception:
+            logger.debug(
+                "[SHADOW_FADE] Failed to attach drop shadow effect for %r",
+                widget,
+                exc_info=True,
+            )
+            return
 
         color_data = config.get("color", [0, 0, 0, 255])
         try:
@@ -356,6 +373,7 @@ class ShadowFadeProfile:
         config: Mapping[str, Any] | None,
         *,
         has_background_frame: bool,
+        on_finished: Optional[Callable[[], None]] = None,
     ) -> None:
         """Fade ``widget`` in, then apply the shared drop shadow.
 
@@ -478,6 +496,11 @@ class ShadowFadeProfile:
                             widget,
                             exc_info=True,
                         )
+                if on_finished is not None:
+                    try:
+                        on_finished()
+                    except Exception as e:
+                        logger.debug("[SHADOW] Exception suppressed in on_finished: %s", e)
 
             anim.finished.connect(_on_finished)
             setattr(widget, "_shadowfade_anim", anim)
@@ -491,6 +514,92 @@ class ShadowFadeProfile:
             except Exception as e:
                 logger.debug("[SHADOW] Exception suppressed: %s", e)
             cls.attach_shadow(widget, cfg, has_background_frame=has_background_frame)
+            if on_finished is not None:
+                try:
+                    on_finished()
+                except Exception as e:
+                    logger.debug("[SHADOW] Exception suppressed in on_finished: %s", e)
+
+    @classmethod
+    def start_fade_out(
+        cls,
+        widget: QWidget,
+        *,
+        duration_ms: int = 800,
+        on_complete: Optional[Callable[[], None]] = None,
+    ) -> None:
+        """Fade ``widget`` out and invoke ``on_complete`` when finished."""
+
+        try:
+            if not Shiboken.isValid(widget):
+                if on_complete is not None:
+                    on_complete()
+                return
+
+            if duration_ms <= 0:
+                try:
+                    widget.hide()
+                except Exception as e:
+                    logger.debug("[SHADOW] Exception suppressed: %s", e)
+                if on_complete is not None:
+                    on_complete()
+                return
+
+            existing_effect = widget.graphicsEffect()
+            if isinstance(existing_effect, QGraphicsDropShadowEffect):
+                try:
+                    widget.setGraphicsEffect(None)
+                except Exception as e:
+                    logger.debug("[SHADOW] Exception suppressed: %s", e)
+
+            opacity_effect = QGraphicsOpacityEffect(widget)
+            opacity_effect.setOpacity(1.0)
+            widget.setGraphicsEffect(opacity_effect)
+
+            anim = QVariantAnimation(widget)
+            anim.setDuration(max(0, int(duration_ms)))
+            anim.setStartValue(1.0)
+            anim.setEndValue(0.0)
+            try:
+                anim.setEasingCurve(QEasingCurve.InOutCubic)
+            except Exception as e:
+                logger.debug("[SHADOW] Exception suppressed: %s", e)
+
+            def _on_value_changed(value: float) -> None:
+                try:
+                    opacity_effect.setOpacity(max(0.0, min(1.0, float(value))))
+                except Exception as e:
+                    logger.debug("[SHADOW] Exception suppressed: %s", e)
+
+            def _on_finished() -> None:
+                try:
+                    widget.setGraphicsEffect(None)
+                except Exception as e:
+                    logger.debug("[SHADOW] Exception suppressed: %s", e)
+                try:
+                    widget.hide()
+                except Exception as e:
+                    logger.debug("[SHADOW] Exception suppressed: %s", e)
+                if on_complete is not None:
+                    try:
+                        on_complete()
+                    except Exception as e:
+                        logger.debug("[SHADOW] Exception suppressed in on_complete: %s", e)
+
+            anim.valueChanged.connect(_on_value_changed)
+            anim.finished.connect(_on_finished)
+            anim.start()
+        except Exception as e:
+            logger.debug("[SHADOW] Exception suppressed: %s", e)
+            try:
+                widget.hide()
+            except Exception as inner:
+                logger.debug("[SHADOW] Exception suppressed: %s", inner)
+            if on_complete is not None:
+                try:
+                    on_complete()
+                except Exception as inner:
+                    logger.debug("[SHADOW] Exception suppressed in on_complete: %s", inner)
 
 
 # ---------------------------------------------------------------------------

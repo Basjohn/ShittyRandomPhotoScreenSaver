@@ -129,6 +129,7 @@ class ScreensaverContextMenu(QMenu):
         hard_exit_enabled: bool = False,
         is_mc_build: bool = False,
         always_on_top: bool = False,
+        random_enabled: bool = False,
     ):
         super().__init__(parent)
         
@@ -140,6 +141,7 @@ class ScreensaverContextMenu(QMenu):
             "Blinds", "Crumble", "Particle",
         ]
         self._current_transition = current_transition
+        self._random_enabled = random_enabled
         self._dimming_enabled = dimming_enabled
         self._hard_exit_enabled = hard_exit_enabled
         
@@ -176,6 +178,15 @@ class ScreensaverContextMenu(QMenu):
         self._transition_menu = QMenu("⟳  Change Transition", self)
         self._transition_menu.setStyleSheet(SUBMENU_STYLE)
         self._transition_actions: dict[str, QAction] = {}
+        
+        # Add 'Random' option at the top
+        random_action = self._transition_menu.addAction("Random")
+        random_action.setCheckable(True)
+        random_action.setChecked(self._random_enabled)
+        random_action.triggered.connect(lambda checked: self._on_transition_selected("Random"))
+        self._transition_actions["Random"] = random_action
+        
+        self._transition_menu.addSeparator()
         
         for trans_name in self._transition_types:
             action = self._transition_menu.addAction(trans_name)
@@ -225,10 +236,24 @@ class ScreensaverContextMenu(QMenu):
         """Handle transition selection."""
         # Update checkmarks
         for trans_name, action in self._transition_actions.items():
-            action.setChecked(trans_name == name)
+            if trans_name == "Random":
+                action.setChecked(name == "Random")
+            else:
+                action.setChecked(not self._random_enabled and trans_name == name)
         self._current_transition = name
+        self._random_enabled = (name == "Random")
         self.transition_selected.emit(name)
         logger.debug("Context menu: transition selected: %s", name)
+    
+    def update_transition_state(self, name: str, random_enabled: bool) -> None:
+        """Sync menu checkmarks with current transition and random mode."""
+        self._random_enabled = random_enabled
+        self._current_transition = name
+        for trans_name, action in self._transition_actions.items():
+            if trans_name == "Random":
+                action.setChecked(random_enabled)
+            else:
+                action.setChecked(not random_enabled and trans_name == name)
     
     def _on_dimming_toggled(self) -> None:
         """Handle dimming toggle."""
@@ -244,9 +269,7 @@ class ScreensaverContextMenu(QMenu):
     
     def update_current_transition(self, name: str) -> None:
         """Update the currently selected transition."""
-        self._current_transition = name
-        for trans_name, action in self._transition_actions.items():
-            action.setChecked(trans_name == name)
+        self.update_transition_state(name, self._random_enabled)
     
     def update_dimming_state(self, enabled: bool) -> None:
         """Update the dimming checkbox state."""

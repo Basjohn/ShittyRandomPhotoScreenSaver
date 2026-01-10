@@ -32,6 +32,9 @@ archive/
 docs/
 *.log
 audits/
+htmlcov/
+.coverage
+.coverage.*
 
 # IDE and editor files
 .vscode/

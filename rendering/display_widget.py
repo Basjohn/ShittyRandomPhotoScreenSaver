@@ -212,6 +212,9 @@ class DisplayWidget(QWidget):
         self.screen_index = screen_index
         self.display_mode = display_mode
         self.settings_manager = settings_manager
+        self._transition_fallback_type: str = "Crossfade"
+        self._transition_random_enabled: bool = False
+        self._settings_listener_connected: bool = False
         self.current_pixmap: Optional[QPixmap] = None
         self.current_image_path: Optional[str] = None
         self.previous_pixmap: Optional[QPixmap] = None
@@ -335,6 +338,14 @@ class DisplayWidget(QWidget):
             )
         except Exception:
             logger.debug("[DISPLAY_WIDGET] Failed to create TransitionController", exc_info=True)
+
+        self._refresh_transition_state_from_settings()
+        if self.settings_manager:
+            try:
+                self.settings_manager.settings_changed.connect(self._on_settings_value_changed)
+                self._settings_listener_connected = True
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Failed to connect settings listener: %s", e)
         
         # EcoModeManager for MC builds (v2.1 integration)
         self._eco_mode_manager: Optional[EcoModeManager] = None
@@ -656,6 +667,7 @@ class DisplayWidget(QWidget):
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
     def _prewarm_context_menu(self) -> None:
+        """Create the context menu ahead of time to avoid first-click lag."""
         try:
             if getattr(self, "_context_menu_prewarmed", False):
                 return
@@ -667,26 +679,24 @@ class DisplayWidget(QWidget):
             return
 
         try:
-            current_transition = "Crossfade"
-            if self.settings_manager:
-                trans_cfg = self.settings_manager.get("transitions", {})
-                if isinstance(trans_cfg, dict):
-                    current_transition = trans_cfg.get("type", "Crossfade")
+            current_transition, random_enabled = self._refresh_transition_state_from_settings()
             hard_exit = self._is_hard_exit_enabled()
             dimming_enabled = False
             if self.settings_manager:
                 dimming_enabled = SettingsManager.to_bool(
-                    self.settings_manager.get("accessibility.dimming.enabled", False),
-                    False,
+                    self.settings_manager.get("accessibility.dimming.enabled", False), False
                 )
+
             self._context_menu = ScreensaverContextMenu(
                 parent=self,
                 current_transition=current_transition,
+                random_enabled=random_enabled,
                 dimming_enabled=dimming_enabled,
                 hard_exit_enabled=hard_exit,
                 is_mc_build=self._is_mc_build,
                 always_on_top=self._always_on_top,
             )
+            # Connect signals once during construction
             self._context_menu.previous_requested.connect(self.previous_requested.emit)
             self._context_menu.next_requested.connect(self.next_requested.emit)
             self._context_menu.transition_selected.connect(self._on_context_transition_selected)
@@ -701,18 +711,51 @@ class DisplayWidget(QWidget):
             except Exception as e:
                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
-            # Force Qt to polish/apply stylesheet now.
             try:
                 self._context_menu.ensurePolished()
             except Exception as e:
                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+
+            self._context_menu_prewarmed = True
         except Exception:
             logger.debug("Failed to prewarm context menu", exc_info=True)
-        finally:
-            try:
-                self._context_menu_prewarmed = True
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+    
+    def _refresh_transition_state_from_settings(self) -> tuple[str, bool]:
+        """Load transition type/random flag from settings and cache local state."""
+        fallback = self._transition_fallback_type or "Crossfade"
+        random_enabled = self._transition_random_enabled
+        if not self.settings_manager:
+            return fallback, random_enabled
+        
+        try:
+            trans_cfg = self.settings_manager.get("transitions", {})
+            if not isinstance(trans_cfg, dict):
+                trans_cfg = {}
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Failed to read transitions config: %s", e)
+            trans_cfg = {}
+        
+        next_type = trans_cfg.get("type", fallback) or fallback
+        if not isinstance(next_type, str):
+            next_type = fallback or "Crossfade"
+        else:
+            next_type = next_type.strip() or "Crossfade"
+        
+        next_random = SettingsManager.to_bool(trans_cfg.get("random_always", False), False)
+        self._transition_fallback_type = next_type
+        self._transition_random_enabled = next_random
+        return next_type, next_random
+    
+    def _on_settings_value_changed(self, key: str, value) -> None:
+        """Respond to SettingsManager updates."""
+        try:
+            if key != "transitions":
+                return
+            menu_name, random_enabled = self._refresh_transition_state_from_settings()
+            if self._context_menu is not None:
+                self._context_menu.update_transition_state(menu_name, random_enabled)
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Failed to handle transitions change: %s", e, exc_info=True)
 
     def _mark_all_overlays_ready(self, overlays: Iterable[str], stage: str) -> None:
         """Mark overlays as ready when running without GL support."""
@@ -1995,6 +2038,13 @@ class DisplayWidget(QWidget):
         """Ensure active transitions are stopped when the widget is destroyed."""
         # NOTE: Deferred Reddit URL opening is now handled by DisplayManager.cleanup()
         # to ensure it happens AFTER windows are hidden but BEFORE QApplication.quit()
+        if self.settings_manager and self._settings_listener_connected:
+            try:
+                self.settings_manager.settings_changed.disconnect(self._on_settings_value_changed)
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+            finally:
+                self._settings_listener_connected = False
         
         # Phase 5: Unregister from MultiMonitorCoordinator
         if self._screen is not None:
@@ -2880,12 +2930,7 @@ class DisplayWidget(QWidget):
     def _show_context_menu(self, global_pos) -> None:
         """Show the context menu at the given global position."""
         try:
-            # Get current transition from settings
-            current_transition = "Crossfade"
-            if self.settings_manager:
-                trans_cfg = self.settings_manager.get("transitions", {})
-                if isinstance(trans_cfg, dict):
-                    current_transition = trans_cfg.get("type", "Crossfade")
+            current_transition, random_enabled = self._refresh_transition_state_from_settings()
             
             hard_exit = self._is_hard_exit_enabled()
             
@@ -2898,9 +2943,11 @@ class DisplayWidget(QWidget):
             
             # Create menu if needed (lazy init for performance)
             if self._context_menu is None:
+                current_transition, random_enabled = self._refresh_transition_state_from_settings()
                 self._context_menu = ScreensaverContextMenu(
                     parent=self,
                     current_transition=current_transition,
+                    random_enabled=random_enabled,
                     dimming_enabled=dimming_enabled,
                     hard_exit_enabled=hard_exit,
                     is_mc_build=self._is_mc_build,
@@ -2944,7 +2991,8 @@ class DisplayWidget(QWidget):
                         logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             else:
                 # Update state before showing
-                self._context_menu.update_current_transition(current_transition)
+                current_transition, random_enabled = self._refresh_transition_state_from_settings()
+                self._context_menu.update_transition_state(current_transition, random_enabled)
                 self._context_menu.update_dimming_state(dimming_enabled)
                 self._context_menu.update_hard_exit_state(hard_exit)
                 self._context_menu.update_always_on_top_state(self._always_on_top)
@@ -3061,11 +3109,33 @@ class DisplayWidget(QWidget):
                 trans_cfg = self.settings_manager.get("transitions", {})
                 if not isinstance(trans_cfg, dict):
                     trans_cfg = {}
-                trans_cfg["type"] = name
-                trans_cfg["random_always"] = False
+                
+                # Handle 'Random' selection - sync with random_always checkbox
+                if name == "Random":
+                    trans_cfg["random_always"] = True
+                    # Keep current type as fallback
+                    logger.info("Context menu: random transitions enabled")
+                    self._transition_random_enabled = True
+                else:
+                    trans_cfg["type"] = name
+                    trans_cfg["random_always"] = False
+                    logger.info("Context menu: transition changed to %s", name)
+                    self._transition_random_enabled = False
+                    self._transition_fallback_type = name
+
+                # Clear any cached random selections when toggling modes
+                try:
+                    self.settings_manager.remove("transitions.random_choice")
+                    self.settings_manager.remove("transitions.last_random_choice")
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Failed clearing cached random choices: %s", e)
+                
                 self.settings_manager.set("transitions", trans_cfg)
                 self.settings_manager.save()
-                logger.info("Context menu: transition changed to %s", name)
+
+                if self._context_menu is not None:
+                    menu_name = "Random" if self._transition_random_enabled else self._transition_fallback_type
+                    self._context_menu.update_transition_state(menu_name, self._transition_random_enabled)
         except Exception:
             logger.debug("Failed to set transition from context menu", exc_info=True)
     
