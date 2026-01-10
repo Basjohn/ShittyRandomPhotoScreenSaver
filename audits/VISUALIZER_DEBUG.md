@@ -138,7 +138,7 @@ This harness is now authoritative; do **not** tweak `_fft_to_bars` without runni
 1. Run `python main.py --debug` with Spotify playing for at least 10 s.
 2. Inspect `logs/screensaver_spotify_vis.log` for bar snapshots — ridge should peak at bars 4/10, bars 5/9 trimmed, centre valley visible during drops.
 3. Execute `python tests/test_visualizer_distribution.py`.
-4. Optional: run the legacy unit suite `python pytest.py tests/test_spotify_visualizer_widget.py -vv`.
+4. Optional: run the legacy unit suite `python tests/pytest.py tests/test_spotify_visualizer_widget.py -vv`.
 
 If synthetic and log sections both PASS, the visualizer is safe to merge/deploy.
 

@@ -3,7 +3,7 @@
 Simulates a realistic screensaver session with multiple transitions
 and measures dt_max to detect UI thread blocking.
 
-Run with: python pytest.py tests/test_frame_timing_workload.py -v
+Run with: python tests/pytest.py tests/test_frame_timing_workload.py -v
 """
 from __future__ import annotations
 

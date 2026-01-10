@@ -1051,15 +1051,11 @@ class MediaWidget(BaseOverlayWidget):
         # artwork is captured on the very first poll. Without this, the first
         # update returns early and artwork is never decoded, causing blank
         # artwork on startup.
-        artwork_bytes = getattr(info, "artwork", None)
-        if isinstance(artwork_bytes, (bytes, bytearray)) and artwork_bytes:
-            try:
-                pm = QPixmap()
-                if pm.loadFromData(bytes(artwork_bytes)) and not pm.isNull():
-                    self._artwork_pixmap = pm
-                    logger.debug("[MEDIA_WIDGET] Artwork decoded: %dx%d", pm.width(), pm.height())
-            except Exception:
-                logger.debug("[MEDIA] Failed to decode artwork pixmap", exc_info=True)
+        artwork_pm = self._decode_artwork_pixmap(getattr(info, "artwork", None))
+        if artwork_pm is not None:
+            self._artwork_pixmap = artwork_pm
+            if is_verbose_logging():
+                logger.debug("[MEDIA_WIDGET] Artwork decoded: %dx%d", artwork_pm.width(), artwork_pm.height())
 
         # CRITICAL: Set content margins BEFORE the first-track early return so
         # that the text layout accounts for artwork space. Without this, the
@@ -1113,45 +1109,64 @@ class MediaWidget(BaseOverlayWidget):
         prev_pm = self._artwork_pixmap
         had_artwork_before = prev_pm is not None and not prev_pm.isNull()
         self._artwork_pixmap = None
-        artwork_bytes = getattr(info, "artwork", None)
-        if isinstance(artwork_bytes, (bytes, bytearray)) and artwork_bytes:
-            try:
-                pm = QPixmap()
-                if pm.loadFromData(bytes(artwork_bytes)) and not pm.isNull():
-                    self._artwork_pixmap = pm
+        artwork_pm = self._decode_artwork_pixmap(getattr(info, "artwork", None))
+        if artwork_pm is not None:
+            self._artwork_pixmap = artwork_pm
 
-                    # Fade in the artwork whenever it appears for the first
-                    # time or when the logical track metadata changes. This
-                    # keeps the card, header and controls perfectly stable
-                    # while giving album art a gentle dissolve on updates.
-                    should_fade_artwork = False
-                    if not had_artwork_before:
+            # Fade in artwork whenever it appears for the first time or when metadata changes.
+            should_fade_artwork = False
+            if not had_artwork_before:
+                should_fade_artwork = True
+            else:
+                try:
+                    if prev_info is None:
                         should_fade_artwork = True
                     else:
-                        try:
-                            if prev_info is None:
-                                should_fade_artwork = True
-                            else:
-                                def _norm(s: Optional[str]) -> str:
-                                    return (s or "").strip()
+                        def _norm(s: Optional[str]) -> str:
+                            return (s or "").strip()
 
-                                if (
-                                    _norm(getattr(prev_info, "title", None))
-                                    != _norm(getattr(info, "title", None))
-                                    or _norm(getattr(prev_info, "artist", None))
-                                    != _norm(getattr(info, "artist", None))
-                                    or _norm(getattr(prev_info, "album", None))
-                                    != _norm(getattr(info, "album", None))
-                                ):
-                                    should_fade_artwork = True
-                        except Exception as e:
-                            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-                            should_fade_artwork = False
+                        if (
+                            _norm(getattr(prev_info, "title", None))
+                            != _norm(getattr(info, "title", None))
+                            or _norm(getattr(prev_info, "artist", None))
+                            != _norm(getattr(info, "artist", None))
+                            or _norm(getattr(prev_info, "album", None))
+                            != _norm(getattr(info, "album", None))
+                        ):
+                            should_fade_artwork = True
+                except Exception as e:
+                    logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+                    should_fade_artwork = False
 
-                    if should_fade_artwork:
-                        self._start_artwork_fade_in()
-            except Exception:
-                logger.debug("[MEDIA] Failed to decode artwork pixmap", exc_info=True)
+            if should_fade_artwork:
+                self._start_artwork_fade_in()
+
+    def _decode_artwork_pixmap(self, artwork: Optional[bytes]) -> Optional[QPixmap]:
+        """Decode artwork bytes into a pixmap, ensuring non-zero dimensions."""
+        if not artwork:
+            return None
+        try:
+            data = bytes(artwork)
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Invalid artwork payload: %s", e)
+            return None
+
+        pm = QPixmap()
+        try:
+            if not pm.loadFromData(data):
+                return None
+        except MemoryError:
+            logger.error("[MEDIA_WIDGET] Out of memory decoding artwork", exc_info=True)
+            return None
+        except Exception:
+            logger.debug("[MEDIA_WIDGET] Failed to decode artwork pixmap", exc_info=True)
+            return None
+
+        if pm.isNull():
+            return None
+        if pm.width() <= 0 or pm.height() <= 0:
+            return None
+        return pm
 
         # Reserve space for artwork plus breathing room on the right even
         # when artwork is missing so the widget size stays stable. Text stays

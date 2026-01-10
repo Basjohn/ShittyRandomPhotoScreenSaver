@@ -40,13 +40,14 @@ Shitty Showcase where I cut off the Spotify controls in recording.
   Widget requests are welcome, the engine is robust enough to handle all sorts of your weird kinky shit.
 
 - **Settings dialog (config mode)**
-  - Dark, frameless UI.r
+  - Dark, frameless UI
   - Tabs:
     - **Sources** – folders + RSS/JSON feeds
     - **Display** – mode, interval, sharpen, pan & scan, monitor selection
     - **Transitions** – transition type, duration, directions, per‑type tuning
     - **Widgets** – clock(s), weather, media, Spotify visualizer, Reddit (You'll need to configure these to your liking! Geolocation is kinda shit.)
-    - **Accessability** - Join my crippled ass with these features! Background brightness dimming and pixel shifting because maybe you're feeling kinda weird or something.
+    - **Accessibility** - Join my crippled ass with these features! Background brightness dimming and pixel shifting because maybe you're feeling kinda weird or something.
+    - **Presets** - Preset system to get going fast with an auto-saving custom preset for your personalization. 
     - **About** – version, credits, SST-based settings Import/Export (human‑readable JSON snapshot per profile) and emergency defaults button
     
 - **Hard‑exit mode & interaction gating**
@@ -60,6 +61,8 @@ Shitty Showcase where I cut off the Spotify controls in recording.
   Hard Exit on the other hand makes nothing except ESC/RightClick/Reddit links close the screensaver. (This is replicated in the SRPSS_MC release version)
   While seeming strange at first, if you have multiple monitors you can pick one or two of them, leave it running 24/7 with widgets of your choice. Your image will change reducing any burn worries   aaaand you have pretty widgets.
 
+  MC/Media Center Builds are designed for Hard Exit especially. These come with it turned on and run in the background with minimal resource usage.
+
   (If you have an OLED nothing is gonna stop burn in except a black screen but you know that already)  
 ---
 
@@ -72,6 +75,7 @@ Shitty Showcase where I cut off the Spotify controls in recording.
   - `X` – Next image
   - `C` – Cycle transition type
   - `S` – Open settings dialog (stops the saver, shows the config UI)
+[Keys do not work on MC Builds, only mouse and mouse context.]
 
 - **Exit keys (always exit)**
   - `Esc` – Exit screensaver
@@ -88,10 +92,11 @@ Shitty Showcase where I cut off the Spotify controls in recording.
     - Move the mouse beyond a small threshold → exits the screensaver.
     - Any mouse button click → exits the screensaver.
   - **Hard‑exit mode** (hard‑exit ON):
-    - Mouse movement and clicks **do not exit**; use `Esc` or `Q` to exit.
+    - Mouse movement and clicks **do not exit**, Double Clicks advance to the next image; use `Esc` or `Q` to exit.
   - **Right Click Context Menu**
     - Right Click while holding Ctrl and a glorious context menu is born.
     - Use it for quick accurate transition and settings changes.
+    - 
 
 - **Ctrl halo interaction**
   - Hold `Ctrl` to show a halo/cursor proxy over the active display.
@@ -114,11 +119,31 @@ The settings dialog lets you:
 - Change display mode, interval, sharpen, and refresh sync
 - Choose the active transition with deep per‑type options
 - Enable/disable and style each overlay widget with sliders in your sliders.
-- Enable **Hard Exit** mode (input.hard_exit)
+- Enable **HARD Exit** becauseyou'refuckinghardcore (input.hard_exit)
 
 All changes are applied immediately and persisted between runs.
 
 ---
+
+## Development & Testing
+
+SRPSS targets **Python 3.11** on Windows. Use the wrappers and docs below so logs/tests behave:
+
+- **Interpreter**: follow `Docs/DEV_ENV.md` for the recommended `python -3.11` launchers.
+- **Running tests**: use the logging-first wrapper so runs are captured under `logs/`:
+
+  ```powershell
+  python tests/pytest.py                # run full suite
+  python tests/pytest.py tests/test_perf_dt_max.py -vv
+  ```
+
+- **Perf/diagnostics**:
+  - Set `SRPSS_PERF_METRICS=1` before launching the saver to collect widget/transition timings.
+  - Check `Docs/Performance_Base_Line_2_5.md` for current performance targets and log commands.
+
+- **Docs**: `Spec.md` and `Index.md` are the canonical references for architecture/module mapping; `Docs/10_WIDGET_GUIDELINES.md` covers overlay styling/lifecycle rules.
+
+Keep contributions aligned with the centralized managers (ThreadManager, ResourceManager, SettingsManager) and the widget/theming policies documented above—rogue threads/shadows will be mocked relentlessly.
 
 ## Installation & Usage (Windows 10 / 11)
 
@@ -131,20 +156,7 @@ Download a version, ideally the setup version if you want it to actually work.
 
 ### 2. Set SRPSS as your screensaver
 
-Find the Configure ShittyRandomScreenSaver on your desktop or Start Menu, it will take you to Windows Screen Saver Settings, select SRPSS, configure the settings by clicking well, settings and you're set. 
-
-If you're super lazy just set it and it'll freak out on the first start asking you to configure it.
-
-Alternative Route:
-On **Windows 10** and **Windows 11** you can reach Screen Saver Settings via either:
-
-- **Settings route**:
-  1. Open **Settings** → **Personalization** → **Lock screen**.
-  2. Scroll down and click **Screen saver settings**.
-
-- **Search route**:
-  1. Press `Win` and type `Change screen saver`.
-  2. Click the **Change screen saver** control panel entry.
+Check the open screensaver settings box in the installer (or leave it checked) and it will even take your lazy ass there.
 
 In the **Screen Saver Settings** dialog:
 
@@ -171,7 +183,5 @@ Version information is centralised in `versioning.py` and used by both runtime a
 - Version string: `APP_VERSION`
 
 ## Credits
-
-- Weather icons: [Basmilius Weather Icons – Line](https://basmilius.github.io/weather-icons/index-line.html)
 
 This README focuses on wasting your time.

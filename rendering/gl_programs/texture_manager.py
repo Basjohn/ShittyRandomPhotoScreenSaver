@@ -120,6 +120,13 @@ class GLTextureManager:
         w = image.width()
         h = image.height()
         if w <= 0 or h <= 0:
+            logger.debug("[GL TEXTURE] Rejecting zero-sized pixmap (%dx%d)", w, h)
+            try:
+                from rendering.gl_error_handler import GLErrorHandler
+
+                GLErrorHandler().record_texture_failure("Zero-sized pixmap")
+            except Exception as e:
+                logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
             return 0
         
         # Get image data

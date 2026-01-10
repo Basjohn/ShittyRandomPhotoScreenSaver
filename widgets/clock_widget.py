@@ -16,7 +16,7 @@ except ImportError:
 
 from PySide6.QtWidgets import QLabel, QWidget
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont, QColor, QPainter, QPen, QPaintEvent, QPainterPath, QPainterPathStroker, QPixmap
+from PySide6.QtGui import QFont, QFontMetrics, QColor, QPainter, QPen, QPaintEvent, QPainterPath, QPainterPathStroker, QPixmap
 from shiboken6 import Shiboken
 
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
@@ -70,6 +70,7 @@ class ClockWidget(BaseOverlayWidget):
     
     # Override defaults for clock
     DEFAULT_FONT_SIZE = 48
+    DIGITAL_TZ_GAP = 20
     
     def __init__(self, parent: Optional[QWidget] = None,
                  time_format: TimeFormat = TimeFormat.TWELVE_HOUR,
@@ -162,7 +163,7 @@ class ClockWidget(BaseOverlayWidget):
     def _create_tz_label(self) -> None:
         """Create the timezone label."""
         self._tz_label = QLabel(self)
-        self._tz_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self._tz_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         tz_font_size = max(int(self._font_size / 4), 8)
         tz_font = QFont(self._font_family, tz_font_size)
         self._tz_label.setFont(tz_font)
@@ -174,7 +175,27 @@ class ClockWidget(BaseOverlayWidget):
             border: none;
         }}""")
         self._tz_label.hide()
-    
+
+    def _get_tz_label_height_estimate(self) -> int:
+        """Estimate timezone label height for padding calculations."""
+        if self._tz_label is not None:
+            try:
+                h = self._tz_label.height()
+                if h > 0:
+                    return h
+                hint = self._tz_label.sizeHint()
+                if hint.isValid():
+                    return hint.height()
+            except Exception as e:
+                logger.debug("[CLOCK] Exception suppressed: %s", e)
+        tz_font_size = max(int(self._font_size / 4), 8)
+        try:
+            metrics = QFontMetrics(QFont(self._font_family, tz_font_size, QFont.Weight.Bold))
+            return max(tz_font_size, metrics.height())
+        except Exception as e:
+            logger.debug("[CLOCK] Exception suppressed: %s", e)
+            return tz_font_size
+
     def _update_content(self) -> None:
         """Required by BaseOverlayWidget - update clock display."""
         self._update_time()
@@ -668,8 +689,16 @@ class ClockWidget(BaseOverlayWidget):
         
         # Position timezone label inside the background frame (bottom-right)
         if self._show_timezone and self._tz_label:
-            tz_x = self.width() - self._tz_label.width() - 12
-            tz_y = self.height() - self._tz_label.height() - 6
+            if self._display_mode == "analog":
+                tz_x = self.width() - self._tz_label.width() - 18
+                tz_y = self.height() - self._tz_label.height() + 4
+            else:
+                tz_x = max(0, int((self.width() - self._tz_label.width()) / 2))
+                tz_y = (
+                    self.height()
+                    - self.contentsMargins().bottom()
+                    + self.DIGITAL_TZ_GAP
+                )
             self._tz_label.move(tz_x, tz_y)
     
     def set_time_format(self, time_format: TimeFormat) -> None:
@@ -881,6 +910,10 @@ class ClockWidget(BaseOverlayWidget):
     
     def _update_stylesheet(self) -> None:
         """Update widget stylesheet based on current settings."""
+        tz_extra_space = 0
+        if self._show_timezone and self._display_mode != "analog":
+            tz_extra_space = self.DIGITAL_TZ_GAP + self._get_tz_label_height_estimate()
+
         if self._show_background:
             if self._display_mode == "analog":
                 padding_left, padding_top, padding_bottom, _ = self._compute_analog_padding()
@@ -888,7 +921,7 @@ class ClockWidget(BaseOverlayWidget):
             else:
                 padding_top = 6
                 padding_right = 28
-                padding_bottom = 6
+                padding_bottom = 6 + tz_extra_space
                 padding_left = 21
                 padding_right = 28
 
@@ -925,15 +958,19 @@ class ClockWidget(BaseOverlayWidget):
                 self.setContentsMargins(padding_left, padding_top, padding_right, padding_bottom)
             else:
                 # Digital mode without background: use asymmetric padding for text alignment
+                padding_top = 6
+                padding_right = 28
+                padding_left = 21
+                padding_bottom = 6 + tz_extra_space
                 self.setStyleSheet(f"""
                     QLabel {{
                         color: rgba({self._text_color.red()}, {self._text_color.green()}, 
                                    {self._text_color.blue()}, {self._text_color.alpha()});
                         background-color: transparent;
-                        padding: 6px 28px 6px 21px;
+                        padding: {padding_top}px {padding_right}px {padding_bottom}px {padding_left}px;
                     }}
                 """)
-                self.setContentsMargins(0, 0, 0, 0)
+                self.setContentsMargins(0, 0, 0, tz_extra_space)
     
     def paintEvent(self, event: QPaintEvent) -> None:
         """Custom paint for analogue mode; fall back to QLabel for digital."""

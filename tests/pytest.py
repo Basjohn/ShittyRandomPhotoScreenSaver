@@ -2,8 +2,8 @@
 
 Usage (PowerShell, from project root):
 
-    python pytest.py
-    python pytest.py tests/test_widgets_media_integration.py -vv
+    python tests/pytest.py
+    python tests/pytest.py tests/test_widgets_media_integration.py -vv
 
 This exists because terminal output is often truncated; use the
 log files under `logs/` to inspect full results.
@@ -11,21 +11,32 @@ log files under `logs/` to inspect full results.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
+import contextlib
+import importlib
+import io
 import logging
 from logging.handlers import RotatingFileHandler
-import importlib
-import contextlib
-import io
+from pathlib import Path
+import sys
 import time
 
 
-def _setup_pytest_logging() -> logging.Logger:
-    root = Path(__file__).resolve().parent
-    log_dir = root / "logs"
-    log_dir.mkdir(exist_ok=True)
+def _root_dir() -> Path:
+    return Path(__file__).resolve().parent.parent
 
+
+def _tests_dir() -> Path:
+    return Path(__file__).resolve().parent
+
+
+def _logs_dir() -> Path:
+    logs_dir = _root_dir() / "logs"
+    logs_dir.mkdir(exist_ok=True)
+    return logs_dir
+
+
+def _setup_pytest_logging() -> logging.Logger:
+    log_dir = _logs_dir()
     log_file = log_dir / "pytest.log"
 
     logger = logging.getLogger("pytest_runner")
@@ -38,9 +49,7 @@ def _setup_pytest_logging() -> logging.Logger:
             backupCount=5,
             encoding="utf-8",
         )
-        formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        )
+        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         handler.setFormatter(formatter)
         logger.addHandler(handler)
 
@@ -48,10 +57,7 @@ def _setup_pytest_logging() -> logging.Logger:
 
 
 def _open_pytest_output_stream() -> io.TextIOBase:
-    root = Path(__file__).resolve().parent
-    log_dir = root / "logs"
-    log_dir.mkdir(exist_ok=True)
-
+    log_dir = _logs_dir()
     out_file = log_dir / "pytest_output.log"
     handler = RotatingFileHandler(
         out_file,
@@ -109,28 +115,35 @@ def _open_pytest_output_stream() -> io.TextIOBase:
     return wrapper
 
 
-def main(argv: list[str] | None = None) -> int:
-    if argv is None:
-        argv = sys.argv[1:]
+def _with_default_config(args: list[str]) -> list[str]:
+    if any(arg == "-c" or arg.startswith("-c") for arg in args):
+        return args
+    config_path = Path(__file__).with_name("pytest.ini")
+    return ["-c", str(config_path)] + args
 
-    logger = _setup_pytest_logging()
-    logger.info("pytest.py starting with args: %r", argv)
 
-    # Import the real pytest library, not this script. Because this file is
-    # named pytest.py, a normal `import pytest` would resolve back to this
-    # module and recurse. To avoid that, temporarily remove the project root
-    # from sys.path while importing the package.
-    root = Path(__file__).resolve().parent
+def _import_real_pytest():
+    tests_dir = _tests_dir()
     orig_sys_path = list(sys.path)
     try:
-        sys.path = [p for p in sys.path if Path(p).resolve() != root]
-        real_pytest = importlib.import_module("pytest")
+        sys.path = [p for p in sys.path if Path(p).resolve() != tests_dir]
+        return importlib.import_module("pytest")
     finally:
         sys.path = orig_sys_path
 
+
+def main(argv: list[str] | None = None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
+    argv = _with_default_config(list(argv))
+
+    logger = _setup_pytest_logging()
+    logger.info("tests/pytest.py starting with args: %r", argv)
+
+    real_pytest = _import_real_pytest()
+
     out_stream = _open_pytest_output_stream()
     try:
-        # Delegate to the real pytest library. This returns an exit code int.
         with contextlib.redirect_stdout(out_stream), contextlib.redirect_stderr(out_stream):
             code = real_pytest.main(argv)
         logger.info("pytest finished with exit code %s", code)

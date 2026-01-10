@@ -3,10 +3,10 @@
 A living map of modules, purposes, and key classes. Keep this up to date.
 
 **Documentation Cross-References:**
-- **Canonical Specifications**: See `Docs/SPEC.md` for architecture, policies, and implementation details
-- **Module Documentation**: See `Docs/INDEX.md` for detailed module-level documentation
-- **Test Documentation**: See `Docs/TestSuite.md` for test coverage and execution patterns
-- **Active Audits**: See `audits/FULL_CODEBASE_AUDIT_2026_01_06.md` for current audit status and tasks
+- **Canonical Specification**: `Spec.md`
+- **Detailed Module Docs**: See the sections below (condensed from the former `Docs/INDEX.md`)
+- **Test Documentation**: `Docs/TestSuite.md`
+- **Active Audits**: `audits/FULL_CODEBASE_AUDIT_2026_01_06.md`
 
 ## Refactor Status
 - audits/ARCHITECTURE_AND_MULTIPROCESSING_PLAN_2026.md (Main 2026 Execution Plan)

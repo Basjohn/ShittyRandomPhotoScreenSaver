@@ -3597,25 +3597,25 @@ class DisplayWidget(QWidget):
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             coordinator = None
 
-        settings_dialog_active = False
-        if coordinator is not None:
-            try:
-                settings_dialog_active = bool(coordinator.settings_dialog_active)
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                settings_dialog_active = False
-
-        if settings_dialog_active:
-            # Settings dialog suppresses halo/activity entirely.
-            try:
-                owner = coordinator.halo_owner if coordinator is not None else None
-                if owner is not None:
-                    owner._hide_ctrl_cursor_hint(immediate=True)
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            return super().eventFilter(watched, event)
-
         try:
+            settings_dialog_active = False
+            if coordinator is not None:
+                try:
+                    settings_dialog_active = bool(coordinator.settings_dialog_active)
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+                    settings_dialog_active = False
+
+            if settings_dialog_active:
+                # Settings dialog suppresses halo/activity entirely.
+                try:
+                    owner = coordinator.halo_owner if coordinator is not None else None
+                    if owner is not None:
+                        owner._hide_ctrl_cursor_hint(immediate=True)
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+                return super().eventFilter(watched, event)
+
             if event is not None and event.type() == QEvent.Type.KeyPress:
                 try:
                     key_event = event  # QKeyEvent
@@ -3830,9 +3830,39 @@ class DisplayWidget(QWidget):
                                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                         except Exception as e:
                             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+        except MemoryError:
+            logger.error("[DISPLAY_WIDGET] eventFilter MemoryError; resetting halo/focus", exc_info=True)
+            self._recover_from_event_filter_memory_error(self._coordinator)
+            return False
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         return super().eventFilter(watched, event)
+
+    def _recover_from_event_filter_memory_error(self, coordinator: Optional["MultiMonitorCoordinator"]) -> None:
+        """Best-effort recovery when eventFilter runs out of memory."""
+        try:
+            hint = getattr(self, "_ctrl_cursor_hint", None)
+            if hint is not None:
+                try:
+                    hint.cancel_animation()
+                except Exception:
+                    pass
+                hint.hide()
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+
+        if coordinator is None:
+            return
+
+        try:
+            coordinator.set_halo_owner(None)
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+
+        try:
+            coordinator.release_focus(self)
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
     def get_screen_info(self) -> dict:
         """Get information about this display."""

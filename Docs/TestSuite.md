@@ -104,7 +104,7 @@ The test suite is now stable and can be relied upon for regression testing. All 
 **Test Execution:**
 ```powershell
 # Full suite (recommended)
-python pytest.py
+python tests/pytest.py
 
 # Specific module
 python -m pytest tests/test_clock_widget.py -v
@@ -143,13 +143,13 @@ The screensaver test suite uses pytest with pytest-qt for Qt integration testing
 **Preferred (logging-first policy, runs pytest.py wrapper):**
 ```powershell
 # Run entire suite with rotating log capture
-python pytest.py
+python tests/pytest.py
 
 # Specific module
-python pytest.py tests/test_settings.py -vv
+python tests/pytest.py tests/test_settings.py -vv
 
 # Collect-only to verify counts
-python pytest.py --collect-only
+python tests/pytest.py --collect-only
 
 # Tail latest consolidated log (auto-rotated)
 Get-Content logs\pytest_output.log -Tail 80
@@ -160,7 +160,7 @@ Get-Content logs\pytest_output.log -Tail 80
 - Runner telemetry (`logs/pytest.log`, 1 MB x5 files).
 - Same Windows-friendly path quoting as our guidelines.
 
-> Legacy direct `pytest ...` commands remain valid, but using `python pytest.py ...` is required for historical log retention per the Windows logging policy.
+> Legacy direct `pytest ...` commands remain valid, but using `python tests/pytest.py ...` is required for historical log retention per the Windows logging policy.
 
 ---
 

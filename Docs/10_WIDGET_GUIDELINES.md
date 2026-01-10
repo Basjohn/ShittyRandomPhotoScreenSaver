@@ -295,11 +295,9 @@ disappears during a transition, debug **only these integration points** first.
 ### 6.1 Where widgets live
 
 - All overlay widgets are **direct children of `DisplayWidget`**.
-- Widgets **never** create their own `QOpenGLWidget` overlays or top‑level
-  windows. (Exception: `CursorHaloWidget` is a top-level helper used for
-  Ctrl-held interaction and is not considered an overlay widget.)
-- GL transitions and the compositor render **behind** widgets; Z‑order is
-  maintained explicitly by `WidgetManager` and `overlay_manager`.
+- Widgets **never** create their own `QOpenGLWidget` overlays or top‑level windows. (Exception: `CursorHaloWidget` is a top-level helper used for Ctrl-held interaction and is not considered an overlay widget.)
+- GL transitions and the compositor render **behind** widgets; Z‑order is maintained explicitly by `WidgetManager` and `overlay_manager`.
+- Widgets must call `self.setAttribute(Qt.WA_TranslucentBackground, True)` and `self.setAttribute(Qt.WA_NoSystemBackground, True)` so GL compositor paints can continue behind them without double clears.
 
 ### 6.2 Creation & basic wiring (`DisplayWidget._setup_widgets` / `WidgetManager`)
 
@@ -326,13 +324,16 @@ Reddit / future widgets), `DisplayWidget._setup_widgets` (delegating to
 The Spotify media card + Spotify Beat Visualizer wiring in
 `rendering/display_widget.py::_setup_widgets` is the reference example.
 
-### 6.3 Coordinated fade + shadow (`request_overlay_fade_sync` + `ShadowFadeProfile`)
+### 6.3 Compositor-ready gating, coordinated fade, and shadow (`request_overlay_fade_sync` + `ShadowFadeProfile`)
 
 All widgets that fade in (Weather, Media, Reddit, clocks, Spotify visualizer)
 follow the same pattern:
 
-1. In the widget’s `start()` method, register a starter callback with the
-   parent `DisplayWidget`:
+**Order of operations**
+
+1. Widget `start()` calls `parent.request_overlay_fade_sync(...)` but must **not** start fading until the compositor has delivered its first frame (`DisplayWidget.image_displayed`).
+2. `DisplayWidget` now defers `_start_overlay_fades()` until `_compositor_ready` is set; widgets rely on this to avoid appearing before the wallpaper is visible.
+3. Once `_compositor_ready` is True, widgets invoke the shared `ShadowFadeProfile` for coordinated card + shadow animation.
 
    - `parent.request_overlay_fade_sync("media", starter)`
    - `parent.request_overlay_fade_sync("weather", starter)`
@@ -359,7 +360,7 @@ follow the same pattern:
 This guarantees that all widgets on a display fade in together and receive
 their drop shadows with identical timing.
 
-### 6.4 Overlay manager (`transitions.overlay_manager.raise_overlay`)
+### 6.4 Overlay manager (`transitions.overlay_manager.raise_overlay`) – legacy GL overlays only
 
 For legacy GL overlays (Crossfade/Slide/Wipe/Diffuse/BlockFlip/Blinds),
 `transitions.overlay_manager.raise_overlay(display, overlay)` is responsible
@@ -390,15 +391,9 @@ It must do **two things**:
 1. **Maintain GL/SW overlay geometry and stacking**
 
    ```python
-   for attr_name in GL_OVERLAY_KEYS + SW_OVERLAY_KEYS:
-       overlay = getattr(self, attr_name, None)
-       if not overlay:
-           continue
+   for overlay in self._legacy_overlays:
        set_overlay_geometry(self, overlay)
-       if overlay.isVisible():
-           schedule_raise_when_ready(self, overlay, stage=f"{stage}_{attr_name}")
-       else:
-           raise_overlay(self, overlay)
+       schedule_raise_when_ready(self, overlay, stage=f"{stage}_{overlay.objectName()}")
    ```
 
 2. **Re‑raise real overlay widgets over the compositor**
@@ -408,15 +403,9 @@ It must do **two things**:
    overlays for the entire duration of a transition:
 
    ```python
-   for attr_name in (
-       "clock_widget", "clock2_widget", "clock3_widget",
-       "weather_widget", "media_widget",
-       "spotify_visualizer_widget", "_spotify_bars_overlay",
-       "spotify_volume_widget", "reddit_widget",
-   ):
-       w = getattr(self, attr_name, None)
-       if w is not None and w.isVisible():
-           w.raise_()
+   for widget in self.widget_manager.iter_widgets_in_stack_order():
+       if widget.isVisible():
+           widget.raise_()
    ```
 
 This pattern – especially the explicit re‑raise of `media_widget`,

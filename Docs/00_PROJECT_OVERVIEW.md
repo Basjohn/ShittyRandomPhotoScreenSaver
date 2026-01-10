@@ -14,10 +14,9 @@ A modern, feature-rich Windows screensaver application using PySide6 that displa
   - High-resolution filter for Reddit (prefers posts ≥2560px width)
   - On-disk caching with rotating cache (keeps at least 20 images before cleanup)
   - Optional save-to-disk mirroring for permanent storage
-- **Usage Ratio Control**: Configurable split between local and RSS sources (default 60/40)
-  - Probabilistic selection based on ratio
-  - Automatic fallback when selected pool is empty
-  - UI slider control in Sources tab
+- **Usage Ratio Control**: Configurable split between local and RSS sources (default 70/30)
+  - Probabilistic selection based on ratio with automatic fallback when the selected pool is empty
+  - UI slider control in Sources tab (disabled when only one source type is configured)
 
 ### 2. Display Modes
 - **Fill Mode** (Primary): Crop and scale to fill screen without distortion/letterboxing
@@ -48,28 +47,25 @@ Transitions run on the GL compositor when hardware acceleration is available. So
 
 ### 5. Widget Overlays
 - **Clock Widget** (up to 3 instances):
-  - Digital or analog display
-  - 12h/24h format with optional seconds
-  - Independent timezone per instance
-  - Per-monitor selection
+  - Digital or analog display with cached face pixmaps for low paint cost
+  - 12h/24h format, optional seconds, timezone per instance
+  - Per-monitor placement plus centralized visual padding helpers for alignment
 - **Weather Widget**:
-  - Current temperature and conditions via Open-Meteo API
-  - Tomorrow's forecast (min/max temp)
-  - Location autocomplete
+  - Current temperature/conditions via Open-Meteo with 30-minute caching
+  - Optional forecast row and location autocomplete
+  - ThreadManager-driven refresh timers (no raw QThreads)
 - **Media Widget**:
-  - Spotify/system media integration via Windows GSMTC (polled safely; WinRT calls are treated as IO and guarded by a hard timeout)
-  - Album artwork, track info, transport controls
-  - Per-monitor selection
+  - Spotify/system media integration via Windows GSMTC with guarded WinRT polling and adaptive idle detection
+  - Album artwork, track info, transport controls, optional Spotify volume slider
+  - Smart polling intervals (1000 ms → 2500 ms active, 5000 ms idle)
 - **Reddit Widget** (up to 2 instances):
-  - Top posts from configured subreddits
-  - 4-item and 10-item layouts
-  - Click-through to browser (deferred in hard-exit mode)
+  - Top posts from configured subreddits with 4-, 10-, or 20-item layouts
+  - Click-through behavior gated by interaction mode (Ctrl/Hard Exit)
+  - Shared styling via widget factories
 - **Spotify Visualizer**:
-  - Real-time audio visualization via WASAPI loopback
-  - 15-bar GL-rendered frequency display with ghosting
-  - Center-out gradient (bass center, treble edges)
-  - Spotify-style card with album art and track info
-  - Volume slider control
+  - Real-time WASAPI loopback audio visualization with GL bars + software fallback
+  - Ghost trails, adaptive sensitivity, and synchronized fade-in with the media card
+  - Volume slider control and pixel-shift aware positioning
 
 ### 6. Configuration GUI
 - Dark-themed settings dialog (dark.qss)
@@ -82,23 +78,24 @@ Transitions run on the GL compositor when hardware acceleration is available. So
 - Command-line arguments: `/s` (run), `/c` (config), `/p` (preview)
 - .scr file format deployment
 - Manual Controller (MC) variant for non-screensaver use
-  - Separate settings profile
-  - System idle suppression
-  - Hard-exit mode by default
+  - Separate QSettings application name (`Screensaver_MC`) with executable stem detection
+  - Hard-exit mode forced on at startup so mouse movement never exits unless the user changes the setting
+  - Idle suppression now relies on standard OS power settings (legacy `SetThreadExecutionState` call removed)
+  - MC window uses `Qt.Tool` flags to stay off Alt+Tab/taskbar and ships primarily as a Nuitka onedir bundle
 
 ### 8. Accessibility Features
 - **Background Dimming**: Adjustable compositor-based dimming (rendered after the base image/transition but before overlay widgets)
 - **Pixel Shift**: Periodic 1px widget movement for burn-in prevention
-- **Hard Exit Mode**: Prevents accidental exit from mouse movement
+- **Hard Exit / Ctrl Gating**: Prevents accidental exit from mouse movement; holding Ctrl temporarily enables widget interaction even when hard-exit is off
 
 ## Technology Stack
 - **Framework**: PySide6 (Qt 6.x)
-- **Language**: Python 3.9+
+- **Language**: Python 3.11
 - **Graphics**: OpenGL 4.1+ via PyOpenGL (GLSL shaders)
 - **Audio**: WASAPI loopback via pyaudiowpatch/sounddevice
-- **Architecture**: Event-driven with centralized resource management
+- **Architecture**: Event-driven with centralized resource/resource + settings managers (see `Spec.md`)
 - **Threading**: ThreadManager with IO/Compute pools, lock-free SPSC queues
-- **Platform**: Windows 10/11
+- **Platform**: Windows 11 (Windows 10 supported but not primary test target)
 
 ## Core Architecture
 
@@ -150,16 +147,16 @@ Transitions run on the GL compositor when hardware acceleration is available. So
 ## Key Settings
 | Setting | Description | Default |
 |---------|-------------|---------|
-| `sources.local_ratio` | Local vs RSS image ratio (%) | 60 |
+| `sources.local_ratio` | Local vs RSS image ratio (%) | 70 |
 | `display.same_image_all_monitors` | Same image on all displays | false |
 | `display.hw_accel` | Hardware acceleration | true |
-| `transitions.type` | Active transition type | Wipe |
-| `transitions.duration_ms` | Transition duration (ms) | 3000 |
-| `timing.interval` | Image rotation interval (s) | 40 |
+| `transitions.type` | Active transition type | Ripple |
+| `transitions.duration_ms` | Transition duration (ms) | 7200 |
+| `timing.interval` | Image rotation interval (s) | 45 |
 
 ## Related Documentation
-- `Index.md` - Module map and class index
-- `Spec.md` - Architecture decisions and implementation details
-- `Docs/10_WIDGET_GUIDELINES.md` - Widget implementation standards
-- `Docs/TestSuite.md` - Test documentation
+- `Index.md` - Canonical module map and class index
+- `Spec.md` - Architecture decisions, policies, and settings schema
+- `Docs/10_WIDGET_GUIDELINES.md` - Widget implementation standards and compositor rules
+- `Docs/TestSuite.md` - Test documentation and execution patterns
 - `audits/` - Architecture audits and optimization notes

@@ -152,26 +152,8 @@ def main() -> int:
     pytest_args = _resolve_pytest_args(args)
     log_file = _ensure_log_dir(args.log_dir)
 
-    # IMPORTANT:
-    # This repository includes a local helper script named `pytest.py` at the
-    # project root. When running `python -m pytest` from the root, Python would
-    # resolve that file instead of the third-party `pytest` package, causing our
-    # suite logs to appear empty.
-    #
-    # To avoid this, we temporarily remove the project root from sys.path while
-    # importing the real `pytest` package, then restore sys.path before
-    # executing pytest so test imports still work.
-    runner = (
-        "import importlib, sys;"
-        "from pathlib import Path;"
-        "root=Path.cwd().resolve();"
-        "orig=list(sys.path);"
-        "sys.path=[p for p in sys.path if p and Path(p).resolve()!=root];"
-        "pytest=importlib.import_module('pytest');"
-        "sys.path=orig;"
-        "raise SystemExit(pytest.main(sys.argv[1:]));"
-    )
-    command = [sys.executable, "-u", "-c", runner, *pytest_args]
+    tests_runner = Path("tests") / "pytest.py"
+    command = [sys.executable, "-u", str(tests_runner), *pytest_args]
 
     print("→ Running:", " ".join(command))
     print(f"→ Logging to: {log_file}")

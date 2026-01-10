@@ -9,7 +9,7 @@ PASS CRITERIA:
 - Visualizer dt_max < 50ms (target: 25ms)
 - Transition dt_max < 100ms (target: 50ms)
 
-Run with: python pytest.py tests/test_perf_dt_max.py -v -s
+Run with: python tests/pytest.py tests/test_perf_dt_max.py -v -s
 """
 import time
 import pytest
