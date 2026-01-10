@@ -336,14 +336,17 @@ class ClockWidget(BaseOverlayWidget):
                     self._tz_label.raise_()
                 except Exception as e:
                     logger.debug("[CLOCK] Exception suppressed: %s", e)
-            try:
-                ShadowFadeProfile.attach_shadow(
-                    self,
-                    self._shadow_config,
-                    has_background_frame=self._show_background,
-                )
-            except Exception as e:
-                logger.debug("[CLOCK] Exception suppressed: %s", e)
+            # Only apply widget-level shadow in digital mode. Analog mode uses
+            # QPainter-drawn shadows to avoid QGraphicsDropShadowEffect cache corruption.
+            if self._display_mode != "analog":
+                try:
+                    ShadowFadeProfile.attach_shadow(
+                        self,
+                        self._shadow_config,
+                        has_background_frame=self._show_background,
+                    )
+                except Exception as e:
+                    logger.debug("[CLOCK] Exception suppressed: %s", e)
             self._has_faded_in = True
             return
 
@@ -364,22 +367,25 @@ class ClockWidget(BaseOverlayWidget):
             except Exception as e:
                 logger.debug("[CLOCK] Exception suppressed: %s", e)
 
-        try:
-            ShadowFadeProfile.start_fade_in(
-                self,
-                self._shadow_config,
-                has_background_frame=self._show_background,
-            )
-        except Exception as e:
-            logger.debug("[CLOCK] Exception suppressed: %s", e)
+        # Only apply widget-level shadow in digital mode. Analog mode uses
+        # QPainter-drawn shadows to avoid QGraphicsDropShadowEffect cache corruption.
+        if self._display_mode != "analog":
             try:
-                apply_widget_shadow(
+                ShadowFadeProfile.start_fade_in(
                     self,
-                    self._shadow_config or {},
+                    self._shadow_config,
                     has_background_frame=self._show_background,
                 )
             except Exception as e:
                 logger.debug("[CLOCK] Exception suppressed: %s", e)
+                try:
+                    apply_widget_shadow(
+                        self,
+                        self._shadow_config or {},
+                        has_background_frame=self._show_background,
+                    )
+                except Exception as e:
+                    logger.debug("[CLOCK] Exception suppressed: %s", e)
         self._has_faded_in = True
     
     def is_running(self) -> bool:
@@ -543,6 +549,14 @@ class ClockWidget(BaseOverlayWidget):
             now = datetime.now(self._timezone)
 
         self._current_dt = now
+
+        # For analogue mode, force the cached clock face (ring + markers +
+        # numeral shadows) to be regenerated on the next paint so any
+        # cached artefacts are cleared at least once per tick. This adds a
+        # small (~1–2ms) cost on the first paint after each tick but avoids
+        # long-lived cache corruption.
+        if self._display_mode == "analog":
+            self._invalidate_clock_face_cache()
 
         # Format time based on settings
         if self._time_format == TimeFormat.TWELVE_HOUR:
@@ -957,8 +971,8 @@ class ClockWidget(BaseOverlayWidget):
             else:
                 painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
 
-            shadow_scale = 1.5 if self._analog_shadow_intense else 1.1
-            opacity_scale = 2.0 if self._analog_shadow_intense else 1.4
+            shadow_scale = 1.8 if self._analog_shadow_intense else 1.43
+            opacity_scale = 3.0 if self._analog_shadow_intense else 1.82
 
             def _scaled_alpha(base_alpha: int) -> int:
                 return min(255, int(round(base_alpha * opacity_scale)))
@@ -986,7 +1000,7 @@ class ClockWidget(BaseOverlayWidget):
             if radius <= 0:
                 return
 
-            drop_offset = 2
+            drop_offset = 3 if self._analog_shadow_intense else 2
             marker_len = max(6, radius // 10)
             marker_lines: list[tuple[int, int, int, int]] = []
             marker_path = QPainterPath()
@@ -1009,13 +1023,13 @@ class ClockWidget(BaseOverlayWidget):
                 ring_path = QPainterPath()
                 ring_path.addEllipse(center_x - radius, center_y - radius, radius * 2, radius * 2)
                 ring_stroke = QPainterPathStroker()
-                ring_stroke.setWidth(max(4.4, radius * (0.0385 if self._analog_shadow_intense else 0.022)))
+                ring_stroke.setWidth(max(4.4, radius * (0.0462 if self._analog_shadow_intense else 0.0286)))
                 ring_stroke.setCapStyle(Qt.PenCapStyle.RoundCap)
                 ring_stroke.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
                 ring_shape = ring_stroke.createStroke(ring_path)
 
                 marker_stroke = QPainterPathStroker()
-                marker_stroke.setWidth(max(2.2, radius * (0.0132 if self._analog_shadow_intense else 0.0088)))
+                marker_stroke.setWidth(max(2.2, radius * (0.01584 if self._analog_shadow_intense else 0.01144)))
                 marker_stroke.setCapStyle(Qt.PenCapStyle.RoundCap)
                 marker_stroke.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
                 marker_shape = marker_stroke.createStroke(marker_path)
@@ -1065,7 +1079,7 @@ class ClockWidget(BaseOverlayWidget):
                         base_numeral_alpha = max(97, int(self._text_color.alpha() * 0.605))
                         numeral_shadow = QColor(0, 0, 0, _scaled_alpha(base_numeral_alpha))
                         painter.setPen(QPen(numeral_shadow))
-                        numeral_offset = max(1, int(round(shadow_scale * 1.2)))
+                        numeral_offset = max(1, int(round(shadow_scale * 1.56)))
                         painter.drawText(tx - tw // 2 + numeral_offset, ty + th // 4 + numeral_offset, text)
 
                     painter.setPen(QPen(self._text_color))
@@ -1081,7 +1095,8 @@ class ClockWidget(BaseOverlayWidget):
         """Paint analog clock face, hands, and numerals.
         
         Uses cached pixmap for static elements (face, markers, numerals) and
-        only redraws the hands each second for better performance.
+        draws hands fresh each frame into a composited buffer to prevent
+        hand trails on transparent backgrounds.
         """
         if self._current_dt is None:
             if self._timezone is None:
@@ -1098,21 +1113,26 @@ class ClockWidget(BaseOverlayWidget):
             self._cached_clock_face_size != current_size):
             self._regenerate_clock_face_cache(current_size[0], current_size[1])
 
-        painter = QPainter(self)
+        # Create a fresh frame buffer each paint to prevent hand accumulation
+        # on transparent backgrounds. We composite: cached face + fresh hands.
+        dpr = self.devicePixelRatioF()
+        frame_buffer = QPixmap(int(self.width() * dpr), int(self.height() * dpr))
+        frame_buffer.setDevicePixelRatio(dpr)
+        frame_buffer.fill(Qt.GlobalColor.transparent)
+        
+        # Draw into frame buffer
+        fb_painter = QPainter(frame_buffer)
         try:
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            fb_painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             high_quality_hint = getattr(QPainter.RenderHint, "HighQualityAntialiasing", None)
             if high_quality_hint is not None:
-                painter.setRenderHint(high_quality_hint, True)
+                fb_painter.setRenderHint(high_quality_hint, True)
             else:
-                painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+                fb_painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
 
             # Draw cached clock face (static elements)
-            # Use Source composition to REPLACE pixels, not blend - this clears old hand positions
             if self._cached_clock_face is not None:
-                painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
-                painter.drawPixmap(0, 0, self._cached_clock_face)
-                painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+                fb_painter.drawPixmap(0, 0, self._cached_clock_face)
 
             # Now draw only the dynamic elements (hands)
             shadow_scale = 1.5 if self._analog_shadow_intense else 1.1
@@ -1128,6 +1148,7 @@ class ClockWidget(BaseOverlayWidget):
                 rect = self.rect().adjusted(left_pad, top_pad, -left_pad, -bottom_margin)
             side = min(rect.width(), rect.height())
             if side <= 0:
+                fb_painter.end()
                 return
 
             center_x = rect.x() + rect.width() // 2
@@ -1135,17 +1156,18 @@ class ClockWidget(BaseOverlayWidget):
 
             numeral_pt = max(8, min(int(self._font_size * 0.25), max(9, side // 18)))
             numeral_font = QFont(self._font_family, numeral_pt)
-            painter.setFont(numeral_font)
-            numeral_metrics = painter.fontMetrics()
+            fb_painter.setFont(numeral_font)
+            numeral_metrics = fb_painter.fontMetrics()
             numeral_height = numeral_metrics.height()
 
             numeral_clearance = numeral_height + max(6, numeral_height // 3)
             radius = side // 2 - numeral_clearance
             if radius <= 0:
+                fb_painter.end()
                 return
 
-            # Helper to draw a hand with a subtle bottom-right shadow.
-            def _draw_hand(angle_deg: float, length: float, thickness: int) -> None:
+            # Helper to draw a hand with an optional bottom-right shadow.
+            def _draw_hand(angle_deg: float, length: float, thickness: int, draw_shadow: bool = True) -> None:
                 angle = math.radians(angle_deg - 90.0)
                 cos_a = math.cos(angle)
                 sin_a = math.sin(angle)
@@ -1159,16 +1181,16 @@ class ClockWidget(BaseOverlayWidget):
                     shadow_pen.setWidthF(max(1.5, float(thickness)) * shadow_scale)
                     shadow_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
                     shadow_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-                    painter.setPen(shadow_pen)
-                    hand_offset = max(2, int(round(2 * shadow_scale)))
-                    painter.drawLine(center_x + hand_offset, center_y + hand_offset, ex + hand_offset, ey + hand_offset)
+                    fb_painter.setPen(shadow_pen)
+                    hand_offset = max(2, int(round(2.6 * shadow_scale)))
+                    fb_painter.drawLine(center_x + hand_offset, center_y + hand_offset, ex + hand_offset, ey + hand_offset)
 
                 hand_pen = QPen(self._text_color)
                 hand_pen.setWidthF(max(1.5, float(thickness)))
                 hand_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
                 hand_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-                painter.setPen(hand_pen)
-                painter.drawLine(center_x, center_y, ex, ey)
+                fb_painter.setPen(hand_pen)
+                fb_painter.drawLine(center_x, center_y, ex, ey)
 
             # Compute hand angles
             sec = now.second + now.microsecond / 1_000_000.0
@@ -1179,31 +1201,44 @@ class ClockWidget(BaseOverlayWidget):
             minute_angle = (minute / 60.0) * 360.0
             second_angle = (sec / 60.0) * 360.0
 
-            # Draw hands in order: hour, minute, second (thinnest on top)
-            # This prevents shadows from thicker hands overlapping the thin seconds hand
-            _draw_hand(hour_angle, radius * 0.52, max(3, radius // 15))
-            _draw_hand(minute_angle, radius * 0.72, max(2, radius // 20))
+            # Draw hands in order: second, hour, minute so the seconds hand sits below.
+            # The seconds hand is drawn without a drop shadow to avoid shadow
+            # accumulation artifacts while keeping hour/minute shadows intact.
             if self._show_seconds:
-                _draw_hand(second_angle, radius * 0.85, 1)
+                _draw_hand(second_angle, radius * 0.85, 1, draw_shadow=False)
+            _draw_hand(hour_angle, radius * 0.52, max(3, radius // 15), draw_shadow=True)
+            _draw_hand(minute_angle, radius * 0.72, max(2, radius // 20), draw_shadow=True)
 
             # Timezone abbreviation rendered below the analogue clock, centred horizontally.
             if self._show_timezone and self._timezone_abbrev:
                 tz_font = QFont(self._font_family, tz_font_size)
-                painter.setFont(tz_font)
-                tz_metrics = painter.fontMetrics()
+                fb_painter.setFont(tz_font)
+                tz_metrics = fb_painter.fontMetrics()
                 tz_height = tz_metrics.height()
                 text = self._timezone_abbrev
 
                 tz_y = center_y + radius + numeral_height + tz_height + 4
                 tz_x = center_x - tz_metrics.horizontalAdvance(text) // 2
-                painter.setPen(QPen(self._text_color))
+                fb_painter.setPen(QPen(self._text_color))
                 if self._analog_face_shadow:
-                    tz_shadow_offset = 2 if self._analog_shadow_intense else 1
+                    tz_shadow_offset = 3 if self._analog_shadow_intense else 2
                     tz_shadow_color = QColor(0, 0, 0, _scaled_alpha(max(60, int(self._text_color.alpha() * 0.45))))
-                    painter.setPen(QPen(tz_shadow_color))
-                    painter.drawText(tz_x + tz_shadow_offset, tz_y + tz_shadow_offset, text)
-                painter.setPen(QPen(self._text_color))
-                painter.drawText(tz_x, tz_y, text)
+                    fb_painter.setPen(QPen(tz_shadow_color))
+                    fb_painter.drawText(tz_x + tz_shadow_offset, tz_y + tz_shadow_offset, text)
+                fb_painter.setPen(QPen(self._text_color))
+                fb_painter.drawText(tz_x, tz_y, text)
+        finally:
+            fb_painter.end()
+        
+        # Blit the composited frame buffer to the widget
+        painter = QPainter(self)
+        try:
+            # Ensure we repaint the entire widget, not just the update region,
+            # so old hand shadows cannot accumulate outside Qt's clip.
+            painter.setClipRect(self.rect(), Qt.ClipOperation.ReplaceClip)
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+            painter.fillRect(self.rect(), Qt.GlobalColor.transparent)
+            painter.drawPixmap(0, 0, frame_buffer)
         finally:
             painter.end()
 

@@ -43,6 +43,11 @@ class SourcesTab(QWidget):
         
         logger.debug("SourcesTab created")
     
+    def load_from_settings(self) -> None:
+        """Reload all UI controls from settings manager (called after preset change)."""
+        self._load_sources()
+        logger.debug("[SOURCES_TAB] Reloaded from settings")
+    
     def _setup_ui(self) -> None:
         """Setup tab UI."""
         # Use a scroll area so this tab behaves consistently with the other

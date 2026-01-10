@@ -19,7 +19,7 @@ from PySide6.QtGui import QFont, QColor, QPixmap, QDesktopServices, QPainter, QP
 from core.logging.logger import get_logger
 from core.settings.settings_manager import SettingsManager
 from core.animation import AnimationManager
-from ui.tabs import SourcesTab, TransitionsTab, WidgetsTab, DisplayTab, AccessibilityTab
+from ui.tabs import SourcesTab, TransitionsTab, WidgetsTab, DisplayTab, AccessibilityTab, PresetsTab
 from ui.styled_popup import StyledPopup
 
 logger = get_logger(__name__)
@@ -431,6 +431,7 @@ class SettingsDialog(QDialog):
             "transitions",
             "widgets",
             "accessibility",
+            "presets",
             "about",
         ]
         self._tab_state_cache: Dict[str, Dict[str, Any]] = {}
@@ -796,6 +797,8 @@ class SettingsDialog(QDialog):
         self.widgets_tab_btn = TabButton("Widgets", "🕐")
         # Accessibility icon: wheelchair symbol for universal accessibility
         self.accessibility_tab_btn = TabButton("Accessibility", "♿")
+        # Presets icon: sliders/controls symbol for configuration presets
+        self.presets_tab_btn = TabButton("Presets", "🎚")
         # Use a circled information glyph for About so the icon's
         # bounding box and spacing match the other emoji-style icons.
         self.about_tab_btn = TabButton("About", "ⓘ")
@@ -806,6 +809,7 @@ class SettingsDialog(QDialog):
             self.transitions_tab_btn,
             self.widgets_tab_btn,
             self.accessibility_tab_btn,
+            self.presets_tab_btn,
             self.about_tab_btn
         ]
         
@@ -814,6 +818,7 @@ class SettingsDialog(QDialog):
         sidebar_layout.addWidget(self.transitions_tab_btn)
         sidebar_layout.addWidget(self.widgets_tab_btn)
         sidebar_layout.addWidget(self.accessibility_tab_btn)
+        sidebar_layout.addWidget(self.presets_tab_btn)
         sidebar_layout.addWidget(self.about_tab_btn)
         sidebar_layout.addStretch()
         
@@ -827,6 +832,7 @@ class SettingsDialog(QDialog):
         self.transitions_tab = TransitionsTab(self._settings)
         self.widgets_tab = WidgetsTab(self._settings)
         self.accessibility_tab = AccessibilityTab(self._settings)
+        self.presets_tab = PresetsTab(self._settings)
         self.about_tab = self._create_about_tab()
         
         self.content_stack.addWidget(self.sources_tab)
@@ -834,13 +840,15 @@ class SettingsDialog(QDialog):
         self.content_stack.addWidget(self.transitions_tab)
         self.content_stack.addWidget(self.widgets_tab)
         self.content_stack.addWidget(self.accessibility_tab)
+        self.content_stack.addWidget(self.presets_tab)
         self.content_stack.addWidget(self.about_tab)
         self._register_tab_scroll_area(0, self.sources_tab)
         self._register_tab_scroll_area(1, self.display_tab)
         self._register_tab_scroll_area(2, self.transitions_tab)
         self._register_tab_scroll_area(3, self.widgets_tab)
         self._register_tab_scroll_area(4, self.accessibility_tab)
-        self._register_tab_scroll_area(5, self.about_tab)
+        self._register_tab_scroll_area(5, self.presets_tab)
+        self._register_tab_scroll_area(6, self.about_tab)
         
         content_layout.addWidget(sidebar)
         content_layout.addWidget(self.content_stack, 1)
@@ -1245,7 +1253,11 @@ class SettingsDialog(QDialog):
         self.transitions_tab_btn.clicked.connect(lambda: self._switch_tab(2))
         self.widgets_tab_btn.clicked.connect(lambda: self._switch_tab(3))
         self.accessibility_tab_btn.clicked.connect(lambda: self._switch_tab(4))
-        self.about_tab_btn.clicked.connect(lambda: self._switch_tab(5))
+        self.presets_tab_btn.clicked.connect(lambda: self._switch_tab(5))
+        self.about_tab_btn.clicked.connect(lambda: self._switch_tab(6))
+        
+        # Connect preset changes to refresh all tabs
+        self.presets_tab.settings_reloaded.connect(self._reload_all_tab_settings)
     
     def _switch_tab(self, index: int, animate: bool = True) -> None:
         """
@@ -1272,7 +1284,7 @@ class SettingsDialog(QDialog):
         old_widget = self.content_stack.currentWidget()
         def _after_switch():
             current_widget = self.content_stack.currentWidget()
-            if index == 5:
+            if index == 6:  # About tab is now at index 6 (presets is at 5)
                 try:
                     self._about_last_card_width = 0
                 except Exception as e:
@@ -1482,6 +1494,32 @@ class SettingsDialog(QDialog):
         popup.add_defaults_requested.connect(self._on_add_default_sources)
         popup.exit_requested.connect(self._on_exit_without_sources)
         popup.exec()
+    
+    def _reload_all_tab_settings(self) -> None:
+        """Reload settings in all tabs after preset change."""
+        # Reload settings in each tab by calling their load/refresh methods
+        tabs_to_reload = [
+            (0, self.sources_tab),
+            (1, self.display_tab),
+            (2, self.transitions_tab),
+            (3, self.widgets_tab),
+            (4, self.accessibility_tab),
+        ]
+        
+        for idx, tab in tabs_to_reload:
+            # Check if tab has a refresh/reload method
+            if hasattr(tab, 'load_from_settings'):
+                try:
+                    tab.load_from_settings()
+                except Exception as e:
+                    logger.debug("[SETTINGS] Failed to reload tab %d: %s", idx, e)
+            elif hasattr(tab, 'refresh'):
+                try:
+                    tab.refresh()
+                except Exception as e:
+                    logger.debug("[SETTINGS] Failed to refresh tab %d: %s", idx, e)
+        
+        logger.debug("[SETTINGS] Reloaded all tab settings after preset change")
     
     def _on_add_default_sources(self) -> None:
         """Add curated RSS feeds as default sources."""
@@ -1722,17 +1760,23 @@ class SettingsDialog(QDialog):
                 )
                 return
 
+            # Apply imported settings to Custom preset
+            try:
+                from core.presets import apply_preset
+                # Switch to custom preset and save imported settings as custom backup
+                self._settings.set("preset", "custom")
+                apply_preset(self._settings, "custom")
+                logger.info("[SETTINGS] Imported settings applied to Custom preset")
+            except Exception as e:
+                logger.debug("Failed to apply imported settings to Custom preset", exc_info=True)
+
             # Reload all tabs so the UI reflects the imported configuration
             # immediately.
             try:
-                if hasattr(self, "sources_tab"):
-                    self.sources_tab._load_settings()  # type: ignore[attr-defined]
-                if hasattr(self, "display_tab"):
-                    self.display_tab._load_settings()  # type: ignore[attr-defined]
-                if hasattr(self, "transitions_tab"):
-                    self.transitions_tab._load_settings()  # type: ignore[attr-defined]
-                if hasattr(self, "widgets_tab"):
-                    self.widgets_tab._load_settings()  # type: ignore[attr-defined]
+                self._reload_all_tab_settings()
+                # Also refresh presets tab to show Custom is selected
+                if hasattr(self, "presets_tab"):
+                    self.presets_tab.refresh()
             except Exception as e:
                 logger.debug("Failed to reload settings tabs after SST import", exc_info=True)
 

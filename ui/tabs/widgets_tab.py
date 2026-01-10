@@ -79,6 +79,15 @@ class WidgetsTab(QWidget):
         
         logger.debug("WidgetsTab created")
     
+    def load_from_settings(self) -> None:
+        """Reload all UI controls from settings manager (called after preset change)."""
+        self._loading = True
+        try:
+            self._load_settings()
+        finally:
+            self._loading = False
+        logger.debug("[WIDGETS_TAB] Reloaded from settings")
+    
     def _load_widget_defaults(self) -> Dict[str, Dict[str, Any]]:
         """Load canonical widget defaults once for reuse."""
         try:

@@ -48,6 +48,15 @@ class AccessibilityTab(QWidget):
         
         logger.debug("AccessibilityTab created")
     
+    def load_from_settings(self) -> None:
+        """Reload all UI controls from settings manager (called after preset change)."""
+        self._loading = True
+        try:
+            self._load_settings()
+        finally:
+            self._loading = False
+        logger.debug("[ACCESSIBILITY_TAB] Reloaded from settings")
+    
     def _setup_ui(self) -> None:
         """Setup tab UI with scroll area."""
         # Create scroll area

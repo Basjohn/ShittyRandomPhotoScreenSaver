@@ -211,6 +211,15 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - Methods: `can_make_request()`, `record_request()`, `wait_if_needed()`, `reset()`
   - **Jan 9, 2026**: Created to fix rate limiting issues on startup
   - **10 unit tests** in `tests/test_reddit_rate_limiter.py`
+- core/presets.py
+  - `PresetDefinition`: Dataclass for preset configurations
+  - `PRESET_DEFINITIONS`: Dict of all available presets (Purist, Essentials, Media, Full Monty, Custom)
+  - `apply_preset()`: Apply a preset to SettingsManager
+  - `get_ordered_presets()`: Get preset keys in slider order
+  - `adjust_settings_for_mc_mode()`: Adjust placements for MC mode (display 2)
+  - Custom preset saves/restores user's manual settings
+  - **Jan 10, 2026**: Created for presets feature
+  - See `audits/Presets_Feature_Plan.md` for implementation details
 - core/process/__init__.py
   - Process isolation module for SRPSS v2.0 multiprocessing
   - Exports: WorkerType, WorkerState, MessageType, WorkerMessage, WorkerResponse, SharedMemoryHeader, RGBAHeader, FFTHeader, HealthStatus, ProcessSupervisor
@@ -573,10 +582,11 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - `StyledPopup`: Dark glass themed popup notifications (info, warning, error, success)
   - `StyledColorPicker`: Centralized dark-themed color picker dialog wrapping QColorDialog
 - ui/tabs/sources_tab.py - Image source configuration (folders, RSS feeds)
-- ui/tabs/display_tab.py - Display mode and hardware acceleration settings. Loads canonical timing defaults (45 s interval) from SettingsManager so tests cover `tests/test_display_tab.py::TestDisplayTab::test_display_tab_default_values`.
+- ui/tabs/display_tab.py - Display mode and hardware acceleration settings. Loads canonical timing defaults (45 s interval) from SettingsManager so tests cover `tests/test_display_tab.py::TestDisplayTab::test_display_tab_default_values`.
 - ui/tabs/transitions_tab.py - Transition type, duration, and direction settings
 - ui/tabs/widgets_tab.py - Overlay widget configuration (clocks, weather, media, Reddit). Includes stacking prediction labels next to position combos.
 - ui/tabs/accessibility_tab.py - Accessibility features (background dimming, pixel shift)
+- ui/tabs/presets_tab.py - Presets configuration slider (Purist, Essentials, Media, Full Monty, Custom). Custom preset preserves user settings.
 - ui/widget_stack_predictor.py
   - `WidgetType`: Enum of widget types for prediction
   - `WidgetEstimate`: Dataclass for estimated widget dimensions
