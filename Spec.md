@@ -40,6 +40,13 @@ Single source of truth for architecture and key decisions.
 - System-agnostic: Uses `QGuiApplication.primaryScreen()` for detection, not screen index assumptions.
 - Dedicated investigation doc: `audits/PHASE_E_ROOT_CAUSE_ANALYSIS.md`.
 
+## Deployment
+- **SRPSS.scr** / **SRPSS.exe**: Main screensaver build
+- **SRPSS_MC.exe**: Manual Controller variant
+- **Inno Setup installer**: `scripts/SRPSS_Installer.iss`
+- **Build scripts**: PyInstaller and Nuitka options
+- **Defender heuristic mitigation (Jan 2026)**: Windows Defender began flagging the SCR as `Trojan:Win32/Wacatac.B!m` until we supplied proper PE version metadata. `scripts/build_nuitka.ps1` now forwards `APP_VERSION`, `APP_COMPANY`, `APP_DESCRIPTION`, and `APP_NAME` into Nuitka’s `--product-version`, `--file-version`, `--company-name`, `--file-description`, and `--product-name` flags. If heuristics flare up again, first confirm those fields are emitted before changing binaries or helper flows; keeping the SCR rename but omitting metadata recreates the false positive, whereas retaining the metadata (even with the `.scr` extension) passes Defender. `-KeepExe` / `-SkipScrRename` exist for experiments only and were not needed for the fix.
+
 ## Runtime Variants
 - Normal screensaver build:
   - Entry: `main.py`, deployed as `SRPSS.scr` / `SRPSS.exe`.
