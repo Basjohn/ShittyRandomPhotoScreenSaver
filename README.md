@@ -6,7 +6,7 @@ ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows (W10/W11) screensaver t
 
 ---
 
-Shitty Showcase where I cut off the Spotify controls in recording.
+Shitty Showcase (From 1.0) where I cut off the Spotify controls in recording.
 
 ## Features
 
@@ -36,8 +36,11 @@ Shitty Showcase where I cut off the Spotify controls in recording.
   - **Weather widget** using Open‑Meteo (no API key) with location autodetect on first run
   - **Media widget** (Spotify now‑playing) with optional controls and artwork
   - **Spotify beat visualizer** paired with the media widget – thin GPU bar overlay with a 1‑bar idle floor and a configurable ghosting trail (opacity + decay), with an automatic software fallback on non‑GL stacks
-  - **Reddit widget** showing top posts from a configured subreddit
-  Widget requests are welcome, the engine is robust enough to handle all sorts of your weird kinky shit.
+  - **Reddit widget** showing top posts from a configured subreddit with smart caching and delayed growth to avoid ratelimiting. If you select 20 posts it will slowly expand to that while avoiding reddit's hard limits. Also links are clickable which was way fucking harder for a screensaver than I considered. Payload discloser! The screensaver version puts a simple helper exe (C:\ProgramData\SRPSS\helper) to open reddit links for you because it isn't possible to open a browser while a SS is in effect without crashing both. MC has no need for a payload. If enough people ask I could make a version with no payload that just copies links to the clipboard but that would be extremely boring and should make you rethink your life choices. 
+
+  Plus we all know I'm the only one using this thing right now and using readmes and commit messages as cries for help.
+    
+  - Widget requests are welcome, the engine is robust enough to handle all sorts of your weird kinky shit.
 
 - **Settings dialog (config mode)**
   - Dark, frameless UI
@@ -172,7 +175,9 @@ In the **Screen Saver Settings** dialog:
   - Clock does a decent job figuring out your timezone, you can have multiple timezones and up to 3 clocks, optionally digital or analogue and with different regions per display.
   - Weather does a really bad job of figuring out where you are but has awesome autocomplete so just start typing your City name and click the suggestion.
   - Reddit can be set to any subreddit you want.
-  - Pro tip, don't set widgets to appear at the same location on the same screen. By default they don't.
+  - UnPro tip, every widget has a performance cost. The less you have on the less impact it makes on your system, though it is designed to use <5-10% with everything on two displays at once which      is overkill.
+  - Presets are your friend. Sort of. They might ghost you later or something but for now, let them help you get a feel for what you want, then go custom when you want full control. You can change     your settings while on any preset and they WILL work but they won't be there if you swap presets later, that only works for custom.
+  - Take advantage of the random pool option in each transition to put ones you think are ugly/slow out of the random rotation for you.
 
 ## Versioning
 
