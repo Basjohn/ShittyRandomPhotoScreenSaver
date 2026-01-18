@@ -129,6 +129,20 @@ A living map of modules, purposes, and key classes. Keep this up to date.
     - Created `tests/test_worker_consolidated.py` with 30 parameterized tests
     - **1348 tests collected** (150 widget/worker tests passing)
 
+## Upcoming Work (_NOT YET IMPLEMENTED_)
+- **Weather Widget SVG Refresh**: Adopt right-aligned `QHBoxLayout` container with animated SVGs sourced from the existing downloader cache. Requires updates to `widgets/weather_widget.py`, `widgets/weather_renderer.py`, and `Docs/Spec.md` once implementation begins.
+- **Visualizer Mode Additions**: Add non-Spectrum modes (e.g., waveform morph, DNA helix, ribbon arcs) to `widgets/spotify_visualizer_widget.py` and `widgets/spotify_visualizer/` GLSL overlays while preserving Spectrum defaults. Document presets + defaults in Spec/Index when ready.
+- **Reddit Widget Enhancements**: Add “copy link vs open browser” options and richer click behaviors under `ui/tabs/widgets_tab.py` + `widgets/reddit_widget.py`.
+- **Imgur Widget Investigation**: Research feasibility, rate limiting, and scraping/API requirements for an Imgur overlay (`widgets/imgur_widget.py`, `sources/imgur_source.py`). Implementation deferred pending investigation outcomes captured in `Docs/Feature_Investigation_Plan.md`.
+- **Cache Slider Default Increase**: Plan calls for bumping `cache.max_items` from 24 → 30 in `core/settings/defaults.py` plus UI/Spec updates. Do not update values until implementation lands.
+- **Automation Hooks**: Add CI rule to block widgets importing `QThread`/`threading.Thread` directly (ties into Widget Guidelines §11). Awaiting tooling.
+- **Transition Desync Settings**: Introduce configurable “desync window” (transition-safe quiet period) exposed via `transitions.desync_guard_ms` in Settings + Spec to enforce the policy described below.
+
+### Transition Desync Policy (current state)
+- `rendering/gl_compositor.py` applies a per-display random delay (0–500 ms) with compensated durations so GPU uploads and Transition start costs are staggered while visuals remain aligned. See `_apply_desync_strategy()` and `_desync_delay_ms`.
+- `DisplayManager`/`TransitionController` wait for all displays to report ready via a lock-free SPSC queue before starting synchronized transitions, preventing large start spikes.
+- _NOT YET IMPLEMENTED_: surface `transitions.desync_guard_ms` + UI controls so operators can tune/disable stagger windows explicitly; document the guard in Spec once the setting lands.
+
 ## Core Managers
 - core/threading/manager.py
   - ThreadManager, ThreadPoolType, TaskPriority

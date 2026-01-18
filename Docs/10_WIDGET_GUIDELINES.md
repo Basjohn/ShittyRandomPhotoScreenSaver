@@ -667,3 +667,29 @@ widgets are siblings of QOpenGLWidget.
 3. Confirm GL overlays defer `show()` until fade > 0
 4. Check `_gl_initialized` guard in QOpenGLWidget subclasses
 5. Verify `configure_overlay_widget_attributes()` is called on all overlay widgets
+
+---
+
+## 11. Threading & Repaint Discipline
+
+Overlay widgets already rely on `ThreadManager` pools and shared fade/shadow helpers. This section makes the policy explicit so future work cannot regress into ad‑hoc timers or paint thrash.
+
+- **ThreadManager-only timers**  
+  Overlay refresh loops (weather fetch, Spotify beat engine, Reddit polls) must use `ThreadManager.register_overlay_timer()` or `ThreadManager.submit_*` helpers. Raw `QTimer`/`QThread` usage in widgets is prohibited unless explicitly whitelisted in `ThreadManager`.  
+  - _NOT YET IMPLEMENTED_: automated lint/test hook that fails CI if widgets import `QThread`/`threading.Thread` directly.
+
+- **No UI-thread blocking**  
+  Any IO, HTTP, media control, or SVG decode must occur off the UI thread. Handlers return immediately and post UI work via `invoke_on_ui_thread`. Logging long-running UI work is grounds for rollback.
+
+- **Minimal repaint surfaces**  
+  Widgets must cache rich-text bodies, pixmaps, and SVG frames; `paintEvent` should only blit cached assets plus lightweight transforms. Avoid per-frame `QPixmap` creation, `QFontMetrics` recalculation, or logging.
+
+- **Coordinated fades**  
+  `ShadowFadeProfile.start_fade_in()` remains the canonical entry point; widgets do not start new QPropertyAnimations. Future fade experiments must integrate with `ShadowFadeProfile` (or its successor) so card opacity, drop shadows, and GPU overlays stay in lockstep.  
+  - _NOT YET IMPLEMENTED_: shared “fade profile registry” allowing per-widget overrides without bypassing the manager.
+
+- **Desync-safe transition scheduling**  
+  Widgets must not schedule heavy work (network, SVG decode, shader uploads) exactly when transitions start. `WidgetManager` already staggers overlay timers relative to `DisplayWidget.request_overlay_fade_sync`. When adding new timers, consult `transition_controller.DesyncPolicy` to avoid work spikes during `transition.start()`.  
+  - _NOT YET IMPLEMENTED_: explicit “desync window” configuration in settings to reflect the Transition Desync Policy described in `Spec.md`.
+
+Document deviations here whenever a widget requires special handling.

@@ -57,7 +57,7 @@ class CursorHaloWidget(QWidget):
         self.setAutoFillBackground(False)
         # Hide mouse cursor over halo - the halo IS the cursor
         self.setCursor(Qt.CursorShape.BlankCursor)
-        self.resize(48, 48)  # 20% smaller than original 60x60
+        self.resize(38, 38)  # 20% smaller than the previous 48x48 footprint
         self._opacity = 1.0
         self._animation_id: Optional[str] = None
         self._animation_manager = AnimationManager()

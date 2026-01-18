@@ -30,6 +30,12 @@ Single source of truth for architecture and key decisions.
 - BeatEngine (extracted from SpotifyVisualizerWidget) handles FFT processing and bar smoothing on COMPUTE pool.
 - **UI Thread Discipline**: Any new diagnostics or telemetry (tray icons, overlays, animations) must avoid blocking the UI thread. All polling belongs on ThreadManager pools with `invoke_in_ui_thread()` postings; even 100 ms sync calls (e.g. `psutil.cpu_percent(0.1)`) will surface as 100–160 ms dt spikes in transitions.
 
+### Transition Desync Policy
+- `GLCompositorWidget` assigns each display a random desync delay (0–500 ms) via `_apply_desync_strategy()`, then compensates transition duration so every display finishes at the same visual progress even though GPU uploads are staggered. This prevents multi-display spikes and reduces the chance that CPU/GPU work overlaps precisely with transition start @rendering/gl_compositor.py#174-412.
+- `DisplayManager`/`TransitionController` stage a lock-free SPSC queue handshake before synchronized transitions begin so all displays are ready before animations run, further reducing desync risk @engine/display_manager.py#448-665.
+- Widgets must also honor the **Desync-safe scheduling** guidance in `Docs/10_WIDGET_GUIDELINES.md` §11 so overlay timers avoid heavy work during `transition.start()`.
+- _NOT YET IMPLEMENTED_: User-facing `transitions.desync_guard_ms` + UI controls to tune/disable stagger windows. Once implemented, document the setting here and in Index.md, and gate widget timers via this guard.
+
 ## Phase E Status: Context Menu / Effect Cache Corruption ✅ MITIGATED
 - Symptom: overlay shadow/opacity corruption artifacts triggered by Reddit link clicks and context menus.
 - Root cause: `SetForegroundWindow()` in `_try_bring_reddit_window_to_front()` steals focus, triggering Windows activation messages that corrupt Qt's `QGraphicsEffect` cache.
@@ -240,6 +246,14 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
   - Spotify visualizer sensitivity naming:
     - UI label is **Recommended**.
     - Stored settings key remains `widgets.spotify_visualizer.adaptive_sensitivity` for backward compatibility.
+
+### Upcoming Settings / Features (_NOT YET IMPLEMENTED_)
+- `transitions.desync_guard_ms`: Proposed setting to define a quiet window around transition start where new overlay timers/network work are deferred. Will surface in Settings UI once coded.
+- **Weather Animated SVG Layout**: Planned migration to a QWidget+`QHBoxLayout` container with right-aligned animated SVG icons. Requires updates to `widgets/weather_widget.py`, `widgets/weather_renderer.py`, and this Spec.
+- **Visualizer Alternative Modes**: Additional OpenGL modes (waveform morph, DNA helix, ribbon arcs) will extend `widgets/spotify_visualizer_widget.py` + GLSL overlays while leaving Spectrum untouched.
+- **Reddit Widget Enhancements**: Option to copy link instead of launching browser plus richer click handling in `widgets/reddit_widget.py`.
+- **Imgur Widget Investigation**: Pending research into APIs/rate limiting for an Imgur overlay; implementation deferred but captured in `Docs/Feature_Investigation_Plan.md`.
+- **Cache Slider Default Increase**: Plan calls for raising `cache.max_items` to 30; keep existing value (24) until implementation lands and this Spec is updated accordingly.
   - `widgets.reddit.*`: Reddit overlay widget configuration (enabled flag, per-monitor selection via `monitor` ('ALL'|1|2|3), 9 position options (Top/Middle/Bottom × Left/Center/Right), subreddit slug, item limit (4-, 10-, or 20-item layouts for ultra-wide/large displays), font family/size, margin, text colour, optional background frame and border with opacity, background opacity). The widget fetches Reddit's unauthenticated JSON listing endpoints with a fixed candidate pool (up to 25 posts), then sorts all valid entries by `created_utc` so the newest posts appear at the top; each layout simply changes how many rows are rendered from that sorted list. The widget hides itself on fetch/parse failure and only responds to clicks in Ctrl-held / hard-exit interaction modes. Initial visibility is coordinated through the shared overlay fade-in system so Reddit, Weather and Media fade together per display.
   - `widgets.reddit2.*`: Second Reddit widget configuration (enabled flag, per-monitor selection via `monitor`, 9 position options, subreddit slug, item limit). Inherits all styling (font, colors, background, border, opacity) from `widgets.reddit.*` to allow showing two different subreddits simultaneously.
  - `widgets.shadows.*`: global drop-shadow configuration shared by all overlay widgets (enabled flag, colour, offset, blur radius, text/frame opacity multipliers). Individual widgets perform a two-stage startup animation: first a coordinated card opacity fade-in (driven by the overlay fade synchronizer), then a shadow fade where the drop shadow grows smoothly from transparent to its configured opacity using the same global duration/easing. Shadows are slightly enlarged/softened via a shared blur-radius multiplier so all widgets share a consistent halo.
