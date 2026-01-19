@@ -20,13 +20,14 @@ State Management:
         RUNNING -> REINITIALIZING -> RUNNING (for settings changes)
         Any state -> SHUTTING_DOWN (terminal)
 """
-import threading
 import random
+import threading
+import time
 from datetime import datetime, timedelta
 from enum import Enum, auto
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple
-from PySide6.QtCore import QObject, Signal, QTimer, QSize, QMetaObject, Qt, QThread
+from PySide6.QtCore import QObject, Signal, QTimer, QSize, QMetaObject, Qt, QThread, QCoreApplication
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QPixmap, QImage
 
@@ -37,6 +38,7 @@ from core.resources import ResourceManager
 from core.threading import ThreadManager
 from core.settings import SettingsManager
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
+from core.rss.pipeline_manager import get_rss_pipeline_manager, RssPipelineManager
 from core.animation import AnimationManager
 from core.process import ProcessSupervisor, WorkerType, MessageType
 from core.process.workers import (
@@ -50,7 +52,10 @@ from engine.display_manager import DisplayManager
 from engine.image_queue import ImageQueue
 from sources.folder_source import FolderSource
 from sources.rss_source import RSSSource
-from sources.base_provider import ImageMetadata, ImageSourceType
+from sources.base_provider import (
+    ImageMetadata,
+    ImageSourceType,
+)
 from rendering.display_modes import DisplayMode
 from rendering.image_processor_async import AsyncImageProcessor
 from ui.settings_dialog import SettingsDialog
@@ -136,6 +141,7 @@ class ScreensaverEngine(QObject):
         self.resource_manager: Optional[ResourceManager] = None
         self.thread_manager: Optional[ThreadManager] = None
         self.settings_manager: Optional[SettingsManager] = None
+        self._rss_pipeline: RssPipelineManager = get_rss_pipeline_manager()
         
         # Engine components
         self.display_manager: Optional[DisplayManager] = None
@@ -185,6 +191,8 @@ class ScreensaverEngine(QObject):
         # Background RSS refresh
         self._rss_refresh_timer: Optional[QTimer] = None
         self._rss_merge_lock = threading.Lock()
+        self._rss_async_generation: int = 0
+        self._rss_async_active: bool = False
         
         # Process Supervisor for multiprocessing workers
         self._process_supervisor: Optional[ProcessSupervisor] = None
@@ -299,6 +307,9 @@ class ScreensaverEngine(QObject):
                 return False
             # Initialize cache + prefetcher after queue is ready
             self._initialize_cache_prefetcher()
+
+            if self.image_queue:
+                self._rss_pipeline.rebuild_dedupe_index(self.image_queue)
             
             # Initialize display manager
             if not self._initialize_display():
@@ -383,6 +394,13 @@ class ScreensaverEngine(QObject):
             self._process_supervisor.register_worker_factory(WorkerType.TRANSITION, transition_worker_main)
             logger.info("ProcessSupervisor initialized with 4 worker factories")
             
+            # Initialize RSS pipeline now that core managers exist
+            self._rss_pipeline.initialize(
+                thread_manager=self.thread_manager,
+                resource_manager=self.resource_manager,
+                settings_manager=self.settings_manager,
+            )
+
             logger.info("Core systems initialized successfully")
             return True
         
@@ -513,13 +531,15 @@ class ScreensaverEngine(QObject):
             # Pre-load cached RSS images BEFORE starting async download
             # This gives immediate RSS variety without waiting for network
             if self.rss_sources:
+                per_feed_seed = self._get_rss_sync_seed_limit()
                 cached_rss_images: List[ImageMetadata] = []
                 for rss_source in self.rss_sources:
-                    # get_images() returns cached images without triggering refresh
-                    # because _load_cached_images() was called in __init__
-                    cached = rss_source._images.copy()  # Get pre-loaded cache
+                    # get_images() here only returns cached entries because
+                    # refresh has not been called yet. Limit per feed so we
+                    # do not block startup with hundreds of files.
+                    cached = rss_source.get_images()
                     if cached:
-                        cached_rss_images.extend(cached)
+                        cached_rss_images.extend(cached[:per_feed_seed])
                 
                 if cached_rss_images:
                     # Enforce RSS cap on initial load - only load up to rss_rotating_cache_size
@@ -536,6 +556,7 @@ class ScreensaverEngine(QObject):
                         cached_rss_images = cached_rss_images[:rotating_cache_size]
                     count = self.image_queue.add_images(cached_rss_images)
                     logger.info(f"Pre-loaded {count} cached RSS images for immediate use (cap={rotating_cache_size})")
+                    self._rss_pipeline.record_images(cached_rss_images)
             
             # Load RSS images asynchronously (don't block startup)
             if self.rss_sources:
@@ -553,6 +574,14 @@ class ScreensaverEngine(QObject):
                 logger.info("No local images - waiting for RSS images to load...")
                 # This is the ONLY case where we block on RSS
                 self._load_rss_images_sync()
+                min_required = self._get_minimum_rss_start_images()
+                if min_required > 0:
+                    if not self._wait_for_min_rss_images(min_required):
+                        logger.warning(
+                            "[ASYNC RSS] Startup guard timed out with only %d/%d RSS images; continuing anyway",
+                            self._count_unique_rss_images(),
+                            min_required,
+                        )
                 if self.image_queue.total_images() == 0:
                     logger.error("No images found from RSS sources")
                     self.error_occurred.emit("No images found")
@@ -665,16 +694,22 @@ class ScreensaverEngine(QObject):
         if not self.rss_sources or not self.thread_manager:
             return
         
-        logger.info(f"Starting async RSS load for {len(self.rss_sources)} sources...")
+        generation = self._next_rss_async_generation()
+        self._rss_async_active = True
+        logger.info(
+            "[ASYNC RSS] Starting async RSS load for %d sources (gen=%d)...",
+            len(self.rss_sources),
+            generation,
+        )
         
         # Capture reference to self for closure
         engine = self
         
         # Set shutdown callback on all RSS sources so they can abort during downloads
-        def should_continue():
-            # Only abort if we're actually shutting down, not just reinitializing
-            # _shutting_down is only True during stop(), not during settings changes
-            return not engine._shutting_down
+        generation_token = generation
+
+        def should_continue() -> bool:
+            return (generation_token == engine._rss_async_generation) and (not engine._shutting_down)
         
         for rss_source in self.rss_sources:
             rss_source.set_shutdown_check(should_continue)
@@ -693,153 +728,425 @@ class ScreensaverEngine(QObject):
             from sources.rss_source import _get_source_priority
             
             rss_images: List[ImageMetadata] = []
+
+            def is_cancelled() -> bool:
+                return generation != engine._rss_async_generation or engine._shutting_down
             
-            # Check if RSSWorker is available
-            use_worker = (
-                engine._process_supervisor is not None and 
-                engine._process_supervisor.is_running(WorkerType.RSS)
-            )
-            
-            if use_worker:
-                logger.info("[ASYNC RSS] Using RSSWorker process for RSS loading")
-            
-            # Sort sources by priority - non-Reddit first (higher priority = earlier)
-            # Each RSSSource has feed_urls attribute with the feed URL(s)
-            def get_source_priority(src):
-                if hasattr(src, 'feed_urls') and src.feed_urls:
-                    return _get_source_priority(src.feed_urls[0])
-                return 50
-            
-            sources = sorted(engine.rss_sources, key=get_source_priority, reverse=True)
-            
-            # Get cache directory from first source if available
-            cache_dir = None
-            for src in sources:
-                if hasattr(src, '_cache_dir') and src._cache_dir:
-                    cache_dir = str(src._cache_dir)
-                    break
-            
-            for i, rss_source in enumerate(sources):
-                # CHECK FOR SHUTDOWN - only abort if actually shutting down
-                if engine._shutting_down:
-                    logger.info("[ASYNC RSS] Engine shutting down, aborting RSS load")
+            try:
+                # Check if RSSWorker is available
+                use_worker = (
+                    engine._process_supervisor is not None and 
+                    engine._process_supervisor.is_running(WorkerType.RSS)
+                )
+                
+                if use_worker:
+                    logger.info("[ASYNC RSS] Using RSSWorker process for RSS loading")
+                
+                # Sort sources by priority - non-Reddit first (higher priority = earlier)
+                # Each RSSSource has feed_urls attribute with the feed URL(s)
+                def get_source_priority(src):
+                    if hasattr(src, 'feed_urls') and src.feed_urls:
+                        return _get_source_priority(src.feed_urls[0])
+                    return 50
+                
+                sources = sorted(engine.rss_sources, key=get_source_priority, reverse=True)
+
+                if is_cancelled():
+                    logger.debug("[ASYNC RSS] Cancelled before start (gen=%d)", generation)
                     return
                 
-                try:
-                    feed_url = rss_source.feed_urls[0] if hasattr(rss_source, 'feed_urls') and rss_source.feed_urls else 'unknown'
-                    logger.info(f"[ASYNC RSS] Processing source {i+1}/{len(sources)}: {feed_url[:60]}...")
+                # Get cache directory from first source if available
+                cache_dir = None
+                for src in sources:
+                    if hasattr(src, '_cache_dir') and src._cache_dir:
+                        cache_dir = str(src._cache_dir)
+                        break
+                
+                for i, rss_source in enumerate(sources):
+                    # CHECK FOR SHUTDOWN - only abort if actually shutting down
+                    if is_cancelled():
+                        logger.info("[ASYNC RSS] Load cancelled mid-run (gen=%d)", generation)
+                        logger.info("[ASYNC RSS] Engine shutting down, aborting RSS load")
+                        return
                     
-                    images_before = len(rss_images)
-                    images: List[ImageMetadata] = []
-                    worker_succeeded = False
-                    
-                    # Try RSSWorker first if available
-                    if use_worker:
-                        worker_result = engine._fetch_rss_via_worker(
-                            feed_url,
-                            cache_dir=cache_dir,
-                            max_images=8,
-                            timeout_ms=30000,
-                        )
+                    try:
+                        if is_cancelled():
+                            logger.info("[ASYNC RSS] Load cancelled mid-run (gen=%d)", generation)
+                            return
+
+                        feed_url = rss_source.feed_urls[0] if hasattr(rss_source, 'feed_urls') and rss_source.feed_urls else 'unknown'
+                        logger.info(f"[ASYNC RSS] Processing source {i+1}/{len(sources)}: {feed_url[:60]}...")
                         
-                        if worker_result is not None:
-                            # Convert worker response dicts to ImageMetadata objects
-                            for img_dict in worker_result:
-                                try:
-                                    local_path = img_dict.get("local_path")
-                                    if local_path:
-                                        local_path = Path(local_path)
-                                    
-                                    meta = ImageMetadata(
-                                        source_type=ImageSourceType.RSS,
-                                        source_id=img_dict.get("source_id", ""),
-                                        url=img_dict.get("url"),
-                                        local_path=local_path,
-                                        title=img_dict.get("title", ""),
-                                    )
-                                    images.append(meta)
-                                except Exception as e:
-                                    logger.debug(f"[ASYNC RSS] Failed to convert worker result: {e}")
-                            
-                            if images:
-                                worker_succeeded = True
-                                logger.debug(f"[ASYNC RSS] RSSWorker returned {len(images)} images")
-                    
-                    # Fallback to RSSSource if worker failed or unavailable
-                    if not worker_succeeded:
+                        images_before = len(rss_images)
+                        images: List[ImageMetadata] = []
+                        worker_succeeded = False
+                        
+                        # Try RSSWorker first if available
                         if use_worker:
-                            logger.debug("[ASYNC RSS] RSSWorker failed, falling back to RSSSource")
-                        rss_source.refresh(max_images_per_source=8)
-                        images = rss_source.get_images()
-                    
-                    rss_images.extend(images)
-                    images_added = len(rss_images) - images_before
-                    
-                    if images_added > 0:
-                        logger.info(f"[ASYNC RSS] Loaded {images_added} images from source")
-                        # Add images to queue immediately so user sees them
-                        # But respect the background cap
-                        if engine.image_queue and not engine._shutting_down:
-                            cap = engine._get_rss_background_cap()
-                            current_rss = sum(1 for m in engine.image_queue.get_all_images() 
-                                            if getattr(m, 'source_type', None) == ImageSourceType.RSS)
-                            remaining = max(0, cap - current_rss)
-                            if remaining > 0:
-                                to_add = images[:remaining] if len(images) > remaining else images
-                                engine.image_queue.add_images(to_add)
-                                logger.debug(f"[ASYNC RSS] Added {len(to_add)} images (cap={cap}, current={current_rss})")
-                            else:
-                                logger.debug(f"[ASYNC RSS] RSS cap reached ({cap}), skipping {len(images)} images")
-                    else:
-                        logger.warning(f"[ASYNC RSS] Source returned 0 images (may be rate limited): {feed_url}")
-                    
-                    # Mark first load done so shutdown check works properly
-                    engine._rss_first_load_done = True
-                    
-                    # Add delay between sources to avoid rate limiting
-                    # Use shorter delays and check for shutdown during wait
-                    # Skip delay if using worker (worker handles rate limiting internally)
-                    if i < len(sources) - 1 and not worker_succeeded:
-                        for _ in range(4):  # 4 x 0.5s = 2s total, but can exit early
-                            if engine._shutting_down:
-                                logger.info("[ASYNC RSS] Engine shutting down during delay, aborting")
-                                return
-                            time.sleep(0.5)
+                            worker_result = engine._fetch_rss_via_worker(
+                                feed_url,
+                                cache_dir=cache_dir,
+                                max_images=8,
+                                timeout_ms=30000,
+                                generation_token=generation_token,
+                            )
+                            
+                            if worker_result is not None:
+                                # Convert worker response dicts to ImageMetadata objects
+                                for img_dict in worker_result:
+                                    try:
+                                        local_path = img_dict.get("local_path")
+                                        if local_path:
+                                            local_path = Path(local_path)
+                                        
+                                        meta = ImageMetadata(
+                                            source_type=ImageSourceType.RSS,
+                                            source_id=img_dict.get("source_id", ""),
+                                            url=img_dict.get("url"),
+                                            local_path=local_path,
+                                            title=img_dict.get("title", ""),
+                                        )
+                                        images.append(meta)
+                                    except Exception as e:
+                                        logger.debug(f"[ASYNC RSS] Failed to convert worker result: {e}")
+                                
+                                if images:
+                                    worker_succeeded = True
+                                    logger.debug(f"[ASYNC RSS] RSSWorker returned {len(images)} images")
                         
-                except Exception as e:
-                    logger.warning(f"[ASYNC RSS] Failed to load RSS source: {e}")
-            
-            # NO RETRY WAIT - rate-limited sources are skipped, not retried
-            # This prevents blocking app exit
-            
-            total_loaded = len(rss_images)
-            logger.info(f"[ASYNC RSS] Completed: {total_loaded} total images loaded from {len(sources)} sources")
-        
+                        # Fallback to RSSSource if worker failed or unavailable
+                        if not worker_succeeded:
+                            if use_worker:
+                                logger.debug("[ASYNC RSS] RSSWorker failed, falling back to RSSSource")
+                            rss_source.refresh(max_images_per_source=8)
+                            images = rss_source.get_images()
+                        
+                        rss_images.extend(images)
+                        images_added = len(rss_images) - images_before
+                        
+                        if images_added > 0:
+                            logger.info(f"[ASYNC RSS] Loaded {images_added} images from source")
+                            # Add images to queue immediately so user sees them
+                            # But respect the background cap
+                            if engine.image_queue and not engine._shutting_down:
+                                cap = engine._get_rss_background_cap()
+                                current_rss = sum(1 for m in engine.image_queue.get_all_images() 
+                                                if getattr(m, 'source_type', None) == ImageSourceType.RSS)
+                                remaining = max(0, cap - current_rss)
+                                if remaining > 0:
+                                    to_add = images[:remaining] if len(images) > remaining else images
+                                    engine.image_queue.add_images(to_add)
+                                    logger.debug(f"[ASYNC RSS] Added {len(to_add)} images (cap={cap}, current={current_rss})")
+                                else:
+                                    logger.debug(f"[ASYNC RSS] RSS cap reached ({cap}), skipping {len(images)} images")
+                        else:
+                            logger.warning(f"[ASYNC RSS] Source returned 0 images (may be rate limited): {feed_url}")
+                        
+                        # Mark first load done so shutdown check works properly
+                        engine._rss_first_load_done = True
+                        
+                        # Add delay between sources to avoid rate limiting
+                        # Use shorter delays and check for shutdown during wait
+                        # Skip delay if using worker (worker handles rate limiting internally)
+                        if i < len(sources) - 1 and not worker_succeeded:
+                            for _ in range(4):  # 4 x 0.5s = 2s total, but can exit early
+                                if is_cancelled():
+                                    logger.info("[ASYNC RSS] Load cancelled during delay (gen=%d)", generation)
+                                    logger.info("[ASYNC RSS] Engine shutting down during delay, aborting")
+                                    return
+                                time.sleep(0.5)
+                            
+                    except Exception as e:
+                        logger.warning(f"[ASYNC RSS] Failed to load RSS source: {e}")
+                
+                # NO RETRY WAIT - rate-limited sources are skipped, not retried
+                # This prevents blocking app exit
+                
+                if is_cancelled():
+                    logger.info("[ASYNC RSS] Load cancelled after completion (gen=%d)", generation)
+                    return
+
+                total_loaded = len(rss_images)
+                logger.info(f"[ASYNC RSS] Completed: {total_loaded} total images loaded from {len(sources)} sources (gen={generation})")
+            finally:
+                engine._rss_async_active = False
+
         # Submit to IO thread pool
-        self.thread_manager.submit_io_task(load_rss_task)
+        try:
+            self.thread_manager.submit_io_task(load_rss_task)
+        except Exception as exc:
+            self._rss_async_active = False
+            logger.warning("[ASYNC RSS] Failed to submit async task: %s", exc)
+
+    def _next_rss_async_generation(self) -> int:
+        """Advance and return the async RSS generation counter."""
+        self._rss_async_generation += 1
+        return self._rss_async_generation
+
+    def _cancel_async_rss_load(self) -> None:
+        """Signal any in-flight async RSS loaders to stop early."""
+        new_gen = self._next_rss_async_generation()
+        logger.debug("[ASYNC RSS] Cancel signal issued (gen=%d)", new_gen)
     
+    def _get_rss_image_key(self, image: Optional[ImageMetadata]) -> str:
+        """Return a stable key for deduplicating RSS images."""
+        if not image:
+            return ""
+        if image.url:
+            return f"url:{image.url}"
+        if image.image_id:
+            return f"id:{image.source_id}:{image.image_id}"
+        if image.local_path:
+            return f"path:{image.local_path}"
+        return f"obj:{id(image)}"
+
     def _load_rss_images_sync(self) -> None:
-        """Load RSS images synchronously (only used when no local images exist)."""
-        logger.info(f"Loading RSS images synchronously for {len(self.rss_sources)} sources...")
-        
-        cap = self._get_rss_background_cap()
-        rss_images: List[ImageMetadata] = []
-        for rss_source in self.rss_sources:
+        """Load a small batch of RSS images synchronously when no local images exist."""
+        if not self.rss_sources:
+            return
+
+        per_feed_seed = self._get_rss_sync_seed_limit()
+        seed_total = self._get_rss_sync_seed_total(per_feed_seed)
+        if seed_total <= 0:
+            return
+
+        logger.info(
+            "Loading RSS images synchronously for %d sources (seed=%d total=%d)...",
+            len(self.rss_sources),
+            per_feed_seed,
+            seed_total,
+        )
+
+        result: dict[str, List[ImageMetadata]] = {}
+        done = threading.Event()
+
+        def worker():
             try:
-                images = rss_source.get_images()
-                rss_images.extend(images)
-                logger.info(f"Added {len(images)} images from RSS source")
-            except Exception as e:
-                logger.warning(f"[FALLBACK] Failed to get images from RSS source: {e}")
-        
-        if rss_images and self.image_queue:
-            # Enforce cap on sync load as well
-            if len(rss_images) > cap:
-                import random
-                random.shuffle(rss_images)
-                rss_images = rss_images[:cap]
-            count = self.image_queue.add_images(rss_images)
-            logger.info(f"Queue initialized with {count} RSS images (cap={cap})")
+                images = self._collect_rss_seed_images(per_feed_seed, seed_total)
+                result["images"] = images
+                if self.event_system:
+                    try:
+                        self.event_system.publish(
+                            EventType.RSS_UPDATED,
+                            data={
+                                "phase": "sync_seed",
+                                "count": len(images),
+                            },
+                            source=self,
+                        )
+                    except Exception as exc:
+                        logger.debug(f"{TAG_RSS} Failed to publish RSS_UPDATED for sync seed: %s", exc)
+            finally:
+                done.set()
+
+        submitted = False
+        if self.thread_manager:
+            try:
+                self.thread_manager.submit_io_task(worker)
+                submitted = True
+            except Exception as exc:
+                logger.warning("[ASYNC RSS] Failed to offload sync seed: %s", exc)
+
+        if not submitted:
+            worker()
+        else:
+            if not self._wait_for_event_with_ui_pump(done, timeout_seconds=20.0):
+                logger.warning("[ASYNC RSS] Sync seed timed out waiting for worker completion")
+                return
+
+        rss_images = result.get("images") or []
+        if not rss_images or not self.image_queue:
+            return
+
+        cap = self._get_rss_background_cap()
+        if len(rss_images) > cap:
+            rss_images = rss_images[:cap]
+        count = self.image_queue.add_images(rss_images)
+        logger.info("Queue initialized with %d RSS images (cap=%d)", count, cap)
+        self._rss_pipeline.record_images(rss_images)
+
+    def _collect_rss_seed_images(
+        self,
+        per_feed_seed: int,
+        total_cap: int,
+    ) -> List[ImageMetadata]:
+        """Collect initial RSS images up to the requested cap."""
+        collected: List[ImageMetadata] = []
+        seen_keys: set[str] = set()
+
+        for rss_source in self.rss_sources:
+            if len(collected) >= total_cap:
+                break
+            try:
+                images = list(rss_source.get_images() or [])
+            except Exception as exc:
+                logger.warning(f"[FALLBACK] Failed to get images from RSS source: {exc}")
+                continue
+
+            if per_feed_seed and len(images) > per_feed_seed:
+                images = images[:per_feed_seed]
+
+            for img in images:
+                if len(collected) >= total_cap:
+                    break
+                key = self._get_rss_image_key(img)
+                if key and key in seen_keys:
+                    continue
+                if key:
+                    seen_keys.add(key)
+                collected.append(img)
+
+            if images:
+                logger.debug(
+                    "Seeded %d images from RSS source %s",
+                    len(images),
+                    rss_source.feed_urls[0] if getattr(rss_source, "feed_urls", None) else "unknown",
+                )
+
+        return collected
+
+    def _get_rss_sync_seed_total(self, per_feed_seed: int) -> int:
+        """Determine how many images we should synchronously seed in total."""
+        min_required = self._get_minimum_rss_start_images()
+        cap = self._get_rss_background_cap()
+        per_feed_seed = max(1, per_feed_seed)
+
+        # Ensure we at least meet the guard, but never exceed the background cap.
+        total = max(min_required, per_feed_seed)
+        total = min(total, cap)
+        return total
+
+    def _wait_for_event_with_ui_pump(
+        self,
+        event: threading.Event,
+        timeout_seconds: float = 20.0,
+        poll_interval: float = 0.05,
+    ) -> bool:
+        """Wait for threading.Event while keeping the Qt event loop responsive."""
+        deadline = time.monotonic() + max(0.0, timeout_seconds)
+        app = QCoreApplication.instance()
+
+        while not event.is_set():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            wait_time = min(poll_interval, max(0.0, remaining))
+            event.wait(wait_time)
+            if app:
+                try:
+                    app.processEvents()
+                except Exception as exc:  # pragma: no cover - defensive
+                    logger.debug("[ENGINE] Exception suppressed while pumping events: %s", exc)
+
+        return event.is_set()
+
+    def _get_minimum_rss_start_images(self) -> int:
+        """Return minimum RSS images required before starting when no local images exist."""
+        default_min = 4
+        try:
+            if not self.settings_manager:
+                return default_min
+            raw = self.settings_manager.get("sources.rss_min_start_images", default_min)
+            value = int(raw)
+            return max(0, min(30, value))
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.debug("[ENGINE] Failed to read rss_min_start_images: %s", exc)
+            return default_min
+
+    def _count_unique_rss_images(self) -> int:
+        """Return the number of unique RSS images currently in the queue."""
+        if not self.image_queue:
+            return 0
+        seen = set()
+        for img in self.image_queue.get_all_images():
+            if getattr(img, "source_type", None) != ImageSourceType.RSS:
+                continue
+            key = self._get_rss_image_key(img)
+            if not key:
+                key = f"obj:{id(img)}"
+            seen.add(key)
+        return len(seen)
+
+    def _wait_for_min_rss_images(
+        self,
+        min_required: int,
+        timeout_seconds: float = 15.0,
+        check_interval: float = 0.5,
+    ) -> bool:
+        """Block until at least `min_required` RSS images are in the queue or timeout."""
+        if min_required <= 0:
+            return True
+
+        start_time = time.monotonic()
+
+        while True:
+            if self._shutting_down:
+                return False
+
+            current = self._count_unique_rss_images()
+            if current >= min_required:
+                elapsed = time.monotonic() - start_time
+                logger.info(
+                    "[ASYNC RSS] Startup guard satisfied with %d RSS images (min=%d, elapsed=%.2fs)",
+                    current,
+                    min_required,
+                    elapsed,
+                )
+                if self.event_system:
+                    try:
+                        self.event_system.publish(
+                            EventType.RSS_GUARD_SATISFIED,
+                            data={
+                                "required": min_required,
+                                "current": current,
+                                "elapsed_seconds": elapsed,
+                            },
+                            source=self,
+                        )
+                    except Exception as exc:
+                        logger.debug(f"{TAG_RSS} Failed to publish guard satisfied event: %s", exc)
+                return True
+
+            elapsed = time.monotonic() - start_time
+            remaining = timeout_seconds - elapsed
+            if remaining <= 0:
+                logger.warning(
+                    "[ASYNC RSS] Startup guard timed out after %.2fs with %d/%d RSS images",
+                    elapsed,
+                    current,
+                    min_required,
+                )
+                if self.event_system:
+                    try:
+                        self.event_system.publish(
+                            EventType.RSS_GUARD_TIMEOUT,
+                            data={
+                                "required": min_required,
+                                "current": current,
+                                "elapsed_seconds": elapsed,
+                            },
+                            source=self,
+                        )
+                    except Exception as exc:
+                        logger.debug(f"{TAG_RSS} Failed to publish guard timeout event: %s", exc)
+                return False
+
+            sleep_for = min(check_interval, remaining)
+            if sleep_for > 0:
+                time.sleep(sleep_for)
+
+    def _get_rss_sync_seed_limit(self) -> int:
+        """Return the per-feed seed limit for synchronous RSS loading."""
+        default_seed = 5
+        try:
+            if not self.settings_manager:
+                return default_seed
+            raw = self.settings_manager.get('sources.rss_sync_seed_per_feed', default_seed)
+            value = int(raw)
+            return max(1, min(10, value))
+        except Exception as e:
+            logger.debug("[ENGINE] Exception suppressed: %s", e)
+            return default_seed
 
     def _get_rss_background_cap(self) -> int:
         """Return the global background cap for RSS images.
@@ -971,6 +1278,9 @@ class ScreensaverEngine(QObject):
                 return
             if not (self.thread_manager and self.image_queue and self.rss_sources):
                 return
+            if self._rss_async_active:
+                logger.debug("[ASYNC RSS] Skipping background refresh (foreground async active)")
+                return
 
             cap = self._get_rss_background_cap()
             if cap <= 0:
@@ -1054,11 +1364,11 @@ class ScreensaverEngine(QObject):
                 logger.debug("[ENGINE] Exception suppressed: %s", e)
                 existing = []
 
-            existing_keys = set()
+            existing_keys: set[str] = set()
             current_rss = 0
             for m in existing:
                 try:
-                    key = str(m.local_path) if m.local_path else (m.url or "")
+                    key = self._get_rss_image_key(m)
                     if key:
                         existing_keys.add(key)
                     if getattr(m, 'source_type', None) == ImageSourceType.RSS:
@@ -1076,10 +1386,11 @@ class ScreensaverEngine(QObject):
                 try:
                     if getattr(m, 'source_type', None) != ImageSourceType.RSS:
                         continue
-                    key = str(m.local_path) if m.local_path else (m.url or "")
+                    key = self._get_rss_image_key(m)
                     if not key or key in existing_keys:
                         continue
                     new_items.append(m)
+                    existing_keys.add(key)
                 except Exception as e:
                     logger.debug("[ENGINE] Exception suppressed: %s", e)
                     continue
@@ -1186,6 +1497,7 @@ class ScreensaverEngine(QObject):
             max_mem_mb = int(self.settings_manager.get('cache.max_memory_mb', 1024))
             max_conc = int(self.settings_manager.get('cache.max_concurrent', 2))
             self._image_cache = ImageCache(max_items=max_items, max_memory_mb=max_mem_mb)
+            self._rss_pipeline.attach_image_cache(self._image_cache)
             if self.thread_manager:
                 self._prefetcher = ImagePrefetcher(self.thread_manager, self._image_cache, max_concurrent=max_conc)
             logger.info(f"Image prefetcher initialized (ahead={self._prefetch_ahead}, max_concurrent={max_conc})")
@@ -1559,8 +1871,9 @@ class ScreensaverEngine(QObject):
                     )
                 except Exception as e:
                     logger.info(
-                        "Stopping displays via DisplayManager (count=?, exit_app=%s)",
+                        "Stopping displays via DisplayManager (count=?, exit_app=%s, error=%s)",
                         exit_app,
+                        e,
                     )
 
                 try:
@@ -2684,7 +2997,7 @@ class ScreensaverEngine(QObject):
                     try:
                         self.display_manager.cleanup()
                     except Exception as e:
-                        logger.debug("DisplayManager cleanup after settings failed", exc_info=True)
+                        logger.debug("DisplayManager cleanup after settings failed: %s", e, exc_info=True)
                     self.display_manager = None
                     self._display_initialized = False
                 
@@ -2695,7 +3008,7 @@ class ScreensaverEngine(QObject):
                     coordinator.set_settings_dialog_active(False)  # Re-enable halo
                     coordinator.cleanup()
                 except Exception as e:
-                    logger.debug("Coordinator cleanup after settings failed", exc_info=True)
+                    logger.debug("Coordinator cleanup after settings failed: %s", e, exc_info=True)
 
                 # Reinitialize displays using current settings
                 if not self._initialize_display():
@@ -2817,6 +3130,9 @@ class ScreensaverEngine(QObject):
         if was_running:
             self._transition_state(EngineState.REINITIALIZING)
         
+        # Cancel in-flight async RSS loaders so they don't race the new config
+        self._cancel_async_rss_load()
+
         # Clear image cache - old cached images may no longer be valid
         if self._image_cache:
             try:

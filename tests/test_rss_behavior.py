@@ -260,6 +260,38 @@ class TestRSSBehavior:
         # (some may occur if pool is exhausted)
         assert consecutive_duplicates <= 2, \
             f"Too many consecutive duplicates: {consecutive_duplicates}"
+
+    def test_image_queue_rss_only_with_high_local_ratio(self):
+        """Ensure RSS-only queues still rotate when local ratio is high."""
+        from engine.image_queue import ImageQueue
+        from sources.base_provider import ImageMetadata, ImageSourceType
+
+        queue = ImageQueue(shuffle=False, history_size=20, local_ratio=90)
+
+        rss_images = [
+            ImageMetadata(
+                source_type=ImageSourceType.RSS,
+                source_id="feed_a",
+                image_id=f"rss_a_{i}",
+                local_path=None,
+                url=f"https://example.com/rss_a_{i}.jpg",
+                title=f"RSS A {i}",
+            )
+            for i in range(3)
+        ]
+
+        queue.add_images(rss_images)
+
+        selections = []
+        for _ in range(6):
+            img = queue.next()
+            if img:
+                selections.append(img.image_id)
+
+        assert len(selections) == 6, "Expected queue to return images for each request"
+        assert len(set(selections)) >= 2, "Expected at least two unique RSS images"
+        consecutive_duplicates = any(selections[i] == selections[i - 1] for i in range(1, len(selections)))
+        assert not consecutive_duplicates, "Queue should not return identical consecutive RSS images when pool > 1"
     
     def test_rss_refresh_adds_new_images_only(self, temp_cache_dir, mock_reddit_response):
         """Test that refresh only adds NEW images, not duplicates."""

@@ -67,6 +67,8 @@ class EventType:
     # Source events
     RSS_UPDATED = "rss.updated"
     RSS_FAILED = "rss.failed"
+    RSS_GUARD_SATISFIED = "rss.guard.satisfied"
+    RSS_GUARD_TIMEOUT = "rss.guard.timeout"
     WEATHER_UPDATED = "weather.updated"
     WEATHER_FAILED = "weather.failed"
     

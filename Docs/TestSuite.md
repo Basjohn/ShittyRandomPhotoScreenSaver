@@ -29,6 +29,10 @@ The test suite is now stable and can be relied upon for regression testing. All 
    - Tests all preset types (purist, essentials, media, full_monty, custom)
    - Nested setting paths, backup/restore, MC mode adjustments
    - Preset validation and persistence
+4. **`test_screensaver_engine_rss_seed.py`**
+   - Guards the synchronous RSS seeding limit recently added to `ScreensaverEngine`
+   - Asserts the per-feed seed clamp honors settings overrides and that the global RSS cap is respected even when feeds exceed the limit
+   - Uses deterministic queue and feed stubs to exercise edge cases (mixed feed ordering, cap < total requested)
 
 **Total New Tests:** ~100 tests across 3 modules  
 **Coverage Increase:** +15-20% for core modules  

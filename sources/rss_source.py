@@ -15,6 +15,7 @@ from datetime import datetime
 from typing import List, Optional, Callable
 from urllib.parse import urlparse, urlunparse
 from sources.base_provider import ImageProvider, ImageMetadata, ImageSourceType
+from core.rss.pipeline_manager import get_rss_pipeline_manager, RssPipelineManager
 from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
@@ -91,6 +92,7 @@ class RSSSource(ImageProvider):
             save_directory: Directory for permanent RSS image storage (required if save_to_disk=True)
         """
         self.feed_urls = feed_urls or list(DEFAULT_RSS_FEEDS.values())
+        self._pipeline: RssPipelineManager = get_rss_pipeline_manager()
         self.timeout = timeout_seconds
         self.max_cache_size = max_cache_size_mb * 1024 * 1024  # Convert to bytes
         self.max_images_per_refresh = max_images_per_refresh
@@ -99,7 +101,7 @@ class RSSSource(ImageProvider):
         if cache_dir:
             self.cache_dir = Path(cache_dir)
         else:
-            self.cache_dir = Path(tempfile.gettempdir()) / "screensaver_rss_cache"
+            self.cache_dir = self._pipeline.cache_dir
         
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
@@ -375,6 +377,7 @@ class RSSSource(ImageProvider):
         
         # Track feeds that returned 0 results for retry
         rate_limited_feeds = []
+        skipped_reddit_due_to_rate_limit = False
         
         for i, feed_url in enumerate(feeds_to_process):
             # Check for shutdown between feeds
@@ -406,6 +409,11 @@ class RSSSource(ImageProvider):
                 # Add delay between feeds - longer for Reddit
                 # Use interruptible delay
                 if i < len(feeds_to_process) - 1:
+                    # If Reddit budget is exhausted, skip delay and move on to non-Reddit feeds.
+                    # We treat "rate limited" as either the JSON parser bailed early or recorded failure above.
+                    if is_reddit and (skipped_reddit_due_to_rate_limit or feed_url in rate_limited_feeds):
+                        continue
+
                     delay = RATE_LIMIT_DELAY_SECONDS * 2 if is_reddit else RATE_LIMIT_DELAY_SECONDS
                     # Split delay into smaller chunks for interruptibility
                     chunks = int(delay / 0.5)
@@ -565,21 +573,20 @@ class RSSSource(ImageProvider):
         if existing_paths is None:
             existing_paths = set()
 
-        # Use centralized rate limiter for Reddit feeds
+        # Use centralized rate limiter for Reddit feeds. If Reddit budget is exhausted,
+        # skip the request entirely so we can continue processing non-Reddit sources
+        # instead of blocking the UI/event loop.
         is_reddit = 'reddit.com' in request_url.lower()
         if is_reddit:
             try:
                 from core.reddit_rate_limiter import RedditRateLimiter
                 wait_time = RedditRateLimiter.wait_if_needed()
                 if wait_time > 0:
-                    logger.info(f"[RATE_LIMIT] Waiting {wait_time:.1f}s before Reddit request")
-                    # Interruptible wait
-                    wait_chunks = int(wait_time / 0.5) + 1
-                    for _ in range(wait_chunks):
-                        if not self._should_continue():
-                            logger.info("[RSS] Shutdown during rate limit wait")
-                            return
-                        time.sleep(0.5)
+                    logger.info(
+                        "[RATE_LIMIT] Reddit quota unavailable (wait=%.1fs). Skipping fetch and retrying later.",
+                        wait_time,
+                    )
+                    return
                 RedditRateLimiter.record_request()
             except ImportError:
                 logger.debug("[RSS] RedditRateLimiter not available, proceeding without coordination")

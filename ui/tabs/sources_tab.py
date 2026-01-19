@@ -177,9 +177,13 @@ class SourcesTab(QWidget):
         self.just_make_it_work_btn.clicked.connect(self._on_just_make_it_work_clicked)
         self.remove_rss_btn = QPushButton("Remove Selected")
         self.remove_rss_btn.clicked.connect(self._remove_rss)
+        self.remove_all_rss_btn = QPushButton("Remove All")
+        self.remove_all_rss_btn.setToolTip("Remove every RSS/JSON feed from the list.")
+        self.remove_all_rss_btn.clicked.connect(self._remove_all_rss)
         rss_buttons.addWidget(self.clear_rss_cache_btn)
         rss_buttons.addWidget(self.just_make_it_work_btn)
         rss_buttons.addWidget(self.remove_rss_btn)
+        rss_buttons.addWidget(self.remove_all_rss_btn)
         rss_buttons.addStretch()
         rss_layout.addLayout(rss_buttons)
         
@@ -371,6 +375,29 @@ class SourcesTab(QWidget):
                 self.sources_changed.emit()
                 logger.info(f"Removed RSS feed: {url}")
     
+    def _remove_all_rss(self) -> None:
+        """Remove all RSS feeds in a single action."""
+        if self.rss_list.count() == 0:
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Remove All RSS Feeds",
+            "This will remove every RSS/JSON feed from the list.\n\nContinue?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+
+        if reply != QMessageBox.Yes:
+            return
+
+        self.rss_list.clear()
+        self._settings.set('sources.rss_feeds', [])
+        self._settings.save()
+        self._update_ratio_control_state()
+        self.sources_changed.emit()
+        logger.info("Removed all RSS feeds via SourcesTab button.")
+
     def _on_rss_save_toggled(self, state: int) -> None:
         """Handle RSS save-to-disk checkbox toggle."""
         enabled = state == 2  # Qt.CheckState.Checked
@@ -511,7 +538,11 @@ class SourcesTab(QWidget):
         # Non-Reddit sources first (no rate limiting, faster cache building)
         # Then Reddit sources (rate limited, processed with delays)
         curated_feeds = [
-            # === NON-REDDIT SOURCES (processed first, no rate limits) ===
+            # === HIGH-PRIORITY FLICKR SOURCES (ranked first) ===
+            "https://api.flickr.com/services/feeds/photos_public.gne?tags=cityscape&format=rss2",
+            "https://api.flickr.com/services/feeds/photos_public.gne?tags=city,night&format=rss2",
+            "https://api.flickr.com/services/feeds/photos_public.gne?tags=rain,street&format=rss2",
+            # === NON-REDDIT SOURCES (processed before rate-limited feeds) ===
             "https://www.bing.com/HPImageArchive.aspx?format=rss&idx=0&n=8&mkt=en-US",  # Bing daily (high quality)
             "https://www.nasa.gov/feeds/iotd-feed",  # NASA Image of the Day
             # === REDDIT SOURCES (processed last with staggered delays) ===
