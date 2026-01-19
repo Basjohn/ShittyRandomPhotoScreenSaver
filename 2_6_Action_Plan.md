@@ -4,6 +4,18 @@
 
 ---
 
+## Phase Ordering & Conflict Review
+
+- **Phase 0 prerequisites every other phase.** Logging/ThreadManager/ResourceManager fixes must land before UI phases so later timers, GL resources, and overlays have deterministic cleanup paths. No downstream tasks re-introduce raw managers; each phase references centralized modules explicitly.
+- **Phase 1 (StyledPopup + timer policy) feeds Phase 3 widget work.** All widget/shadow/fade initiatives assume dialogs already share the same chrome and that inline QTimers have been migrated to ThreadManager helpers. Phase 3 checklists point back to the same modules to avoid duplicate cleanup.
+- **Phase 2 (sources/RSS guard) must finish before Phase 5 (media/RSS extensions).** Items like Reddit priority or AlphaCoders feed reuse the same queue + dedupe improvements introduced in 2.2–2.4, so Phase 5 explicitly depends on the completed groundwork.
+- **Phase 3 precedes Phase 4 purposely.** WidgetManager/shadow/visualizer stability comes before adding new transition controls or GL-heavy presets so we do not regress overlay fade ordering.
+- **Phase 6/7 remain trailing documentation/monitoring passes.** Every phase now references Spec/Index/TestSuite touchpoints to prevent documentation drift; audits are updated after each phase per Usage Note #3.
+
+No contradictory instructions remain: each checklist cites a single owning module set, and downstream phases reference upstream deliverables (e.g., Phase 5.3 explicitly “after Phase 2’s UI priority work”). If scope changes introduce new dependencies, add them here before modifying lower phases.
+
+---
+
 ## Phase 0 – Core & Infrastructure Hardening
 
 Stabilize logging, threading, resource ownership, settings/schema alignment, and event plumbing so downstream features are built on solid ground.
@@ -94,10 +106,11 @@ Enforce a single popup chrome (StyledPopup), remove raw timers, sync QSS + Style
 
 ### 1.2 Timer Policy
 **Goal:** No raw `QTimer.singleShot` in UI code; timers should either be registered with ResourceManager or scheduled via ThreadManager.  
+**Modules:** `ui/settings_dialog.py` (toast auto-dismiss, RSS helpers), `ui/tabs/sources_tab.py` (folder scan debounce), `widgets/media_widget.py`, `widgets/spotify_visualizer_widget.py` (ghost timers), `rendering/widget_manager.py`.  
 **Checklist:**  
 - [ ] Replace toast/auto-dismiss timers with ThreadManager helpers; register any remaining QTimers.  
 - [ ] Document pattern in Style Guide and enforce via tests.  
-**Pitfalls:** Many modules create timers before QApplication exists—add guards or no-ops with warnings to avoid crashes.
+**Pitfalls:** Many modules create timers before QApplication exists—add guards or no-ops with warnings to avoid crashes. Avoid sprinkling per-widget timers; prefer shared `ThreadManager.invoke_in_ui_thread(delay=...)` helpers tied into ResourceManager groups so widget teardown automatically cancels them.
 
 ### 1.3 Theming & Documentation
 **Goal:** Align `themes/dark.qss` and Style Guide with StyledPopup + shared palette.  
@@ -164,16 +177,20 @@ Implement Feature Plan sections 3–7 alongside audit findings.
 
 ### 3.1 Drop Shadow System Review (Feature Plan §3)
 **Goal:** Migrate to central `ShadowFadeProfile`, reduce QGraphicsEffect overhead, and document canonical shadow profiles.  
+**Modules:** `widgets/shadow_utils.py`, `widgets/shadow_utils_old.py`, `widgets/reddit_widget.py`, `widgets/media_widget.py`, `widgets/spotify_visualizer_widget.py`, `widgets/weather_widget.py`, `ui/settings_dialog.py`, `Docs/10_WIDGET_GUIDELINES.md`, `Docs/STYLE_GUIDELINES.md`.  
 **Checklist:**  
 - [ ] Enumerate all `QGraphicsDropShadowEffect` usages (including `shadow_utils_old`).  
 - [ ] Define card vs badge profiles (radius 8px/4px, offsets, alpha).  
-- [ ] Prototype GL overlay shadow strips (Spotify card) to avoid effect corruption.  
-- [ ] Update Docs/10_WIDGET_GUIDELINES.md + Style Guide with diagrams, offset values, and references to Qt performance research [^1][^2].  
-**Pitfalls:** Keep fade-sync logic intact; ensure new profiles integrate with `ShadowFadeProfile`.  
+- [ ] Prototype GL overlay shadow strips (Spotify card) to avoid effect corruption; cache strips as 9-slice textures rather than per-frame QGraphicsEffect blur.  
+- [ ] Update Docs/10_WIDGET_GUIDELINES.md + Style Guide with diagrams, offset values, and references to Qt performance research [^1][^2][^9].  
+- [ ] Capture before/after perf metrics (paint cost, FPS) to prove new profiles do not regress overlay budgets.  
+**Pitfalls:** Keep fade-sync logic intact; ensure new profiles integrate with `ShadowFadeProfile`. Qt’s own docs note that `QGraphicsDropShadowEffect` re-blurs every frame in device coordinates, so sharing a cached pixmap or shader-generated strip is mandatory on low-power GPUs. When integrating with GL overlays, register the new textures with ResourceManager to avoid leaks.
 
 ### 3.2 WidgetManager Reliability
+**Modules:** `rendering/widget_manager.py`, `rendering/display_widget.py`, `widgets/base_overlay_widget.py`, `widgets/spotify_volume_widget.py`, `widgets/spotify_visualizer_widget.py`.  
 - [ ] Register/unregister widgets, timers, and fade callbacks with ResourceManager; disconnect compositor signals on teardown.  
-- [ ] Document expected overlay/fade handshake so widgets know when to register.  
+- [ ] Document expected overlay/fade handshake so widgets know when to register (Widget Guidelines §10, Spec Overlay chapter).  
+- [ ] Ensure `WidgetManager.request_overlay_fade_sync()` order is deterministic so Phase 3.3 tests have a stable contract.  
 
 ### 3.3 Spotify Volume Widget Fade Coordination (Feature Plan §4)
 **Checklist:**  
@@ -206,17 +223,44 @@ Implement Feature Plan sections 3–7 alongside audit findings.
 | Spectrogram Ribbon | Stack recent FFT frames as translucent ribbon layers above/below bars. | Stanford CCRMA OpenGL viz[^6] |
 | Phasor Particle Swarm | Replace solid bars with particle emitters along the same x positions; swirling phasor trails capture beats. | PAV “Phasor”[^7] |
 
+**Reference Assets & Docs:**  
+- Morphing Waveform Ribbon – capture still from TimArt animated example, store interim PNG under `%TEMP%\visualizer_refs\waveform.png`, commit final asset to `Docs/assets/visualizer_modes/morph_waveform.png` with caption + link to TimArt GitHub README.  
+- DNA Helix – ShaderToy `dtl3Dr` has both shader source and preview; save preview frame (`Docs/assets/visualizer_modes/dna_helix.png`) + include author credit + license snippet from ShaderToy.  
+- Radial Bloom – GLava gallery screenshots (radial module) + official docs (https://github.com/wacossusca34/glava/wiki); capture semicircle frame for horizontal default and full radial for vertical mode.  
+- Spectrogram Ribbon – Stanford CCRMA Sound Visualization lab posts include sample renders; capture single frame plus annotate color scale usage (store as `spectrogram_ribbon.png`).  
+- Phasor Particle Swarm – PAV “Phasor” YouTube demo + GitHub README assets; capture top-down frame showing particle emitters; note particle counts + easing functions.  
+All assets must be documented in `Docs/Spec.md` Appendix (visualizer references) with source URLs and image licensing notes. Until final images ship, keep raw references in `%TEMP%\visualizer_refs` and note TODO in Spec.
+
+**FFT Worker & Data Flow:**  
+- Existing `SpotifyVisualizerAudioWorker` already pushes mono frames through the ProcessSupervisor FFT worker; no new worker is required. Instead, extend the worker payload to return both magnitude bars and optional time-domain history (`history_buffer`, `phase_samples`).  
+- Modes needing additional data: Spectrogram Ribbon (history of freq frames ≤32), Morphing Waveform (time-domain waveform), Phasor Swarm (phase differentials). Plan to reuse the same FFT worker by adding opt-in flags per mode so it emits cached FFT bins + raw waveform window in one message.  
+- Update TripleBuffer schema to include `fft_bins`, `waveform_slice`, and `history_ring`. UI thread selects whichever subset each GLSL program needs. Keep ghosting/adaptive sensitivity logic centralized so Spectrum + new modes read the same normalization constants.  
+- Document worker changes in `Docs/TestSuite.md` (headless FFT tests) and ensure the ProcessSupervisor budget covers slightly larger payloads (still under 64 KB per frame).
+
 **Implementation Steps:**  
 1. Add `spotify_visualizer.mode` enum + per-mode settings (thickness, twist, particle count, history depth) + vertical orientation toggle in Widgets tab UI; ensure config persists in `core/settings/defaults.py`, `core/settings/models.py`, and presets.  
 2. Implement GLSL programs for each mode under `widgets/spotify_visualizer/*`, sharing buffers with Spectrum wherever possible; capability detection should fall back to Spectrum whenever GL requirements fail (session-scoped demotion only).  
 3. Update DisplayWidget / overlay layout so card rotation + padding adjustments respect orientation toggle without breaching ShadowFadeProfile constraints.  
 4. Update presets (`Cinematic` helix defaults, `Artistic` waveform) and document tables in Spec.md & Index.md.  
 
+**Per-Mode Implementation Notes:**  
+- Morphing Waveform Ribbon – Use mirrored triangle strip with dynamic thickness; drive vertical displacement from time-domain waveform while tinting via FFT-derived energy. Reference TimArt shader for morph math, but clamp vertex count to existing VBO (reuse 64 vertices).  
+- DNA Helix – Two instanced helices rendered via geometry shader; amplitude maps to helix radius, twist factor driven by setting `helix.twist`. Add optional Z scroll uniform (0 = static).  
+- Radial Bloom – Render using polar coordinates: sample FFT bins, convert to angle/length pairs; horizontal orientation clamps to 180° arc, vertical orientation unlocks full 360°.  
+- Spectrogram Ribbon – Maintain history buffer texture (≤32 rows). Each frame uploads latest FFT magnitudes into a scrolling 2D texture for ribbon shader to sample. Provide degradation path (downsample to 16 frames) when GPU load detected.  
+- Phasor Particle Swarm – Spawn particles anchored to bar centers; GPU instancing handles per-particle angular velocity derived from FFT phase. Cap default particle count at 128, allow up to 256 via settings if `SRPSS_PERF_METRICS` indicates sufficient headroom.  
+Include external references (GLava wiki, ShaderToy source, CCRMA lab notes, PAV repo) directly in Spec footnotes for reproducibility.
+
 **Testing & Telemetry:**  
 - Headless GL smoke tests to initialize each mode (mock GL context) and assert no errors.  
 - Config persistence tests covering mode switches + preset application (ensure `config.json` writing is stable).  
 - GL uniform budget snapshot tests comparing each mode vs Spectrum to ensure no unexpected uniform uploads/VBO allocations.  
 - Guard any new performance logging behind `SRPSS_PERF_METRICS`; reuse `screensaver_perf.log` pipeline.  
+
+**Card Sizing & Layout:**  
+- Keep default card width identical to Spectrum so existing placements stay valid, but allow per-mode Y-growth up to +25% (and X-growth in vertical orientation) via new settings `widgets.spotify_visualizer.additional_height` / `.additional_width_vertical`.  
+- Extend `WidgetManager` layout helpers so card bounding boxes can expand while preserving anchor margins; update Widget Guidelines to call out maximum safe growth before overlapping other overlays.  
+- Verify new orientation paths respect pixel shift + fade coordination: orientation toggle should trigger a layout recalculation before fade-in so the compositor never reveals partially clipped geometry.
 
 **Modules / References:** `widgets/spotify_visualizer_widget.py`, `widgets/spotify_bars_gl_overlay.py`, `widgets/spotify_visualizer/*`, `ui/tabs/widgets_tab.py`, `core/settings/defaults.py`, `core/settings/models.py`, `Spec.md`, `Docs/Feature_Investigation_Plan.md`, `tests/visualizer/*`.  
 
@@ -242,6 +286,7 @@ Implement Feature Plan sections 3–7 alongside audit findings.
 - [ ] Add header frame toggle/styling parity with Spotify widget; update Widget Guidelines to require header frame options for all widgets with headings/logo.  
 - [ ] Tests: `tests/ui/test_widgets_tab.py` for mutual exclusivity + persistence.  
 **Pitfalls:** Ensure tooltip text adheres to Style Guide (no inline QSS). Document MC vs normal builds difference.  
+**Modules:** `ui/tabs/widgets_tab.py`, `widgets/reddit_widget.py`, `rendering/display_widget.py`, `core/settings/defaults.py`, `Spec.md`, `Docs/10_WIDGET_GUIDELINES.md`. Ensure settings migration touches `SettingsManager.validate_and_repair()` and `core/presets.py`.
 
 ### 3.7 Pixel Shift Boundary Enforcement (Feature Plan §7.2)
 **Checklist:**  
@@ -373,6 +418,7 @@ Long-range coordination once core work is complete.
 [^6]: Stanford CCRMA, *Sound Visualization with OpenGL* – spectrogram ribbon reference.  
 [^7]: Processing Audio Visualization (PAV) “Phasor” – particle swarm inspiration.  
 [^8]: Qt 6.8 `QSvgRenderer` docs – animated SVG guidance.  
+[^9]: Qt Docs – *QGraphicsDropShadowEffect* (Qt 6.8) – notes per-frame blur cost and device-coordinate offsets, reinforcing the need for cached/custom shadows.  
 
 ---
 
