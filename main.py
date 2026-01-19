@@ -16,7 +16,7 @@ import ctypes
 import time
 from pathlib import Path
 from enum import Enum
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt, QCoreApplication
 from PySide6.QtGui import QSurfaceFormat, QImageReader, QIcon
 from core.logging.logger import setup_logging, get_logger, get_log_dir
@@ -24,6 +24,7 @@ from core.settings.settings_manager import SettingsManager
 from core.animation import AnimationManager
 from engine.screensaver_engine import ScreensaverEngine
 from ui.settings_dialog import SettingsDialog
+from ui.styled_popup import StyledPopup
 from rendering.gl_format import build_surface_format
 from ui.system_tray import ScreensaverTrayIcon
 from versioning import APP_VERSION, APP_EXE_NAME
@@ -247,7 +248,7 @@ def run_screensaver(app: QApplication) -> int:
     
     if not folders and not rss_feeds:
         logger.warning("No image sources configured - opening settings dialog")
-        QMessageBox.information(
+        StyledPopup.show_warning(
             None,
             "No Sources Configured",
             "No image sources have been configured.\n\n"
@@ -260,7 +261,7 @@ def run_screensaver(app: QApplication) -> int:
         if not engine.initialize():
             logger.error("Failed to initialize screensaver engine")
             logger.warning("Opening settings dialog to configure sources")
-            QMessageBox.warning(
+            StyledPopup.show_error(
                 None,
                 "Configuration Required",
                 "Failed to initialize screensaver.\n\n"
@@ -271,7 +272,7 @@ def run_screensaver(app: QApplication) -> int:
         if not engine.start():
             logger.error("Failed to start screensaver engine")
             logger.warning("Opening settings dialog")
-            QMessageBox.warning(
+            StyledPopup.show_error(
                 None,
                 "Startup Failed",
                 "Failed to start screensaver.\n\n"
@@ -285,7 +286,7 @@ def run_screensaver(app: QApplication) -> int:
             try:
                 tray_icon = ScreensaverTrayIcon(app, app.windowIcon())
             except Exception as e:
-                logger.debug("Failed to create system tray icon", exc_info=True)
+                logger.debug("Failed to create system tray icon: %s", e, exc_info=True)
 
             if tray_icon is not None:
                 # Delegate to the engine's existing S-key workflow so tray
@@ -296,13 +297,13 @@ def run_screensaver(app: QApplication) -> int:
                         # settings dialog → restart cycle.
                         engine._on_settings_requested()  # type: ignore[attr-defined]
                     except Exception as e:
-                        logger.exception("Failed to open settings from system tray")
+                        logger.exception("Failed to open settings from system tray: %s", e)
 
                 def _on_tray_exit() -> None:
                     try:
                         engine.stop()
                     except Exception as e:
-                        logger.exception("Failed to stop engine from system tray")
+                        logger.exception("Failed to stop engine from system tray: %s", e)
                     app.quit()
 
                 tray_icon.settings_requested.connect(_on_tray_settings)
@@ -330,7 +331,7 @@ def run_screensaver(app: QApplication) -> int:
         
     except Exception as e:
         logger.exception(f"Failed to start screensaver engine: {e}")
-        QMessageBox.critical(
+        StyledPopup.show_error(
             None,
             "Screensaver Error",
             f"Failed to start screensaver:\n{e}"
@@ -366,7 +367,7 @@ def run_config(app: QApplication) -> int:
         
     except Exception as e:
         logger.exception(f"Failed to open configuration dialog: {e}")
-        QMessageBox.critical(
+        StyledPopup.show_error(
             None,
             "Configuration Error",
             f"Failed to open settings:\n{e}"
@@ -458,7 +459,9 @@ def main():
         try:
             app.setWindowIcon(QIcon(str(icon_path)))
         except Exception as e:
-            logger.debug("Failed to set application icon from SRPSS.ico", exc_info=True)
+            logger.debug(
+                "Failed to set application icon from SRPSS.ico: %s", e, exc_info=True
+            )
     
     # Increase Qt image allocation limit from 256MB to 1GB for high-res images
     # This is per-image when loaded, not total memory for all images
@@ -497,7 +500,9 @@ def main():
                     profiler.dump_stats(str(profile_path))
                     logger.info("[PERF] [CPU] cProfile stats written to %s", profile_path)
                 except Exception as e:
-                    logger.debug("[PERF] [CPU] Failed to write cProfile stats", exc_info=True)
+                    logger.debug(
+                        "[PERF] [CPU] Failed to write cProfile stats: %s", e, exc_info=True
+                    )
             else:
                 exit_code = run_screensaver(app)
             
@@ -560,12 +565,14 @@ def main():
                 _sv.main()
             except Exception as e:
                 logger.debug(
-                    "[PERF] spotify_vis_metrics_parser auto-run failed",
+                    "[PERF] spotify_vis_metrics_parser auto-run failed: %s",
+                    e,
                     exc_info=True,
                 )
     except Exception as e:
         logger.debug(
-            "[PERF] spotify_vis_metrics_parser auto-run guard failed",
+            "[PERF] spotify_vis_metrics_parser auto-run guard failed: %s",
+            e,
             exc_info=True,
         )
     

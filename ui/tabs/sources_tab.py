@@ -4,16 +4,19 @@ Allows users to configure image sources:
 - Folder sources (browse and add)
 - RSS/JSON feed sources (add/edit/remove)
 """
-from typing import Optional
 from pathlib import Path
 import tempfile
+from typing import Optional
 from urllib.parse import urlparse, urlunparse
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget,
-    QPushButton, QLineEdit, QFileDialog, QGroupBox, QMessageBox, QCheckBox,
+    QPushButton, QLineEdit, QFileDialog, QGroupBox, QCheckBox,
     QScrollArea, QDialog, QFrame, QSlider,
 )
 from PySide6.QtCore import Signal, Qt
+
+from ui.styled_popup import StyledPopup
 
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger
@@ -299,7 +302,7 @@ class SourcesTab(QWidget):
                 self.sources_changed.emit()
                 logger.info(f"Added folder source: {folder}")
             else:
-                QMessageBox.information(self, "Duplicate", "This folder is already added.")
+                StyledPopup.show_info(self, "Duplicate", "This folder is already added.")
     
     def _remove_folder(self) -> None:
         """Remove selected folder source."""
@@ -339,7 +342,7 @@ class SourcesTab(QWidget):
 
             url = self._autocorrect_feed_url(raw_url).strip()
             if not url or not url.startswith(("http://", "https://")):
-                QMessageBox.warning(self, "Invalid URL", "Could not autocorrect feed URL. Please enter a full http:// or https:// address.")
+                StyledPopup.show_warning(self, "Invalid URL", "Could not autocorrect feed URL.\nPlease enter a full http:// or https:// address.")
                 return
 
         # Get current RSS feeds using dot notation
@@ -355,7 +358,7 @@ class SourcesTab(QWidget):
             self.sources_changed.emit()
             logger.info(f"Added RSS feed: {url}")
         else:
-            QMessageBox.information(self, "Duplicate", "This RSS feed is already added.")
+            StyledPopup.show_info(self, "Duplicate", "This RSS feed is already added.")
     
     def _remove_rss(self) -> None:
         """Remove selected RSS feed source."""
@@ -380,15 +383,11 @@ class SourcesTab(QWidget):
         if self.rss_list.count() == 0:
             return
 
-        reply = QMessageBox.question(
+        if not StyledPopup.question(
             self,
             "Remove All RSS Feeds",
             "This will remove every RSS/JSON feed from the list.\n\nContinue?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
-        )
-
-        if reply != QMessageBox.Yes:
+        ):
             return
 
         self.rss_list.clear()
@@ -484,8 +483,6 @@ class SourcesTab(QWidget):
         
         Shows a confirmation dialog before deleting to prevent accidental data loss.
         """
-        from PySide6.QtWidgets import QMessageBox
-        
         # Count files before asking
         cache_dir = Path(tempfile.gettempdir()) / "screensaver_rss_cache"
         file_count = 0
@@ -496,31 +493,32 @@ class SourcesTab(QWidget):
             logger.debug("[MISC] Exception suppressed: %s", e)
         
         if file_count == 0:
-            QMessageBox.information(
-                self, "Cache Empty",
-                "The RSS image cache is already empty."
+            StyledPopup.show_info(
+                self,
+                "Cache Empty",
+                "The RSS image cache is already empty.",
             )
             return
         
         # Confirm before deleting
-        reply = QMessageBox.question(
-            self, "Clear RSS Cache",
+        if not StyledPopup.question(
+            self,
+            "Clear RSS Cache",
             f"This will delete {file_count} cached RSS images.\n\n"
             "The images will be re-downloaded on the next refresh.\n\n"
             "Continue?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-        
-        if reply != QMessageBox.Yes:
+            yes_text="Clear Cache",
+            no_text="Cancel",
+        ):
             return
         
         removed = self._clear_rss_cache()
         logger.info(f"RSS cache cleared via SourcesTab button: {removed} files removed")
         
-        QMessageBox.information(
-            self, "Cache Cleared",
-            f"Successfully removed {removed} cached images."
+        StyledPopup.show_info(
+            self,
+            "Cache Cleared",
+            f"Successfully removed {removed} cached images.",
         )
 
     def _on_just_make_it_work_clicked(self) -> None:
@@ -646,7 +644,6 @@ class SourcesTab(QWidget):
         self._settings.save()
         logger.info(f"Usage ratio saved: {local_ratio}% local, {100 - local_ratio}% RSS")
         self.sources_changed.emit()
-
 
 class RssAutocorrectDialog(QDialog):
     """Small, styled dialog for RSS/JSON URL autocorrection.
