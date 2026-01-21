@@ -704,6 +704,25 @@ class WidgetsTab(QWidget):
         self.weather_show_details_row.stateChanged.connect(self._update_stack_status)
         weather_layout.addWidget(self.weather_show_details_row)
 
+        icon_row = QHBoxLayout()
+        icon_row.addWidget(QLabel("Animated Icon Alignment:"))
+        self.weather_icon_alignment = QComboBox()
+        self.weather_icon_alignment.addItem("None", "NONE")
+        self.weather_icon_alignment.addItem("Left aligned", "LEFT")
+        self.weather_icon_alignment.addItem("Right aligned", "RIGHT")
+        self.weather_icon_alignment.currentTextChanged.connect(self._save_settings)
+        icon_row.addWidget(self.weather_icon_alignment)
+        icon_row.addStretch()
+        weather_layout.addLayout(icon_row)
+        default_icon_alignment = self._default_str('weather', 'animated_icon_alignment', 'NONE')
+        self._set_combo_data(self.weather_icon_alignment, (default_icon_alignment or 'NONE').upper())
+
+        self.weather_desaturate_icon = QCheckBox("Desaturate Animated Icon")
+        self.weather_desaturate_icon.setToolTip("Render the animated SVG with a grayscale tint to blend with monochrome themes.")
+        self.weather_desaturate_icon.setChecked(self._default_bool('weather', 'desaturate_animated_icon', False))
+        self.weather_desaturate_icon.stateChanged.connect(self._save_settings)
+        weather_layout.addWidget(self.weather_desaturate_icon)
+
         # Intense shadow
         self.weather_intense_shadow = QCheckBox("Intense Shadows")
         self.weather_intense_shadow.setChecked(self._default_bool('weather', 'intense_shadow', True))
@@ -1873,6 +1892,11 @@ class WidgetsTab(QWidget):
             self.weather_font_size.setValue(self._config_int('weather', weather_config, 'font_size', 24))
             self.weather_show_forecast.setChecked(self._config_bool('weather', weather_config, 'show_forecast', True))
             self.weather_show_details_row.setChecked(self._config_bool('weather', weather_config, 'show_details_row', False))
+            icon_alignment_value = (self._config_str('weather', weather_config, 'animated_icon_alignment', 'NONE') or 'NONE').upper()
+            self._set_combo_data(self.weather_icon_alignment, icon_alignment_value)
+            self.weather_desaturate_icon.setChecked(
+                self._config_bool('weather', weather_config, 'desaturate_animated_icon', False)
+            )
             self.weather_intense_shadow.setChecked(
                 self._config_bool('weather', weather_config, 'intense_shadow', True)
             )
@@ -2356,6 +2380,8 @@ class WidgetsTab(QWidget):
             'margin': self.weather_margin.value(),
             'show_forecast': self.weather_show_forecast.isChecked(),
             'show_details_row': self.weather_show_details_row.isChecked(),
+            'animated_icon_alignment': (self.weather_icon_alignment.currentData() or self.weather_icon_alignment.currentText() or "NONE"),
+            'desaturate_animated_icon': self.weather_desaturate_icon.isChecked(),
             'intense_shadow': self.weather_intense_shadow.isChecked(),
             'show_background': self.weather_show_background.isChecked(),
             'bg_opacity': self.weather_bg_opacity.value() / 100.0,

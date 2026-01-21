@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QSizePolicy,
     QFrame,
+    QGraphicsColorizeEffect,
 )
 from PySide6.QtCore import QTimer, Qt, Signal, QObject, QRectF, QSize
 from PySide6.QtGui import (
@@ -51,6 +52,38 @@ _METRIC_ICON_FILES = {
     "wind": "wind.svg",
 }
 _DETAIL_ICON_MIN_PX = 30
+_ICON_ALIGNMENT_OPTIONS = {"LEFT", "RIGHT", "NONE"}
+_DEFAULT_ICON_ALIGNMENT = "NONE"
+_DEFAULT_DESATURATE_ICON = False
+_ANIMATED_ICON_SCALE_FACTOR = 1.44
+
+# Weather code groupings from Open-Meteo to our SVG assets
+_WEATHER_CODE_ICON_MAP: List[Tuple[set[int], str]] = [
+    (set([0]), "clear-day.svg"),
+    (set([1, 2]), "partly-cloudy-day.svg"),
+    (set([3]), "overcast-day.svg"),
+    (set([45, 48]), "fog-day.svg"),
+    (set([51, 53, 55, 56, 57]), "drizzle.svg"),
+    (set([61, 63, 65, 80, 81, 82]), "rain.svg"),
+    (set([66, 67]), "hail.svg"),
+    (set([71, 73, 75, 77, 85, 86]), "snow.svg"),
+    (set([95, 96, 99]), "thunderstorms-day.svg"),
+]
+
+_CONDITION_KEYWORDS_ICON_MAP: List[Tuple[str, str]] = [
+    ("clear", "clear-day.svg"),
+    ("partly", "partly-cloudy-day.svg"),
+    ("overcast", "overcast-day.svg"),
+    ("cloud", "partly-cloudy-day.svg"),
+    ("fog", "fog-day.svg"),
+    ("haze", "haze-day.svg"),
+    ("smoke", "smoke.svg"),
+    ("drizzle", "drizzle.svg"),
+    ("rain", "rain.svg"),
+    ("snow", "snow.svg"),
+    ("sleet", "partly-cloudy-day-sleet.svg"),
+    ("thunder", "thunderstorms-day-rain.svg"),
+]
 
 
 class WeatherDetailIcon(QWidget):
@@ -115,6 +148,89 @@ class WeatherDetailIcon(QWidget):
         x = target.x() + (target.width() - scaled.width()) // 2
         y = target.y() + (target.height() - scaled.height()) // 2 + self._baseline_offset
         painter.drawPixmap(x, y, scaled)
+        painter.end()
+
+
+class WeatherConditionIcon(QWidget):
+    """Widget that renders animated SVG weather icons with Qt's SVG engine."""
+
+    def __init__(self, size_px: int = 96, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self._renderer: Optional[QSvgRenderer] = None
+        self._icon_path: Optional[Path] = None
+        self._size_px = max(48, int(size_px))
+        self._frames_per_second = 24
+        self._padding = 4
+        self._set_fixed_box()
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+
+    def _set_fixed_box(self) -> None:
+        box = QSize(self._size_px, self._size_px)
+        self.setMinimumSize(box)
+        self.setMaximumSize(box)
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
+    def set_icon_size(self, size_px: int) -> None:
+        size_px = max(32, int(size_px))
+        if size_px == self._size_px:
+            return
+        self._size_px = size_px
+        self._set_fixed_box()
+        self.update()
+
+    def clear_icon(self) -> None:
+        if self._renderer:
+            try:
+                self._renderer.repaintNeeded.disconnect(self.update)
+            except Exception:
+                pass
+        self._renderer = None
+        self._icon_path = None
+        self.update()
+
+    def set_icon_path(self, icon_path: Optional[Path]) -> None:
+        if icon_path is None or not icon_path.exists():
+            self.clear_icon()
+            return
+        if self._icon_path == icon_path and self._renderer is not None:
+            return
+
+        renderer = QSvgRenderer(str(icon_path))
+        if not renderer.isValid():
+            self.clear_icon()
+            return
+
+        renderer.setAnimationEnabled(True)
+        renderer.setFramesPerSecond(self._frames_per_second)
+
+        if self._renderer:
+            try:
+                self._renderer.repaintNeeded.disconnect(self.update)
+            except Exception:
+                pass
+
+        renderer.repaintNeeded.connect(self.update)
+        self._renderer = renderer
+        self._icon_path = icon_path
+        self.update()
+
+    def has_icon(self) -> bool:
+        return self._renderer is not None and self._icon_path is not None
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        renderer = self._renderer
+        if not renderer or not renderer.isValid():
+            painter.end()
+            return
+        target = QRectF(
+            self._padding,
+            self._padding,
+            self.width() - 2 * self._padding,
+            self.height() - 2 * self._padding,
+        )
+        renderer.render(painter, target)
         painter.end()
 
 
@@ -409,14 +525,14 @@ class WeatherWidget(BaseOverlayWidget):
         self._font_size = 24
         
         # Layout sizing
-        self._min_content_width = 520
+        self._min_content_width = 420
 
         # Padding: slightly more at top/bottom, extra slack on the right so the
         # drop shadow doesn't make TOP_RIGHT appear flush with the screen edge.
         self._padding_top = 4
         self._padding_bottom = 4
-        self._padding_left = 12
-        self._padding_right = 16
+        self._padding_left = 8
+        self._padding_right = 12
         
         # Set visual padding for base class positioning (aligns visible content to margins)
         # This replaces the custom horizontal_margin adjustment in _update_position
@@ -438,6 +554,7 @@ class WeatherWidget(BaseOverlayWidget):
         self._detail_icon_size = 14
         self._detail_icon_cache: Dict[Tuple[str, int, int], QPixmap] = {}
         self._detail_renderer_cache: Dict[str, QSvgRenderer] = {}
+        self._last_detail_values: Dict[str, Optional[float]] = {}
         self._details_font: Optional[QFont] = None
         self._details_font_metrics: Optional[QFontMetrics] = None
         self._city_label: Optional[QLabel] = None
@@ -449,6 +566,13 @@ class WeatherWidget(BaseOverlayWidget):
         self._detail_row_container: Optional[QWidget] = None
         self._forecast_container: Optional[QWidget] = None
         self._primary_row: Optional[QWidget] = None
+        self._primary_layout: Optional[QHBoxLayout] = None
+        self._text_column: Optional[QWidget] = None
+        self._condition_icon_widget: Optional[WeatherConditionIcon] = None
+        self._animated_icon_alignment: str = _DEFAULT_ICON_ALIGNMENT
+        self._desaturate_condition_icon: bool = _DEFAULT_DESATURATE_ICON
+        self._icon_desaturate_effect: Optional[QGraphicsColorizeEffect] = None
+        self._last_icon_context: Dict[str, Any] = {}
         self._primary_spacer: Optional[QWidget] = None
         self._root_layout: Optional[QVBoxLayout] = None
         
@@ -513,6 +637,11 @@ class WeatherWidget(BaseOverlayWidget):
         if windspeed is not None:
             metrics.append(("wind", f"{windspeed:.1f} km/h"))
         
+        self._last_detail_values = {
+            "rain": precipitation,
+            "humidity": humidity,
+            "wind": windspeed,
+        }
         self._detail_metrics = metrics
         if is_perf_metrics_enabled():
             logger.info(
@@ -703,6 +832,7 @@ class WeatherWidget(BaseOverlayWidget):
         primary_layout = QHBoxLayout(self._primary_row)
         primary_layout.setContentsMargins(0, 0, 0, 0)
         primary_layout.setSpacing(8)
+        self._primary_layout = primary_layout
 
         text_column = QWidget(self._primary_row)
         text_column.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
@@ -718,7 +848,15 @@ class WeatherWidget(BaseOverlayWidget):
         text_layout.addWidget(self._city_label)
         text_layout.addWidget(self._conditions_label)
 
+        self._text_column = text_column
         primary_layout.addWidget(text_column, 1)
+
+        default_icon_px = int(round(96 * _ANIMATED_ICON_SCALE_FACTOR))
+        self._condition_icon_widget = WeatherConditionIcon(size_px=default_icon_px, parent=self._primary_row)
+        self._condition_icon_widget.setVisible(False)
+        primary_layout.addWidget(
+            self._condition_icon_widget, 0, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight
+        )
 
         self._root_layout.addWidget(self._primary_row)
 
@@ -756,6 +894,9 @@ class WeatherWidget(BaseOverlayWidget):
         forecast_layout.addWidget(self._forecast_label)
         self._forecast_container.setVisible(False)
         self._root_layout.addWidget(self._forecast_container)
+
+        self._apply_icon_alignment()
+        self._apply_icon_desaturation()
 
     def _create_content_label(self, *, word_wrap: bool = True) -> QLabel:
         label = QLabel(self)
@@ -1284,14 +1425,28 @@ class WeatherWidget(BaseOverlayWidget):
             temp = data.get("temperature")
             condition = data.get("condition")
             location = data.get("location")
+            weather_entry: Optional[Dict[str, Any]] = None
+
+            if isinstance(data.get("weather"), list) and data["weather"]:
+                weather_entry = data["weather"][0] or {}
 
             if temp is None and isinstance(data.get("main"), dict):
                 temp = data["main"].get("temp")
-            if condition is None and isinstance(data.get("weather"), list) and data["weather"]:
-                weather_entry = data["weather"][0]
+            if condition is None and weather_entry:
                 condition = weather_entry.get("main") or weather_entry.get("description")
             if not location:
                 location = data.get("name") or self._location
+
+            weather_code = data.get("weather_code")
+            if weather_code is None and weather_entry:
+                weather_code = weather_entry.get("id") or weather_entry.get("code")
+
+            is_day_flag = data.get("is_day")
+            if is_day_flag is None and weather_entry:
+                is_day_flag = weather_entry.get("is_day")
+            if is_day_flag is None:
+                is_day_flag = 1
+            is_day = bool(int(is_day_flag)) if isinstance(is_day_flag, (int, str)) else bool(is_day_flag)
 
             temp = 0.0 if temp is None else float(temp)
             condition = "Unknown" if condition is None else str(condition)
@@ -1343,7 +1498,7 @@ class WeatherWidget(BaseOverlayWidget):
                 _DETAIL_ICON_MIN_PX, int(metrics_height * 1.15) if metrics_height else _DETAIL_ICON_MIN_PX
             )
             self._update_detail_metrics(data)
-            detail_ready = len(self._detail_metrics) >= 2
+            detail_ready = bool(self._detail_metrics)
             if not detail_ready and self._show_details_row and self._enabled:
                 self._fetch_weather()
 
@@ -1377,6 +1532,10 @@ class WeatherWidget(BaseOverlayWidget):
                     self._forecast_label.setTextFormat(Qt.TextFormat.RichText)
                     self._forecast_label.setText(forecast_html)
                 self._forecast_label.setVisible(show_forecast_line)
+
+            base_icon_scale = max(city_pt * 2, 72)
+            animated_scale = int(round(base_icon_scale * _ANIMATED_ICON_SCALE_FACTOR))
+            self._update_condition_icon(weather_code, condition_display, is_day, icon_scale=animated_scale)
 
             self.clear()
             self.adjustSize()
@@ -1462,6 +1621,39 @@ class WeatherWidget(BaseOverlayWidget):
         if self._cached_data:
             self._update_display(self._cached_data)
 
+    def set_desaturate_animated_icon(self, desaturate: bool) -> None:
+        """Enable or disable desaturation for the animated icon."""
+        if self._desaturate_condition_icon == desaturate:
+            return
+        self._desaturate_condition_icon = desaturate
+        self._apply_icon_desaturation()
+
+    def get_desaturate_animated_icon(self) -> bool:
+        return self._desaturate_condition_icon
+
+    def _apply_icon_desaturation(self) -> None:
+        icon_widget = self._condition_icon_widget
+        if icon_widget is None:
+            return
+
+        if not self._desaturate_condition_icon:
+            if self._icon_desaturate_effect is not None:
+                try:
+                    icon_widget.setGraphicsEffect(None)
+                except RuntimeError:
+                    logger.debug("[WEATHER] Failed to remove desaturation effect", exc_info=True)
+            return
+
+        effect = self._icon_desaturate_effect
+        if effect is None or Shiboken.isValid(effect) is False:
+            effect = QGraphicsColorizeEffect(icon_widget)
+            effect.setColor(QColor(196, 196, 196))
+            effect.setStrength(0.65)
+            self._icon_desaturate_effect = effect
+
+        effect.setEnabled(True)
+        icon_widget.setGraphicsEffect(effect)
+
     def set_show_details_row(self, show: bool) -> None:
         """Enable/disable mini detail row with icons."""
         if self._show_details_row == show:
@@ -1471,6 +1663,127 @@ class WeatherWidget(BaseOverlayWidget):
             self._update_display(self._cached_data)
         else:
             self.update()
+
+    def set_animated_icon_alignment(self, alignment: str) -> None:
+        """Set animated icon alignment ('LEFT', 'RIGHT', 'NONE')."""
+        normalized = (alignment or _DEFAULT_ICON_ALIGNMENT).strip().upper()
+        if normalized not in _ICON_ALIGNMENT_OPTIONS:
+            normalized = _DEFAULT_ICON_ALIGNMENT
+        if normalized == self._animated_icon_alignment:
+            return
+        self._animated_icon_alignment = normalized
+        self._apply_icon_alignment()
+        self._refresh_condition_icon()
+
+    def get_animated_icon_alignment(self) -> str:
+        return self._animated_icon_alignment
+
+    def _apply_icon_alignment(self) -> None:
+        icon_widget = self._condition_icon_widget
+        layout = self._primary_layout
+        text_column = self._text_column
+        if icon_widget is None or layout is None or text_column is None:
+            return
+
+        layout.removeWidget(icon_widget)
+        icon_widget.setVisible(False)
+        layout.setStretchFactor(text_column, 1)
+
+        if self._animated_icon_alignment == "NONE":
+            icon_widget.clear_icon()
+            return
+
+        if self._animated_icon_alignment == "LEFT":
+            layout.insertWidget(0, icon_widget, 0, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+        else:
+            layout.addWidget(icon_widget, 0, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight)
+
+        if icon_widget.has_icon():
+            icon_widget.setVisible(True)
+
+    def _refresh_condition_icon(self) -> None:
+        if not self._last_icon_context:
+            return
+        self._update_condition_icon(
+            self._last_icon_context.get("code"),
+            self._last_icon_context.get("condition"),
+            self._last_icon_context.get("is_day", True),
+            icon_scale=self._last_icon_context.get("icon_scale"),
+        )
+
+    def _update_condition_icon(
+        self,
+        weather_code: Optional[int],
+        condition_text: Optional[str],
+        is_day: bool,
+        icon_scale: Optional[int] = None,
+    ) -> None:
+        icon_widget = self._condition_icon_widget
+        if icon_widget is None:
+            return
+
+        self._last_icon_context = {
+            "code": weather_code,
+            "condition": condition_text,
+            "is_day": is_day,
+            "icon_scale": icon_scale,
+        }
+
+        if self._animated_icon_alignment == "NONE":
+            icon_widget.clear_icon()
+            icon_widget.setVisible(False)
+            return
+
+        icon_path = self._resolve_condition_icon_path(weather_code, condition_text, is_day)
+        if icon_path is None:
+            icon_widget.clear_icon()
+            icon_widget.setVisible(False)
+            return
+
+        if icon_scale:
+            icon_widget.set_icon_size(icon_scale)
+
+        icon_widget.set_icon_path(icon_path)
+        icon_widget.setVisible(True)
+
+    def _resolve_condition_icon_path(
+        self, weather_code: Optional[int], condition_text: Optional[str], is_day: bool
+    ) -> Optional[Path]:
+        icon_name: Optional[str] = None
+        if weather_code is not None:
+            for codes, candidate in _WEATHER_CODE_ICON_MAP:
+                if weather_code in codes:
+                    icon_name = candidate
+                    break
+        if icon_name is None and condition_text:
+            lowered = condition_text.lower()
+            for keyword, candidate in _CONDITION_KEYWORDS_ICON_MAP:
+                if keyword in lowered:
+                    icon_name = candidate
+                    break
+        if icon_name is None:
+            return None
+
+        resolved_name = self._resolve_day_night_icon(icon_name, is_day)
+        candidate_path = _WEATHER_ICON_DIR / resolved_name
+        if candidate_path.exists():
+            return candidate_path
+
+        fallback_path = _WEATHER_ICON_DIR / icon_name
+        if fallback_path.exists():
+            return fallback_path
+        return None
+
+    @staticmethod
+    def _resolve_day_night_icon(icon_name: str, is_day: bool) -> str:
+        if is_day:
+            return icon_name
+        if "-day" in icon_name:
+            return icon_name.replace("-day", "-night")
+        if icon_name.endswith(".svg"):
+            base = icon_name[:-4]
+            return f"{base}-night.svg"
+        return icon_name
 
     def _show_status_message(self, message: str) -> None:
         if self._city_label:
@@ -1482,7 +1795,6 @@ class WeatherWidget(BaseOverlayWidget):
             self._forecast_label.clear()
             self._forecast_label.setVisible(False)
         if self._detail_row_widget:
-            self._detail_row_widget.update_metrics([], QFont(self._font_family, 10), self._text_color, self._detail_icon_size)
             self._detail_row_widget.setVisible(False)
         if self._detail_row_container:
             self._detail_row_container.setVisible(False)
@@ -1492,6 +1804,9 @@ class WeatherWidget(BaseOverlayWidget):
             self._forecast_separator.setVisible(False)
         if self._forecast_container:
             self._forecast_container.setVisible(False)
+        if self._condition_icon_widget:
+            self._condition_icon_widget.clear_icon()
+            self._condition_icon_widget.setVisible(False)
         self.clear()
         self.adjustSize()
     

@@ -13,17 +13,17 @@ This decomposition improves:
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import Any, Dict, Optional
 
 from PySide6.QtWidgets import QWidget
 
-from core.logging.logger import get_logger
+from widgets.shadow_utils import apply_widget_shadow
 from core.settings.settings_manager import SettingsManager
 from rendering.widget_setup import parse_color_to_qcolor
+from core.threading.manager import ThreadManager
+from core.logging.logger import get_logger
 
-if TYPE_CHECKING:
-    from core.threading.manager import ThreadManager
-
+_DEFAULT_ANIMATED_ICON_ALIGNMENT = "NONE"
 logger = get_logger(__name__)
 
 
@@ -217,7 +217,6 @@ class ClockWidgetFactory(WidgetFactory):
             
             # Shadow config
             if shadows_config:
-                from widgets.shadow_utils import apply_widget_shadow
                 try:
                     if hasattr(widget, "set_shadow_config"):
                         widget.set_shadow_config(shadows_config)
@@ -261,8 +260,6 @@ class WeatherWidgetFactory(WidgetFactory):
         """Create and configure a WeatherWidget."""
         from widgets.weather_widget import WeatherWidget, WeatherPosition
         from core.settings.models import WidgetPosition, coerce_widget_position
-        from widgets.shadow_utils import apply_widget_shadow
-        
         if not SettingsManager.to_bool(config.get("enabled", False), False):
             return None
         
@@ -336,6 +333,14 @@ class WeatherWidgetFactory(WidgetFactory):
             if hasattr(widget, "set_show_details_row"):
                 widget.set_show_details_row(show_details_row)
             
+            icon_alignment = (config.get('animated_icon_alignment') or _DEFAULT_ANIMATED_ICON_ALIGNMENT).upper()
+            if hasattr(widget, 'set_animated_icon_alignment'):
+                widget.set_animated_icon_alignment(icon_alignment)
+
+            desaturate_icon = SettingsManager.to_bool(config.get('desaturate_animated_icon', False), False)
+            if hasattr(widget, 'set_desaturate_animated_icon'):
+                widget.set_desaturate_animated_icon(desaturate_icon)
+            
             # Margin
             margin = config.get('margin', 30)
             try:
@@ -382,8 +387,6 @@ class MediaWidgetFactory(WidgetFactory):
         """Create and configure a MediaWidget with full settings."""
         from widgets.media_widget import MediaWidget, MediaPosition
         from core.settings.models import MediaWidgetSettings, WidgetPosition, coerce_widget_position
-        from widgets.shadow_utils import apply_widget_shadow
-        
         model = MediaWidgetSettings.from_mapping(config if isinstance(config, dict) else {})
         if not SettingsManager.to_bool(model.enabled, False):
             return None
@@ -488,8 +491,6 @@ class RedditWidgetFactory(WidgetFactory):
         """Create and configure a RedditWidget with full settings inheritance."""
         from widgets.reddit_widget import RedditWidget, RedditPosition
         from core.settings.models import RedditWidgetSettings, WidgetPosition, coerce_widget_position
-        from widgets.shadow_utils import apply_widget_shadow
-        
         model = RedditWidgetSettings.from_mapping(config if isinstance(config, dict) else {}, prefix=f"widgets.{settings_key}")
         if not SettingsManager.to_bool(model.enabled, False):
             return None
