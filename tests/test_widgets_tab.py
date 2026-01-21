@@ -57,6 +57,7 @@ class TestWidgetsTab:
         loc = tab.weather_location.text()
         assert isinstance(loc, str) and loc
         assert tab.weather_show_forecast.isChecked() is True  # Default is True per defaults.py
+        assert tab.weather_show_details_row.isChecked() is False
         assert tab.weather_show_background.isChecked() is True
         assert tab.weather_bg_opacity.value() == 70
 
@@ -80,6 +81,7 @@ class TestWidgetsTab:
         tab.weather_position.setCurrentText("Bottom Left")
         tab.weather_monitor_combo.setCurrentText("ALL")
         tab.weather_show_forecast.setChecked(True)
+        tab.weather_show_details_row.setChecked(True)
         tab.weather_show_background.setChecked(True)
         tab.weather_bg_opacity.setValue(80)  # 80%
 
@@ -102,6 +104,7 @@ class TestWidgetsTab:
         assert weather_cfg.get("location") == "Johannesburg"
         assert weather_cfg.get("position") == "Bottom Left"
         assert weather_cfg.get("show_forecast") is True
+        assert weather_cfg.get("show_details_row") is True
         assert weather_cfg.get("show_background") is True
         assert pytest.approx(weather_cfg.get("bg_opacity", 0.0)) == 0.80
         assert weather_cfg.get("monitor") == "ALL"

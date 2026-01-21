@@ -160,6 +160,43 @@ python tests/pytest.py --collect-only
 Get-Content logs\pytest_output.log -Tail 80
 ```
 
+#### Runner Convenience Flags (`--suite`, `--case`)
+
+`tests/pytest.py` now accepts shorthand flags to simplify per-suite and per-test execution. These resolve to real paths/node IDs before invoking pytest, so developers no longer need to remember the full syntax.
+
+```powershell
+# Run a suite by shorthand (maps to tests/widgets/test_worker_consolidated.py)
+python tests/pytest.py --suite widgets/test_worker_consolidated -vv
+
+# Absolute / relative paths still work
+python tests/pytest.py --suite tests/test_widget_manager_refresh.py -k "clock"
+
+# Target a specific test case using pytest node syntax
+python tests/pytest.py --case widgets/test_worker_consolidated::TestImageWorkerCacheKeyParity::test_cache_key_format_matches_legacy
+
+# Mix shorthand with classic args (suite flag expands before pytest sees the args)
+python tests/pytest.py --suite tests/test_widget_manager_refresh.py -m widget_fade --maxfail=1
+```
+
+Multiple `--suite` / `--case` flags are allowed; they will be appended to the pytest arg list in the order provided and logged in `logs/pytest.log` for traceability. This behaviour is documented in the Phase 6 TestSuite section of `2_6_Action_Plan.md` and should be updated if the runner gains new shorthand.
+
+#### Marker & Selector Guidance
+
+Markers let contributors run cross-cutting subsets quickly (Phase 6 requirement). Standard markers:
+
+| Marker | Scope |
+| --- | --- |
+| `widget_fade` | Overlay fade/WidgetManager handshake tests |
+| `visualizer` | Spotify visualizer audio + rendering suites |
+| `rss` | RSS workers, queue priority, metadata |
+| `perf` | Perf/telemetry harness guards (skip in CI unless `SRPSS_PERF_METRICS=1`) |
+
+Add new markers when introducing suites; document them here and in `2_6_Action_Plan.md` usage notes. Example command:
+
+```powershell
+python tests/pytest.py --suite tests/test_widget_manager_refresh.py -m widget_fade -vv
+```
+
 `pytest.py` ensures:
 - Rotating console capture (`logs/pytest_output.log`, 5 MB x5 files).
 - Runner telemetry (`logs/pytest.log`, 1 MB x5 files).

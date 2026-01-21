@@ -11,7 +11,7 @@ import json
 import tempfile
 from pathlib import Path
 import requests
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_perf_metrics_enabled
 
 logger = get_logger(__name__)
 
@@ -264,11 +264,13 @@ class OpenMeteoProvider:
         try:
             logger.debug(f"Fetching weather for {city} ({latitude:.2f}, {longitude:.2f})")
             
+            hourly_vars = ["precipitation_probability", "relative_humidity_2m"]
             params = {
                 'latitude': latitude,
                 'longitude': longitude,
                 'current_weather': 'true',
                 'current': 'relative_humidity_2m',  # Additional current data
+                'hourly': ",".join(hourly_vars),
                 'daily': 'temperature_2m_max,temperature_2m_min,weathercode',  # Tomorrow's forecast
                 'forecast_days': 2,  # Today + tomorrow
                 'timezone': 'auto'
@@ -281,7 +283,7 @@ class OpenMeteoProvider:
             
             # Extract current weather
             current = data.get('current_weather', {})
-            current_units = data.get('current', {})
+            current_details = data.get('current', {})
             
             temperature = current.get('temperature')
             weather_code = current.get('weathercode', 0)
@@ -289,8 +291,47 @@ class OpenMeteoProvider:
             
             # Get humidity from extended current data (if available)
             humidity = None
-            if 'relative_humidity_2m' in current_units:
-                humidity = current_units['relative_humidity_2m']
+            if isinstance(current_details, dict):
+                humidity = current_details.get('relative_humidity_2m')
+            
+            # Extract precipitation probability (prefer hourly series)
+            precipitation_probability = None
+            hourly = data.get('hourly', {})
+            hourly_humidity_series = None
+            if isinstance(hourly, dict):
+                probs = hourly.get('precipitation_probability')
+                times = hourly.get('time', [])
+                hourly_humidity_series = hourly.get('relative_humidity_2m')
+                if isinstance(probs, list) and probs:
+                    idx = 0
+                    current_time = current.get('time')
+                    if current_time and isinstance(times, list):
+                        try:
+                            idx = times.index(current_time)
+                        except ValueError:
+                            idx = 0
+                    try:
+                        precipitation_probability = float(probs[idx])
+                    except (TypeError, ValueError, IndexError):
+                        precipitation_probability = None
+                    if humidity is None and isinstance(hourly_humidity_series, list):
+                        try:
+                            humidity = float(hourly_humidity_series[idx])
+                        except (TypeError, ValueError, IndexError):
+                            pass
+
+            if is_perf_metrics_enabled():
+                if humidity is None:
+                    logger.info(
+                        "[WEATHER][DETAIL] Open-Meteo returned no humidity (current_keys=%s hourly_humidity=%s)",
+                        list(current_details.keys()) if isinstance(current_details, dict) else None,
+                        bool(hourly_humidity_series),
+                    )
+                if precipitation_probability is None:
+                    logger.info(
+                        "[WEATHER][DETAIL] Open-Meteo returned no precipitation_probability (hourly_keys=%s)",
+                        list(hourly.keys()) if isinstance(hourly, dict) else None,
+                    )
             
             # Map weather code to condition
             condition = self.WEATHER_CODES.get(weather_code, "Unknown")
@@ -321,6 +362,7 @@ class OpenMeteoProvider:
                 'weather_code': weather_code,
                 'windspeed': windspeed,
                 'humidity': humidity,
+                'precipitation_probability': precipitation_probability,
                 'forecast': forecast_text
             }
             

@@ -219,6 +219,7 @@ class _StubWeatherWidget(_BaseStubWidget):
         self.background_opacity = None
         self.border = None
         self.show_forecast = None
+        self.show_details_row = None
         self.margin = None
         self.intense_shadow = None
 
@@ -248,6 +249,9 @@ class _StubWeatherWidget(_BaseStubWidget):
 
     def set_show_forecast(self, value):
         self.show_forecast = value
+
+    def set_show_details_row(self, value):
+        self.show_details_row = value
 
     def set_margin(self, value):
         self.margin = value
@@ -456,6 +460,7 @@ def test_weather_widget_creation_handles_prefixed_positions():
             "border_opacity": 0.9,
             "margin": 10,
             "show_forecast": True,
+            "show_details_row": True,
             "intense_shadow": True,
         },
         "shadows": {"enabled": True},
@@ -470,6 +475,7 @@ def test_weather_widget_creation_handles_prefixed_positions():
     assert widget.font_size == 30
     assert widget.margin == 10
     assert widget.intense_shadow is True
+    assert widget.show_details_row is True
     assert widget.background_opacity == 0.75
     assert widget.raised is True
     assert widget.started is True

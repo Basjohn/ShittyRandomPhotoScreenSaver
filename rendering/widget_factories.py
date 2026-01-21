@@ -331,6 +331,11 @@ class WeatherWidgetFactory(WidgetFactory):
             show_forecast = SettingsManager.to_bool(config.get('show_forecast', False), False)
             widget.set_show_forecast(show_forecast)
             
+            # Details row
+            show_details_row = SettingsManager.to_bool(config.get('show_details_row', False), False)
+            if hasattr(widget, "set_show_details_row"):
+                widget.set_show_details_row(show_details_row)
+            
             # Margin
             margin = config.get('margin', 30)
             try:

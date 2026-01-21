@@ -1,7 +1,7 @@
 """Tests for weather widget."""
 import pytest
 from unittest.mock import Mock, patch
-from PySide6.QtWidgets import QWidget, QApplication
+from PySide6.QtWidgets import QWidget, QApplication, QSizePolicy
 from PySide6.QtGui import QColor
 from widgets.weather_widget import WeatherWidget, WeatherPosition, WeatherFetcher
 
@@ -127,12 +127,95 @@ def test_weather_display_update(qapp, parent_widget, mock_weather_data):
     weather = WeatherWidget(parent=parent_widget)
     
     weather._update_display(mock_weather_data)
-    text = weather.text()
     
-    # Should contain location and temperature (case-insensitive)
-    assert "London" in text or "LONDON" in text.upper()
-    assert "20°C" in text or "21°C" in text  # Rounded
-    assert "Clouds" in text or "CLOUDS" in text.upper()
+    city_text = weather._city_label.text()
+    conditions_text = weather._conditions_label.text()
+    
+    assert "London" in city_text or "LONDON" in city_text.upper()
+    assert "20" in conditions_text  # Rounded temp included in summary line
+    assert "Clouds" in conditions_text or "CLOUDS" in conditions_text.upper()
+
+
+def test_weather_detail_row_metrics_with_toggle(qapp, parent_widget):
+    """Detail metrics populate when toggle is enabled."""
+    weather = WeatherWidget(parent=parent_widget)
+    sample = {
+        "temperature": 18.4,
+        "condition": "Overcast",
+        "location": "Rivonia",
+        "humidity": 55,
+        "windspeed": 7.2,
+        "precipitation_probability": 42,
+    }
+
+    weather.set_show_details_row(True)
+    weather._update_display(sample)
+
+    assert weather._detail_metrics == [
+        ("rain", "42%"),
+        ("humidity", "55%"),
+        ("wind", "7.2 km/h"),
+    ]
+    assert weather._details_separator is not None
+    assert not weather._details_separator.isHidden()
+    assert weather._detail_row_widget is not None
+    assert not weather._detail_row_widget.isHidden()
+    assert weather._detail_row_widget.metrics == weather._detail_metrics
+    assert "Rain chance 42%" in weather.toolTip()
+
+
+def test_weather_detail_row_segments_show_icons(qapp, parent_widget):
+    """Detail row segments expand across width and render icons."""
+    weather = WeatherWidget(parent=parent_widget)
+    sample = {
+        "temperature": 21,
+        "condition": "Partly Cloudy",
+        "location": "Berlin",
+        "humidity": 64,
+        "windspeed": 5.3,
+        "precipitation_probability": 15,
+    }
+
+    weather.set_show_details_row(True)
+    weather._update_display(sample)
+
+    row = weather._detail_row_widget
+    assert row is not None
+    policy = row.sizePolicy()
+    assert policy.horizontalPolicy() == QSizePolicy.Policy.Expanding
+    assert len(row._segment_widgets) == 3
+
+    for segment in row._segment_widgets:
+        layout = segment.layout()
+        assert layout is not None
+        assert layout.count() >= 2
+        icon_label = layout.itemAt(0).widget()
+        text_label = layout.itemAt(1).widget()
+        assert icon_label is not None and icon_label.pixmap() is not None
+        assert not icon_label.pixmap().isNull()
+        assert text_label is not None and text_label.text()
+
+
+def test_weather_respects_minimum_width(qapp, parent_widget):
+    """Widget reports wide size hints when detail row enabled."""
+    weather = WeatherWidget(parent=parent_widget)
+    sample = {
+        "temperature": 19,
+        "condition": "Rainy",
+        "location": "Seattle",
+        "humidity": 75,
+        "windspeed": 10.2,
+        "precipitation_probability": 68,
+        "forecast": "Tomorrow 17°C / Showers",
+    }
+
+    weather.set_show_details_row(True)
+    weather.set_show_forecast(True)
+    weather._update_display(sample)
+
+    hint = weather.minimumSizeHint()
+    assert hint.width() >= weather._min_content_width
+    assert hint.width() >= 450
 
 
 def test_weather_cache(qapp, parent_widget, mock_weather_data):

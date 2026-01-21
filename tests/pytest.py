@@ -5,6 +5,10 @@ Usage (PowerShell, from project root):
     python tests/pytest.py
     python tests/pytest.py tests/test_widgets_media_integration.py -vv
 
+Convenience flags:
+    --suite widgets/test_worker_consolidated   # resolves to tests/widgets/test_worker_consolidated.py
+    --case widgets/test_worker_consolidated::TestClass::test_case
+
 This exists because terminal output is often truncated; use the
 log files under `logs/` to inspect full results.
 """
@@ -122,6 +126,90 @@ def _with_default_config(args: list[str]) -> list[str]:
     return ["-c", str(config_path)] + args
 
 
+def _resolve_suite_target(value: str) -> str:
+    """
+    Resolve a suite shorthand into an existing test file path.
+
+    Accepts absolute paths, repo-relative paths, or shorthand like
+    "widgets/test_widget_tab" which maps to tests/widgets/test_widget_tab.py.
+    """
+    raw = value.strip()
+    if not raw:
+        raise ValueError("Empty suite target")
+
+    candidates = []
+    raw_path = Path(raw)
+    tests_dir = _tests_dir()
+
+    def _maybe_add(path: Path) -> None:
+        if path.exists():
+            candidates.append(path)
+        elif path.suffix != ".py":
+            py_path = path.with_suffix(".py")
+            if py_path.exists():
+                candidates.append(py_path)
+
+    if raw_path.is_absolute():
+        _maybe_add(raw_path)
+    else:
+        normalized = Path(raw.replace(".", Path.sep))
+        _maybe_add(tests_dir / normalized)
+        if not candidates:
+            _maybe_add(Path.cwd() / normalized)
+            if not candidates:
+                _maybe_add(Path(normalized))
+
+    if not candidates:
+        raise FileNotFoundError(f"Could not resolve suite target '{value}'")
+
+    return str(candidates[0])
+
+
+def _resolve_case_target(value: str) -> str:
+    """
+    Resolve a node id shorthand into a pytest-compatible node id.
+    """
+    parts = value.split("::", 1)
+    suite_part = parts[0]
+    remainder = f"::{parts[1]}" if len(parts) > 1 else ""
+    suite_path = _resolve_suite_target(suite_part)
+    return f"{suite_path}{remainder}"
+
+
+def _process_custom_targets(args: list[str]) -> tuple[list[str], dict[str, list[str]]]:
+    """
+    Handle --suite/--case convenience flags before handing off to pytest.
+    """
+    processed: list[str] = []
+    suites: list[str] = []
+    cases: list[str] = []
+
+    def _consume_value(arg: str, idx: int) -> tuple[str, int]:
+        if "=" in arg:
+            return arg.split("=", 1)[1], idx
+        if idx + 1 >= len(args):
+            raise ValueError(f"{arg} requires a value")
+        return args[idx + 1], idx + 1
+
+    skip_to = -1
+    for idx, arg in enumerate(args):
+        if idx <= skip_to:
+            continue
+        if arg.startswith("--suite"):
+            value, skip_to = _consume_value(arg, idx)
+            suites.append(_resolve_suite_target(value))
+            continue
+        if arg.startswith("--case"):
+            value, skip_to = _consume_value(arg, idx)
+            cases.append(_resolve_case_target(value))
+            continue
+        processed.append(arg)
+
+    processed.extend(suites)
+    processed.extend(cases)
+    return processed, {"suites": suites, "cases": cases}
+
+
 def _import_real_pytest():
     tests_dir = _tests_dir()
     orig_sys_path = list(sys.path)
@@ -135,10 +223,17 @@ def _import_real_pytest():
 def main(argv: list[str] | None = None) -> int:
     if argv is None:
         argv = sys.argv[1:]
+
+    argv, resolved = _process_custom_targets(list(argv))
     argv = _with_default_config(list(argv))
 
     logger = _setup_pytest_logging()
-    logger.info("tests/pytest.py starting with args: %r", argv)
+    logger.info(
+        "tests/pytest.py starting with args: %r (resolved suites=%s cases=%s)",
+        argv,
+        resolved.get("suites"),
+        resolved.get("cases"),
+    )
 
     real_pytest = _import_real_pytest()
 

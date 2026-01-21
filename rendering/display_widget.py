@@ -74,7 +74,7 @@ from transitions.overlay_manager import (
     SW_OVERLAY_KEYS,
 )
 from core.events import EventSystem
-from core.eco_mode import is_mc_build, EcoModeManager, EcoModeConfig
+from core.mc_build import is_mc_build
 from rendering.backends import BackendSelectionResult, create_backend_from_settings
 from rendering.backends.base import RendererBackend, RenderSurface, SurfaceDescriptor
 
@@ -346,39 +346,6 @@ class DisplayWidget(QWidget):
                 self._settings_listener_connected = True
             except Exception as e:
                 logger.debug("[DISPLAY_WIDGET] Failed to connect settings listener: %s", e)
-        
-        # EcoModeManager for MC builds (v2.1 integration)
-        self._eco_mode_manager: Optional[EcoModeManager] = None
-        if is_mc_build():
-            try:
-                # Get eco mode settings from SettingsManager with canonical defaults
-                eco_enabled = True
-                eco_threshold = 0.95
-                eco_check_interval = 1000
-                eco_recovery_delay = 100
-                if self.settings_manager:
-                    eco_cfg = self.settings_manager.get('mc.eco_mode', {})
-                    if isinstance(eco_cfg, dict):
-                        eco_enabled = SettingsManager.to_bool(eco_cfg.get('enabled', True), True)
-                        eco_threshold = float(eco_cfg.get('threshold', 0.95))
-                        eco_check_interval = int(eco_cfg.get('check_interval', 1000))
-                        eco_recovery_delay = int(eco_cfg.get('recovery_delay', 100))
-                
-                eco_config = EcoModeConfig(
-                    enabled=eco_enabled,
-                    occlusion_threshold=eco_threshold,
-                    check_interval_ms=eco_check_interval,
-                    recovery_delay_ms=eco_recovery_delay,
-                    pause_transitions=True,
-                    pause_visualizer=True,
-                )
-                self._eco_mode_manager = EcoModeManager(eco_config)
-                self._eco_mode_manager.set_display_widget(self)
-                if self._transition_controller:
-                    self._eco_mode_manager.set_transition_controller(self._transition_controller)
-                logger.info("[DISPLAY_WIDGET] EcoModeManager initialized for MC build")
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Failed to create EcoModeManager: %s", e, exc_info=True)
         
         # ImagePresenter for centralized pixmap lifecycle (Phase 4 refactor)
         self._image_presenter: Optional[ImagePresenter] = None
@@ -904,34 +871,18 @@ class DisplayWidget(QWidget):
         
         WidgetManager handles creation; this just handles positioning.
         """
-        # Position Spotify visualizer if created
         if self.spotify_visualizer_widget is not None:
             try:
                 self._position_spotify_visualizer()
             except Exception as e:
                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            
-            # Wire up EcoModeManager to visualizer (MC builds only)
-            if self._eco_mode_manager is not None:
-                try:
-                    self._eco_mode_manager.set_visualizer(self.spotify_visualizer_widget)
-                except Exception:
-                    logger.debug("[DISPLAY_WIDGET] Failed to set visualizer on EcoModeManager", exc_info=True)
         
-        # Position Spotify volume if created
         if self.spotify_volume_widget is not None:
             try:
                 self._position_spotify_volume()
             except Exception as e:
                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         
-        # Start EcoModeManager monitoring (MC builds only)
-        if self._eco_mode_manager is not None:
-            try:
-                self._eco_mode_manager.start_monitoring()
-            except Exception:
-                logger.debug("[DISPLAY_WIDGET] Failed to start EcoModeManager monitoring", exc_info=True)
-
     def _setup_pixel_shift(self) -> None:
         """Setup pixel shift manager for burn-in prevention.
         

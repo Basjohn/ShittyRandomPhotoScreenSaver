@@ -179,8 +179,8 @@ def estimate_weather_size(font_size: int, show_forecast: bool = False) -> Tuple[
     font_height_multiplier = 1.8
     actual_font_height = int(font_size * font_height_multiplier)
     
-    # Weather shows: icon + temp + condition
-    width = 200 + font_size * 2  # Icon + text
+    # Weather shows: icon + temp + condition across a wide card plus detail row padding
+    width = max(460, 200 + font_size * 2)
     height = actual_font_height * 2 + 40  # Two lines + padding
     
     if show_forecast:

@@ -55,6 +55,7 @@ class SpotifyVolumeWidget(QWidget):
         self._flush_timer: Optional[QTimer] = None
         self._has_faded_in: bool = False
         self._anchor_media: Optional[QWidget] = None
+        self._waiting_for_anchor: bool = False
 
         try:
             SpotifyVolumeWidget._instances.add(self)
@@ -244,7 +245,8 @@ class SpotifyVolumeWidget(QWidget):
 
         self._ensure_flush_timer()
         
-        # Only show if anchor media widget is visible (Spotify is active)
+        # Observe anchor visibility for diagnostics but do not bail; fade sync
+        # coordination must proceed so WidgetManager can schedule us.
         anchor = self._anchor_media
         anchor_visible = True
         if anchor is not None:
@@ -253,10 +255,6 @@ class SpotifyVolumeWidget(QWidget):
             except Exception as e:
                 logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
                 anchor_visible = True
-        
-        if not anchor_visible:
-            # Media widget not visible - don't show volume widget yet
-            return
 
         if self._thread_manager is None:
             try:
@@ -289,15 +287,48 @@ class SpotifyVolumeWidget(QWidget):
             except Exception:
                 logger.debug("[SPOTIFY_VOL] Failed to schedule initial volume read", exc_info=True)
 
+        parent = self.parent()
+
         # Participate in coordinated overlay fade sync like other widgets
         def _starter() -> None:
             if not self._enabled:
                 return
+
+            self._waiting_for_anchor = False
+
+            anchor_widget = self._anchor_media
+            if anchor_widget is not None:
+                try:
+                    if not anchor_widget.isVisible():
+                        # Anchor still hidden (media widget mid-fade). Requeue as
+                        # a Spotify secondary fade so we retry once the primary
+                        # overlays are visible.
+                        self._waiting_for_anchor = True
+                        requeued = False
+                        parent_widget = self.parent()
+                        if parent_widget is not None and hasattr(parent_widget, "register_spotify_secondary_fade"):
+                            try:
+                                parent_widget.register_spotify_secondary_fade(_starter)
+                                requeued = True
+                            except Exception as e:
+                                logger.debug("[SPOTIFY_VOL] Exception suppressed while requeueing secondary fade: %s", e)
+                        if not requeued:
+                            try:
+                                QTimer.singleShot(200, _starter)
+                            except Exception as e:
+                                logger.debug("[SPOTIFY_VOL] Fallback requeue failed: %s", e)
+                        return
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VOL] Exception suppressed during anchor visibility check: %s", e)
             self._start_widget_fade_in(1500)
 
-        parent = self.parent()
         if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
             try:
+                if is_verbose_logging():
+                    logger.debug(
+                        "[SPOTIFY_VOL][FADE] requesting overlay fade sync (anchor_visible=%s)",
+                        anchor_visible,
+                    )
                 parent.request_overlay_fade_sync("spotify_volume", _starter)
             except Exception as e:
                 logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)

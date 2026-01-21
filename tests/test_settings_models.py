@@ -296,6 +296,18 @@ class TestWeatherWidgetSettings:
         assert settings.enabled is False
         assert settings.position == WidgetPosition.BOTTOM_LEFT
         assert settings.location == ""
+        assert settings.show_details_row is False
+
+    def test_show_details_row_from_settings(self):
+        """Ensure show_details_row flag loads from SettingsManager."""
+        mock_settings = MagicMock()
+        mock_settings.get.side_effect = lambda key, default=None: {
+            "widgets.weather.show_details_row": True,
+        }.get(key, default)
+
+        model = WeatherWidgetSettings.from_settings(mock_settings)
+
+        assert model.show_details_row is True
 
 
 class TestMediaWidgetSettings:

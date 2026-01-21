@@ -694,6 +694,16 @@ class WidgetsTab(QWidget):
         self.weather_show_forecast.stateChanged.connect(self._update_stack_status)
         weather_layout.addWidget(self.weather_show_forecast)
 
+        # Detail row toggle
+        self.weather_show_details_row = QCheckBox("Show Detail Row (Humidity/Rain/Wind)")
+        self.weather_show_details_row.setChecked(self._default_bool('weather', 'show_details_row', False))
+        self.weather_show_details_row.setToolTip(
+            "Display a compact row of monochrome humidity, rain chance, and wind icons between the main block and forecast."
+        )
+        self.weather_show_details_row.stateChanged.connect(self._save_settings)
+        self.weather_show_details_row.stateChanged.connect(self._update_stack_status)
+        weather_layout.addWidget(self.weather_show_details_row)
+
         # Intense shadow
         self.weather_intense_shadow = QCheckBox("Intense Shadows")
         self.weather_intense_shadow.setChecked(self._default_bool('weather', 'intense_shadow', True))
@@ -1862,6 +1872,7 @@ class WidgetsTab(QWidget):
             self.weather_font_combo.setCurrentFont(QFont(self._config_str('weather', weather_config, 'font_family', 'Segoe UI')))
             self.weather_font_size.setValue(self._config_int('weather', weather_config, 'font_size', 24))
             self.weather_show_forecast.setChecked(self._config_bool('weather', weather_config, 'show_forecast', True))
+            self.weather_show_details_row.setChecked(self._config_bool('weather', weather_config, 'show_details_row', False))
             self.weather_intense_shadow.setChecked(
                 self._config_bool('weather', weather_config, 'intense_shadow', True)
             )
@@ -2344,6 +2355,7 @@ class WidgetsTab(QWidget):
             'font_size': self.weather_font_size.value(),
             'margin': self.weather_margin.value(),
             'show_forecast': self.weather_show_forecast.isChecked(),
+            'show_details_row': self.weather_show_details_row.isChecked(),
             'intense_shadow': self.weather_intense_shadow.isChecked(),
             'show_background': self.weather_show_background.isChecked(),
             'bg_opacity': self.weather_bg_opacity.value() / 100.0,
