@@ -94,6 +94,26 @@ class InputHandler(QObject):
         
         logger.debug("[INPUT_HANDLER] Initialized")
     
+    # ---------------------------------------------------------------------
+    # Event helpers
+    # ---------------------------------------------------------------------
+    @staticmethod
+    def _event_point(event: QMouseEvent) -> QPoint:
+        """Return the integer QPoint for a QMouseEvent using the modern API."""
+        try:
+            return event.position().toPoint()
+        except AttributeError:
+            # Fallback for older Qt bindings – should not happen in production.
+            return event.pos()
+    
+    @staticmethod
+    def _event_global_point(event: QMouseEvent) -> QPoint:
+        """Return the global QPoint for a QMouseEvent using the modern API."""
+        try:
+            return event.globalPosition().toPoint()
+        except AttributeError:
+            return event.globalPos()
+    
     # =========================================================================
     # Configuration
     # =========================================================================
@@ -273,7 +293,7 @@ class InputHandler(QObject):
         ctrl_mode_active = self._ctrl_held or global_ctrl_held
         
         # Track mouse press for gesture detection
-        self._mouse_press_pos = event.pos()
+        self._mouse_press_pos = self._event_point(event)
         self._mouse_press_time = time.time()
         
         # Right-click context menu handling
@@ -282,7 +302,7 @@ class InputHandler(QObject):
             
             # Context menu available in hard-exit mode or with Ctrl held
             if hard_exit_enabled or ctrl_mode_active:
-                global_pos = event.globalPos()
+                global_pos = self._event_global_point(event)
                 
                 # Phase E: Notify WidgetManager before menu popup
                 if self._widget_manager is not None:
@@ -332,7 +352,7 @@ class InputHandler(QObject):
             return False
         
         # Track initial position for exit threshold
-        current_pos = event.pos()
+        current_pos = self._event_point(event)
         if self._initial_mouse_pos is None:
             self._initial_mouse_pos = current_pos
             return False
@@ -656,7 +676,7 @@ class InputHandler(QObject):
         handled = False
         reddit_handled = False
         reddit_url = None
-        pos = event.pos()
+        pos = self._event_point(event)
         button = event.button()
         
         # Spotify volume widget
@@ -762,11 +782,8 @@ class InputHandler(QObject):
             controls_row_top = height - controls_row_height
             
             if local_y >= controls_row_top:
-                margins = mw.contentsMargins()
-                content_left = margins.left()
-                content_right = width - margins.right()
-                content_width = max(1, content_right - content_left)
-                x_in_content = max(0, min(content_width, local_x - content_left))
+                content_width = width
+                x_in_content = max(0, min(content_width, local_x))
                 third = content_width / 3.0
                 
                 if x_in_content < third:

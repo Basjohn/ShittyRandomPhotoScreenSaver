@@ -2786,7 +2786,8 @@ class DisplayWidget(QWidget):
             event.accept()
             return
 
-        logger.info(f"Mouse clicked at ({event.pos().x()}, {event.pos().y()}), requesting exit")
+        click_pos = event.position().toPoint()
+        logger.info(f"Mouse clicked at ({click_pos.x()}, {click_pos.y()}), requesting exit")
         self._exiting = True
         # Deferred Reddit URLs are now flushed centrally by DisplayManager after teardown.
         self.exit_requested.emit()
@@ -2804,7 +2805,7 @@ class DisplayWidget(QWidget):
         hard_exit = self._is_hard_exit_enabled()
         if hard_exit or ctrl_mode_active:
             # Show/update halo position
-            local_pos = event.pos()
+            local_pos = event.position().toPoint()
             hint = self._ctrl_cursor_hint
             if hint is not None:
                 halo_hidden = not hint.isVisible()
@@ -2818,7 +2819,7 @@ class DisplayWidget(QWidget):
             if self._input_handler is not None:
                 try:
                     self._input_handler.route_volume_drag(
-                        event.pos(), getattr(self, "spotify_volume_widget", None)
+                        event.position().toPoint(), getattr(self, "spotify_volume_widget", None)
                     )
                 except Exception as e:
                     logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
@@ -2827,13 +2828,14 @@ class DisplayWidget(QWidget):
 
         # Store initial position on first move
         if self._initial_mouse_pos is None:
-            self._initial_mouse_pos = event.pos()
+            self._initial_mouse_pos = event.position().toPoint()
             event.accept()
             return
         
         # Calculate distance from initial position
-        dx = event.pos().x() - self._initial_mouse_pos.x()
-        dy = event.pos().y() - self._initial_mouse_pos.y()
+        current_pos = event.position().toPoint()
+        dx = current_pos.x() - self._initial_mouse_pos.x()
+        dy = current_pos.y() - self._initial_mouse_pos.y()
         distance = (dx * dx + dy * dy) ** 0.5
         
         # Exit if moved beyond threshold

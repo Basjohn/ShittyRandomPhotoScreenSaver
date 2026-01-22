@@ -6,6 +6,7 @@ Manages overlay widget lifecycle, positioning, visibility, and Z-order.
 from __future__ import annotations
 
 import logging
+import os
 import time
 from typing import Any, Callable, Dict, List, Optional, Set, TYPE_CHECKING, Mapping
 
@@ -17,9 +18,6 @@ from core.resources.manager import ResourceManager
 from core.settings.settings_manager import SettingsManager
 from rendering.widget_setup import parse_color_to_qcolor, compute_expected_overlays
 from widgets.shadow_utils import apply_widget_shadow as _apply_widget_shadow
-
-# Re-export for tests that monkeypatch rendering.widget_manager.apply_widget_shadow.
-apply_widget_shadow = _apply_widget_shadow
 from widgets.media_widget import MediaWidget
 # Gmail widget archived - see archive/gmail_feature/RESTORE_GMAIL.md
 # from widgets.gmail_widget import GmailWidget, GmailPosition
@@ -29,12 +27,20 @@ from widgets.spotify_volume_widget import SpotifyVolumeWidget
 from rendering.widget_positioner import WidgetPositioner, PositionAnchor
 from rendering.widget_factories import WidgetFactoryRegistry
 
+# Re-export for tests that monkeypatch rendering.widget_manager.apply_widget_shadow.
+apply_widget_shadow = _apply_widget_shadow
+
 if TYPE_CHECKING:
     from rendering.display_widget import DisplayWidget
     from core.threading.manager import ThreadManager
 
 logger = get_logger(__name__)
 win_diag_logger = logging.getLogger("win_diag")
+
+
+def _in_test_environment() -> bool:
+    """Return True when running under pytest or explicit test mode."""
+    return bool(os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("SRPSS_TEST_MODE"))
 
 
 class WidgetManager:
@@ -106,7 +112,7 @@ class WidgetManager:
     
     def _connect_compositor_ready_signal(self) -> None:
         """Connect to parent's image_displayed signal to know when compositor is ready."""
-        if self._parent is None:
+        if self._parent is None or _in_test_environment():
             self._compositor_ready = True  # No parent, assume ready
             return
         

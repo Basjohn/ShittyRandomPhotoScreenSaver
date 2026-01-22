@@ -638,6 +638,7 @@ def test_display_widget_ctrl_click_routes_to_media_widget(
     event = QMouseEvent(
         QEvent.Type.MouseButtonPress,
         QtCore.QPointF(pos),
+        QtCore.QPointF(w.mapToGlobal(pos)),
         Qt.MouseButton.LeftButton,
         Qt.MouseButton.LeftButton,
         Qt.KeyboardModifier.ControlModifier,
@@ -708,6 +709,7 @@ def test_display_widget_hard_exit_click_routes_to_media_widget(
     event = QMouseEvent(
         QEvent.Type.MouseButtonPress,
         QtCore.QPointF(pos),
+        QtCore.QPointF(w.mapToGlobal(pos)),
         Qt.MouseButton.LeftButton,
         Qt.MouseButton.LeftButton,
         Qt.KeyboardModifier.NoModifier,

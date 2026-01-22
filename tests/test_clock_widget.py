@@ -605,10 +605,15 @@ def test_clock_shadow_settings(qapp, parent_widget):
     """Test clock shadow configuration."""
     clock = ClockWidget(parent=parent_widget)
     
-    # Clock widget uses shadow_utils for shadow management
-    # Just verify the widget was created successfully
+    # BaseOverlayWidget exposes shadow config helpers instead of direct flags.
     assert clock is not None
-    assert hasattr(clock, '_shadow_enabled')
+    initial_config = clock.get_shadow_config()
+    assert initial_config is None
+    
+    sample_config = {"enabled": True, "blur_radius": 12, "offset": [2, 2]}
+    clock.set_shadow_config(sample_config)
+    
+    assert clock.get_shadow_config() == sample_config
     
     clock.cleanup()
 

@@ -5,6 +5,7 @@ Displays current weather information using Open-Meteo API (no API key needed).
 """
 from typing import Any, Dict, Optional, Tuple, List, Callable
 import html
+import math
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
@@ -555,6 +556,8 @@ class WeatherWidget(BaseOverlayWidget):
         self._detail_icon_cache: Dict[Tuple[str, int, int], QPixmap] = {}
         self._detail_renderer_cache: Dict[str, QSvgRenderer] = {}
         self._last_detail_values: Dict[str, Optional[float]] = {}
+        self._detail_metrics_signature: Optional[Tuple[Tuple[str, str], ...]] = None
+        self._detail_metrics_last_refresh: Optional[datetime] = None
         self._details_font: Optional[QFont] = None
         self._details_font_metrics: Optional[QFontMetrics] = None
         self._city_label: Optional[QLabel] = None
@@ -568,6 +571,7 @@ class WeatherWidget(BaseOverlayWidget):
         self._primary_row: Optional[QWidget] = None
         self._primary_layout: Optional[QHBoxLayout] = None
         self._text_column: Optional[QWidget] = None
+        self._text_layout: Optional[QVBoxLayout] = None
         self._condition_icon_widget: Optional[WeatherConditionIcon] = None
         self._animated_icon_alignment: str = _DEFAULT_ICON_ALIGNMENT
         self._desaturate_condition_icon: bool = _DEFAULT_DESATURATE_ICON
@@ -575,6 +579,8 @@ class WeatherWidget(BaseOverlayWidget):
         self._last_icon_context: Dict[str, Any] = {}
         self._primary_spacer: Optional[QWidget] = None
         self._root_layout: Optional[QVBoxLayout] = None
+        self._status_label: Optional[QLabel] = None
+        self._current_summary: str = ""
         
         # Setup UI
         self._setup_ui()
@@ -625,7 +631,7 @@ class WeatherWidget(BaseOverlayWidget):
 
         return precipitation, humidity, windspeed
     
-    def _update_detail_metrics(self, data: Dict[str, Any]) -> None:
+    def _update_detail_metrics(self, data: Dict[str, Any], *, force: bool = False) -> None:
         """Compute available detail metrics from provider payload."""
         metrics: List[Tuple[str, str]] = []
         precipitation, humidity, windspeed = self._extract_detail_values(data)
@@ -637,6 +643,30 @@ class WeatherWidget(BaseOverlayWidget):
         if windspeed is not None:
             metrics.append(("wind", f"{windspeed:.1f} km/h"))
         
+        metrics_signature: Tuple[Tuple[str, str], ...] = tuple(metrics)
+        now = datetime.now()
+        should_refresh = force or self._detail_metrics_signature is None
+        if not should_refresh:
+            if metrics_signature != self._detail_metrics_signature:
+                should_refresh = True
+            elif self._detail_metrics_last_refresh is None:
+                should_refresh = True
+            else:
+                elapsed = (now - self._detail_metrics_last_refresh).total_seconds()
+                should_refresh = elapsed >= 30 * 60
+
+        if not should_refresh:
+            if is_perf_metrics_enabled():
+                logger.info(
+                    "[WEATHER][DETAIL] Skipping metrics refresh (unchanged, last=%ss)",
+                    None
+                    if self._detail_metrics_last_refresh is None
+                    else round((now - self._detail_metrics_last_refresh).total_seconds(), 1),
+                )
+            return
+
+        self._detail_metrics_signature = metrics_signature
+        self._detail_metrics_last_refresh = now
         self._last_detail_values = {
             "rain": precipitation,
             "humidity": humidity,
@@ -828,7 +858,7 @@ class WeatherWidget(BaseOverlayWidget):
 
         self._primary_row = QWidget(self)
         self._primary_row.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        self._primary_row.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._primary_row.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.MinimumExpanding)
         primary_layout = QHBoxLayout(self._primary_row)
         primary_layout.setContentsMargins(0, 0, 0, 0)
         primary_layout.setSpacing(8)
@@ -836,10 +866,11 @@ class WeatherWidget(BaseOverlayWidget):
 
         text_column = QWidget(self._primary_row)
         text_column.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        text_column.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        text_column.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.MinimumExpanding)
         text_layout = QVBoxLayout(text_column)
         text_layout.setContentsMargins(8, 2, 8, 2)
         text_layout.setSpacing(1)
+        self._text_layout = text_layout
 
         self._city_label = self._create_content_label(word_wrap=False)
         self._city_label.setContentsMargins(0, 0, 0, 0)
@@ -895,15 +926,28 @@ class WeatherWidget(BaseOverlayWidget):
         self._forecast_container.setVisible(False)
         self._root_layout.addWidget(self._forecast_container)
 
+        self._status_label = self._create_content_label(word_wrap=True)
+        self._status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._status_label.setVisible(False)
+        self._root_layout.addWidget(self._status_label)
+
         self._apply_icon_alignment()
         self._apply_icon_desaturation()
+        self._sync_primary_row_min_height()
+
+    def text(self) -> str:  # noqa: N802
+        """Return user-facing summary text even when base QLabel text is blank."""
+        summary = getattr(self, "_current_summary", "")
+        if summary:
+            return summary
+        return super().text()
 
     def _create_content_label(self, *, word_wrap: bool = True) -> QLabel:
         label = QLabel(self)
         label.setObjectName("")
         label.setWordWrap(word_wrap)
         label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.MinimumExpanding)
         label.setFrameShape(QFrame.Shape.NoFrame)
         label.setFrameShadow(QFrame.Shadow.Plain)
         label.setMargin(0)
@@ -1418,7 +1462,10 @@ class WeatherWidget(BaseOverlayWidget):
             data: Weather data
         """
         if not data:
-            self._show_status_message("Weather: No Data")
+            message = "Weather: No Data"
+            self._detail_metrics.clear()
+            self._update_detail_metrics({}, force=True)
+            self._show_status_message(message)
             return
         
         try:
@@ -1426,6 +1473,10 @@ class WeatherWidget(BaseOverlayWidget):
             condition = data.get("condition")
             location = data.get("location")
             weather_entry: Optional[Dict[str, Any]] = None
+            if self._status_label:
+                self._status_label.setVisible(False)
+            if self._primary_row:
+                self._primary_row.setVisible(True)
 
             if isinstance(data.get("weather"), list) and data["weather"]:
                 weather_entry = data["weather"][0] or {}
@@ -1537,10 +1588,10 @@ class WeatherWidget(BaseOverlayWidget):
             animated_scale = int(round(base_icon_scale * _ANIMATED_ICON_SCALE_FACTOR))
             self._update_condition_icon(weather_code, condition_display, is_day, icon_scale=animated_scale)
 
-            self.clear()
+            self._current_summary = f"{location_display}: {temp:.0f}°C - {condition_display}"
             self.adjustSize()
-
-            self._update_detail_tooltip(f"{location_display}: {temp:.0f}°C - {condition_display}")
+            self._update_detail_tooltip(self._current_summary)
+            self._sync_primary_row_min_height()
 
             if self.parent():
                 self._update_position()
@@ -1659,6 +1710,11 @@ class WeatherWidget(BaseOverlayWidget):
         if self._show_details_row == show:
             return
         self._show_details_row = show
+        if not show:
+            if self._details_separator:
+                self._details_separator.setVisible(False)
+            if self._detail_row_container:
+                self._detail_row_container.setVisible(False)
         if self._cached_data:
             self._update_display(self._cached_data)
         else:
@@ -1745,6 +1801,54 @@ class WeatherWidget(BaseOverlayWidget):
 
         icon_widget.set_icon_path(icon_path)
         icon_widget.setVisible(True)
+        self._sync_primary_row_min_height()
+
+    def _sync_primary_row_min_height(self) -> None:
+        """Ensure the text column expands to match the icon height (DPR aware)."""
+        primary_row = self._primary_row
+        text_column = self._text_column
+        if primary_row is None or text_column is None:
+            return
+
+        icon_widget = self._condition_icon_widget
+        dpr = max(1.0, float(self.devicePixelRatioF()))
+
+        icon_height = 0
+        if icon_widget is not None:
+            icon_height = icon_widget.height() or icon_widget.sizeHint().height()
+
+        text_layout = self._text_layout
+        text_height = 0
+        if text_layout is not None:
+            label_heights: List[int] = []
+            for idx in range(text_layout.count()):
+                item = text_layout.itemAt(idx)
+                widget = item.widget() if item is not None else None
+                if widget is not None:
+                    hint = widget.sizeHint().height()
+                    label_heights.append(hint if hint > 0 else widget.height())
+            spacing_total = max(0, len(label_heights) - 1) * max(0, text_layout.spacing())
+            margins = text_layout.contentsMargins()
+            text_height = (
+                sum(label_heights)
+                + spacing_total
+                + margins.top()
+                + margins.bottom()
+            )
+
+        if text_height <= 0:
+            text_height = text_column.sizeHint().height() or text_column.height()
+
+        logical_height = max(icon_height, text_height)
+        if logical_height <= 0:
+            return
+
+        physical_height = math.ceil(logical_height * dpr)
+        min_height = int(math.ceil(physical_height / dpr))
+        primary_row.setMinimumHeight(min_height)
+        text_column.setMinimumHeight(min_height)
+        primary_row.updateGeometry()
+        text_column.updateGeometry()
 
     def _resolve_condition_icon_path(
         self, weather_code: Optional[int], condition_text: Optional[str], is_day: bool
@@ -1786,9 +1890,15 @@ class WeatherWidget(BaseOverlayWidget):
         return icon_name
 
     def _show_status_message(self, message: str) -> None:
+        self._current_summary = message
+        if self._primary_row:
+            self._primary_row.setVisible(False)
+        if self._status_label:
+            self._status_label.setTextFormat(Qt.TextFormat.PlainText)
+            self._status_label.setText(message)
+            self._status_label.setVisible(True)
         if self._city_label:
-            self._city_label.setText(message)
-            self._city_label.setTextFormat(Qt.TextFormat.PlainText)
+            self._city_label.clear()
         if self._conditions_label:
             self._conditions_label.clear()
         if self._forecast_label:
@@ -1807,7 +1917,7 @@ class WeatherWidget(BaseOverlayWidget):
         if self._condition_icon_widget:
             self._condition_icon_widget.clear_icon()
             self._condition_icon_widget.setVisible(False)
-        self.clear()
+        self.setText("")
         self.adjustSize()
     
     def set_text_color(self, color: QColor) -> None:
