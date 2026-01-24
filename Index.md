@@ -653,6 +653,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - scripts/build_nuitka.ps1, scripts/build_nuitka_mc.ps1 - Nuitka build scripts
 - scripts/run_tests.py - Test runner with logging
 - scripts/SRPSS_Installer.iss - Inno Setup installer script
+- tools/synthetic_widget_benchmark.py - Qt-driven harness for Weather + Reddit widgets. Forces `SRPSS_PERF_METRICS=1`, loads cached fixture data, and drives deterministic repaint loops with CLI toggles for enabling/disabling entire widgets (`--weather/--reddit`), detail rows, forecast blocks, animated icon alignment, Reddit separators/limits, fixture overrides, and JSONL metric export. See `Docs/Performance_Base_Line_2_5.md §1.6` for usage matrix and sample command.
 
 ## Root
 - versioning.py

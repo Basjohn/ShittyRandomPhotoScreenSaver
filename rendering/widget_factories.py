@@ -337,6 +337,10 @@ class WeatherWidgetFactory(WidgetFactory):
             if hasattr(widget, 'set_animated_icon_alignment'):
                 widget.set_animated_icon_alignment(icon_alignment)
 
+            icon_animated = SettingsManager.to_bool(config.get('animated_icon_enabled', True), True)
+            if hasattr(widget, 'set_animated_icon_enabled'):
+                widget.set_animated_icon_enabled(icon_animated)
+
             desaturate_icon = SettingsManager.to_bool(config.get('desaturate_animated_icon', False), False)
             if hasattr(widget, 'set_desaturate_animated_icon'):
                 widget.set_desaturate_animated_icon(desaturate_icon)

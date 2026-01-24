@@ -3,6 +3,7 @@ Weather widget for screensaver overlay.
 
 Displays current weather information using Open-Meteo API (no API key needed).
 """
+from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple, List, Callable
 import html
 import math
@@ -39,6 +40,7 @@ from weather.open_meteo_provider import OpenMeteoProvider
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
 from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
+from core.performance import widget_paint_sample, widget_timer_sample
 
 logger = get_logger(__name__)
 # Store the weather cache in the user's home directory so it is stable
@@ -152,6 +154,13 @@ class WeatherDetailIcon(QWidget):
         painter.end()
 
 
+@dataclass
+class _DetailSegment:
+    widget: QWidget
+    icon: WeatherDetailIcon
+    text: QLabel
+
+
 class WeatherConditionIcon(QWidget):
     """Widget that renders animated SVG weather icons with Qt's SVG engine."""
 
@@ -160,8 +169,10 @@ class WeatherConditionIcon(QWidget):
         self._renderer: Optional[QSvgRenderer] = None
         self._icon_path: Optional[Path] = None
         self._size_px = max(48, int(size_px))
-        self._frames_per_second = 24
+        self._frames_per_second = 12
         self._padding = 4
+        self._animation_enabled = True
+        self._static_pixmap: Optional[QPixmap] = None
         self._set_fixed_box()
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
@@ -177,6 +188,7 @@ class WeatherConditionIcon(QWidget):
             return
         self._size_px = size_px
         self._set_fixed_box()
+        self._static_pixmap = None
         self.update()
 
     def clear_icon(self) -> None:
@@ -187,6 +199,7 @@ class WeatherConditionIcon(QWidget):
                 pass
         self._renderer = None
         self._icon_path = None
+        self._static_pixmap = None
         self.update()
 
     def set_icon_path(self, icon_path: Optional[Path]) -> None:
@@ -201,28 +214,82 @@ class WeatherConditionIcon(QWidget):
             self.clear_icon()
             return
 
-        renderer.setAnimationEnabled(True)
-        renderer.setFramesPerSecond(self._frames_per_second)
-
         if self._renderer:
             try:
                 self._renderer.repaintNeeded.disconnect(self.update)
             except Exception:
                 pass
 
-        renderer.repaintNeeded.connect(self.update)
         self._renderer = renderer
         self._icon_path = icon_path
+        self._apply_animation_state()
         self.update()
 
     def has_icon(self) -> bool:
         return self._renderer is not None and self._icon_path is not None
+
+    def set_animation_enabled(self, enabled: bool) -> None:
+        if self._animation_enabled == enabled:
+            return
+        self._animation_enabled = enabled
+        self._apply_animation_state()
+
+    def _apply_animation_state(self) -> None:
+        renderer = self._renderer
+        if renderer is None:
+            return
+
+        try:
+            renderer.repaintNeeded.disconnect(self.update)
+        except Exception:
+            pass
+
+        renderer.setAnimationEnabled(self._animation_enabled)
+        if self._animation_enabled:
+            renderer.setFramesPerSecond(self._frames_per_second)
+            renderer.repaintNeeded.connect(self.update)
+            self._static_pixmap = None
+        else:
+            try:
+                renderer.setCurrentFrame(0)
+            except Exception:
+                pass
+            self._render_static_frame()
+        self.update()
+
+    def _render_static_frame(self) -> None:
+        renderer = self._renderer
+        if renderer is None or not renderer.isValid():
+            self._static_pixmap = None
+            return
+
+        target_rect = QRectF(
+            self._padding,
+            self._padding,
+            self._size_px - 2 * self._padding,
+            self._size_px - 2 * self._padding,
+        )
+        pixmap = QPixmap(self._size_px, self._size_px)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        renderer.render(painter, target_rect)
+        painter.end()
+        pixmap.setDevicePixelRatio(max(1.0, self.devicePixelRatioF()))
+        self._static_pixmap = pixmap
 
     def paintEvent(self, event) -> None:  # noqa: N802
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         renderer = self._renderer
         if not renderer or not renderer.isValid():
+            painter.end()
+            return
+        if not self._animation_enabled:
+            if self._static_pixmap is None:
+                self._render_static_frame()
+            if self._static_pixmap is not None:
+                painter.drawPixmap(0, 0, self._static_pixmap)
             painter.end()
             return
         target = QRectF(
@@ -253,6 +320,16 @@ class WeatherDetailRow(QWidget):
         self._icon_size = 16
         self._segment_widgets: List[QWidget] = []
         self._debug_dumped_icons: set[str] = set()
+        self._segment_pool: Dict[str, _DetailSegment] = {}
+        self._segment_values: Dict[str, str] = {}
+        self._segment_icon_cache: Dict[str, Tuple[int, Optional[QPixmap]]] = {}
+        self._segment_icon_sizes: Dict[str, int] = {}
+        self._segment_color_rgba: Dict[str, str] = {}
+        self._segment_font_signature: Dict[str, Tuple[str, int, int, bool]] = {}
+        self._segment_heights: Dict[str, int] = {}
+        self._segment_debug_logged: set[str] = set()
+        self._current_color_rgba: str = "rgba(255,255,255,255)"
+        self._font_signature: Tuple[str, int, int, bool] = ("", 0, 0, False)
 
         outer = QHBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -264,6 +341,7 @@ class WeatherDetailRow(QWidget):
         self._segments_layout.setAlignment(
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
         )
+        self._segments_layout.addStretch(1)
 
         outer.addLayout(self._segments_layout, 1)
 
@@ -281,130 +359,182 @@ class WeatherDetailRow(QWidget):
         self._font = QFont(font)
         self._font_metrics = QFontMetrics(self._font)
         self._text_color = QColor(color)
-        self._icon_size = max(18, int(icon_size))
+        normalized_icon_size = max(18, int(icon_size))
+        if normalized_icon_size != self._icon_size:
+            self._icon_size = normalized_icon_size
+            self._segment_icon_cache.clear()
+            self._segment_debug_logged.clear()
+            self._segment_icon_sizes.clear()
+            self._segment_heights.clear()
         self._rebuild_segments()
         self.setVisible(bool(metrics))
 
     def _rebuild_segments(self) -> None:
-        while self._segments_layout.count():
-            item = self._segments_layout.takeAt(0)
-            widget = item.widget() if item is not None else None
-            if widget is not None:
-                widget.deleteLater()
+        has_metrics = bool(self._metrics)
+        self._segments_layout.setContentsMargins(0, 6 if has_metrics else 0, 0, 4 if has_metrics else 0)
+        self._segments_layout.setSpacing(max(12, self._icon_size // 2 + 4) if has_metrics else 0)
         self._segment_widgets.clear()
 
-        if not self._metrics:
-            return
-
-        self._segments_layout.setContentsMargins(0, 6, 0, 4)
-        self._segments_layout.setSpacing(max(12, self._icon_size // 2 + 4))
-        line_height = self._font_metrics.height()
-
+        active_keys: List[str] = []
         for key, value in self._metrics:
-            segment = QWidget(self)
-            segment.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-            segment.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-            segment.setFixedHeight(max(self._icon_size + 10, line_height + 6))
-            layout = QHBoxLayout(segment)
-            layout.setContentsMargins(0, 1, 0, 1)
-            layout.setSpacing(3)
-            layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+            active_keys.append(key)
+            segment = self._segment_pool.get(key)
+            if segment is None:
+                segment = self._create_segment()
+                self._segment_pool[key] = segment
+                insert_pos = max(0, self._segments_layout.count() - 1)
+                self._segments_layout.insertWidget(insert_pos, segment.widget)
+            self._configure_segment(segment, key, value)
+            segment.widget.setVisible(True)
+            self._segment_widgets.append(segment.widget)
 
-            icon_label = WeatherDetailIcon(self._icon_size, segment)
-            icon_edge = max(10, self._icon_size)
+        for key, segment in self._segment_pool.items():
+            if key not in active_keys:
+                segment.widget.setVisible(False)
+
+    def _create_segment(self) -> _DetailSegment:
+        segment = QWidget(self)
+        segment.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        segment.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        layout = QHBoxLayout(segment)
+        layout.setContentsMargins(0, 1, 0, 1)
+        layout.setSpacing(3)
+        layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+
+        icon_label = WeatherDetailIcon(self._icon_size, segment)
+        text_label = QLabel(segment)
+        text_label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        text_label.setWordWrap(False)
+        text_label.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
+        text_label.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Fixed)
+
+        layout.addWidget(icon_label)
+        layout.addWidget(text_label)
+
+        return _DetailSegment(widget=segment, icon=icon_label, text=text_label)
+
+    def _configure_segment(self, segment: _DetailSegment, key: str, value: str) -> None:
+        font_sig = (
+            self._font.family(),
+            self._font.pointSize(),
+            self._font.weight(),
+            self._font.italic(),
+        )
+        self._font_signature = font_sig
+        self._current_color_rgba = (
+            f"rgba({self._text_color.red()}, {self._text_color.green()}, "
+            f"{self._text_color.blue()}, {self._text_color.alpha()})"
+        )
+
+        icon_edge = max(10, self._icon_size)
+        cache_entry = self._segment_icon_cache.get(key)
+        pixmap: Optional[QPixmap]
+        if cache_entry and cache_entry[0] == self._icon_size:
+            pixmap = cache_entry[1]
+        else:
             pixmap = self._icon_fetcher(key, icon_edge)
-            original_pixmap = pixmap
-            if pixmap is not None and not pixmap.isNull():
-                icon_label.set_pixmap(pixmap)
-            base_drop = min(icon_label.height() // 3, int(self._icon_size * 0.18) + 2)
-            soft_drop = max(0, base_drop - 1)
-            icon_label.set_baseline_offset(soft_drop)
-            icon_label.set_debug_background(is_perf_metrics_enabled())
-            if is_perf_metrics_enabled():
-                label_pixmap = icon_label.pixmap()
-                widget_size = (icon_label.width(), icon_label.height())
-                state = "none"
-                incoming_size: Optional[Tuple[int, int]] = None
-                label_size: Optional[Tuple[int, int]] = None
-                if original_pixmap is not None:
-                    state = "null" if original_pixmap.isNull() else "ready"
-                    incoming_size = (
-                        original_pixmap.width(),
-                        original_pixmap.height(),
+            self._segment_icon_cache[key] = (self._icon_size, pixmap)
+
+        original_pixmap = pixmap
+        segment.icon.set_pixmap(pixmap if pixmap and not pixmap.isNull() else None)
+        base_drop = min(
+            segment.icon.sizeHint().height() // 3, int(self._icon_size * 0.18) + 2
+        )
+        soft_drop = max(0, base_drop - 1)
+        segment.icon.set_baseline_offset(soft_drop)
+        segment.icon.set_debug_background(is_perf_metrics_enabled())
+
+        log_detail_geometry = False
+        if is_perf_metrics_enabled():
+            logged_key = f"{key}:{self._icon_size}"
+            if logged_key not in self._segment_debug_logged:
+                log_detail_geometry = True
+                self._segment_debug_logged.add(logged_key)
+
+        if log_detail_geometry:
+            label_pixmap = segment.icon.pixmap()
+            widget_size = (segment.icon.width(), segment.icon.height())
+            state = "none"
+            incoming_size: Optional[Tuple[int, int]] = None
+            label_size: Optional[Tuple[int, int]] = None
+            if original_pixmap is not None:
+                state = "null" if original_pixmap.isNull() else "ready"
+                incoming_size = (original_pixmap.width(), original_pixmap.height())
+            if label_pixmap is not None:
+                label_size = (label_pixmap.width(), label_pixmap.height())
+            logger.info(
+                "[WEATHER][DETAIL][ICON][UI] key=%s state=%s incoming=%s label=%s widget=%s scaled=%s",
+                key,
+                state,
+                incoming_size,
+                label_size,
+                widget_size,
+                False,
+            )
+            size_hint = segment.icon.sizeHint()
+            rect = segment.icon.rect()
+            logger.info(
+                "[WEATHER][DETAIL][ICON][GEOM] key=%s fixed=%s size_hint=(%s, %s) rect=(%s, %s, %s, %s) "
+                "segment_hint=(%s, %s)",
+                key,
+                widget_size,
+                size_hint.width(),
+                size_hint.height(),
+                rect.x(),
+                rect.y(),
+                rect.width(),
+                rect.height(),
+                segment.widget.sizeHint().width(),
+                segment.widget.sizeHint().height(),
+            )
+            if (
+                original_pixmap is not None
+                and not original_pixmap.isNull()
+                and key not in self._debug_dumped_icons
+            ):
+                dump_dir = Path(tempfile.gettempdir()) / "srpss_weather_icons"
+                dump_dir.mkdir(parents=True, exist_ok=True)
+                dump_path = dump_dir / f"{key}_{self._icon_size}px.png"
+                try:
+                    pixmap.save(str(dump_path), "PNG")
+                    logger.info(
+                        "[WEATHER][DETAIL][ICON][DUMP] key=%s path=%s size=%s",
+                        key,
+                        dump_path,
+                        (original_pixmap.width(), original_pixmap.height()),
                     )
-                if label_pixmap is not None:
-                    label_size = (label_pixmap.width(), label_pixmap.height())
-                logger.info(
-                    "[WEATHER][DETAIL][ICON][UI] key=%s state=%s incoming=%s label=%s widget=%s scaled=%s",
-                    key,
-                    state,
-                    incoming_size,
-                    label_size,
-                    widget_size,
-                    False,
-                )
-                size_hint = icon_label.sizeHint()
-                rect = icon_label.rect()
-                logger.info(
-                    "[WEATHER][DETAIL][ICON][GEOM] key=%s fixed=%s size_hint=(%s, %s) rect=(%s, %s, %s, %s) "
-                    "segment_hint=(%s, %s)",
-                    key,
-                    widget_size,
-                    size_hint.width(),
-                    size_hint.height(),
-                    rect.x(),
-                    rect.y(),
-                    rect.width(),
-                    rect.height(),
-                    segment.sizeHint().width(),
-                    segment.sizeHint().height(),
-                )
-                if (
-                    original_pixmap is not None
-                    and not original_pixmap.isNull()
-                    and key not in self._debug_dumped_icons
-                ):
-                    dump_dir = Path(tempfile.gettempdir()) / "srpss_weather_icons"
-                    dump_dir.mkdir(parents=True, exist_ok=True)
-                    dump_path = dump_dir / f"{key}_{self._icon_size}px.png"
-                    try:
-                        pixmap.save(str(dump_path), "PNG")
-                        logger.info(
-                            "[WEATHER][DETAIL][ICON][DUMP] key=%s path=%s size=%s",
-                            key,
-                            dump_path,
-                            incoming_size,
-                        )
-                    except Exception as exc:  # pragma: no cover - best-effort debug
-                        logger.warning(
-                            "[WEATHER][DETAIL][ICON][DUMP] Failed key=%s path=%s err=%s",
-                            key,
-                            dump_path,
-                            exc,
-                        )
-                    else:
-                        self._debug_dumped_icons.add(key)
+                except Exception as exc:  # pragma: no cover - best-effort debug
+                    logger.warning(
+                        "[WEATHER][DETAIL][ICON][DUMP] Failed key=%s path=%s err=%s",
+                        key,
+                        dump_path,
+                        exc,
+                    )
+                else:
+                    self._debug_dumped_icons.add(key)
 
-            text_label = QLabel(value, segment)
-            text_label.setFont(self._font)
-            text_label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-            text_label.setWordWrap(False)
-            text_label.setAlignment(
-                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
-            )
-            text_label.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Fixed)
-            text_label.setStyleSheet(
-                f"color: rgba({self._text_color.red()}, {self._text_color.green()}, "
-                f"{self._text_color.blue()}, {self._text_color.alpha()});"
-            )
+        if self._segment_font_signature.get(key) != font_sig:
+            segment.text.setFont(self._font)
+            self._segment_font_signature[key] = font_sig
+        if self._segment_values.get(key) != value:
+            segment.text.setText(value)
+            self._segment_values[key] = value
+        if self._segment_color_rgba.get(key) != self._current_color_rgba:
+            segment.text.setStyleSheet(self._current_color_rgba_style())
+            self._segment_color_rgba[key] = self._current_color_rgba
+        line_height = self._font_metrics.height()
+        height = max(self._icon_size + 10, line_height + 6)
+        if self._segment_heights.get(key) != height:
+            segment.widget.setFixedHeight(height)
+            self._segment_heights[key] = height
 
-            layout.addWidget(icon_label)
-            layout.addWidget(text_label)
-
-            self._segments_layout.addWidget(segment)
-            self._segment_widgets.append(segment)
-
-        self._segments_layout.addStretch(1)
+    def _current_color_rgba_style(self) -> str:
+        return (
+            f"color: rgba({self._text_color.red()}, {self._text_color.green()}, "
+            f"{self._text_color.blue()}, {self._text_color.alpha()});"
+        )
 
     @property
     def metrics(self) -> List[Tuple[str, str]]:
@@ -488,7 +618,8 @@ class WeatherWidget(BaseOverlayWidget):
     
     def __init__(self, parent: Optional[QWidget] = None,
                  location: str = "London",
-                 position: WeatherPosition = WeatherPosition.BOTTOM_LEFT):
+                 position: WeatherPosition = WeatherPosition.BOTTOM_LEFT,
+                 enable_tooltips: bool = False):
         """
         Initialize weather widget.
         
@@ -574,18 +705,41 @@ class WeatherWidget(BaseOverlayWidget):
         self._text_layout: Optional[QVBoxLayout] = None
         self._condition_icon_widget: Optional[WeatherConditionIcon] = None
         self._animated_icon_alignment: str = _DEFAULT_ICON_ALIGNMENT
+        self._animated_icon_enabled: bool = True
         self._desaturate_condition_icon: bool = _DEFAULT_DESATURATE_ICON
         self._icon_desaturate_effect: Optional[QGraphicsColorizeEffect] = None
         self._last_icon_context: Dict[str, Any] = {}
+        self._last_icon_refresh: Optional[datetime] = None
         self._primary_spacer: Optional[QWidget] = None
         self._root_layout: Optional[QVBoxLayout] = None
         self._status_label: Optional[QLabel] = None
         self._current_summary: str = ""
+        self._tooltips_enabled: bool = enable_tooltips
+        self._display_refresh_interval = timedelta(minutes=30)
+        self._last_display_refresh: Optional[datetime] = None
+        self._display_refresh_deadline: Optional[datetime] = None
+        self._force_next_display_refresh: bool = True
+        self._last_display_signature: Optional[Tuple[Any, ...]] = None
+        self._last_payload_signature: Optional[Tuple[Any, ...]] = None
+        self._pending_payload_signature: Optional[Tuple[Any, ...]] = None
+        self._pending_payload_data: Optional[Dict[str, Any]] = None
+        self._pending_refresh_deadline_token: Optional[object] = None
+        self._last_city_html: Optional[str] = None
+        self._last_details_html: Optional[str] = None
+        self._detail_font_cache_key: Optional[Tuple[str, int]] = None
+        self._detail_row_last_signature: Optional[Tuple[Tuple[str, str], ...]] = None
+        self._forecast_label_cache: Optional[str] = None
+        self._tooltip_cache: Optional[str] = None
         
         # Setup UI
         self._setup_ui()
         
         logger.debug(f"WeatherWidget created (location={location}, position={position.value})")
+    
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        """Wrap base paint so PERF metrics capture weather card costs."""
+        with widget_paint_sample(self, "weather.paint"):
+            super().paintEvent(event)
     
     # ------------------------------------------------------------------
     # Detail row helpers
@@ -689,8 +843,8 @@ class WeatherWidget(BaseOverlayWidget):
                     windspeed,
                 )
     
-    def _update_detail_tooltip(self, base: str) -> None:
-        """Attach detail values to the widget tooltip."""
+    def _build_tooltip_text(self, base: str) -> str:
+        """Return composed tooltip text for current detail metrics."""
         tooltip_lines = [base]
         if self._detail_metrics:
             detail_text = ", ".join(
@@ -700,7 +854,122 @@ class WeatherWidget(BaseOverlayWidget):
             tooltip_lines.append(detail_text)
         if self._show_forecast and self._forecast_data:
             tooltip_lines.append(f"Forecast: {self._forecast_data}")
-        self.setToolTip("\n".join(tooltip_lines))
+        return "\n".join(tooltip_lines)
+
+    def _update_detail_tooltip(self, base: str) -> None:
+        """Attach detail values to the widget tooltip."""
+        self.setToolTip(self._build_tooltip_text(base))
+
+    def _request_display_refresh(self) -> None:
+        """Force the next `_update_display` call to bypass cadence throttling."""
+        self._force_next_display_refresh = True
+
+    def _schedule_pending_refresh_consumption(self) -> None:
+        """Schedule a deadline-bound flush of any pending payload."""
+        deadline = self._display_refresh_deadline
+        if deadline is None:
+            return
+
+        delay_ms = int(max(0, (deadline - datetime.now()).total_seconds() * 1000))
+        runner: Optional[Callable[..., None]] = None
+        if self._thread_manager is not None:
+            runner = self._thread_manager.single_shot  # type: ignore[attr-defined]
+        else:
+            runner = ThreadManager.single_shot
+
+        token = object()
+        self._pending_refresh_deadline_token = token
+
+        try:
+            runner(delay_ms, self._consume_pending_payload_at_deadline, token)
+        except Exception:
+            self._pending_refresh_deadline_token = None
+            logger.debug("[WEATHER] Failed to schedule pending payload flush", exc_info=True)
+
+    def _consume_pending_payload_at_deadline(self, token: object) -> None:
+        """Consume any queued payload once the cadence deadline elapses."""
+        if token is not self._pending_refresh_deadline_token:
+            return
+        self._pending_refresh_deadline_token = None
+
+        if not Shiboken.isValid(self):
+            return
+
+        pending_payload = self._pending_payload_data
+        if not pending_payload:
+            return
+
+        deadline = self._display_refresh_deadline
+        if deadline is not None and datetime.now() < deadline:
+            # Deadline shifted (manual refresh); reschedule with new token.
+            self._schedule_pending_refresh_consumption()
+            return
+
+        self._force_next_display_refresh = True
+        self._pending_payload_data = None
+        try:
+            self._update_display(pending_payload)
+        except Exception:
+            logger.exception("[WEATHER] Pending payload flush failed")
+
+    def _build_payload_signature(self, data: Dict[str, Any]) -> Tuple[Any, ...]:
+        """Return a coarse signature describing the UI-relevant payload fields."""
+        weather_entry: Optional[Dict[str, Any]] = None
+        if isinstance(data.get("weather"), list) and data["weather"]:
+            weather_entry = data["weather"][0] or {}
+
+        temp = data.get("temperature")
+        if temp is None and isinstance(data.get("main"), dict):
+            temp = data["main"].get("temp")
+        if temp is None:
+            temp = 0.0
+
+        condition = data.get("condition")
+        if condition is None and weather_entry:
+            condition = weather_entry.get("main") or weather_entry.get("description") or "Unknown"
+        condition_raw = str(condition or "Unknown")
+        condition_key = condition_raw.split("·", 1)[0].split("#", 1)[0].strip().lower()
+
+        location = data.get("location") or data.get("name") or self._location
+        location_key = str(location).strip().lower()
+
+        weather_code = data.get("weather_code")
+        if weather_code is None and weather_entry:
+            weather_code = weather_entry.get("id") or weather_entry.get("code")
+
+        is_day_flag = data.get("is_day")
+        if is_day_flag is None and weather_entry:
+            is_day_flag = weather_entry.get("is_day")
+        if is_day_flag is None:
+            is_day_flag = 1
+        try:
+            is_day_norm = bool(int(is_day_flag)) if isinstance(is_day_flag, (int, str)) else bool(is_day_flag)
+        except ValueError:
+            is_day_norm = True
+
+        precipitation, humidity, windspeed = self._extract_detail_values(data)
+        detail_signature = (
+            None if precipitation is None else round(precipitation, 1),
+            None if humidity is None else round(humidity, 1),
+            None if windspeed is None else round(windspeed, 1),
+        )
+
+        forecast_text = data.get("forecast") or self._forecast_data or ""
+        forecast_key = ""
+        if isinstance(forecast_text, str):
+            forecast_key = forecast_text.split("(frame", 1)[0].strip().lower()
+
+        return (
+            round(float(temp), 1),
+            condition_key,
+            location_key,
+            weather_code,
+            is_day_norm,
+            detail_signature,
+            bool(self._show_details_row),
+            bool(self._show_forecast),
+            forecast_key,
+        )
     
     def _get_metric_icon_pixmap(self, key: str, size: int) -> Optional[QPixmap]:
         """Return cached monochrome pixmap for requested icon."""
@@ -884,6 +1153,7 @@ class WeatherWidget(BaseOverlayWidget):
 
         default_icon_px = int(round(96 * _ANIMATED_ICON_SCALE_FACTOR))
         self._condition_icon_widget = WeatherConditionIcon(size_px=default_icon_px, parent=self._primary_row)
+        self._condition_icon_widget.set_animation_enabled(self._animated_icon_enabled)
         self._condition_icon_widget.setVisible(False)
         primary_layout.addWidget(
             self._condition_icon_widget, 0, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight
@@ -1461,144 +1731,256 @@ class WeatherWidget(BaseOverlayWidget):
         Args:
             data: Weather data
         """
-        if not data:
-            message = "Weather: No Data"
-            self._detail_metrics.clear()
-            self._update_detail_metrics({}, force=True)
-            self._show_status_message(message)
-            return
+        with widget_timer_sample(self, "weather.update_display"):
+            if not data:
+                message = "Weather: No Data"
+                self._detail_metrics.clear()
+                self._update_detail_metrics({}, force=True)
+                self._show_status_message(message)
+                return
         
-        try:
-            temp = data.get("temperature")
-            condition = data.get("condition")
-            location = data.get("location")
-            weather_entry: Optional[Dict[str, Any]] = None
-            if self._status_label:
-                self._status_label.setVisible(False)
-            if self._primary_row:
-                self._primary_row.setVisible(True)
+            try:
+                geometry_dirty = False
+                now = datetime.now()
+                temp = data.get("temperature")
+                condition = data.get("condition")
+                location = data.get("location")
+                weather_entry: Optional[Dict[str, Any]] = None
+                if self._status_label:
+                    self._status_label.setVisible(False)
+                if self._primary_row:
+                    self._primary_row.setVisible(True)
 
-            if isinstance(data.get("weather"), list) and data["weather"]:
-                weather_entry = data["weather"][0] or {}
+                if isinstance(data.get("weather"), list) and data["weather"]:
+                    weather_entry = data["weather"][0] or {}
 
-            if temp is None and isinstance(data.get("main"), dict):
-                temp = data["main"].get("temp")
-            if condition is None and weather_entry:
-                condition = weather_entry.get("main") or weather_entry.get("description")
-            if not location:
-                location = data.get("name") or self._location
+                if temp is None and isinstance(data.get("main"), dict):
+                    temp = data["main"].get("temp")
+                if condition is None and weather_entry:
+                    condition = weather_entry.get("main") or weather_entry.get("description")
+                if not location:
+                    location = data.get("name") or self._location
 
-            weather_code = data.get("weather_code")
-            if weather_code is None and weather_entry:
-                weather_code = weather_entry.get("id") or weather_entry.get("code")
+                weather_code = data.get("weather_code")
+                if weather_code is None and weather_entry:
+                    weather_code = weather_entry.get("id") or weather_entry.get("code")
 
-            is_day_flag = data.get("is_day")
-            if is_day_flag is None and weather_entry:
-                is_day_flag = weather_entry.get("is_day")
-            if is_day_flag is None:
-                is_day_flag = 1
-            is_day = bool(int(is_day_flag)) if isinstance(is_day_flag, (int, str)) else bool(is_day_flag)
+                is_day_flag = data.get("is_day")
+                if is_day_flag is None and weather_entry:
+                    is_day_flag = weather_entry.get("is_day")
+                if is_day_flag is None:
+                    is_day_flag = 1
+                is_day = bool(int(is_day_flag)) if isinstance(is_day_flag, (int, str)) else bool(is_day_flag)
 
-            temp = 0.0 if temp is None else float(temp)
-            condition = "Unknown" if condition is None else str(condition)
-            location = location or self._location
+                temp = 0.0 if temp is None else float(temp)
+                condition = "Unknown" if condition is None else str(condition)
+                location = location or self._location
 
-            forecast = data.get("forecast")
-            if forecast:
-                self._forecast_data = forecast
-
-            location_display = html.escape(str(location).title())
-            condition_display = html.escape(str(condition).title())
-
-            city_pt = max(6, self._font_size + 2)
-            primary_pt = max(6, self._font_size - 2)
-            secondary_pt = max(6, self._font_size - 12)
-
-            color_rgba = (
-                f"rgba({self._text_color.red()}, {self._text_color.green()}, "
-                f"{self._text_color.blue()}, {self._text_color.alpha()})"
-            )
-
-            city_html = (
-                f"<div style='font-size:{city_pt}pt; font-weight:700; color:{color_rgba};'>"
-                f"{location_display}</div>"
-            )
-            temp_html = (
-                f"<span style='font-weight:700; color:{color_rgba};'>{temp:.0f}°C</span>"
-            )
-            condition_html = (
-                f"<span style='font-weight:600; color:{color_rgba};'>{condition_display}</span>"
-            )
-            details_html = (
-                f"<div style='font-size:{primary_pt}pt; color:{color_rgba};'>"
-                f"{temp_html} - {condition_html}</div>"
-            )
-
-            if self._city_label:
-                self._city_label.setTextFormat(Qt.TextFormat.RichText)
-                self._city_label.setText(city_html)
-            if self._conditions_label:
-                self._conditions_label.setTextFormat(Qt.TextFormat.RichText)
-                self._conditions_label.setText(details_html)
-
-            self._details_font = QFont(self._font_family, secondary_pt, QFont.Weight.Normal)
-            self._details_font.setItalic(False)
-            self._details_font_metrics = QFontMetrics(self._details_font)
-            metrics_height = self._details_font_metrics.height()
-            self._detail_icon_size = max(
-                _DETAIL_ICON_MIN_PX, int(metrics_height * 1.15) if metrics_height else _DETAIL_ICON_MIN_PX
-            )
-            self._update_detail_metrics(data)
-            detail_ready = bool(self._detail_metrics)
-            if not detail_ready and self._show_details_row and self._enabled:
-                self._fetch_weather()
-
-            show_details = bool(self._show_details_row and detail_ready)
-            if self._details_separator:
-                self._details_separator.setVisible(show_details)
-            if self._detail_row_container:
-                self._detail_row_container.setVisible(show_details)
-            if self._detail_row_widget:
-                detail_metrics = self._detail_metrics if show_details else []
-                self._detail_row_widget.update_metrics(
-                    detail_metrics,
-                    self._details_font,
-                    self._text_color,
-                    self._detail_icon_size,
+                payload_signature = self._build_payload_signature(data)
+                signature_changed = payload_signature != self._last_payload_signature
+                refresh_due = (
+                    self._force_next_display_refresh
+                    or self._last_display_refresh is None
+                    or self._display_refresh_deadline is None
+                    or now >= self._display_refresh_deadline
                 )
-                self._detail_row_widget.setVisible(show_details)
 
-            show_forecast_line = bool(self._show_forecast and self._forecast_data)
-            if self._forecast_separator:
-                self._forecast_separator.setVisible(show_forecast_line)
-            if self._forecast_container:
-                self._forecast_container.setVisible(show_forecast_line)
-            if self._forecast_label:
-                if show_forecast_line:
-                    forecast_html = (
-                        f"<div style='font-size:{secondary_pt}pt; font-style:italic; "
-                        f"font-weight:400; color:{color_rgba};'>"
-                        f"{html.escape(self._forecast_data)}</div>"
+                if not refresh_due and not self._force_next_display_refresh:
+                    if signature_changed:
+                        self._pending_payload_signature = payload_signature
+                        self._pending_payload_data = data
+                        self._schedule_pending_refresh_consumption()
+                    if self._tooltips_enabled and self._current_summary:
+                        with widget_timer_sample(self, "weather.details.tooltip"):
+                            tooltip_text = self._build_tooltip_text(self._current_summary)
+                            if tooltip_text != self._tooltip_cache:
+                                self.setToolTip(tooltip_text)
+                                self._tooltip_cache = tooltip_text
+                    return
+
+                self._force_next_display_refresh = False
+                self._last_payload_signature = payload_signature
+                self._pending_payload_signature = None
+                self._pending_payload_data = None
+
+                forecast = data.get("forecast")
+                if forecast:
+                    self._forecast_data = forecast
+
+                location_display = html.escape(str(location).title())
+                condition_display = html.escape(str(condition).title())
+
+                city_pt = max(6, self._font_size + 2)
+                primary_pt = max(6, self._font_size - 2)
+                secondary_pt = max(6, self._font_size - 12)
+
+                color_rgba = (
+                    f"rgba({self._text_color.red()}, {self._text_color.green()}, "
+                    f"{self._text_color.blue()}, {self._text_color.alpha()})"
+                )
+
+                with widget_timer_sample(self, "weather.label.html"):
+                    city_html = (
+                        f"<div style='font-size:{city_pt}pt; font-weight:700; color:{color_rgba};'>"
+                        f"{location_display}</div>"
                     )
-                    self._forecast_label.setTextFormat(Qt.TextFormat.RichText)
-                    self._forecast_label.setText(forecast_html)
-                self._forecast_label.setVisible(show_forecast_line)
+                    temp_html = (
+                        f"<span style='font-weight:700; color:{color_rgba};'>{temp:.0f}°C</span>"
+                    )
+                    condition_html = (
+                        f"<span style='font-weight:600; color:{color_rgba};'>{condition_display}</span>"
+                    )
+                    details_html = (
+                        f"<div style='font-size:{primary_pt}pt; color:{color_rgba};'>"
+                        f"{temp_html} - {condition_html}</div>"
+                    )
 
-            base_icon_scale = max(city_pt * 2, 72)
-            animated_scale = int(round(base_icon_scale * _ANIMATED_ICON_SCALE_FACTOR))
-            self._update_condition_icon(weather_code, condition_display, is_day, icon_scale=animated_scale)
+                    if self._city_label and city_html != self._last_city_html:
+                        self._city_label.setTextFormat(Qt.TextFormat.RichText)
+                        self._city_label.setText(city_html)
+                        self._last_city_html = city_html
+                        geometry_dirty = True
+                    if self._conditions_label and details_html != self._last_details_html:
+                        self._conditions_label.setTextFormat(Qt.TextFormat.RichText)
+                        self._conditions_label.setText(details_html)
+                        self._last_details_html = details_html
+                        geometry_dirty = True
 
-            self._current_summary = f"{location_display}: {temp:.0f}°C - {condition_display}"
-            self.adjustSize()
-            self._update_detail_tooltip(self._current_summary)
-            self._sync_primary_row_min_height()
+                display_summary = f"{location_display}: {temp:.0f}°C - {condition_display}"
+                self._current_summary = display_summary
 
-            if self.parent():
-                self._update_position()
+                font_key = (self._font_family, secondary_pt)
+                if self._detail_font_cache_key != font_key:
+                    with widget_timer_sample(self, "weather.details.font"):
+                        self._details_font = QFont(self._font_family, secondary_pt, QFont.Weight.Normal)
+                        self._details_font.setItalic(False)
+                        self._details_font_metrics = QFontMetrics(self._details_font)
+                        metrics_height = self._details_font_metrics.height()
+                        self._detail_icon_size = max(
+                            _DETAIL_ICON_MIN_PX, int(metrics_height * 1.15) if metrics_height else _DETAIL_ICON_MIN_PX
+                        )
+                        self._detail_font_cache_key = font_key
+                with widget_timer_sample(self, "weather.details.metrics"):
+                    self._update_detail_metrics(data)
+                    detail_ready = bool(self._detail_metrics)
+                if not detail_ready and self._show_details_row and self._enabled:
+                    self._fetch_weather()
 
-        except Exception as e:
-            logger.exception(f"Error updating weather display: {e}")
-            self._show_status_message("Weather: Error")
+                show_details = bool(self._show_details_row and detail_ready)
+                if self._details_separator and self._details_separator.isVisible() != show_details:
+                    self._details_separator.setVisible(show_details)
+                    geometry_dirty = True
+                if self._detail_row_container and self._detail_row_container.isVisible() != show_details:
+                    self._detail_row_container.setVisible(show_details)
+                    geometry_dirty = True
+                if self._detail_row_widget:
+                    detail_metrics = self._detail_metrics if show_details else []
+                    signature = tuple(detail_metrics)
+                    if signature != self._detail_row_last_signature or not show_details:
+                        with widget_timer_sample(self, "weather.details.row_widget"):
+                            self._detail_row_widget.update_metrics(
+                                detail_metrics,
+                                self._details_font,
+                                self._text_color,
+                                self._detail_icon_size,
+                            )
+                        self._detail_row_last_signature = signature if show_details else None
+                        geometry_dirty = True
+                    self._detail_row_widget.setVisible(show_details)
+
+                show_forecast_line = bool(self._show_forecast and self._forecast_data)
+                if self._forecast_separator and self._forecast_separator.isVisible() != show_forecast_line:
+                    self._forecast_separator.setVisible(show_forecast_line)
+                    geometry_dirty = True
+                if self._forecast_container and self._forecast_container.isVisible() != show_forecast_line:
+                    self._forecast_container.setVisible(show_forecast_line)
+                    geometry_dirty = True
+                if self._forecast_label:
+                    with widget_timer_sample(self, "weather.forecast.label"):
+                        forecast_html = ""
+                        if show_forecast_line:
+                            forecast_html = (
+                                f"<div style='font-size:{secondary_pt}pt; font-style:italic; "
+                                f"font-weight:400; color:{color_rgba};'>"
+                                f"{html.escape(self._forecast_data)}</div>"
+                            )
+                        if forecast_html != self._forecast_label_cache:
+                            if show_forecast_line:
+                                self._forecast_label.setTextFormat(Qt.TextFormat.RichText)
+                                self._forecast_label.setText(forecast_html)
+                            else:
+                                self._forecast_label.clear()
+                            self._forecast_label_cache = forecast_html
+                            geometry_dirty = True
+                        self._forecast_label.setVisible(show_forecast_line)
+
+                forecast_signature = self._forecast_data if show_forecast_line else None
+
+                display_signature = (
+                    round(temp, 2),
+                    condition,
+                    location,
+                    show_details,
+                    tuple(self._detail_metrics) if show_details else (),
+                    show_forecast_line,
+                    forecast_signature,
+                    weather_code,
+                    is_day,
+                    city_pt,
+                    primary_pt,
+                )
+
+                if self._last_display_signature == display_signature:
+                    if self._tooltips_enabled:
+                        tooltip_text = self._build_tooltip_text(self._current_summary)
+                        if tooltip_text != self._tooltip_cache:
+                            self.setToolTip(tooltip_text)
+                            self._tooltip_cache = tooltip_text
+                    return
+
+                base_icon_scale = max(city_pt * 2, 72)
+                animated_scale = int(round(base_icon_scale * _ANIMATED_ICON_SCALE_FACTOR))
+                icon_context = (
+                    weather_code,
+                    condition_display,
+                    is_day,
+                    animated_scale,
+                )
+                if (
+                    self._last_icon_context.get("code"),
+                    self._last_icon_context.get("condition"),
+                    self._last_icon_context.get("is_day"),
+                    self._last_icon_context.get("icon_scale"),
+                ) != icon_context:
+                    with widget_timer_sample(self, "weather.icon.update"):
+                        self._update_condition_icon(
+                            weather_code, condition_display, is_day, icon_scale=animated_scale
+                        )
+                        geometry_dirty = True
+
+                if geometry_dirty:
+                    with widget_timer_sample(self, "weather.adjust_size"):
+                        self.adjustSize()
+                if self._tooltips_enabled:
+                    with widget_timer_sample(self, "weather.details.tooltip"):
+                        tooltip_text = self._build_tooltip_text(self._current_summary)
+                        if tooltip_text != self._tooltip_cache:
+                            self.setToolTip(tooltip_text)
+                            self._tooltip_cache = tooltip_text
+                if geometry_dirty:
+                    with widget_timer_sample(self, "weather.sync_primary_row"):
+                        self._sync_primary_row_min_height()
+                    if self.parent():
+                        with widget_timer_sample(self, "weather.position.update"):
+                            self._update_position()
+
+                self._last_display_signature = display_signature
+                self._last_display_refresh = now
+                self._display_refresh_deadline = now + self._display_refresh_interval
+
+            except Exception as e:
+                logger.exception(f"Error updating weather display: {e}")
+                self._show_status_message("Weather: Error")
 
     def _update_position(self) -> None:
         """Update widget position using base class visual padding helpers.
@@ -1635,6 +2017,7 @@ class WeatherWidget(BaseOverlayWidget):
             location: City name or coordinates
         """
         self._location = location
+        self._request_display_refresh()
         
         # Clear cache
         self._cached_data = None
@@ -1658,6 +2041,16 @@ class WeatherWidget(BaseOverlayWidget):
         # Update position immediately if running
         if self._enabled:
             self._update_position()
+            self._request_display_refresh()
+            if self._cached_data:
+                self._update_display(self._cached_data)
+    
+    def set_font_size(self, size: int) -> None:
+        """Override to ensure display refresh when typography changes."""
+        super().set_font_size(size)
+        self._request_display_refresh()
+        if self._cached_data:
+            self._update_display(self._cached_data)
     
     def set_thread_manager(self, thread_manager) -> None:
         self._thread_manager = thread_manager
@@ -1668,7 +2061,10 @@ class WeatherWidget(BaseOverlayWidget):
         Args:
             show: True to show forecast line when data is available
         """
+        if self._show_forecast == show:
+            return
         self._show_forecast = show
+        self._request_display_refresh()
         if self._cached_data:
             self._update_display(self._cached_data)
 
@@ -1678,6 +2074,9 @@ class WeatherWidget(BaseOverlayWidget):
             return
         self._desaturate_condition_icon = desaturate
         self._apply_icon_desaturation()
+        self._request_display_refresh()
+        if self._cached_data:
+            self._update_display(self._cached_data)
 
     def get_desaturate_animated_icon(self) -> bool:
         return self._desaturate_condition_icon
@@ -1715,6 +2114,7 @@ class WeatherWidget(BaseOverlayWidget):
                 self._details_separator.setVisible(False)
             if self._detail_row_container:
                 self._detail_row_container.setVisible(False)
+        self._request_display_refresh()
         if self._cached_data:
             self._update_display(self._cached_data)
         else:
@@ -1730,9 +2130,25 @@ class WeatherWidget(BaseOverlayWidget):
         self._animated_icon_alignment = normalized
         self._apply_icon_alignment()
         self._refresh_condition_icon()
+        self._request_display_refresh()
+        if self._cached_data:
+            self._update_display(self._cached_data)
 
     def get_animated_icon_alignment(self) -> str:
         return self._animated_icon_alignment
+
+    def set_animated_icon_enabled(self, enabled: bool) -> None:
+        """Enable or disable SVG animation playback."""
+        enabled = bool(enabled)
+        if enabled == self._animated_icon_enabled:
+            return
+        self._animated_icon_enabled = enabled
+        if self._condition_icon_widget is not None:
+            self._condition_icon_widget.set_animation_enabled(enabled)
+        self._refresh_condition_icon()
+        self._request_display_refresh()
+        if self._cached_data:
+            self._update_display(self._cached_data)
 
     def _apply_icon_alignment(self) -> None:
         icon_widget = self._condition_icon_widget
@@ -1927,6 +2343,7 @@ class WeatherWidget(BaseOverlayWidget):
         if previous == self._text_color:
             return
         self._clear_detail_caches()
+        self._request_display_refresh()
         if self._cached_data:
             self._update_display(self._cached_data)
 
@@ -1937,6 +2354,7 @@ class WeatherWidget(BaseOverlayWidget):
             forecast: Forecast text (e.g. "Tomorrow: 18°C, Partly Cloudy")
         """
         self._forecast_data = forecast
+        self._request_display_refresh()
         if self._show_forecast and self._cached_data:
             self._update_display(self._cached_data)
     

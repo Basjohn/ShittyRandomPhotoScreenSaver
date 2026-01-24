@@ -12,8 +12,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, asdict
 from enum import Enum
-from typing import Optional, List, Dict, Any
-from datetime import timedelta
+from typing import Optional, List, Dict, Any, Tuple, Callable
+from datetime import timedelta, datetime
 import time
 import re
 import sys
@@ -171,6 +171,14 @@ class RedditWidget(BaseOverlayWidget):
         self._limit: int = 10  # Target limit (may be reduced during progressive loading)
         self._target_limit: int = 10  # User's desired limit
         self._refresh_interval = timedelta(minutes=10)
+        self._display_refresh_interval = timedelta(minutes=10)
+        self._last_display_refresh: Optional[datetime] = None
+        self._display_refresh_deadline: Optional[datetime] = None
+        self._force_next_display_refresh: bool = True
+        self._last_display_signature: Optional[Tuple[Any, ...]] = None
+        self._pending_payload_signature: Optional[Tuple[Any, ...]] = None
+        self._pending_display_payload: Optional[Tuple[List[RedditPost], bool]] = None
+        self._pending_refresh_deadline_token: Optional[object] = None
 
         self._update_timer: Optional[QTimer] = None
         self._update_timer_handle: Optional[OverlayTimerHandle] = None
@@ -330,8 +338,8 @@ class RedditWidget(BaseOverlayWidget):
                        len(cached_posts), self._cache_key)
             self._all_fetched_posts = cached_posts
             self._progressive_stage = self._get_stage_for_post_count(len(cached_posts))
-            # Prepare data but don't show - fade sync will handle visibility
-            self._prepare_posts_for_display(cached_posts)
+            # Prepare data and force a display refresh so startup shows immediately.
+            self._prepare_posts_for_display(cached_posts, force_refresh=True)
         else:
             logger.info("[REDDIT] No cached posts found (cache_key=%s)", self._cache_key)
         
@@ -391,6 +399,7 @@ class RedditWidget(BaseOverlayWidget):
     def set_subreddit(self, subreddit: str) -> None:
         self._subreddit = self._normalise_subreddit(subreddit)
         # Refresh immediately on change
+        self._request_display_refresh()
         if self._enabled:
             self._fetch_feed()
 
@@ -400,20 +409,31 @@ class RedditWidget(BaseOverlayWidget):
         # Update base class position
         overlay_pos = OverlayPosition(position.value)
         super().set_position(overlay_pos)
+        self._request_display_refresh()
+        if self._all_fetched_posts:
+            self._display_progressive_posts()
 
     def set_show_separators(self, show: bool) -> None:
         """Enable or disable row separators."""
         self._show_separators = bool(show)
-        self.update()
+        self._request_display_refresh()
+        if self._all_fetched_posts:
+            self._display_progressive_posts()
+        else:
+            self.update()
 
     def set_item_limit(self, limit: int) -> None:
         self._limit = max(1, min(int(limit), 25))
         self._target_limit = self._limit  # Store user's desired limit
         self._update_card_height_from_limit()
+        self._request_display_refresh()
         if self._enabled and self._posts:
             # Trim existing posts to the new visible limit
             self._posts = self._posts[: self._limit]
             self.update()
+        if self._all_fetched_posts:
+            self._setup_progressive_stages()
+            self._display_progressive_posts()
 
     # ------------------------------------------------------------------
     # Progressive Loading
@@ -458,67 +478,65 @@ class RedditWidget(BaseOverlayWidget):
         
         if not posts_to_show:
             return
-        
-        # Update posts and trigger fade sync or fade animation
-        self._update_posts_internal(posts_to_show, fade=fade)
-        
-        logger.debug("[REDDIT] Progressive display: stage=%d, showing %d/%d posts (target=%d, fade=%s)",
-                    self._progressive_stage, len(posts_to_show), 
-                    len(self._all_fetched_posts), self._target_limit, fade)
 
-    def _prepare_posts_for_display(self, posts: List[RedditPost]) -> None:
-        """Prepare posts data without showing widget (for startup with cached data)."""
+        signature = self._build_display_signature(posts_to_show, stage_limit)
+        now = datetime.now()
+        refresh_due = (
+            self._force_next_display_refresh
+            or self._last_display_refresh is None
+            or self._display_refresh_deadline is None
+            or now >= self._display_refresh_deadline
+        )
+
+        if not refresh_due:
+            if signature != self._last_display_signature:
+                self._pending_payload_signature = signature
+                self._pending_display_payload = (list(posts_to_show), fade)
+                self._schedule_pending_refresh_consumption()
+            return
+
+        if signature == self._last_display_signature and not self._force_next_display_refresh:
+            return
+
+        self._apply_display_payload(posts_to_show, signature, fade)
+
+        logger.debug(
+            "[REDDIT] Progressive display: stage=%d, showing %d/%d posts (target=%d, fade=%s)",
+            self._progressive_stage,
+            len(posts_to_show),
+            len(self._all_fetched_posts),
+            self._target_limit,
+            fade,
+        )
+
+    def _prepare_posts_for_display(
+        self,
+        posts: List[RedditPost],
+        *,
+        force_refresh: bool = False,
+    ) -> None:
+        """Seed posts for display while respecting the cadence gate."""
         if not posts:
             return
-        
-        # Sort posts
+
+        # Sort posts newest-first so progressive slices stay deterministic.
         try:
             def _sort_key(p: RedditPost) -> tuple[int, float]:
                 ts = float(getattr(p, "created_utc", 0.0) or 0.0)
                 if ts <= 0.0:
                     return (1, 0.0)
                 return (0, -ts)
+
             posts = sorted(posts, key=_sort_key)
         except Exception as e:
             logger.debug("[REDDIT] Exception suppressed: %s", e)
-        
-        stage_limit = self._get_current_stage_limit()
-        self._posts = posts[:stage_limit]
-        self._row_hit_rects.clear()
-        self._invalidate_paint_cache()
-        
-        # Update typography
-        base_font = max(6, self._font_size)
-        header_font = max(6, int(base_font * 1.2))
-        self._header_font_pt = header_font
-        self._header_logo_size = max(12, int(header_font * 1.3))
-        self._header_logo_margin = self._header_logo_size
-        
-        # Size the card
-        self._update_card_height_from_content(len(self._posts))
-        
-        if self.parent():
-            self._update_position()
-        
-        # Register for fade sync (widget stays hidden until sync triggers)
-        self._has_seen_first_sample = True
-        self._has_displayed_valid_data = True
-        parent = self.parent()
-        
-        def _starter() -> None:
-            if not shiboken_isValid(self):
-                return
-            self._start_widget_fade_in(1500)
-        
-        if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
-            try:
-                overlay_name = getattr(self, '_overlay_name', None) or "reddit"
-                parent.request_overlay_fade_sync(overlay_name, _starter)
-            except Exception as e:
-                logger.debug("[REDDIT] Exception suppressed: %s", e)
-                _starter()
-        else:
-            _starter()
+
+        self._all_fetched_posts = posts
+
+        if force_refresh:
+            self._request_display_refresh()
+
+        self._display_progressive_posts()
 
     def _advance_progressive_stage(self) -> bool:
         """Advance to next progressive stage if possible.
@@ -532,6 +550,96 @@ class RedditWidget(BaseOverlayWidget):
         # Fade in when advancing stages to avoid flash
         self._display_progressive_posts(fade=True)
         return True
+
+    def _request_display_refresh(self) -> None:
+        """Force the next display update to bypass cadence throttling."""
+        self._force_next_display_refresh = True
+
+    def _schedule_pending_refresh_consumption(self) -> None:
+        """Schedule a deadline-bound flush of any pending payload."""
+        deadline = self._display_refresh_deadline
+        if deadline is None:
+            return
+
+        delay_ms = int(max(0, (deadline - datetime.now()).total_seconds() * 1000))
+        runner: Optional[Callable[..., None]] = None
+        if self._thread_manager is not None:
+            runner = self._thread_manager.single_shot  # type: ignore[attr-defined]
+        else:
+            runner = ThreadManager.single_shot
+
+        token = object()
+        self._pending_refresh_deadline_token = token
+
+        try:
+            runner(delay_ms, self._consume_pending_payload_at_deadline, token)
+        except Exception:
+            self._pending_refresh_deadline_token = None
+            logger.debug("[REDDIT] Failed to schedule pending payload flush", exc_info=True)
+
+    def _consume_pending_payload_at_deadline(self, token: object) -> None:
+        """Consume any queued payload once the cadence deadline elapses."""
+        if token is not self._pending_refresh_deadline_token:
+            return
+        self._pending_refresh_deadline_token = None
+
+        if not shiboken_isValid(self):
+            return
+
+        pending_payload = self._pending_display_payload
+        if not pending_payload:
+            return
+
+        deadline = self._display_refresh_deadline
+        if deadline is not None and datetime.now() < deadline:
+            self._schedule_pending_refresh_consumption()
+            return
+
+        posts_to_show, fade = pending_payload
+        signature = self._pending_payload_signature or self._build_display_signature(
+            posts_to_show, len(posts_to_show)
+        )
+        self._force_next_display_refresh = True
+        self._pending_display_payload = None
+        self._pending_payload_signature = None
+        self._apply_display_payload(posts_to_show, signature, fade)
+
+    def _build_display_signature(
+        self, posts: List[RedditPost], stage_limit: int
+    ) -> Tuple[Any, ...]:
+        """Return a coarse signature describing the UI-visible Reddit payload."""
+        post_entries = tuple(
+            (post.title, post.url, post.score, int(post.created_utc))
+            for post in posts
+        )
+        return (
+            self._progressive_stage,
+            stage_limit,
+            len(posts),
+            self._show_separators,
+            self._font_size,
+            self._show_background,
+            post_entries,
+        )
+
+    def _apply_display_payload(
+        self,
+        posts_to_show: List[RedditPost],
+        signature: Tuple[Any, ...],
+        fade: bool,
+    ) -> None:
+        """Apply a posts payload immediately and update cadence tracking."""
+        self._force_next_display_refresh = False
+        self._pending_payload_signature = None
+        self._pending_display_payload = None
+        self._pending_refresh_deadline_token = None
+
+        self._update_posts_internal(posts_to_show, fade=fade)
+
+        now = datetime.now()
+        self._last_display_signature = signature
+        self._last_display_refresh = now
+        self._display_refresh_deadline = now + self._display_refresh_interval
 
     # ------------------------------------------------------------------
     # Networking
