@@ -2,10 +2,11 @@
 
 A living map of modules, purposes, and key classes. Keep this up to date.
 
-**Documentation Cross-References:**
-- **Canonical Specification**: `Spec.md`
-- **Detailed Module Docs**: See the sections below (condensed from the former `Docs/INDEX.md`)
-- **Test Documentation**: `Docs/TestSuite.md`
+- **Documentation Cross-References:**
+  - **Canonical Specification**: `Spec.md`
+  - **Detailed Module Docs**: See the sections below (condensed from the former `Docs/INDEX.md`)
+  - **Test Documentation**: `Docs/TestSuite.md`
+  - **Benchmark Harness Parity**: `Docs/Benchmark_Parity.md`
 - **Active Audits & Roadmaps**:
   - `audits/FULL_CODEBASE_AUDIT_2026_01_06.md` (live checklist)
   - `audits/Audit_Consolidation_Jan10_2026.md` (current phased plan; supersedes prior audit files)
@@ -653,7 +654,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - scripts/build_nuitka.ps1, scripts/build_nuitka_mc.ps1 - Nuitka build scripts
 - scripts/run_tests.py - Test runner with logging
 - scripts/SRPSS_Installer.iss - Inno Setup installer script
-- tools/synthetic_widget_benchmark.py - Qt-driven harness for Weather + Reddit widgets. Forces `SRPSS_PERF_METRICS=1`, loads cached fixture data, and drives deterministic repaint loops with CLI toggles for enabling/disabling entire widgets (`--weather/--reddit`), detail rows, forecast blocks, animated icon alignment, Reddit separators/limits, fixture overrides, and JSONL metric export. See `Docs/Performance_Base_Line_2_5.md §1.6` for usage matrix and sample command.
+- tools/synthetic_widget_benchmark.py - Qt-driven harness for Weather/Reddit/Clock/Media/Transition widgets. Forces `SRPSS_PERF_METRICS=1`, loads cached fixtures, and drives deterministic repaint loops with CLI toggles for widget counts, cadence, transition sizing/speed, and JSONL metric export (`Docs/Benchmark_Parity.md`). Captures `[PERF_WIDGET]` samples plus ThreadManager telemetry (`thread_pool_stats`) and frame-driver cadence stats (`frame_driver_timer`), emitting `[PERF_THREAD]` / `[PERF_TIMER frame_driver.tick]` warnings when pools saturate or ticks drift beyond max(100 ms, 1.5× interval). Media widgets reuse production-style shared feeds, artwork caches, and per-DPR scaled pixmaps. Acts as the synthetic parity harness for CI diffing alongside `tools/run_synthetic_benchmark_suite.py` + `tools/compare_synthetic_suite.py`.
 
 ## Root
 - versioning.py

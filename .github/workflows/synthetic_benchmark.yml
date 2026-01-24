@@ -1,0 +1,47 @@
+name: Synthetic Benchmark Suite
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"
+  pull_request:
+    paths:
+      - ".github/workflows/synthetic_benchmark.yml"
+      - "tools/synthetic_widget_benchmark.py"
+      - "tools/run_synthetic_benchmark_suite.py"
+      - "tools/compare_synthetic_suite.py"
+      - "Docs/Benchmark_Parity.md"
+      - "Spec.md"
+
+jobs:
+  synthetic-suite:
+    name: Synthetic Parity Harness
+    runs-on: windows-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run synthetic benchmark suite
+        run: python tools/run_synthetic_benchmark_suite.py --output-dir .cache/synthetic_suite
+
+      - name: Compare against baseline
+        if: ${{ hashFiles('tools/baselines/synthetic_suite_baseline.json') != '' }}
+        run: python tools/compare_synthetic_suite.py tools/baselines/synthetic_suite_baseline.json .cache/synthetic_suite/suite_summary.json
+
+      - name: Upload suite artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-suite-${{ github.run_id }}
+          path: .cache/synthetic_suite

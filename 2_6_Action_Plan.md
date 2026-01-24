@@ -126,7 +126,7 @@ Enforce a single popup chrome (StyledPopup), remove raw timers, sync QSS + Style
 
 ---
 
-## Phase 2 – Sources Tab Responsiveness, RSS Priority & Dedupe, “5 Images” Guard
+## Phase 2 – Sources Tab Responsiveness, RSS Priority & Dedupe, “5 Images” START UP ONLY (Including from Settings GUI) Guard
 
 Implement the in-depth plan from Feature Investigation §8 while resolving audit issues in sources modules.
 
@@ -139,7 +139,7 @@ Implement the in-depth plan from Feature Investigation §8 while resolving audit
 
 ### 2.2 Priority & Multi-select UX
 **Details (from Feature Plan §8):**  
-- Priority equals list order; label rows with “Priority #”.  
+- Priority equals list order; label rows with “Priority #”.
 - Add ExtendedSelection (Shift/Ctrl/mouse drag) for batch removal.  
 - Keep numbering current after reorder/add/remove.  
 **Modules:** `ui/tabs/sources_tab.py`, `engine/screensaver_engine.py`, `core/settings/settings_manager.py`, `Spec.md`.  

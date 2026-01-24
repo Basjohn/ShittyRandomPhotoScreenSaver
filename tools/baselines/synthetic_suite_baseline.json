@@ -1,0 +1,371 @@
+{
+  "generated_at": "2026-01-24T14:04:14.047910+00:00",
+  "scenarios": [
+    {
+      "name": "steady-baseline",
+      "description": "2 displays, single widget copies, steady cadence (baseline parity check).",
+      "command": [
+        "C:\\Python311\\python.exe",
+        "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tools\\synthetic_widget_benchmark.py",
+        "--display-count",
+        "2",
+        "--frames",
+        "600",
+        "--cadence-mode",
+        "steady",
+        "--weather-per-display",
+        "1",
+        "--reddit-per-display",
+        "1",
+        "--clock-per-display",
+        "1",
+        "--media-per-display",
+        "1",
+        "--transitions",
+        "--transition-speed-scale",
+        "1.0",
+        "--json-output",
+        ".cache\\synthetic_suite\\steady-baseline\\run.jsonl"
+      ],
+      "jsonl": ".cache\\synthetic_suite\\steady-baseline\\run.jsonl",
+      "run": {
+        "type": "run",
+        "frames": 600,
+        "interval_ms": 16,
+        "display_count": 2,
+        "cadence_mode": "steady",
+        "weather_enabled": true,
+        "weather_details": true,
+        "weather_forecast": false,
+        "weather_width": 620,
+        "weather_height": 320,
+        "weather_updates_per_frame": 3,
+        "reddit_enabled": true,
+        "reddit_limit": 10,
+        "reddit_separators": false,
+        "clock_enabled": true,
+        "media_enabled": true,
+        "transitions_enabled": true,
+        "media_per_display": 1,
+        "media_feed_mode": "shared",
+        "transition_speed_scale": 1.0,
+        "transition_width": 320,
+        "transition_height": 180,
+        "media_track_interval": 1800,
+        "media_artwork_latency_min_ms": 200,
+        "media_artwork_latency_max_ms": 1200,
+        "weather_per_display": 1,
+        "reddit_per_display": 1,
+        "clock_per_display": 1,
+        "thread_pool_stats": [
+          {
+            "pool": "compute",
+            "max_workers": 23,
+            "max_active": 0,
+            "max_active_frame": 0,
+            "max_active_ratio": 0.0,
+            "saturated_frames": 0,
+            "submitted": 0,
+            "completed": 0,
+            "failed": 0
+          },
+          {
+            "pool": "io",
+            "max_workers": 4,
+            "max_active": 1,
+            "max_active_frame": 1,
+            "max_active_ratio": 0.25,
+            "saturated_frames": 0,
+            "submitted": 4,
+            "completed": 4,
+            "failed": 0
+          }
+        ],
+        "frame_driver_timer": {
+          "samples": 599,
+          "avg_ms": 18.031,
+          "max_ms": 30.379,
+          "min_ms": 0.44,
+          "late_frames": 0,
+          "warn_threshold_ms": 100.0
+        }
+      },
+      "summaries": [
+        {
+          "type": "summary",
+          "widget": "BenchmarkMediaWidget",
+          "kind": "paint",
+          "calls": 1158,
+          "avg_ms": 0.802,
+          "max_ms": 3.33,
+          "area_px": 99200
+        },
+        {
+          "type": "summary",
+          "widget": "SyntheticMediaFeed",
+          "kind": "timer",
+          "calls": 600,
+          "avg_ms": 0.003,
+          "max_ms": 0.57,
+          "area_px": 0
+        },
+        {
+          "type": "summary",
+          "widget": "TransitionStub",
+          "kind": "paint",
+          "calls": 1158,
+          "avg_ms": 0.115,
+          "max_ms": 0.4,
+          "area_px": 57600
+        },
+        {
+          "type": "summary",
+          "widget": "TransitionStub",
+          "kind": "timer",
+          "calls": 1200,
+          "avg_ms": 0.015,
+          "max_ms": 0.05,
+          "area_px": 0
+        },
+        {
+          "type": "summary",
+          "widget": "clock",
+          "kind": "paint",
+          "calls": 1164,
+          "avg_ms": 0.882,
+          "max_ms": 2.67,
+          "area_px": 28982
+        },
+        {
+          "type": "summary",
+          "widget": "clock",
+          "kind": "timer",
+          "calls": 1200,
+          "avg_ms": 0.093,
+          "max_ms": 0.44,
+          "area_px": 0
+        },
+        {
+          "type": "summary",
+          "widget": "reddit",
+          "kind": "paint",
+          "calls": 1162,
+          "avg_ms": 2.008,
+          "max_ms": 5.4,
+          "area_px": 148180
+        },
+        {
+          "type": "summary",
+          "widget": "reddit",
+          "kind": "timer",
+          "calls": 30,
+          "avg_ms": 0.156,
+          "max_ms": 0.23,
+          "area_px": 0
+        },
+        {
+          "type": "summary",
+          "widget": "weather",
+          "kind": "paint",
+          "calls": 1169,
+          "avg_ms": 0.034,
+          "max_ms": 0.33,
+          "area_px": 198400
+        },
+        {
+          "type": "summary",
+          "widget": "weather",
+          "kind": "timer",
+          "calls": 54,
+          "avg_ms": 2.082,
+          "max_ms": 28.87,
+          "area_px": 0
+        }
+      ]
+    },
+    {
+      "name": "stress-stack",
+      "description": "2 displays, duplicated widgets, stress cadence (forces timer + thread saturation).",
+      "command": [
+        "C:\\Python311\\python.exe",
+        "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\tools\\synthetic_widget_benchmark.py",
+        "--display-count",
+        "2",
+        "--frames",
+        "600",
+        "--cadence-mode",
+        "stress",
+        "--weather-per-display",
+        "2",
+        "--reddit-per-display",
+        "2",
+        "--clock-per-display",
+        "1",
+        "--media-per-display",
+        "2",
+        "--transitions",
+        "--transition-speed-scale",
+        "1.5",
+        "--weather-updates-per-frame",
+        "3",
+        "--json-output",
+        ".cache\\synthetic_suite\\stress-stack\\run.jsonl"
+      ],
+      "jsonl": ".cache\\synthetic_suite\\stress-stack\\run.jsonl",
+      "run": {
+        "type": "run",
+        "frames": 600,
+        "interval_ms": 16,
+        "display_count": 2,
+        "cadence_mode": "stress",
+        "weather_enabled": true,
+        "weather_details": true,
+        "weather_forecast": false,
+        "weather_width": 620,
+        "weather_height": 320,
+        "weather_updates_per_frame": 3,
+        "reddit_enabled": true,
+        "reddit_limit": 10,
+        "reddit_separators": false,
+        "clock_enabled": true,
+        "media_enabled": true,
+        "transitions_enabled": true,
+        "media_per_display": 2,
+        "media_feed_mode": "shared",
+        "transition_speed_scale": 1.5,
+        "transition_width": 320,
+        "transition_height": 180,
+        "media_track_interval": 1800,
+        "media_artwork_latency_min_ms": 200,
+        "media_artwork_latency_max_ms": 1200,
+        "weather_per_display": 2,
+        "reddit_per_display": 2,
+        "clock_per_display": 1,
+        "thread_pool_stats": [
+          {
+            "pool": "compute",
+            "max_workers": 23,
+            "max_active": 0,
+            "max_active_frame": 0,
+            "max_active_ratio": 0.0,
+            "saturated_frames": 0,
+            "submitted": 0,
+            "completed": 0,
+            "failed": 0
+          },
+          {
+            "pool": "io",
+            "max_workers": 4,
+            "max_active": 1,
+            "max_active_frame": 1,
+            "max_active_ratio": 0.25,
+            "saturated_frames": 0,
+            "submitted": 4,
+            "completed": 4,
+            "failed": 0
+          }
+        ],
+        "frame_driver_timer": {
+          "samples": 599,
+          "avg_ms": 39.311,
+          "max_ms": 58.319,
+          "min_ms": 6.007,
+          "late_frames": 0,
+          "warn_threshold_ms": 100.0
+        }
+      },
+      "summaries": [
+        {
+          "type": "summary",
+          "widget": "BenchmarkMediaWidget",
+          "kind": "paint",
+          "calls": 2352,
+          "avg_ms": 0.769,
+          "max_ms": 3.21,
+          "area_px": 99200
+        },
+        {
+          "type": "summary",
+          "widget": "SyntheticMediaFeed",
+          "kind": "timer",
+          "calls": 600,
+          "avg_ms": 0.002,
+          "max_ms": 0.96,
+          "area_px": 0
+        },
+        {
+          "type": "summary",
+          "widget": "TransitionStub",
+          "kind": "paint",
+          "calls": 1176,
+          "avg_ms": 0.112,
+          "max_ms": 0.28,
+          "area_px": 57600
+        },
+        {
+          "type": "summary",
+          "widget": "TransitionStub",
+          "kind": "timer",
+          "calls": 1200,
+          "avg_ms": 0.01,
+          "max_ms": 0.05,
+          "area_px": 0
+        },
+        {
+          "type": "summary",
+          "widget": "clock",
+          "kind": "paint",
+          "calls": 1176,
+          "avg_ms": 0.866,
+          "max_ms": 1.36,
+          "area_px": 28982
+        },
+        {
+          "type": "summary",
+          "widget": "clock",
+          "kind": "timer",
+          "calls": 1200,
+          "avg_ms": 0.071,
+          "max_ms": 0.38,
+          "area_px": 0
+        },
+        {
+          "type": "summary",
+          "widget": "reddit",
+          "kind": "paint",
+          "calls": 2344,
+          "avg_ms": 1.969,
+          "max_ms": 6.14,
+          "area_px": 148180
+        },
+        {
+          "type": "summary",
+          "widget": "reddit",
+          "kind": "timer",
+          "calls": 2400,
+          "avg_ms": 0.163,
+          "max_ms": 0.88,
+          "area_px": 0
+        },
+        {
+          "type": "summary",
+          "widget": "weather",
+          "kind": "paint",
+          "calls": 2356,
+          "avg_ms": 0.025,
+          "max_ms": 0.24,
+          "area_px": 198400
+        },
+        {
+          "type": "summary",
+          "widget": "weather",
+          "kind": "timer",
+          "calls": 34559,
+          "avg_ms": 0.194,
+          "max_ms": 30.98,
+          "area_px": 0
+        }
+      ]
+    }
+  ]
+}
