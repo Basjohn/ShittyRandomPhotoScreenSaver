@@ -175,6 +175,8 @@ class WeatherConditionIcon(QWidget):
         self._monochrome_base: Optional[QColor] = None
         self._desaturation_enabled = False
         self._static_pixmap: Optional[QPixmap] = None
+        self._static_pixmap_dpr: Optional[float] = None
+        self._geom_log_signatures: Dict[str, str] = {}
         self._set_fixed_box()
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
@@ -196,6 +198,7 @@ class WeatherConditionIcon(QWidget):
         self._size_px = size_px
         self._set_fixed_box()
         self._static_pixmap = None
+        self._static_pixmap_dpr = None
         self.update()
 
     def clear_icon(self) -> None:
@@ -207,6 +210,7 @@ class WeatherConditionIcon(QWidget):
         self._renderer = None
         self._icon_path = None
         self._static_pixmap = None
+        self._static_pixmap_dpr = None
         self.update()
 
     def set_icon_path(self, icon_path: Optional[Path]) -> None:
@@ -290,26 +294,41 @@ class WeatherConditionIcon(QWidget):
         renderer = self._renderer
         if renderer is None or not renderer.isValid():
             self._static_pixmap = None
+            self._static_pixmap_dpr = None
             return
 
-        width = max(1, self.width() or self._size_px)
-        height = max(1, self.height() or self._size_px)
-        pixmap = QPixmap(width, height)
+        widget_width = max(1, self.width() or self._size_px)
+        widget_height = max(1, self.height() or self._size_px)
+        target_width = max(1, widget_width - 2 * self._padding)
+        target_height = max(1, widget_height - 2 * self._padding)
+        dpr = float(max(1.0, self.devicePixelRatioF()))
+        render_width = max(1, int(round(target_width * dpr)))
+        render_height = max(1, int(round(target_height * dpr)))
+
+        pixmap = QPixmap(render_width, render_height)
+        pixmap.setDevicePixelRatio(dpr)
         pixmap.fill(Qt.GlobalColor.transparent)
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        target = QRectF(
-            self._padding,
-            self._padding,
-            width - 2 * self._padding,
-            height - 2 * self._padding,
-        )
-        renderer.render(painter, target)
+        renderer.render(painter, QRectF(0, 0, target_width, target_height))
         painter.end()
         image = pixmap.toImage().convertToFormat(QImage.Format_ARGB32)
         if self._desaturation_enabled:
             image = self._apply_monochrome(image)
-        self._static_pixmap = QPixmap.fromImage(image)
+        pixmap = QPixmap.fromImage(image)
+        pixmap.setDevicePixelRatio(dpr)
+        self._static_pixmap = pixmap
+        self._static_pixmap_dpr = dpr
+        self._log_geometry(
+            mode="static.cache",
+            target_rect=QRectF(
+                self._padding,
+                self._padding,
+                widget_width - 2 * self._padding,
+                widget_height - 2 * self._padding,
+            ),
+            pixmap=self._static_pixmap,
+        )
         self.update()
 
     def paintEvent(self, event) -> None:  # noqa: N802
@@ -319,19 +338,26 @@ class WeatherConditionIcon(QWidget):
         if not renderer or not renderer.isValid():
             painter.end()
             return
-        if not self._animation_enabled:
-            if self._static_pixmap is None:
-                self._render_static_frame()
-            if self._static_pixmap is not None:
-                painter.drawPixmap(self.rect(), self._static_pixmap, self._static_pixmap.rect())
-            painter.end()
-            return
+        widget_rect = self.rect()
         target = QRectF(
             self._padding,
             self._padding,
-            self.width() - 2 * self._padding,
-            self.height() - 2 * self._padding,
+            widget_rect.width() - 2 * self._padding,
+            widget_rect.height() - 2 * self._padding,
         )
+        if not self._animation_enabled:
+            dpr = float(max(1.0, self.devicePixelRatioF()))
+            if (
+                self._static_pixmap is None
+                or self._static_pixmap_dpr is None
+                or not math.isclose(self._static_pixmap_dpr, dpr, rel_tol=1e-3)
+            ):
+                self._render_static_frame()
+            if self._static_pixmap is not None:
+                painter.drawPixmap(target, self._static_pixmap, self._static_pixmap.rect())
+                self._log_geometry(mode="static.paint", target_rect=target, pixmap=self._static_pixmap)
+            painter.end()
+            return
         if self._desaturation_enabled:
             image = QImage(int(target.width()), int(target.height()), QImage.Format_ARGB32)
             image.fill(Qt.GlobalColor.transparent)
@@ -343,6 +369,7 @@ class WeatherConditionIcon(QWidget):
             painter.drawImage(target, image)
         else:
             renderer.render(painter, target)
+        self._log_geometry(mode="animated.paint", target_rect=target, pixmap=None)
         painter.end()
 
     def _apply_monochrome(self, image: QImage) -> QImage:
@@ -371,6 +398,44 @@ class WeatherConditionIcon(QWidget):
         dark = QColor(base)
         dark = dark.darker(150)
         return light, dark
+
+    def _log_geometry(self, *, mode: str, target_rect: QRectF, pixmap: Optional[QPixmap]) -> None:
+        if not is_perf_metrics_enabled():
+            return
+        widget_w = self.width() or self._size_px
+        widget_h = self.height() or self._size_px
+        pixmap_size: Optional[Tuple[int, int]] = None
+        if pixmap is not None and not pixmap.isNull():
+            ratio = float(max(1.0, pixmap.devicePixelRatio()))
+            logical_w = int(round(pixmap.width() / ratio))
+            logical_h = int(round(pixmap.height() / ratio))
+            pixmap_size = (logical_w, logical_h)
+        dpr = float(max(1.0, self.devicePixelRatioF()))
+        signature = (
+            f"{mode}|{widget_w}x{widget_h}|"
+            f"{target_rect.x():.2f},{target_rect.y():.2f},"
+            f"{target_rect.width():.2f},{target_rect.height():.2f}|"
+            f"{pixmap_size}|{dpr:.3f}|pad={self._padding}|desat={self._desaturation_enabled}"
+        )
+        if self._geom_log_signatures.get(mode) == signature:
+            return
+        self._geom_log_signatures[mode] = signature
+        logger.info(
+            "[WEATHER][ICON][GEOM] mode=%s widget=(%s, %s) target=(%.2f, %.2f, %.2f, %.2f) "
+            "pixmap=%s dpr=%.3f padding=%s anim=%s desat=%s",
+            mode,
+            widget_w,
+            widget_h,
+            target_rect.x(),
+            target_rect.y(),
+            target_rect.width(),
+            target_rect.height(),
+            pixmap_size,
+            dpr,
+            self._padding,
+            self._animation_enabled,
+            self._desaturation_enabled,
+        )
 
 
 class WeatherDetailRow(QWidget):
