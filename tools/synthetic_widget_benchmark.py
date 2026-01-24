@@ -234,6 +234,8 @@ class BenchmarkArgs:
     weather_details: bool
     weather_forecast: bool
     weather_icon_alignment: str
+    weather_icon_animated: bool
+    weather_icon_desaturate: bool
     weather_fixture: Optional[Path]
     weather_width: int
     weather_height: int
@@ -413,6 +415,8 @@ class BenchmarkWindow(QWidget):
         widget.set_show_details_row(self._args.weather_details)
         widget.set_show_forecast(self._args.weather_forecast)
         widget.set_animated_icon_alignment(self._args.weather_icon_alignment.upper())
+        widget.set_animated_icon_enabled(self._args.weather_icon_animated)
+        widget.set_desaturate_animated_icon(self._args.weather_icon_desaturate)
 
         # Ensure DPR aware layout before painting.
         widget.resize(widget.minimumSizeHint())
@@ -516,6 +520,20 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         choices=["left", "right", "none"],
         default="right",
         help="Control animated icon alignment (NONE disables SVG rendering).",
+    )
+    parser.add_argument(
+        "--weather-animate",
+        dest="weather_icon_animated",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable or disable the weather condition icon animation while keeping the art visible.",
+    )
+    parser.add_argument(
+        "--weather-desaturate-icon",
+        dest="weather_icon_desaturate",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Render the weather condition icon in grayscale to match monochrome themes.",
     )
     parser.add_argument(
         "--weather-fixture",
@@ -624,6 +642,8 @@ def _parse_args() -> BenchmarkArgs:
         weather_details=ns.weather_details,
         weather_forecast=ns.weather_forecast,
         weather_icon_alignment=ns.weather_animated_icon,
+        weather_icon_animated=ns.weather_icon_animated,
+        weather_icon_desaturate=ns.weather_icon_desaturate,
         weather_fixture=ns.weather_fixture,
         weather_width=ns.weather_width,
         weather_height=ns.weather_height,

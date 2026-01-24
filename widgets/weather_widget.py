@@ -172,6 +172,8 @@ class WeatherConditionIcon(QWidget):
         self._frames_per_second = 12
         self._padding = 4
         self._animation_enabled = True
+        self._monochrome_base: Optional[QColor] = None
+        self._desaturation_enabled = False
         self._static_pixmap: Optional[QPixmap] = None
         self._set_fixed_box()
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
@@ -181,6 +183,11 @@ class WeatherConditionIcon(QWidget):
         self.setMinimumSize(box)
         self.setMaximumSize(box)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        if not self._animation_enabled:
+            self._render_static_frame()
 
     def set_icon_size(self, size_px: int) -> None:
         size_px = max(32, int(size_px))
@@ -246,10 +253,18 @@ class WeatherConditionIcon(QWidget):
 
         renderer.setAnimationEnabled(self._animation_enabled)
         if self._animation_enabled:
+            try:
+                renderer.repaintNeeded.disconnect(self.update)
+            except Exception:
+                pass
             renderer.setFramesPerSecond(self._frames_per_second)
             renderer.repaintNeeded.connect(self.update)
             self._static_pixmap = None
         else:
+            try:
+                renderer.repaintNeeded.disconnect(self.update)
+            except Exception:
+                pass
             try:
                 renderer.setCurrentFrame(0)
             except Exception:
@@ -257,26 +272,45 @@ class WeatherConditionIcon(QWidget):
             self._render_static_frame()
         self.update()
 
+    def set_desaturation_enabled(self, enabled: bool, *, base_color: Optional[QColor] = None) -> None:
+        enabled = bool(enabled)
+        if enabled == self._desaturation_enabled and base_color is None:
+            return
+        self._desaturation_enabled = enabled
+        if base_color is not None:
+            self._monochrome_base = QColor(base_color)
+        elif self._monochrome_base is None:
+            self._monochrome_base = QColor(220, 220, 220)
+        if not self._animation_enabled:
+            self._render_static_frame()
+        else:
+            self.update()
+
     def _render_static_frame(self) -> None:
         renderer = self._renderer
         if renderer is None or not renderer.isValid():
             self._static_pixmap = None
             return
 
-        target_rect = QRectF(
-            self._padding,
-            self._padding,
-            self._size_px - 2 * self._padding,
-            self._size_px - 2 * self._padding,
-        )
-        pixmap = QPixmap(self._size_px, self._size_px)
+        width = max(1, self.width() or self._size_px)
+        height = max(1, self.height() or self._size_px)
+        pixmap = QPixmap(width, height)
         pixmap.fill(Qt.GlobalColor.transparent)
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        renderer.render(painter, target_rect)
+        target = QRectF(
+            self._padding,
+            self._padding,
+            width - 2 * self._padding,
+            height - 2 * self._padding,
+        )
+        renderer.render(painter, target)
         painter.end()
-        pixmap.setDevicePixelRatio(max(1.0, self.devicePixelRatioF()))
-        self._static_pixmap = pixmap
+        image = pixmap.toImage().convertToFormat(QImage.Format_ARGB32)
+        if self._desaturation_enabled:
+            image = self._apply_monochrome(image)
+        self._static_pixmap = QPixmap.fromImage(image)
+        self.update()
 
     def paintEvent(self, event) -> None:  # noqa: N802
         painter = QPainter(self)
@@ -289,7 +323,7 @@ class WeatherConditionIcon(QWidget):
             if self._static_pixmap is None:
                 self._render_static_frame()
             if self._static_pixmap is not None:
-                painter.drawPixmap(0, 0, self._static_pixmap)
+                painter.drawPixmap(self.rect(), self._static_pixmap, self._static_pixmap.rect())
             painter.end()
             return
         target = QRectF(
@@ -298,8 +332,45 @@ class WeatherConditionIcon(QWidget):
             self.width() - 2 * self._padding,
             self.height() - 2 * self._padding,
         )
-        renderer.render(painter, target)
+        if self._desaturation_enabled:
+            image = QImage(int(target.width()), int(target.height()), QImage.Format_ARGB32)
+            image.fill(Qt.GlobalColor.transparent)
+            temp = QPainter(image)
+            temp.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            renderer.render(temp, QRectF(0, 0, target.width(), target.height()))
+            temp.end()
+            image = self._apply_monochrome(image)
+            painter.drawImage(target, image)
+        else:
+            renderer.render(painter, target)
         painter.end()
+
+    def _apply_monochrome(self, image: QImage) -> QImage:
+        light, dark = self._monochrome_palette()
+        for y in range(image.height()):
+            for x in range(image.width()):
+                color = QColor(image.pixel(x, y))
+                alpha = color.alpha()
+                if alpha == 0:
+                    continue
+                gray = int(round(0.299 * color.red() + 0.587 * color.green() + 0.114 * color.blue()))
+                factor = gray / 255.0
+                new_color = QColor(
+                    int(dark.red() + (light.red() - dark.red()) * factor),
+                    int(dark.green() + (light.green() - dark.green()) * factor),
+                    int(dark.blue() + (light.blue() - dark.blue()) * factor),
+                    alpha,
+                )
+                image.setPixelColor(x, y, new_color)
+        return image
+
+    def _monochrome_palette(self) -> Tuple[QColor, QColor]:
+        base = self._monochrome_base or QColor(220, 220, 220)
+        light = QColor(base)
+        light = light.lighter(120)
+        dark = QColor(base)
+        dark = dark.darker(150)
+        return light, dark
 
 
 class WeatherDetailRow(QWidget):
@@ -444,7 +515,7 @@ class WeatherDetailRow(QWidget):
         )
         soft_drop = max(0, base_drop - 1)
         segment.icon.set_baseline_offset(soft_drop)
-        segment.icon.set_debug_background(is_perf_metrics_enabled())
+        segment.icon.set_debug_background(False)
 
         log_detail_geometry = False
         if is_perf_metrics_enabled():
@@ -2087,20 +2158,21 @@ class WeatherWidget(BaseOverlayWidget):
             return
 
         if not self._desaturate_condition_icon:
-            if self._icon_desaturate_effect is not None:
+            if self._icon_desaturate_effect is not None and Shiboken.isValid(self._icon_desaturate_effect):
                 try:
-                    icon_widget.setGraphicsEffect(None)
-                except RuntimeError:
-                    logger.debug("[WEATHER] Failed to remove desaturation effect", exc_info=True)
+                    self._icon_desaturate_effect.setEnabled(False)
+                except Exception:
+                    logger.debug("[WEATHER] Failed to disable desaturation effect", exc_info=True)
+            icon_widget.setGraphicsEffect(None)
             return
 
         effect = self._icon_desaturate_effect
         if effect is None or Shiboken.isValid(effect) is False:
             effect = QGraphicsColorizeEffect(icon_widget)
-            effect.setColor(QColor(196, 196, 196))
-            effect.setStrength(0.65)
             self._icon_desaturate_effect = effect
 
+        effect.setColor(QColor(160, 160, 160))
+        effect.setStrength(1.0)
         effect.setEnabled(True)
         icon_widget.setGraphicsEffect(effect)
 
