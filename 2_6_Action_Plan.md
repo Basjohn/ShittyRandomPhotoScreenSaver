@@ -34,6 +34,7 @@ Stabilize logging, threading, resource ownership, settings/schema alignment, and
 - [ ] Auto-disable ANSI coloring when `stdout` is not a terminal.  
 - [ ] Describe `.perf.cfg` / `.logging.cfg` generation and expected values in Spec + Style guide.  
 - [ ] Ensure build outputs reference the same contract (ties to Phase 6 tooling tasks).  
+- [ ] Cull redundant high-volume logs (e.g., `[PERF][MEDIA_FEEDBACK]`, widget paint spam) and gate remaining diagnostics behind `SRPSS_PERF_METRICS` so normal runs stay quiet while still allowing synchronized-event instrumentation.  
 **Pitfalls:** Avoid double-writing logs or silently discarding them; ensure documentation covers frozen builds vs dev builds.
 
 ### 0.2 ThreadManager & ResourceManager
@@ -242,7 +243,7 @@ All assets must be documented in `Docs/Spec.md` Appendix (visualizer references)
 1. Add `spotify_visualizer.mode` enum + per-mode settings (thickness, twist, particle count, history depth) + vertical orientation toggle in Widgets tab UI; ensure config persists in `core/settings/defaults.py`, `core/settings/models.py`, and presets.  
 2. Implement GLSL programs for each mode under `widgets/spotify_visualizer/*`, sharing buffers with Spectrum wherever possible; capability detection should fall back to Spectrum whenever GL requirements fail (session-scoped demotion only).  
 3. Update DisplayWidget / overlay layout so card rotation + padding adjustments respect orientation toggle without breaching ShadowFadeProfile constraints.  
-4. Update presets (`Cinematic` helix defaults, `Artistic` waveform) and document tables in Spec.md & Index.md.  
+4. Update presets (`Cinematic` helix defaults, `Artistic` waveform) and document tables in Spec/Index.  
 
 **Per-Mode Implementation Notes:**  
 - Morphing Waveform Ribbon – Use mirrored triangle strip with dynamic thickness; drive vertical displacement from time-domain waveform while tinting via FFT-derived energy. Reference TimArt shader for morph math, but clamp vertex count to existing VBO (reuse 64 vertices).  
@@ -270,31 +271,46 @@ Include external references (GLava wiki, ShaderToy source, CCRMA lab notes, PAV 
 ### 3.5 Weather Widget – Animated SVG Icons (Feature Plan §6)
 **Goal:** Replace text-only widget with animated SVG icons using `QSvgRenderer`.  
 **Checklist:**  
-- [ ] Promote to QWidget + QHBoxLayout (text column + icon container) so layout alignment is reliable.  
-- [ ] Load icons via `QSvgRenderer`, set `framesPerSecond`, and connect `repaintNeeded` to `update()` (no extra timers).  
-- [ ] Add settings for `widgets.weather.icon_scale` and animation toggle (defaults documented).  
-- [ ] Maintain small LRU cache (≤6 renderers) and pause animations during transitions.  
-- [ ] Map provider condition codes to `images/weather/manifest.json`.  
-- [ ] Tests: throttle repaint signal counts, ensure caching works, update `tools/download_weather_icons.py` if needed.  
+- [x ] Promote to QWidget + QHBoxLayout (text column + icon container) so layout alignment is reliable.  
+- [x ] Load icons via `QSvgRenderer`, set `framesPerSecond`, and connect `repaintNeeded` to `update()` (no extra timers).  
+- [x ] Add settings for `widgets.weather.icon_scale` and animation toggle (defaults documented).  
+- [x ] Maintain small LRU cache (≤6 renderers) and pause animations during transitions.  
+- [x ] Map provider condition codes to `images/weather/manifest.json`.  
+- [x ] Tests: throttle repaint signal counts, ensure caching works, update `tools/download_weather_icons.py` if needed.  
 **Pitfalls:** Do not spawn extra threads; rely on renderer’s animation driver. Document fallback to static icons when animation disabled.  
+**Status/Notes (Jan 25):** Detail row now emits fallback metrics (cached or 0%) whenever the provider omits rain/humidity/wind, so the layout never collapses even under degraded data. Keep this behavior when the SVG overhaul lands so degraded payloads stay visually consistent (screenshots in §3 requirements).
 
 ### 3.6 Reddit Widget Options & Header Parity (Feature Plan §7 + §7.1)
 **Checklist:**  
-- [ ] Rename “Exit when Reddit links opened” to “Open When Reddit Links Are Clicked”; add “Copy Clicked Reddit Links To Clipboard” checkbox.  
-- [ ] Enforce mutual exclusivity except on MC builds (where both can be enabled); reuse `self._mc_build` gating.  
-- [ ] Update click handler (`rendering/display_widget.py`) to set clipboard text before executing action.  
-- [ ] Migrate settings key (`widgets.reddit.exit_on_click` → `widgets.reddit.open_on_click`) with `SettingsManager.validate_and_repair()` shim. Update presets + Spec tables.  
-- [ ] Add header frame toggle/styling parity with Spotify widget; update Widget Guidelines to require header frame options for all widgets with headings/logo.  
-- [ ] Tests: `tests/ui/test_widgets_tab.py` for mutual exclusivity + persistence.  
+- [x ] Rename “Exit when Reddit links opened” to “Open When Reddit Links Are Clicked”; add “Copy Clicked Reddit Links To Clipboard” checkbox.  
+- [x ] Enforce mutual exclusivity except on MC builds (where both can be enabled); reuse `self._mc_build` gating.  
+- [x ] Update click handler (`rendering/display_widget.py`) to set clipboard text before executing action.  
+- [x ] Migrate settings key (`widgets.reddit.exit_on_click` → `widgets.reddit.open_on_click`) with `SettingsManager.validate_and_repair()` shim. Update presets + Spec tables.  
+- [x ] Add header frame toggle/styling parity with Spotify widget; update Widget Guidelines to require header frame options for all widgets with headings/logo.  
+- [x ] Tests: `tests/ui/test_widgets_tab.py` for mutual exclusivity + persistence.  
 **Pitfalls:** Ensure tooltip text adheres to Style Guide (no inline QSS). Document MC vs normal builds difference.  
 **Modules:** `ui/tabs/widgets_tab.py`, `widgets/reddit_widget.py`, `rendering/display_widget.py`, `core/settings/defaults.py`, `Spec.md`, `Docs/10_WIDGET_GUIDELINES.md`. Ensure settings migration touches `SettingsManager.validate_and_repair()` and `core/presets.py`.
 
 ### 3.7 Pixel Shift Boundary Enforcement (Feature Plan §7.2)
 **Checklist:**  
-- [ ] Audit `DisplayWidget._apply_pixel_shift()` to clamp overlay rects within `screen_geometry.adjusted(margins)`.  
-- [ ] Provide per-widget bounding boxes via WidgetManager (notify overlays when geometry shifts).  
-- [ ] Add regression test simulating max pixel shift deltas on multi-monitor setups to ensure widgets remain fully visible.  
-- [ ] Update Widget Guidelines (positioning section) with pixel-shift constraints.  
+- [x ] Audit `DisplayWidget._apply_pixel_shift()` to clamp overlay rects within `screen_geometry.adjusted(margins)`.  
+- [x ] Provide per-widget bounding boxes via WidgetManager (notify overlays when geometry shifts).  
+- [x ] Add regression test simulating max pixel shift deltas on multi-monitor setups to ensure widgets remain fully visible.  
+- [x ] Update Widget Guidelines (positioning section) with pixel-shift constraints.  
+
+### 3.8 Media Widget Feedback Sync & Fade (New)
+**Goal:** Finish the EventSystem broadcast path so every MediaWidget (all screens) reacts in lockstep to hardware keys, and retune the highlight fade so it looks like a smooth, single animation rather than per-widget timers fighting.  
+**Current Findings:**  
+- WM_APPCOMMAND now publishes `EventType.MEDIA_CONTROL_TRIGGERED`, and MediaWidget clones share a single animation driver (class timer + shared event cache). Logging shows identical event IDs/timestamps per clone.  
+- Auto/manual guard logic still needs verification when broadcast feedback lands during fade-in, but baseline highlight synchronization now matches across displays.  
+**Checklist:**  
+- [x ] Instrument `_publish_media_control_action` / `_handle_media_control_event` with shared event IDs + `[PERF][MEDIA_FEEDBACK]` grouping so logs confirm synchronized delivery (per Phase 0 logging cleanup).  
+- [x ] Introduce a shared animation driver (single timer or ThreadManager callback) for all MediaWidget clones; store control feedback timestamps in a shared struct keyed by event ID instead of each widget keeping its own timer.  
+- [x ] When hardware/manual triggers arrive, reuse the shared timestamp and skip `_controls_feedback.clear()` so repaint diffing doesn’t blank the card on one display.  
+- [ ] Ensure fade-in/out state (`_fade_in_completed`, `_has_seen_first_track`) is updated atomically when broadcast feedback arrives so the secondary display doesn’t slip back into hidden state.  
+- [x ] Add regression tests (`tests/test_media_widget.py`) to simulate hardware broadcasts and assert both widgets trigger `_trigger_controls_feedback` once, with identical timestamps.  
+- [ ] Update Spec/Docs to describe the broadcast contract (hardware → EventSystem → shared driver) and mention the fade guard for multi-display setups.  
+**Pitfalls:** Avoid spinning up new per-widget timers; use ThreadManager/ResourceManager so teardown stays deterministic. Verify logging stays gated by `SRPSS_PERF_METRICS`.
 
 ---
 

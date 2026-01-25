@@ -733,3 +733,75 @@ def test_display_widget_hard_exit_click_routes_to_media_widget(
     assert handled
     assert fake_ctrl.play_pause_calls == 1
     assert not getattr(w, "_exiting", False)
+
+
+@pytest.mark.qt
+def test_media_widget_shared_feedback_driver_syncs_clones(mock_parent, qtbot, monkeypatch):
+    """Shared feedback driver should keep event ids/timestamps identical across clones."""
+
+    monkeypatch.setattr(media_mod.MediaWidget, "_ensure_shared_feedback_timer", lambda *args, **kwargs: None)
+    monkeypatch.setattr(media_mod.MediaWidget, "_maybe_stop_shared_feedback_timer", lambda *args, **kwargs: None)
+    media_mod.MediaWidget._shared_feedback_events.clear()
+
+    widgets = []
+    for _ in range(2):
+        widget = MediaWidget(mock_parent, position=MediaPosition.BOTTOM_LEFT)
+        qtbot.addWidget(widget)
+        widgets.append(widget)
+
+    try:
+        leader, follower = widgets
+        leader._trigger_controls_feedback("play", source="manual")
+
+        assert "play" in leader._controls_feedback
+        assert "play" in follower._controls_feedback
+
+        ts_leader, event_id_leader = leader._controls_feedback["play"]
+        ts_follower, event_id_follower = follower._controls_feedback["play"]
+
+        assert event_id_leader == event_id_follower
+        assert ts_leader == pytest.approx(ts_follower, rel=0, abs=1e-9)
+
+        shared_entry = media_mod.MediaWidget._shared_feedback_events.get(event_id_leader)
+        assert shared_entry is not None
+        assert shared_entry["timestamp"] == ts_leader
+        assert shared_entry["key"] == "play"
+        assert shared_entry["source"] == "manual"
+    finally:
+        for widget in widgets:
+            widget._clear_local_feedback()
+        media_mod.MediaWidget._shared_feedback_events.clear()
+        media_mod.MediaWidget._shared_auto_events.clear()
+
+
+@pytest.mark.qt
+def test_media_widget_feedback_reuses_timestamp_and_keeps_single_key(mock_parent, qtbot, monkeypatch):
+    """Feedback should reuse manual timestamp for rapid auto events and never keep both keys active."""
+
+    monkeypatch.setattr(media_mod.MediaWidget, "_ensure_shared_feedback_timer", lambda *args, **kwargs: None)
+    monkeypatch.setattr(media_mod.MediaWidget, "_maybe_stop_shared_feedback_timer", lambda *args, **kwargs: None)
+    class _FakeAnimMgr:
+        def __init__(self, owner):
+            self.owner = owner
+
+        def animate_custom(self, duration, update_callback, **kwargs):
+            update_callback(0.0)  # start
+            update_callback(0.5)
+            update_callback(1.0)
+            return "anim"
+
+        def cancel_animation(self, anim_id):
+            pass
+
+    fake_mgr = _FakeAnimMgr(None)
+    monkeypatch.setattr(media_mod.MediaWidget, "_ensure_feedback_anim_mgr", lambda self: fake_mgr)
+
+    widget = MediaWidget(mock_parent, position=MediaPosition.BOTTOM_LEFT)
+    qtbot.addWidget(widget)
+
+    widget._trigger_controls_feedback("next", source="manual", timestamp=1.23, event_id="evt-manual")
+    assert list(widget._controls_feedback.keys()) == ["next"]
+    widget._trigger_controls_feedback("play", source="auto", timestamp=1.30, event_id="evt-auto")
+    assert list(widget._controls_feedback.keys()) == ["play"]
+    widget._trigger_controls_feedback("prev", source="auto", timestamp=1.35, event_id="evt-auto2")
+    assert list(widget._controls_feedback.keys()) == ["prev"]

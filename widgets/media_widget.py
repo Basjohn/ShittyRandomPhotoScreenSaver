@@ -16,14 +16,17 @@ from enum import Enum
 from pathlib import Path
 import os
 import time
-from typing import Optional, TYPE_CHECKING, Deque, Tuple, ClassVar
+import uuid
 import weakref
+from typing import Optional, TYPE_CHECKING, Deque, Tuple, ClassVar
 
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QWidget, QSizePolicy
 from PySide6.QtCore import QTimer, Qt, Signal, QVariantAnimation, QRect, QPoint
 from PySide6.QtGui import QFont, QColor, QPixmap, QPainter, QPainterPath, QFontMetrics
 from shiboken6 import Shiboken
 
+from core.animation.animator import AnimationManager
+from core.animation.types import EasingCurve
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.events import EventSystem, EventType, Event
 from core.performance import widget_paint_sample
@@ -82,6 +85,9 @@ class MediaWidget(BaseOverlayWidget):
     DEFAULT_FONT_SIZE = 20
     _instances: ClassVar["weakref.WeakSet[MediaWidget]"] = weakref.WeakSet()
     _shared_auto_events: ClassVar[dict[str, float]] = {}
+    _shared_feedback_events: ClassVar[dict[str, dict[str, float]]] = {}
+    _shared_feedback_timer: ClassVar[Optional[QTimer]] = None
+    _shared_feedback_timer_interval_ms: ClassVar[int] = 16
 
     _event_system: ClassVar[Optional["EventSystem"]] = None
     _event_subscription_id: ClassVar[Optional[str]] = None
@@ -180,13 +186,16 @@ class MediaWidget(BaseOverlayWidget):
         self._telemetry_logged_missing_tm = False
         self._telemetry_last_visibility: Optional[bool] = None
         self._telemetry_logged_fade_request = False
-        self._controls_feedback: dict[str, float] = {}
-        self._controls_feedback_timer: Optional[QTimer] = None
+        self._controls_feedback: dict[str, Tuple[float, Optional[str]]] = {}
+        self._controls_feedback_progress: dict[str, float] = {}
+        self._controls_feedback_anim_ids: dict[str, str] = {}
+        self._feedback_anim_mgr: Optional[AnimationManager] = None
         self._controls_feedback_duration: float = 1.35
         self._last_manual_control: Optional[Tuple[str, float]] = None
         self._auto_feedback_guard_window: float = self._controls_feedback_duration + 0.2
         self._track_history: Deque[Tuple] = deque(maxlen=12)
         self._feedback_instance_id: Optional[str] = None
+        self._active_feedback_events: dict[str, str] = {}
 
         type(self)._instances.add(self)
         self._setup_ui()
@@ -229,11 +238,13 @@ class MediaWidget(BaseOverlayWidget):
     def _handle_media_control_event(cls, event: Event) -> None:
         action = None
         timestamp = None
+        event_id: Optional[str] = None
         data = event.data or {}
         try:
             if isinstance(data, dict):
                 action = data.get("action")
                 timestamp = data.get("timestamp")
+                event_id = data.get("event_id")
         except Exception as e:
             logger.debug("[MEDIA_WIDGET] Bad event payload: %s", e)
             return
@@ -243,11 +254,11 @@ class MediaWidget(BaseOverlayWidget):
 
         for instance in list(cls._instances):
             try:
-                instance._handle_remote_media_action(action, timestamp)
+                instance._handle_remote_media_action(action, timestamp, event_id)
             except Exception as e:
                 logger.debug("[MEDIA_WIDGET] Remote media action failed: %s", e)
 
-    def _handle_remote_media_action(self, action: str, timestamp: Optional[float]) -> None:
+    def _handle_remote_media_action(self, action: str, timestamp: Optional[float], event_id: Optional[str]) -> None:
         try:
             if not Shiboken.isValid(self):
                 return
@@ -260,6 +271,7 @@ class MediaWidget(BaseOverlayWidget):
             source="hardware",
             propagate=False,
             timestamp=timestamp if isinstance(timestamp, (int, float)) else None,
+            event_id=event_id,
         )
 
     # ------------------------------------------------------------------
@@ -281,6 +293,7 @@ class MediaWidget(BaseOverlayWidget):
         font = QFont(self._font_family, self._font_size, QFont.Weight.Normal)
         self.setFont(font)
         self.setWordWrap(True)
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
 
         # Base contents margins; _update_display() will tighten these once we
         # know the artwork size, but start with a modest frame.
@@ -342,6 +355,13 @@ class MediaWidget(BaseOverlayWidget):
         self._scaled_artwork_cache = None
         self._scaled_artwork_cache_key = None
         self._last_info = None
+        if self._feedback_anim_mgr is not None:
+            try:
+                self._feedback_anim_mgr.cancel_all()
+                self._feedback_anim_mgr.cleanup()
+            except Exception:
+                logger.debug("[MEDIA_WIDGET] Feedback animation manager cleanup failed", exc_info=True)
+            self._feedback_anim_mgr = None
         try:
             type(self)._instances.discard(self)
         except Exception:
@@ -416,8 +436,7 @@ class MediaWidget(BaseOverlayWidget):
         """Clean up resources (called from DisplayWidget)."""
 
         logger.debug("Cleaning up media widget")
-        self._controls_feedback.clear()
-        self._cancel_controls_feedback_timer()
+        self._clear_local_feedback()
         self.stop()
 
     def set_thread_manager(self, thread_manager) -> None:
@@ -1164,13 +1183,15 @@ class MediaWidget(BaseOverlayWidget):
             logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             hint_h = 0
         base_min = self.minimumHeight()
-        fixed_candidate = max(220, base_min, hint_h)
+        control_padding = self._controls_row_min_height()
+        fixed_candidate = max(220, base_min, hint_h + control_padding)
         if self._fixed_card_height is None or fixed_candidate > self._fixed_card_height:
             self._fixed_card_height = fixed_candidate
 
         if self._fixed_card_height is not None:
             self.setMinimumHeight(self._fixed_card_height)
-            self.setMaximumHeight(self._fixed_card_height)
+            # Allow taller tracks to expand beyond the first snapshot while keeping a floor.
+            self.setMaximumHeight(16777215)
 
         # CRITICAL: Decode artwork BEFORE the first-track early return so that
         # artwork is captured on the very first poll. Without this, the first
@@ -1186,7 +1207,8 @@ class MediaWidget(BaseOverlayWidget):
         # that the text layout accounts for artwork space. Without this, the
         # text wraps as if there's no artwork, causing overlap on startup.
         right_margin = max(self._artwork_size + 40, 60)
-        self.setContentsMargins(29, 12, right_margin, 40)
+        # Reduce bottom margin so controls sit closer to the card edge.
+        self.setContentsMargins(29, 12, right_margin, self._controls_row_margin())
 
         # On the very first non-empty track update we use this call purely
         # to establish a stable layout and fixed height, but keep the widget
@@ -1274,9 +1296,8 @@ class MediaWidget(BaseOverlayWidget):
         # when artwork is missing so the widget size stays stable. Text stays
         # anchored on the left side.
         right_margin = max(self._artwork_size + 40, 60)
-        # Extra bottom margin so the painted controls row has breathing
-        # room above the card edge while keeping text clear of the glyphs.
-        self.setContentsMargins(29, 12, right_margin, 40)
+        bottom_margin = self._controls_row_margin()
+        self.setContentsMargins(29, 12, right_margin, bottom_margin)
 
         # After adjusting margins, recompute the widget's anchored position
         # once so we do not "jump" after the fade completes.
@@ -1769,6 +1790,18 @@ class MediaWidget(BaseOverlayWidget):
         finally:
             painter.restore()
 
+    def _controls_row_min_height(self) -> int:
+        """Return the minimum vertical footprint required for the controls row."""
+        controls_font_pt = max(8, self._font_size - 2)
+        font = QFont(self._font_family, controls_font_pt, QFont.Weight.Medium)
+        fm = QFontMetrics(font)
+        # Inner padding mirrors _compute_controls_layout to keep visuals consistent.
+        return max(28, fm.height() + 14)
+
+    def _controls_row_margin(self) -> int:
+        """Bottom margin that keeps controls breathing room above the card edge."""
+        return max(12, int(self._controls_row_min_height() * 0.4))
+
     def _compute_controls_layout(self):
         """Compute geometry for the transport controls row."""
         if not self._show_controls:
@@ -1789,7 +1822,7 @@ class MediaWidget(BaseOverlayWidget):
         controls_font_pt = max(8, self._font_size - 2)
         font = QFont(self._font_family, controls_font_pt, QFont.Weight.Medium)
         fm = QFontMetrics(font)
-        row_height = max(24, fm.height() + 10)
+        row_height = max(self._controls_row_min_height(), fm.height() + 10)
 
         try:
             header_font_pt = int(self._header_font_pt) if self._header_font_pt > 0 else self._font_size
@@ -1800,7 +1833,7 @@ class MediaWidget(BaseOverlayWidget):
         header_metrics = QFontMetrics(QFont(self._font_family, header_font_pt, QFont.Weight.Bold))
         header_height = header_metrics.height()
 
-        base_row_top = height - margins.bottom() - row_height - 6
+        base_row_top = height - margins.bottom() - row_height
         min_row_top = margins.top() + header_height + 6
         row_top = max(min_row_top, base_row_top)
         if row_top + row_height > height - margins.bottom():
@@ -1871,22 +1904,18 @@ class MediaWidget(BaseOverlayWidget):
 
             # Click feedback overlay
             if self._controls_feedback:
-                now = time.monotonic()
                 painter.setPen(Qt.PenStyle.NoPen)
                 for key, rect in button_rects.items():
-                    start = self._controls_feedback.get(key)
-                    if start is None:
+                    entry = self._controls_feedback.get(key)
+                    if entry is None:
                         continue
-                    elapsed = max(0.0, now - start)
-                    progress = min(1.0, elapsed / max(0.01, self._controls_feedback_duration))
-                    if progress >= 1.0:
+                    intensity = self._controls_feedback_progress.get(key, 0.0)
+                    if intensity <= 0.0:
                         continue
-                    ease = (1.0 - progress)
-                    ease *= ease
-                    opacity = int(150 * ease)
+                    opacity = int(150 * intensity)
                     if opacity <= 0:
                         continue
-                    scale = 1.0 + 0.1 * ease
+                    scale = 1.0 + 0.1 * intensity
                     highlight_rect = QRect(
                         rect.center().x() - int(rect.width() * scale / 2),
                         rect.center().y() - int(rect.height() * scale / 2),
@@ -1971,6 +2000,99 @@ class MediaWidget(BaseOverlayWidget):
         screen = getattr(parent, "screen_index", "?") if parent is not None else "?"
         return f"{screen}:{self._feedback_instance_id}"
 
+    def _log_feedback_metric(
+        self,
+        *,
+        phase: str,
+        key: str,
+        source: str,
+        event_id: str,
+        **extra: object,
+    ) -> None:
+        if not is_perf_metrics_enabled():
+            return
+        extra_str = " ".join(f"{name}={value}" for name, value in extra.items()).strip()
+        if extra_str:
+            logger.info(
+                "[PERF][MEDIA_FEEDBACK] tag=%s key=%s source=%s phase=%s event_id=%s %s",
+                self._feedback_tag(),
+                key,
+                source,
+                phase,
+                event_id,
+                extra_str,
+            )
+        else:
+            logger.info(
+                "[PERF][MEDIA_FEEDBACK] tag=%s key=%s source=%s phase=%s event_id=%s",
+                self._feedback_tag(),
+                key,
+                source,
+                phase,
+                event_id,
+            )
+
+    def _ensure_feedback_anim_mgr(self) -> AnimationManager:
+        mgr = self._feedback_anim_mgr
+        if mgr is None:
+            mgr = AnimationManager(fps=60)
+            self._feedback_anim_mgr = mgr
+        return mgr
+
+    def _start_feedback_animation(self, key: str) -> None:
+        mgr = self._ensure_feedback_anim_mgr()
+        self._controls_feedback_progress[key] = 1.0
+
+        def _on_update(progress: float) -> None:
+            eased = max(0.0, 1.0 - progress)
+            # Slightly weight towards the front half for bolder reaction.
+            value = eased * eased
+            self._controls_feedback_progress[key] = value
+            self.update()
+
+        def _on_complete() -> None:
+            self._finalize_feedback_key(key)
+
+        anim_id = mgr.animate_custom(
+            duration=max(0.01, self._controls_feedback_duration),
+            update_callback=_on_update,
+            easing=EasingCurve.CUBIC_OUT,
+            on_complete=_on_complete,
+        )
+        self._controls_feedback_anim_ids[key] = anim_id
+
+    def _expire_all_feedback(self, *, suppress_log: bool = False) -> None:
+        for key in list(self._controls_feedback.keys()):
+            self._finalize_feedback_key(key, suppress_log=suppress_log)
+
+    def _finalize_feedback_key(self, key: str, *, suppress_log: bool = False) -> None:
+        anim_id = self._controls_feedback_anim_ids.pop(key, None)
+        mgr = self._feedback_anim_mgr
+        if anim_id is not None and mgr is not None:
+            try:
+                mgr.cancel_animation(anim_id)
+            except Exception:
+                logger.debug("[MEDIA_WIDGET] Feedback anim cancel failed for %s", key, exc_info=True)
+
+        self._controls_feedback_progress.pop(key, None)
+        entry = self._controls_feedback.pop(key, None)
+        evt_id = None
+        if entry is not None:
+            _, evt_id = entry
+        if evt_id:
+            type(self)._shared_feedback_events.pop(evt_id, None)
+        active_evt_id = self._active_feedback_events.pop(key, None)
+        if active_evt_id and not suppress_log:
+            self._log_feedback_metric(
+                phase="expire",
+                key=key,
+                source="local",
+                event_id=active_evt_id,
+            )
+        if not self._controls_feedback:
+            type(self)._maybe_stop_shared_feedback_timer()
+        self.update()
+
     def _trigger_controls_feedback(
         self,
         key: str,
@@ -1978,28 +2100,35 @@ class MediaWidget(BaseOverlayWidget):
         source: str = "auto",
         propagate: bool = True,
         timestamp: Optional[float] = None,
+        event_id: Optional[str] = None,
     ) -> None:
         """Start or refresh the click feedback effect for a control button."""
+        cls = type(self)
         now = time.monotonic()
+        ts = timestamp if timestamp is not None else now
+        resolved_event_id = event_id or cls._generate_feedback_event_id(key, ts)
 
-        def _commit_feedback(ts: float) -> float:
-            self._controls_feedback.clear()
-            self._controls_feedback[key] = ts
-            return ts
+        def _commit_feedback(ts_commit: float, evt_id: str) -> float:
+            existing = self._controls_feedback.get(key)
+            if existing is not None and existing[1] == evt_id:
+                return existing[0]
+            self._expire_all_feedback()
+            self._controls_feedback[key] = (ts_commit, evt_id)
+            self._active_feedback_events[key] = evt_id
+            self._start_feedback_animation(key)
+            return ts_commit
 
         timestamp_used: Optional[float] = None
-        ts = timestamp if timestamp is not None else now
 
-        if is_perf_metrics_enabled():
-            logger.info(
-                "[PERF][MEDIA_FEEDBACK] tag=%s key=%s source=%s phase=trigger",
-                self._feedback_tag(),
-                key,
-                source,
-            )
+        self._log_feedback_metric(
+            phase="trigger",
+            key=key,
+            source=source,
+            event_id=resolved_event_id,
+        )
 
         if source == "manual":
-            timestamp_used = _commit_feedback(ts)
+            timestamp_used = _commit_feedback(ts, resolved_event_id)
             self._last_manual_control = (key, ts)
         else:
             last_manual = self._last_manual_control
@@ -2007,94 +2136,100 @@ class MediaWidget(BaseOverlayWidget):
                 same_key = last_manual[0] == key
                 recent = (now - last_manual[1]) <= self._auto_feedback_guard_window
                 if recent and not same_key:
-                    if is_perf_metrics_enabled():
-                        logger.info(
-                            "[PERF][MEDIA_FEEDBACK] tag=%s key=%s source=%s phase=suppressed reason=recent_manual other_key=%s",
-                            self._feedback_tag(),
-                            key,
-                            source,
-                            last_manual[0],
-                        )
+                    self._log_feedback_metric(
+                        phase="suppressed",
+                        key=key,
+                        source=source,
+                        event_id=resolved_event_id,
+                        reason="recent_manual",
+                        other_key=last_manual[0],
+                    )
                     return
                 if same_key and recent:
-                    timestamp_used = _commit_feedback(last_manual[1])
-                    if is_perf_metrics_enabled():
-                        logger.info(
-                            "[PERF][MEDIA_FEEDBACK] tag=%s key=%s source=%s phase=refresh reuse_manual_ts",
-                            self._feedback_tag(),
-                            key,
-                            source,
-                        )
+                    timestamp_used = _commit_feedback(last_manual[1], resolved_event_id)
+                    self._log_feedback_metric(
+                        phase="refresh",
+                        key=key,
+                        source=source,
+                        event_id=resolved_event_id,
+                        reuse_ts="manual",
+                    )
                     return
-            timestamp_used = _commit_feedback(ts)
+            timestamp_used = _commit_feedback(ts, resolved_event_id)
 
         if timestamp_used is None:
             return
 
-        if is_perf_metrics_enabled():
-            logger.info(
-                "[PERF][MEDIA_FEEDBACK] tag=%s key=%s source=%s phase=animate deadline=%.2f",
-                self._feedback_tag(),
-                key,
-                source,
-                self._controls_feedback_duration,
-            )
+        cls._shared_feedback_events[resolved_event_id] = {
+            "key": key,
+            "timestamp": timestamp_used,
+            "source": source,
+            "duration": self._controls_feedback_duration,
+        }
 
-        self._ensure_controls_feedback_timer()
+        self._log_feedback_metric(
+            phase="animate",
+            key=key,
+            source=source,
+            event_id=resolved_event_id,
+            deadline=self._controls_feedback_duration,
+        )
+
+        cls._ensure_shared_feedback_timer()
         self.update()
 
         if not propagate:
             return
 
         if source == "manual":
-            self._broadcast_manual_feedback(key, timestamp_used)
+            self._broadcast_manual_feedback(key, timestamp_used, resolved_event_id)
         else:
-            self._broadcast_auto_feedback(key, timestamp_used)
+            self._broadcast_auto_feedback(key, timestamp_used, resolved_event_id)
 
     def flash_controls_feedback(self, key: str) -> None:
         """Externally trigger control feedback without invoking controller."""
         if key not in ("prev", "play", "next"):
             return
         self._trigger_controls_feedback(key, source="manual")
-    def _broadcast_manual_feedback(self, key: str, started_at: float) -> None:
+    def _broadcast_manual_feedback(self, key: str, started_at: float, event_id: str) -> None:
         cls = type(self)
         for other in list(cls._instances):
             if other is self:
                 continue
             try:
-                if is_perf_metrics_enabled():
-                    logger.info(
-                        "[PERF][MEDIA_FEEDBACK] tag=%s key=%s source=manual phase=broadcast dest=%s",
-                        self._feedback_tag(),
-                        key,
-                        other._feedback_tag(),
-                    )
-                other._receive_remote_manual_feedback(key, started_at)
+                self._log_feedback_metric(
+                    phase="broadcast",
+                    key=key,
+                    source="manual",
+                    event_id=event_id,
+                    dest=other._feedback_tag(),
+                )
+                other._receive_remote_manual_feedback(key, started_at, event_id)
             except Exception as e:
                 logger.debug("[MEDIA_WIDGET] Remote feedback failed: %s", e)
 
-    def _broadcast_auto_feedback(self, key: str, started_at: float) -> None:
+    def _broadcast_auto_feedback(self, key: str, started_at: float, event_id: str) -> None:
         cls = type(self)
         for other in list(cls._instances):
             if other is self:
                 continue
             try:
-                if is_perf_metrics_enabled():
-                    logger.info(
-                        "[PERF][MEDIA_FEEDBACK] tag=%s key=%s source=auto phase=broadcast dest=%s",
-                        self._feedback_tag(),
-                        key,
-                        other._feedback_tag(),
-                    )
-                other._receive_remote_auto_feedback(key, started_at)
+                self._log_feedback_metric(
+                    phase="broadcast",
+                    key=key,
+                    source="auto",
+                    event_id=event_id,
+                    dest=other._feedback_tag(),
+                )
+                other._receive_remote_auto_feedback(key, started_at, event_id)
             except Exception as e:
                 logger.debug("[MEDIA_WIDGET] Remote auto feedback failed: %s", e)
 
-    def _receive_remote_manual_feedback(self, key: str, started_at: float) -> None:
-        self._apply_remote_feedback(key, started_at, record_manual=True, source="remote_manual")
+    def _receive_remote_manual_feedback(self, key: str, started_at: float, event_id: str) -> None:
+        self._apply_remote_feedback(key, started_at, record_manual=True, source="remote_manual", event_id=event_id)
 
-    def _receive_remote_auto_feedback(self, key: str, started_at: float) -> None:
-        self._apply_remote_feedback(key, started_at, record_manual=False, source="remote_auto")
+    def _receive_remote_auto_feedback(self, key: str, started_at: float, event_id: str) -> None:
+        self._apply_remote_feedback(key, started_at, record_manual=False, source="remote_auto", event_id=event_id)
 
     def _apply_remote_feedback(
         self,
@@ -2103,24 +2238,36 @@ class MediaWidget(BaseOverlayWidget):
         *,
         record_manual: bool,
         source: str,
+        event_id: Optional[str] = None,
     ) -> None:
         try:
             if not Shiboken.isValid(self):
                 return
         except Exception:
             return
-        self._controls_feedback.clear()
-        self._controls_feedback[key] = timestamp
+        cls = type(self)
+        resolved_event_id = event_id or cls._generate_feedback_event_id(key, timestamp)
+        self._expire_all_feedback()
+        self._controls_feedback[key] = (timestamp, resolved_event_id)
+        self._active_feedback_events[key] = resolved_event_id
+        self._start_feedback_animation(key)
+        existing_meta = cls._shared_feedback_events.get(resolved_event_id)
+        if existing_meta is None:
+            cls._shared_feedback_events[resolved_event_id] = {
+                "key": key,
+                "timestamp": timestamp,
+                "source": source,
+                "duration": self._controls_feedback_duration,
+            }
         if record_manual:
             self._last_manual_control = (key, timestamp)
-        if is_perf_metrics_enabled():
-            logger.info(
-                "[PERF][MEDIA_FEEDBACK] tag=%s key=%s source=%s phase=apply",
-                self._feedback_tag(),
-                key,
-                source,
-            )
-        self._ensure_controls_feedback_timer()
+        self._log_feedback_metric(
+            phase="apply",
+            key=key,
+            source=source,
+            event_id=resolved_event_id,
+        )
+        cls._ensure_shared_feedback_timer()
         self.update()
 
     def _record_track_identity(self, identity: Optional[Tuple]) -> None:
@@ -2169,49 +2316,88 @@ class MediaWidget(BaseOverlayWidget):
         last_ts = cls._shared_auto_events.get(key)
         guard = max(self._controls_feedback_duration, 0.1)
         if last_ts is not None and (now - last_ts) <= guard:
-            if is_perf_metrics_enabled():
-                logger.info(
-                    "[PERF][MEDIA_FEEDBACK] tag=%s key=%s source=%s phase=shared_skip dt=%.3f",
-                    self._feedback_tag(),
-                    key,
-                    origin,
-                    now - last_ts,
-                )
+            self._log_feedback_metric(
+                phase="shared_skip",
+                key=key,
+                source=origin,
+                event_id=self._active_feedback_events.get(key, "n/a"),
+                dt=f"{now - last_ts:.3f}",
+            )
             return
         cls._shared_auto_events[key] = now
         self._trigger_controls_feedback(key, source=origin, timestamp=now)
 
-    def _ensure_controls_feedback_timer(self) -> None:
-        if self._controls_feedback_timer is None:
-            timer = QTimer(self)
-            timer.setInterval(32)
-            timer.timeout.connect(self._on_controls_feedback_tick)
-            self._controls_feedback_timer = timer
-        if not self._controls_feedback_timer.isActive():
-            self._controls_feedback_timer.start()
+    @classmethod
+    def _generate_feedback_event_id(cls, key: str, ts: float) -> str:
+        return f"{int(ts * 1000):x}-{key}-{uuid.uuid4().hex[:4]}"
 
-    def _cancel_controls_feedback_timer(self) -> None:
-        if self._controls_feedback_timer is not None:
-            try:
-                self._controls_feedback_timer.stop()
-            except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+    def _process_feedback_tick(self, now: float) -> bool:
+        # Animations handle highlight expiry; timer presence still used for shared cache cleanup.
+        return bool(self._controls_feedback)
 
-    def _on_controls_feedback_tick(self) -> None:
-        if not self._controls_feedback:
-            self._cancel_controls_feedback_timer()
+    def _clear_local_feedback(self) -> None:
+        """Clear this widget's local feedback state and unregister events."""
+        cls = type(self)
+        for key in list(self._controls_feedback.keys()):
+            self._finalize_feedback_key(key, suppress_log=True)
+        cls._maybe_stop_shared_feedback_timer()
+
+    @classmethod
+    def _ensure_shared_feedback_timer(cls) -> None:
+        timer = cls._shared_feedback_timer
+        if timer is None:
+            timer = QTimer()
+            timer.setTimerType(Qt.TimerType.PreciseTimer)
+            timer.setInterval(cls._shared_feedback_timer_interval_ms)
+            timer.timeout.connect(cls._on_shared_feedback_tick)
+            cls._shared_feedback_timer = timer
+        if not timer.isActive():
+            timer.start()
+
+    @classmethod
+    def _maybe_stop_shared_feedback_timer(cls) -> None:
+        timer = cls._shared_feedback_timer
+        if timer is None:
             return
+        has_feedback = False
+        for instance in list(cls._instances):
+            try:
+                if not Shiboken.isValid(instance):
+                    continue
+            except Exception:
+                continue
+            if instance._controls_feedback:
+                has_feedback = True
+                break
+        if not has_feedback and not cls._shared_feedback_events:
+            timer.stop()
+
+    @classmethod
+    def _on_shared_feedback_tick(cls) -> None:
         now = time.monotonic()
-        dirty = False
-        deadline = self._controls_feedback_duration
-        expired_keys = [key for key, start in self._controls_feedback.items() if (now - start) >= deadline]
-        for key in expired_keys:
-            self._controls_feedback.pop(key, None)
-            dirty = True
-        if not self._controls_feedback:
-            self._cancel_controls_feedback_timer()
-        if dirty:
-            self.update()
+        any_active = False
+        for instance in list(cls._instances):
+            try:
+                if not Shiboken.isValid(instance):
+                    continue
+            except Exception:
+                continue
+            active = instance._process_feedback_tick(now)
+            if active:
+                any_active = True
+
+        expired_ids: list[str] = []
+        for event_id, meta in list(cls._shared_feedback_events.items()):
+            duration = meta.get("duration", 0.0) or 0.0
+            timestamp = meta.get("timestamp", now)
+            if (now - timestamp) >= duration:
+                expired_ids.append(event_id)
+        for event_id in expired_ids:
+            cls._shared_feedback_events.pop(event_id, None)
+
+        if not any_active and not cls._shared_feedback_events:
+            cls._maybe_stop_shared_feedback_timer()
+
 
     def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:
         """Fade the entire widget in, then attach the global drop shadow."""

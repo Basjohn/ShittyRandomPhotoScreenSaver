@@ -907,6 +907,8 @@ class WeatherWidget(BaseOverlayWidget):
         self._detail_row_last_signature: Optional[Tuple[Tuple[str, str], ...]] = None
         self._forecast_label_cache: Optional[str] = None
         self._tooltip_cache: Optional[str] = None
+        self._detail_placeholder_label: Optional[QLabel] = None
+        self._detail_placeholder_label_cache: Optional[str] = None
         
         # Setup UI
         self._setup_ui()
@@ -965,15 +967,41 @@ class WeatherWidget(BaseOverlayWidget):
     def _update_detail_metrics(self, data: Dict[str, Any], *, force: bool = False) -> None:
         """Compute available detail metrics from provider payload."""
         metrics: List[Tuple[str, str]] = []
+        latest_values: Dict[str, Optional[float]] = {}
+
         precipitation, humidity, windspeed = self._extract_detail_values(data)
-        
-        if precipitation is not None:
-            metrics.append(("rain", f"{precipitation:.0f}%"))
-        if humidity is not None:
-            metrics.append(("humidity", f"{humidity:.0f}%"))
-        if windspeed is not None:
-            metrics.append(("wind", f"{windspeed:.1f} km/h"))
-        
+
+        def _append_metric(key: str, value: Optional[float], fmt: Callable[[float], str]) -> None:
+            if value is None:
+                return
+            metrics.append((key, fmt(value)))
+            latest_values[key] = value
+
+        _append_metric("rain", precipitation, lambda val: f"{val:.0f}%")
+        _append_metric("humidity", humidity, lambda val: f"{val:.0f}%")
+        _append_metric("wind", windspeed, lambda val: f"{val:.1f} km/h")
+
+        if not metrics and self._show_details_row:
+            # Provider returned no detail metrics; fall back to cached values or zeros
+            fallback = dict(self._last_detail_values) if self._last_detail_values else {}
+            if "rain" not in fallback:
+                fallback["rain"] = 0.0
+            if "humidity" not in fallback:
+                fallback["humidity"] = 0.0
+            if "wind" not in fallback:
+                fallback["wind"] = 0.0
+
+            metrics = [
+                ("rain", f"{(fallback.get('rain') or 0.0):.0f}%"),
+                ("humidity", f"{(fallback.get('humidity') or 0.0):.0f}%"),
+                ("wind", f"{(fallback.get('wind') or 0.0):.1f} km/h"),
+            ]
+            latest_values = {
+                "rain": fallback.get("rain", 0.0),
+                "humidity": fallback.get("humidity", 0.0),
+                "wind": fallback.get("wind", 0.0),
+            }
+
         metrics_signature: Tuple[Tuple[str, str], ...] = tuple(metrics)
         now = datetime.now()
         should_refresh = force or self._detail_metrics_signature is None
@@ -998,11 +1026,12 @@ class WeatherWidget(BaseOverlayWidget):
 
         self._detail_metrics_signature = metrics_signature
         self._detail_metrics_last_refresh = now
-        self._last_detail_values = {
-            "rain": precipitation,
-            "humidity": humidity,
-            "wind": windspeed,
-        }
+        if latest_values:
+            self._last_detail_values = {
+                "rain": latest_values.get("rain", precipitation),
+                "humidity": latest_values.get("humidity", humidity),
+                "wind": latest_values.get("wind", windspeed),
+            }
         self._detail_metrics = metrics
         if is_perf_metrics_enabled():
             logger.info(
@@ -1353,6 +1382,11 @@ class WeatherWidget(BaseOverlayWidget):
         self._detail_row_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._detail_row_widget.setVisible(False)
         detail_layout.addWidget(self._detail_row_widget)
+        placeholder = self._create_content_label(word_wrap=False)
+        placeholder.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        placeholder.setVisible(False)
+        self._detail_placeholder_label = placeholder
+        detail_layout.addWidget(placeholder)
         self._detail_row_container.setVisible(False)
         self._root_layout.addWidget(self._detail_row_container)
 
@@ -2043,12 +2077,14 @@ class WeatherWidget(BaseOverlayWidget):
                 if not detail_ready and self._show_details_row and self._enabled:
                     self._fetch_weather()
 
+                detail_placeholder_needed = self._show_details_row and not detail_ready
+                show_detail_segment = bool(self._show_details_row and (detail_ready or detail_placeholder_needed))
                 show_details = bool(self._show_details_row and detail_ready)
-                if self._details_separator and self._details_separator.isVisible() != show_details:
-                    self._details_separator.setVisible(show_details)
+                if self._details_separator and self._details_separator.isVisible() != show_detail_segment:
+                    self._details_separator.setVisible(show_detail_segment)
                     geometry_dirty = True
-                if self._detail_row_container and self._detail_row_container.isVisible() != show_details:
-                    self._detail_row_container.setVisible(show_details)
+                if self._detail_row_container and self._detail_row_container.isVisible() != show_detail_segment:
+                    self._detail_row_container.setVisible(show_detail_segment)
                     geometry_dirty = True
                 if self._detail_row_widget:
                     detail_metrics = self._detail_metrics if show_details else []
@@ -2064,6 +2100,24 @@ class WeatherWidget(BaseOverlayWidget):
                         self._detail_row_last_signature = signature if show_details else None
                         geometry_dirty = True
                     self._detail_row_widget.setVisible(show_details)
+                if self._detail_placeholder_label:
+                    if detail_placeholder_needed:
+                        placeholder_html = (
+                            f"<span style='font-size:{secondary_pt}pt; font-style:italic; "
+                            f"color:rgba({self._text_color.red()}, {self._text_color.green()}, "
+                            f"{self._text_color.blue()}, {int(self._text_color.alpha() * 0.9)})'>"
+                            "Detailed metrics unavailable</span>"
+                        )
+                        if placeholder_html != self._detail_placeholder_label_cache:
+                            self._detail_placeholder_label.setTextFormat(Qt.TextFormat.RichText)
+                            self._detail_placeholder_label.setText(placeholder_html)
+                            self._detail_placeholder_label_cache = placeholder_html
+                            geometry_dirty = True
+                    else:
+                        if self._detail_placeholder_label_cache:
+                            self._detail_placeholder_label.clear()
+                            self._detail_placeholder_label_cache = None
+                    self._detail_placeholder_label.setVisible(detail_placeholder_needed)
 
                 show_forecast_line = bool(self._show_forecast and self._forecast_data)
                 if self._forecast_separator and self._forecast_separator.isVisible() != show_forecast_line:

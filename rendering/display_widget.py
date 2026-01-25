@@ -73,7 +73,10 @@ from transitions.overlay_manager import (
     GL_OVERLAY_KEYS,
     SW_OVERLAY_KEYS,
 )
+import uuid
+
 from core.events import EventSystem, EventType
+from core.logging.logger import is_perf_metrics_enabled
 from core.mc_build import is_mc_build
 from rendering.backends import BackendSelectionResult, create_backend_from_settings
 from rendering.backends.base import RendererBackend, RenderSurface, SurfaceDescriptor
@@ -3573,11 +3576,21 @@ class DisplayWidget(QWidget):
         event_system = self._event_system
         if event_system is None:
             return False
+        event_id = f"{int((event_time or time.monotonic()) * 1000):x}-{uuid.uuid4().hex[:6]}"
         payload = {
             "action": action,
             "timestamp": event_time if event_time is not None else time.monotonic(),
             "screen_index": self.screen_index,
+            "event_id": event_id,
         }
+        if is_perf_metrics_enabled():
+            logger.info(
+                "[PERF][MEDIA_FEEDBACK] publisher=DisplayWidget screen=%s action=%s event_id=%s ts=%.6f",
+                self.screen_index,
+                action,
+                event_id,
+                payload["timestamp"],
+            )
         try:
             event_system.publish(
                 EventType.MEDIA_CONTROL_TRIGGERED,
