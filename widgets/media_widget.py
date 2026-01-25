@@ -10,6 +10,7 @@ mode remains non-interactive.
 """
 from __future__ import annotations
 
+import math
 from collections import deque
 from dataclasses import asdict
 from enum import Enum
@@ -191,11 +192,13 @@ class MediaWidget(BaseOverlayWidget):
         self._controls_feedback_anim_ids: dict[str, str] = {}
         self._feedback_anim_mgr: Optional[AnimationManager] = None
         self._controls_feedback_duration: float = 1.35
-        self._last_manual_control: Optional[Tuple[str, float]] = None
+        self._last_manual_control: Optional[Tuple[str, float, str]] = None
         self._auto_feedback_guard_window: float = self._controls_feedback_duration + 0.2
+        self._awaiting_manual_state: Optional[Tuple[str, MediaPlaybackState]] = None
         self._track_history: Deque[Tuple] = deque(maxlen=12)
         self._feedback_instance_id: Optional[str] = None
         self._active_feedback_events: dict[str, str] = {}
+        self._artwork_vertical_bias: float = 0.4
 
         type(self)._instances.add(self)
         self._setup_ui()
@@ -796,6 +799,9 @@ class MediaWidget(BaseOverlayWidget):
             try:
                 if new_state is not None:
                     self._apply_pending_state_override(new_state)
+                    self._awaiting_manual_state = ("play", new_state, time.monotonic())
+                else:
+                    self._awaiting_manual_state = None
             except Exception:
                 logger.debug("[MEDIA] play_pause optimistic override failed", exc_info=True)
 
@@ -1145,6 +1151,7 @@ class MediaWidget(BaseOverlayWidget):
             body_html = (
                 f"<div style='font-size:{base_font}pt; font-weight:500;'>(no metadata)</div>"
             )
+            metadata_complexity = 0
         else:
             body_lines_html = []
             if title:
@@ -1156,6 +1163,7 @@ class MediaWidget(BaseOverlayWidget):
                     f"<div style='margin-top:4px; font-size:{artist_font}pt; font-weight:{artist_weight}; opacity:0.95;'>{artist}</div>"
                 )
             body_html = "".join(body_lines_html)
+            metadata_complexity = len(title.strip()) + len(artist.strip())
 
         header_html = (
             f"<div style='font-size:{header_font}pt; font-weight:{header_weight}; "
@@ -1172,6 +1180,16 @@ class MediaWidget(BaseOverlayWidget):
 
         self.setTextFormat(Qt.TextFormat.RichText)
         self.setText(html)
+
+        # Adjust artwork vertical bias so shorter metadata keeps the frame closer to center.
+        if metadata_complexity <= 0:
+            self._artwork_vertical_bias = 0.58
+        elif metadata_complexity <= 40:
+            self._artwork_vertical_bias = 0.55
+        elif metadata_complexity <= 80:
+            self._artwork_vertical_bias = 0.45
+        else:
+            self._artwork_vertical_bias = 0.32
 
         # Lock the card height after the first track so that layout changes
         # (for example when titles wrap to multiple lines) do not cause the
@@ -1446,6 +1464,7 @@ class MediaWidget(BaseOverlayWidget):
             # Optional header frame on the left side around logo + SPOTIFY.
             self._paint_header_frame(painter)
 
+            controls_layout_cached = self._compute_controls_layout()
             pm = self._artwork_pixmap
             if pm is not None and not pm.isNull():
                 # Artwork should be the dominant visual element but must
@@ -1538,7 +1557,22 @@ class MediaWidget(BaseOverlayWidget):
                     # artwork and its border never touch the outer frame.
                     pad = 20
                     x = max(pad, self.width() - pad - frame_w)
-                    y = pad
+                    margins = self.contentsMargins()
+                    content_top = margins.top()
+                    min_y = max(pad, content_top)
+                    bias = float(getattr(self, "_artwork_vertical_bias", 0.4))
+                    if not math.isfinite(bias):
+                        bias = 0.4
+                    bias = min(1.0, max(0.0, bias))
+                    if controls_layout_cached is not None:
+                        row_top_limit = controls_layout_cached["row_rect"].top()
+                    else:
+                        row_top_limit = self.height() - self._controls_row_margin()
+                    max_y = max(min_y, row_top_limit - frame_h - 8)
+                    if max_y <= min_y:
+                        y = min_y
+                    else:
+                        y = int(round(min_y + (max_y - min_y) * bias))
                     painter.save()
                     try:
                         if self._artwork_opacity != 1.0:
@@ -2129,12 +2163,24 @@ class MediaWidget(BaseOverlayWidget):
 
         if source == "manual":
             timestamp_used = _commit_feedback(ts, resolved_event_id)
-            self._last_manual_control = (key, ts)
+            self._last_manual_control = (key, ts, resolved_event_id)
         else:
             last_manual = self._last_manual_control
             if last_manual is not None:
-                same_key = last_manual[0] == key
-                recent = (now - last_manual[1]) <= self._auto_feedback_guard_window
+                manual_key, manual_ts, manual_event = last_manual
+                same_key = manual_key == key
+                dt_since_manual = now - manual_ts
+                recent = dt_since_manual <= self._auto_feedback_guard_window
+                if is_perf_metrics_enabled():
+                    self._log_feedback_metric(
+                        phase="guard_eval",
+                        key=key,
+                        source=source,
+                        event_id=resolved_event_id,
+                        same_key=same_key,
+                        dt=f"{dt_since_manual:.3f}",
+                        manual_event=manual_event,
+                    )
                 if recent and not same_key:
                     self._log_feedback_metric(
                         phase="suppressed",
@@ -2142,17 +2188,18 @@ class MediaWidget(BaseOverlayWidget):
                         source=source,
                         event_id=resolved_event_id,
                         reason="recent_manual",
-                        other_key=last_manual[0],
+                        other_key=manual_key,
+                        manual_event=manual_event,
                     )
                     return
                 if same_key and recent:
-                    timestamp_used = _commit_feedback(last_manual[1], resolved_event_id)
                     self._log_feedback_metric(
-                        phase="refresh",
+                        phase="sync_suppressed",
                         key=key,
                         source=source,
                         event_id=resolved_event_id,
-                        reuse_ts="manual",
+                        reason="recent_manual_same_key",
+                        manual_event=manual_event,
                     )
                     return
             timestamp_used = _commit_feedback(ts, resolved_event_id)
@@ -2313,6 +2360,22 @@ class MediaWidget(BaseOverlayWidget):
     def _trigger_shared_auto_feedback(self, key: str, *, origin: str) -> None:
         cls = type(self)
         now = time.monotonic()
+        last_manual = self._last_manual_control
+        if last_manual is not None:
+            manual_key, manual_ts, manual_event = last_manual
+            same_key = manual_key == key
+            dt_since_manual = now - manual_ts
+            recent = dt_since_manual <= self._auto_feedback_guard_window
+            if same_key and recent:
+                self._log_feedback_metric(
+                    phase="auto_guard_skip",
+                    key=key,
+                    source=origin,
+                    event_id=self._active_feedback_events.get(key, "n/a"),
+                    dt=f"{dt_since_manual:.3f}",
+                    manual_event=manual_event,
+                )
+                return
         last_ts = cls._shared_auto_events.get(key)
         guard = max(self._controls_feedback_duration, 0.1)
         if last_ts is not None and (now - last_ts) <= guard:
@@ -2325,7 +2388,12 @@ class MediaWidget(BaseOverlayWidget):
             )
             return
         cls._shared_auto_events[key] = now
-        self._trigger_controls_feedback(key, source=origin, timestamp=now)
+        self._trigger_controls_feedback(
+            key,
+            source=origin,
+            timestamp=now,
+            event_id=f"auto::{origin}::{int(now * 1000)}",
+        )
 
     @classmethod
     def _generate_feedback_event_id(cls, key: str, ts: float) -> str:

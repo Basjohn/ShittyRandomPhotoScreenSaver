@@ -736,6 +736,24 @@ def test_display_widget_hard_exit_click_routes_to_media_widget(
 
 
 @pytest.mark.qt
+def test_media_widget_auto_feedback_suppressed_after_manual(mock_parent, qtbot):
+    """Auto feedback triggered immediately after manual play should be skipped by guard."""
+
+    widget = MediaWidget(mock_parent, position=MediaPosition.BOTTOM_LEFT)
+    qtbot.addWidget(widget)
+
+    widget._trigger_controls_feedback("play", source="manual", propagate=False)
+    assert "play" in widget._controls_feedback
+    manual_event = widget._controls_feedback["play"][1]
+
+    widget._trigger_shared_auto_feedback("play", origin="state_change")
+
+    assert len(widget._controls_feedback) == 1
+    assert widget._controls_feedback["play"][1] == manual_event
+    assert widget._shared_auto_events.get("play") is None
+
+
+@pytest.mark.qt
 def test_media_widget_shared_feedback_driver_syncs_clones(mock_parent, qtbot, monkeypatch):
     """Shared feedback driver should keep event ids/timestamps identical across clones."""
 

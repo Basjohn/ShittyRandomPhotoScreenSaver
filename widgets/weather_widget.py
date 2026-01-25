@@ -55,6 +55,7 @@ _METRIC_ICON_FILES = {
     "wind": "wind.svg",
 }
 _DETAIL_ICON_MIN_PX = 30
+_DETAIL_METRICS_TTL_SECONDS = 30 * 60
 _ICON_ALIGNMENT_OPTIONS = {"LEFT", "RIGHT", "NONE"}
 _DEFAULT_ICON_ALIGNMENT = "NONE"
 _DEFAULT_DESATURATE_ICON = False
@@ -1012,7 +1013,7 @@ class WeatherWidget(BaseOverlayWidget):
                 should_refresh = True
             else:
                 elapsed = (now - self._detail_metrics_last_refresh).total_seconds()
-                should_refresh = elapsed >= 30 * 60
+                should_refresh = elapsed >= _DETAIL_METRICS_TTL_SECONDS
 
         if not should_refresh:
             if is_perf_metrics_enabled():
@@ -1859,9 +1860,40 @@ class WeatherWidget(BaseOverlayWidget):
             cached["forecast"] = forecast
         where = payload.get("detail_source", "unknown")
         cached["_detail_source"] = where
+        detail_metrics = payload.get("detail_metrics")
+        if isinstance(detail_metrics, list):
+            cached["detail_metrics"] = detail_metrics
+        detail_values = payload.get("detail_values")
+        if isinstance(detail_values, dict):
+            cached["detail_values"] = detail_values
+        detail_ts = payload.get("detail_metrics_timestamp")
+        if detail_ts:
+            cached["detail_metrics_timestamp"] = detail_ts
 
         self._cached_data = cached
         self._cache_time = dt
+        if detail_metrics:
+            parsed = []
+            for entry in detail_metrics:
+                if isinstance(entry, (list, tuple)) and len(entry) == 2:
+                    parsed.append((str(entry[0]), str(entry[1])))
+            if parsed:
+                self._detail_metrics = parsed
+                self._detail_metrics_signature = tuple(parsed)
+        if isinstance(detail_values, dict):
+            self._last_detail_values = {
+                "rain": detail_values.get("rain"),
+                "humidity": detail_values.get("humidity"),
+                "wind": detail_values.get("wind"),
+            }
+        if "forecast" in cached:
+            self._forecast_data = cached["forecast"]
+        detail_ts_raw = cached.get("detail_metrics_timestamp")
+        if detail_ts_raw:
+            try:
+                self._detail_metrics_last_refresh = datetime.fromisoformat(detail_ts_raw)
+            except Exception:
+                self._detail_metrics_last_refresh = None
         if is_perf_metrics_enabled():
             logger.debug(
                 "[WEATHER][CACHE] Loaded persisted cache with details: humidity=%s wind=%s rain=%s forecast=%s",
@@ -1921,6 +1953,12 @@ class WeatherWidget(BaseOverlayWidget):
                 payload["windspeed"] = float(windspeed)
             if forecast:
                 payload["forecast"] = str(forecast)
+            if self._detail_metrics:
+                payload["detail_metrics"] = [[key, value] for key, value in self._detail_metrics]
+            if self._last_detail_values:
+                payload["detail_values"] = dict(self._last_detail_values)
+            if self._detail_metrics_last_refresh:
+                payload["detail_metrics_timestamp"] = self._detail_metrics_last_refresh.isoformat()
 
             if is_perf_metrics_enabled():
                 logger.debug(

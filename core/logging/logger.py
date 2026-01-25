@@ -72,6 +72,32 @@ def _parse_bool_token(value: Optional[str]) -> Optional[bool]:
         return False
     return None
 
+_LOG_NOISE_LEVEL: str = os.getenv("SRPSS_LOG_NOISE", "normal").strip().lower()
+if _LOG_NOISE_LEVEL not in {"quiet", "normal", "verbose"}:
+    _LOG_NOISE_LEVEL = "normal"
+_LOG_DOMAIN_OVERRIDES: dict[str, bool] = {}
+_raw_domain_tokens = os.getenv("SRPSS_LOG_DOMAINS")
+if _raw_domain_tokens:
+    for raw_token in _raw_domain_tokens.split(","):
+        token = raw_token.strip()
+        if not token:
+            continue
+        domain_name = token
+        explicit_value: Optional[bool] = None
+        if token.startswith("!"):
+            domain_name = token[1:]
+            explicit_value = False
+        elif "=" in token:
+            name_part, value_part = token.split("=", 1)
+            domain_name = name_part.strip()
+            explicit_value = _parse_bool_token(value_part.strip())
+        if not domain_name:
+            continue
+        domain_key = domain_name.lower()
+        if explicit_value is None:
+            explicit_value = True
+        _LOG_DOMAIN_OVERRIDES[domain_key] = explicit_value
+
 
 def _read_bool_flag_file(path: Path) -> Optional[bool]:
     """Read a boolean flag from the given path."""

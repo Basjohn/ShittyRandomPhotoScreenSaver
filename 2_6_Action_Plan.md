@@ -24,12 +24,14 @@ Stabilize logging, threading, resource ownership, settings/schema alignment, and
 **Goal:** Make logging lifecycle predictable and documented so repeated init/shutdown cycles do not leak handlers or write logs to phantom directories.  
 **Current State / Findings:**  
 - `setup_logging()` is re-entrant but only partially tears down handlers, causing duplicated file descriptors when toggled.  
-- `_FORCED_LOG_DIR` / `_ACTIVE_LOG_DIR` semantics are unclear, leading to discrepancies when logging is disabled.  
+- `_FORCED_LOG_DIR` / `_ACTIVE_LOG_DIR` semantics are unclear (see `@core/logging/logger.py#45-67`), leading to discrepancies when logging is disabled.  
 - Colored console formatter assumes TTY, spamming escape codes in redirected logs.  
 - `.perf.cfg` and `.logging.cfg` files produced by build scripts are undocumented in Spec/Style guides.  
-**Modules:** `core/logging/logger.py`, build scripts writing cfg files, `Docs/Spec.md`, `Docs/STYLE_GUIDELINES.md`, `Index.md`.  
+**Modules:** `@core/logging/logger.py#45-67`, `@core/logging/logger.py#632-680`, build scripts writing cfg files, `Docs/Spec.md`, `Docs/STYLE_GUIDELINES.md`, `Index.md`, `/logs`, `/audits`, `/Docs` ad-hoc leaf files.  
 **Checklist:**  
 - [ ] Tear down existing handlers before reinitializing and clearly document lifecycle.  
+  - **AC:** No duplicate file descriptors after 3 setup/teardown cycles
+  - **Test:** `tests/test_logging_lifecycle.py::test_repeated_setup_teardown`  
 - [ ] Clarify forced/active log dir semantics and raise/log when logging is disabled but helpers are invoked.  
 - [ ] Auto-disable ANSI coloring when `stdout` is not a terminal.  
 - [ ] Describe `.perf.cfg` / `.logging.cfg` generation and expected values in Spec + Style guide.  
@@ -43,12 +45,19 @@ Stabilize logging, threading, resource ownership, settings/schema alignment, and
 - `_UiInvoker` and futures/timers are instantiated without ResourceManager registration.  
 - Mutation queue silently drops entries without counter metrics.  
 - `cleanup_all()` runs even when invoked off the UI thread, risking deadlocks.  
-**Modules:** `core/threading/manager.py`, `core/resources/manager.py`, `tests/perf/test_thread_manager_contention.py`.  
+**Modules:** `@core/threading/manager.py`, `@core/resources/manager.py`, `@core/threading/types.py`, `@core/resources/types.py`, `@tests/test_thread_manager.py`, `@tests/test_resource_manager.py`.  
 **Checklist:**  
-- [ ] Register `_UiInvoker`, ThreadManager timers, and task futures with ResourceManager; unregister when complete.  
-- [ ] Surface queue drop counts via `inspect_queues()` and expose to tests/logs.  
-- [ ] Enforce UI-thread cleanup: marshal `cleanup_all()` to the main thread or warn + abort when called elsewhere.  
+- [ ] Register UI thread dispatch futures returned by `invoke_in_ui_thread()` with ResourceManager so cancellation propagates; unregister when complete.  
+  - **Code Reference:** `@core/threading/manager.py#_UiInvoker class`  
+- [ ] Surface queue drop counts via `inspect_queues()` returning `Dict[str, Dict[str, int]]` with keys `{pool_name: {dropped: N, pending: M}}` and expose to tests/logs.  
+  - **AC:** Emit WARNING when drops exceed threshold (>10/minute)  
+- [ ] Enforce UI-thread cleanup: marshal `cleanup_all()` to the main thread via `ThreadManager.invoke_in_ui_thread(blocking=True, timeout=5s)` or warn + abort when called elsewhere.  
+  - **AC:** Deadlock prevention - timeout after 5s and log ERROR if cleanup incomplete  
 - [ ] Provide deterministic single-shot helper that respects QApplication lifecycle (per audit).  
+  - **API:** `ThreadManager.single_shot_ui(delay_ms, callback)` helper
+  - **Behavior:** Cancellable, respects QApplication lifecycle, auto-cleanup
+  - **AC:** Callback not invoked after QApplication.quit()
+  - **Test:** `tests/test_thread_manager.py::test_single_shot_after_quit`  
 **Pitfalls:** Do not rely on GC finalizers; explicit unregister is required to avoid zombie entries.
 
 ### 0.3 Settings Authority
@@ -58,7 +67,7 @@ Stabilize logging, threading, resource ownership, settings/schema alignment, and
 - Flattened defaults reintroduce conflicting key paths (e.g., `display.mode`).  
 - `set_many` emits change signals for each key, overwhelming UI.  
 - SettingsManager never registers with ResourceManager; repeated instantiations leak QSettings handles.  
-**Modules:** `core/settings/defaults.py`, `core/settings/schema.py`, `core/settings/settings_manager.py`, docs referencing settings.  
+**Modules:** `@core/settings/defaults.py`, `@core/settings/schema.py`, `@core/settings/settings_manager.py`, docs referencing settings.  
 **Checklist:**  
 - [ ] Remove `id(default)` cache keying; adopt per-key sentinel strategy with eviction.  
 - [ ] Align schema names with defaults and ensure flattening respects canonical path. Document in Spec/Index.  
@@ -69,7 +78,7 @@ Stabilize logging, threading, resource ownership, settings/schema alignment, and
 ### 0.4 Event System
 **Goal:** Prevent subscription leaks and clamp history/recursion depth reliably.  
 **Findings:** Subscriptions never auto-unsubscribe, `_publish_depth` grows per-thread, and history cannot be disabled (privacy risk).  
-**Modules:** `core/events/event_system.py`.  
+**Modules:** `@core/events/event_system.py`.  
 **Checklist:**  
 - [ ] Provide RAII/context-managed subscription objects that auto unsubscribe.  
 - [ ] Purge `_publish_depth` entries even when exceptions occur; use `try/finally`.  
@@ -82,7 +91,7 @@ Stabilize logging, threading, resource ownership, settings/schema alignment, and
 - ScreensaverEngine double-emits `stopped`, keeps ProcessSupervisor alive during settings dialog, and doesn’t store subscription IDs.  
 - DisplayManager creates ad-hoc ResourceManagers, leaving hotplug signals connected post-cleanup.  
 - GL compositor and DisplayWidget instantiate GL managers/textures without ResourceManager tracking.  
-**Modules:** `engine/screensaver_engine.py`, `engine/display_manager.py`, `rendering/gl_compositor.py`, `rendering/display_widget.py`.  
+**Modules:** `@engine/screensaver_engine.py`, `@engine/display_manager.py`, `@rendering/gl_compositor.py`, `@rendering/display_widget.py`.  
 **Checklist:**  
 - [ ] Capture subscription IDs, unsubscribe on cleanup, ensure timers/workers shut down once.  
 - [ ] Inject ResourceManager/ThreadManager dependencies; disconnect Qt signals and document lifetimes.  
@@ -98,7 +107,7 @@ Enforce a single popup chrome (StyledPopup), remove raw timers, sync QSS + Style
 ### 1.1 StyledPopup Adoption
 **Goal:** Every dialog (settings, toasts, popups, tooling) uses the frameless StyledPopup that mimics “Export Complete”.  
 **Current State:** Custom classes (`NoSourcesPopup`, `ResetDefaultsDialog`) duplicate drop shadows/title bars, diverging from spec.  
-**Modules:** `ui/settings_dialog.py`, `ui/tabs/*`, `widgets/*`, `main.py`, tooling dialogs.  
+**Modules:** `@ui/settings_dialog.py`, `@ui/tabs/*`, `@widgets/*`, `@main.py`, tooling dialogs, `@ui/styled_popup.py`.  
 **Checklist:**  
 - [ ] Replace bespoke dialogs and any `QMessageBox` remnants with `StyledPopup.show_*` helpers.  
 - [ ] Centralize button definitions (labels, values, defaults) so confirmations share copy and layout.  
@@ -107,7 +116,7 @@ Enforce a single popup chrome (StyledPopup), remove raw timers, sync QSS + Style
 
 ### 1.2 Timer Policy
 **Goal:** No raw `QTimer.singleShot` in UI code; timers should either be registered with ResourceManager or scheduled via ThreadManager.  
-**Modules:** `ui/settings_dialog.py` (toast auto-dismiss, RSS helpers), `ui/tabs/sources_tab.py` (folder scan debounce), `widgets/media_widget.py`, `widgets/spotify_visualizer_widget.py` (ghost timers), `rendering/widget_manager.py`.  
+**Modules:** `@ui/settings_dialog.py` (toast auto-dismiss, RSS helpers), `@ui/tabs/sources_tab.py` (folder scan debounce), `@widgets/media_widget.py`, `@widgets/spotify_visualizer_widget.py` (ghost timers), `@rendering/widget_manager.py`.  
 **Checklist:**  
 - [ ] Replace toast/auto-dismiss timers with ThreadManager helpers; register any remaining QTimers.  
 - [ ] Document pattern in Style Guide and enforce via tests.  
@@ -138,38 +147,46 @@ Implement the in-depth plan from Feature Investigation §8 while resolving audit
 - [ ] Keep buttons enabled/disabled appropriately and allow cancellation when possible.  
 **Pitfalls:** Ensure ThreadManager single-shot is not invoked before QApplication instantiation.
 
-### 2.2 Priority & Multi-select UX [PRIORITY STILL NEEDED BUT MULTI-SELECT CANCELLED REMOVE ALL BUTTON TAKES CARE OF THIS ALREADY]
-**Details (from Feature Plan §8):**  
-- Priority equals list order; label rows with “Priority #”.
-- Add ExtendedSelection (Shift/Ctrl/mouse drag) for batch removal.  
-- Keep numbering current after reorder/add/remove.  
-**Modules:** `ui/tabs/sources_tab.py`, `engine/screensaver_engine.py`, `core/settings/settings_manager.py`, `Spec.md`.  
+### 2.2 Priority Display (Multi-select CANCELLED per user)
+**Goal:** Priority = list order; display "Priority #" labels. Multi-select batch operations are cancelled - "Remove All" button handles this.  
+**Details:**  
+- Priority equals list order; label rows with "Priority #".
+- Keep numbering current after reorder/add/remove.
+- Reddit sources: priority applies within Reddit feeds only (rate-limit aware), not across source types  
+**Modules:** `@ui/tabs/sources_tab.py`, `@engine/screensaver_engine.py`, `@core/settings/settings_manager.py`, `Spec.md`.  
 **Checklist:**  
 - [ ] Display priority numbers in the UI (delegate or suffix).  
 - [ ] Persist ordering in settings; ensure “Just Make It Work” writes feeds sorted by desired priority.  
 - [ ] Update tooltips/docs to explain priority semantics.  
-(Reddit source can gain priorty over other reddit but not non reddit sources because of rate limiting)
+**Note:** Reddit source can gain priority over other Reddit sources but not non-Reddit sources due to rate limiting.
 
 ### 2.3 Cache & Dedupe Unification
-**Goal:** Consolidate the multiple dedupe layers (engine queue, `_rss_pipeline.record_images`, worker cache, disk cache).  
+**Goal:** Consolidate the multiple dedupe layers (engine queue, `RSSPipelineManager.record_images`, worker cache, disk cache).  
+**Modules:** `@core/rss/pipeline_manager.py`, `@engine/screensaver_engine.py`, `@sources/rss_source.py`  
 **Checklist:**  
 - [ ] Map all dedupe checkpoints and pick a single owner (likely pipeline manager).  
 - [ ] Broadcast generation tokens on cache clears so workers stop referencing stale `_cached_urls`.  
 - [ ] Instrument dedupe decisions (per feed) for diagnostics.  
 **Pitfalls:** Do not expand manifest size; consider probabilistic filters only if measured collision risk is low. All resets must run through ThreadManager (no UI blocking).  
 
-### 2.4 “5 Images” Startup Guard
-**Details:** Screensaver must not launch in RSS-only mode until at least five images are downloaded; once guard is satisfied, downloads continue asynchronously. Hybrid mode may fall back to local sources.  
-**Modules:** `engine/screensaver_engine.py`, `_rss_pipeline`, UI actions (“Clear Cache”, “Remove All”, “Just Make It Work”).  
+### 2.4 "5 Images" Startup Guard (START UP ONLY - Including from Settings GUI)
+**Details:** Screensaver must not launch in RSS-only mode until at least five images are downloaded; once guard is satisfied, downloads continue asynchronously. Hybrid mode may fall back to local sources. This guard applies at startup AND when triggered from Settings GUI operations.  
+**Modules:** `@engine/screensaver_engine.py`, `@core/rss/pipeline_manager.py`, UI actions ("Clear Cache", "Remove All", "Just Make It Work").  
 **Checklist:**  
-- [ ] Add guard counter with pause/resume hooks in `_rss_pipeline` (`pause_after(count)` semantics).  
+- [ ] Implement RSSStartupGuard class with target=5, pause/resume hooks
+  - **API:** `pause_after(count)` semantics  
 - [ ] When guard active, UI-triggered operations should only fetch five synchronous images before returning control.  
 - [ ] Emit guard start/stop events and add telemetry for startup latency.  
 - [ ] Tests: extend `tests/test_screensaver_engine_rss_seed.py` to assert guard behavior and hybrid bypass.  
 **Pitfalls:** Ensure guard cooperates with cache clears mid-download; resets should keep the 5-image limit. Avoid raw timers; rely on ThreadManager scheduling.  
 
 ### 2.5 Reddit Rate Limits & Research
-**From Feature Plan:** Document current Reddit activity windows and rate limits (backoff > 60s?). Ensure UI priority interplay doesn’t stall entire queue when Reddit feeds are throttled. Add research notes to Spec.  
+**From Feature Plan:** Document current Reddit activity windows and rate limits (8 req/min confirmed). Ensure UI priority interplay doesn't stall entire queue when Reddit feeds are throttled. Add research notes to Spec.  
+**Modules:** `@core/reddit_rate_limiter.py` (if exists), `@sources/rss_source.py`  
+**Checklist:**  
+- [ ] Document current 8 req/min limit in Spec.md Sources section
+- [ ] Test backoff behavior when limit exceeded
+- [ ] Verify priority processing doesn't block non-Reddit sources  
 
 ---
 
@@ -179,7 +196,7 @@ Implement Feature Plan sections 3–7 alongside audit findings.
 
 ### 3.1 Drop Shadow System Review (Feature Plan §3)
 **Goal:** Migrate to central `ShadowFadeProfile`, reduce QGraphicsEffect overhead, and document canonical shadow profiles.  
-**Modules:** `widgets/shadow_utils.py`, `widgets/shadow_utils_old.py`, `widgets/reddit_widget.py`, `widgets/media_widget.py`, `widgets/spotify_visualizer_widget.py`, `widgets/weather_widget.py`, `ui/settings_dialog.py`, `Docs/10_WIDGET_GUIDELINES.md`, `Docs/STYLE_GUIDELINES.md`.  
+**Modules:** `@widgets/shadow_utils.py`, `@widgets/shadow_utils_old.py`, `@widgets/reddit_widget.py`, `@widgets/media_widget.py`, `@widgets/spotify_visualizer_widget.py`, `@widgets/weather_widget.py`, `@ui/settings_dialog.py`, `@Docs/10_WIDGET_GUIDELINES.md`, `@Docs/STYLE_GUIDELINES.md`.  
 **Checklist:**  
 - [ ] Enumerate all `QGraphicsDropShadowEffect` usages (including `shadow_utils_old`).  
 - [ ] Define card vs badge profiles (radius 8px/4px, offsets, alpha).  
@@ -189,7 +206,7 @@ Implement Feature Plan sections 3–7 alongside audit findings.
 **Pitfalls:** Keep fade-sync logic intact; ensure new profiles integrate with `ShadowFadeProfile`. Qt’s own docs note that `QGraphicsDropShadowEffect` re-blurs every frame in device coordinates, so sharing a cached pixmap or shader-generated strip is mandatory on low-power GPUs. When integrating with GL overlays, register the new textures with ResourceManager to avoid leaks.
 
 ### 3.2 WidgetManager Reliability
-**Modules:** `rendering/widget_manager.py`, `rendering/display_widget.py`, `widgets/base_overlay_widget.py`, `widgets/spotify_volume_widget.py`, `widgets/spotify_visualizer_widget.py`.  
+**Modules:** `@rendering/widget_manager.py`, `@rendering/display_widget.py`, `@widgets/base_overlay_widget.py`, `@widgets/spotify_volume_widget.py`, `@widgets/spotify_visualizer_widget.py`.  
 - [ ] Register/unregister widgets, timers, and fade callbacks with ResourceManager; disconnect compositor signals on teardown.  
 - [ ] Document expected overlay/fade handshake so widgets know when to register (Widget Guidelines §10, Spec Overlay chapter).  
 - [ ] Ensure `WidgetManager.request_overlay_fade_sync()` order is deterministic so Phase 3.3 tests have a stable contract.  
@@ -268,7 +285,7 @@ Include external references (GLava wiki, ShaderToy source, CCRMA lab notes, PAV 
 
 **Pitfalls:** Maintain existing ghosting/adaptive sensitivity logic across modes (shared helpers); never mutate Spectrum shader/perf caps; capability detection must demote once per session (no per-call silent fallbacks); ensure vertical orientation keeps card bounds consistent with Widget Guidelines.  
 
-### 3.5 Weather Widget – Animated SVG Icons (Feature Plan §6)
+### 3.5 Weather Widget – Animated SVG Icons (Feature Plan §6) 
 **Goal:** Replace text-only widget with animated SVG icons using `QSvgRenderer`.  
 **Checklist:**  
 - [x ] Promote to QWidget + QHBoxLayout (text column + icon container) so layout alignment is reliable.  
@@ -280,7 +297,7 @@ Include external references (GLava wiki, ShaderToy source, CCRMA lab notes, PAV 
 **Pitfalls:** Do not spawn extra threads; rely on renderer’s animation driver. Document fallback to static icons when animation disabled.  
 **Status/Notes (Jan 25):** Detail row now emits fallback metrics (cached or 0%) whenever the provider omits rain/humidity/wind, so the layout never collapses even under degraded data. Keep this behavior when the SVG overhaul lands so degraded payloads stay visually consistent (screenshots in §3 requirements).
 
-### 3.6 Reddit Widget Options & Header Parity (Feature Plan §7 + §7.1)
+### 3.6 Reddit Widget Options & Header Parity (Feature Plan §7 + §7.1) 
 **Checklist:**  
 - [x ] Rename “Exit when Reddit links opened” to “Open When Reddit Links Are Clicked”; add “Copy Clicked Reddit Links To Clipboard” checkbox.  
 - [x ] Enforce mutual exclusivity except on MC builds (where both can be enabled); reuse `self._mc_build` gating.  
@@ -291,8 +308,7 @@ Include external references (GLava wiki, ShaderToy source, CCRMA lab notes, PAV 
 **Pitfalls:** Ensure tooltip text adheres to Style Guide (no inline QSS). Document MC vs normal builds difference.  
 **Modules:** `ui/tabs/widgets_tab.py`, `widgets/reddit_widget.py`, `rendering/display_widget.py`, `core/settings/defaults.py`, `Spec.md`, `Docs/10_WIDGET_GUIDELINES.md`. Ensure settings migration touches `SettingsManager.validate_and_repair()` and `core/presets.py`.
 
-### 3.7 Pixel Shift Boundary Enforcement (Feature Plan §7.2)
-**Checklist:**  
+### 3.7 Pixel Shift Boundary Enforcement (Feature Plan §7.2) 
 - [x ] Audit `DisplayWidget._apply_pixel_shift()` to clamp overlay rects within `screen_geometry.adjusted(margins)`.  
 - [x ] Provide per-widget bounding boxes via WidgetManager (notify overlays when geometry shifts).  
 - [x ] Add regression test simulating max pixel shift deltas on multi-monitor setups to ensure widgets remain fully visible.  
@@ -323,7 +339,7 @@ Deliver all transition/UI enhancements plus DisplayWidget hygiene items.
 - [ ] Update presets (Performance, Balanced) to 60/90 respectively and document in Spec/Index.  
 - [ ] Ensure ThreadManager handles heavy reinit work to avoid UI freezes.  
 
-### 4.2 Transition Controls
+### 4.1 Transition Controls
 **Blinds Feather Control (§2.2):**  
 - [ ] Slider (0–10) shown when Blinds selected; thread value through TransitionFactory to GL shader uniform.  
 - [ ] Clamp for software renderer fallback; update presets and docs.  
@@ -346,7 +362,7 @@ Deliver all transition/UI enhancements plus DisplayWidget hygiene items.
 - [ ] Show direction combo only for Block Puzzle Flip; persist random choice per rotation, update TransitionFactory + GL shader uniforms, add CPU fallback for software renderer.  
 - [ ] Tests: extend `tests/test_transition_state_manager.py` and related suites to cover new enumeration.  
 
-### 4.3 Display/Rendering Hygiene
+### 4.2 Display/Rendering Hygiene
 - [ ] Align documentation of `_render_strategy_manager` fallback with actual behavior; ensure software renderer downgrade path is deterministic.  
 - [ ] Document (or plan) DisplayWidget refactor to separate input, overlay, and eco mode responsibilities as per audit.  
 
@@ -363,7 +379,7 @@ Execute Feature Plan §1, §12, and remaining media/widget items after earlier p
 - Tests currently confirm suppression (behavior to invert).  
 **Settings Defaults / Presets:**  
 - Introduce `input.media_keys.passthrough_enabled = True` in defaults and ensure MC preset matches. Document in Spec keybinding table.  
-**Modules:** `rendering/display_widget.py`, `rendering/input_handler.py`, `core/engine/input_hooks.py`, `core/settings/defaults.py`, `tests/test_media_keys.py`, `Spec.md`.  
+**Modules:** `@rendering/display_widget.py`, `@rendering/input_handler.py`, `@core/engine/input_hooks.py`, `@core/settings/defaults.py`, `@tests/test_media_keys.py`, `Spec.md`.  
 **Checklist:**  
 - [ ] Update `DisplayWidget.keyPressEvent()` to `event.ignore()` when `_is_media_key` returns `False` so OS receives event.  
 - [ ] Review `nativeEventFilter` (Index: `core/engine/input_hooks.py`) to ensure WM_APPCOMMAND isn’t consumed prematurely.  
@@ -455,10 +471,10 @@ All suggestions must have two checkboxes. Only once the user/developer checks at
 2 checks means implement, 1 check means investigate and add to medium/low priority tasks if deemed valuable. Examine the box during every doc update. If any suggestions are made obviously redundant, remove them
 Keep this box tidy and ordered. IT IS NOT A CHANGE LOG. Pre place checkboxes even without suggestions for convienence, in space allocated. If suggestions exist without check boxes, reformat them to have them.
 ##################################################################
-## Examine that multiple visualizers do not do multiple work. Media is always a clone, central work to avoid performance issues is key.
-## Check what visualizer FPS limitations/caps are, how they function with vsync, whether altering these would improve smoothness or performance.
-## Many alignment issues in media card when on main_mc ONLY, card does not expand vertically enough to have entire artists and title, overlaps controls and is notably slower than in main runs so slow 4fps is observed! 40fps with media off but still laggy. Even disabling ALL WIDGETS only maxes out to 40fp. PRIORITY. 
-## Clean up logging significantly! Too much is logged when not needed 10x at least! More suppressions, averages or not logging of stable minor systems unless actively being worked on (quick toggle on and off)
+## - [x] [ ] Examine that multiple visualizers do not do multiple work. Media is always a clone, central work to avoid performance issues is key.
+## - [x] [ ] Check what visualizer FPS limitations/caps are, how they function with vsync, whether altering these would improve smoothness or performance.
+## - [x] [ ] Many alignment issues in media card when on main_mc ONLY (ADDRESSED IN PHASE 3.8)
+## - [x] [x] Clean up logging significantly! (ADDRESSED IN PHASE 0.1)
 ##
 ##
 ##

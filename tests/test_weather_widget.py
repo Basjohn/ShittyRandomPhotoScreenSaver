@@ -1,8 +1,13 @@
 """Tests for weather widget."""
-import pytest
+import json
+from datetime import datetime
 from unittest.mock import Mock, patch
-from PySide6.QtWidgets import QWidget, QApplication, QSizePolicy
+
+import pytest
 from PySide6.QtGui import QColor
+from PySide6.QtWidgets import QApplication, QSizePolicy, QWidget
+
+from widgets import weather_widget as weather_mod
 from widgets.weather_widget import WeatherWidget, WeatherPosition, WeatherFetcher
 
 
@@ -194,6 +199,60 @@ def test_weather_detail_row_segments_show_icons(qapp, parent_widget):
         assert icon_label is not None and icon_label.pixmap() is not None
         assert not icon_label.pixmap().isNull()
         assert text_label is not None and text_label.text()
+
+
+def test_weather_detail_metrics_fallback_uses_cached_values(qapp, parent_widget):
+    """When provider omits metrics the widget should reuse cached values."""
+    weather = WeatherWidget(parent=parent_widget)
+    weather.set_show_details_row(True)
+    weather._last_detail_values = {"rain": 35.0, "humidity": 47.0, "wind": 4.2}
+
+    payload = {
+        "temperature": 16,
+        "condition": "Mist",
+        "location": "Cape Town",
+        # Intentionally omit rain/humidity/wind so fallback path executes
+    }
+
+    weather._update_display(payload)
+
+    assert weather._detail_metrics == [
+        ("rain", "35%"),
+        ("humidity", "47%"),
+        ("wind", "4.2 km/h"),
+    ]
+    assert weather._detail_row_widget is not None
+    assert not weather._detail_row_widget.isHidden()
+
+
+def test_weather_load_persisted_cache_restores_details(qapp, parent_widget, tmp_path):
+    """Persisted cache should restore detail metrics and forecast text."""
+    weather = WeatherWidget(parent=parent_widget, location="Lisbon")
+
+    payload = {
+        "location": "Lisbon",
+        "temperature": 23.5,
+        "condition": "Sunny",
+        "humidity": 40,
+        "precipitation_probability": 20,
+        "windspeed": 6.1,
+        "forecast": "Tomorrow: 18°-25°C Partly Cloudy",
+        "detail_metrics": [["rain", "20%"], ["humidity", "40%"], ["wind", "6.1 km/h"]],
+        "detail_values": {"rain": 20.0, "humidity": 40.0, "wind": 6.1},
+        "detail_metrics_timestamp": datetime.now().isoformat(),
+    }
+
+    weather_mod._CACHE_FILE.write_text(json.dumps(payload), encoding="utf-8")
+    weather._load_persisted_cache()
+
+    assert weather._cached_data is not None
+    assert weather._detail_metrics == [
+        ("rain", "20%"),
+        ("humidity", "40%"),
+        ("wind", "6.1 km/h"),
+    ]
+    assert weather._last_detail_values == {"rain": 20.0, "humidity": 40.0, "wind": 6.1}
+    assert weather._forecast_data == payload["forecast"]
 
 
 def test_weather_respects_minimum_width(qapp, parent_widget):
