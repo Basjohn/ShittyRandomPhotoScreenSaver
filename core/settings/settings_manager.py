@@ -19,6 +19,9 @@ if TYPE_CHECKING:
 
 logger = get_logger("SettingsManager")
 
+# Sentinel value to distinguish "key not in cache" from "key cached as None"
+_CACHE_SENTINEL = object()
+
 
 class SettingsManager(QObject):
     """
@@ -68,8 +71,14 @@ class SettingsManager(QObject):
         self._event_system_ref: Optional["EventSystem"] = None
 
         # In-memory cache for frequently accessed settings (P2 optimization)
+        # Fixed: Use key-only caching instead of id(default) which caused unbounded growth
         self._cache: Dict[str, Any] = {}
         self._cache_enabled = True
+        self._cache_max_size = 256  # Limit cache size to prevent memory bloat
+        
+        # Batch update context tracking
+        self._batch_context_depth = 0
+        self._batch_changed_keys: Dict[str, Any] = {}  # key -> new_value for batch signal
 
         # Initialize defaults
         self._set_defaults()
@@ -285,10 +294,9 @@ class SettingsManager(QObject):
             Setting value or default
         """
         with self._lock:
-            # Check cache first (P2 optimization from architectural audit)
-            cache_key = f"{key}:{id(default)}"
-            if self._cache_enabled and cache_key in self._cache:
-                return self._cache[cache_key]
+            # Check cache first - use key-only caching (fixed from id(default) which caused unbounded growth)
+            if self._cache_enabled and key in self._cache:
+                return self._cache[key]
 
             value = self._settings.value(key, default)
 
@@ -316,16 +324,26 @@ class SettingsManager(QObject):
                 except Exception as e:
                     logger.debug("[SETTINGS] Exception suppressed: %s", e)
                     coerced.append(item)
-            # Cache the coerced value
+            # Cache the coerced value (with size limit check)
             if self._cache_enabled:
                 with self._lock:
-                    self._cache[cache_key] = coerced
+                    if len(self._cache) >= self._cache_max_size:
+                        # Evict oldest 25% of entries
+                        evict_count = max(1, self._cache_max_size // 4)
+                        for k in list(self._cache.keys())[:evict_count]:
+                            del self._cache[k]
+                    self._cache[key] = coerced
             return coerced
 
-        # Cache the result for future lookups
+        # Cache the result for future lookups (with size limit check)
         if self._cache_enabled:
             with self._lock:
-                self._cache[cache_key] = value
+                if len(self._cache) >= self._cache_max_size:
+                    # Evict oldest 25% of entries
+                    evict_count = max(1, self._cache_max_size // 4)
+                    for k in list(self._cache.keys())[:evict_count]:
+                        del self._cache[k]
+                self._cache[key] = value
         return value
 
     @staticmethod
@@ -453,10 +471,13 @@ class SettingsManager(QObject):
             if root_key in self._CRITICAL_KEYS or key in self._CRITICAL_KEYS:
                 self._settings.sync()
 
-            # Emit change signal
-            self.settings_changed.emit(key, value)
+            # Emit change signal - defer if in batch context
+            if self._batch_context_depth > 0:
+                self._batch_changed_keys[key] = value
+            else:
+                self.settings_changed.emit(key, value)
 
-            # Call registered handlers
+            # Call registered handlers (always immediate, not batched)
             if key in self._change_handlers:
                 for handler in self._change_handlers[key]:
                     try:
@@ -473,9 +494,32 @@ class SettingsManager(QObject):
             logger.debug("Setting changed: %s", key)
 
     def set_many(self, values: Mapping[str, Any]) -> None:
-        """Set multiple settings in one call."""
+        """Set multiple settings in one call.
+        
+        Note: Each set() emits a separate signal unless wrapped in batch_update().
+        For bulk updates where you want a single aggregated signal, use:
+            with settings.batch_update():
+                settings.set_many(values)
+        """
         for k, v in values.items():
             self.set(k, v)
+
+    def batch_update(self) -> "BatchUpdateContext":
+        """Context manager for batching multiple settings updates.
+        
+        Defers settings_changed signal emission until the context exits,
+        then emits a single aggregated signal with all changed keys.
+        
+        Usage:
+            with settings.batch_update():
+                settings.set("key1", value1)
+                settings.set("key2", value2)
+            # Single aggregated signal emitted here
+        
+        Returns:
+            BatchUpdateContext that emits aggregated signal on exit.
+        """
+        return BatchUpdateContext(self)
 
     # Typed helpers -----------------------------------------------------
     def get_spotify_visualizer_settings(self) -> SpotifyVisualizerSettings:
@@ -1276,3 +1320,38 @@ class SettingsManager(QObject):
                 "Failed to compute settings snapshot preview from %s", path
             )
             return {}
+
+
+class BatchUpdateContext:
+    """Context manager for batching SettingsManager updates.
+    
+    Supports nesting - only the outermost context emits the aggregated signal.
+    """
+    
+    def __init__(self, settings: SettingsManager):
+        self._settings = settings
+    
+    def __enter__(self) -> "BatchUpdateContext":
+        with self._settings._lock:
+            self._settings._batch_context_depth += 1
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        changed_keys: Dict[str, Any] = {}
+        with self._settings._lock:
+            self._settings._batch_context_depth -= 1
+            
+            # Only emit aggregated signal when outermost context exits
+            if self._settings._batch_context_depth == 0:
+                changed_keys = dict(self._settings._batch_changed_keys)
+                self._settings._batch_changed_keys.clear()
+        
+        # Emit signals outside the lock to avoid deadlock
+        if changed_keys:
+            # Emit a single aggregated signal with all changed keys
+            # Using a special key format to indicate batch update
+            self._settings.settings_changed.emit("__batch__", changed_keys)
+            
+            # Also emit individual signals for compatibility with existing handlers
+            for key, value in changed_keys.items():
+                self._settings.settings_changed.emit(key, value)

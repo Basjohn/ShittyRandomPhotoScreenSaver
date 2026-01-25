@@ -34,6 +34,10 @@ class RssPipelineManager:
         self._image_cache = None
 
         self._dedupe_keys: Dict[str, Set[str]] = defaultdict(set)
+        
+        # Phase 2.3: Generation token for cache invalidation
+        # Workers check this to know if their cached data is stale
+        self._generation: int = 0
 
     @classmethod
     def get_instance(cls) -> "RssPipelineManager":
@@ -170,13 +174,20 @@ class RssPipelineManager:
         image_queue=None,
         namespace: Optional[str] = None,
     ) -> dict:
-        """Clear disk and/or in-memory caches and optionally rebuild dedupe keys."""
+        """Clear disk and/or in-memory caches and optionally rebuild dedupe keys.
+        
+        Phase 2.3: Increments generation token so workers know cached data is stale.
+        """
         files_removed = 0
         memory_cleared = 0
 
         if clear_disk:
             files_removed = self._clear_disk_cache()
             self.clear_dedupe(namespace=namespace)
+            # Phase 2.3: Increment generation so workers stop referencing stale data
+            with self._lock:
+                self._generation += 1
+                logger.debug("[RSS PIPELINE] Cache generation incremented to %d", self._generation)
 
         if clear_memory and self._image_cache is not None:
             try:
@@ -212,6 +223,12 @@ class RssPipelineManager:
     # ------------------------------------------------------------ utilities ###
     def _ns(self, namespace: Optional[str]) -> str:
         return namespace or "__global__"
+    
+    @property
+    def generation(self) -> int:
+        """Phase 2.3: Get current cache generation for staleness checks."""
+        with self._lock:
+            return self._generation
 
     def is_duplicate(
         self,
@@ -219,13 +236,23 @@ class RssPipelineManager:
         *,
         pending_keys: Optional[Set[str]] = None,
         namespace: Optional[str] = None,
+        log_decision: bool = False,
     ) -> bool:
+        """Check if an image is a duplicate.
+        
+        Phase 2.3: Added log_decision parameter for dedupe diagnostics.
+        """
         key = self.build_image_key(image)
         if not key:
             return False
         if pending_keys and key in pending_keys:
+            if log_decision:
+                logger.debug("[DEDUPE] Duplicate (pending): %s", key[:60])
             return True
-        return self.has_key(key, namespace=namespace)
+        is_dup = self.has_key(key, namespace=namespace)
+        if log_decision and is_dup:
+            logger.debug("[DEDUPE] Duplicate (recorded): %s", key[:60])
+        return is_dup
 
 
 def get_rss_pipeline_manager() -> RssPipelineManager:

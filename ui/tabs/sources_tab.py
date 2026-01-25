@@ -19,6 +19,7 @@ from PySide6.QtCore import Signal, Qt
 from ui.styled_popup import StyledPopup
 
 from core.settings.settings_manager import SettingsManager
+from core.threading import ThreadManager
 from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
@@ -227,18 +228,22 @@ class SourcesTab(QWidget):
         outer.addWidget(scroll)
     
     def _load_sources(self) -> None:
-        """Load sources from settings."""
+        """Load sources from settings.
+        
+        Phase 2.2: Display priority numbers for each source.
+        Priority = list order (1 = highest priority).
+        """
         # Load folders using dot notation
         folders = self._settings.get('sources.folders', [])
         self.folder_list.clear()
-        for folder in folders:
-            self.folder_list.addItem(folder)
+        for idx, folder in enumerate(folders, 1):
+            self.folder_list.addItem(f"[{idx}] {folder}")
         
         # Load RSS feeds using dot notation
         rss_feeds = self._settings.get('sources.rss_feeds', [])
         self.rss_list.clear()
-        for feed in rss_feeds:
-            self.rss_list.addItem(feed)
+        for idx, feed in enumerate(rss_feeds, 1):
+            self.rss_list.addItem(f"[{idx}] {feed}")
         
         # Load and display usage ratio
         local_ratio = self._settings.get('sources.local_ratio', 60)
@@ -281,6 +286,28 @@ class SourcesTab(QWidget):
     def _load_settings(self) -> None:
         self._load_sources()
 
+    def _strip_priority_prefix(self, text: str) -> str:
+        """Phase 2.2: Strip priority prefix like '[1] ' from list item text."""
+        import re
+        match = re.match(r'^\[\d+\]\s*', text)
+        if match:
+            return text[match.end():]
+        return text
+    
+    def _refresh_list_priorities(self) -> None:
+        """Phase 2.2: Refresh priority numbers after add/remove."""
+        # Refresh folder list
+        folders = self._settings.get('sources.folders', [])
+        self.folder_list.clear()
+        for idx, folder in enumerate(folders, 1):
+            self.folder_list.addItem(f"[{idx}] {folder}")
+        
+        # Refresh RSS list
+        rss_feeds = self._settings.get('sources.rss_feeds', [])
+        self.rss_list.clear()
+        for idx, feed in enumerate(rss_feeds, 1):
+            self.rss_list.addItem(f"[{idx}] {feed}")
+    
     def _add_folder(self) -> None:
         """Add folder source."""
         folder = QFileDialog.getExistingDirectory(
@@ -297,7 +324,9 @@ class SourcesTab(QWidget):
                 folders.append(folder)
                 self._settings.set('sources.folders', folders)
                 self._settings.save()
-                self.folder_list.addItem(folder)
+                # Phase 2.2: Add with priority number
+                idx = len(folders)
+                self.folder_list.addItem(f"[{idx}] {folder}")
                 self._update_ratio_control_state()
                 self.sources_changed.emit()
                 logger.info(f"Added folder source: {folder}")
@@ -308,7 +337,8 @@ class SourcesTab(QWidget):
         """Remove selected folder source."""
         current_item = self.folder_list.currentItem()
         if current_item:
-            folder = current_item.text()
+            # Phase 2.2: Strip priority prefix to get actual folder path
+            folder = self._strip_priority_prefix(current_item.text())
             
             # Get current folders using dot notation
             folders = self._settings.get('sources.folders', [])
@@ -317,7 +347,8 @@ class SourcesTab(QWidget):
                 folders.remove(folder)
                 self._settings.set('sources.folders', folders)
                 self._settings.save()
-                self.folder_list.takeItem(self.folder_list.currentRow())
+                # Phase 2.2: Refresh to update priority numbers
+                self._refresh_list_priorities()
                 self._update_ratio_control_state()
                 self.sources_changed.emit()
                 logger.info(f"Removed folder source: {folder}")
@@ -352,7 +383,9 @@ class SourcesTab(QWidget):
             rss_feeds.append(url)
             self._settings.set('sources.rss_feeds', rss_feeds)
             self._settings.save()
-            self.rss_list.addItem(url)
+            # Phase 2.2: Add with priority number
+            idx = len(rss_feeds)
+            self.rss_list.addItem(f"[{idx}] {url}")
             self.rss_input.clear()
             self._update_ratio_control_state()
             self.sources_changed.emit()
@@ -364,7 +397,8 @@ class SourcesTab(QWidget):
         """Remove selected RSS feed source."""
         current_item = self.rss_list.currentItem()
         if current_item:
-            url = current_item.text()
+            # Phase 2.2: Strip priority prefix to get actual URL
+            url = self._strip_priority_prefix(current_item.text())
             
             # Get current RSS feeds using dot notation
             rss_feeds = self._settings.get('sources.rss_feeds', [])
@@ -373,7 +407,8 @@ class SourcesTab(QWidget):
                 rss_feeds.remove(url)
                 self._settings.set('sources.rss_feeds', rss_feeds)
                 self._settings.save()
-                self.rss_list.takeItem(self.rss_list.currentRow())
+                # Phase 2.2: Refresh to update priority numbers
+                self._refresh_list_priorities()
                 self._update_ratio_control_state()
                 self.sources_changed.emit()
                 logger.info(f"Removed RSS feed: {url}")
@@ -481,49 +516,85 @@ class SourcesTab(QWidget):
     def _on_clear_rss_cache_clicked(self) -> None:
         """Clear downloaded RSS/JSON images from the shared cache.
         
+        Phase 2.1: Uses ThreadManager IO pool for async file operations.
         Shows a confirmation dialog before deleting to prevent accidental data loss.
         """
-        # Count files before asking
-        cache_dir = Path(tempfile.gettempdir()) / "screensaver_rss_cache"
-        file_count = 0
-        try:
-            if cache_dir.exists() and cache_dir.is_dir():
-                file_count = sum(1 for f in cache_dir.glob('*') if f.is_file())
-        except Exception as e:
-            logger.debug("[MISC] Exception suppressed: %s", e)
+        # Disable button during operation
+        self.clear_rss_cache_btn.setEnabled(False)
+        self.clear_rss_cache_btn.setText("Counting...")
         
-        if file_count == 0:
+        def _count_files() -> int:
+            """Count cache files on IO thread."""
+            cache_dir = Path(tempfile.gettempdir()) / "screensaver_rss_cache"
+            try:
+                if cache_dir.exists() and cache_dir.is_dir():
+                    return sum(1 for f in cache_dir.glob('*') if f.is_file())
+            except Exception as e:
+                logger.debug("[MISC] Exception suppressed: %s", e)
+            return 0
+        
+        def _on_count_done(result) -> None:
+            """Handle file count result on UI thread."""
+            self.clear_rss_cache_btn.setText("Clear RSS Cache")
+            self.clear_rss_cache_btn.setEnabled(True)
+            
+            file_count = result.result if result and result.success else 0
+            
+            if file_count == 0:
+                StyledPopup.show_info(
+                    self,
+                    "Cache Empty",
+                    "The RSS image cache is already empty.",
+                )
+                return
+            
+            # Confirm before deleting
+            if not StyledPopup.question(
+                self,
+                "Clear RSS Cache",
+                f"This will delete {file_count} cached RSS images.\n\n"
+                "The images will be re-downloaded on the next refresh.\n\n"
+                "Continue?",
+                yes_text="Clear Cache",
+                no_text="Cancel",
+            ):
+                return
+            
+            # Proceed with async deletion
+            self._clear_rss_cache_async()
+        
+        # Run file count on IO thread
+        ThreadManager.submit_io_task(_count_files, callback=_on_count_done)
+    
+    def _clear_rss_cache_async(self) -> None:
+        """Phase 2.1: Async cache clear using ThreadManager."""
+        self.clear_rss_cache_btn.setEnabled(False)
+        self.clear_rss_cache_btn.setText("Clearing...")
+        
+        def _do_clear() -> int:
+            """Delete cache files on IO thread."""
+            return self._clear_rss_cache()
+        
+        def _on_clear_done(result) -> None:
+            """Handle clear result on UI thread."""
+            self.clear_rss_cache_btn.setText("Clear RSS Cache")
+            self.clear_rss_cache_btn.setEnabled(True)
+            
+            removed = result.result if result and result.success else 0
+            logger.info(f"RSS cache cleared via SourcesTab button: {removed} files removed")
+            
             StyledPopup.show_info(
                 self,
-                "Cache Empty",
-                "The RSS image cache is already empty.",
+                "Cache Cleared",
+                f"Successfully removed {removed} cached images.",
             )
-            return
         
-        # Confirm before deleting
-        if not StyledPopup.question(
-            self,
-            "Clear RSS Cache",
-            f"This will delete {file_count} cached RSS images.\n\n"
-            "The images will be re-downloaded on the next refresh.\n\n"
-            "Continue?",
-            yes_text="Clear Cache",
-            no_text="Cancel",
-        ):
-            return
-        
-        removed = self._clear_rss_cache()
-        logger.info(f"RSS cache cleared via SourcesTab button: {removed} files removed")
-        
-        StyledPopup.show_info(
-            self,
-            "Cache Cleared",
-            f"Successfully removed {removed} cached images.",
-        )
+        ThreadManager.submit_io_task(_do_clear, callback=_on_clear_done)
 
     def _on_just_make_it_work_clicked(self) -> None:
         """Reset RSS feeds to a curated, known-good set.
 
+        Phase 2.1: Uses async cache clear to prevent UI blocking.
         This clears the on-disk RSS cache, wipes the current RSS feed
         list, and replaces it with a curated set of image feeds.
         
@@ -531,7 +602,24 @@ class SourcesTab(QWidget):
         1. Non-Reddit sources first (NASA, Bing) - no rate limits
         2. Reddit sources last - aggressive rate limiting requires delays
         """
-        self._clear_rss_cache()
+        # Disable button during operation
+        self.just_make_it_work_btn.setEnabled(False)
+        self.just_make_it_work_btn.setText("Setting up...")
+        
+        def _do_clear() -> int:
+            """Clear cache on IO thread."""
+            return self._clear_rss_cache()
+        
+        def _on_clear_done(result) -> None:
+            """Apply curated feeds after cache clear."""
+            self.just_make_it_work_btn.setText("Just Make It Work")
+            self.just_make_it_work_btn.setEnabled(True)
+            self._apply_curated_feeds()
+        
+        ThreadManager.submit_io_task(_do_clear, callback=_on_clear_done)
+    
+    def _apply_curated_feeds(self) -> None:
+        """Apply curated RSS feeds after cache is cleared."""
 
         # Non-Reddit sources first (no rate limiting, faster cache building)
         # Then Reddit sources (rate limited, processed with delays)

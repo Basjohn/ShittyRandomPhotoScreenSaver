@@ -197,6 +197,9 @@ class ScreensaverEngine(QObject):
         # Process Supervisor for multiprocessing workers
         self._process_supervisor: Optional[ProcessSupervisor] = None
         
+        # Phase 0.5: Store subscription IDs for cleanup
+        self._subscription_ids: List[str] = []
+        
         logger.info("ScreensaverEngine created")
     
     # -------------------------------------------------------------------------
@@ -1046,8 +1049,11 @@ class ScreensaverEngine(QObject):
         return event.is_set()
 
     def _get_minimum_rss_start_images(self) -> int:
-        """Return minimum RSS images required before starting when no local images exist."""
-        default_min = 4
+        """Return minimum RSS images required before starting when no local images exist.
+        
+        Phase 2.4: Default is 5 images to ensure adequate variety before launch.
+        """
+        default_min = 5
         try:
             if not self.settings_manager:
                 return default_min
@@ -1692,18 +1698,23 @@ class ScreensaverEngine(QObject):
             self._rotation_timer = None
     
     def _subscribe_to_events(self) -> None:
-        """Subscribe to relevant events."""
+        """Subscribe to relevant events.
+        
+        Phase 0.5: Store subscription IDs so we can unsubscribe on cleanup.
+        """
         if not self.event_system:
             return
         
-        # Subscribe to settings changes
-        self.event_system.subscribe('settings.changed', self._on_settings_changed)
+        # Subscribe to settings changes and store ID
+        sub_id = self.event_system.subscribe('settings.changed', self._on_settings_changed)
+        if sub_id:
+            self._subscription_ids.append(sub_id)
         
         # Subscribe to monitor changes
         if self.display_manager:
             self.display_manager.monitors_changed.connect(self._on_monitors_changed)
         
-        logger.debug("Event subscriptions configured")
+        logger.debug("Event subscriptions configured (count=%d)", len(self._subscription_ids))
     
     def _start_workers(self) -> None:
         """Start multiprocessing workers based on settings.
@@ -1998,6 +2009,46 @@ class ScreensaverEngine(QObject):
         except Exception as exc:
             logger.debug("%s stop failed: %s", description, exc, exc_info=True)
     
+    def _unsubscribe_all_events(self) -> None:
+        """Phase 0.5: Unsubscribe from all events and disconnect Qt signals."""
+        # Unsubscribe from EventSystem subscriptions
+        if self.event_system and self._subscription_ids:
+            for sub_id in self._subscription_ids:
+                try:
+                    self.event_system.unsubscribe(sub_id)
+                except Exception as e:
+                    logger.debug("Failed to unsubscribe %s: %s", sub_id, e)
+            logger.debug("Unsubscribed from %d events", len(self._subscription_ids))
+            self._subscription_ids.clear()
+        
+        # Disconnect DisplayManager signals
+        if self.display_manager:
+            try:
+                self.display_manager.exit_requested.disconnect(self._on_exit_requested)
+            except Exception:
+                pass
+            try:
+                self.display_manager.previous_requested.disconnect(self._on_previous_requested)
+            except Exception:
+                pass
+            try:
+                self.display_manager.next_requested.disconnect(self._on_next_requested)
+            except Exception:
+                pass
+            try:
+                self.display_manager.cycle_transition_requested.disconnect(self._on_cycle_transition)
+            except Exception:
+                pass
+            try:
+                self.display_manager.settings_requested.disconnect(self._on_settings_requested)
+            except Exception:
+                pass
+            try:
+                self.display_manager.monitors_changed.disconnect(self._on_monitors_changed)
+            except Exception:
+                pass
+            logger.debug("Disconnected DisplayManager signals")
+    
     def cleanup(self) -> None:
         """Clean up all resources."""
         logger.info("Cleaning up screensaver engine...")
@@ -2006,6 +2057,9 @@ class ScreensaverEngine(QObject):
             # Stop if running
             if self._running:
                 self.stop()
+            
+            # Phase 0.5: Unsubscribe from all events
+            self._unsubscribe_all_events()
 
             # Emit a concise summary tying together queue stats and transition skips
             # for prefetch vs transition-skip pacing diagnostics.

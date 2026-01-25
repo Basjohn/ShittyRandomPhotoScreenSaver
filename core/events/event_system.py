@@ -27,8 +27,13 @@ class EventSystem:
     # Maximum recursion depth for publish() to prevent infinite loops
     MAX_PUBLISH_DEPTH = 10
     
-    def __init__(self):
-        """Initialize the event system."""
+    def __init__(self, history_enabled: bool = True, redact_payloads: bool = False):
+        """Initialize the event system.
+        
+        Args:
+            history_enabled: If False, events are not stored in history (privacy/memory).
+            redact_payloads: If True, event data is not stored in history (only type/timestamp).
+        """
         self._subscriptions: Dict[str, List[Subscription]] = defaultdict(list)
         self._subscription_map: Dict[str, Subscription] = {}
         # Use deque with maxlen for automatic size limiting (no manual trimming needed)
@@ -38,7 +43,11 @@ class EventSystem:
         # Track publish recursion depth per thread to prevent infinite loops
         self._publish_depth: Dict[int, int] = {}
         
-        logger.info("EventSystem initialized")
+        # History control options
+        self._history_enabled = history_enabled
+        self._redact_payloads = redact_payloads
+        
+        logger.info("EventSystem initialized (history=%s, redact=%s)", history_enabled, redact_payloads)
     
     def subscribe(
         self, 
@@ -79,6 +88,32 @@ class EventSystem:
         
         logger.debug(f"New subscription: {subscription.id} for {event_type} (priority={priority})")
         return subscription.id
+
+    def scoped_subscription(
+        self,
+        event_type: str,
+        callback: Callable[[Event], None],
+        priority: int = 50,
+        filter_fn: Optional[Callable[[Event], bool]] = None,
+    ) -> "ScopedSubscription":
+        """Create a context-managed subscription that auto-unsubscribes on exit.
+        
+        Usage:
+            with event_system.scoped_subscription("my_event", handler) as sub:
+                # subscription is active
+                pass
+            # subscription is automatically removed
+        
+        Args:
+            event_type: Type of event to subscribe to
+            callback: Function to call when event is published
+            priority: Priority (higher = called earlier), default 50
+            filter_fn: Optional filter function
+        
+        Returns:
+            ScopedSubscription context manager
+        """
+        return ScopedSubscription(self, event_type, callback, priority, filter_fn)
     
     def unsubscribe(self, subscription_id: str) -> None:
         """
@@ -183,9 +218,21 @@ class EventSystem:
                 self._publish_depth.pop(thread_id, None)
     
     def _add_to_history(self, event: Event) -> None:
-        """Add event to history. Deque maxlen handles size limiting automatically."""
+        """Add event to history. Deque maxlen handles size limiting automatically.
+        
+        Respects history_enabled and redact_payloads settings.
+        """
+        if not self._history_enabled:
+            return
+        
         with self._lock:
-            self._event_history.append(event)
+            if self._redact_payloads:
+                # Store only event type and timestamp, not data
+                redacted = Event(event.event_type, data=None, source=None)
+                redacted.timestamp = event.timestamp
+                self._event_history.append(redacted)
+            else:
+                self._event_history.append(event)
     
     def get_event_history(self, limit: int = 100) -> List[Event]:
         """
@@ -228,3 +275,60 @@ class EventSystem:
         """Get number of subscriptions for a specific event type."""
         with self._lock:
             return len(self._subscriptions.get(event_type, []))
+
+    def set_history_enabled(self, enabled: bool) -> None:
+        """Enable or disable event history storage."""
+        self._history_enabled = enabled
+        logger.debug("Event history enabled: %s", enabled)
+
+    def set_redact_payloads(self, redact: bool) -> None:
+        """Enable or disable payload redaction in history."""
+        self._redact_payloads = redact
+        logger.debug("Event payload redaction: %s", redact)
+
+
+class ScopedSubscription:
+    """RAII-style context manager for EventSystem subscriptions.
+    
+    Automatically unsubscribes when the context exits, preventing subscription leaks.
+    """
+    
+    def __init__(
+        self,
+        event_system: EventSystem,
+        event_type: str,
+        callback: Callable[[Event], None],
+        priority: int = 50,
+        filter_fn: Optional[Callable[[Event], bool]] = None,
+    ):
+        self._event_system = event_system
+        self._event_type = event_type
+        self._callback = callback
+        self._priority = priority
+        self._filter_fn = filter_fn
+        self._subscription_id: Optional[str] = None
+    
+    def __enter__(self) -> "ScopedSubscription":
+        self._subscription_id = self._event_system.subscribe(
+            self._event_type,
+            self._callback,
+            self._priority,
+            self._filter_fn,
+        )
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        if self._subscription_id is not None:
+            self._event_system.unsubscribe(self._subscription_id)
+            self._subscription_id = None
+    
+    @property
+    def subscription_id(self) -> Optional[str]:
+        """Return the subscription ID, or None if not active."""
+        return self._subscription_id
+    
+    def unsubscribe(self) -> None:
+        """Manually unsubscribe before context exit."""
+        if self._subscription_id is not None:
+            self._event_system.unsubscribe(self._subscription_id)
+            self._subscription_id = None

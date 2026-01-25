@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QLabel, QStackedWidget, QGraphicsDropShadowEffect, QSizeGrip,
     QSizePolicy, QFileDialog, QMenu, QScrollArea,
 )
-from PySide6.QtCore import Qt, QPoint, Signal, QUrl, QTimer
+from PySide6.QtCore import Qt, QPoint, Signal, QUrl
 from PySide6.QtGui import QFont, QColor, QPixmap, QDesktopServices, QPainter, QPen, QGuiApplication
 
 from core.logging.logger import get_logger
@@ -304,92 +304,6 @@ class NoSourcesPopup(QDialog):
                 )
             except Exception as e:
                 logger.debug("[SETTINGS] Exception suppressed: %s", e)
-
-
-class ResetDefaultsDialog(QWidget):
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
-        super().__init__(parent)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-
-        outer_layout = QVBoxLayout(self)
-        outer_layout.setContentsMargins(0, 0, 0, 0)
-        outer_layout.setSpacing(0)
-
-        card = QWidget(self)
-        card.setObjectName("resetDefaultsDialogCard")
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(0, 0, 0, 0)
-        card_layout.setSpacing(0)
-
-        title_bar = CustomTitleBar(card)
-        title_bar.title_label.setText("Reset To Defaults")
-        title_bar.minimize_btn.hide()
-        title_bar.maximize_btn.hide()
-        title_bar.close_clicked.connect(self.reject)
-        card_layout.addWidget(title_bar)
-
-        body = QWidget(card)
-        body_layout = QVBoxLayout(body)
-        body_layout.setContentsMargins(24, 20, 24, 20)
-        body_layout.setSpacing(16)
-
-        # Simple confirmation text shown after settings have already been
-        # reverted to their canonical defaults.
-        message = QLabel("Settings reverted to defaults!")
-        message.setWordWrap(True)
-        message.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        body_layout.addWidget(message)
-
-        buttons_row = QHBoxLayout()
-        buttons_row.addStretch()
-        ok_btn = QPushButton("OK")
-        ok_btn.clicked.connect(self.accept)
-        buttons_row.addWidget(ok_btn)
-        body_layout.addLayout(buttons_row)
-
-        card_layout.addWidget(body)
-
-        shadow = QGraphicsDropShadowEffect(card)
-        shadow.setBlurRadius(20)
-        shadow.setXOffset(0)
-        shadow.setYOffset(0)
-        shadow.setColor(QColor(0, 0, 0, 180))
-        card.setGraphicsEffect(shadow)
-
-        card.setStyleSheet(
-            "QWidget#resetDefaultsDialogCard {"
-            "background-color: rgba(16, 16, 16, 230);"
-            "border-radius: 10px;"
-            "}"
-        )
-
-        outer_layout.addWidget(card)
-        self.adjustSize()
-
-        # Auto-dismiss after a short delay so this behaves like a toast.
-        QTimer.singleShot(2000, self.accept)
-
-    def showEvent(self, event) -> None:  # type: ignore[override]
-        super().showEvent(event)
-        parent = self.parentWidget()
-        if parent is not None:
-            try:
-                # Center the toast within the parent dialog's client rect so
-                # it always appears above the content without creating a
-                # separate native window.
-                geom = parent.rect()
-                self.move(geom.center() - self.rect().center())
-                self.raise_()
-            except Exception as e:
-                logger.debug("[SETTINGS] Exception suppressed: %s", e)
-
-    def accept(self) -> None:
-        """Close the toast when acknowledged or after timeout."""
-        self.close()
-
-    def reject(self) -> None:
-        """Treat rejection the same as acceptance for this toast."""
-        self.close()
 
 
 class SettingsDialog(QDialog):
@@ -1127,15 +1041,6 @@ class SettingsDialog(QDialog):
         button_row.addWidget(self.more_options_btn)
         layout.addLayout(button_row)
 
-        self.reset_notice_label = QLabel("Settings reverted to defaults!")
-        self.reset_notice_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        self.reset_notice_label.setStyleSheet(
-            "color: #ffffff; font-size: 11px; padding: 4px 10px; "
-            "background-color: rgba(16, 16, 16, 230); border-radius: 6px;"
-        )
-        self.reset_notice_label.setVisible(False)
-        layout.addWidget(self.reset_notice_label)
-
         return widget
 
     def _update_about_header_images(self) -> None:
@@ -1578,13 +1483,13 @@ class SettingsDialog(QDialog):
             except Exception:
                 logger.debug("Failed to reload settings tabs after reset_to_defaults", exc_info=True)
 
-            try:
-                notice = getattr(self, "reset_notice_label", None)
-                if notice is not None:
-                    notice.setVisible(True)
-                    QTimer.singleShot(2000, lambda: notice.setVisible(False))
-            except Exception:
-                logger.debug("Failed to show reset notice label", exc_info=True)
+            # Phase 1.1: Use StyledPopup instead of inline label with QTimer
+            StyledPopup.show_success(
+                self,
+                "Reset Complete",
+                "Settings reverted to defaults!",
+                auto_close_ms=2000,
+            )
         except Exception as exc:
             logger.exception("Failed to reset settings to defaults: %s", exc)
             StyledPopup.show_error(

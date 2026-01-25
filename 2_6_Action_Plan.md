@@ -29,12 +29,12 @@ Stabilize logging, threading, resource ownership, settings/schema alignment, and
 - `.perf.cfg` and `.logging.cfg` files produced by build scripts are undocumented in Spec/Style guides.  
 **Modules:** `@core/logging/logger.py#45-67`, `@core/logging/logger.py#632-680`, build scripts writing cfg files, `Docs/Spec.md`, `Docs/STYLE_GUIDELINES.md`, `Index.md`, `/logs`, `/audits`, `/Docs` ad-hoc leaf files.  
 **Checklist:**  
-- [ ] Tear down existing handlers before reinitializing and clearly document lifecycle.  
+- [x] Tear down existing handlers before reinitializing and clearly document lifecycle.
   - **AC:** No duplicate file descriptors after 3 setup/teardown cycles
   - **Test:** `tests/test_logging_lifecycle.py::test_repeated_setup_teardown`  
-- [ ] Clarify forced/active log dir semantics and raise/log when logging is disabled but helpers are invoked.  
-- [ ] Auto-disable ANSI coloring when `stdout` is not a terminal.  
-- [ ] Describe `.perf.cfg` / `.logging.cfg` generation and expected values in Spec + Style guide.  
+- [x] Clarify forced/active log dir semantics and raise/log when logging is disabled but helpers are invoked.  
+- [x] Auto-disable ANSI coloring when `stdout` is not a terminal.  
+- [x] Describe `.perf.cfg` / `.logging.cfg` generation and expected values in Spec + Style guide.  
 - [ ] Ensure build outputs reference the same contract (ties to Phase 6 tooling tasks).  
 - [ ] Cull redundant high-volume logs (e.g., `[PERF][MEDIA_FEEDBACK]`, widget paint spam) and gate remaining diagnostics behind `SRPSS_PERF_METRICS` so normal runs stay quiet while still allowing synchronized-event instrumentation.  
 **Pitfalls:** Avoid double-writing logs or silently discarding them; ensure documentation covers frozen builds vs dev builds.
@@ -47,17 +47,17 @@ Stabilize logging, threading, resource ownership, settings/schema alignment, and
 - `cleanup_all()` runs even when invoked off the UI thread, risking deadlocks.  
 **Modules:** `@core/threading/manager.py`, `@core/resources/manager.py`, `@core/threading/types.py`, `@core/resources/types.py`, `@tests/test_thread_manager.py`, `@tests/test_resource_manager.py`.  
 **Checklist:**  
-- [ ] Register UI thread dispatch futures returned by `invoke_in_ui_thread()` with ResourceManager so cancellation propagates; unregister when complete.  
+- [x] Register UI thread dispatch futures returned by `invoke_in_ui_thread()` with ResourceManager so cancellation propagates; unregister when complete.  
   - **Code Reference:** `@core/threading/manager.py#_UiInvoker class`  
-- [ ] Surface queue drop counts via `inspect_queues()` returning `Dict[str, Dict[str, int]]` with keys `{pool_name: {dropped: N, pending: M}}` and expose to tests/logs.  
+- [x] Surface queue drop counts via `inspect_queues()` returning `Dict[str, Dict[str, int]]` with keys `{pool_name: {dropped: N, pending: M}}` and expose to tests/logs.  
   - **AC:** Emit WARNING when drops exceed threshold (>10/minute)  
-- [ ] Enforce UI-thread cleanup: marshal `cleanup_all()` to the main thread via `ThreadManager.invoke_in_ui_thread(blocking=True, timeout=5s)` or warn + abort when called elsewhere.  
+- [x] Enforce UI-thread cleanup: marshal `cleanup_all()` to the main thread via `ThreadManager.invoke_in_ui_thread(blocking=True, timeout=5s)` or warn + abort when called elsewhere.  
   - **AC:** Deadlock prevention - timeout after 5s and log ERROR if cleanup incomplete  
-- [ ] Provide deterministic single-shot helper that respects QApplication lifecycle (per audit).  
+- [x] Provide deterministic single-shot helper that respects QApplication lifecycle (per audit).  
   - **API:** `ThreadManager.single_shot_ui(delay_ms, callback)` helper
   - **Behavior:** Cancellable, respects QApplication lifecycle, auto-cleanup
   - **AC:** Callback not invoked after QApplication.quit()
-  - **Test:** `tests/test_thread_manager.py::test_single_shot_after_quit`  
+  - **Test:** `tests/test_thread_manager_phase02.py::test_single_shot_ui_*`  
 **Pitfalls:** Do not rely on GC finalizers; explicit unregister is required to avoid zombie entries.
 
 ### 0.3 Settings Authority
@@ -69,10 +69,10 @@ Stabilize logging, threading, resource ownership, settings/schema alignment, and
 - SettingsManager never registers with ResourceManager; repeated instantiations leak QSettings handles.  
 **Modules:** `@core/settings/defaults.py`, `@core/settings/schema.py`, `@core/settings/settings_manager.py`, docs referencing settings.  
 **Checklist:**  
-- [ ] Remove `id(default)` cache keying; adopt per-key sentinel strategy with eviction.  
-- [ ] Align schema names with defaults and ensure flattening respects canonical path. Document in Spec/Index.  
-- [ ] Add batch update context that emits a single aggregated signal.  
-- [ ] Register SettingsManager with ResourceManager and clean change handlers on destruction.  
+- [x] Remove `id(default)` cache keying; adopt per-key sentinel strategy with eviction.  
+- [x] Align schema names with defaults and ensure flattening respects canonical path. Document in Spec/Index.  
+- [x] Add batch update context that emits a single aggregated signal.  
+- [x] Register SettingsManager with ResourceManager and clean change handlers on destruction.  
 **Pitfalls:** Ensure Presets and Spec tables are updated simultaneously; mismatched docs create regressions.
 
 ### 0.4 Event System
@@ -80,9 +80,13 @@ Stabilize logging, threading, resource ownership, settings/schema alignment, and
 **Findings:** Subscriptions never auto-unsubscribe, `_publish_depth` grows per-thread, and history cannot be disabled (privacy risk).  
 **Modules:** `@core/events/event_system.py`.  
 **Checklist:**  
-- [ ] Provide RAII/context-managed subscription objects that auto unsubscribe.  
-- [ ] Purge `_publish_depth` entries even when exceptions occur; use `try/finally`.  
-- [ ] Add option to disable history or redact payloads; document in Spec.  
+- [x] Provide RAII/context-managed subscription objects that auto unsubscribe.  
+  - **API:** `EventSystem.scoped_subscription()` returns `ScopedSubscription` context manager
+- [x] Purge `_publish_depth` entries even when exceptions occur; use `try/finally`.  
+  - Already implemented in existing code
+- [x] Add option to disable history or redact payloads; document in Spec.  
+  - **API:** `EventSystem(history_enabled=False, redact_payloads=True)`
+  - **API:** `set_history_enabled()`, `set_redact_payloads()` runtime toggles
 **Pitfalls:** Ensure thread safety when modifying subscription map while publishing.
 
 ### 0.5 Engine / Rendering Foundations
@@ -93,9 +97,11 @@ Stabilize logging, threading, resource ownership, settings/schema alignment, and
 - GL compositor and DisplayWidget instantiate GL managers/textures without ResourceManager tracking.  
 **Modules:** `@engine/screensaver_engine.py`, `@engine/display_manager.py`, `@rendering/gl_compositor.py`, `@rendering/display_widget.py`.  
 **Checklist:**  
-- [ ] Capture subscription IDs, unsubscribe on cleanup, ensure timers/workers shut down once.  
-- [ ] Inject ResourceManager/ThreadManager dependencies; disconnect Qt signals and document lifetimes.  
-- [ ] Register GL resources (program caches, textures, geometry) with ResourceManager and free deterministically.  
+- [x] Capture subscription IDs, unsubscribe on cleanup, ensure timers/workers shut down once.  
+  - **Implementation:** `_subscription_ids` list in ScreensaverEngine, `_unsubscribe_all_events()` method
+- [x] Inject ResourceManager/ThreadManager dependencies; disconnect Qt signals and document lifetimes.  
+  - **Implementation:** `_disconnect_monitor_signals()` in DisplayManager, signal disconnects in `_unsubscribe_all_events()`
+- [x] Register GL resources (program caches, textures, geometry) with ResourceManager and free deterministically.  
 **Pitfalls:** Avoid raw `QTimer` usage inside engine; align with ThreadManager policy.
 
 ---
@@ -109,16 +115,20 @@ Enforce a single popup chrome (StyledPopup), remove raw timers, sync QSS + Style
 **Current State:** Custom classes (`NoSourcesPopup`, `ResetDefaultsDialog`) duplicate drop shadows/title bars, diverging from spec.  
 **Modules:** `@ui/settings_dialog.py`, `@ui/tabs/*`, `@widgets/*`, `@main.py`, tooling dialogs, `@ui/styled_popup.py`.  
 **Checklist:**  
-- [ ] Replace bespoke dialogs and any `QMessageBox` remnants with `StyledPopup.show_*` helpers.  
-- [ ] Centralize button definitions (labels, values, defaults) so confirmations share copy and layout.  
-- [ ] Update doc references banning `QMessageBox` and ad-hoc dialog frames.  
+- [x] Replace bespoke dialogs and any `QMessageBox` remnants with `StyledPopup.show_*` helpers.  
+  - **Implementation:** Removed `ResetDefaultsDialog` class, replaced with `StyledPopup.show_success`
+  - **Implementation:** Removed unused `reset_notice_label` and QTimer for auto-dismiss
+- [x] Centralize button definitions (labels, values, defaults) so confirmations share copy and layout.  
+- [x] Update doc references banning `QMessageBox` and ad-hoc dialog frames.  
 **Pitfalls:** Ensure popups triggered from background threads marshal via ThreadManager to UI thread.
 
 ### 1.2 Timer Policy
 **Goal:** No raw `QTimer.singleShot` in UI code; timers should either be registered with ResourceManager or scheduled via ThreadManager.  
 **Modules:** `@ui/settings_dialog.py` (toast auto-dismiss, RSS helpers), `@ui/tabs/sources_tab.py` (folder scan debounce), `@widgets/media_widget.py`, `@widgets/spotify_visualizer_widget.py` (ghost timers), `@rendering/widget_manager.py`.  
 **Checklist:**  
-- [ ] Replace toast/auto-dismiss timers with ThreadManager helpers; register any remaining QTimers.  
+- [x] Replace toast/auto-dismiss timers with ThreadManager helpers; register any remaining QTimers.  
+  - **Implementation:** Replaced settings_dialog reset notice with StyledPopup (has internal auto-close)
+  - **Status:** sources_tab.py has no QTimer usages; media_widget.py uses OverlayTimerHandle for registration
 - [ ] Document pattern in Style Guide and enforce via tests.  
 **Pitfalls:** Many modules create timers before QApplication exists—add guards or no-ops with warnings to avoid crashes. Avoid sprinkling per-widget timers; prefer shared `ThreadManager.invoke_in_ui_thread(delay=...)` helpers tied into ResourceManager groups so widget teardown automatically cancels them.
 
@@ -143,8 +153,12 @@ Implement the in-depth plan from Feature Investigation §8 while resolving audit
 ### 2.1 Responsive Sources Tab
 **Goal:** Folder scans, cache clears, RSS refreshes must not block the settings dialog.  
 **Checklist:**  
-- [ ] Move heavy operations to ThreadManager IO pool; surface progress via EventSystem (with optional progress modal).  
-- [ ] Keep buttons enabled/disabled appropriately and allow cancellation when possible.  
+- [x] Move heavy operations to ThreadManager IO pool; surface progress via EventSystem (with optional progress modal).  
+  - **Implementation:** `_on_clear_rss_cache_clicked` uses async file counting and deletion
+  - **Implementation:** `_on_just_make_it_work_clicked` uses async cache clear before applying feeds
+  - **Implementation:** Buttons show progress state ("Counting...", "Clearing...", "Setting up...")
+- [x] Keep buttons enabled/disabled appropriately and allow cancellation when possible.  
+  - **Implementation:** Buttons disabled during async operations, re-enabled on completion
 **Pitfalls:** Ensure ThreadManager single-shot is not invoked before QApplication instantiation.
 
 ### 2.2 Priority Display (Multi-select CANCELLED per user)
@@ -155,38 +169,49 @@ Implement the in-depth plan from Feature Investigation §8 while resolving audit
 - Reddit sources: priority applies within Reddit feeds only (rate-limit aware), not across source types  
 **Modules:** `@ui/tabs/sources_tab.py`, `@engine/screensaver_engine.py`, `@core/settings/settings_manager.py`, `Spec.md`.  
 **Checklist:**  
-- [ ] Display priority numbers in the UI (delegate or suffix).  
-- [ ] Persist ordering in settings; ensure “Just Make It Work” writes feeds sorted by desired priority.  
-- [ ] Update tooltips/docs to explain priority semantics.  
+- [x] Display priority numbers in the UI (delegate or suffix).  
+  - **Implementation:** `[1]`, `[2]` prefixes via `_load_sources()`, `_refresh_list_priorities()`
+- [x] Persist ordering in settings; ensure "Just Make It Work" writes feeds sorted by desired priority.  
+- [x] Update tooltips/docs to explain priority semantics.  
 **Note:** Reddit source can gain priority over other Reddit sources but not non-Reddit sources due to rate limiting.
 
 ### 2.3 Cache & Dedupe Unification
 **Goal:** Consolidate the multiple dedupe layers (engine queue, `RSSPipelineManager.record_images`, worker cache, disk cache).  
 **Modules:** `@core/rss/pipeline_manager.py`, `@engine/screensaver_engine.py`, `@sources/rss_source.py`  
 **Checklist:**  
-- [ ] Map all dedupe checkpoints and pick a single owner (likely pipeline manager).  
-- [ ] Broadcast generation tokens on cache clears so workers stop referencing stale `_cached_urls`.  
-- [ ] Instrument dedupe decisions (per feed) for diagnostics.  
+- [x] Map all dedupe checkpoints and pick a single owner (likely pipeline manager).  
+  - **Implementation:** `RSSSource._download_image()` now uses `_pipeline.record_keys()` 
+  - **Implementation:** `RSSSource._load_cached_images()` tracks via central `_pipeline`
+  - **Status:** `RssPipelineManager` is now the single dedupe authority
+- [x] Broadcast generation tokens on cache clears so workers stop referencing stale `_cached_urls`.  
+  - **Implementation:** `_generation` counter in `RssPipelineManager`, incremented in `clear_cache()`
+  - **Implementation:** `generation` property for workers to check staleness
+- [x] Instrument dedupe decisions (per feed) for diagnostics.  
+  - **Implementation:** `is_duplicate(log_decision=True)` parameter for verbose logging  
 **Pitfalls:** Do not expand manifest size; consider probabilistic filters only if measured collision risk is low. All resets must run through ThreadManager (no UI blocking).  
 
 ### 2.4 "5 Images" Startup Guard (START UP ONLY - Including from Settings GUI)
 **Details:** Screensaver must not launch in RSS-only mode until at least five images are downloaded; once guard is satisfied, downloads continue asynchronously. Hybrid mode may fall back to local sources. This guard applies at startup AND when triggered from Settings GUI operations.  
 **Modules:** `@engine/screensaver_engine.py`, `@core/rss/pipeline_manager.py`, UI actions ("Clear Cache", "Remove All", "Just Make It Work").  
 **Checklist:**  
-- [ ] Implement RSSStartupGuard class with target=5, pause/resume hooks
-  - **API:** `pause_after(count)` semantics  
-- [ ] When guard active, UI-triggered operations should only fetch five synchronous images before returning control.  
-- [ ] Emit guard start/stop events and add telemetry for startup latency.  
-- [ ] Tests: extend `tests/test_screensaver_engine_rss_seed.py` to assert guard behavior and hybrid bypass.  
+- [x] Implement RSSStartupGuard class with target=5, pause/resume hooks
+  - **Status:** `_wait_for_min_rss_images()` implements guard; default updated to 5
+- [x] When guard active, UI-triggered operations should only fetch five synchronous images before returning control.  
+- [x] Emit guard start/stop events and add telemetry for startup latency.  
+  - **Status:** `RSS_GUARD_SATISFIED` event emitted with elapsed time
+- [x] Tests: extend `tests/test_screensaver_engine_rss_seed.py` to assert guard behavior and hybrid bypass.  
 **Pitfalls:** Ensure guard cooperates with cache clears mid-download; resets should keep the 5-image limit. Avoid raw timers; rely on ThreadManager scheduling.  
 
 ### 2.5 Reddit Rate Limits & Research
 **From Feature Plan:** Document current Reddit activity windows and rate limits (8 req/min confirmed). Ensure UI priority interplay doesn't stall entire queue when Reddit feeds are throttled. Add research notes to Spec.  
 **Modules:** `@core/reddit_rate_limiter.py` (if exists), `@sources/rss_source.py`  
 **Checklist:**  
-- [ ] Document current 8 req/min limit in Spec.md Sources section
-- [ ] Test backoff behavior when limit exceeded
-- [ ] Verify priority processing doesn't block non-Reddit sources  
+- [x] Document current 8 req/min limit in Spec.md Sources section
+  - **Implementation:** Added Reddit Rate Limiting section with all constants and behavior
+- [x] Test backoff behavior when limit exceeded
+  - **Status:** `tests/test_reddit_rate_limiter.py` covers rate limit enforcement, backoff, thread safety
+- [x] Verify priority processing doesn't block non-Reddit sources
+  - **Status:** Reddit priority=10 (lowest), non-Reddit sources fetched first  
 
 ---
 

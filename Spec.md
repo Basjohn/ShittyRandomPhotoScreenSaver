@@ -106,6 +106,13 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
   - **Runtime caps**: Initial load limits cached images to `sources.rss_rotating_cache_size` (default 20). Async and background refresh enforce `sources.rss_background_cap` (default 30) as the maximum RSS images in queue at any time.
   - **RSS-only startup guard (2026-01-18)**: When no folder sources are configured, the engine now waits for at least `sources.rss_min_start_images` unique RSS images (default 4, clamped 0–30) before leaving STARTING state. If the guard times out (~15s) the engine logs a warning and continues with whatever images are available. Mixed/hybrid setups skip the guard entirely so local photos still drive instant startup.
   - **Async loading**: `_load_rss_images_async()` processes sources in priority order (Bing=95, Unsplash=90, Wikimedia=85, NASA=75, Reddit=10) with 8 images per source per cycle to prevent any single source from blocking.
+  - **Reddit Rate Limiting (Phase 2.5)**: Reddit's anonymous API enforces ~10 requests/minute per IP. The `RedditRateLimiter` class (`core/reddit_rate_limiter.py`) coordinates all Reddit API calls:
+    - **Limit**: 8 requests/minute (-2 safety margin from Reddit's 10 req/min)
+    - **Interval**: 8 second minimum between consecutive requests
+    - **Backoff**: When rate limited, feeds are skipped and retried on next refresh cycle (no blocking waits)
+    - **Feed rotation**: Maximum 8 Reddit feeds per startup; excess feeds rotate daily via hash-based selection
+    - **Priority**: Reddit sources have lowest priority (10) so non-rate-limited sources (Bing, NASA, etc.) are fetched first
+    - **Health tracking**: Feeds with repeated failures use exponential backoff (reset after 24h)
   - **State Management (2025-12-14)**: Engine uses `EngineState` enum instead of boolean flags for lifecycle management:
     - States: UNINITIALIZED → INITIALIZING → STOPPED → STARTING → RUNNING → STOPPING/SHUTTING_DOWN
     - REINITIALIZING state used during settings changes (not STOPPING)
@@ -436,6 +443,37 @@ The current Windows mixer approach is simpler and works for all users. Implement
 5. Fallback to mixer control for non-Premium users
 
 This is a **low-priority enhancement** that could be added post-v1.2 if users request Spotify-synced volume.
+
+## Logging Configuration Files (Frozen Builds)
+
+Frozen builds (Nuitka/PyInstaller) use small companion config files next to the executable to control logging behaviour without environment variables. These files are written by build scripts and read at startup by `core/logging/logger.py`.
+
+| File Pattern | Purpose | Values | Default |
+|--------------|---------|--------|---------|
+| `<exe-stem>.perf.cfg` | Enable/disable PERF metrics | `1`/`true`/`on` or `0`/`false`/`off` | `0` (disabled) |
+| `<exe-stem>.logging.cfg` | Enable/disable all logging | `1`/`true`/`on` or `0`/`false`/`off` | `0` (disabled for frozen) |
+| `<exe-stem>.logdir.cfg` | Override log directory path | Absolute or relative path | `logs/` next to exe |
+
+**Example for `SRPSS.scr`:**
+- `SRPSS.perf.cfg` → contains `0` (no PERF metrics in production)
+- `SRPSS.logging.cfg` → contains `1` (enable logging)
+- `SRPSS.logdir.cfg` → optional, e.g. `C:\ProgramData\SRPSS\logs`
+
+**Environment Variable Overrides:**
+- `SRPSS_PERF_METRICS=1` → overrides `.perf.cfg`
+- `SRPSS_FORCE_LOGS=1` → enables logging regardless of `.logging.cfg`
+- `SRPSS_DISABLE_LOGS=1` → disables logging regardless of `.logging.cfg`
+- `SRPSS_FORCE_LOG_DIR=/path` → overrides `.logdir.cfg`
+
+**Lifecycle:**
+- `setup_logging()` tears down all existing handlers before reinitializing (safe to call multiple times)
+- When logging is disabled, `get_log_dir()` returns a valid path but emits a one-time warning to stderr
+- ANSI coloring auto-disables when stdout is not a TTY (prevents escape code spam in redirected output)
+
+**Build Script Integration:**
+- `scripts/build_nuitka.ps1` writes `.perf.cfg` and `.logging.cfg` based on build type (debug vs release)
+- GUI/retail builds typically set PERF to `0` and logging to `1`
+- Console/debug builds set both to `1` for full telemetry
 
 ## v2.0 Architecture Updates (Jan 2026)
 

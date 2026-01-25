@@ -19,24 +19,43 @@ logger = get_logger(__name__)
 
 # UI-thread invoker for reliable main thread dispatch
 class _UiInvoker(QObject):
+    """Signal-based invoker for running callables on the UI thread.
+    
+    This is a singleton managed by _ensure_ui_invoker() and tracked via
+    ResourceManager when available. It provides thread-safe dispatch of
+    callables to the Qt main thread.
+    """
     invoke = Signal(object, object, object)
 
     def __init__(self):
         super().__init__()
         self.invoke.connect(self._on_invoke)
+        self._pending_count = 0  # Track pending invocations
 
     def _on_invoke(self, func, args, kwargs):
         try:
             func(*args, **(kwargs or {}))
         except Exception as e:
             logger.exception("UI invoker callable raised: %s", e)
+        finally:
+            self._pending_count = max(0, self._pending_count - 1)
 
 
 _ui_invoker: Optional[_UiInvoker] = None
+_ui_invoker_registered: bool = False  # Track ResourceManager registration
 
 
-def _ensure_ui_invoker() -> Optional[_UiInvoker]:
-    global _ui_invoker
+def _ensure_ui_invoker(resource_manager: Optional[Any] = None) -> Optional[_UiInvoker]:
+    """Get or create the singleton UI invoker.
+    
+    Args:
+        resource_manager: Optional ResourceManager to register the invoker with.
+                         Registration only happens once per invoker lifetime.
+    
+    Returns:
+        The singleton _UiInvoker or None if QCoreApplication is unavailable.
+    """
+    global _ui_invoker, _ui_invoker_registered
     try:
         app = QCoreApplication.instance()
         if app is None:
@@ -46,6 +65,22 @@ def _ensure_ui_invoker() -> Optional[_UiInvoker]:
             inv = _UiInvoker()
             inv.moveToThread(app.thread())
             _ui_invoker = inv
+            _ui_invoker_registered = False
+        
+        # Register with ResourceManager if provided and not yet registered
+        if resource_manager is not None and not _ui_invoker_registered:
+            try:
+                from core.resources.types import ResourceType
+                resource_manager.register(
+                    _ui_invoker,
+                    ResourceType.CUSTOM,
+                    "UI thread invoker singleton",
+                    cleanup_handler=lambda inv: None  # QObject cleanup handled by Qt
+                )
+                _ui_invoker_registered = True
+            except Exception as e:
+                logger.debug("Could not register UI invoker: %s", e)
+        
         return _ui_invoker
     except Exception as e:
         logger.exception("Failed to initialize UI invoker: %s", e)
@@ -128,9 +163,12 @@ class ThreadManager:
         self._stats = {pool_type: {'submitted': 0, 'completed': 0, 'failed': 0} 
                       for pool_type in ThreadPoolType}
         
-        # Lock-free mutation queue
+        # Lock-free mutation queue with drop tracking
         self._mut_q: SPSCQueue[tuple] = SPSCQueue(256)
         self._mut_drain_scheduled = False
+        self._queue_drops: int = 0  # Track dropped queue entries
+        self._queue_drops_last_warn: float = 0.0  # Timestamp of last warning
+        self._queue_drops_warn_threshold: int = 10  # Warn if >10 drops per minute
         
         # Lock-free stats publisher
         self._stats_tb: TripleBuffer[Dict[str, Dict[str, Any]]] = TripleBuffer()
@@ -138,6 +176,9 @@ class ThreadManager:
         
         self._resource_manager = resource_manager
         self._resource_id = None
+        
+        # Track pending single-shot timers for lifecycle management
+        self._pending_single_shots: List[QTimer] = []
         
         # Initialize pools
         self._initialize_pools()
@@ -348,15 +389,60 @@ class ThreadManager:
         
         logger.info("Thread manager shut down complete")
 
+    def inspect_queues(self) -> Dict[str, Dict[str, int]]:
+        """Return queue statistics including drop counts.
+        
+        Returns:
+            Dict with pool_name keys and {dropped: N, pending: M} values.
+            Also includes 'mutation_queue' with drop/pending counts.
+        """
+        result: Dict[str, Dict[str, int]] = {}
+        
+        # Per-pool stats
+        for pool_type in ThreadPoolType:
+            stats = self._stats.get(pool_type, {})
+            pending = stats.get('submitted', 0) - stats.get('completed', 0) - stats.get('failed', 0)
+            result[pool_type.value] = {
+                'dropped': 0,  # Task-level drops not tracked per-pool
+                'pending': max(0, pending),
+            }
+        
+        # Mutation queue stats
+        result['mutation_queue'] = {
+            'dropped': self._queue_drops,
+            'pending': self._mut_q.size() if hasattr(self._mut_q, 'size') else 0,
+        }
+        
+        return result
+
+    def _check_drop_threshold(self) -> None:
+        """Check if queue drops exceed threshold and emit warning."""
+        now = time.time()
+        # Check if we've exceeded threshold in the last minute
+        if self._queue_drops >= self._queue_drops_warn_threshold:
+            if now - self._queue_drops_last_warn >= 60.0:  # Once per minute max
+                logger.warning(
+                    "[THREADING] Queue drops exceeded threshold: %d drops (threshold=%d/min)",
+                    self._queue_drops,
+                    self._queue_drops_warn_threshold,
+                )
+                self._queue_drops_last_warn = now
+                # Reset counter after warning
+                self._queue_drops = 0
+
     # Internal: mutation queue -------------------------------------------
     def _enqueue_mutation(self, ev: tuple) -> None:
         if self._shutdown:
             return
         try:
-            self._mut_q.push_drop_oldest(ev)
+            # Track drops - push_drop_oldest returns True if an item was dropped
+            dropped = self._mut_q.push_drop_oldest(ev)
+            if dropped:
+                self._queue_drops += 1
+                self._check_drop_threshold()
         except Exception as e:
-            # FIX: Log silent failure instead of ignoring
             logger.debug(f"Failed to push mutation to queue: {e}")
+            self._queue_drops += 1
             return
         
         if isinstance(ev, tuple) and ev and ev[0] == 'register_active':
@@ -494,6 +580,109 @@ class ThreadManager:
                 ThreadManager.run_on_ui_thread(_schedule_on_ui)
         except Exception as e:
             logger.exception("single_shot failed: %s", e)
+
+    def single_shot_ui(self, delay_ms: int, func: Callable, *args, **kwargs) -> Optional[QTimer]:
+        """Schedule a callable with QApplication lifecycle awareness.
+        
+        Unlike single_shot(), this method:
+        - Returns a cancellable QTimer reference
+        - Automatically cancels if QApplication.quit() is called before firing
+        - Registers with ResourceManager for cleanup tracking
+        - Auto-removes from tracking after firing
+        
+        Args:
+            delay_ms: Delay in milliseconds before executing
+            func: Function to call
+            *args, **kwargs: Arguments for func
+            
+        Returns:
+            QTimer instance that can be stopped to cancel, or None if scheduling failed.
+            
+        AC: Callback not invoked after QApplication.quit()
+        """
+        try:
+            app = QCoreApplication.instance()
+            if app is None:
+                logger.debug("single_shot_ui called without QCoreApplication")
+                return None
+            
+            timer = QTimer()
+            timer.setSingleShot(True)
+            timer.setTimerType(Qt.TimerType.PreciseTimer)
+            
+            # Flag to track if we've been cancelled
+            cancelled = [False]
+            
+            def _cleanup_timer():
+                """Remove timer from tracking list."""
+                try:
+                    if timer in self._pending_single_shots:
+                        self._pending_single_shots.remove(timer)
+                except Exception:
+                    pass
+            
+            def _on_timeout():
+                """Handle timer firing."""
+                _cleanup_timer()
+                if cancelled[0]:
+                    return
+                # Check if app is still running
+                current_app = QCoreApplication.instance()
+                if current_app is None:
+                    logger.debug("single_shot_ui: QApplication gone, skipping callback")
+                    return
+                try:
+                    func(*args, **(kwargs or {}))
+                except Exception as e:
+                    logger.exception("single_shot_ui callback raised: %s", e)
+            
+            def _on_app_quit():
+                """Handle application quit - cancel pending timer."""
+                cancelled[0] = True
+                try:
+                    timer.stop()
+                except Exception:
+                    pass
+                _cleanup_timer()
+            
+            # Connect signals
+            timer.timeout.connect(_on_timeout)
+            if app is not None:
+                try:
+                    app.aboutToQuit.connect(_on_app_quit)
+                except Exception:
+                    pass
+            
+            # Track for lifecycle management
+            self._pending_single_shots.append(timer)
+            
+            # Register with ResourceManager
+            if self._resource_manager:
+                try:
+                    from core.resources.types import ResourceType
+                    self._resource_manager.register(
+                        timer,
+                        ResourceType.TIMER,
+                        f"Single-shot timer ({delay_ms}ms)",
+                        cleanup_handler=lambda t: t.stop() if t.isActive() else None
+                    )
+                except Exception as e:
+                    logger.debug("Could not register single-shot timer: %s", e)
+            
+            # Start timer - must be on UI thread
+            def _start_timer():
+                timer.start(max(0, int(delay_ms)))
+            
+            if QThread.currentThread() is app.thread():
+                _start_timer()
+            else:
+                ThreadManager.run_on_ui_thread(_start_timer)
+            
+            return timer
+            
+        except Exception as e:
+            logger.exception("single_shot_ui failed: %s", e)
+            return None
 
     def schedule_recurring(
         self,

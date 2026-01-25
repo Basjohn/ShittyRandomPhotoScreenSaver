@@ -86,6 +86,20 @@ class DisplayManager(QObject):
         
         logger.info("DisplayManager initialized (mode=%s, same_image=%s)" % (display_mode, same_image_mode))
     
+    def _disconnect_monitor_signals(self) -> None:
+        """Phase 0.5: Disconnect monitor hotplug signals to prevent callbacks after cleanup."""
+        app = QGuiApplication.instance()
+        if app:
+            try:
+                app.screenAdded.disconnect(self._on_screen_added)
+            except Exception:
+                pass
+            try:
+                app.screenRemoved.disconnect(self._on_screen_removed)
+            except Exception:
+                pass
+            logger.debug("Disconnected monitor hotplug signals")
+    
     def _setup_monitor_detection(self) -> None:
         """Setup monitor hotplug detection."""
         app = QGuiApplication.instance()
@@ -585,6 +599,9 @@ class DisplayManager(QObject):
         """Clean up all display widgets."""
         count = len(self.displays)
         logger.info("Cleaning up %d display widgets", count)
+        
+        # Phase 0.5: Disconnect monitor hotplug signals
+        self._disconnect_monitor_signals()
 
         # Reset global DisplayWidget state to avoid stale references after cleanup
         try:

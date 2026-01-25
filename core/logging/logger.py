@@ -158,8 +158,25 @@ def _determine_logging_disabled(exe_path: Path | None) -> bool:
     return logging_disabled
 
 
+def _is_stdout_tty() -> bool:
+    """Check if stdout is connected to a TTY (interactive terminal).
+    
+    Returns False when output is redirected to a file or piped, preventing
+    ANSI escape codes from polluting non-interactive output.
+    """
+    try:
+        return sys.stdout is not None and sys.stdout.isatty()
+    except Exception:
+        return False
+
+
 class ColoredFormatter(logging.Formatter):
-    """Formatter that adds colors to console output."""
+    """Formatter that adds colors to console output.
+    
+    Automatically disables ANSI coloring when stdout is not a TTY (e.g., when
+    output is redirected to a file or piped to another process). This prevents
+    escape code spam in non-interactive contexts.
+    """
     
     # ANSI color codes
     COLORS = {
@@ -173,6 +190,11 @@ class ColoredFormatter(logging.Formatter):
     PREWARM_COLOR = '\033[38;5;135m'   # Purple for prewarm/flicker diagnostics
     RESET = '\033[0m'
     BOLD = '\033[1m'
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Cache TTY check at init time for performance
+        self._is_tty = _is_stdout_tty()
     
     def format(self, record):
         # Save original values
@@ -198,7 +220,8 @@ class ColoredFormatter(logging.Formatter):
         elif record.levelname in self.COLORS:
             color = self.COLORS[record.levelname]
 
-        if color is not None:
+        # Skip coloring if not a TTY to avoid escape code spam in redirected output
+        if color is not None and self._is_tty:
             # Color the level name in bold
             record.levelname = f"{self.BOLD}{color}{record.levelname}{self.RESET}"
             # Format the message
@@ -567,13 +590,32 @@ class SpotifyVolLogFilter(logging.Filter):
         return "spotify_volume" in name
 
 
+_LOG_DIR_WARNING_EMITTED: bool = False
+
+
 def get_log_dir() -> Path:
     """Return the directory used for log files.
     
     setup_logging() should be called once at startup so that _BASE_DIR is
     updated for frozen builds and the returned path matches the location used
     by the active RotatingFileHandler.
+    
+    When logging is disabled (_LOGGING_DISABLED=True), this function still
+    returns a valid path but emits a one-time warning to stderr on first call.
     """
+    global _LOG_DIR_WARNING_EMITTED
+    
+    if _LOGGING_DISABLED and not _LOG_DIR_WARNING_EMITTED:
+        _LOG_DIR_WARNING_EMITTED = True
+        try:
+            import sys
+            sys.stderr.write(
+                "[SRPSS] Warning: get_log_dir() called while logging is disabled. "
+                "Set SRPSS_FORCE_LOGS=1 to enable logging.\n"
+            )
+        except Exception:
+            pass
+    
     if _ACTIVE_LOG_DIR is not None:
         return _ACTIVE_LOG_DIR
     if _FORCED_LOG_DIR is not None:
@@ -629,9 +671,43 @@ def _select_log_dir(
     return fallback
 
 
+def _teardown_handlers() -> None:
+    """Tear down all existing handlers on the root logger.
+    
+    This prevents duplicate file descriptors when setup_logging() is called
+    multiple times (e.g., during settings reload or test setup/teardown cycles).
+    
+    Lifecycle contract:
+    - Called at the start of every setup_logging() invocation
+    - Closes and removes ALL handlers from root logger
+    - Safe to call multiple times (idempotent)
+    """
+    root = logging.getLogger()
+    for handler in list(root.handlers):
+        try:
+            # Flush any pending writes
+            handler.flush()
+        except Exception:
+            pass
+        try:
+            handler.close()
+        except Exception:
+            pass
+        try:
+            root.removeHandler(handler)
+        except Exception:
+            pass
+
+
 def setup_logging(debug: bool = False, verbose: bool = False) -> None:
     """
     Configure application logging with file rotation.
+    
+    Lifecycle:
+    - Safe to call multiple times; previous handlers are torn down first
+    - After 3 setup/teardown cycles, no duplicate file descriptors remain
+    - When logging is disabled, helpers like get_log_dir() return None-safe paths
+      but log a warning on first invocation
     
     Args:
         debug: If True, set log level to DEBUG and enable console output.
@@ -640,6 +716,9 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
             etc.). Verbose mode also implies debug-level logging.
     """
     global _VERBOSE, _PERF_METRICS_ENABLED, _BASE_DIR, _FORCED_LOG_DIR, _ACTIVE_LOG_DIR
+
+    # CRITICAL: Tear down existing handlers FIRST to prevent duplicate file descriptors
+    _teardown_handlers()
 
     debug_enabled = debug or verbose
     # Create logs directory. In frozen builds (Nuitka/PyInstaller) we prefer
@@ -703,13 +782,8 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
 
     if logging_disabled and not debug_enabled:
         _ACTIVE_LOG_DIR = None
+        # Handlers already torn down by _teardown_handlers() - just add NullHandler
         root = logging.getLogger()
-        for handler in list(root.handlers):
-            try:
-                handler.close()
-            except Exception:
-                pass
-            root.removeHandler(handler)
         root.addHandler(logging.NullHandler())
         root.setLevel(logging.CRITICAL + 10)
         return

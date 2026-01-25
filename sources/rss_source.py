@@ -6,7 +6,6 @@ Fetches images from RSS/Atom feeds and caches them locally.
 import feedparser
 import requests
 import hashlib
-import tempfile
 import re
 import shutil
 import time
@@ -289,8 +288,9 @@ class RSSSource(ImageProvider):
                         format=cache_file.suffix[1:].upper(),
                     )
                     self._images.append(metadata)
-                    # Track the hash as a "known" URL to avoid re-downloading
-                    self._cached_urls.add(cache_file.stem)
+                    # Phase 2.3: Track in central dedupe manager
+                    path_key = f"path:{cache_file}"
+                    self._pipeline.record_keys([path_key])
                     valid_count += 1
                 except Exception as e:
                     logger.debug(f"Failed to load cached image {cache_file}: {e}")
@@ -837,10 +837,13 @@ class RSSSource(ImageProvider):
         
         cache_file = self.cache_dir / f"{url_hash}{ext}"
         
-        # Return cached file if exists and track it
+        # Phase 2.3: Use central RssPipelineManager for dedupe
+        url_key = self._pipeline.build_url_key(image_url)
+        
+        # Return cached file if exists and track it centrally
         if cache_file.exists():
             logger.debug(f"Using cached image: {cache_file.name}")
-            self._cached_urls.add(url_hash)
+            self._pipeline.record_keys([url_key])
             return cache_file
         
         # Download image
@@ -869,8 +872,8 @@ class RSSSource(ImageProvider):
             
             logger.info(f"Downloaded image: {cache_file.name} ({cache_file.stat().st_size} bytes)")
             
-            # Track this URL as cached
-            self._cached_urls.add(url_hash)
+            # Phase 2.3: Track this URL in central dedupe manager
+            self._pipeline.record_keys([url_key])
             
             # Optionally save to permanent storage
             if self.save_to_disk and self.save_directory:
