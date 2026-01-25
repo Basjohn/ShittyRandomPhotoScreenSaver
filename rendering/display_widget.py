@@ -73,7 +73,7 @@ from transitions.overlay_manager import (
     GL_OVERLAY_KEYS,
     SW_OVERLAY_KEYS,
 )
-from core.events import EventSystem
+from core.events import EventSystem, EventType
 from core.mc_build import is_mc_build
 from rendering.backends import BackendSelectionResult, create_backend_from_settings
 from rendering.backends.base import RendererBackend, RenderSurface, SurfaceDescriptor
@@ -129,6 +129,14 @@ _APPCOMMAND_NAMES = {
     0x000F: "APPCOMMAND_MEDIA_CHANNEL_DOWN",
     0x0010: "APPCOMMAND_VOLUME_DOWN",
     0x0012: "APPCOMMAND_VOLUME_UP",
+}
+
+_APPCOMMAND_TO_MEDIA_ACTION = {
+    0x0005: "next",
+    0x0006: "prev",
+    0x0008: "play",
+    0x0009: "play",
+    0x000E: "play",
 }
 
 if sys.platform == "win32":
@@ -215,6 +223,7 @@ class DisplayWidget(QWidget):
         self._transition_fallback_type: str = "Crossfade"
         self._transition_random_enabled: bool = False
         self._settings_listener_connected: bool = False
+        self._event_system: Optional[EventSystem] = None
         self.current_pixmap: Optional[QPixmap] = None
         self.current_image_path: Optional[str] = None
         self.previous_pixmap: Optional[QPixmap] = None
@@ -258,6 +267,12 @@ class DisplayWidget(QWidget):
         self._ctrl_cursor_hint: Optional[CursorHaloWidget] = None
         self._last_halo_activity_ts: float = 0.0
         self._halo_last_local_pos: Optional[QPoint] = None
+        self._event_system = self._resolve_event_system()
+        if self._event_system is not None:
+            try:
+                MediaWidget.attach_event_system(self._event_system)
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Failed to attach EventSystem to MediaWidget: %s", e)
         self._halo_activity_timeout: float = 2.0
         self._exiting: bool = False
         self._focus_loss_logged: bool = False
@@ -1782,15 +1797,7 @@ class DisplayWidget(QWidget):
             logger.info("[RENDER] No settings manager attached; backend initialization skipped")
             return
 
-        event_system: Optional[EventSystem] = None
-        try:
-            if hasattr(self.settings_manager, "get_event_system"):
-                candidate = self.settings_manager.get_event_system()
-                if isinstance(candidate, EventSystem):
-                    event_system = candidate
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            event_system = None
+        event_system = self._event_system
 
         try:
             selection = create_backend_from_settings(
@@ -3532,6 +3539,13 @@ class DisplayWidget(QWidget):
             lparam,
         )
 
+        action = _APPCOMMAND_TO_MEDIA_ACTION.get(command)
+        if action is not None:
+            try:
+                self._publish_media_control_action(action, event_time=time.monotonic())
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Failed to publish media control action: %s", e)
+
         if _USER32 is not None and hwnd:
             try:
                 result = int(_USER32.DefWindowProcW(hwnd, WM_APPCOMMAND, wparam, lparam))
@@ -3541,6 +3555,39 @@ class DisplayWidget(QWidget):
                 target_logger.debug("[WIN_APPCOMMAND] DefWindowProcW failed", exc_info=True)
 
         return False, 0
+
+    def _resolve_event_system(self) -> Optional[EventSystem]:
+        settings = self.settings_manager
+        if settings is None:
+            return None
+        try:
+            if hasattr(settings, "get_event_system"):
+                candidate = settings.get_event_system()
+                if isinstance(candidate, EventSystem):
+                    return candidate
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+        return None
+
+    def _publish_media_control_action(self, action: str, *, event_time: Optional[float] = None) -> bool:
+        event_system = self._event_system
+        if event_system is None:
+            return False
+        payload = {
+            "action": action,
+            "timestamp": event_time if event_time is not None else time.monotonic(),
+            "screen_index": self.screen_index,
+        }
+        try:
+            event_system.publish(
+                EventType.MEDIA_CONTROL_TRIGGERED,
+                data=payload,
+                source=self,
+            )
+            return True
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Failed to publish media control event: %s", e)
+            return False
 
     def eventFilter(self, watched, event):  # type: ignore[override]
         """Global event filter to keep the Ctrl halo responsive over children."""

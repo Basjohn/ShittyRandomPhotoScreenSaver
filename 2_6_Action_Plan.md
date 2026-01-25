@@ -137,7 +137,7 @@ Implement the in-depth plan from Feature Investigation §8 while resolving audit
 - [ ] Keep buttons enabled/disabled appropriately and allow cancellation when possible.  
 **Pitfalls:** Ensure ThreadManager single-shot is not invoked before QApplication instantiation.
 
-### 2.2 Priority & Multi-select UX
+### 2.2 Priority & Multi-select UX [PRIORITY STILL NEEDED BUT MULTI-SELECT CANCELLED REMOVE ALL BUTTON TAKES CARE OF THIS ALREADY]
 **Details (from Feature Plan §8):**  
 - Priority equals list order; label rows with “Priority #”.
 - Add ExtendedSelection (Shift/Ctrl/mouse drag) for batch removal.  
@@ -147,6 +147,7 @@ Implement the in-depth plan from Feature Investigation §8 while resolving audit
 - [ ] Display priority numbers in the UI (delegate or suffix).  
 - [ ] Persist ordering in settings; ensure “Just Make It Work” writes feeds sorted by desired priority.  
 - [ ] Update tooltips/docs to explain priority semantics.  
+(Reddit source can gain priorty over other reddit but not non reddit sources because of rate limiting)
 
 ### 2.3 Cache & Dedupe Unification
 **Goal:** Consolidate the multiple dedupe layers (engine queue, `_rss_pipeline.record_images`, worker cache, disk cache).  
@@ -427,3 +428,31 @@ Long-range coordination once core work is complete.
 2. Update checklist status inline with notes when scope changes; never remove context.  
 3. Mirror completions in Spec/Index/TestSuite + audits immediately.  
 4. Treat this document as the single source of truth—new discoveries should be added to the appropriate phase or a new phase, not scattered elsewhere.
+
+--------------------------------------------
+SUGGESTIONS BOX 
+--------------------------------------------
+This special area below this patch of text will be known as the suggestions box.
+You will be able to add suggestions freely for the developer/user/other agents to check as worth investigating/implementing'
+and are encouraged to do so regularly. The user/developer will also place suggestions here.
+All suggestions must have two checkboxes. Only once the user/developer checks at least one can it be removed from the box and placed into the action plan where appropriate.
+2 checks means implement, 1 check means investigate and add to medium/low priority tasks if deemed valuable. Examine the box during every doc update. If any suggestions are made obviously redundant, remove them
+Keep this box tidy and ordered. IT IS NOT A CHANGE LOG. Pre place checkboxes even without suggestions for convienence, in space allocated. If suggestions exist without check boxes, reformat them to have them.
+##################################################################
+## Examine that multiple visualizers do not do multiple work. Media is always a clone, central work to avoid performance issues is key.
+## Check what visualizer FPS limitations/caps are, how they function with vsync, whether altering these would improve smoothness or performance.
+## Many alignment issues in media card when on main_mc ONLY, card does not expand vertically enough to have entire artists and title, overlaps controls and is notably slower than in main runs so slow 4fps is observed! 40fps with media off but still laggy. Even disabling ALL WIDGETS only maxes out to 40fp. PRIORITY. 
+## Clean up logging significantly! Too much is logged when not needed 10x at least! More suppressions, averages or not logging of stable minor systems unless actively being worked on (quick toggle on and off)
+##
+##
+##
+##
+##
+##
+##
+##
+##
+##
+##
+##
+###################################################################

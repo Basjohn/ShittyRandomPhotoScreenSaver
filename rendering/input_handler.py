@@ -774,27 +774,8 @@ class InputHandler(QObject):
             geom = mw.geometry()
             local_x = pos.x() - geom.x()
             local_y = pos.y() - geom.y()
-            height = max(1, mw.height())
-            width = max(1, mw.width())
-            
-            # Controls row is in the bottom 60px
-            controls_row_height = 60
-            controls_row_top = height - controls_row_height
-            
-            if local_y >= controls_row_top:
-                content_width = width
-                x_in_content = max(0, min(content_width, local_x))
-                third = content_width / 3.0
-                
-                if x_in_content < third:
-                    mw.previous_track()
-                    return True
-                elif x_in_content < 2.0 * third:
-                    mw.play_pause()
-                    return True
-                else:
-                    mw.next_track()
-                    return True
+            from PySide6.QtCore import Qt as _Qt
+            return bool(mw.handle_controls_click(QPoint(local_x, local_y), _Qt.MouseButton.LeftButton))
         except Exception as e:
             logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
         return False

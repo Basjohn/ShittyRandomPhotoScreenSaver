@@ -103,6 +103,7 @@ class ClockWidget(BaseOverlayWidget):
         self._show_timezone = show_timezone
         self._thread_manager: Optional["ThreadManager"] = None
         self._timer_handle: Optional[OverlayTimerHandle] = None
+        self._timer = None
         
         # Separate label for timezone
         self._tz_label: Optional[QLabel] = None
@@ -132,13 +133,20 @@ class ClockWidget(BaseOverlayWidget):
         self._cached_clock_face: Optional["QPixmap"] = None
         self._cached_clock_face_size: Optional[tuple[int, int]] = None
         self._clock_face_cache_invalidated: bool = True
-        
+        # Reusable analog frame buffer to avoid reallocating full-resolution pixmaps each paint
+        self._analog_frame_buffer: Optional[QPixmap] = None
+        self._analog_frame_buffer_size: Optional[tuple[int, int]] = None
+        self._analog_frame_buffer_dpr: Optional[float] = None
+
         # Setup widget
         self._setup_ui()
         
         # Track if we've been initialized via lifecycle
-        self._lifecycle_initialized = False
-        
+        self._lifecycle_initialized = True
+
+        # External tick driver toggle (e.g., synthetic benchmark shared timer)
+        self._external_tick_driver: bool = False
+
         logger.debug(f"ClockWidget created (format={time_format.value}, "
                     f"position={position.value}, seconds={show_seconds}, "
                     f"timezone={timezone_str}, show_tz={show_timezone})")
@@ -213,14 +221,19 @@ class ClockWidget(BaseOverlayWidget):
         """Activate clock - start timer and show widget (lifecycle hook)."""
         if not self._ensure_thread_manager("ClockWidget._activate_impl"):
             raise RuntimeError("ThreadManager not available")
-        
+
         # Update immediately
         self._update_time()
-        
-        # Start recurring updates
-        handle = create_overlay_timer(self, 1000, self._update_time, description="ClockWidget tick")
-        self._timer_handle = handle
-        self._timer = getattr(handle, "_timer", None)
+
+        if self._external_tick_driver:
+            logger.debug("[CLOCK] External tick driver active; skipping internal timer start")
+            self._timer_handle = None
+            self._timer = None
+        else:
+            # Start recurring updates
+            handle = create_overlay_timer(self, 1000, self._update_time, description="ClockWidget tick")
+            self._timer_handle = handle
+            self._timer = getattr(handle, "_timer", None)
         
         # Start fade-in
         parent = self.parent()
@@ -286,14 +299,19 @@ class ClockWidget(BaseOverlayWidget):
         # Update immediately
         self._update_time()
 
-        # Start recurring updates via the centralized overlay timer helper.
-        # Keep the legacy QTimer attribute for compatibility with any
-        # existing diagnostics/tests while routing creation through
-        # create_overlay_timer so timers participate in ThreadManager /
-        # ResourceManager tracking when available.
-        handle = create_overlay_timer(self, 1000, self._update_time, description="ClockWidget tick")
-        self._timer_handle = handle
-        self._timer = getattr(handle, "_timer", None)
+        if self._external_tick_driver:
+            logger.debug("[CLOCK] External tick driver active; skipping legacy start timer")
+            self._timer_handle = None
+            self._timer = None
+        else:
+            # Start recurring updates via the centralized overlay timer helper.
+            # Keep the legacy QTimer attribute for compatibility with any
+            # existing diagnostics/tests while routing creation through
+            # create_overlay_timer so timers participate in ThreadManager /
+            # ResourceManager tracking when available.
+            handle = create_overlay_timer(self, 1000, self._update_time, description="ClockWidget tick")
+            self._timer_handle = handle
+            self._timer = getattr(handle, "_timer", None)
 
         self._enabled = True
         parent = self.parent()
@@ -719,7 +737,6 @@ class ClockWidget(BaseOverlayWidget):
 
     def set_display_mode(self, mode: str) -> None:
         """Set display mode ("digital" or "analog")."""
-
         mode_l = str(mode).lower()
         if mode_l not in ("digital", "analog"):
             mode_l = "digital"
@@ -743,6 +760,33 @@ class ClockWidget(BaseOverlayWidget):
             self._update_time()
         else:
             self.update()
+
+    def set_external_tick_driver(self, enabled: bool) -> None:
+        """
+        Toggle whether this clock relies on an external/shared tick driver.
+
+        When enabled, the widget skips creating its own overlay timer so an
+        external controller (e.g., synthetic benchmark shared tick hub) can
+        call `_update_time()` directly.
+        """
+        flag = bool(enabled)
+        if self._external_tick_driver == flag:
+            return
+        self._external_tick_driver = flag
+        if flag:
+            if self._timer_handle is not None:
+                try:
+                    self._timer_handle.stop()
+                except Exception as e:
+                    logger.debug("[CLOCK] Exception suppressed: %s", e)
+                self._timer_handle = None
+            if self._timer is not None:
+                try:
+                    self._timer.stop()
+                    self._timer.deleteLater()
+                except Exception:
+                    pass
+                self._timer = None
     
     def set_position(self, position: ClockPosition) -> None:
         """
@@ -987,6 +1031,17 @@ class ClockWidget(BaseOverlayWidget):
         """Invalidate the cached clock face so it will be regenerated on next paint."""
         self._clock_face_cache_invalidated = True
         self._cached_clock_face = None
+        self._invalidate_analog_frame_buffer()
+
+    def _invalidate_analog_frame_buffer(self) -> None:
+        """Drop the reusable analog frame buffer so a new pixmap will be allocated."""
+        self._analog_frame_buffer = None
+        self._analog_frame_buffer_size = None
+        self._analog_frame_buffer_dpr = None
+
+    def resizeEvent(self, event) -> None:  # type: ignore[override]
+        super().resizeEvent(event)
+        self._invalidate_analog_frame_buffer()
 
     def _regenerate_clock_face_cache(self, width: int, height: int) -> None:
         """Regenerate the cached clock face pixmap with static elements.
@@ -1153,8 +1208,7 @@ class ClockWidget(BaseOverlayWidget):
         # Create a fresh frame buffer each paint to prevent hand accumulation
         # on transparent backgrounds. We composite: cached face + fresh hands.
         dpr = self.devicePixelRatioF()
-        frame_buffer = QPixmap(int(self.width() * dpr), int(self.height() * dpr))
-        frame_buffer.setDevicePixelRatio(dpr)
+        frame_buffer = self._acquire_analog_frame_buffer(self.width(), self.height(), dpr)
         frame_buffer.fill(Qt.GlobalColor.transparent)
         
         # Draw into frame buffer
@@ -1266,7 +1320,7 @@ class ClockWidget(BaseOverlayWidget):
                 fb_painter.drawText(tz_x, tz_y, text)
         finally:
             fb_painter.end()
-        
+
         # Blit the composited frame buffer to the widget
         painter = QPainter(self)
         try:
@@ -1278,6 +1332,23 @@ class ClockWidget(BaseOverlayWidget):
             painter.drawPixmap(0, 0, frame_buffer)
         finally:
             painter.end()
+
+    def _acquire_analog_frame_buffer(self, width: int, height: int, dpr: float) -> QPixmap:
+        """Return a reusable frame buffer pixmap for analog paints."""
+        buffer = self._analog_frame_buffer
+        needs_new = (
+            buffer is None
+            or self._analog_frame_buffer_size != (width, height)
+            or self._analog_frame_buffer_dpr is None
+            or not math.isclose(self._analog_frame_buffer_dpr, dpr, rel_tol=1e-6)
+        )
+        if needs_new:
+            buffer = QPixmap(max(1, int(width * dpr)), max(1, int(height * dpr)))
+            buffer.setDevicePixelRatio(max(1.0, dpr))
+            self._analog_frame_buffer = buffer
+            self._analog_frame_buffer_size = (width, height)
+            self._analog_frame_buffer_dpr = float(dpr)
+        return buffer
 
     def _compute_analog_padding(self) -> tuple[int, int, int, int]:
         dpi_y = max(96, int(round(self.logicalDpiY()))) if hasattr(self, "logicalDpiY") else 96

@@ -566,12 +566,14 @@ class TestMediaWidgetIdleDetection:
         assert widget._consecutive_none_count == 0
 
 
-def test_media_widget_transport_delegates_to_controller():
-    """Transport methods should delegate to the underlying controller."""
+@pytest.mark.qt
+def test_media_widget_transport_delegates_to_controller(mock_parent, qtbot):
+    """Transport methods should delegate to the underlying controller and keep widget alive."""
 
     info = mc.MediaTrackInfo(title="Song", state=mc.MediaPlaybackState.PLAYING)
     ctrl = _DummyController(info=info)
-    w = MediaWidget(parent=QWidget(), controller=ctrl)
+    w = MediaWidget(parent=mock_parent, controller=ctrl)
+    qtbot.addWidget(w)
 
     w.play_pause()
     w.next_track()
@@ -633,7 +635,10 @@ def test_display_widget_ctrl_click_routes_to_media_widget(
     assert handler is not None
 
     media = w.media_widget
-    local_controls_pos = QtCore.QPoint(media.width() // 2, media.height() - 10)
+    layout = media._compute_controls_layout()  # type: ignore[attr-defined]
+    assert layout is not None
+    play_rect = layout["button_rects"]["play"]
+    local_controls_pos = play_rect.center()
     pos = media.mapToParent(local_controls_pos)
     event = QMouseEvent(
         QEvent.Type.MouseButtonPress,
@@ -704,8 +709,11 @@ def test_display_widget_hard_exit_click_routes_to_media_widget(
     handler = getattr(w, "_input_handler", None)
     assert handler is not None
 
-    geom = w.media_widget.geometry()
-    pos = QtCore.QPoint(geom.center().x(), geom.bottom() - 10)
+    media = w.media_widget
+    layout = media._compute_controls_layout()  # type: ignore[attr-defined]
+    assert layout is not None
+    play_rect = layout["button_rects"]["play"]
+    pos = media.mapToParent(play_rect.center())
     event = QMouseEvent(
         QEvent.Type.MouseButtonPress,
         QtCore.QPointF(pos),

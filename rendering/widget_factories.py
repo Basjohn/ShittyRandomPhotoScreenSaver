@@ -118,6 +118,14 @@ class ClockWidgetFactory(WidgetFactory):
                     return base_clock_settings.get(key, default)
                 return config.get(key, default)
             
+            def _resolve_bool(key: str, default: bool) -> bool:
+                value = config.get(key, None)
+                if value is None and isinstance(base_clock_settings, dict):
+                    value = base_clock_settings.get(key, None)
+                if value is None:
+                    value = default
+                return SettingsManager.to_bool(value, default)
+            
             # Position mapping
             position_map = {
                 WidgetPosition.TOP_LEFT: ClockPosition.TOP_LEFT,
@@ -155,6 +163,9 @@ class ClockWidgetFactory(WidgetFactory):
                 timezone_str=timezone_str,
                 show_timezone=show_timezone,
             )
+            shared_tick_enabled = _resolve_bool('shared_tick', True)
+            if hasattr(widget, 'set_external_tick_driver'):
+                widget.set_external_tick_driver(shared_tick_enabled)
             
             # Configure styling with inheritance
             font_family = _resolve_style('font_family', 'Segoe UI')
@@ -344,6 +355,10 @@ class WeatherWidgetFactory(WidgetFactory):
             desaturate_icon = SettingsManager.to_bool(config.get('desaturate_animated_icon', False), False)
             if hasattr(widget, 'set_desaturate_animated_icon'):
                 widget.set_desaturate_animated_icon(desaturate_icon)
+
+            shared_driver = SettingsManager.to_bool(config.get('shared_animation_driver', True), True)
+            if hasattr(widget, 'set_shared_animation_driver_enabled'):
+                widget.set_shared_animation_driver_enabled(shared_driver)
             
             # Margin
             margin = config.get('margin', 30)

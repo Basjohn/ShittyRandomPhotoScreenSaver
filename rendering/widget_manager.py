@@ -8,10 +8,12 @@ from __future__ import annotations
 import logging
 import os
 import time
-from typing import Any, Callable, Dict, List, Optional, Set, TYPE_CHECKING, Mapping
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, TYPE_CHECKING, Mapping
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QObject, QTimer, Qt
 from PySide6.QtWidgets import QWidget, QGraphicsDropShadowEffect, QGraphicsOpacityEffect
+from PySide6.QtSvg import QSvgRenderer
 
 from core.logging.logger import get_logger, is_verbose_logging
 from core.resources.manager import ResourceManager
@@ -26,6 +28,9 @@ from core.settings.models import SpotifyVisualizerSettings, MediaWidgetSettings,
 from widgets.spotify_volume_widget import SpotifyVolumeWidget
 from rendering.widget_positioner import WidgetPositioner, PositionAnchor
 from rendering.widget_factories import WidgetFactoryRegistry
+from core.performance import widget_timer_sample
+from widgets.clock_widget import ClockWidget
+from widgets.weather_widget import WeatherWidget, WeatherConditionIcon
 
 # Re-export for tests that monkeypatch rendering.widget_manager.apply_widget_shadow.
 apply_widget_shadow = _apply_widget_shadow
@@ -36,6 +41,161 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 win_diag_logger = logging.getLogger("win_diag")
+
+
+class _SharedWeatherAnimationLink(QObject):
+    """Relay master weather icon repaints to sink widgets with optional staggering."""
+
+    def __init__(
+        self,
+        *,
+        master_icon: WeatherConditionIcon,
+        sink_widget: WeatherWidget,
+        offset_ms: int,
+        thread_manager: Optional["ThreadManager"],
+        parent: Optional[QObject] = None,
+    ) -> None:
+        super().__init__(parent)
+        self._master_icon = master_icon
+        self._sink_widget = sink_widget
+        self._thread_manager = thread_manager
+        self._offset_ms = max(0, offset_ms)
+        self._delay_timer: Optional[QTimer] = None
+        self._renderer: Optional[QSvgRenderer] = getattr(master_icon, "_renderer", None)
+        self._icon_path: Optional[Path] = getattr(master_icon, "_icon_path", None)
+        self._attach_renderer()
+        try:
+            master_icon.icon_source_changed.connect(self._handle_icon_source_changed)
+        except Exception:
+            logger.debug("[WEATHER][SHARED_ANIM] Failed to hook icon_source_changed", exc_info=True)
+        self._connect_repaint_signal()
+
+    def stop(self) -> None:
+        try:
+            self._master_icon.icon_source_changed.disconnect(self._handle_icon_source_changed)
+        except Exception:
+            pass
+        self._disconnect_repaint_signal()
+        if self._delay_timer is not None:
+            try:
+                self._delay_timer.stop()
+                self._delay_timer.deleteLater()
+            except Exception:
+                pass
+            self._delay_timer = None
+
+    def _handle_icon_source_changed(
+        self,
+        renderer: Optional[QSvgRenderer],
+        icon_path: Optional[Path],
+    ) -> None:
+        self._renderer = renderer
+        self._icon_path = icon_path
+        self._attach_renderer()
+        self._connect_repaint_signal()
+
+    def _attach_renderer(self) -> None:
+        sink_icon = self._sink_widget.get_condition_icon_widget()
+        if sink_icon is None:
+            return
+        sink_icon.set_animation_enabled(False)
+        sink_icon.set_renderer_reference(self._renderer, self._icon_path)
+        sink_icon.set_animation_enabled(True)
+
+    def _connect_repaint_signal(self) -> None:
+        self._disconnect_repaint_signal()
+        if self._renderer is None:
+            return
+        try:
+            self._renderer.repaintNeeded.connect(self._handle_master_repaint)
+        except Exception:
+            logger.debug("[WEATHER][SHARED_ANIM] Failed to hook repaintNeeded", exc_info=True)
+
+    def _disconnect_repaint_signal(self) -> None:
+        if self._renderer is None:
+            return
+        try:
+            self._renderer.repaintNeeded.disconnect(self._handle_master_repaint)
+        except Exception:
+            pass
+
+    def _handle_master_repaint(self) -> None:
+        if self._offset_ms <= 0:
+            self._sink_widget.update()
+            return
+        if self._thread_manager is not None:
+            try:
+                self._thread_manager.single_shot(self._offset_ms, self._sink_widget.update)
+                return
+            except Exception:
+                logger.debug("[WEATHER][SHARED_ANIM] ThreadManager single_shot failed", exc_info=True)
+        if self._delay_timer is None:
+            self._delay_timer = QTimer(self)
+            self._delay_timer.setSingleShot(True)
+            self._delay_timer.timeout.connect(self._sink_widget.update)
+        if self._delay_timer.isActive():
+            self._delay_timer.stop()
+        self._delay_timer.start(self._offset_ms)
+
+
+class SharedWeatherAnimationDriver(QObject):
+    """Shares a single weather icon renderer across sink widgets with staggered repaints."""
+
+    def __init__(
+        self,
+        *,
+        master_widget: WeatherWidget,
+        sink_widgets: Sequence[WeatherWidget],
+        thread_manager: Optional["ThreadManager"],
+        stagger_ms: int = 3,
+        parent: Optional[QObject] = None,
+    ) -> None:
+        super().__init__(parent)
+        self._master_widget = master_widget
+        self._sink_widgets = list(sink_widgets)
+        self._thread_manager = thread_manager
+        self._stagger_ms = max(0, stagger_ms)
+        self._links: List[_SharedWeatherAnimationLink] = []
+        master_widget.disable_shared_animation_sink_mode()
+        master_icon = master_widget.get_condition_icon_widget()
+        if master_icon is None or not self._sink_widgets:
+            return
+        for index, sink in enumerate(self._sink_widgets, start=1):
+            try:
+                sink.enable_shared_animation_sink_mode()
+            except Exception:
+                logger.debug("[WEATHER][SHARED_ANIM] Failed to enable sink mode", exc_info=True)
+            link = _SharedWeatherAnimationLink(
+                master_icon=master_icon,
+                sink_widget=sink,
+                offset_ms=index * self._stagger_ms,
+                thread_manager=self._thread_manager,
+                parent=self,
+            )
+            self._links.append(link)
+
+    def has_links(self) -> bool:
+        return bool(self._links)
+
+    def stop(self) -> None:
+        for link in self._links:
+            try:
+                link.stop()
+            except Exception:
+                logger.debug("[WEATHER][SHARED_ANIM] Link stop failed", exc_info=True)
+            finally:
+                link.deleteLater()
+        self._links.clear()
+        for sink in self._sink_widgets:
+            try:
+                sink.disable_shared_animation_sink_mode()
+                sink.refresh_condition_icon()
+            except Exception:
+                logger.debug("[WEATHER][SHARED_ANIM] Failed to reset sink widget", exc_info=True)
+        try:
+            self._master_widget.disable_shared_animation_sink_mode()
+        except Exception:
+            pass
 
 
 def _in_test_environment() -> bool:
@@ -79,6 +239,7 @@ class WidgetManager:
         
         # Widget references
         self._widgets: Dict[str, QWidget] = {}
+        self._weather_widgets_by_display: Dict[int, List["WeatherWidget"]] = {}
         
         # Rate limiting for raise operations
         self._last_raise_time: float = 0.0
@@ -104,6 +265,14 @@ class WidgetManager:
         
         # Widget factory registry (Dec 2025) - for simplified widget creation
         self._factory_registry: Optional[WidgetFactoryRegistry] = None
+        self._thread_manager: Optional["ThreadManager"] = None
+
+        # Shared clock tick hub state
+        self._clock_shared_tick_timer: Optional[QTimer] = None
+        self._clock_shared_tick_widgets: List["ClockWidget"] = []
+        self._clock_shared_tick_interval_ms: int = 1000
+        self._clock_shared_tick_stagger_ms: int = 4
+        self._weather_animation_drivers: Dict[int, SharedWeatherAnimationDriver] = {}
 
         # Settings manager wiring for live updates (Spotify VIS etc.)
         self._settings_manager: Optional[SettingsManager] = None
@@ -161,6 +330,12 @@ class WidgetManager:
             thread_manager: Optional ThreadManager for background operations
         """
         self._factory_registry = WidgetFactoryRegistry(settings, thread_manager)
+        self._thread_manager = thread_manager
+        if thread_manager is not None:
+            try:
+                setattr(self._parent, "_thread_manager", thread_manager)
+            except Exception as exc:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", exc)
         logger.debug("[WIDGET_MANAGER] Factory registry initialized")
     
     def set_process_supervisor(self, supervisor) -> None:
@@ -871,6 +1046,9 @@ class WidgetManager:
             except Exception as e:
                 logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             self._raise_timer = None
+
+        self._stop_shared_clock_tick_timer()
+        self._teardown_weather_animation_drivers()
         
         # Use lifecycle cleanup for widgets that support it
         for name, widget in list(self._widgets.items()):
@@ -1637,6 +1815,9 @@ class WidgetManager:
 
         # Reset fade coordination
         self.reset_fade_coordination()
+        self._stop_shared_clock_tick_timer()
+        self._teardown_weather_animation_drivers()
+        self._weather_widgets_by_display.clear()
 
         created = {}
 
@@ -1699,6 +1880,7 @@ class WidgetManager:
                 )
                 if widget:
                     self.register_widget("weather", widget)
+                    self._weather_widgets_by_display.setdefault(screen_index, []).append(widget)
                     created['weather_widget'] = widget
 
         # Create media widget via factory
@@ -1770,6 +1952,9 @@ class WidgetManager:
                     widget.start()
                 except Exception as e:
                     logger.debug("Failed to start %s: %s", attr_name, e)
+
+        self._configure_shared_clock_tick()
+        self._configure_shared_weather_animation_drivers(screen_index)
         
         # CRITICAL: Raise widgets AFTER start() so fade coordination completes first
         # This prevents widgets appearing before compositor is ready
@@ -1785,6 +1970,208 @@ class WidgetManager:
 
         logger.info("Widget setup complete: %d widgets created and started via factories", len(created))
         return created
+
+    def _configure_shared_clock_tick(self) -> None:
+        """Setup or refresh the shared clock tick hub for clocks using external driver."""
+        active_widgets: List[ClockWidget] = []
+        for name in ('clock', 'clock2', 'clock3'):
+            widget = self._widgets.get(name)
+            if widget is None:
+                continue
+            try:
+                if not isinstance(widget, ClockWidget):
+                    continue
+                if not getattr(widget, "_external_tick_driver", False):
+                    continue
+            except Exception as exc:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", exc)
+                continue
+            active_widgets.append(widget)
+
+        self._clock_shared_tick_widgets = active_widgets
+
+        if not active_widgets:
+            self._stop_shared_clock_tick_timer()
+            return
+
+        if self._clock_shared_tick_timer is not None:
+            return
+
+        timer: Optional[QTimer] = None
+
+        if self._thread_manager is not None:
+            def _tick() -> None:
+                self._drive_shared_clock_tick()
+
+            try:
+                timer = self._thread_manager.schedule_recurring(
+                    self._clock_shared_tick_interval_ms,
+                    _tick,
+                    description="[PERF][CLOCK] Shared tick hub",
+                )
+            except Exception as exc:
+                logger.debug("[WIDGET_MANAGER] Failed to schedule shared clock tick via ThreadManager: %s", exc)
+
+        if timer is None:
+            timer = QTimer(self._parent)
+            timer.setTimerType(Qt.TimerType.PreciseTimer)
+            timer.timeout.connect(self._drive_shared_clock_tick)
+            timer.start(self._clock_shared_tick_interval_ms)
+
+        self._clock_shared_tick_timer = timer
+        logger.info("[CLOCK] Shared tick hub started for %d widgets", len(active_widgets))
+
+    def _stop_shared_clock_tick_timer(self) -> None:
+        """Stop and dispose the shared clock tick timer if active."""
+        timer = self._clock_shared_tick_timer
+        self._clock_shared_tick_timer = None
+        self._clock_shared_tick_widgets = []
+        if timer is None:
+            return
+        try:
+            timer.stop()
+        except Exception:
+            logger.debug("[CLOCK] Exception stopping shared tick timer", exc_info=True)
+        try:
+            timer.deleteLater()
+        except Exception:
+            pass
+        logger.info("[CLOCK] Shared tick hub stopped")
+
+    def _drive_shared_clock_tick(self) -> None:
+        """Fan out shared tick invokes to all registered clock widgets."""
+        if not self._clock_shared_tick_widgets:
+            self._stop_shared_clock_tick_timer()
+            return
+
+        widgets: List[ClockWidget] = []
+        for widget in self._clock_shared_tick_widgets:
+            if widget is None:
+                continue
+            widgets.append(widget)
+
+        if not widgets:
+            self._stop_shared_clock_tick_timer()
+            return
+
+        stagger_ms = max(0, self._clock_shared_tick_stagger_ms)
+
+        if len(widgets) == 1 or stagger_ms == 0:
+            for widget in widgets:
+                self._invoke_clock_widget_tick(widget)
+            return
+
+        for index, widget in enumerate(widgets):
+            delay_ms = index * stagger_ms
+            if delay_ms <= 0:
+                self._invoke_clock_widget_tick(widget)
+                continue
+
+            if self._thread_manager is not None:
+                try:
+                    self._thread_manager.single_shot(delay_ms, self._invoke_clock_widget_tick, widget)
+                    continue
+                except Exception:
+                    logger.debug("[CLOCK] Failed to schedule shared tick stagger via ThreadManager", exc_info=True)
+
+            try:
+                QTimer.singleShot(delay_ms, lambda w=widget: self._invoke_clock_widget_tick(w))
+            except Exception:
+                logger.debug("[CLOCK] Failed to schedule shared tick stagger via QTimer", exc_info=True)
+
+    def _invoke_clock_widget_tick(self, clock_widget: Optional[ClockWidget]) -> None:
+        """Safely invoke a tick on a clock widget under perf sampling."""
+        if clock_widget is None:
+            return
+
+        metric_name = getattr(clock_widget, "_overlay_name", "clock") or "clock"
+        try:
+            with widget_timer_sample(
+                clock_widget,
+                f"{metric_name}.shared.tick",
+                interval_ms=self._clock_shared_tick_interval_ms,
+            ):
+                clock_widget._update_time()
+        except Exception:
+            logger.debug("[CLOCK] Shared tick failed for %s", metric_name, exc_info=True)
+
+    # =========================================================================
+    # Shared Weather Animation Driver
+    # =========================================================================
+
+    def _configure_shared_weather_animation_drivers(self, screen_index: int) -> None:
+        """Configure shared weather animation driver for the given display."""
+        self._stop_weather_driver(screen_index)
+        widgets = self._weather_widgets_by_display.get(screen_index, []) or []
+        if not widgets:
+            return
+
+        # Reset sink mode in case previous driver was removed.
+        for widget in widgets:
+            try:
+                widget.disable_shared_animation_sink_mode()
+            except Exception:
+                logger.debug("[WEATHER][SHARED_ANIM] Failed to reset sink mode", exc_info=True)
+
+        eligible: List[WeatherWidget] = []
+        for widget in widgets:
+            try:
+                if not widget.shared_animation_driver_enabled():
+                    continue
+                eligible.append(widget)
+            except Exception:
+                logger.debug("[WEATHER][SHARED_ANIM] Eligibility check failed", exc_info=True)
+
+        if len(eligible) < 2:
+            logger.debug(
+                "[WEATHER][SHARED_ANIM] Skipping shared driver (screen=%s, eligible=%s)",
+                screen_index,
+                len(eligible),
+            )
+            return
+
+        master = eligible[0]
+        sinks = eligible[1:]
+        driver = SharedWeatherAnimationDriver(
+            master_widget=master,
+            sink_widgets=sinks,
+            thread_manager=self._thread_manager,
+            stagger_ms=3,
+            parent=self._parent,
+        )
+        if not driver.has_links():
+            driver.stop()
+            driver.deleteLater()
+            logger.debug(
+                "[WEATHER][SHARED_ANIM] Shared driver aborted (no links) screen=%s",
+                screen_index,
+            )
+            return
+
+        self._weather_animation_drivers[screen_index] = driver
+        logger.info(
+            "[WEATHER][SHARED_ANIM] Shared driver active screen=%s master=%s sinks=%s",
+            screen_index,
+            getattr(master, "_overlay_name", "weather"),
+            len(sinks),
+        )
+
+    def _stop_weather_driver(self, screen_index: int) -> None:
+        """Stop and remove the shared weather driver for a screen."""
+        driver = self._weather_animation_drivers.pop(screen_index, None)
+        if driver is None:
+            return
+        try:
+            driver.stop()
+            driver.deleteLater()
+        except Exception:
+            logger.debug("[WEATHER][SHARED_ANIM] Failed to stop driver", exc_info=True)
+
+    def _teardown_weather_animation_drivers(self) -> None:
+        """Stop and dispose all shared weather animation drivers."""
+        for screen_index in list(self._weather_animation_drivers.keys()):
+            self._stop_weather_driver(screen_index)
+        self._weather_animation_drivers.clear()
 
     def create_spotify_volume_widget(
         self,

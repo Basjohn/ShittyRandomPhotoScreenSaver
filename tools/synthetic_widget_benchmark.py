@@ -45,12 +45,16 @@ import time
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 from datetime import timedelta
 
-# Ensure repo root is importable before local dependencies.
-_REPO_ROOT = Path(__file__).resolve().parent.parent
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
-
-from PySide6.QtCore import QObject, QTimer, Qt, Signal, QBuffer, QIODevice, QSize, QRect  # noqa: E402
+from PySide6.QtCore import (
+    QObject,
+    QTimer,
+    Qt,
+    Signal,
+    QBuffer,
+    QIODevice,
+    QSize,
+    QRect,
+)  # noqa: E402
 from PySide6.QtGui import (  # noqa: E402
     QColor,
     QPainter,
@@ -62,6 +66,11 @@ from PySide6.QtGui import (  # noqa: E402
     QPainterPath,
 )
 from PySide6.QtWidgets import QApplication, QVBoxLayout, QHBoxLayout, QWidget  # noqa: E402
+
+# Ensure repo root is importable before local dependencies.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 # Ensure perf metrics emit even when run outside the screensaver shell.
 if os.getenv("SRPSS_PERF_METRICS", "").strip().lower() not in {"1", "true", "on", "yes"}:
@@ -295,6 +304,8 @@ class BenchmarkArgs:
     weather_icon_alignment: str
     weather_icon_animated: bool
     weather_icon_desaturate: bool
+    weather_animated_displays: Optional[List[int]]
+    weather_shared_animation_driver: bool
     weather_fixture: Optional[Path]
     weather_width: int
     weather_height: int
@@ -307,6 +318,7 @@ class BenchmarkArgs:
     reddit_per_display: int
     clock_enabled: bool
     clock_per_display: int
+    clock_shared_tick: bool
     transitions_enabled: bool
     transition_speed_scale: float
     transition_width: int
@@ -337,6 +349,96 @@ class DisplayStack:
     clock_widgets: List[ClockWidget]
     media_widgets: List["BenchmarkMediaWidget"]
     transition_widget: Optional["TransitionStub"]
+
+
+class _SharedWeatherAnimationLink(QObject):
+    """Relay master weather icon repaints to sink icons with staggered offsets."""
+
+    def __init__(
+        self,
+        *,
+        renderer: Any,
+        sink_icon: Any,
+        icon_path: Optional[Path],
+        offset_ms: int,
+        parent: Optional[QObject],
+    ) -> None:
+        super().__init__(parent)
+        self._renderer = renderer
+        self._sink_icon = sink_icon
+        self._icon_path = icon_path
+        self._offset_ms = max(0, offset_ms)
+        self._delay_timer: Optional[QTimer] = None
+        self._attach_renderer()
+        try:
+            renderer.repaintNeeded.connect(self._handle_master_repaint)
+        except Exception:
+            logger.debug("[BENCH] Failed to hook shared weather repaint for %r", sink_icon, exc_info=True)
+
+    def _attach_renderer(self) -> None:
+        icon = self._sink_icon
+        renderer = self._renderer
+        if icon is None or renderer is None:
+            return
+        try:
+            icon.set_animation_enabled(False)
+        except Exception:
+            pass
+        try:
+            icon._renderer = renderer  # type: ignore[attr-defined]
+            if self._icon_path is not None:
+                icon._icon_path = self._icon_path  # type: ignore[attr-defined]
+            icon._animation_enabled = True  # type: ignore[attr-defined]
+            icon._static_pixmap = None  # type: ignore[attr-defined]
+        except Exception:
+            logger.debug("[BENCH] Failed to attach shared renderer to %r", icon, exc_info=True)
+
+    def _handle_master_repaint(self) -> None:
+        if self._offset_ms <= 0:
+            self._sink_icon.update()
+            return
+        if self._delay_timer is None:
+            self._delay_timer = QTimer(self)
+            self._delay_timer.setSingleShot(True)
+            self._delay_timer.timeout.connect(self._sink_icon.update)
+        if self._delay_timer.isActive():
+            self._delay_timer.stop()
+        self._delay_timer.start(self._offset_ms)
+
+
+class SharedWeatherAnimationDriver(QObject):
+    """Shares a single weather icon renderer across multiple widgets with staggered repaints."""
+
+    def __init__(
+        self,
+        *,
+        master_widget: WeatherWidget,
+        sinks: Sequence[WeatherWidget],
+        stagger_ms: int = 3,
+        parent: Optional[QObject] = None,
+    ) -> None:
+        super().__init__(parent)
+        self._links: List[_SharedWeatherAnimationLink] = []
+        master_icon = getattr(master_widget, "_condition_icon_widget", None)
+        renderer = getattr(master_icon, "_renderer", None)
+        icon_path = getattr(master_icon, "_icon_path", None)
+        if renderer is None or master_icon is None:
+            return
+        effective_stagger = max(0, stagger_ms)
+        for idx, sink_widget in enumerate(sinks):
+            if sink_widget is master_widget:
+                continue
+            sink_icon = getattr(sink_widget, "_condition_icon_widget", None)
+            if sink_icon is None:
+                continue
+            link = _SharedWeatherAnimationLink(
+                renderer=renderer,
+                sink_icon=sink_icon,
+                icon_path=icon_path,
+                offset_ms=idx * effective_stagger,
+                parent=self,
+            )
+            self._links.append(link)
 
 
 @dataclass
@@ -740,6 +842,18 @@ class BenchmarkWindow(QWidget):
         self._media_feeds: List[SyntheticMediaFeed] = []
         self._thread_pool_stats: Dict[str, Dict[str, Any]] = {}
         self._thread_pool_last_warn: Dict[str, int] = {}
+        self._weather_animated_display_set: Set[int] = self._build_weather_animated_display_set()
+        self._shared_weather_animation_display: Optional[int] = None
+        self._shared_weather_animation_master: Optional[WeatherWidget] = None
+        self._shared_weather_animation_sinks: List[WeatherWidget] = []
+        self._weather_animation_driver: Optional["SharedWeatherAnimationDriver"] = None
+        if self._args.weather_shared_animation_driver and self._weather_animated_display_set:
+            self._shared_weather_animation_display = min(self._weather_animated_display_set)
+        self._clock_tick_timer: Optional[QTimer] = None
+        self._clock_tick_interval_ms = 1000
+        self._clock_tick_elapsed_ms = 0
+        self._per_clock_tick_elapsed: Dict[ClockWidget, int] = {}
+        self._clock_shared_tick_stagger_ms = 4
         if args.media_enabled:
             if args.media_feed_mode == "shared":
                 self._media_feeds.append(SyntheticMediaFeed(self._thread_manager, args))
@@ -773,10 +887,20 @@ class BenchmarkWindow(QWidget):
                         weather_payload,
                         parent=column,
                         instance_index=weather_idx,
+                        display_index=display_index,
                     )
                     if widget is not None:
                         stack.weather_widgets.append(widget)
                         self._weather_widgets.append(widget)
+                        if self._args.weather_shared_animation_driver:
+                            if (
+                                self._shared_weather_animation_display is not None
+                                and display_index == self._shared_weather_animation_display
+                                and self._shared_weather_animation_master is None
+                            ):
+                                self._shared_weather_animation_master = widget
+                            else:
+                                self._shared_weather_animation_sinks.append(widget)
                         column_layout.addWidget(widget, 0, Qt.AlignmentFlag.AlignTop)
 
             if self._args.reddit_enabled:
@@ -830,6 +954,8 @@ class BenchmarkWindow(QWidget):
             self._display_stacks.append(stack)
 
         self._configure_widget_cadence()
+        self._initialize_shared_weather_animation_driver()
+        self._configure_clock_tick_driver()
 
         if not args.show_window:
             # Keep the QWidget visible for Qt so paint events fire, but avoid presenting UI.
@@ -837,6 +963,106 @@ class BenchmarkWindow(QWidget):
         self.show()
 
         self._all_widgets: List[QWidget] = self._gather_all_widgets()
+
+    def _build_weather_animated_display_set(self) -> Set[int]:
+        if not self._args.weather_icon_animated:
+            return set()
+        if self._args.weather_animated_displays is None:
+            return set(range(self._args.display_count))
+        return set(self._args.weather_animated_displays)
+
+    def _should_animate_weather(self, display_index: int) -> bool:
+        if not self._args.weather_icon_animated:
+            return False
+        if not self._weather_animated_display_set:
+            return False
+        if (
+            self._args.weather_shared_animation_driver
+            and self._shared_weather_animation_display is not None
+        ):
+            return display_index == self._shared_weather_animation_display
+        return display_index in self._weather_animated_display_set
+
+    def _initialize_shared_weather_animation_driver(self) -> None:
+        if self._weather_animation_driver is not None:
+            self._weather_animation_driver.deleteLater()
+            self._weather_animation_driver = None
+        if (
+            not self._args.weather_shared_animation_driver
+            or self._shared_weather_animation_master is None
+            or not self._shared_weather_animation_sinks
+        ):
+            return
+        self._weather_animation_driver = SharedWeatherAnimationDriver(
+            master_widget=self._shared_weather_animation_master,
+            sinks=self._shared_weather_animation_sinks,
+            stagger_ms=3,
+            parent=self,
+        )
+
+    def _configure_clock_tick_driver(self) -> None:
+        if not self._args.clock_shared_tick or not self._clock_widgets:
+            if self._clock_tick_timer is not None:
+                self._clock_tick_timer.stop()
+                self._clock_tick_timer.deleteLater()
+                self._clock_tick_timer = None
+            return
+        if self._clock_tick_timer is not None:
+            return
+        timer = QTimer(self)
+        timer.setTimerType(Qt.TimerType.PreciseTimer)
+        timer.timeout.connect(self._on_clock_tick)
+        timer.start(self._clock_tick_interval_ms)
+        self._clock_tick_timer = timer
+
+    def _on_clock_tick(self) -> None:
+        if not self._clock_widgets:
+            return
+        if len(self._clock_widgets) == 1 or self._clock_shared_tick_stagger_ms <= 0:
+            for widget in self._clock_widgets:
+                self._drive_clock_widget_tick(
+                    widget,
+                    metric_name="clock.shared.tick",
+                    interval_ms=self._clock_tick_interval_ms,
+                )
+            return
+
+        for index, widget in enumerate(self._clock_widgets):
+            delay_ms = index * self._clock_shared_tick_stagger_ms
+            if delay_ms <= 0:
+                self._drive_clock_widget_tick(
+                    widget,
+                    metric_name="clock.shared.tick",
+                    interval_ms=self._clock_tick_interval_ms,
+                )
+            else:
+                QTimer.singleShot(
+                    delay_ms,
+                    lambda w=widget: self._drive_clock_widget_tick(
+                        w,
+                        metric_name="clock.shared.tick",
+                        interval_ms=self._clock_tick_interval_ms,
+                    ),
+                )
+
+    def _drive_clock_widget_tick(
+        self,
+        clock_widget: Optional[ClockWidget],
+        *,
+        metric_name: str,
+        interval_ms: int,
+    ) -> None:
+        if clock_widget is None:
+            return
+        try:
+            with widget_timer_sample(
+                clock_widget,
+                metric_name,
+                interval_ms=interval_ms,
+            ):
+                clock_widget._update_time()
+        except Exception:
+            logger.debug("[CLOCK] Tick failed (%s)", metric_name, exc_info=True)
 
     @property
     def all_widgets(self) -> List[QWidget]:
@@ -905,16 +1131,17 @@ class BenchmarkWindow(QWidget):
                             force_refresh=(self._cadence_mode == "stress"),
                         )
 
-        for clock_widget in self._clock_widgets:
-            try:
-                with widget_timer_sample(
-                    clock_widget,
-                    "clock.widget.tick",
-                    interval_ms=self._args.interval_ms,
-                ):
-                    clock_widget._update_time()
-            except Exception:
-                pass
+        if self._clock_widgets and not self._args.clock_shared_tick:
+            for clock_widget in self._clock_widgets:
+                try:
+                    with widget_timer_sample(
+                        clock_widget,
+                        "clock.widget.tick",
+                        interval_ms=self._args.interval_ms,
+                    ):
+                        clock_widget._update_time()
+                except Exception:
+                    pass
 
         if self._media_widgets:
             for feed in self._media_feeds:
@@ -1091,6 +1318,7 @@ class BenchmarkWindow(QWidget):
         *,
         parent: Optional[QWidget] = None,
         instance_index: int = 0,
+        display_index: int = 0,
     ) -> Optional[WeatherWidget]:
         if payload is None:
             payload = DEFAULT_WEATHER_SAMPLE
@@ -1102,8 +1330,9 @@ class BenchmarkWindow(QWidget):
         widget.set_show_details_row(self._args.weather_details)
         widget.set_show_forecast(self._args.weather_forecast)
         widget.set_animated_icon_alignment(self._args.weather_icon_alignment.upper())
-        widget.set_animated_icon_enabled(self._args.weather_icon_animated)
+        widget.set_animated_icon_enabled(self._should_animate_weather(display_index))
         widget.set_desaturate_animated_icon(self._args.weather_icon_desaturate)
+        setattr(widget, "_benchmark_display_index", display_index)
 
         # Ensure DPR aware layout before painting.
         widget.resize(widget.minimumSizeHint())
@@ -1158,6 +1387,7 @@ class BenchmarkWindow(QWidget):
         widget = ClockWidget(parent=widget_parent)
         widget.set_thread_manager(self._thread_manager)
         widget._enabled = True
+        widget.set_external_tick_driver(self._args.clock_shared_tick)
         hint = widget.sizeHint()
         if hint.isValid():
             widget.resize(hint)
@@ -1267,6 +1497,22 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="Render the weather condition icon in grayscale to match monochrome themes.",
     )
     parser.add_argument(
+        "--weather-animated-displays",
+        type=str,
+        default=None,
+        help=(
+            "Comma-separated list of display indices whose weather widgets keep animation enabled "
+            "(use 'all' for every display or 'none' to disable everywhere)."
+        ),
+    )
+    parser.add_argument(
+        "--weather-shared-animation-driver",
+        dest="weather_shared_animation_driver",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Experimental: simulate a shared weather icon animation driver across displays.",
+    )
+    parser.add_argument(
         "--weather-fixture",
         type=Path,
         default=None,
@@ -1310,6 +1556,13 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         type=int,
         default=1,
         help="How many clock widgets to instantiate per simulated display (when enabled).",
+    )
+    parser.add_argument(
+        "--clock-shared-tick",
+        dest="clock_shared_tick",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Drive all clock widgets from a shared synthetic tick (reduces duplicate timer sampling).",
     )
     parser.add_argument(
         "--transitions",
@@ -1544,6 +1797,8 @@ def _write_jsonl(
                     "weather_enabled": args.weather_enabled,
                     "weather_details": args.weather_details,
                     "weather_forecast": args.weather_forecast,
+                    "weather_shared_animation_driver": args.weather_shared_animation_driver,
+                    "weather_animated_displays": args.weather_animated_displays or "default",
                     "weather_width": args.weather_width,
                     "weather_height": args.weather_height,
                     "weather_updates_per_frame": args.weather_updates_per_frame,
@@ -1577,19 +1832,47 @@ def _write_jsonl(
             fh.write(json.dumps({"type": "raw", **record}) + "\n")
 
 
+def _parse_weather_animated_displays(raw_value: Optional[str], display_count: int) -> Optional[List[int]]:
+    if not raw_value:
+        return None
+    raw_value = raw_value.strip().lower()
+    if raw_value in {"none", "off"}:
+        return []
+    if raw_value in {"all", "any"}:
+        return list(range(display_count))
+    indices: List[int] = []
+    for part in raw_value.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            idx = int(part)
+        except ValueError:
+            continue
+        if 0 <= idx < display_count:
+            indices.append(idx)
+    return sorted(set(indices))
+
+
 def _parse_args() -> BenchmarkArgs:
     parser = _build_arg_parser()
     ns = parser.parse_args()
+    display_count = max(1, ns.display_count)
     return BenchmarkArgs(
         frames=ns.frames,
         interval_ms=ns.interval_ms,
-        display_count=max(1, ns.display_count),
+        display_count=display_count,
         weather_enabled=ns.weather_enabled,
         weather_details=ns.weather_details,
         weather_forecast=ns.weather_forecast,
         weather_icon_alignment=ns.weather_animated_icon,
         weather_icon_animated=ns.weather_icon_animated,
         weather_icon_desaturate=ns.weather_icon_desaturate,
+        weather_animated_displays=_parse_weather_animated_displays(
+            ns.weather_animated_displays,
+            display_count,
+        ),
+        weather_shared_animation_driver=ns.weather_shared_animation_driver,
         weather_fixture=ns.weather_fixture,
         weather_width=ns.weather_width,
         weather_height=ns.weather_height,
@@ -1601,11 +1884,12 @@ def _parse_args() -> BenchmarkArgs:
         reddit_fixture=ns.reddit_fixture,
         reddit_per_display=max(0, ns.reddit_per_display),
         clock_enabled=ns.clock_enabled,
+        clock_shared_tick=ns.clock_shared_tick,
         clock_per_display=max(0, ns.clock_per_display),
         transitions_enabled=ns.transitions_enabled,
-        transition_speed_scale=max(0.1, min(5.0, float(ns.transition_speed_scale))),
-        transition_width=max(1, ns.transition_width),
-        transition_height=max(1, ns.transition_height),
+        transition_speed_scale=ns.transition_speed_scale,
+        transition_width=max(16, ns.transition_width),
+        transition_height=max(16, ns.transition_height),
         media_enabled=ns.media_enabled,
         media_per_display=max(0, ns.media_per_display),
         media_track_interval=max(1, ns.media_track_interval),

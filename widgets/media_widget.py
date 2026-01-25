@@ -10,18 +10,22 @@ mode remains non-interactive.
 """
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import asdict
 from enum import Enum
 from pathlib import Path
 import os
-from typing import Optional, TYPE_CHECKING
+import time
+from typing import Optional, TYPE_CHECKING, Deque, Tuple, ClassVar
+import weakref
 
 from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import QTimer, Qt, Signal, QVariantAnimation, QRect
+from PySide6.QtCore import QTimer, Qt, Signal, QVariantAnimation, QRect, QPoint
 from PySide6.QtGui import QFont, QColor, QPixmap, QPainter, QPainterPath, QFontMetrics
 from shiboken6 import Shiboken
 
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
+from core.events import EventSystem, EventType, Event
 from core.performance import widget_paint_sample
 from core.media.media_controller import (
     BaseMediaController,
@@ -76,6 +80,11 @@ class MediaWidget(BaseOverlayWidget):
     
     # Override defaults for media widget
     DEFAULT_FONT_SIZE = 20
+    _instances: ClassVar["weakref.WeakSet[MediaWidget]"] = weakref.WeakSet()
+    _shared_auto_events: ClassVar[dict[str, float]] = {}
+
+    _event_system: ClassVar[Optional["EventSystem"]] = None
+    _event_subscription_id: ClassVar[Optional[str]] = None
 
     def __init__(
         self,
@@ -171,10 +180,87 @@ class MediaWidget(BaseOverlayWidget):
         self._telemetry_logged_missing_tm = False
         self._telemetry_last_visibility: Optional[bool] = None
         self._telemetry_logged_fade_request = False
+        self._controls_feedback: dict[str, float] = {}
+        self._controls_feedback_timer: Optional[QTimer] = None
+        self._controls_feedback_duration: float = 1.35
+        self._last_manual_control: Optional[Tuple[str, float]] = None
+        self._auto_feedback_guard_window: float = self._controls_feedback_duration + 0.2
+        self._track_history: Deque[Tuple] = deque(maxlen=12)
+        self._feedback_instance_id: Optional[str] = None
 
+        type(self)._instances.add(self)
         self._setup_ui()
 
         logger.debug("MediaWidget created (position=%s)", position.value)
+
+    # ------------------------------------------------------------------
+    # Event system integration
+    # ------------------------------------------------------------------
+    @classmethod
+    def attach_event_system(cls, event_system: Optional["EventSystem"]) -> None:
+        """Attach the shared EventSystem (idempotent)."""
+        if event_system is None:
+            if cls._event_subscription_id:
+                try:
+                    cls._event_system.unsubscribe(cls._event_subscription_id)  # type: ignore[arg-type]
+                except Exception as e:
+                    logger.debug("[MEDIA_WIDGET] Failed to unsubscribe EventSystem: %s", e)
+                cls._event_subscription_id = None
+            cls._event_system = None
+            return
+
+        if cls._event_system is event_system and cls._event_subscription_id:
+            return
+
+        cls._event_system = event_system
+        try:
+            sub_id = event_system.subscribe(
+                EventType.MEDIA_CONTROL_TRIGGERED,
+                cls._handle_media_control_event,
+                priority=60,
+            )
+            cls._event_subscription_id = sub_id
+            logger.debug("[MEDIA_WIDGET] Subscribed to MEDIA_CONTROL_TRIGGERED with id=%s", sub_id)
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Failed to subscribe to MEDIA_CONTROL_TRIGGERED: %s", e)
+            cls._event_subscription_id = None
+
+    @classmethod
+    def _handle_media_control_event(cls, event: Event) -> None:
+        action = None
+        timestamp = None
+        data = event.data or {}
+        try:
+            if isinstance(data, dict):
+                action = data.get("action")
+                timestamp = data.get("timestamp")
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Bad event payload: %s", e)
+            return
+
+        if action not in {"prev", "play", "next"}:
+            return
+
+        for instance in list(cls._instances):
+            try:
+                instance._handle_remote_media_action(action, timestamp)
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Remote media action failed: %s", e)
+
+    def _handle_remote_media_action(self, action: str, timestamp: Optional[float]) -> None:
+        try:
+            if not Shiboken.isValid(self):
+                return
+        except Exception:
+            return
+
+        key = "play" if action == "play" else action
+        self._trigger_controls_feedback(
+            key,
+            source="hardware",
+            propagate=False,
+            timestamp=timestamp if isinstance(timestamp, (int, float)) else None,
+        )
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -256,6 +342,10 @@ class MediaWidget(BaseOverlayWidget):
         self._scaled_artwork_cache = None
         self._scaled_artwork_cache_key = None
         self._last_info = None
+        try:
+            type(self)._instances.discard(self)
+        except Exception:
+            pass
         logger.debug("[LIFECYCLE] MediaWidget cleaned up")
     
     # -------------------------------------------------------------------------
@@ -326,6 +416,8 @@ class MediaWidget(BaseOverlayWidget):
         """Clean up resources (called from DisplayWidget)."""
 
         logger.debug("Cleaning up media widget")
+        self._controls_feedback.clear()
+        self._cancel_controls_feedback_timer()
         self.stop()
 
     def set_thread_manager(self, thread_manager) -> None:
@@ -638,6 +730,7 @@ class MediaWidget(BaseOverlayWidget):
         except Exception:
             logger.debug("[MEDIA] play_pause delegation failed", exc_info=True)
             return
+        self._trigger_controls_feedback("play", source="manual")
 
         # Optimistically flip the last known playback state so the controls
         # row and any listeners (e.g. the Spotify visualizer) respond
@@ -739,6 +832,7 @@ class MediaWidget(BaseOverlayWidget):
         except Exception:
             logger.debug("[MEDIA] next delegation failed", exc_info=True)
             return
+        self._trigger_controls_feedback("next", source="manual")
 
         try:
             if self._enabled:
@@ -757,6 +851,7 @@ class MediaWidget(BaseOverlayWidget):
         except Exception:
             logger.debug("[MEDIA] previous delegation failed", exc_info=True)
             return
+        self._trigger_controls_feedback("prev", source="manual")
 
         try:
             if self._enabled:
@@ -888,11 +983,13 @@ class MediaWidget(BaseOverlayWidget):
         # Cache last track snapshot for diagnostics/interaction
         prev_info = self._last_info
         self._last_info = info
+        prev_identity = self._last_track_identity
         
         # Smart polling: diff gating - compute track identity
         if info is not None:
             current_identity = self._compute_track_identity(info)
-            
+            identity_changed = current_identity != prev_identity
+
             # Reset idle counter when we get valid track info
             if self._consecutive_none_count > 0 or self._is_idle:
                 if is_perf_metrics_enabled():
@@ -915,7 +1012,7 @@ class MediaWidget(BaseOverlayWidget):
             # Diff gating: skip update if track identity unchanged
             # Always process first track (when _last_track_identity is None)
             # Also process if we haven't completed fade-in yet (need 2 updates for fade-in)
-            if (current_identity == self._last_track_identity and 
+            if (not identity_changed and
                 self._last_track_identity is not None and 
                 self._fade_in_completed):
                 if is_perf_metrics_enabled():
@@ -923,9 +1020,13 @@ class MediaWidget(BaseOverlayWidget):
                 return
             
             # Track changed - update identity and proceed
+            if identity_changed:
+                self._emit_track_change_feedback(prev_identity, current_identity)
             self._last_track_identity = current_identity
+            self._record_track_identity(current_identity)
             if is_perf_metrics_enabled():
                 logger.debug("[PERF] Media widget update applied (track changed)")
+            self._maybe_emit_state_feedback(prev_info, info)
 
         if info is None:
             # Smart polling: idle detection - track consecutive None results
@@ -935,6 +1036,7 @@ class MediaWidget(BaseOverlayWidget):
             if self._consecutive_none_count >= self._idle_threshold and not self._is_idle:
                 self._is_idle = True
                 self._last_track_identity = None  # Reset identity for next track
+                self._track_history.clear()
                 if is_perf_metrics_enabled():
                     logger.debug("[PERF] Media widget entering idle mode (Spotify closed)")
                 else:
@@ -1654,129 +1756,462 @@ class MediaWidget(BaseOverlayWidget):
 
         painter.save()
         try:
-            painter.drawPixmap(x, y, scaled)
+            try:
+                painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+
+            target_rect = QRect(int(x), int(y), int(self._header_logo_size), int(self._header_logo_size))
+            try:
+                painter.drawPixmap(target_rect.topLeft(), scaled)
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
         finally:
             painter.restore()
 
-    def _paint_controls_row(self, painter: QPainter) -> None:
-        """Paint a static transport controls row along the bottom.
-
-        The controls are always aligned to the thirds of the text content
-        width (between contentsMargins.left/right) so they visually match
-        the click routing implemented in DisplayWidget.mousePressEvent.
-        """
-
+    def _compute_controls_layout(self):
+        """Compute geometry for the transport controls row."""
         if not self._show_controls:
-            return
-
-        info = self._last_info
-        if info is None and self._pending_state_override is None:
-            return
-
-        try:
-            base_state = info.state if info is not None else MediaPlaybackState.UNKNOWN
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-            base_state = MediaPlaybackState.UNKNOWN
-
-        state = self._pending_state_override or base_state
+            return None
 
         width = self.width()
         height = self.height()
         if width <= 0 or height <= 0:
-            return
+            return None
 
         margins = self.contentsMargins()
         content_left = margins.left()
         content_right = width - margins.right()
-        if content_right <= content_left:
+        content_width = content_right - content_left
+        if content_width <= 60:
+            return None
+
+        controls_font_pt = max(8, self._font_size - 2)
+        font = QFont(self._font_family, controls_font_pt, QFont.Weight.Medium)
+        fm = QFontMetrics(font)
+        row_height = max(24, fm.height() + 10)
+
+        try:
+            header_font_pt = int(self._header_font_pt) if self._header_font_pt > 0 else self._font_size
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+            header_font_pt = self._font_size
+
+        header_metrics = QFontMetrics(QFont(self._font_family, header_font_pt, QFont.Weight.Bold))
+        header_height = header_metrics.height()
+
+        base_row_top = height - margins.bottom() - row_height - 6
+        min_row_top = margins.top() + header_height + 6
+        row_top = max(min_row_top, base_row_top)
+        if row_top + row_height > height - margins.bottom():
+            row_top = max(margins.top(), height - margins.bottom() - row_height)
+        if row_top < margins.top():
+            row_top = margins.top()
+
+        row_rect = QRect(
+            int(content_left),
+            int(row_top),
+            int(content_width),
+            int(row_height),
+        )
+
+        slot_width = content_width / 3.0
+        inner_pad_x = max(6.0, slot_width * 0.08)
+        inner_pad_y = max(3.0, row_height * 0.2)
+        hit_slop = max(6, int(row_height * 0.2))
+
+        button_rects = {}
+        hit_rects = {}
+        for index, key in enumerate(("prev", "play", "next")):
+            slot_left = content_left + slot_width * index
+            rect = QRect(
+                int(slot_left + inner_pad_x),
+                int(row_top + inner_pad_y),
+                int(slot_width - inner_pad_x * 2),
+                int(row_height - inner_pad_y * 2),
+            )
+            button_rects[key] = rect
+            hit_rects[key] = rect.adjusted(-hit_slop, -hit_slop, hit_slop, hit_slop)
+
+        return {
+            "font": font,
+            "row_rect": row_rect,
+            "button_rects": button_rects,
+            "hit_rects": hit_rects,
+        }
+
+    def _paint_controls_row(self, painter: QPainter) -> None:
+        """Paint transport controls aligned with the click hit regions."""
+        layout = self._compute_controls_layout()
+        if layout is None:
             return
 
-        content_width = content_right - content_left
-        third = content_width / 3.0
-
-        controls_font = max(6, self._font_size - 3)
-        font = QFont(self._font_family, controls_font, QFont.Weight.Medium)
+        font: QFont = layout["font"]
+        row_rect: QRect = layout["row_rect"]
+        button_rects: dict = layout["button_rects"]
 
         painter.save()
         try:
+            bg = QColor(self._bg_color)
+            bg.setAlpha(int(min(255, max(0, bg.alpha()) * 0.7)) or 140)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(bg)
+            painter.drawRoundedRect(row_rect, 6, 6)
+
+            divider_color = QColor(255, 255, 255, 35)
+            painter.setPen(divider_color)
+            for i in range(1, 3):
+                x = row_rect.left() + int(row_rect.width() * i / 3.0)
+                painter.drawLine(x, row_rect.top() + 6, x, row_rect.bottom() - 6)
+
             painter.setFont(font)
-            fm = QFontMetrics(font)
+            painter.setPen(QColor(255, 255, 255, 225))
+            for key, rect in button_rects.items():
+                self._draw_control_icon(painter, rect, key)
 
-            row_height = fm.height() + 4
-
-            # Previous anchoring kept the row just above the text bottom
-            # margin. To free up more vertical space for long titles while
-            # keeping the widget's geometry unchanged, we move the controls
-            # down by roughly one SPOTIFY header height and then clamp the
-            # result inside the card bounds.
-            prev_row_top = height - margins.bottom() - row_height - 4
-
-            try:
-                header_font_pt = int(self._header_font_pt) if self._header_font_pt > 0 else self._font_size
-            except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-                header_font_pt = self._font_size
-
-            header_fm = QFontMetrics(QFont(self._font_family, header_font_pt, QFont.Weight.Bold))
-            header_h = header_fm.height()
-
-            # Target position: one header height lower than the previous
-            # value, but never so low that the glyphs touch the card edge.
-            bottom_pad = 8
-            bottom_limit = height - row_height - bottom_pad
-            target_row_top = prev_row_top + header_h
-            row_top = max(margins.top(), min(bottom_limit, target_row_top))
-
-            from PySide6.QtCore import QRect as _QRect
-
-            left_rect = _QRect(
-                int(content_left),
-                int(row_top),
-                int(third),
-                int(row_height),
-            )
-            centre_rect = _QRect(
-                int(content_left + third),
-                int(row_top),
-                int(third),
-                int(row_height),
-            )
-            right_rect = _QRect(
-                int(content_left + 2 * third),
-                int(row_top),
-                int(third),
-                int(row_height),
-            )
-
-            prev_sym = "\u2190"  # LEFTWARDS ARROW
-            next_sym = "\u2192"  # RIGHTWARDS ARROW
-            if state == MediaPlaybackState.PLAYING:
-                centre_sym = "||"  # pause
-            else:
-                centre_sym = "\u25b6"  # play
-
-            inactive_color = QColor(200, 200, 200, 230)
-            active_color = QColor(255, 255, 255, 255)
-
-            # Side arrows
-            pen = painter.pen()
-            pen.setColor(inactive_color)
-            painter.setPen(pen)
-            painter.drawText(left_rect, Qt.AlignmentFlag.AlignCenter, prev_sym)
-            painter.drawText(right_rect, Qt.AlignmentFlag.AlignCenter, next_sym)
-
-            # Centre play/pause gets a slightly heavier weight and full white
-            # to stand out just enough without drifting in position.
-            # Use smaller font for pause "||" since it's two characters vs one for play
-            pause_font_size = controls_font - 2 if centre_sym == "||" else controls_font
-            font_centre = QFont(self._font_family, pause_font_size, QFont.Weight.Bold)
-            painter.setFont(font_centre)
-            pen.setColor(active_color)
-            painter.setPen(pen)
-            painter.drawText(centre_rect, Qt.AlignmentFlag.AlignCenter, centre_sym)
+            # Click feedback overlay
+            if self._controls_feedback:
+                now = time.monotonic()
+                painter.setPen(Qt.PenStyle.NoPen)
+                for key, rect in button_rects.items():
+                    start = self._controls_feedback.get(key)
+                    if start is None:
+                        continue
+                    elapsed = max(0.0, now - start)
+                    progress = min(1.0, elapsed / max(0.01, self._controls_feedback_duration))
+                    if progress >= 1.0:
+                        continue
+                    ease = (1.0 - progress)
+                    ease *= ease
+                    opacity = int(150 * ease)
+                    if opacity <= 0:
+                        continue
+                    scale = 1.0 + 0.1 * ease
+                    highlight_rect = QRect(
+                        rect.center().x() - int(rect.width() * scale / 2),
+                        rect.center().y() - int(rect.height() * scale / 2),
+                        int(rect.width() * scale),
+                        int(rect.height() * scale),
+                    )
+                    painter.setBrush(QColor(255, 255, 255, opacity))
+                    painter.drawRoundedRect(highlight_rect, 8, 8)
         finally:
             painter.restore()
+
+    def _draw_control_icon(self, painter: QPainter, rect: QRect, key: str) -> None:
+        """Paint bespoke glyphs for transport controls."""
+        painter.save()
+        try:
+            glyph = self._control_glyph_for_key(key)
+            if not glyph:
+                return
+            font = QFont(self._font_family, max(12, int(rect.height() * 0.65)), QFont.Weight.DemiBold)
+            painter.setFont(font)
+            painter.setPen(QColor(255, 255, 255, 235))
+            target_rect = rect
+            if glyph == "||":
+                target_rect = rect.adjusted(0, -2, 0, 0)
+            painter.drawText(target_rect, Qt.AlignmentFlag.AlignCenter, glyph)
+        finally:
+            painter.restore()
+
+    def _control_glyph_for_key(self, key: str) -> str:
+        if key == "play":
+            return "||" if self._is_playing() else "▶"
+        if key == "prev":
+            return "←"
+        if key == "next":
+            return "→"
+        return ""
+
+    def _is_playing(self) -> bool:
+        state = self._pending_state_override
+        if state is None and isinstance(self._last_info, MediaTrackInfo):
+            state = getattr(self._last_info, "state", None)
+        if isinstance(state, MediaPlaybackState):
+            return state == MediaPlaybackState.PLAYING
+        if hasattr(MediaPlaybackState, "PLAYING"):
+            try:
+                return state == MediaPlaybackState.PLAYING
+            except Exception:
+                return False
+        if hasattr(state, "value"):
+            return str(state.value).lower() == MediaPlaybackState.PLAYING.value.lower()
+        if isinstance(state, str):
+            return state.lower() == "playing"
+        return False
+
+    def handle_controls_click(self, local_pos: QPoint, button: Qt.MouseButton) -> bool:
+        """Handle a click within the control row."""
+        if button != Qt.MouseButton.LeftButton:
+            return False
+
+        layout = self._compute_controls_layout()
+        if layout is None:
+            return False
+
+        hit_rects: dict = layout["hit_rects"]
+        pos = QPoint(int(local_pos.x()), int(local_pos.y()))
+
+        if hit_rects["prev"].contains(pos):
+            self.previous_track()
+            return True
+        if hit_rects["play"].contains(pos):
+            self.play_pause()
+            return True
+        if hit_rects["next"].contains(pos):
+            self.next_track()
+            return True
+        return False
+
+    def _feedback_tag(self) -> str:
+        if self._feedback_instance_id is None:
+            self._feedback_instance_id = f"{id(self) & 0xFFFF:04X}"
+        parent = self.parent()
+        screen = getattr(parent, "screen_index", "?") if parent is not None else "?"
+        return f"{screen}:{self._feedback_instance_id}"
+
+    def _trigger_controls_feedback(
+        self,
+        key: str,
+        *,
+        source: str = "auto",
+        propagate: bool = True,
+        timestamp: Optional[float] = None,
+    ) -> None:
+        """Start or refresh the click feedback effect for a control button."""
+        now = time.monotonic()
+
+        def _commit_feedback(ts: float) -> float:
+            self._controls_feedback.clear()
+            self._controls_feedback[key] = ts
+            return ts
+
+        timestamp_used: Optional[float] = None
+        ts = timestamp if timestamp is not None else now
+
+        if is_perf_metrics_enabled():
+            logger.info(
+                "[PERF][MEDIA_FEEDBACK] tag=%s key=%s source=%s phase=trigger",
+                self._feedback_tag(),
+                key,
+                source,
+            )
+
+        if source == "manual":
+            timestamp_used = _commit_feedback(ts)
+            self._last_manual_control = (key, ts)
+        else:
+            last_manual = self._last_manual_control
+            if last_manual is not None:
+                same_key = last_manual[0] == key
+                recent = (now - last_manual[1]) <= self._auto_feedback_guard_window
+                if recent and not same_key:
+                    if is_perf_metrics_enabled():
+                        logger.info(
+                            "[PERF][MEDIA_FEEDBACK] tag=%s key=%s source=%s phase=suppressed reason=recent_manual other_key=%s",
+                            self._feedback_tag(),
+                            key,
+                            source,
+                            last_manual[0],
+                        )
+                    return
+                if same_key and recent:
+                    timestamp_used = _commit_feedback(last_manual[1])
+                    if is_perf_metrics_enabled():
+                        logger.info(
+                            "[PERF][MEDIA_FEEDBACK] tag=%s key=%s source=%s phase=refresh reuse_manual_ts",
+                            self._feedback_tag(),
+                            key,
+                            source,
+                        )
+                    return
+            timestamp_used = _commit_feedback(ts)
+
+        if timestamp_used is None:
+            return
+
+        if is_perf_metrics_enabled():
+            logger.info(
+                "[PERF][MEDIA_FEEDBACK] tag=%s key=%s source=%s phase=animate deadline=%.2f",
+                self._feedback_tag(),
+                key,
+                source,
+                self._controls_feedback_duration,
+            )
+
+        self._ensure_controls_feedback_timer()
+        self.update()
+
+        if not propagate:
+            return
+
+        if source == "manual":
+            self._broadcast_manual_feedback(key, timestamp_used)
+        else:
+            self._broadcast_auto_feedback(key, timestamp_used)
+
+    def flash_controls_feedback(self, key: str) -> None:
+        """Externally trigger control feedback without invoking controller."""
+        if key not in ("prev", "play", "next"):
+            return
+        self._trigger_controls_feedback(key, source="manual")
+    def _broadcast_manual_feedback(self, key: str, started_at: float) -> None:
+        cls = type(self)
+        for other in list(cls._instances):
+            if other is self:
+                continue
+            try:
+                if is_perf_metrics_enabled():
+                    logger.info(
+                        "[PERF][MEDIA_FEEDBACK] tag=%s key=%s source=manual phase=broadcast dest=%s",
+                        self._feedback_tag(),
+                        key,
+                        other._feedback_tag(),
+                    )
+                other._receive_remote_manual_feedback(key, started_at)
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Remote feedback failed: %s", e)
+
+    def _broadcast_auto_feedback(self, key: str, started_at: float) -> None:
+        cls = type(self)
+        for other in list(cls._instances):
+            if other is self:
+                continue
+            try:
+                if is_perf_metrics_enabled():
+                    logger.info(
+                        "[PERF][MEDIA_FEEDBACK] tag=%s key=%s source=auto phase=broadcast dest=%s",
+                        self._feedback_tag(),
+                        key,
+                        other._feedback_tag(),
+                    )
+                other._receive_remote_auto_feedback(key, started_at)
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Remote auto feedback failed: %s", e)
+
+    def _receive_remote_manual_feedback(self, key: str, started_at: float) -> None:
+        self._apply_remote_feedback(key, started_at, record_manual=True, source="remote_manual")
+
+    def _receive_remote_auto_feedback(self, key: str, started_at: float) -> None:
+        self._apply_remote_feedback(key, started_at, record_manual=False, source="remote_auto")
+
+    def _apply_remote_feedback(
+        self,
+        key: str,
+        timestamp: float,
+        *,
+        record_manual: bool,
+        source: str,
+    ) -> None:
+        try:
+            if not Shiboken.isValid(self):
+                return
+        except Exception:
+            return
+        self._controls_feedback.clear()
+        self._controls_feedback[key] = timestamp
+        if record_manual:
+            self._last_manual_control = (key, timestamp)
+        if is_perf_metrics_enabled():
+            logger.info(
+                "[PERF][MEDIA_FEEDBACK] tag=%s key=%s source=%s phase=apply",
+                self._feedback_tag(),
+                key,
+                source,
+            )
+        self._ensure_controls_feedback_timer()
+        self.update()
+
+    def _record_track_identity(self, identity: Optional[Tuple]) -> None:
+        if identity is None:
+            return
+        if not self._track_history or self._track_history[-1] != identity:
+            self._track_history.append(identity)
+
+    def _emit_track_change_feedback(
+        self,
+        prev_identity: Optional[Tuple],
+        new_identity: Optional[Tuple],
+    ) -> None:
+        if prev_identity is None or new_identity is None:
+            return
+        direction = self._infer_track_direction(new_identity)
+        if direction == "prev":
+            self._trigger_shared_auto_feedback("prev", origin="track_change")
+        elif direction == "next":
+            self._trigger_shared_auto_feedback("next", origin="track_change")
+
+    def _infer_track_direction(self, new_identity: Tuple) -> str:
+        if len(self._track_history) >= 2 and self._track_history[-2] == new_identity:
+            return "prev"
+        return "next"
+
+    def _maybe_emit_state_feedback(
+        self,
+        previous_info: Optional[MediaTrackInfo],
+        new_info: Optional[MediaTrackInfo],
+    ) -> None:
+        if previous_info is None or new_info is None:
+            return
+        prev_state = getattr(previous_info, "state", None)
+        new_state = getattr(new_info, "state", None)
+        if prev_state is None or new_state is None:
+            return
+        if prev_state == new_state:
+            return
+        if new_state in (MediaPlaybackState.PLAYING, MediaPlaybackState.PAUSED):
+            self._trigger_shared_auto_feedback("play", origin="state_change")
+
+    def _trigger_shared_auto_feedback(self, key: str, *, origin: str) -> None:
+        cls = type(self)
+        now = time.monotonic()
+        last_ts = cls._shared_auto_events.get(key)
+        guard = max(self._controls_feedback_duration, 0.1)
+        if last_ts is not None and (now - last_ts) <= guard:
+            if is_perf_metrics_enabled():
+                logger.info(
+                    "[PERF][MEDIA_FEEDBACK] tag=%s key=%s source=%s phase=shared_skip dt=%.3f",
+                    self._feedback_tag(),
+                    key,
+                    origin,
+                    now - last_ts,
+                )
+            return
+        cls._shared_auto_events[key] = now
+        self._trigger_controls_feedback(key, source=origin, timestamp=now)
+
+    def _ensure_controls_feedback_timer(self) -> None:
+        if self._controls_feedback_timer is None:
+            timer = QTimer(self)
+            timer.setInterval(32)
+            timer.timeout.connect(self._on_controls_feedback_tick)
+            self._controls_feedback_timer = timer
+        if not self._controls_feedback_timer.isActive():
+            self._controls_feedback_timer.start()
+
+    def _cancel_controls_feedback_timer(self) -> None:
+        if self._controls_feedback_timer is not None:
+            try:
+                self._controls_feedback_timer.stop()
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+
+    def _on_controls_feedback_tick(self) -> None:
+        if not self._controls_feedback:
+            self._cancel_controls_feedback_timer()
+            return
+        now = time.monotonic()
+        dirty = False
+        deadline = self._controls_feedback_duration
+        expired_keys = [key for key, start in self._controls_feedback.items() if (now - start) >= deadline]
+        for key in expired_keys:
+            self._controls_feedback.pop(key, None)
+            dirty = True
+        if not self._controls_feedback:
+            self._cancel_controls_feedback_timer()
+        if dirty:
+            self.update()
 
     def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:
         """Fade the entire widget in, then attach the global drop shadow."""
@@ -1784,7 +2219,6 @@ class MediaWidget(BaseOverlayWidget):
         self._fade_in_completed = False
         # CRITICAL: Position the widget BEFORE showing to prevent teleport flash
         # The widget starts at (0,0) and must be moved to its correct position
-        # before becoming visible to avoid a brief flash in the wrong location.
         try:
             self._update_position()
         except Exception as e:

@@ -43,6 +43,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - **WidgetManager**: Robust position normalization (Enum/String/Coerce); Smart positioning logic for Visualizer (Top vs Bottom alignment).
   - **InputHandler**: Global media key passthrough; Double-click "Next Image" navigation.
   - **SettingsDialog**: Multi-monitor aware window state persistence (geometry clamping, screen-at detection).
+  - **Clock Widgets**: Centralized shared tick driver wired through `WidgetManager` so every display cluster reuses a single ThreadManager-backed PreciseTimer (`widgets.clock.shared_tick`), matching the synthetic benchmark’s `--clock-shared-tick` design and eliminating duplicate overlay timers.
 
 - v2.1 Production Integration (Jan 2026)
   - **ProcessSupervisor Integration**: Initialized in ScreensaverEngine with 4 worker factories (Image, RSS, FFT, Transition)
@@ -550,6 +551,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - Settings include `show_details_row`, `show_forecast`, a standalone “Animate weather icon” checkbox (independent from the alignment dropdown) that toggles SVG animation at 12 fps with a static-frame fallback when disabled, and an optional “Desaturate Animated Icon” checkbox that threads through defaults/models/factories to apply a `QGraphicsColorizeEffect` so animated art can match monochrome card themes.
 - widgets/media_widget.py
   - Spotify/media overlay widget extending `BaseOverlayWidget`. Driven by `core/media/media_controller.py`; per-monitor selection via `widgets.media`, 9 position options (Top/Middle/Bottom × Left/Center/Right), background frame, and monochrome transport controls (Prev/Play/Pause/Next) over track metadata. Uses Title Case for track title and artist display. Artwork uses a square frame for album covers and adapts to non-square thumbnails.
+  - Media overlay (Spotify GSMTC card). Handles title/artist text, artwork decode, fade-in coordination, shared shadow, Spotify volume slider anchoring, wake-from-idle logic, and the authoritative transport controls layout. `_compute_controls_layout()` returns the painted rectangles + accessibility hit regions; `handle_controls_click()` applies previous/play/next with click feedback and optimistic controller state so cloned cards (multiple displays) stay in lockstep. InputHandler delegates left-clicks to this helper while right/middle clicks remain direct next/previous shortcuts.
 - widgets/reddit_widget.py
   - Reddit overlay widget extending `BaseOverlayWidget`. Shows top posts from a configured subreddit with 4-, 10-, or 20-item layouts (20-item mode for ultra-wide displays), per-monitor selection via `widgets.reddit`, 9 position options (Top/Middle/Bottom × Left/Center/Right), shared overlay fade-in coordination, and click-through to the system browser.
   - **Reddit link handling (2024-12-17)**: Smart A/B/C logic based on primary display coverage:

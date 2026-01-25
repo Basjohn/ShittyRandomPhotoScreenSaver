@@ -361,6 +361,11 @@ class ScreensaverEngine(QObject):
             # Settings manager
             self.settings_manager = SettingsManager()
             logger.debug("SettingsManager initialized")
+
+            try:
+                self.settings_manager.set_event_system(self.event_system)
+            except Exception as e:
+                logger.debug("[ENGINE] Failed to attach EventSystem to SettingsManager: %s", e)
             
             # Bridge SettingsManager Qt Signal to EventSystem
             # This allows the engine to receive settings changes via EventSystem
@@ -2955,6 +2960,8 @@ class ScreensaverEngine(QObject):
         except Exception as e:
             logger.debug("[ENGINE] Failed to wake media widget from idle: %s", e)
         
+        coordinator = None
+        settings_flag_cleared = False
         # Set settings dialog active flag FIRST - this prevents halo from showing
         try:
             from rendering.multi_monitor_coordinator import get_coordinator
@@ -3028,6 +3035,15 @@ class ScreensaverEngine(QObject):
         except Exception as e:
             logger.exception(f"Failed to open settings dialog: {e}")
             QApplication.quit()
+        finally:
+            if not settings_flag_cleared:
+                try:
+                    if coordinator is None:
+                        from rendering.multi_monitor_coordinator import get_coordinator
+                        coordinator = get_coordinator()
+                    coordinator.set_settings_dialog_active(False)
+                except Exception as e:
+                    logger.debug("[ENGINE] Failed to reset settings dialog flag in finally: %s", e)
     
     def _on_exit_requested(self) -> None:
         """Handle exit request coming from any display window."""

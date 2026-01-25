@@ -164,6 +164,8 @@ class _DetailSegment:
 class WeatherConditionIcon(QWidget):
     """Widget that renders animated SVG weather icons with Qt's SVG engine."""
 
+    icon_source_changed = Signal(object, object)  # (renderer, icon_path)
+
     def __init__(self, size_px: int = 96, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._renderer: Optional[QSvgRenderer] = None
@@ -212,6 +214,10 @@ class WeatherConditionIcon(QWidget):
         self._static_pixmap = None
         self._static_pixmap_dpr = None
         self.update()
+        try:
+            self.icon_source_changed.emit(None, None)
+        except Exception:
+            pass
 
     def set_icon_path(self, icon_path: Optional[Path]) -> None:
         if icon_path is None or not icon_path.exists():
@@ -234,6 +240,22 @@ class WeatherConditionIcon(QWidget):
         self._renderer = renderer
         self._icon_path = icon_path
         self._apply_animation_state()
+        self.update()
+        try:
+            self.icon_source_changed.emit(renderer, icon_path)
+        except Exception:
+            pass
+
+    def set_renderer_reference(
+        self,
+        renderer: Optional[QSvgRenderer],
+        icon_path: Optional[Path],
+    ) -> None:
+        """Adopt an external renderer reference (shared animation driver)."""
+        self._renderer = renderer
+        self._icon_path = icon_path
+        self._static_pixmap = None
+        self._static_pixmap_dpr = None
         self.update()
 
     def has_icon(self) -> bool:
@@ -373,7 +395,10 @@ class WeatherConditionIcon(QWidget):
         painter.end()
 
     def _apply_monochrome(self, image: QImage) -> QImage:
-        light, dark = self._monochrome_palette()
+        palette = self._monochrome_palette()
+        if not palette:
+            return image
+        band_count = max(1, len(palette) - 1)
         for y in range(image.height()):
             for x in range(image.width()):
                 color = QColor(image.pixel(x, y))
@@ -382,22 +407,36 @@ class WeatherConditionIcon(QWidget):
                     continue
                 gray = int(round(0.299 * color.red() + 0.587 * color.green() + 0.114 * color.blue()))
                 factor = gray / 255.0
-                new_color = QColor(
-                    int(dark.red() + (light.red() - dark.red()) * factor),
-                    int(dark.green() + (light.green() - dark.green()) * factor),
-                    int(dark.blue() + (light.blue() - dark.blue()) * factor),
-                    alpha,
-                )
-                image.setPixelColor(x, y, new_color)
+                scaled = factor * band_count
+                index = min(len(palette) - 2, int(math.floor(scaled)))
+                t = max(0.0, min(1.0, scaled - index))
+                base_color = palette[index]
+                next_color = palette[index + 1]
+                blended = self._lerp_color(base_color, next_color, t)
+                blended.setAlpha(alpha)
+                image.setPixelColor(x, y, blended)
         return image
 
-    def _monochrome_palette(self) -> Tuple[QColor, QColor]:
+    def _monochrome_palette(self) -> List[QColor]:
         base = self._monochrome_base or QColor(220, 220, 220)
-        light = QColor(base)
-        light = light.lighter(120)
-        dark = QColor(base)
-        dark = dark.darker(150)
-        return light, dark
+        highlight = QColor(base)
+        highlight = highlight.lighter(120)
+        mid = QColor(base)
+        mid = mid.darker(140)  # at least 30% darker than base
+        shadow = QColor(base)
+        shadow = shadow.darker(200)
+        return [shadow, mid, highlight]
+
+    @staticmethod
+    def _lerp_color(a: QColor, b: QColor, t: float) -> QColor:
+        t = max(0.0, min(1.0, t))
+        def _lerp(ca: int, cb: int) -> int:
+            return int(round(ca + (cb - ca) * t))
+        return QColor(
+            _lerp(a.red(), b.red()),
+            _lerp(a.green(), b.green()),
+            _lerp(a.blue(), b.blue()),
+        )
 
     def _log_geometry(self, *, mode: str, target_rect: QRectF, pixmap: Optional[QPixmap]) -> None:
         if not is_perf_metrics_enabled():
@@ -844,6 +883,8 @@ class WeatherWidget(BaseOverlayWidget):
         self._animated_icon_enabled: bool = True
         self._desaturate_condition_icon: bool = _DEFAULT_DESATURATE_ICON
         self._icon_desaturate_effect: Optional[QGraphicsColorizeEffect] = None
+        self._shared_animation_driver_enabled: bool = True
+        self._shared_animation_sink_mode: bool = False
         self._last_icon_context: Dict[str, Any] = {}
         self._last_icon_refresh: Optional[datetime] = None
         self._primary_spacer: Optional[QWidget] = None
@@ -2092,7 +2133,7 @@ class WeatherWidget(BaseOverlayWidget):
                         self._update_condition_icon(
                             weather_code, condition_display, is_day, icon_scale=animated_scale
                         )
-                        geometry_dirty = True
+                    geometry_dirty = True
 
                 if geometry_dirty:
                     with widget_timer_sample(self, "weather.adjust_size"):
@@ -2217,6 +2258,35 @@ class WeatherWidget(BaseOverlayWidget):
     def get_desaturate_animated_icon(self) -> bool:
         return self._desaturate_condition_icon
 
+    def set_shared_animation_driver_enabled(self, enabled: bool) -> None:
+        self._shared_animation_driver_enabled = bool(enabled)
+
+    def shared_animation_driver_enabled(self) -> bool:
+        return self._shared_animation_driver_enabled
+
+    def shared_animation_sink_mode_enabled(self) -> bool:
+        return self._shared_animation_sink_mode
+
+    def enable_shared_animation_sink_mode(self) -> None:
+        self._shared_animation_sink_mode = True
+
+    def disable_shared_animation_sink_mode(self) -> None:
+        if not self._shared_animation_sink_mode:
+            return
+        self._shared_animation_sink_mode = False
+        self.refresh_condition_icon()
+
+    def get_condition_icon_widget(self) -> Optional[WeatherConditionIcon]:
+        return self._condition_icon_widget
+
+    def refresh_condition_icon(self) -> None:
+        icon_widget = self._condition_icon_widget
+        if icon_widget is None:
+            return
+        icon_widget.clear_icon()
+        icon_widget.set_animation_enabled(self._animated_icon_enabled)
+        self._refresh_condition_icon()
+
     def _apply_icon_desaturation(self) -> None:
         icon_widget = self._condition_icon_widget
         if icon_widget is None:
@@ -2339,13 +2409,24 @@ class WeatherWidget(BaseOverlayWidget):
         }
 
         if self._animated_icon_alignment == "NONE":
-            icon_widget.clear_icon()
-            icon_widget.setVisible(False)
+            icon_widget = self._condition_icon_widget
+        if icon_widget is None:
             return
 
-        icon_path = self._resolve_condition_icon_path(weather_code, condition_text, is_day)
+        self._last_icon_context = {
+            "code": weather_code,
+            "condition": condition_text,
+            "is_day": is_day,
+            "icon_scale": icon_scale,
+        }
+
+        if self._shared_animation_sink_mode:
+            return
+
+        icon_widget.clear_icon()
+
+        icon_path = self._resolve_icon_path(weather_code, condition_text, is_day)
         if icon_path is None:
-            icon_widget.clear_icon()
             icon_widget.setVisible(False)
             return
 
@@ -2430,6 +2511,12 @@ class WeatherWidget(BaseOverlayWidget):
         if fallback_path.exists():
             return fallback_path
         return None
+
+    def _resolve_icon_path(
+        self, weather_code: Optional[int], condition_text: Optional[str], is_day: bool
+    ) -> Optional[Path]:
+        """Legacy alias returning the resolved icon path."""
+        return self._resolve_condition_icon_path(weather_code, condition_text, is_day)
 
     @staticmethod
     def _resolve_day_night_icon(icon_name: str, is_day: bool) -> str:

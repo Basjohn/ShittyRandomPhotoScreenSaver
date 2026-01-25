@@ -3,7 +3,8 @@ Settings manager implementation for screensaver.
 
 Uses QSettings for persistent storage. Simplified from SPQDocker reusable modules.
 """
-from typing import Any, Callable, Dict, List, Mapping, Optional
+
+from typing import Any, Callable, Dict, List, Mapping, Optional, TYPE_CHECKING
 from copy import deepcopy
 import threading
 import sys
@@ -13,25 +14,31 @@ from PySide6.QtCore import QSettings, QObject, Signal
 from core.logging.logger import get_logger, is_verbose_logging
 from core.settings.models import SpotifyVisualizerSettings
 
-logger = get_logger('SettingsManager')
+if TYPE_CHECKING:
+    from core.events import EventSystem
+
+logger = get_logger("SettingsManager")
 
 
 class SettingsManager(QObject):
     """
     Centralized settings management for the screensaver.
-    
+
     Uses QSettings for persistent storage with organization/application name.
     Thread-safe with change notifications.
     """
-    
+
     # Signal emitted when settings change
     settings_changed = Signal(str, object)  # key, new_value
-    
-    def __init__(self, organization: str = "ShittyRandomPhotoScreenSaver", 
-                 application: str = "Screensaver"):
+
+    def __init__(
+        self,
+        organization: str = "ShittyRandomPhotoScreenSaver",
+        application: str = "Screensaver",
+    ):
         """
         Initialize the settings manager.
-        
+
         Args:
             organization: Organization name for QSettings
             application: Application name for QSettings
@@ -50,15 +57,16 @@ class SettingsManager(QObject):
                     or "main_mc.py" in exe_name
                 ):
                     app_name = "Screensaver_MC"
-        except Exception as e:
-            logger.debug("[SETTINGS] Exception suppressed: %s", e)
+        except Exception:
+            logger.debug("[SETTINGS] Exception suppressed during init naming", exc_info=True)
 
         self._settings = QSettings(organization, app_name)
         self._organization = organization
         self._application = app_name
         self._lock = threading.RLock()
         self._change_handlers: Dict[str, List[Callable]] = {}
-        
+        self._event_system_ref: Optional["EventSystem"] = None
+
         # In-memory cache for frequently accessed settings (P2 optimization)
         self._cache: Dict[str, Any] = {}
         self._cache_enabled = True
@@ -68,7 +76,7 @@ class SettingsManager(QObject):
 
         try:
             self.validate_and_repair()
-        except Exception as e:
+        except Exception:
             logger.debug("Settings validation failed", exc_info=True)
 
         # Diagnostic snapshot so widget enable/monitor issues can be traced
@@ -76,7 +84,7 @@ class SettingsManager(QObject):
         # full widgets map can be large, so we only dump it in verbose
         # mode; normal debug just logs the presence/absence of the key.
         try:
-            widgets_snapshot = self._settings.value('widgets', None)
+            widgets_snapshot = self._settings.value("widgets", None)
             if is_verbose_logging():
                 logger.debug("Widgets snapshot on init: %r", widgets_snapshot)
             else:
@@ -88,16 +96,25 @@ class SettingsManager(QObject):
                     )
                 else:
                     logger.debug(
-                        "Widgets snapshot on init: type=%s", type(widgets_snapshot).__name__
+                        "Widgets snapshot on init: type=%s",
+                        type(widgets_snapshot).__name__,
                     )
-        except Exception as e:
+        except Exception:
             logger.debug("Failed to read widgets snapshot on init", exc_info=True)
 
         logger.info("SettingsManager initialized")
-    
+
+    def set_event_system(self, event_system: Optional["EventSystem"]) -> None:
+        """Attach the shared EventSystem so consumers can retrieve it later."""
+        self._event_system_ref = event_system
+
+    def get_event_system(self) -> Optional["EventSystem"]:
+        """Return the shared EventSystem instance, if any."""
+        return self._event_system_ref
+
     def _get_default_image_folders(self) -> List[str]:
         """Get default image folders based on system.
-        
+
         Returns user's Pictures folder if available, otherwise empty list.
         This replaces the previous hardcoded path.
         """
@@ -105,38 +122,41 @@ class SettingsManager(QObject):
         try:
             # Try to get user's Pictures folder
             from PySide6.QtCore import QStandardPaths
+
             pictures = QStandardPaths.writableLocation(QStandardPaths.PicturesLocation)
             if pictures and Path(pictures).exists():
                 folders.append(pictures)
         except Exception as e:
             logger.debug("[SETTINGS] Exception suppressed: %s", e)
-        
+
         # Fallback: try common Windows paths
         if not folders:
             try:
                 import os
-                user_profile = os.environ.get('USERPROFILE', '')
+
+                user_profile = os.environ.get("USERPROFILE", "")
                 if user_profile:
-                    pictures_path = Path(user_profile) / 'Pictures'
+                    pictures_path = Path(user_profile) / "Pictures"
                     if pictures_path.exists():
                         folders.append(str(pictures_path))
             except Exception as e:
                 logger.debug("[SETTINGS] Exception suppressed: %s", e)
-        
+
         return folders
-    
+
     def _set_defaults(self) -> None:
         """Set default values if not already present."""
         from core.settings.defaults import get_default_settings
+
         canonical = get_default_settings()
 
         defaults: Dict[str, Any] = {
             # User-specific sources should remain dynamic on first run.
-            'sources.folders': self._get_default_image_folders(),
-            'sources.rss_feeds': [],
+            "sources.folders": self._get_default_image_folders(),
+            "sources.rss_feeds": [],
         }
 
-        for section in ('display', 'input', 'queue', 'sources', 'timing'):
+        for section in ("display", "input", "queue", "sources", "timing"):
             section_value = canonical.get(section)
             if not isinstance(section_value, Mapping):
                 continue
@@ -144,25 +164,25 @@ class SettingsManager(QObject):
                 dotted = f"{section}.{subkey}"
                 # Even if a future defaults schema includes these, keep them
                 # dynamic here.
-                if dotted in {'sources.folders', 'sources.rss_feeds'}:
+                if dotted in {"sources.folders", "sources.rss_feeds"}:
                     continue
                 defaults[dotted] = subval
 
-        canonical_transitions = canonical.get('transitions')
+        canonical_transitions = canonical.get("transitions")
         if isinstance(canonical_transitions, Mapping):
-            defaults['transitions'] = dict(canonical_transitions)
+            defaults["transitions"] = dict(canonical_transitions)
 
-        canonical_widgets = canonical.get('widgets')
+        canonical_widgets = canonical.get("widgets")
         if isinstance(canonical_widgets, Mapping):
-            defaults['widgets'] = dict(canonical_widgets)
-        
+            defaults["widgets"] = dict(canonical_widgets)
+
         for key, value in defaults.items():
-            if key == 'widgets':
+            if key == "widgets":
                 # Merge any existing widgets map with canonical defaults so
                 # that legacy configs gain new sections (e.g. media) without
                 # losing user customizations.
                 self._ensure_widgets_defaults(value)
-            elif key == 'transitions':
+            elif key == "transitions":
                 self._ensure_transitions_defaults(value)
             else:
                 if not self._settings.contains(key):
@@ -170,13 +190,15 @@ class SettingsManager(QObject):
 
     def _ensure_transitions_defaults(self, default_transitions: Dict[str, Any]) -> None:
         with self._lock:
-            raw_transitions = self._settings.value('transitions', None)
+            raw_transitions = self._settings.value("transitions", None)
             if isinstance(raw_transitions, Mapping):
                 transitions: Dict[str, Any] = dict(raw_transitions)
             else:
                 transitions = {}
 
-            def merge(existing: Dict[str, Any], defaults_map: Mapping[str, Any]) -> bool:
+            def merge(
+                existing: Dict[str, Any], defaults_map: Mapping[str, Any]
+            ) -> bool:
                 changed = False
                 for k, v in defaults_map.items():
                     if k not in existing:
@@ -192,7 +214,7 @@ class SettingsManager(QObject):
 
             changed = merge(transitions, default_transitions)
             if changed or not isinstance(raw_transitions, Mapping):
-                self._settings.setValue('transitions', transitions)
+                self._settings.setValue("transitions", transitions)
                 self._settings.sync()
 
     def _ensure_widgets_defaults(self, default_widgets: Dict[str, Any]) -> None:
@@ -204,7 +226,7 @@ class SettingsManager(QObject):
         """
 
         with self._lock:
-            raw_widgets = self._settings.value('widgets', None)
+            raw_widgets = self._settings.value("widgets", None)
             if isinstance(raw_widgets, Mapping):
                 widgets: Dict[str, Any] = dict(raw_widgets)
             else:
@@ -230,7 +252,7 @@ class SettingsManager(QObject):
                     changed = True
 
             if changed or not isinstance(raw_widgets, Mapping):
-                self._settings.setValue('widgets', widgets)
+                self._settings.setValue("widgets", widgets)
                 self._settings.sync()
 
     def get_widget_defaults(self, section: str) -> Dict[str, Any]:
@@ -243,21 +265,22 @@ class SettingsManager(QObject):
 
         # Import canonical defaults to ensure consistency
         from core.settings.defaults import get_default_settings
-        defaults = get_default_settings()
-        widgets_defaults = defaults.get('widgets', {})
 
-        key = str(section) if section is not None else ''
+        defaults = get_default_settings()
+        widgets_defaults = defaults.get("widgets", {})
+
+        key = str(section) if section is not None else ""
         base = widgets_defaults.get(key, {})
         return dict(base) if isinstance(base, Mapping) else {}
-                
+
     def get(self, key: str, default: Any = None) -> Any:
         """
         Get a setting value.
-        
+
         Args:
             key: Setting key in dot notation (e.g., 'sources.mode')
             default: Default value if key not found
-        
+
         Returns:
             Setting value or default
         """
@@ -266,7 +289,7 @@ class SettingsManager(QObject):
             cache_key = f"{key}:{id(default)}"
             if self._cache_enabled and cache_key in self._cache:
                 return self._cache[cache_key]
-            
+
             value = self._settings.value(key, default)
 
         def to_plain(obj: Any) -> Any:
@@ -304,11 +327,11 @@ class SettingsManager(QObject):
             with self._lock:
                 self._cache[cache_key] = value
         return value
-    
+
     @staticmethod
     def to_bool(value: Any, default: bool = False) -> bool:
         """Normalize a stored setting value to bool.
-        
+
         Accepts common string forms ("true", "1", "yes", "on") as True and
         ("false", "0", "no", "off") as False. Falls back to bool(value) or
         the provided default when the value cannot be interpreted.
@@ -387,25 +410,29 @@ class SettingsManager(QObject):
                     # bool is a subclass of int; preserve intent.
                     return int(value)
                 return int(value)
-        except Exception as e:
-            logger.debug("Failed to coerce SST value for %s=%r", dotted, value, exc_info=True)
+        except Exception:
+            logger.debug(
+                "Failed to coerce SST value for %s=%r", dotted, value, exc_info=True
+            )
             return value
 
         return value
 
     # Keys that require immediate sync to prevent data loss on crash/exit
-    _CRITICAL_KEYS = frozenset({
-        'transitions',
-        'widgets',
-        'sources.folders',
-        'sources.rss_feeds',
-        'display',
-    })
+    _CRITICAL_KEYS = frozenset(
+        {
+            "transitions",
+            "widgets",
+            "sources.folders",
+            "sources.rss_feeds",
+            "display",
+        }
+    )
 
     def set(self, key: str, value: Any) -> None:
         """
         Set a setting value.
-        
+
         Args:
             key: Setting key in dot notation
             value: Value to set
@@ -413,22 +440,22 @@ class SettingsManager(QObject):
         with self._lock:
             old_value = self._settings.value(key)
             self._settings.setValue(key, value)
-            
+
             # Invalidate cache entries for this key (P2 optimization)
             if self._cache_enabled:
                 keys_to_remove = [k for k in self._cache if k.startswith(f"{key}:")]
                 for k in keys_to_remove:
                     del self._cache[k]
-            
+
             # Immediate sync for critical settings to prevent data loss
             # QSettings on Windows uses registry and may delay writes
-            root_key = key.split('.')[0] if '.' in key else key
+            root_key = key.split(".")[0] if "." in key else key
             if root_key in self._CRITICAL_KEYS or key in self._CRITICAL_KEYS:
                 self._settings.sync()
-            
+
             # Emit change signal
             self.settings_changed.emit(key, value)
-            
+
             # Call registered handlers
             if key in self._change_handlers:
                 for handler in self._change_handlers[key]:
@@ -458,83 +485,99 @@ class SettingsManager(QObject):
     def set_spotify_visualizer_settings(self, model: SpotifyVisualizerSettings) -> None:
         """Persist Spotify visualizer settings from a typed model."""
         self.set_many(model.to_dict())
-    
+
     def save(self) -> None:
         """Force save settings to persistent storage."""
         with self._lock:
             self._settings.sync()
         logger.debug("Settings saved")
-    
+
     def load(self) -> None:
         """Load settings from persistent storage."""
         # QSettings loads automatically, but we can force sync
         with self._lock:
             self._settings.sync()
         logger.debug("Settings loaded")
-    
+
     def validate_and_repair(self) -> Dict[str, str]:
         """Validate settings and repair corrupted values.
-        
+
         Checks for:
         - Invalid types (e.g., string where list expected)
         - Out-of-range values
         - Missing required keys
-        
+
         Returns:
             Dict of repaired keys and their issues
         """
         repairs = {}
-        
+
         with self._lock:
             # Validate sources.folders - must be list
-            folders = self._settings.value('sources.folders')
+            folders = self._settings.value("sources.folders")
             if folders is not None and not isinstance(folders, list):
-                logger.warning(f"Repairing sources.folders: was {type(folders).__name__}, expected list")
+                logger.warning(
+                    f"Repairing sources.folders: was {type(folders).__name__}, expected list"
+                )
                 if isinstance(folders, str):
-                    self._settings.setValue('sources.folders', [folders] if folders else [])
+                    self._settings.setValue(
+                        "sources.folders", [folders] if folders else []
+                    )
                 else:
-                    self._settings.setValue('sources.folders', [])
-                repairs['sources.folders'] = f"Invalid type: {type(folders).__name__}"
-            
+                    self._settings.setValue("sources.folders", [])
+                repairs["sources.folders"] = f"Invalid type: {type(folders).__name__}"
+
             # Validate sources.rss_feeds - must be list
-            rss_feeds = self._settings.value('sources.rss_feeds')
+            rss_feeds = self._settings.value("sources.rss_feeds")
             if rss_feeds is not None and not isinstance(rss_feeds, list):
-                logger.warning(f"Repairing sources.rss_feeds: was {type(rss_feeds).__name__}, expected list")
+                logger.warning(
+                    f"Repairing sources.rss_feeds: was {type(rss_feeds).__name__}, expected list"
+                )
                 if isinstance(rss_feeds, str):
-                    self._settings.setValue('sources.rss_feeds', [rss_feeds] if rss_feeds else [])
+                    self._settings.setValue(
+                        "sources.rss_feeds", [rss_feeds] if rss_feeds else []
+                    )
                 else:
-                    self._settings.setValue('sources.rss_feeds', [])
-                repairs['sources.rss_feeds'] = f"Invalid type: {type(rss_feeds).__name__}"
-            
+                    self._settings.setValue("sources.rss_feeds", [])
+                repairs["sources.rss_feeds"] = (
+                    f"Invalid type: {type(rss_feeds).__name__}"
+                )
+
             # Validate timing.interval - must be positive number
-            interval = self._settings.value('timing.interval')
+            interval = self._settings.value("timing.interval")
             if interval is not None:
                 try:
                     interval_val = int(interval)
                     if interval_val < 1:
                         logger.warning(f"Repairing timing.interval: {interval_val} < 1")
-                        self._settings.setValue('timing.interval', 10)
-                        repairs['timing.interval'] = f"Out of range: {interval_val}"
+                        self._settings.setValue("timing.interval", 10)
+                        repairs["timing.interval"] = f"Out of range: {interval_val}"
                     elif interval_val > 3600:
-                        logger.warning(f"Repairing timing.interval: {interval_val} > 3600")
-                        self._settings.setValue('timing.interval', 60)
-                        repairs['timing.interval'] = f"Out of range: {interval_val}"
+                        logger.warning(
+                            f"Repairing timing.interval: {interval_val} > 3600"
+                        )
+                        self._settings.setValue("timing.interval", 60)
+                        repairs["timing.interval"] = f"Out of range: {interval_val}"
                 except (ValueError, TypeError):
-                    logger.warning(f"Repairing timing.interval: invalid value {interval!r}")
-                    self._settings.setValue('timing.interval', 10)
-                    repairs['timing.interval'] = f"Invalid value: {interval!r}"
-            
+                    logger.warning(
+                        f"Repairing timing.interval: invalid value {interval!r}"
+                    )
+                    self._settings.setValue("timing.interval", 10)
+                    repairs["timing.interval"] = f"Invalid value: {interval!r}"
+
             # Validate display.mode - must be valid enum
-            display_mode = self._settings.value('display.mode')
-            valid_modes = {'fill', 'fit', 'shrink', 'stretch', 'center'}
+            display_mode = self._settings.value("display.mode")
+            valid_modes = {"fill", "fit", "shrink", "stretch", "center"}
             if display_mode is not None and display_mode not in valid_modes:
-                logger.warning(f"Repairing display.mode: {display_mode!r} not in {valid_modes}")
-                self._settings.setValue('display.mode', 'fill')
-                repairs['display.mode'] = f"Invalid value: {display_mode!r}"
+                logger.warning(
+                    f"Repairing display.mode: {display_mode!r} not in {valid_modes}"
+                )
+                self._settings.setValue("display.mode", "fill")
+                repairs["display.mode"] = f"Invalid value: {display_mode!r}"
 
             # Validate display.render_backend_mode - must be valid enum
-            backend_mode = self._settings.value('display.render_backend_mode')
-            valid_backends = {'opengl', 'software', 'd3d11'}
+            backend_mode = self._settings.value("display.render_backend_mode")
+            valid_backends = {"opengl", "software", "d3d11"}
             if backend_mode is not None:
                 normalized = None
                 if isinstance(backend_mode, str):
@@ -545,25 +588,32 @@ class SettingsManager(QObject):
                         backend_mode,
                         valid_backends,
                     )
-                    self._settings.setValue('display.render_backend_mode', 'opengl')
-                    repairs['display.render_backend_mode'] = f"Invalid value: {backend_mode!r}"
-                elif normalized == 'd3d11':
-                    logger.info("Normalizing legacy display.render_backend_mode=d3d11 to opengl")
-                    self._settings.setValue('display.render_backend_mode', 'opengl')
-                    repairs['display.render_backend_mode'] = "Legacy value: d3d11"
+                    self._settings.setValue("display.render_backend_mode", "opengl")
+                    repairs["display.render_backend_mode"] = (
+                        f"Invalid value: {backend_mode!r}"
+                    )
+                elif normalized == "d3d11":
+                    logger.info(
+                        "Normalizing legacy display.render_backend_mode=d3d11 to opengl"
+                    )
+                    self._settings.setValue("display.render_backend_mode", "opengl")
+                    repairs["display.render_backend_mode"] = "Legacy value: d3d11"
 
             # Validate display.hw_accel - keep in sync with backend mode
-            hw_accel = self._settings.value('display.hw_accel')
-            backend_mode_final = self._settings.value('display.render_backend_mode')
+            hw_accel = self._settings.value("display.hw_accel")
+            backend_mode_final = self._settings.value("display.render_backend_mode")
             backend_is_opengl = False
-            if isinstance(backend_mode_final, str) and backend_mode_final.lower().strip() == 'opengl':
+            if (
+                isinstance(backend_mode_final, str)
+                and backend_mode_final.lower().strip() == "opengl"
+            ):
                 backend_is_opengl = True
             expected_hw = bool(backend_is_opengl)
             if hw_accel is not None:
                 if isinstance(hw_accel, bool):
                     hw_val = hw_accel
                 elif isinstance(hw_accel, str):
-                    hw_val = hw_accel.lower().strip() in {'1', 'true', 'yes', 'on'}
+                    hw_val = hw_accel.lower().strip() in {"1", "true", "yes", "on"}
                 else:
                     hw_val = bool(hw_accel)
                 if hw_val != expected_hw:
@@ -573,79 +623,113 @@ class SettingsManager(QObject):
                         expected_hw,
                         backend_mode_final,
                     )
-                    self._settings.setValue('display.hw_accel', expected_hw)
-                    repairs['display.hw_accel'] = f"Mismatch with backend: {backend_mode_final!r}"
+                    self._settings.setValue("display.hw_accel", expected_hw)
+                    repairs["display.hw_accel"] = (
+                        f"Mismatch with backend: {backend_mode_final!r}"
+                    )
             else:
                 # Missing key: populate to avoid ambiguous startup paths.
-                self._settings.setValue('display.hw_accel', expected_hw)
-                repairs['display.hw_accel'] = "Missing key"
-            
+                self._settings.setValue("display.hw_accel", expected_hw)
+                repairs["display.hw_accel"] = "Missing key"
+
             # Validate spotify visualizer sensitivity - must be in valid range (0.25-2.5)
             # Fix for corrupted sensitivity values that cause poor visualizer performance
-            vis_sensitivity = self._settings.value('widgets.spotify_visualizer.sensitivity')
+            vis_sensitivity = self._settings.value(
+                "widgets.spotify_visualizer.sensitivity"
+            )
             if vis_sensitivity is not None:
                 try:
                     sens_val = float(vis_sensitivity)
                     # If sensitivity is below 0.5, it's likely corrupted - reset to default 1.0
                     if sens_val < 0.5:
-                        logger.warning(f"Repairing widgets.spotify_visualizer.sensitivity: {sens_val} < 0.5 (likely corrupted)")
-                        self._settings.setValue('widgets.spotify_visualizer.sensitivity', 1.0)
-                        repairs['widgets.spotify_visualizer.sensitivity'] = f"Out of range: {sens_val}"
+                        logger.warning(
+                            f"Repairing widgets.spotify_visualizer.sensitivity: {sens_val} < 0.5 (likely corrupted)"
+                        )
+                        self._settings.setValue(
+                            "widgets.spotify_visualizer.sensitivity", 1.0
+                        )
+                        repairs["widgets.spotify_visualizer.sensitivity"] = (
+                            f"Out of range: {sens_val}"
+                        )
                     elif sens_val > 2.5:
-                        logger.warning(f"Repairing widgets.spotify_visualizer.sensitivity: {sens_val} > 2.5")
-                        self._settings.setValue('widgets.spotify_visualizer.sensitivity', 1.0)
-                        repairs['widgets.spotify_visualizer.sensitivity'] = f"Out of range: {sens_val}"
+                        logger.warning(
+                            f"Repairing widgets.spotify_visualizer.sensitivity: {sens_val} > 2.5"
+                        )
+                        self._settings.setValue(
+                            "widgets.spotify_visualizer.sensitivity", 1.0
+                        )
+                        repairs["widgets.spotify_visualizer.sensitivity"] = (
+                            f"Out of range: {sens_val}"
+                        )
                 except (ValueError, TypeError):
-                    logger.warning(f"Repairing widgets.spotify_visualizer.sensitivity: invalid value {vis_sensitivity!r}")
-                    self._settings.setValue('widgets.spotify_visualizer.sensitivity', 1.0)
-                    repairs['widgets.spotify_visualizer.sensitivity'] = f"Invalid value: {vis_sensitivity!r}"
+                    logger.warning(
+                        f"Repairing widgets.spotify_visualizer.sensitivity: invalid value {vis_sensitivity!r}"
+                    )
+                    self._settings.setValue(
+                        "widgets.spotify_visualizer.sensitivity", 1.0
+                    )
+                    repairs["widgets.spotify_visualizer.sensitivity"] = (
+                        f"Invalid value: {vis_sensitivity!r}"
+                    )
 
             # Validate widgets - must be dict
-            widgets = self._settings.value('widgets')
+            widgets = self._settings.value("widgets")
             if widgets is not None and not isinstance(widgets, Mapping):
-                logger.warning(f"Repairing widgets: was {type(widgets).__name__}, expected mapping")
+                logger.warning(
+                    f"Repairing widgets: was {type(widgets).__name__}, expected mapping"
+                )
                 try:
                     from core.settings.defaults import get_default_settings
-                    canonical_widgets = get_default_settings().get('widgets', {})
+
+                    canonical_widgets = get_default_settings().get("widgets", {})
                     if isinstance(canonical_widgets, Mapping):
-                        self._settings.setValue('widgets', dict(canonical_widgets))
+                        self._settings.setValue("widgets", dict(canonical_widgets))
                     else:
-                        self._settings.setValue('widgets', {})
+                        self._settings.setValue("widgets", {})
                 except Exception as e:
                     logger.debug("[SETTINGS] Exception suppressed: %s", e)
-                    self._settings.setValue('widgets', {})
-                repairs['widgets'] = f"Invalid type: {type(widgets).__name__}"
-            
+                    self._settings.setValue("widgets", {})
+                repairs["widgets"] = f"Invalid type: {type(widgets).__name__}"
+
             # Validate transitions - must be dict
-            transitions = self._settings.value('transitions')
+            transitions = self._settings.value("transitions")
             if transitions is not None and not isinstance(transitions, Mapping):
-                logger.warning(f"Repairing transitions: was {type(transitions).__name__}, expected mapping")
+                logger.warning(
+                    f"Repairing transitions: was {type(transitions).__name__}, expected mapping"
+                )
                 try:
                     from core.settings.defaults import get_default_settings
-                    canonical_transitions = get_default_settings().get('transitions', {})
+
+                    canonical_transitions = get_default_settings().get(
+                        "transitions", {}
+                    )
                     if isinstance(canonical_transitions, Mapping):
-                        self._settings.setValue('transitions', dict(canonical_transitions))
+                        self._settings.setValue(
+                            "transitions", dict(canonical_transitions)
+                        )
                     else:
-                        self._settings.setValue('transitions', {})
+                        self._settings.setValue("transitions", {})
                 except Exception as e:
                     logger.debug("[SETTINGS] Exception suppressed: %s", e)
-                    self._settings.setValue('transitions', {})
-                repairs['transitions'] = f"Invalid type: {type(transitions).__name__}"
-            
+                    self._settings.setValue("transitions", {})
+                repairs["transitions"] = f"Invalid type: {type(transitions).__name__}"
+
             if repairs:
                 self._settings.sync()
-                logger.info(f"Settings validation repaired {len(repairs)} issues: {list(repairs.keys())}")
+                logger.info(
+                    f"Settings validation repaired {len(repairs)} issues: {list(repairs.keys())}"
+                )
             else:
                 logger.debug("Settings validation passed - no repairs needed")
-        
+
         return repairs
-    
+
     def backup_settings(self, backup_path: Optional[Path] = None) -> Optional[Path]:
         """Create a backup of current settings.
-        
+
         Args:
             backup_path: Optional path for backup file. If None, uses default location.
-            
+
         Returns:
             Path to backup file, or None if backup failed
         """
@@ -653,31 +737,32 @@ class SettingsManager(QObject):
             if backup_path is None:
                 # Default to settings directory with timestamp
                 import datetime
+
                 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                 settings_dir = Path(self._settings.fileName()).parent
                 backup_path = settings_dir / f"settings_backup_{timestamp}.json"
-            
+
             # Export all settings to JSON
             settings_dict = {}
             with self._lock:
                 for key in self._settings.allKeys():
                     settings_dict[key] = self._settings.value(key)
-            
+
             backup_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(backup_path, 'w', encoding='utf-8') as f:
+            with open(backup_path, "w", encoding="utf-8") as f:
                 json.dump(settings_dict, f, indent=2, default=str)
-            
+
             logger.info(f"Settings backed up to: {backup_path}")
             return backup_path
-            
+
         except Exception as e:
             logger.error(f"Failed to backup settings: {e}")
             return None
-    
+
     def on_changed(self, key: str, handler: Callable[[Any, Any], None]) -> None:
         """
         Register a handler for when a specific setting changes.
-        
+
         Args:
             key: Setting key to watch
             handler: Callback function(new_value, old_value)
@@ -686,55 +771,55 @@ class SettingsManager(QObject):
             if key not in self._change_handlers:
                 self._change_handlers[key] = []
             self._change_handlers[key].append(handler)
-        
+
         logger.debug(f"Registered change handler for {key}")
-    
+
     def reset_to_defaults(self) -> None:
         """Reset all settings to default values, preserving user-specific data.
-        
+
         Preserved settings (not reset):
         - sources.folders (user's image folders)
-        - sources.rss_feeds (user's RSS feeds)  
+        - sources.rss_feeds (user's RSS feeds)
         - widgets.weather.location (auto-detected or user-set)
         - widgets.weather.latitude (auto-detected)
         - widgets.weather.longitude (auto-detected)
         """
         from core.settings.defaults import get_default_settings
-        
+
         with self._lock:
             # Preserve user-specific data before clearing
             preserved: dict = {}
-            
+
             # Preserve source folders and feeds
-            folders = self._settings.value('sources.folders')
+            folders = self._settings.value("sources.folders")
             if folders:
-                preserved['sources.folders'] = folders
-            rss_feeds = self._settings.value('sources.rss_feeds')
+                preserved["sources.folders"] = folders
+            rss_feeds = self._settings.value("sources.rss_feeds")
             if rss_feeds:
-                preserved['sources.rss_feeds'] = rss_feeds
-            
+                preserved["sources.rss_feeds"] = rss_feeds
+
             # Preserve weather location/geo data from widgets map
-            widgets_raw = self._settings.value('widgets')
+            widgets_raw = self._settings.value("widgets")
             if isinstance(widgets_raw, Mapping):
                 widgets_map = dict(widgets_raw)
-                weather = widgets_map.get('weather', {})
+                weather = widgets_map.get("weather", {})
                 if isinstance(weather, Mapping):
-                    for key in ('location', 'latitude', 'longitude'):
+                    for key in ("location", "latitude", "longitude"):
                         if key in weather:
-                            preserved[f'widgets.weather.{key}'] = weather[key]
-            
+                            preserved[f"widgets.weather.{key}"] = weather[key]
+
             # Clear and apply canonical defaults
             self._settings.clear()
-            
+
             # Apply new defaults from defaults module
             # Some sections (widgets, transitions) are stored as nested dicts,
             # while others use flat dot-notation keys for QSettings compatibility
             defaults = get_default_settings()
-            
+
             # Sections that should be stored as nested dicts (not flattened)
-            nested_sections = {'widgets', 'transitions'}
-            
-            def flatten_dict(d: dict, parent_key: str = '') -> dict:
+            nested_sections = {"widgets", "transitions"}
+
+            def flatten_dict(d: dict, parent_key: str = "") -> dict:
                 """Flatten nested dict to dot-notation keys."""
                 items = {}
                 for k, v in d.items():
@@ -744,7 +829,7 @@ class SettingsManager(QObject):
                     else:
                         items[new_key] = v
                 return items
-            
+
             for section, value in defaults.items():
                 if section in nested_sections:
                     # Store as nested dict
@@ -756,50 +841,54 @@ class SettingsManager(QObject):
                         self._settings.setValue(key, val)
                 else:
                     self._settings.setValue(section, value)
-            
+
             # Restore preserved user-specific data using flat dot-notation keys
-            if 'sources.folders' in preserved:
-                self._settings.setValue('sources.folders', preserved['sources.folders'])
-            
-            if 'sources.rss_feeds' in preserved:
-                self._settings.setValue('sources.rss_feeds', preserved['sources.rss_feeds'])
-            
+            if "sources.folders" in preserved:
+                self._settings.setValue("sources.folders", preserved["sources.folders"])
+
+            if "sources.rss_feeds" in preserved:
+                self._settings.setValue(
+                    "sources.rss_feeds", preserved["sources.rss_feeds"]
+                )
+
             # Restore weather geo data into the nested widgets dict
-            widgets = self._settings.value('widgets', {})
+            widgets = self._settings.value("widgets", {})
             if isinstance(widgets, Mapping):
                 widgets_dict = dict(widgets)
-                weather = widgets_dict.get('weather', {})
+                weather = widgets_dict.get("weather", {})
                 if isinstance(weather, Mapping):
                     weather_dict = dict(weather)
-                    for key in ('location', 'latitude', 'longitude'):
-                        pkey = f'widgets.weather.{key}'
+                    for key in ("location", "latitude", "longitude"):
+                        pkey = f"widgets.weather.{key}"
                         if pkey in preserved:
                             weather_dict[key] = preserved[pkey]
-                    widgets_dict['weather'] = weather_dict
-                    self._settings.setValue('widgets', widgets_dict)
-            
+                    widgets_dict["weather"] = weather_dict
+                    self._settings.setValue("widgets", widgets_dict)
+
             self._settings.sync()
             self._cache.clear()
 
-        logger.info("Settings reset to defaults (preserved: %s)", list(preserved.keys()))
-        self.settings_changed.emit('*', None)  # Signal that all changed
-    
+        logger.info(
+            "Settings reset to defaults (preserved: %s)", list(preserved.keys())
+        )
+        self.settings_changed.emit("*", None)  # Signal that all changed
+
     def get_all_keys(self) -> List[str]:
         """Get all setting keys."""
         with self._lock:
             return self._settings.allKeys()
-    
+
     def contains(self, key: str) -> bool:
         """Check if a setting key exists."""
         with self._lock:
             return self._settings.contains(key)
-    
+
     def remove(self, key: str) -> None:
         """Remove a setting key."""
         with self._lock:
             self._settings.remove(key)
         logger.debug(f"Removed setting: {key}")
-    
+
     def clear(self) -> None:
         """Clear all settings (use with caution)."""
         with self._lock:
@@ -837,7 +926,7 @@ class SettingsManager(QObject):
             old_value = self._settings.value(section)
             self._settings.setValue(section, mapping)
 
-            root_key = section.split('.')[0] if '.' in section else section
+            root_key = section.split(".")[0] if "." in section else section
             if root_key in self._CRITICAL_KEYS or section in self._CRITICAL_KEYS:
                 self._settings.sync()
 
@@ -854,7 +943,7 @@ class SettingsManager(QObject):
         any future migration or normalisation can be centralised here.
         """
 
-        value = self.get_section('widgets', {})
+        value = self.get_section("widgets", {})
         return dict(value) if isinstance(value, Mapping) else {}
 
     def set_widgets_map(self, widgets: Mapping[str, Any]) -> None:
@@ -864,7 +953,7 @@ class SettingsManager(QObject):
         callers from hard-coding the 'widgets' key.
         """
 
-        self.set_section('widgets', widgets)
+        self.set_section("widgets", widgets)
 
     def export_to_sst(self, path: str) -> bool:
         """Export a human-readable SST snapshot of all settings to *path*.
@@ -887,23 +976,23 @@ class SettingsManager(QObject):
                     # Widgets and transitions are already stored as nested
                     # mappings; keep them as top-level sections in the
                     # snapshot so they are easy to diff and re-import.
-                    if key == 'widgets':
+                    if key == "widgets":
                         if isinstance(value, Mapping):
-                            snapshot['widgets'] = dict(value)
+                            snapshot["widgets"] = dict(value)
                         else:
-                            snapshot['widgets'] = value
+                            snapshot["widgets"] = value
                         continue
-                    if key == 'transitions':
+                    if key == "transitions":
                         if isinstance(value, Mapping):
-                            snapshot['transitions'] = dict(value)
+                            snapshot["transitions"] = dict(value)
                         else:
-                            snapshot['transitions'] = value
+                            snapshot["transitions"] = value
                         continue
 
                     # Dotted keys (e.g. 'display.mode', 'input.hard_exit')
                     # become nested sections in the SST snapshot.
-                    if '.' in key:
-                        section, subkey = key.split('.', 1)
+                    if "." in key:
+                        section, subkey = key.split(".", 1)
                         container = snapshot.get(section)
                         if not isinstance(container, dict):
                             container = {}
@@ -915,22 +1004,27 @@ class SettingsManager(QObject):
 
             app_name = None
             try:
-                app_name = getattr(self, "_application", None) or self._settings.applicationName()
+                app_name = (
+                    getattr(self, "_application", None)
+                    or self._settings.applicationName()
+                )
             except Exception as e:
                 logger.debug("[SETTINGS] Exception suppressed: %s", e)
                 app_name = "Screensaver"
 
             payload: Dict[str, Any] = {
-                'settings_version': 1,
-                'application': app_name,
-                'snapshot': snapshot,
+                "settings_version": 1,
+                "application": app_name,
+                "snapshot": snapshot,
             }
 
             target = Path(path)
-            target.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding='utf-8')
+            target.write_text(
+                json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8"
+            )
             logger.info("Exported settings snapshot to %s", target)
             return True
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to export settings snapshot to %s", path)
             return False
 
@@ -944,17 +1038,17 @@ class SettingsManager(QObject):
         """
 
         try:
-            raw = Path(path).read_text(encoding='utf-8')
+            raw = Path(path).read_text(encoding="utf-8")
             loaded = json.loads(raw)
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to read settings snapshot from %s", path)
             return False
 
         sst_version: Any = None
         sst_application: Any = None
         if isinstance(loaded, Mapping):
-            sst_version = loaded.get('settings_version')
-            sst_application = loaded.get('application')
+            sst_version = loaded.get("settings_version")
+            sst_application = loaded.get("application")
 
         current_version = 1
         if isinstance(sst_version, int):
@@ -974,8 +1068,8 @@ class SettingsManager(QObject):
         if isinstance(sst_application, str):
             try:
                 current_app = self.get_application_name()
-            except Exception as e:
-                logger.debug("[SETTINGS] Exception suppressed: %s", e)
+            except Exception:
+                logger.debug("[SETTINGS] Exception suppressed while fetching app name", exc_info=True)
                 current_app = None
             if current_app and sst_application != current_app:
                 logger.info(
@@ -985,8 +1079,8 @@ class SettingsManager(QObject):
                 )
 
         root: Any
-        if isinstance(loaded, Mapping) and 'snapshot' in loaded:
-            root = loaded.get('snapshot', {})
+        if isinstance(loaded, Mapping) and "snapshot" in loaded:
+            root = loaded.get("snapshot", {})
         else:
             root = loaded
 
@@ -998,42 +1092,48 @@ class SettingsManager(QObject):
             with self._lock:
                 for section_key, section_value in root.items():
                     # Widgets: treat as a single mapping-backed section.
-                    if section_key == 'widgets':
+                    if section_key == "widgets":
                         widgets_map: Any = section_value
                         if not isinstance(widgets_map, Mapping):
                             continue
                         widgets_dict: Dict[str, Any] = dict(widgets_map)
 
                         if merge:
-                            existing = self._settings.value('widgets', {})
+                            existing = self._settings.value("widgets", {})
                             if isinstance(existing, Mapping):
                                 merged_widgets = dict(existing)
                                 for name, cfg in widgets_dict.items():
                                     merged_widgets[name] = cfg
                                 widgets_dict = merged_widgets
 
-                        self._settings.setValue('widgets', widgets_dict)
+                        self._settings.setValue("widgets", widgets_dict)
                         continue
 
                     # Transitions: similar treatment to widgets.
-                    if section_key == 'transitions':
+                    if section_key == "transitions":
                         transitions_map: Any = section_value
                         if not isinstance(transitions_map, Mapping):
                             continue
                         transitions_dict: Dict[str, Any] = dict(transitions_map)
 
                         if merge:
-                            existing_t = self._settings.value('transitions', {})
+                            existing_t = self._settings.value("transitions", {})
                             if isinstance(existing_t, Mapping):
                                 merged_t = dict(existing_t)
                                 merged_t.update(transitions_dict)
                                 transitions_dict = merged_t
 
-                        self._settings.setValue('transitions', transitions_dict)
+                        self._settings.setValue("transitions", transitions_dict)
                         continue
 
                     # Known mapping-backed sections must be dict-like.
-                    if section_key in {'display', 'timing', 'input', 'sources', 'cache'} and not isinstance(section_value, Mapping):
+                    if section_key in {
+                        "display",
+                        "timing",
+                        "input",
+                        "sources",
+                        "cache",
+                    } and not isinstance(section_value, Mapping):
                         logger.warning(
                             "Skipping SST section '%s': expected mapping, got %s",
                             section_key,
@@ -1058,10 +1158,10 @@ class SettingsManager(QObject):
 
             # Wildcard signal so listeners that care about global changes can
             # refresh their view.
-            self.settings_changed.emit('*', None)
+            self.settings_changed.emit("*", None)
             logger.info("Imported settings snapshot from %s", path)
             return True
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to apply settings snapshot from %s", path)
             return False
 
@@ -1074,20 +1174,24 @@ class SettingsManager(QObject):
         """
 
         try:
-            raw = Path(path).read_text(encoding='utf-8')
+            raw = Path(path).read_text(encoding="utf-8")
             loaded = json.loads(raw)
-        except Exception as e:
-            logger.exception("Failed to read settings snapshot for preview from %s", path)
+        except Exception:
+            logger.exception(
+                "Failed to read settings snapshot for preview from %s", path
+            )
             return {}
 
         root: Any
-        if isinstance(loaded, Mapping) and 'snapshot' in loaded:
-            root = loaded.get('snapshot', {})
+        if isinstance(loaded, Mapping) and "snapshot" in loaded:
+            root = loaded.get("snapshot", {})
         else:
             root = loaded
 
         if not isinstance(root, Mapping):
-            logger.warning("Settings snapshot root is not a mapping for preview: %r", type(root))
+            logger.warning(
+                "Settings snapshot root is not a mapping for preview: %r", type(root)
+            )
             return {}
 
         diffs: Dict[str, Any] = {}
@@ -1095,13 +1199,13 @@ class SettingsManager(QObject):
         try:
             with self._lock:
                 for section_key, section_value in root.items():
-                    if section_key == 'widgets':
+                    if section_key == "widgets":
                         widgets_map: Any = section_value
                         if not isinstance(widgets_map, Mapping):
                             continue
                         new_widgets: Dict[str, Any] = dict(widgets_map)
 
-                        existing = self._settings.value('widgets', {})
+                        existing = self._settings.value("widgets", {})
                         if isinstance(existing, Mapping):
                             old_widgets = dict(existing)
                         else:
@@ -1114,16 +1218,16 @@ class SettingsManager(QObject):
                             new_widgets = merged_widgets
 
                         if old_widgets != new_widgets:
-                            diffs['widgets'] = (old_widgets, new_widgets)
+                            diffs["widgets"] = (old_widgets, new_widgets)
                         continue
 
-                    if section_key == 'transitions':
+                    if section_key == "transitions":
                         transitions_map: Any = section_value
                         if not isinstance(transitions_map, Mapping):
                             continue
                         new_transitions: Dict[str, Any] = dict(transitions_map)
 
-                        existing_t = self._settings.value('transitions', {})
+                        existing_t = self._settings.value("transitions", {})
                         if isinstance(existing_t, Mapping):
                             old_transitions = dict(existing_t)
                         else:
@@ -1135,10 +1239,16 @@ class SettingsManager(QObject):
                             new_transitions = merged_t
 
                         if old_transitions != new_transitions:
-                            diffs['transitions'] = (old_transitions, new_transitions)
+                            diffs["transitions"] = (old_transitions, new_transitions)
                         continue
 
-                    if section_key in {'display', 'timing', 'input', 'sources', 'cache'} and not isinstance(section_value, Mapping):
+                    if section_key in {
+                        "display",
+                        "timing",
+                        "input",
+                        "sources",
+                        "cache",
+                    } and not isinstance(section_value, Mapping):
                         logger.warning(
                             "Skipping SST section '%s' in preview: expected mapping, got %s",
                             section_key,
@@ -1161,6 +1271,8 @@ class SettingsManager(QObject):
                             diffs[section_key] = (old_val, new_val)
 
             return diffs
-        except Exception as e:
-            logger.exception("Failed to compute settings snapshot preview from %s", path)
+        except Exception:
+            logger.exception(
+                "Failed to compute settings snapshot preview from %s", path
+            )
             return {}
