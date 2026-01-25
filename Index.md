@@ -158,6 +158,17 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - EventSystem pub/sub (thread-safe)
 - core/events/event_types.py
   - Event type definitions (ImageChanged, TransitionStarted, etc.)
+- core/rss/pipeline_manager.py
+  - RssPipelineManager: Singleton for RSS cache paths, deduplication, and cache hygiene
+  - `build_url_key()`, `build_image_key()`: Generate dedupe keys from URLs/images
+  - `record_keys()`, `has_key()`, `clear_dedupe()`: Manage dedupe state
+  - `count_disk_cache_files()`, `clear_cache()`: Disk cache management
+  - `generation` property: Cache invalidation token for staleness checks (Phase 2.3)
+  - `is_duplicate(log_decision=True)`: Dedupe with optional diagnostics
+- core/reddit_rate_limiter.py
+  - RedditRateLimiter: Thread-safe singleton for Reddit API rate limiting
+  - Enforces 8 req/min limit (Reddit allows 10, -2 safety margin)
+  - `wait_if_needed()`, `record_request()`, `can_make_request()`
 - core/performance/frame_budget.py
   - FrameBudget: Frame time budget allocation for GL render, visualizer, image loading
   - FrameBudgetConfig: Configuration for target FPS and budget allocation

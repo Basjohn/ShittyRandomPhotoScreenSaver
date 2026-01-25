@@ -307,15 +307,26 @@ class WidgetManager:
         logger.debug("[FADE_SYNC] Compositor ready (first image displayed)")
         
         # Disconnect signal to avoid repeated calls
-        try:
-            if self._parent is not None and hasattr(self._parent, "image_displayed"):
-                self._parent.image_displayed.disconnect(self._on_compositor_ready)
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+        self._disconnect_compositor_signal()
         
         # If we have pending fades waiting for compositor, start them now
         if self._overlay_fade_pending and not self._overlay_fade_started:
             self._start_overlay_fades(force=False)
+    
+    def _disconnect_compositor_signal(self) -> None:
+        """Disconnect compositor ready signal if connected.
+        
+        Phase 3.2: Ensures signal is disconnected during cleanup to prevent
+        stale callbacks after widget manager is torn down.
+        """
+        try:
+            if self._parent is not None and hasattr(self._parent, "image_displayed"):
+                self._parent.image_displayed.disconnect(self._on_compositor_ready)
+        except (TypeError, RuntimeError):
+            # Signal was not connected or already disconnected
+            pass
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
     
     def set_factory_registry(
         self, 
@@ -451,6 +462,12 @@ class WidgetManager:
                     self._raise_timer = QTimer()
                     self._raise_timer.setSingleShot(True)
                     self._raise_timer.timeout.connect(self._do_deferred_raise)
+                    # Register timer with ResourceManager for cleanup tracking
+                    if self._resource_manager:
+                        try:
+                            self._resource_manager.register_qt(self._raise_timer, description="WidgetManager raise timer")
+                        except Exception as e:
+                            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                 self._raise_timer.start(remaining_ms)
             return
         
@@ -1038,17 +1055,46 @@ class WidgetManager:
             return 100
     
     def cleanup(self) -> None:
-        """Clean up all managed widgets."""
+        """Clean up all managed widgets and resources.
+        
+        Phase 3.2: Ensures deterministic cleanup of:
+        - Timers (raise, fade timeout, clock tick)
+        - Compositor signal connections
+        - Fade callbacks and overlay sync state
+        - Weather animation drivers
+        - All registered widgets
+        """
         self._detach_settings_manager()
+        
+        # Disconnect compositor ready signal
+        self._disconnect_compositor_signal()
+        
+        # Stop and cleanup raise timer
         if self._raise_timer is not None:
             try:
                 self._raise_timer.stop()
+                self._raise_timer.deleteLater()
             except Exception as e:
                 logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             self._raise_timer = None
+        
+        # Stop and cleanup overlay fade timeout timer
+        if self._overlay_fade_timeout is not None:
+            try:
+                self._overlay_fade_timeout.stop()
+                self._overlay_fade_timeout.deleteLater()
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+            self._overlay_fade_timeout = None
 
         self._stop_shared_clock_tick_timer()
         self._teardown_weather_animation_drivers()
+        
+        # Clear fade coordination state
+        self._overlay_fade_expected.clear()
+        self._overlay_fade_pending.clear()
+        self._overlay_fade_started = False
+        self._spotify_secondary_fade_starters.clear()
         
         # Use lifecycle cleanup for widgets that support it
         for name, widget in list(self._widgets.items()):
@@ -1635,6 +1681,12 @@ class WidgetManager:
                 timeout = QTimer()
                 timeout.setSingleShot(True)
                 timeout.timeout.connect(lambda: self._start_overlay_fades(force=True))
+                # Phase 3.2: Register timer with ResourceManager for cleanup tracking
+                if self._resource_manager:
+                    try:
+                        self._resource_manager.register_qt(timeout, description="WidgetManager fade timeout")
+                    except Exception as e:
+                        logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                 timeout.start(2500)
                 self._overlay_fade_timeout = timeout
             except Exception as e:
@@ -2016,6 +2068,12 @@ class WidgetManager:
             timer = QTimer(self._parent)
             timer.setTimerType(Qt.TimerType.PreciseTimer)
             timer.timeout.connect(self._drive_shared_clock_tick)
+            # Phase 3.2: Register timer with ResourceManager for cleanup tracking
+            if self._resource_manager:
+                try:
+                    self._resource_manager.register_qt(timer, description="WidgetManager clock tick timer")
+                except Exception as e:
+                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             timer.start(self._clock_shared_tick_interval_ms)
 
         self._clock_shared_tick_timer = timer

@@ -1533,7 +1533,8 @@ class RedditWidget(BaseOverlayWidget):
             return
 
         rect = QRect(left, top, total_w, total_h)
-        radius = min(rect.width(), rect.height()) / 2.5
+        # Match the main card border-radius of 8px for visual consistency
+        radius = 8.0
 
         # Use shadow helper for border with drop shadow
         draw_rounded_rect_with_shadow(

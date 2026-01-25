@@ -211,7 +211,32 @@ Implement the in-depth plan from Feature Investigation §8 while resolving audit
 - [x] Test backoff behavior when limit exceeded
   - **Status:** `tests/test_reddit_rate_limiter.py` covers rate limit enforcement, backoff, thread safety
 - [x] Verify priority processing doesn't block non-Reddit sources
-  - **Status:** Reddit priority=10 (lowest), non-Reddit sources fetched first  
+  - **Status:** Reddit priority=10 (lowest), non-Reddit sources fetched first
+
+### 2.5.1 Reddit Rate Limit Contention Prevention (Side Quest 4)
+**Problem:** Every hybrid startup triggers rate limit warnings because `RedditRateLimiter` quota is exhausted before RSS feeds are even processed, causing immediate backoff and feed health degradation.
+**Root Cause:** Research confirms Reddit's unauthenticated API limit is **10 requests/minute** (not 60 as some sources claim). Current implementation uses 8 req/min with 8s intervals, but the limiter doesn't account for **startup burst** where multiple Reddit feeds try to fetch simultaneously.
+**Solution Strategy:**
+- [ ] **Pre-flight quota check**: Before processing Reddit feeds, check `RedditRateLimiter.can_make_request()` and defer entire Reddit batch if quota unavailable
+  - **Implementation:** In `_refresh_feeds()`, check quota before Reddit feed loop, skip all Reddit feeds if quota exhausted
+  - **Benefit:** Prevents cascading backoff failures, allows feeds to retry on next refresh cycle
+- [ ] **Startup stagger for Reddit feeds**: Introduce minimum delay between Reddit feed requests at startup (currently 8s, consider 10s for safety margin)
+  - **Implementation:** Increase `RATE_LIMIT_DELAY_SECONDS` from 8.0 to 10.0 (6 req/min, well under 10 req/min limit)
+  - **Benefit:** Reduces chance of quota exhaustion during burst
+- [ ] **Smarter feed rotation**: Current day-based hash rotation is good, but add quota-aware selection
+  - **Implementation:** Track successful Reddit fetches per session, stop processing Reddit feeds once quota is near exhaustion
+  - **Benefit:** Prevents wasted attempts and backoff penalties
+- [ ] **Separate Reddit quota tracking**: `RedditRateLimiter` tracks requests globally, but doesn't distinguish between RSS source and Reddit widget
+  - **Implementation:** Add namespace parameter to `RedditRateLimiter` methods for quota attribution
+  - **Benefit:** Better visibility into which component is consuming quota
+- [ ] **Document "double draw" consequences**: Clarify in code comments that exceeding quota triggers 2-minute backoff and feed health degradation
+  - **Implementation:** Add warning comments in `_refresh_feeds()` near Reddit processing logic
+  - **Benefit:** Future developers understand the cost of quota violations
+**Testing:**
+- [ ] Add test simulating startup with 10+ Reddit feeds and limited quota
+- [ ] Verify pre-flight check prevents cascading failures
+- [ ] Confirm feed rotation respects quota availability
+**Modules:** `@sources/rss_source.py`, `@core/reddit_rate_limiter.py`  
 
 ---
 
@@ -223,12 +248,16 @@ Implement Feature Plan sections 3–7 alongside audit findings.
 **Goal:** Migrate to central `ShadowFadeProfile`, reduce QGraphicsEffect overhead, and document canonical shadow profiles.  
 **Modules:** `@widgets/shadow_utils.py`, `@widgets/shadow_utils_old.py`, `@widgets/reddit_widget.py`, `@widgets/media_widget.py`, `@widgets/spotify_visualizer_widget.py`, `@widgets/weather_widget.py`, `@ui/settings_dialog.py`, `@Docs/10_WIDGET_GUIDELINES.md`, `@Docs/STYLE_GUIDELINES.md`.  
 **Checklist:**  
-- [ ] Enumerate all `QGraphicsDropShadowEffect` usages (including `shadow_utils_old`).  
-- [ ] Define card vs badge profiles (radius 8px/4px, offsets, alpha).  
+- [x] Enumerate all `QGraphicsDropShadowEffect` usages (including `shadow_utils_old`).  
+  - **Status:** `shadow_utils_old.py` is not imported anywhere (legacy); `shadow_utils.py` is the active implementation
+  - **Status:** All widgets use centralized `apply_widget_shadow()` and `ShadowFadeProfile`
+- [x] Define card vs badge profiles (radius 8px/4px, offsets, alpha).  
+  - **Status:** `shadow_utils.py` has `SHADOW_SIZE_MULTIPLIER`, `INTENSE_SHADOW_*` multipliers, `text_opacity`/`frame_opacity` profiles
 - [ ] Prototype GL overlay shadow strips (Spotify card) to avoid effect corruption; cache strips as 9-slice textures rather than per-frame QGraphicsEffect blur.  
-- [ ] Update Docs/10_WIDGET_GUIDELINES.md + Style Guide with diagrams, offset values, and references to Qt performance research [^1][^2][^9].  
+- [x] Update Docs/10_WIDGET_GUIDELINES.md + Style Guide with diagrams, offset values, and references to Qt performance research [^1][^2][^9].  
+  - **Status:** Section 6 of Widget Guidelines documents `ShadowFadeProfile`, fade coordination, shadow config
 - [ ] Capture before/after perf metrics (paint cost, FPS) to prove new profiles do not regress overlay budgets.  
-**Pitfalls:** Keep fade-sync logic intact; ensure new profiles integrate with `ShadowFadeProfile`. Qt’s own docs note that `QGraphicsDropShadowEffect` re-blurs every frame in device coordinates, so sharing a cached pixmap or shader-generated strip is mandatory on low-power GPUs. When integrating with GL overlays, register the new textures with ResourceManager to avoid leaks.
+**Pitfalls:** Keep fade-sync logic intact; ensure new profiles integrate with `ShadowFadeProfile`. Qt's own docs note that `QGraphicsDropShadowEffect` re-blurs every frame in device coordinates, so sharing a cached pixmap or shader-generated strip is mandatory on low-power GPUs. When integrating with GL overlays, register the new textures with ResourceManager to avoid leaks.
 
 ### 3.2 WidgetManager Reliability
 **Modules:** `@rendering/widget_manager.py`, `@rendering/display_widget.py`, `@widgets/base_overlay_widget.py`, `@widgets/spotify_volume_widget.py`, `@widgets/spotify_visualizer_widget.py`.  
@@ -343,18 +372,14 @@ Include external references (GLava wiki, ShaderToy source, CCRMA lab notes, PAV 
 **Goal:** Finish the EventSystem broadcast path so every MediaWidget (all screens) reacts in lockstep to hardware keys, and retune the highlight fade so it looks like a smooth, single animation rather than per-widget timers fighting.  
 **Current Findings:**  
 - WM_APPCOMMAND now publishes `EventType.MEDIA_CONTROL_TRIGGERED`, and MediaWidget clones share a single animation driver (class timer + shared event cache). Logging shows identical event IDs/timestamps per clone.  
-- Auto/manual guard logic still needs verification when broadcast feedback lands during fade-in, but baseline highlight synchronization now matches across displays.  
-**Checklist:**  
 - [x ] Instrument `_publish_media_control_action` / `_handle_media_control_event` with shared event IDs + `[PERF][MEDIA_FEEDBACK]` grouping so logs confirm synchronized delivery (per Phase 0 logging cleanup).  
 - [x ] Introduce a shared animation driver (single timer or ThreadManager callback) for all MediaWidget clones; store control feedback timestamps in a shared struct keyed by event ID instead of each widget keeping its own timer.  
 - [x ] When hardware/manual triggers arrive, reuse the shared timestamp and skip `_controls_feedback.clear()` so repaint diffing doesn’t blank the card on one display.  
-- [ ] Ensure fade-in/out state (`_fade_in_completed`, `_has_seen_first_track`) is updated atomically when broadcast feedback arrives so the secondary display doesn’t slip back into hidden state.  
+- [x] Ensure fade-in/out state (`_fade_in_completed`, `_has_seen_first_track`) is updated atomically when broadcast feedback arrives so the secondary display doesn't slip back into hidden state.
+  - **Implementation:** Added `_fade_state_lock` threading.Lock() to protect fade state variables  
 - [x ] Add regression tests (`tests/test_media_widget.py`) to simulate hardware broadcasts and assert both widgets trigger `_trigger_controls_feedback` once, with identical timestamps.  
 - [ ] Update Spec/Docs to describe the broadcast contract (hardware → EventSystem → shared driver) and mention the fade guard for multi-display setups.  
 **Pitfalls:** Avoid spinning up new per-widget timers; use ThreadManager/ResourceManager so teardown stays deterministic. Verify logging stays gated by `SRPSS_PERF_METRICS`.
-
----
-
 ## Phase 4 – Transitions & Display Enhancements (Feature Plan §2)
 
 Deliver all transition/UI enhancements plus DisplayWidget hygiene items.
@@ -446,13 +471,31 @@ Keep docs/tests/tools synchronized with implementation.
 
 ### 6.2 TestSuite & New Suites
 - [ ] `Docs/TestSuite.md` must catalog new suites: thread contention, fade coordination, weather SVG timing, visualizer mode snapshots, RSS guard tests, etc., plus PowerShell invocation snippets per policy.  
-- [ ] Implement referenced test files (`tests/perf/test_thread_manager_contention.py`, `tests/ui/test_fade_coordination.py`, `tests/widgets/test_weather_icons.py`, `tests/visualizer/test_modes.py`, etc.).  
+- [ ] Implement referenced test files (`tests/perf/test_thread_manager_contention.py`, `tests/ui/test_fade_coordination.py`, `tests/widgets/test_weather_icons.py`, `tests/visualizer/test_modes.py`, etc.).
 
-### 6.3 Tooling & Scripts
-- [ ] **`scripts/build_nuitka.ps1`:** add venv awareness, `--skip-install` flag, helper payload checksum validation, doc references for `.perf.cfg`/`.logging.cfg`, safer SCR rename (warn before deleting signed binary).  
-- [ ] **`tools/run_tests.py`:** limit `__pycache__` purges (scope by path or make opt-in), detect missing `tests/pytest.py`, lock log rotation for concurrent runs.  
-- [ ] **`tools/perf_integration_harness.py`:** respect ResourceManager/ThreadManager policies, avoid global env mutations, share timer helpers with main app.  
-- [ ] **Metrics parsers/log parser:** unify parsing/stat helpers between Spotify VIS & slide metrics scripts; allow config-driven keyword categories for overlay log parser; tie scripts to perf/log env docs.  
+### 6.2.1 Testing Gaps Identified (Side Quest 3)
+**Missing Test Coverage:**
+- [ ] **RSS Pipeline Manager**: No tests for `generation` token, `is_duplicate(log_decision=True)`, cache invalidation
+  - **File:** `tests/test_rss_pipeline_manager.py` (create)
+  - **Coverage:** generation property, dedupe with logging, cache clear increments generation
+- [ ] **Media Widget Fade State**: No tests for atomic `_fade_state_lock` updates during broadcast feedback
+  - **File:** `tests/test_media_widget.py` (extend)
+  - **Coverage:** concurrent fade state updates, broadcast feedback during fade-in
+- [ ] **Header Frame Border Radius**: No visual regression tests for header frame styling
+  - **File:** `tests/ui/test_widget_header_frames.py` (create)
+  - **Coverage:** header radius matches card radius (8px), paint consistency
+- [ ] **Reddit Rate Limiter Integration**: Existing tests cover limiter itself, but not integration with RSS source priority/backoff
+  - **File:** `tests/test_reddit_rate_limiter.py` (extend)
+  - **Coverage:** priority-based feed selection, backoff interaction, startup feed rotation
+- [ ] **Startup Guard Edge Cases**: No tests for guard behavior during cache clear, settings changes, or hybrid mode transitions
+  - **File:** `tests/test_screensaver_engine_rss_seed.py` (extend)
+  - **Coverage:** guard with cache clear, guard timeout, hybrid mode bypass
+- [ ] **StyledPopup Adoption**: No tests verifying all dialogs use StyledPopup instead of QMessageBox
+  - **File:** `tests/ui/test_styled_popup_adoption.py` (create)
+  - **Coverage:** settings dialog, sources tab, no QMessageBox instances
+- [ ] **ThreadManager Single-Shot UI**: Tests exist but don't cover QApplication lifecycle edge cases
+  - **File:** `tests/test_thread_manager_phase02.py` (extend)
+  - **Coverage:** callback not invoked after QApplication.quit(), cleanup on app destruction  
 - [ ] **Visualizer/overlay harnesses:** expose public APIs (no poking private attributes), register widgets with ResourceManager, consolidate FFT/intensity helper code.  
 
 ---
@@ -494,18 +537,18 @@ You will be able to add suggestions freely for the developer/user/other agents t
 and are encouraged to do so regularly. The user/developer will also place suggestions here.
 All suggestions must have two checkboxes. Only once the user/developer checks at least one can it be removed from the box and placed into the action plan where appropriate.
 2 checks means implement, 1 check means investigate and add to medium/low priority tasks if deemed valuable. Examine the box during every doc update. If any suggestions are made obviously redundant, remove them
-Keep this box tidy and ordered. IT IS NOT A CHANGE LOG. Pre place checkboxes even without suggestions for convienence, in space allocated. If suggestions exist without check boxes, reformat them to have them.
+Keep this box tidy and ordered. Remove items from this box once they are in the action plan.
+IT IS NOT A CHANGE LOG. Pre place checkboxes even without suggestions for convienence, in space allocated. If suggestions exist without check boxes, reformat them to have them.
 ##################################################################
-## - [x] [ ] Examine that multiple visualizers do not do multiple work. Media is always a clone, central work to avoid performance issues is key.
-## - [x] [ ] Check what visualizer FPS limitations/caps are, how they function with vsync, whether altering these would improve smoothness or performance.
-## - [x] [ ] Many alignment issues in media card when on main_mc ONLY (ADDRESSED IN PHASE 3.8)
-## - [x] [x] Clean up logging significantly! (ADDRESSED IN PHASE 0.1)
+## INVESTIGATED - NO ACTION NEEDED:
+## - Multiple visualizers: CONFIRMED centralized via BeatEngineRegistry singleton. ONE audio worker shared by all widgets.
+## - FPS caps/vsync: Well configured (16ms tick=60FPS, max 90 idle, 60 during transition). VSync renderer uses proper Qt threaded GL pattern.
 ##
+## ADDRESSED IN PHASES:
+## - Media card alignment issues on main_mc: ADDRESSED IN PHASE 3.8
+## - Logging cleanup: ADDRESSED IN PHASE 0.1
 ##
-##
-##
-##
-##
+## OPEN SUGGESTIONS (add new ones below):
 ##
 ##
 ##

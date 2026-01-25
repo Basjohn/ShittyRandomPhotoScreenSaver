@@ -11,6 +11,7 @@ mode remains non-interactive.
 from __future__ import annotations
 
 import math
+import threading
 from collections import deque
 from dataclasses import asdict
 from enum import Enum
@@ -179,6 +180,8 @@ class MediaWidget(BaseOverlayWidget):
         # first track's metadata, then only fade the widget in on the
         # *second* update once geometry has settled. This avoids the card
         # jumping size mid-fade or a second after it appears.
+        # Phase 3.8: Lock protects fade state for atomic updates from broadcast feedback
+        self._fade_state_lock = threading.Lock()
         self._has_seen_first_track: bool = False
         self._fade_in_completed: bool = False
 
@@ -1232,9 +1235,12 @@ class MediaWidget(BaseOverlayWidget):
         # to establish a stable layout and fixed height, but keep the widget
         # hidden. The next update with the same track will then perform the
         # actual fade-in so you never see the intermediate size.
-        is_first_snapshot = not self._has_seen_first_track
+        # Phase 3.8: Atomic check-and-set with lock
+        with self._fade_state_lock:
+            is_first_snapshot = not self._has_seen_first_track
+            if is_first_snapshot:
+                self._has_seen_first_track = True
         if is_first_snapshot:
-            self._has_seen_first_track = True
             try:
                 self.hide()
             except Exception as e:
@@ -1740,7 +1746,8 @@ class MediaWidget(BaseOverlayWidget):
             return
 
         rect = QRect(left, top, width, height)
-        radius = min(rect.width(), rect.height()) / 2.5
+        # Match the main card border-radius of 8px for visual consistency
+        radius = 8.0
 
         # Use shadow helper for border with drop shadow
         draw_rounded_rect_with_shadow(
@@ -2470,7 +2477,9 @@ class MediaWidget(BaseOverlayWidget):
     def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:
         """Fade the entire widget in, then attach the global drop shadow."""
         # Reset fade completion flag so re-entrancy (wake from idle) reapplies the shadow.
-        self._fade_in_completed = False
+        # Phase 3.8: Atomic update with lock
+        with self._fade_state_lock:
+            self._fade_in_completed = False
         # CRITICAL: Position the widget BEFORE showing to prevent teleport flash
         # The widget starts at (0,0) and must be moved to its correct position
         try:
@@ -2525,10 +2534,15 @@ class MediaWidget(BaseOverlayWidget):
             self._handle_fade_in_complete()
 
     def _handle_fade_in_complete(self) -> None:
-        """Mark fade-in complete and apply shared drop shadow."""
-        if self._fade_in_completed:
-            return
-        self._fade_in_completed = True
+        """Mark fade-in complete and apply shared drop shadow.
+        
+        Phase 3.8: Uses lock for atomic fade state update to prevent secondary
+        display from slipping back into hidden state during broadcast feedback.
+        """
+        with self._fade_state_lock:
+            if self._fade_in_completed:
+                return
+            self._fade_in_completed = True
         if is_perf_metrics_enabled():
             has_config = bool(self._shadow_config)
             logger.info(
