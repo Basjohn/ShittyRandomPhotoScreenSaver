@@ -63,7 +63,7 @@ DEFAULT_RSS_FEEDS = {
 class RSSSource(ImageProvider):
     """
     RSS feed-based image provider.
-    
+
     Features:
     - Parses RSS/Atom feeds for images
     - Downloads and caches images locally
@@ -71,8 +71,8 @@ class RSSSource(ImageProvider):
     - Automatic cache management
     - Graceful error handling
     """
-    
-    def __init__(self, feed_urls: Optional[List[str]] = None, 
+
+    def __init__(self, feed_urls: Optional[List[str]] = None,
                  cache_dir: Optional[Path] = None,
                  max_cache_size_mb: int = 500,
                  timeout_seconds: int = 30,
@@ -81,7 +81,7 @@ class RSSSource(ImageProvider):
                  max_images_per_refresh: Optional[int] = None):
         """
         Initialize RSS source.
-        
+
         Args:
             feed_urls: List of RSS/Atom feed URLs (defaults to NASA feeds)
             cache_dir: Directory for cached images (defaults to temp)
@@ -95,15 +95,15 @@ class RSSSource(ImageProvider):
         self.timeout = timeout_seconds
         self.max_cache_size = max_cache_size_mb * 1024 * 1024  # Convert to bytes
         self.max_images_per_refresh = max_images_per_refresh
-        
+
         # Setup cache directory
         if cache_dir:
             self.cache_dir = Path(cache_dir)
         else:
             self.cache_dir = self._pipeline.cache_dir
-        
+
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Setup permanent save directory
         self.save_to_disk = save_to_disk
         self.save_directory = None
@@ -119,72 +119,72 @@ class RSSSource(ImageProvider):
             else:
                 logger.warning("RSS save-to-disk enabled but no directory specified, disabling feature")
                 self.save_to_disk = False
-        
+
         self._images: List[ImageMetadata] = []
         self._feed_data = {}  # Store feed metadata
         self._cached_urls: set = set()  # Track URLs we've already downloaded
         self._shutdown_check: Optional[Callable[[], bool]] = None  # Callback to check if we should abort
-        
+
         # Feed health tracking for exponential backoff
         self._feed_health: dict = {}  # url -> {'failures': int, 'last_failure': float, 'skip_until': float}
-        
+
         # Load existing cached images on startup for faster availability
         self._load_cached_images()
-        
+
         logger.info(f"RSSSource initialized with {len(self.feed_urls)} feeds")
         logger.info(f"Cache directory: {self.cache_dir}")
         logger.info(f"Pre-loaded {len(self._images)} cached RSS images")
-    
+
     def _should_skip_feed(self, feed_url: str) -> bool:
         """Check if feed should be skipped due to repeated failures.
-        
+
         Returns True if feed has failed too many times and backoff hasn't expired.
         """
         if feed_url not in self._feed_health:
             return False
-        
+
         health = self._feed_health[feed_url]
         now = time.time()
-        
+
         # Reset health after FEED_HEALTH_RESET_HOURS
         hours_since_failure = (now - health.get('last_failure', 0)) / 3600
         if hours_since_failure > FEED_HEALTH_RESET_HOURS:
             del self._feed_health[feed_url]
             logger.info(f"[FEED_HEALTH] Reset health for {feed_url} (no failures in {FEED_HEALTH_RESET_HOURS}h)")
             return False
-        
+
         # Check if still in backoff period
         skip_until = health.get('skip_until', 0)
         if now < skip_until:
             remaining = int(skip_until - now)
             logger.debug(f"[FEED_HEALTH] Skipping {feed_url} for {remaining}s more (failures: {health['failures']})")
             return True
-        
+
         return False
-    
+
     def _record_feed_failure(self, feed_url: str) -> None:
         """Record a feed failure and calculate backoff.
-        
+
         Uses exponential backoff: 60s, 120s, 240s, etc.
         """
         now = time.time()
-        
+
         if feed_url not in self._feed_health:
             self._feed_health[feed_url] = {'failures': 0, 'last_failure': 0, 'skip_until': 0}
-        
+
         health = self._feed_health[feed_url]
         health['failures'] += 1
         health['last_failure'] = now
-        
+
         # Exponential backoff
         backoff = FAILURE_BACKOFF_BASE_SECONDS * (2 ** (health['failures'] - 1))
         health['skip_until'] = now + backoff
-        
+
         logger.warning(f"[FEED_HEALTH] Feed {feed_url} failed {health['failures']} times, backoff {backoff}s")
-        
+
         if health['failures'] >= MAX_CONSECUTIVE_FAILURES:
             logger.error(f"[FEED_HEALTH] Feed {feed_url} marked unhealthy after {MAX_CONSECUTIVE_FAILURES} failures")
-    
+
     def _record_feed_success(self, feed_url: str) -> None:
         """Record a successful feed fetch, resetting failure count."""
         if feed_url in self._feed_health:
@@ -192,10 +192,10 @@ class RSSSource(ImageProvider):
             if old_failures > 0:
                 logger.info(f"[FEED_HEALTH] Feed {feed_url} recovered after {old_failures} failures")
             del self._feed_health[feed_url]
-    
+
     def get_feed_health_status(self) -> dict:
         """Get health status for all feeds.
-        
+
         Returns dict of feed_url -> {'healthy': bool, 'failures': int, 'skip_until': float}
         """
         now = time.time()
@@ -212,10 +212,10 @@ class RSSSource(ImageProvider):
             else:
                 status[url] = {'healthy': True, 'failures': 0, 'skip_until': 0, 'skipped': False}
         return status
-    
+
     def _load_cached_images(self) -> None:
         """Load existing cached images for immediate availability.
-        
+
         This allows RSS images to be available instantly on startup
         without waiting for network requests. Validates each image
         to ensure it's not corrupt.
@@ -223,27 +223,27 @@ class RSSSource(ImageProvider):
         try:
             if not self.cache_dir.exists():
                 return
-            
+
             image_extensions = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
             cached_files = []
-            
+
             for file in self.cache_dir.glob('*'):
                 if file.is_file() and file.suffix.lower() in image_extensions:
                     cached_files.append(file)
-            
+
             if not cached_files:
                 return
-            
+
             # Sort by modification time (newest first) for freshness
             cached_files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
-            
+
             # Limit to MAX_CACHED_IMAGES_TO_LOAD to avoid loading hundreds of old images
             # The engine will further limit based on rss_rotating_cache_size setting
             cached_files = cached_files[:MAX_CACHED_IMAGES_TO_LOAD]
-            
+
             valid_count = 0
             removed_count = 0
-            
+
             for cache_file in cached_files:
                 try:
                     # Validate the image is not corrupt by checking file size
@@ -254,11 +254,11 @@ class RSSSource(ImageProvider):
                         cache_file.unlink()
                         removed_count += 1
                         continue
-                    
+
                     # Quick validation: check for valid image header
                     with open(cache_file, 'rb') as f:
                         header = f.read(16)
-                    
+
                     # Check for common image signatures
                     is_valid = (
                         header[:2] == b'\xff\xd8' or  # JPEG
@@ -266,13 +266,13 @@ class RSSSource(ImageProvider):
                         header[:4] == b'RIFF' or  # WebP
                         header[:6] in (b'GIF87a', b'GIF89a')  # GIF
                     )
-                    
+
                     if not is_valid:
                         logger.debug(f"Removing invalid cached image (bad header): {cache_file.name}")
                         cache_file.unlink()
                         removed_count += 1
                         continue
-                    
+
                     metadata = ImageMetadata(
                         source_type=ImageSourceType.RSS,
                         source_id="cached",
@@ -294,72 +294,72 @@ class RSSSource(ImageProvider):
                     valid_count += 1
                 except Exception as e:
                     logger.debug(f"Failed to load cached image {cache_file}: {e}")
-            
+
             if removed_count > 0:
                 logger.info(f"Removed {removed_count} corrupt cached RSS images")
             logger.debug(f"Loaded {valid_count} valid images from cache")
-            
+
         except Exception as e:
             logger.warning(f"Failed to load cached RSS images: {e}")
-    
+
     def set_shutdown_check(self, callback: Callable[[], bool]) -> None:
         """Set a callback to check if we should abort operations.
-        
+
         Args:
             callback: Function that returns True if we should continue, False to abort
         """
         self._shutdown_check = callback
-    
+
     def _should_continue(self) -> bool:
         """Check if we should continue processing or abort."""
         if self._shutdown_check is None:
             return True
         return self._shutdown_check()
-    
+
     def get_images(self) -> List[ImageMetadata]:
         """Get all images from RSS feeds."""
         if not self._images:
             self.refresh()
         return self._images.copy()
-    
+
     def refresh(self, max_images_per_source: int = 10) -> None:
         """Refresh images from all RSS feeds.
-        
+
         Preserves pre-loaded cached images and adds new ones from feeds.
         Avoids re-downloading images that are already in cache.
         Includes rate limiting and retry logic for Reddit API.
-        
+
         IMPORTANT: Checks shutdown callback during downloads to allow early exit.
-        
+
         Args:
             max_images_per_source: Maximum new images to download per source (default 10).
                                    This prevents blocking for too long on sources with many entries.
-        
+
         Feed processing order:
         1. Non-Reddit sources first (NASA, Bing, Wikimedia) - no rate limits
         2. Reddit sources last with longer delays
         """
         logger.info(f"Refreshing RSS feeds ({len(self.feed_urls)} feeds, max {max_images_per_source}/source)...")
-        
+
         # Check for shutdown before starting
         if not self._should_continue():
             logger.info("[RSS] Shutdown requested, aborting refresh")
             return
-        
+
         # Track existing image paths to avoid duplicates
         existing_paths = {str(img.local_path) for img in self._images if img.local_path}
         initial_count = len(self._images)
-        
+
         # Sort feeds by priority - non-Reddit sources first
         feeds_to_process = sorted(
             self.feed_urls,
             key=lambda url: -_get_source_priority(url)  # Negative for descending
         )
-        
+
         # Limit Reddit feeds to avoid rate limiting (10 req/min limit)
         reddit_feeds = [url for url in feeds_to_process if 'reddit.com' in url.lower()]
         non_reddit_feeds = [url for url in feeds_to_process if 'reddit.com' not in url.lower()]
-        
+
         if len(reddit_feeds) > MAX_REDDIT_FEEDS_PER_STARTUP:
             # Rotate which Reddit feeds are processed using day-based rotation
             # This ensures all feeds eventually get processed over multiple days
@@ -371,32 +371,45 @@ class RSSSource(ImageProvider):
             rotated = reddit_feeds[start_idx:] + reddit_feeds[:start_idx]
             reddit_feeds = rotated[:MAX_REDDIT_FEEDS_PER_STARTUP]
             logger.info(f"[RATE_LIMIT] Limited to {MAX_REDDIT_FEEDS_PER_STARTUP} Reddit feeds (total: {len([url for url in feeds_to_process if 'reddit.com' in url.lower()])} configured)")
-        
+
         # Rebuild feed list: non-Reddit first, then limited Reddit feeds
         feeds_to_process = non_reddit_feeds + reddit_feeds
-        
+
+        # Phase 2.5.1: Pre-flight quota check for Reddit feeds
+        # Check if Reddit quota is available BEFORE processing any Reddit feeds
+        # This prevents cascading backoff failures when quota is exhausted at startup
+        reddit_quota_available = True
+        if reddit_feeds:
+            try:
+                from core.reddit_rate_limiter import RedditRateLimiter
+                reddit_quota_available = RedditRateLimiter.can_make_request()
+                if not reddit_quota_available:
+                    logger.info("[RATE_LIMIT] Reddit quota exhausted at startup, deferring all Reddit feeds to next refresh")
+            except ImportError:
+                pass  # No rate limiter, proceed normally
+
         # Track feeds that returned 0 results for retry
         rate_limited_feeds = []
-        skipped_reddit_due_to_rate_limit = False
-        
+        skipped_reddit_due_to_rate_limit = not reddit_quota_available
+
         for i, feed_url in enumerate(feeds_to_process):
             # Check for shutdown between feeds
             if not self._should_continue():
                 logger.info("[RSS] Shutdown requested, aborting refresh")
                 break
-            
+
             # Skip unhealthy feeds (exponential backoff)
             if self._should_skip_feed(feed_url):
                 continue
-                
+
             is_reddit = 'reddit.com' in feed_url.lower()
-            
+
             try:
                 images_before = len(self._images)
                 self._parse_feed(feed_url, existing_paths, max_images=max_images_per_source)
                 images_after = len(self._images)
                 new_images = images_after - images_before
-                
+
                 # If we got 0 images from a Reddit feed, it might be rate limited
                 if new_images == 0 and is_reddit:
                     rate_limited_feeds.append(feed_url)
@@ -405,7 +418,7 @@ class RSSSource(ImageProvider):
                 elif new_images > 0:
                     # Success - reset failure count
                     self._record_feed_success(feed_url)
-                
+
                 # Add delay between feeds - longer for Reddit
                 # Use interruptible delay
                 if i < len(feeds_to_process) - 1:
@@ -422,42 +435,42 @@ class RSSSource(ImageProvider):
                             logger.info("[RSS] Shutdown requested during delay")
                             break
                         time.sleep(0.5)
-                    
+
             except Exception as e:
                 logger.error(f"[FALLBACK] Failed to parse feed {feed_url}: {e}")
                 self._record_feed_failure(feed_url)
                 # Continue with other feeds (fallback behavior)
-        
+
         # DO NOT RETRY rate-limited feeds with blocking wait
         # This would block app exit and is terrible UX
         # Rate-limited feeds will be retried on next refresh cycle
         if rate_limited_feeds:
             logger.info(f"[RATE_LIMIT] Skipping {len(rate_limited_feeds)} rate-limited Reddit feeds (will retry on next refresh)")
-        
+
         new_count = len(self._images) - initial_count
         logger.info(f"RSS refresh complete: {len(self._images)} total images ({new_count} new)")
-        
+
         # Only cleanup cache if we have MORE than the minimum threshold
         # This ensures we build up a healthy cache before any decay
         if new_count > 0 and len(self._images) > MIN_CACHE_SIZE_BEFORE_CLEANUP:
             self._cleanup_cache(min_keep=MIN_CACHE_SIZE_BEFORE_CLEANUP)
-    
+
     def refresh_single_feed(self, feed_url: str) -> int:
         """Refresh a single feed without blocking retry logic.
-        
+
         Used for background refresh to avoid blocking the UI.
         Returns number of new images added.
         """
         existing_paths = {str(img.local_path) for img in self._images if img.local_path}
         images_before = len(self._images)
-        
+
         try:
             self._parse_feed(feed_url, existing_paths)
         except Exception as e:
             logger.error(f"[FALLBACK] Failed to parse feed {feed_url}: {e}")
-        
+
         return len(self._images) - images_before
-    
+
     def _get_per_feed_image_limit(self) -> Optional[int]:
         try:
             if self.max_images_per_refresh is None:
@@ -506,14 +519,14 @@ class RSSSource(ImageProvider):
     def _parse_feed(self, feed_url: str, existing_paths: Optional[set] = None, max_images: int = 10) -> None:
         """
         Parse a single RSS/Atom feed and extract images.
-        
+
         Args:
             feed_url: URL of the feed to parse
             existing_paths: Set of already-loaded image paths to avoid duplicates
             max_images: Maximum number of NEW images to download (prevents blocking)
         """
         logger.debug(f"Parsing feed: {feed_url}")
-        
+
         if existing_paths is None:
             existing_paths = set()
 
@@ -527,12 +540,12 @@ class RSSSource(ImageProvider):
             feed = feedparser.parse(request_url, request_headers={
                 'User-Agent': 'ShittyRandomPhotoScreenSaver/1.0'
             })
-            
+
             if feed.bozo:
                 # Feed has parsing errors but may still be usable
                 logger.warning(f"[FALLBACK] Feed has parsing errors: {feed_url}")
                 logger.warning(f"Bozo exception: {feed.get('bozo_exception', 'Unknown')}")
-            
+
             # Store feed metadata
             feed_title = feed.feed.get('title', 'Unknown Feed')
             self._feed_data[feed_url] = {
@@ -540,7 +553,7 @@ class RSSSource(ImageProvider):
                 'updated': feed.feed.get('updated', ''),
                 'entries_count': len(feed.entries)
             }
-            
+
             logger.info(f"Feed '{feed_title}': {len(feed.entries)} entries")
 
             limit = self._get_per_feed_image_limit()
@@ -562,14 +575,14 @@ class RSSSource(ImageProvider):
                         added += 1
                 except Exception as e:
                     logger.warning(f"Failed to process entry: {e}")
-        
+
         except Exception as e:
             logger.error(f"Failed to fetch feed {feed_url}: {e}", exc_info=True)
             raise
-    
+
     def _parse_json_feed(self, request_url: str, original_url: str, existing_paths: Optional[set] = None, max_images: int = 10) -> None:
         logger.debug(f"Parsing JSON feed: {request_url}")
-        
+
         if existing_paths is None:
             existing_paths = set()
 
@@ -660,7 +673,7 @@ class RSSSource(ImageProvider):
     def _process_entry(self, entry, feed_url: str, feed_title: str) -> bool:
         """
         Process a single feed entry and extract image.
-        
+
         Args:
             entry: Feed entry from feedparser
             feed_url: URL of the parent feed
@@ -668,21 +681,21 @@ class RSSSource(ImageProvider):
         """
         # Try to find image URL from various fields
         image_url = None
-        
+
         # Check media:content (common in RSS 2.0)
         if hasattr(entry, 'media_content') and entry.media_content:
             for media in entry.media_content:
                 if media.get('medium') == 'image' or 'image' in media.get('type', ''):
                     image_url = media.get('url')
                     break
-        
+
         # Check enclosures (podcast-style)
         if not image_url and hasattr(entry, 'enclosures') and entry.enclosures:
             for enclosure in entry.enclosures:
                 if 'image' in enclosure.get('type', ''):
                     image_url = enclosure.get('href')
                     break
-        
+
         # Check content/summary for img tags
         if not image_url:
             content = entry.get('content', [{}])[0].get('value', '') or entry.get('summary', '')
@@ -691,15 +704,15 @@ class RSSSource(ImageProvider):
                 img_match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', content)
                 if img_match:
                     image_url = img_match.group(1)
-        
+
         # Check for thumbnail
         if not image_url and hasattr(entry, 'media_thumbnail') and entry.media_thumbnail:
             image_url = entry.media_thumbnail[0].get('url')
-        
+
         if not image_url:
             logger.debug(f"No image found in entry: {entry.get('title', 'Untitled')}")
             return False
-        
+
         # Download and cache image
         try:
             cached_path = self._download_image(image_url, entry)
@@ -732,17 +745,17 @@ class RSSSource(ImageProvider):
     def _process_reddit_json_entry(self, post: dict, feed_url: str, feed_title: str, existing_paths: Optional[set] = None) -> bool:
         if not isinstance(post, dict):
             return False
-        
+
         if existing_paths is None:
             existing_paths = set()
 
         image_url = post.get('url_overridden_by_dest') or post.get('url')
         if not image_url:
             return False
-        
+
         # Check if we already have this image in our current _images list
         url_hash = hashlib.md5(image_url.encode()).hexdigest()
-        
+
         # Check if this image path is already in existing_paths (from current refresh)
         parsed = urlparse(image_url)
         ext = Path(parsed.path).suffix or '.jpg'
@@ -824,39 +837,39 @@ class RSSSource(ImageProvider):
         except Exception as e:
             logger.warning(f"Failed to download JSON image from {image_url}: {e}")
             return False
-    
+
     def _download_image(self, image_url: str, entry) -> Optional[Path]:
         """
         Download and cache an image.
-        
+
         Args:
             image_url: URL of the image to download
             entry: Feed entry (for generating cache filename)
-        
+
         Returns:
             Path to cached image, or None if download failed
         """
         # Generate cache filename from URL hash
         url_hash = hashlib.md5(image_url.encode()).hexdigest()
-        
+
         # Try to determine extension from URL
         parsed = urlparse(image_url)
         ext = Path(parsed.path).suffix or '.jpg'
-        
+
         cache_file = self.cache_dir / f"{url_hash}{ext}"
-        
+
         # Phase 2.3: Use central RssPipelineManager for dedupe
         url_key = self._pipeline.build_url_key(image_url)
-        
+
         # Return cached file if exists and track it centrally
         if cache_file.exists():
             logger.debug(f"Using cached image: {cache_file.name}")
             self._pipeline.record_keys([url_key])
             return cache_file
-        
+
         # Download image
         logger.debug(f"Downloading image: {image_url}")
-        
+
         try:
             # Use browser-like user agent for better compatibility
             response = requests.get(
@@ -866,23 +879,23 @@ class RSSSource(ImageProvider):
                 stream=True
             )
             response.raise_for_status()
-            
+
             # Check content type
             content_type = response.headers.get('Content-Type', '')
             if 'image' not in content_type:
                 logger.warning(f"URL does not point to an image: {content_type}")
                 return None
-            
+
             # Write to cache
             with open(cache_file, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
-            
+
             logger.info(f"Downloaded image: {cache_file.name} ({cache_file.stat().st_size} bytes)")
-            
+
             # Phase 2.3: Track this URL in central dedupe manager
             self._pipeline.record_keys([url_key])
-            
+
             # Optionally save to permanent storage
             if self.save_to_disk and self.save_directory:
                 try:
@@ -892,25 +905,25 @@ class RSSSource(ImageProvider):
                         logger.info(f"Saved RSS image to disk: {save_file}")
                 except Exception as e:
                     logger.warning(f"Failed to save RSS image to disk: {e}")
-            
+
             return cache_file
-        
+
         except requests.RequestException as e:
             logger.error(f"Download failed for {image_url}: {e}")
             return None
-    
+
     def _parse_date(self, entry) -> Optional[datetime]:
         """
         Parse date from feed entry.
-        
+
         Args:
             entry: Feed entry
-        
+
         Returns:
             Parsed datetime or None
         """
         date_fields = ['published_parsed', 'updated_parsed', 'created_parsed']
-        
+
         for field in date_fields:
             if hasattr(entry, field):
                 time_struct = getattr(entry, field)
@@ -919,12 +932,12 @@ class RSSSource(ImageProvider):
                         return datetime(*time_struct[:6])
                     except Exception as e:
                         logger.debug("[RSS] Exception suppressed: %s", e)
-        
+
         return None
-    
+
     def _cleanup_cache(self, min_keep: int = 10) -> None:
         """Clean up cache if it exceeds max size or file count, always keeping at least min_keep images.
-        
+
         Args:
             min_keep: Minimum number of cached images to always retain for faster startup.
                      This ensures users have some RSS images available immediately.
@@ -933,53 +946,53 @@ class RSSSource(ImageProvider):
             # Get all cached files with their modification times
             cache_files = []
             total_size = 0
-            
+
             for file in self.cache_dir.glob('*'):
                 if file.is_file():
                     size = file.stat().st_size
                     mtime = file.stat().st_mtime
                     cache_files.append((file, size, mtime))
                     total_size += size
-            
+
             # Check both size limit AND file count limit
             # Max files = 2x min_keep to allow some buffer but prevent unbounded growth
             max_files = max(min_keep * 2, MAX_CACHED_IMAGES_TO_LOAD)
             size_ok = total_size <= self.max_cache_size
             count_ok = len(cache_files) <= max_files
-            
+
             if size_ok and count_ok:
                 logger.debug(f"Cache OK: {total_size / 1024 / 1024:.1f}MB, {len(cache_files)} files (max={max_files})")
                 return
-            
+
             reason = []
             if not size_ok:
                 reason.append(f"size {total_size / 1024 / 1024:.1f}MB > {self.max_cache_size / 1024 / 1024:.1f}MB")
             if not count_ok:
                 reason.append(f"count {len(cache_files)} > {max_files}")
             logger.info(f"Cache cleanup needed: {', '.join(reason)}")
-            
+
             # Sort by modification time (oldest first)
             cache_files.sort(key=lambda x: x[2])
-            
+
             # Calculate how many we can remove while keeping min_keep
             max_removable = max(0, len(cache_files) - min_keep)
-            
+
             # Remove oldest files until under both limits, but always keep min_keep
             removed_count = 0
             removed_size = 0
             current_count = len(cache_files)
-            
+
             for i, (file, size, _) in enumerate(cache_files):
                 # Stop if we've reached the minimum to keep
                 if i >= max_removable:
                     break
-                
+
                 # Check if we're under both limits now
                 size_under = (total_size - removed_size) <= self.max_cache_size * 0.8
                 count_under = (current_count - removed_count) <= max_files
                 if size_under and count_under:
                     break
-                
+
                 try:
                     file.unlink()
                     removed_count += 1
@@ -987,20 +1000,20 @@ class RSSSource(ImageProvider):
                     logger.debug(f"Removed cached file: {file.name}")
                 except Exception as e:
                     logger.warning(f"Failed to remove {file}: {e}")
-            
+
             remaining = len(cache_files) - removed_count
             logger.info(
                 f"Cache cleanup: removed {removed_count} files ({removed_size / 1024 / 1024:.1f}MB), "
                 f"kept {remaining} files (min_keep={min_keep})"
             )
-        
+
         except Exception as e:
             logger.error(f"Cache cleanup failed: {e}")
-    
+
     def is_available(self) -> bool:
         """Check if RSS source is available (has valid feeds)."""
         return len(self.feed_urls) > 0
-    
+
     def get_source_info(self) -> dict:
         """Get source information."""
         return {
@@ -1010,25 +1023,25 @@ class RSSSource(ImageProvider):
             'cache_directory': str(self.cache_dir),
             'feed_data': self._feed_data
         }
-    
+
     def add_feed(self, feed_url: str) -> None:
         """
         Add a new RSS feed.
-        
+
         Args:
             feed_url: URL of the RSS/Atom feed
         """
         if feed_url not in self.feed_urls:
             self.feed_urls.append(feed_url)
             logger.info(f"Added feed: {feed_url}")
-    
+
     def remove_feed(self, feed_url: str) -> bool:
         """
         Remove an RSS feed.
-        
+
         Args:
             feed_url: URL of the feed to remove
-        
+
         Returns:
             True if removed, False if not found
         """
@@ -1037,24 +1050,24 @@ class RSSSource(ImageProvider):
             logger.info(f"Removed feed: {feed_url}")
             return True
         return False
-    
+
     def clear_cache(self) -> int:
         """
         Clear all cached images.
-        
+
         Returns:
             Number of files removed
         """
         removed_count = 0
-        
+
         try:
             for file in self.cache_dir.glob('*'):
                 if file.is_file():
                     file.unlink()
                     removed_count += 1
-            
+
             logger.info(f"Cache cleared: {removed_count} files removed")
         except Exception as e:
             logger.error(f"Failed to clear cache: {e}")
-        
+
         return removed_count

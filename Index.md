@@ -185,7 +185,8 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 ## Core Managers
 - core/threading/manager.py
   - ThreadManager, ThreadPoolType, TaskPriority
-  - UI dispatch helpers: run_on_ui_thread, single_shot
+  - `get_thread_manager()` - Module-level singleton accessor (Jan 2026)
+  - UI dispatch helpers: run_on_ui_thread, single_shot, invoke_in_ui_thread
   - IO/Compute pools, lock-free stats and mutation queues
 - core/resources/manager.py
   - ResourceManager for Qt object lifecycle tracking (register_qt, cleanup_all)
@@ -197,11 +198,12 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - Event type definitions (ImageChanged, TransitionStarted, etc.)
 - core/rss/pipeline_manager.py
   - RssPipelineManager: Singleton for RSS cache paths, deduplication, and cache hygiene
+  - `get_rss_pipeline_manager()` - Module-level singleton accessor
+  - `generation` property - Increments on disk cache clear for staleness detection (Phase 2.3)
+  - `is_duplicate(log_decision=True)` - Dedupe check with optional logging
   - `build_url_key()`, `build_image_key()`: Generate dedupe keys from URLs/images
   - `record_keys()`, `has_key()`, `clear_dedupe()`: Manage dedupe state
-  - `count_disk_cache_files()`, `clear_cache()`: Disk cache management
-  - `generation` property: Cache invalidation token for staleness checks (Phase 2.3)
-  - `is_duplicate(log_decision=True)`: Dedupe with optional diagnostics
+  - Tests: `tests/test_rss_pipeline_manager.py` (14 tests)
 - core/reddit_rate_limiter.py
   - RedditRateLimiter: Thread-safe singleton for Reddit API rate limiting
   - Enforces 8 req/min limit (Reddit allows 10, -2 safety margin)

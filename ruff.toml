@@ -1,0 +1,30 @@
+# Ruff configuration for ShittyRandomPhotoScreenSaver
+# https://docs.astral.sh/ruff/configuration/
+
+[lint]
+# Enable specific rule categories
+select = [
+    "E",      # pycodestyle errors
+    "F",      # Pyflakes
+    "W",      # pycodestyle warnings
+    "B",      # flake8-bugbear
+]
+
+# Specific rules to always enforce
+extend-select = [
+    "F841",   # Local variable assigned but never used (catches unused 'e' in except)
+]
+
+# Rules to ignore
+ignore = [
+    "E501",   # Line too long (handled by formatter)
+    "E731",   # Do not assign a lambda expression
+]
+
+# Per-file ignores
+[lint.per-file-ignores]
+"tests/*" = ["F841"]  # Allow unused variables in tests for setup
+
+[format]
+# Use 4-space indentation
+indent-style = "space"

@@ -20,7 +20,7 @@ logger = get_logger(__name__)
 # UI-thread invoker for reliable main thread dispatch
 class _UiInvoker(QObject):
     """Signal-based invoker for running callables on the UI thread.
-    
+
     This is a singleton managed by _ensure_ui_invoker() and tracked via
     ResourceManager when available. It provides thread-safe dispatch of
     callables to the Qt main thread.
@@ -47,11 +47,11 @@ _ui_invoker_registered: bool = False  # Track ResourceManager registration
 
 def _ensure_ui_invoker(resource_manager: Optional[Any] = None) -> Optional[_UiInvoker]:
     """Get or create the singleton UI invoker.
-    
+
     Args:
         resource_manager: Optional ResourceManager to register the invoker with.
                          Registration only happens once per invoker lifetime.
-    
+
     Returns:
         The singleton _UiInvoker or None if QCoreApplication is unavailable.
     """
@@ -66,7 +66,7 @@ def _ensure_ui_invoker(resource_manager: Optional[Any] = None) -> Optional[_UiIn
             inv.moveToThread(app.thread())
             _ui_invoker = inv
             _ui_invoker_registered = False
-        
+
         # Register with ResourceManager if provided and not yet registered
         if resource_manager is not None and not _ui_invoker_registered:
             try:
@@ -80,7 +80,7 @@ def _ensure_ui_invoker(resource_manager: Optional[Any] = None) -> Optional[_UiIn
                 _ui_invoker_registered = True
             except Exception as e:
                 logger.debug("Could not register UI invoker: %s", e)
-        
+
         return _ui_invoker
     except Exception as e:
         logger.exception("Failed to initialize UI invoker: %s", e)
@@ -113,7 +113,7 @@ class TaskResult:
 
 class Task:
     """Wrapper for executable tasks with metadata"""
-    def __init__(self, func: Callable, *args, task_id: str = None, 
+    def __init__(self, func: Callable, *args, task_id: str = None,
                  priority: TaskPriority = TaskPriority.NORMAL, **kwargs):
         self.func = func
         self.args = args
@@ -130,7 +130,7 @@ class Task:
 class ThreadManager:
     """
     Centralized thread manager for screensaver application.
-    
+
     Features:
     - Separate IO and COMPUTE thread pools
     - Task prioritization and result handling
@@ -138,17 +138,17 @@ class ThreadManager:
     - UI thread dispatch utilities
     - Lock-free statistics
     """
-    def __init__(self, config: Optional[Dict[ThreadPoolType, int]] = None, 
+    def __init__(self, config: Optional[Dict[ThreadPoolType, int]] = None,
                  resource_manager: Optional[Any] = None):
         """
         Initialize thread manager.
-        
+
         Args:
             config: Dictionary mapping ThreadPoolType to max_workers count
             resource_manager: Optional ResourceManager for cleanup tracking
         """
         self._shutdown = False
-        
+
         # Default configuration for screensaver
         cpu_count = os.cpu_count() or 1
         compute_workers = max(1, cpu_count - 1)
@@ -157,44 +157,44 @@ class ThreadManager:
             ThreadPoolType.COMPUTE: compute_workers,  # Image processing
         }
         self.config = {**default_config, **(config or {})}
-        
+
         self._executors: Dict[ThreadPoolType, ThreadPoolExecutor] = {}
         self._active_tasks: Dict[str, Task] = {}
-        self._stats = {pool_type: {'submitted': 0, 'completed': 0, 'failed': 0} 
+        self._stats = {pool_type: {'submitted': 0, 'completed': 0, 'failed': 0}
                       for pool_type in ThreadPoolType}
-        
+
         # Lock-free mutation queue with drop tracking
         self._mut_q: SPSCQueue[tuple] = SPSCQueue(256)
         self._mut_drain_scheduled = False
         self._queue_drops: int = 0  # Track dropped queue entries
         self._queue_drops_last_warn: float = 0.0  # Timestamp of last warning
         self._queue_drops_warn_threshold: int = 10  # Warn if >10 drops per minute
-        
+
         # Lock-free stats publisher
         self._stats_tb: TripleBuffer[Dict[str, Dict[str, Any]]] = TripleBuffer()
         self._stats_pub_interval_ms: int = 250
-        
+
         self._resource_manager = resource_manager
         self._resource_id = None
-        
+
         # Track pending single-shot timers for lifecycle management
         self._pending_single_shots: List[QTimer] = []
-        
+
         # Initialize pools
         self._initialize_pools()
-        
+
         # Start stats publisher
         try:
             self._schedule_stats_publish()
         except Exception as e:
             logger.debug("Stats publisher scheduling failed: %s", e)
-        
+
         # Start mutation drain
         try:
             self._schedule_mutation_drain()
         except Exception as e:
             logger.debug("[THREADING] Exception suppressed: %s", e)
-        
+
         logger.info("ThreadManager initialized with IO=%d, COMPUTE=%d workers",
                    self.config[ThreadPoolType.IO], self.config[ThreadPoolType.COMPUTE])
 
@@ -206,7 +206,7 @@ class ThreadManager:
                     max_workers=max_workers,
                     thread_name_prefix=f"{pool_type.value}_pool"
                 )
-                
+
                 # Register with resource manager if available
                 if self._resource_manager:
                     try:
@@ -220,20 +220,20 @@ class ThreadManager:
                         )
                     except Exception as e:
                         logger.debug("Could not register executor: %s", e)
-                
+
                 self._executors[pool_type] = executor
                 logger.info(f"Initialized {pool_type.value} pool with {max_workers} workers")
             except Exception as e:
                 logger.error(f"Failed to initialize {pool_type.value} pool: %s", e)
                 self.shutdown()
-                raise RuntimeError(f"Failed to initialize {pool_type.value} thread pool")
+                raise RuntimeError(f"Failed to initialize {pool_type.value} thread pool") from e
 
     def submit_task(self, pool_type: ThreadPoolType, func: Callable, *args,
                    task_id: str = None, priority: TaskPriority = TaskPriority.NORMAL,
                    callback: Callable[[TaskResult], None] = None, **kwargs) -> str:
         """
         Submit a task to the specified thread pool.
-        
+
         Args:
             pool_type: Which thread pool to use
             func: Function to execute
@@ -242,16 +242,16 @@ class ThreadManager:
             priority: Task priority
             callback: Optional callback for result
             **kwargs: Keyword arguments for func
-        
+
         Returns:
             str: Task ID for tracking
         """
         if self._shutdown:
             raise RuntimeError("Thread manager is shut down")
-        
+
         task = Task(func, *args, task_id=task_id, priority=priority, **kwargs)
         executor = self._executors[pool_type]
-        
+
         def wrapped_func():
             start_time = time.time()
             try:
@@ -276,20 +276,20 @@ class ThreadManager:
                 self._enqueue_mutation(('failed', pool_type.value))
             finally:
                 self._enqueue_mutation(('unregister_active', task.task_id))
-            
+
             # Execute callback
             if callback:
                 try:
                     callback(task_result)
                 except Exception as e:
                     logger.error(f"Callback for task {task.task_id} failed: {e}")
-            
+
             return task_result
-        
+
         # Submit to executor
         future = executor.submit(wrapped_func)
         task.future = future
-        
+
         # Register with resource manager
         if self._resource_manager:
             try:
@@ -303,11 +303,11 @@ class ThreadManager:
                 )
             except (TypeError, Exception) as e:
                 logger.debug(f"Skipping resource registration for task {task.task_id}: {e}")
-        
+
         # Update tracking
         self._enqueue_mutation(('register_active', task))
         self._enqueue_mutation(('submitted', pool_type.value))
-        
+
         if is_verbose_logging():
             logger.debug(f"Submitted task {task.task_id} to {pool_type.value} pool")
         return task.task_id
@@ -332,8 +332,8 @@ class ThreadManager:
             raise KeyError(f"Task {task_id} not found")
         try:
             return task.future.result(timeout=timeout)
-        except TimeoutError:
-            raise TimeoutError(f"Task {task_id} did not complete within {timeout}s")
+        except TimeoutError as e:
+            raise TimeoutError(f"Task {task_id} did not complete within {timeout}s") from e
 
     def cancel_task(self, task_id: str) -> bool:
         """Attempt to cancel a task"""
@@ -352,27 +352,27 @@ class ThreadManager:
 
     def get_pool_stats(self) -> Dict[str, Dict[str, int]]:
         """Get statistics for all thread pools"""
-        return {pool_type.value: stats.copy() 
+        return {pool_type.value: stats.copy()
                for pool_type, stats in self._stats.items()}
 
     def shutdown(self, wait: bool = True, timeout: Optional[float] = None):
         """
         Shutdown all thread pools and clean up resources.
-        
+
         Args:
             wait: Whether to wait for active tasks
             timeout: Maximum time to wait
         """
         logger.info("Shutting down thread manager...")
-        
+
         if self._shutdown:
             return
         self._shutdown = True
-        
+
         # Cancel active tasks
         for task_id in list(self._active_tasks.keys()):
             self.cancel_task(task_id)
-        
+
         # Shutdown executors
         for pool_type, executor in self._executors.items():
             try:
@@ -386,18 +386,18 @@ class ThreadManager:
                     logger.debug("Using Python < 3.9 shutdown (no cancel_futures)")
             except Exception as e:
                 logger.error(f"Error shutting down {pool_type.value} pool: {e}")
-        
+
         logger.info("Thread manager shut down complete")
 
     def inspect_queues(self) -> Dict[str, Dict[str, int]]:
         """Return queue statistics including drop counts.
-        
+
         Returns:
             Dict with pool_name keys and {dropped: N, pending: M} values.
             Also includes 'mutation_queue' with drop/pending counts.
         """
         result: Dict[str, Dict[str, int]] = {}
-        
+
         # Per-pool stats
         for pool_type in ThreadPoolType:
             stats = self._stats.get(pool_type, {})
@@ -406,13 +406,13 @@ class ThreadManager:
                 'dropped': 0,  # Task-level drops not tracked per-pool
                 'pending': max(0, pending),
             }
-        
+
         # Mutation queue stats
         result['mutation_queue'] = {
             'dropped': self._queue_drops,
             'pending': self._mut_q.size() if hasattr(self._mut_q, 'size') else 0,
         }
-        
+
         return result
 
     def _check_drop_threshold(self) -> None:
@@ -444,7 +444,7 @@ class ThreadManager:
             logger.debug(f"Failed to push mutation to queue: {e}")
             self._queue_drops += 1
             return
-        
+
         if isinstance(ev, tuple) and ev and ev[0] == 'register_active':
             self._schedule_mutation_drain(0)
         else:
@@ -453,7 +453,7 @@ class ThreadManager:
     def _schedule_mutation_drain(self, delay_ms: int = 10) -> None:
         if self._shutdown or self._mut_drain_scheduled:
             return
-        
+
         self._mut_drain_scheduled = True
         if QCoreApplication.instance() is not None:
             self.single_shot(max(0, int(delay_ms)), self._drain_mutations_on_ui)
@@ -467,13 +467,13 @@ class ThreadManager:
                 ok, ev = self._mut_q.try_pop()
                 if not ok:
                     break
-                
+
                 try:
                     kind = ev[0]
                 except Exception as e:
                     logger.debug("[THREADING] Exception suppressed: %s", e)
                     continue
-                
+
                 if kind == 'register_active':
                     try:
                         task_obj = ev[1]
@@ -549,11 +549,11 @@ class ThreadManager:
             if app is None:
                 logger.debug("run_on_ui_thread called without QCoreApplication")
                 return
-            
+
             if QThread.currentThread() is app.thread():
                 func(*args, **(kwargs or {}))
                 return
-            
+
             inv = _ensure_ui_invoker()
             if inv is None:
                 raise RuntimeError("UI invoker unavailable")
@@ -583,21 +583,21 @@ class ThreadManager:
 
     def single_shot_ui(self, delay_ms: int, func: Callable, *args, **kwargs) -> Optional[QTimer]:
         """Schedule a callable with QApplication lifecycle awareness.
-        
+
         Unlike single_shot(), this method:
         - Returns a cancellable QTimer reference
         - Automatically cancels if QApplication.quit() is called before firing
         - Registers with ResourceManager for cleanup tracking
         - Auto-removes from tracking after firing
-        
+
         Args:
             delay_ms: Delay in milliseconds before executing
             func: Function to call
             *args, **kwargs: Arguments for func
-            
+
         Returns:
             QTimer instance that can be stopped to cancel, or None if scheduling failed.
-            
+
         AC: Callback not invoked after QApplication.quit()
         """
         try:
@@ -605,14 +605,14 @@ class ThreadManager:
             if app is None:
                 logger.debug("single_shot_ui called without QCoreApplication")
                 return None
-            
+
             timer = QTimer()
             timer.setSingleShot(True)
             timer.setTimerType(Qt.TimerType.PreciseTimer)
-            
+
             # Flag to track if we've been cancelled
             cancelled = [False]
-            
+
             def _cleanup_timer():
                 """Remove timer from tracking list."""
                 try:
@@ -620,7 +620,7 @@ class ThreadManager:
                         self._pending_single_shots.remove(timer)
                 except Exception:
                     pass
-            
+
             def _on_timeout():
                 """Handle timer firing."""
                 _cleanup_timer()
@@ -635,7 +635,7 @@ class ThreadManager:
                     func(*args, **(kwargs or {}))
                 except Exception as e:
                     logger.exception("single_shot_ui callback raised: %s", e)
-            
+
             def _on_app_quit():
                 """Handle application quit - cancel pending timer."""
                 cancelled[0] = True
@@ -644,7 +644,7 @@ class ThreadManager:
                 except Exception:
                     pass
                 _cleanup_timer()
-            
+
             # Connect signals
             timer.timeout.connect(_on_timeout)
             if app is not None:
@@ -652,10 +652,10 @@ class ThreadManager:
                     app.aboutToQuit.connect(_on_app_quit)
                 except Exception:
                     pass
-            
+
             # Track for lifecycle management
             self._pending_single_shots.append(timer)
-            
+
             # Register with ResourceManager
             if self._resource_manager:
                 try:
@@ -668,18 +668,18 @@ class ThreadManager:
                     )
                 except Exception as e:
                     logger.debug("Could not register single-shot timer: %s", e)
-            
+
             # Start timer - must be on UI thread
             def _start_timer():
                 timer.start(max(0, int(delay_ms)))
-            
+
             if QThread.currentThread() is app.thread():
                 _start_timer()
             else:
                 ThreadManager.run_on_ui_thread(_start_timer)
-            
+
             return timer
-            
+
         except Exception as e:
             logger.exception("single_shot_ui failed: %s", e)
             return None
@@ -694,12 +694,12 @@ class ThreadManager:
     ) -> QTimer:
         """
         Schedule a recurring task on the UI thread.
-        
+
         Args:
             interval_ms: Interval in milliseconds
             func: Function to call
             *args, **kwargs: Arguments for func
-        
+
         Returns:
             QTimer: Timer instance (keep reference to prevent GC)
         """
@@ -734,12 +734,12 @@ class ThreadManager:
                 func(*args, **(kwargs or {}))
             except Exception as e:
                 logger.exception("Recurring task raised: %s", e)
-        
+
         timer = QTimer()
         timer.setTimerType(Qt.TimerType.PreciseTimer)
         timer.timeout.connect(_invoke)
         timer.start(max(1, int(interval_ms)))
-        
+
         # Register with resource manager
         if self._resource_manager:
             try:
@@ -752,5 +752,21 @@ class ThreadManager:
                 )
             except Exception as e:
                 logger.debug("Could not register timer: %s", e)
-        
+
         return timer
+
+
+# Module-level singleton accessor
+_global_thread_manager: Optional[ThreadManager] = None
+
+
+def get_thread_manager() -> ThreadManager:
+    """Get or create the global ThreadManager singleton.
+
+    Returns:
+        The global ThreadManager instance.
+    """
+    global _global_thread_manager
+    if _global_thread_manager is None:
+        _global_thread_manager = ThreadManager()
+    return _global_thread_manager

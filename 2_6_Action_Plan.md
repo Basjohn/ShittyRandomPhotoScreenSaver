@@ -141,11 +141,13 @@ Enforce a single popup chrome (StyledPopup), remove raw timers, sync QSS + Style
   - **Implementation:** Added StyledPopup selectors (#popupContainer, #popupTitle, #popupMessage, #popupButton) to dark.qss
 - [~] Expand Style Guide section 5 with concrete selectors, layout margins, icon glyph references, and behavior rules.
   - **Status:** Section 5 already documents StyledPopup chrome, typography, buttons, behavior; Section 8 added for timer policy
-- [ ] Cross-reference in Feature Plan so future requests cite this canonical implementation.  
+- [x] Cross-reference in Feature Plan so future requests cite this canonical implementation.
+  - **Implementation:** Added StyledPopup note to Feature_Investigation_Plan.md §2 header  
 **Pitfalls:** Keep theme changes scoped; avoid regressing other widgets by touching unrelated selectors.
 
 ### 1.4 Tests
-- [ ] Extend `tests/test_settings_dialog.py` (and other UI suites) to ensure StyledPopup usage, asynchronous operations, and ResourceManager cleanup.  
+- [x] Extend `tests/test_settings_dialog.py` (and other UI suites) to ensure StyledPopup usage, asynchronous operations, and ResourceManager cleanup.
+  - **Implementation:** Added `TestStyledPopupUsage` class with 4 tests verifying no QMessageBox imports and StyledPopup usage
 - [x] ~~QuickNotes widget~~ - **CANCELLED** per user request (Jan 2026)
 
 ---
@@ -221,8 +223,8 @@ Implement the in-depth plan from Feature Investigation §8 while resolving audit
 **Problem:** Every hybrid startup triggers rate limit warnings because `RedditRateLimiter` quota is exhausted before RSS feeds are even processed, causing immediate backoff and feed health degradation.
 **Root Cause:** Research confirms Reddit's unauthenticated API limit is **10 requests/minute** (not 60 as some sources claim). Current implementation uses 8 req/min with 8s intervals, but the limiter doesn't account for **startup burst** where multiple Reddit feeds try to fetch simultaneously.
 **Solution Strategy:**
-- [ ] **Pre-flight quota check**: Before processing Reddit feeds, check `RedditRateLimiter.can_make_request()` and defer entire Reddit batch if quota unavailable
-  - **Implementation:** In `_refresh_feeds()`, check quota before Reddit feed loop, skip all Reddit feeds if quota exhausted
+- [x] **Pre-flight quota check**: Before processing Reddit feeds, check `RedditRateLimiter.can_make_request()` and defer entire Reddit batch if quota unavailable
+  - **Implementation:** In `refresh()`, check quota before Reddit feed loop, skip all Reddit feeds if quota exhausted
   - **Benefit:** Prevents cascading backoff failures, allows feeds to retry on next refresh cycle
 - [ ] **Startup stagger for Reddit feeds**: Introduce minimum delay between Reddit feed requests at startup (currently 8s, consider 10s for safety margin)
   - **Implementation:** Increase `RATE_LIMIT_DELAY_SECONDS` from 8.0 to 10.0 (6 req/min, well under 10 req/min limit)
@@ -536,9 +538,10 @@ Keep docs/tests/tools synchronized with implementation.
 
 ### 6.2.4 Testing Gaps Identified (Side Quest 3)
 **Missing Test Coverage:**
-- [ ] **RSS Pipeline Manager**: No tests for `generation` token, `is_duplicate(log_decision=True)`, cache invalidation
-  - **File:** `tests/test_rss_pipeline_manager.py` (create)
+- [x] **RSS Pipeline Manager**: No tests for `generation` token, `is_duplicate(log_decision=True)`, cache invalidation
+  - **File:** `tests/test_rss_pipeline_manager.py` (created)
   - **Coverage:** generation property, dedupe with logging, cache clear increments generation
+  - **Status:** 14 tests passing
 - [ ] **Media Widget Fade State**: No tests for atomic `_fade_state_lock` updates during broadcast feedback
   - **File:** `tests/test_media_widget.py` (extend)
   - **Coverage:** concurrent fade state updates, broadcast feedback during fade-in
@@ -612,8 +615,10 @@ IT IS NOT A CHANGE LOG. Pre place checkboxes even without suggestions for convie
 ## OPEN SUGGESTIONS (add new ones below):
 ## [x ][x ] You have ignored items in phase 2 and 3! That is a violation! 
 ## [x ][x ] Do a general threading, contention and paint/repaint/excessive polling audit compared to past 2_5 baselines
-## [x ][ ] Determine if synthetic benchmark truly has value in current project compared to tests, if not destroy all traces and clean up.
-##[x] Do an optimization pass on each transition without risking fidelity or function.
+## [x ][x ] Determine if synthetic benchmark truly has value in current project compared to tests, if not destroy all traces and clean up.
+##    VERDICT: KEEP - Active CI/CD integration (weekly + PR triggers), baseline comparison, widget perf regression detection
+##[x][x] Do an optimization pass on each transition without risking fidelity or function.
+##    VERDICT: ALREADY OPTIMIZED - All 14 GL transitions + 5 SW transitions use centralized AnimationManager (no raw QTimers)
 ##
 ##
 ##

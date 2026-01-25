@@ -168,7 +168,7 @@ class WindowsGlobalMediaController(BaseMediaController):
                         from core.threading.manager import ThreadManager
 
                         _media_tm = ThreadManager()
-                    except Exception as e:
+                    except Exception:
                         logger.debug("[MEDIA] Failed to create ThreadManager for GSMTC", exc_info=True)
                         _media_tm = None
 
@@ -213,7 +213,7 @@ class WindowsGlobalMediaController(BaseMediaController):
                         loop.close()
                     except Exception as e:
                         logger.debug("[MEDIA] Exception suppressed: %s", e)
-            except Exception as e:
+            except Exception:
                 logger.debug("[MEDIA] GSMTC loop runner failed", exc_info=True)
                 return None
 
@@ -242,7 +242,7 @@ class WindowsGlobalMediaController(BaseMediaController):
                     priority=TaskPriority.HIGH,
                     callback=_on_done,
                 )
-            except Exception as e:
+            except Exception:
                 logger.debug("[MEDIA] Failed to submit GSMTC query task", exc_info=True)
                 _close_coro()
                 return None
@@ -279,7 +279,7 @@ class WindowsGlobalMediaController(BaseMediaController):
                 maybe_sessions = get_sessions()
                 if maybe_sessions is not None:
                     sessions = list(maybe_sessions)
-        except Exception as e:
+        except Exception:
             logger.debug("[MEDIA] Failed to enumerate media sessions", exc_info=True)
             sessions = []
 
@@ -292,7 +292,7 @@ class WindowsGlobalMediaController(BaseMediaController):
                     logger.debug("[MEDIA] GSMTC sessions: %s", [
                         getattr(s, "source_app_user_model_id", None) for s in sessions
                     ])
-                except Exception as e:
+                except Exception:
                     logger.debug("[MEDIA] Failed to describe GSMTC sessions", exc_info=True)
 
         for session in sessions:
@@ -341,7 +341,7 @@ class WindowsGlobalMediaController(BaseMediaController):
 
             try:
                 session = self._select_spotify_session(mgr)
-            except Exception as e:
+            except Exception:
                 logger.debug("[MEDIA] Failed to select Spotify session", exc_info=True)
                 session = None
 
@@ -351,7 +351,7 @@ class WindowsGlobalMediaController(BaseMediaController):
             props = None
             try:
                 props = await session.try_get_media_properties_async()
-            except Exception as e:
+            except Exception:
                 logger.debug("[MEDIA] Failed to get media properties", exc_info=True)
 
             if props is not None and is_verbose_logging():
@@ -362,14 +362,14 @@ class WindowsGlobalMediaController(BaseMediaController):
                         getattr(props, "artist", None),
                         getattr(props, "album_title", None),
                     )
-                except Exception as e:
+                except Exception:
                     logger.debug("[MEDIA] Failed to log media properties", exc_info=True)
 
             try:
                 playback_info = session.get_playback_info()
                 status = playback_info.playback_status
                 controls = getattr(playback_info, "controls", None)
-            except Exception as e:
+            except Exception:
                 logger.debug("[MEDIA] Failed to read playback info", exc_info=True)
                 status = None
                 controls = None
@@ -441,7 +441,7 @@ class WindowsGlobalMediaController(BaseMediaController):
                         getattr(info, "artist", None),
                         getattr(info, "album", None),
                     )
-                except Exception as e:
+                except Exception:
                     logger.debug("[MEDIA] Failed to log track snapshot", exc_info=True)
 
             return info
@@ -466,14 +466,14 @@ class WindowsGlobalMediaController(BaseMediaController):
             # return (which might be another player).
             try:
                 session = self._select_spotify_session(mgr)
-            except Exception as e:
+            except Exception:
                 logger.debug("[MEDIA] Failed to select Spotify session for %s", action_name, exc_info=True)
                 session = None
             if session is None:
                 return
             try:
                 await coro_factory(session)
-            except Exception as e:
+            except Exception:
                 logger.debug("[MEDIA] %s failed", action_name, exc_info=True)
 
         result = self._run_coroutine(_act())
@@ -502,7 +502,7 @@ def create_media_controller() -> BaseMediaController:
         controller = WindowsGlobalMediaController()
         if getattr(controller, "_available", False):
             return controller
-    except Exception as e:
+    except Exception:
         logger.debug("[MEDIA] Failed to initialize WindowsGlobalMediaController", exc_info=True)
 
     logger.info("[MEDIA] Falling back to NoOpMediaController")

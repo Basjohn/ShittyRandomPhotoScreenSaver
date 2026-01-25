@@ -91,7 +91,7 @@ class GLCompositorClawMarksTransition(BaseTransition):
             comp.setGeometry(0, 0, widget.width(), widget.height())
             comp.show()
             comp.raise_()
-        except Exception as e:
+        except Exception:
             logger.debug(
                 "[GL COMPOSITOR] Failed to configure compositor geometry/visibility (claw marks)",
                 exc_info=True,
@@ -116,7 +116,7 @@ class GLCompositorClawMarksTransition(BaseTransition):
                 animation_manager=am,
                 on_finished=_on_finished_shader,
             )
-        except Exception as e:
+        except Exception:
             logger.debug(
                 "[GL COMPOSITOR] Failed to start shader-based Shooting Stars; falling back to diffuse region API",
                 exc_info=True,
@@ -172,7 +172,7 @@ class GLCompositorClawMarksTransition(BaseTransition):
             try:
                 # Snap to final frame when cancelling mid-way to avoid pops.
                 self._compositor.cancel_current_transition(snap_to_new=True)
-            except Exception as e:
+            except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to cancel current claw marks transition", exc_info=True)
 
         self._animation_id = None
@@ -188,7 +188,7 @@ class GLCompositorClawMarksTransition(BaseTransition):
                 # Ensure compositor is no longer animating; do not force snap
                 # here, as DisplayWidget will already have updated its base.
                 self._compositor.cancel_current_transition(snap_to_new=True)
-            except Exception as e:
+            except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to cleanup claw marks compositor", exc_info=True)
             self._compositor = None
 
@@ -303,7 +303,7 @@ class GLCompositorClawMarksTransition(BaseTransition):
         if not region.isEmpty():
             try:
                 self._compositor.set_diffuse_region(region)
-            except Exception as e:
+            except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to update claw marks region", exc_info=True)
 
         total = len(self._claws) or 1

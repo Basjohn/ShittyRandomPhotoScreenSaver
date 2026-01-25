@@ -520,7 +520,7 @@ def main():
                     profile_path = get_log_dir() / "screensaver_config.pstats"
                     profiler.dump_stats(str(profile_path))
                     logger.info("[PERF] [CPU] cProfile stats written to %s", profile_path)
-                except Exception as e:
+                except Exception:
                     logger.debug("[PERF] [CPU] Failed to write cProfile stats", exc_info=True)
             else:
                 exit_code = run_config(app)

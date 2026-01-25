@@ -67,7 +67,7 @@ def _load_tray_menu_stylesheet() -> str | None:
         if not theme_path.exists():
             return None
         return theme_path.read_text(encoding="utf-8")
-    except Exception as e:
+    except Exception:
         logger.debug("Failed to load dark.qss for tray menu", exc_info=True)
         return None
 
@@ -112,7 +112,7 @@ class ScreensaverTrayIcon(QSystemTrayIcon):
             stylesheet = _load_tray_menu_stylesheet()
             if stylesheet:
                 menu.setStyleSheet(stylesheet)
-        except Exception as e:
+        except Exception:
             logger.debug("Failed to apply dark.qss to tray menu", exc_info=True)
 
         settings_action = QAction("Settings", menu)
@@ -139,7 +139,7 @@ class ScreensaverTrayIcon(QSystemTrayIcon):
         if QSystemTrayIcon.isSystemTrayAvailable():
             try:
                 self.show()
-            except Exception as e:
+            except Exception:
                 logger.debug("Failed to show system tray icon", exc_info=True)
         else:
             logger.info("System tray not available; skipping tray icon")

@@ -68,7 +68,7 @@ class SpotifyVolumeController:
 
         try:
             value = float(volume_iface.GetMasterVolume())  # type: ignore[attr-defined]
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VOL] GetMasterVolume failed", exc_info=True)
             return None
 
@@ -101,7 +101,7 @@ class SpotifyVolumeController:
             logger.debug("[SPOTIFY_VOL] Set Spotify session volume to %.3f (session=%s)", clamped, session_name)
             self._last_pid = getattr(getattr(volume_iface, "_session", None), "ProcessId", None)
             return True
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VOL] SetMasterVolume failed", exc_info=True)
             return False
 
@@ -143,7 +143,7 @@ class SpotifyVolumeController:
         # If Spotify is paused or stopped, no session will be found.
         try:
             sessions = AudioUtilities.GetAllSessions()
-        except Exception as e:
+        except Exception:
             logger.debug("[SPOTIFY_VOL] GetAllSessions failed", exc_info=True)
             return None, None
         
@@ -202,7 +202,7 @@ class SpotifyVolumeController:
                 volume = ctl.QueryInterface(ISimpleAudioVolume)  # type: ignore[call-arg]
                 logger.debug("[SPOTIFY_VOL] Found Spotify session: %s", name)
                 return volume, name
-            except Exception as e:
+            except Exception:
                 logger.debug(
                     "[SPOTIFY_VOL] Failed to obtain ISimpleAudioVolume for %r", name, exc_info=True
                 )

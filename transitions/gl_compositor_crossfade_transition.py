@@ -70,7 +70,7 @@ class GLCompositorCrossfadeTransition(BaseTransition):
             comp.setGeometry(0, 0, widget.width(), widget.height())
             comp.show()
             comp.raise_()
-        except Exception as e:
+        except Exception:
             logger.debug("[GL COMPOSITOR] Failed to configure compositor geometry/visibility", exc_info=True)
 
         # Drive crossfade via shared AnimationManager.
@@ -105,7 +105,7 @@ class GLCompositorCrossfadeTransition(BaseTransition):
             try:
                 # Snap to final frame when cancelling mid-way to avoid pops.
                 self._compositor.cancel_current_transition(snap_to_new=True)
-            except Exception as e:
+            except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to cancel current transition", exc_info=True)
 
         self._animation_id = None
@@ -122,7 +122,7 @@ class GLCompositorCrossfadeTransition(BaseTransition):
                 # here, as DisplayWidget will already have updated its base.
                 # The compositor remains visible as the primary renderer.
                 self._compositor.cancel_current_transition(snap_to_new=True)
-            except Exception as e:
+            except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to cleanup compositor", exc_info=True)
             self._compositor = None
 

@@ -149,7 +149,7 @@ class GLCompositorParticleTransition(BaseTransition):
             warm = getattr(comp, "warm_shader_textures", None)
             if callable(warm):
                 warm(old_pixmap, new_pixmap)
-        except Exception as e:
+        except Exception:
             logger.debug("[GL COMPOSITOR] Failed to warm particle textures", exc_info=True)
 
         # Ensure compositor matches widget geometry and is above the base.
@@ -157,7 +157,7 @@ class GLCompositorParticleTransition(BaseTransition):
             comp.setGeometry(0, 0, widget.width(), widget.height())
             comp.show()
             comp.raise_()
-        except Exception as e:
+        except Exception:
             logger.debug("[GL COMPOSITOR] Failed to configure compositor geometry/visibility (particle)", exc_info=True)
 
         # Drive via shared AnimationManager.
@@ -207,7 +207,7 @@ class GLCompositorParticleTransition(BaseTransition):
         if self._compositor is not None:
             try:
                 self._compositor.cancel_current_transition(snap_to_new=True)
-            except Exception as e:
+            except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to cancel current transition (particle)", exc_info=True)
 
         self._animation_id = None
@@ -221,7 +221,7 @@ class GLCompositorParticleTransition(BaseTransition):
         if self._compositor is not None:
             try:
                 self._compositor.cancel_current_transition(snap_to_new=True)
-            except Exception as e:
+            except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to cleanup compositor (particle)", exc_info=True)
             self._compositor = None
 
