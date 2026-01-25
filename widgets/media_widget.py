@@ -90,6 +90,12 @@ class MediaWidget(BaseOverlayWidget):
     _shared_feedback_events: ClassVar[dict[str, dict[str, float]]] = {}
     _shared_feedback_timer: ClassVar[Optional[QTimer]] = None
     _shared_feedback_timer_interval_ms: ClassVar[int] = 16
+    
+    # Shared media info cache - prevents one widget hiding when another has valid info
+    # This fixes multi-display desync where one widget gets None from GSMTC while other has valid data
+    _shared_last_valid_info: ClassVar[Optional["MediaTrackInfo"]] = None
+    _shared_last_valid_info_ts: ClassVar[float] = 0.0
+    _shared_info_max_age_sec: ClassVar[float] = 5.0  # Max age before shared info is considered stale
 
     _event_system: ClassVar[Optional["EventSystem"]] = None
     _event_subscription_id: ClassVar[Optional[str]] = None
@@ -263,6 +269,38 @@ class MediaWidget(BaseOverlayWidget):
                 instance._handle_remote_media_action(action, timestamp, event_id)
             except Exception as e:
                 logger.debug("[MEDIA_WIDGET] Remote media action failed: %s", e)
+
+    @classmethod
+    def _get_shared_valid_info(cls) -> Optional["MediaTrackInfo"]:
+        """Get shared media info if another widget has valid data.
+        
+        This prevents multi-display desync where one widget gets None from GSMTC
+        while another still has valid media info. Returns the shared info if:
+        1. Shared info exists and is not stale (< 5 seconds old)
+        2. At least one other visible widget has valid _last_info
+        """
+        now = time.monotonic()
+        
+        # Check shared cache first (most recent valid info from any widget)
+        if cls._shared_last_valid_info is not None:
+            age = now - cls._shared_last_valid_info_ts
+            if age < cls._shared_info_max_age_sec:
+                return cls._shared_last_valid_info
+        
+        # Fallback: check other widget instances for valid info
+        for instance in list(cls._instances):
+            try:
+                if not Shiboken.isValid(instance):
+                    continue
+                if instance._last_info is not None and instance.isVisible():
+                    # Found another widget with valid info
+                    cls._shared_last_valid_info = instance._last_info
+                    cls._shared_last_valid_info_ts = now
+                    return instance._last_info
+            except Exception:
+                continue
+        
+        return None
 
     def _handle_remote_media_action(self, action: str, timestamp: Optional[float], event_id: Optional[str]) -> None:
         try:
@@ -1015,6 +1053,11 @@ class MediaWidget(BaseOverlayWidget):
         
         # Smart polling: diff gating - compute track identity
         if info is not None:
+            # Update shared cache with valid info for multi-display sync
+            cls = type(self)
+            cls._shared_last_valid_info = info
+            cls._shared_last_valid_info_ts = time.monotonic()
+            
             current_identity = self._compute_track_identity(info)
             identity_changed = current_identity != prev_identity
 
@@ -1057,49 +1100,62 @@ class MediaWidget(BaseOverlayWidget):
             self._maybe_emit_state_feedback(prev_info, info)
 
         if info is None:
-            # Smart polling: idle detection - track consecutive None results
-            self._consecutive_none_count += 1
-            
-            # Enter idle mode after threshold consecutive None results (~30s)
-            if self._consecutive_none_count >= self._idle_threshold and not self._is_idle:
-                self._is_idle = True
-                self._last_track_identity = None  # Reset identity for next track
-                self._track_history.clear()
-                if is_perf_metrics_enabled():
-                    logger.debug("[PERF] Media widget entering idle mode (Spotify closed)")
-                else:
-                    logger.info("[MEDIA_WIDGET] Entering idle mode after %d consecutive empty polls", 
-                               self._consecutive_none_count)
-                # Update timer interval from active (2.5s) to idle (5s)
-                self._stop_timer()
-                self._ensure_timer()
-            
-            # No active media session (e.g. Spotify not playing) – hide widget with graceful fade
-            last_vis = self._telemetry_last_visibility
-            if last_vis or last_vis is None:
-                logger.info("[MEDIA_WIDGET] No active media session; hiding media card")
-            # Keep last artwork so we can reuse it if Spotify resumes while
-            # the widget is hidden; only clear once we actually hide.
-            # Graceful fade out instead of instant hide (tests skip animation)
-            if self.isVisible():
-                if _in_test_environment():
-                    self._complete_hide_sequence()
-                else:
-                    try:
-                        from widgets.shadow_utils import ShadowFadeProfile
-                        ShadowFadeProfile.start_fade_out(
-                            self,
-                            duration_ms=800,
-                            on_complete=lambda: self._complete_hide_sequence()
-                        )
-                    except Exception as e:
-                        logger.debug("[MEDIA_WIDGET] Fade out failed, hiding instantly: %s", e)
-                        self._complete_hide_sequence()
+            # MULTI-DISPLAY FIX: Check if other widgets have valid info before hiding
+            # This prevents one widget hiding due to GSMTC timing while another still has valid data
+            cls = type(self)
+            shared_info = cls._get_shared_valid_info()
+            if shared_info is not None:
+                # Another widget has valid info - use it instead of hiding
+                logger.debug("[MEDIA_WIDGET] Using shared info from another display (local poll returned None)")
+                info = shared_info
+                self._last_info = info
+                # Don't count this as a None result since we recovered
+                # Fall through to display the shared info
             else:
-                self._complete_hide_sequence()
-            
-            self._telemetry_last_visibility = False
-            return
+                # No shared info available - proceed with normal None handling
+                # Smart polling: idle detection - track consecutive None results
+                self._consecutive_none_count += 1
+                
+                # Enter idle mode after threshold consecutive None results (~30s)
+                if self._consecutive_none_count >= self._idle_threshold and not self._is_idle:
+                    self._is_idle = True
+                    self._last_track_identity = None  # Reset identity for next track
+                    self._track_history.clear()
+                    if is_perf_metrics_enabled():
+                        logger.debug("[PERF] Media widget entering idle mode (Spotify closed)")
+                    else:
+                        logger.info("[MEDIA_WIDGET] Entering idle mode after %d consecutive empty polls", 
+                                   self._consecutive_none_count)
+                    # Update timer interval from active (2.5s) to idle (5s)
+                    self._stop_timer()
+                    self._ensure_timer()
+                
+                # No active media session (e.g. Spotify not playing) – hide widget with graceful fade
+                last_vis = self._telemetry_last_visibility
+                if last_vis or last_vis is None:
+                    logger.info("[MEDIA_WIDGET] No active media session; hiding media card")
+                # Keep last artwork so we can reuse it if Spotify resumes while
+                # the widget is hidden; only clear once we actually hide.
+                # Graceful fade out instead of instant hide (tests skip animation)
+                if self.isVisible():
+                    if _in_test_environment():
+                        self._complete_hide_sequence()
+                    else:
+                        try:
+                            from widgets.shadow_utils import ShadowFadeProfile
+                            ShadowFadeProfile.start_fade_out(
+                                self,
+                                duration_ms=800,
+                                on_complete=lambda: self._complete_hide_sequence()
+                            )
+                        except Exception as e:
+                            logger.debug("[MEDIA_WIDGET] Fade out failed, hiding instantly: %s", e)
+                            self._complete_hide_sequence()
+                else:
+                    self._complete_hide_sequence()
+                
+                self._telemetry_last_visibility = False
+                return
 
         # Metadata: title and artist on separate lines; album is intentionally
         # omitted to keep the block compact. Apply Title Case for readability.

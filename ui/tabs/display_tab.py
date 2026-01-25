@@ -198,6 +198,19 @@ class DisplayTab(QWidget):
         self.refresh_sync_check.setChecked(True)
         self.refresh_sync_check.stateChanged.connect(self._save_settings)
         perf_layout.addWidget(self.refresh_sync_check)
+        
+        # Image cache size slider (Phase 4.1)
+        cache_row = QHBoxLayout()
+        cache_row.addWidget(QLabel("Image Cache Size:"))
+        self.cache_size_spin = QSpinBox()
+        self.cache_size_spin.setRange(30, 100)
+        self.cache_size_spin.setValue(30)
+        self.cache_size_spin.setSuffix(" images")
+        self.cache_size_spin.setToolTip("Maximum number of images to keep in memory cache (30-100)")
+        self.cache_size_spin.valueChanged.connect(self._save_settings)
+        cache_row.addWidget(self.cache_size_spin)
+        cache_row.addStretch()
+        perf_layout.addLayout(cache_row)
 
         layout.addWidget(perf_group)
 
@@ -302,6 +315,7 @@ class DisplayTab(QWidget):
         self.sharpen_check.blockSignals(True)
         # Also block performance toggles to avoid saving defaults while loading
         self.refresh_sync_check.blockSignals(True)
+        self.cache_size_spin.blockSignals(True)
         self.backend_combo.blockSignals(True)
         # Block input toggles
         self.hard_exit_check.blockSignals(True)
@@ -379,6 +393,10 @@ class DisplayTab(QWidget):
             # Refresh rate sync
             refresh_sync = self._settings.get_bool('display.refresh_sync', True)
             self.refresh_sync_check.setChecked(refresh_sync)
+            
+            # Image cache size (Phase 4.1)
+            cache_size = self._settings.get('cache.max_items', 30)
+            self.cache_size_spin.setValue(max(30, min(100, int(cache_size))))
 
             # Input / Hard Exit
             hard_exit_raw = self._settings.get('input.hard_exit', False)
@@ -406,6 +424,7 @@ class DisplayTab(QWidget):
             self.shuffle_check.blockSignals(False)
             self.sharpen_check.blockSignals(False)
             self.refresh_sync_check.blockSignals(False)
+            self.cache_size_spin.blockSignals(False)
             self.backend_combo.blockSignals(False)
             self.hard_exit_check.blockSignals(False)
             self._loading = False
@@ -448,6 +467,7 @@ class DisplayTab(QWidget):
         
         # Performance
         self._settings.set('display.refresh_sync', self.refresh_sync_check.isChecked())
+        self._settings.set('cache.max_items', self.cache_size_spin.value())
 
         # Input / Exit
         self._settings.set('input.hard_exit', self.hard_exit_check.isChecked())

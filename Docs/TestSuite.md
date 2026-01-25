@@ -54,6 +54,7 @@ The test suite is now stable and can be relied upon for regression testing. All 
 - `test_process_supervisor.py` - 33 tests
 - `test_image_worker.py` - 11 tests
 - `test_rss_worker.py` - 12 tests
+- `test_rss_pipeline_manager.py` - 14 tests (Phase 6.2.4: generation token, dedupe logging, cache invalidation)
 - `test_fft_worker.py` - 13 tests
 - `test_transition_worker.py` - 11 tests
 - `test_gl_state_manager_overlay.py` - 21 tests

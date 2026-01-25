@@ -310,6 +310,24 @@ class TransitionsTab(QWidget):
         
         layout.addWidget(self.crumble_group)
         
+        # Blinds specific settings (Phase 4.1)
+        self.blinds_group = QGroupBox("Blinds Settings")
+        blinds_layout = QVBoxLayout(self.blinds_group)
+        
+        feather_row = QHBoxLayout()
+        feather_row.addWidget(QLabel("Edge Feather:"))
+        self.blinds_feather_spin = QSpinBox()
+        self.blinds_feather_spin.setRange(0, 10)
+        self.blinds_feather_spin.setValue(2)
+        self.blinds_feather_spin.setSuffix(" px")
+        self.blinds_feather_spin.setToolTip("Softness of slat edges (0 = sharp, 10 = very soft)")
+        self.blinds_feather_spin.valueChanged.connect(self._save_settings)
+        feather_row.addWidget(self.blinds_feather_spin)
+        feather_row.addStretch()
+        blinds_layout.addLayout(feather_row)
+        
+        layout.addWidget(self.blinds_group)
+        
         # Particle specific settings
         self.particle_group = QGroupBox("Particle Settings")
         particle_layout = QVBoxLayout(self.particle_group)
@@ -607,6 +625,8 @@ class TransitionsTab(QWidget):
             getattr(self, 'crumble_piece_count_spin', None),
             getattr(self, 'crumble_complexity_spin', None),
             getattr(self, 'crumble_weight_combo', None),
+            # Blinds widgets (Phase 4.1)
+            getattr(self, 'blinds_feather_spin', None),
             # Particle widgets
             getattr(self, 'particle_mode_combo', None),
             getattr(self, 'particle_direction_combo', None),
@@ -715,6 +735,11 @@ class TransitionsTab(QWidget):
                 self.crumble_weight_combo.setCurrentIndex(idx)
             except Exception as e:
                 logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
+
+            # Load blinds settings (Phase 4.1)
+            canonical_blinds = canonical_transitions.get('blinds', {})
+            blinds = transitions_config.get('blinds', {})
+            self.blinds_feather_spin.setValue(blinds.get('feather', canonical_blinds.get('feather', 2)))
 
             # Load particle settings - use canonical defaults from defaults.py
             canonical_particle = canonical_transitions.get('particle', {})
@@ -853,6 +878,9 @@ class TransitionsTab(QWidget):
         # Show/hide Crumble settings
         self.crumble_group.setVisible(transition == "Crumble")
         
+        # Show/hide Blinds settings (Phase 4.1)
+        self.blinds_group.setVisible(transition == "Blinds")
+        
         # Show/hide Particle settings
         self.particle_group.setVisible(transition == "Particle")
         if transition == "Particle":
@@ -867,10 +895,10 @@ class TransitionsTab(QWidget):
         mode = self.particle_mode_combo.currentText()
         is_directional = mode == "Directional"
         is_swirl = mode == "Swirl"
-        is_converge = mode == "Converge"
-        # Direction only applies to Directional/Converge modes (disabled for Random - auto-selected)
-        self.particle_direction_combo.setEnabled(is_directional or is_converge)
-        # Swirl settings only apply to Swirl mode (disabled for Random - auto-selected)
+        # Direction only applies to Directional mode (Converge/Random auto-select direction)
+        # Converge mode particles always converge to center regardless of direction setting
+        self.particle_direction_combo.setEnabled(is_directional)
+        # Swirl settings only apply to Swirl mode
         self.particle_swirl_turns_spin.setEnabled(is_swirl)
         self.particle_swirl_order_combo.setEnabled(is_swirl)
 
@@ -972,6 +1000,9 @@ class TransitionsTab(QWidget):
                 'piece_count': self.crumble_piece_count_spin.value(),
                 'crack_complexity': self.crumble_complexity_spin.value(),
                 'weighting': self.crumble_weight_combo.currentText(),
+            },
+            'blinds': {
+                'feather': self.blinds_feather_spin.value(),
             },
             'particle': {
                 'mode': self.particle_mode_combo.currentText(),

@@ -420,6 +420,58 @@ late in a GL transition.
 3. `rendering/display_widget.py` pre-warm section - for compositor pre-warm raises
 4. Widget's `_setup_ui()` must call `configure_overlay_widget_attributes(self)` from `shadow_utils.py` to prevent flicker with GL compositor
 
+### 6.6 WidgetManager Lifecycle & Resource Registration (Phase 3.2)
+
+`WidgetManager` owns the overlay/fade coordination contract. All timers, signal
+connections, and fade callbacks must be properly registered and cleaned up.
+
+**Resource Registration Contract:**
+
+1. **Timers** - Any `QTimer` created by WidgetManager must be registered with
+   `ResourceManager` for deterministic cleanup:
+   ```python
+   if self._resource_manager:
+       self._resource_manager.register_qt(timer, description="WidgetManager <purpose>")
+   ```
+
+2. **Compositor Signal** - The `image_displayed` signal connection is managed
+   via `_connect_compositor_ready_signal()` and `_disconnect_compositor_signal()`.
+   Cleanup automatically disconnects to prevent stale callbacks.
+
+3. **Fade Coordination State** - On cleanup, WidgetManager clears:
+   - `_overlay_fade_expected` - Expected overlays set
+   - `_overlay_fade_pending` - Pending fade callbacks
+   - `_overlay_fade_started` - Started flag
+   - `_overlay_fade_timeout` - Timeout timer (stopped and deleted)
+
+**Overlay Fade Handshake Order:**
+
+1. Widget calls `WidgetManager.add_expected_overlay(name)` during creation
+2. Widget calls `WidgetManager.request_overlay_fade_sync(name, starter_callback)`
+3. WidgetManager waits for compositor ready (`_compositor_ready = True`)
+4. Once all expected overlays register, or timeout (2.5s), fades start together
+5. Each widget's `starter_callback` invokes `ShadowFadeProfile.start_fade_in()`
+
+**Deterministic Fade Order:**
+
+Fade callbacks are invoked in **registration order** (first registered = first
+fade), but the visual result is synchronized because all use the same
+`ShadowFadeProfile` animation timing. The 2.5s timeout ensures misbehaving
+overlays don't block others indefinitely.
+
+**Cleanup Sequence:**
+
+```python
+def cleanup(self) -> None:
+    self._detach_settings_manager()
+    self._disconnect_compositor_signal()  # Disconnect first
+    # Stop timers (raise, fade timeout, clock tick)
+    # Clear fade coordination state
+    # Teardown weather animation drivers
+    # Call widget.cleanup() for each registered widget
+    # Clear widget dict and fade callbacks
+```
+
 ---
 
 ## 7. Settings & Persistence Checklist

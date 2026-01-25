@@ -48,6 +48,7 @@ class DisplayManager(QObject):
     next_requested = Signal()  # X key - go to next image
     cycle_transition_requested = Signal()  # C key - cycle transition mode
     settings_requested = Signal()  # S key - open settings
+    transition_finished = Signal()  # Emitted when any display's visual transition completes
     
     def __init__(
         self,
@@ -84,29 +85,46 @@ class DisplayManager(QObject):
         self.screen_count = 0
         self._setup_monitor_detection()
         
+        # Cross-display weather animation driver (configured after all displays created)
+        self._cross_display_weather_driver = None
+        
         logger.info("DisplayManager initialized (mode=%s, same_image=%s)" % (display_mode, same_image_mode))
     
     def _disconnect_monitor_signals(self) -> None:
-        """Phase 0.5: Disconnect monitor hotplug signals to prevent callbacks after cleanup."""
+        """Phase 0.5: Disconnect monitor hotplug signals to prevent callbacks after cleanup.
+        
+        Phase 6.2.2: Only disconnect if signals were actually connected to prevent
+        RuntimeWarning when disconnecting unconnected signals.
+        """
+        if not getattr(self, '_monitor_signals_connected', False):
+            return
+            
         app = QGuiApplication.instance()
         if app:
             try:
                 app.screenAdded.disconnect(self._on_screen_added)
-            except Exception:
+            except (TypeError, RuntimeError):
                 pass
             try:
                 app.screenRemoved.disconnect(self._on_screen_removed)
-            except Exception:
+            except (TypeError, RuntimeError):
                 pass
+            self._monitor_signals_connected = False
             logger.debug("Disconnected monitor hotplug signals")
     
     def _setup_monitor_detection(self) -> None:
         """Setup monitor hotplug detection."""
         app = QGuiApplication.instance()
         if app:
+            # Prevent double-connection
+            if getattr(self, '_monitor_signals_connected', False):
+                logger.debug("Monitor signals already connected, skipping")
+                return
+                
             # Connect to screen change signals
             app.screenAdded.connect(self._on_screen_added)
             app.screenRemoved.connect(self._on_screen_removed)
+            self._monitor_signals_connected = True
             
             # Store initial screen count
             self.screen_count = len(app.screens())
@@ -142,13 +160,13 @@ class DisplayManager(QObject):
                 if not isinstance(parsed, (list, tuple, set)):
                     return indices
                 values = {int(x) for x in parsed}
-            except Exception as e:
+            except Exception:
                 logger.debug("[DISPLAY] Failed to parse show_on_monitors=%r; defaulting to ALL", raw)
                 return indices
         elif isinstance(raw, (list, tuple, set)):
             try:
                 values = {int(x) for x in raw}
-            except Exception as e:
+            except Exception:
                 logger.debug("[DISPLAY] Invalid show_on_monitors=%r; defaulting to ALL", raw)
                 return indices
         else:
@@ -271,6 +289,9 @@ class DisplayManager(QObject):
             # Connect dimming sync signal - when one display changes dimming, update all
             display.dimming_changed.connect(self.set_dimming_all_displays)
             
+            # Connect transition_finished signal for guard tracking
+            display.transition_finished.connect(self.transition_finished.emit)
+            
             # Show fullscreen
             display.show_on_screen()
             
@@ -308,8 +329,65 @@ class DisplayManager(QObject):
         for display in self.displays:
             try:
                 display.set_process_supervisor(supervisor)
-            except Exception as e:
+            except Exception:
                 logger.debug("Failed to set ProcessSupervisor on display", exc_info=True)
+    
+    def configure_cross_display_weather_driver(self) -> None:
+        """Configure shared weather animation driver across ALL displays.
+        
+        Collects weather widgets from all DisplayWidget instances and sets up
+        a single shared QSvgRenderer to prevent duplicate animation drivers.
+        Must be called AFTER all displays have created their widgets.
+        """
+        from widgets.weather_widget import WeatherWidget
+        from rendering.widget_manager import SharedWeatherAnimationDriver
+        
+        # Collect all weather widgets across all displays
+        all_weather_widgets = []
+        for display in self.displays:
+            try:
+                weather = getattr(display, 'weather_widget', None)
+                if weather is not None and isinstance(weather, WeatherWidget):
+                    if hasattr(weather, 'shared_animation_driver_enabled') and weather.shared_animation_driver_enabled():
+                        all_weather_widgets.append(weather)
+            except Exception:
+                pass
+        
+        if len(all_weather_widgets) < 2:
+            logger.debug("[WEATHER][CROSS_DISPLAY] Skipping driver (widgets=%d)", len(all_weather_widgets))
+            return
+        
+        # Reset sink mode on all widgets first
+        for widget in all_weather_widgets:
+            try:
+                widget.disable_shared_animation_sink_mode()
+            except Exception:
+                pass
+        
+        # First widget is master, rest are sinks
+        master = all_weather_widgets[0]
+        sinks = all_weather_widgets[1:]
+        
+        try:
+            driver = SharedWeatherAnimationDriver(
+                master_widget=master,
+                sink_widgets=sinks,
+                thread_manager=self._thread_manager,
+                stagger_ms=3,
+                parent=self,
+            )
+            
+            if not driver.has_links():
+                driver.stop()
+                driver.deleteLater()
+                logger.debug("[WEATHER][CROSS_DISPLAY] Driver aborted (no links)")
+                return
+            
+            # Store driver reference to prevent garbage collection
+            self._cross_display_weather_driver = driver
+            logger.info("[WEATHER][CROSS_DISPLAY] Shared driver active: master on display 0, %d sinks", len(sinks))
+        except Exception as e:
+            logger.debug("[WEATHER][CROSS_DISPLAY] Failed to create driver: %s", e)
     
     def show_image(self, pixmap: QPixmap, image_path: str = "", 
                    screen_index: Optional[int] = None) -> None:
@@ -697,7 +775,7 @@ class DisplayManager(QObject):
                 app = QGuiApplication.instance()
                 if app is not None:
                     app.processEvents()
-            except Exception as e:
+            except Exception:
                 logger.debug("[REDDIT] processEvents failed before flush", exc_info=True)
 
         if REDDIT_FLUSH_LOGGING:
@@ -712,7 +790,7 @@ class DisplayManager(QObject):
         if helper_module is not None:
             try:
                 use_helper = helper_module.should_use_session_launcher()
-            except Exception as e:
+            except Exception:
                 logger.debug("[REDDIT] Helper capability check failed", exc_info=True)
                 use_helper = False
         if helper_bridge is not None and helper_bridge.is_bridge_available():
@@ -727,7 +805,7 @@ class DisplayManager(QObject):
                     if launched:
                         logger.info("[REDDIT] Deferred URL queued via ProgramData bridge: %s", url)
                         continue
-                except Exception as e:
+                except Exception:
                     logger.warning("[REDDIT] Bridge enqueue failed; falling back", exc_info=True)
                     launched = False
 
@@ -738,7 +816,7 @@ class DisplayManager(QObject):
                         logger.info("[REDDIT] Helper launched deferred URL: %s", url)
                     else:
                         logger.debug("[REDDIT] Helper declined to launch URL; falling back")
-                except Exception as e:
+                except Exception:
                     logger.warning("[REDDIT] Helper launch failed; falling back", exc_info=True)
                     launched = False
 

@@ -273,6 +273,8 @@ class WidgetManager:
         self._clock_shared_tick_interval_ms: int = 1000
         self._clock_shared_tick_stagger_ms: int = 4
         self._weather_animation_drivers: Dict[int, SharedWeatherAnimationDriver] = {}
+        # Cross-display weather animation driver (shares single renderer across ALL displays)
+        self._global_weather_animation_driver: Optional[SharedWeatherAnimationDriver] = None
 
         # Settings manager wiring for live updates (Spotify VIS etc.)
         self._settings_manager: Optional[SettingsManager] = None
@@ -2006,7 +2008,12 @@ class WidgetManager:
                     logger.debug("Failed to start %s: %s", attr_name, e)
 
         self._configure_shared_clock_tick()
-        self._configure_shared_weather_animation_drivers(screen_index)
+        # Configure cross-display weather animation driver (shares single renderer across ALL displays)
+        # This is more efficient than per-screen drivers when there's one weather widget per display
+        self._configure_global_weather_animation_driver()
+        # Fall back to per-screen driver if global driver not applicable (e.g., multiple widgets on same screen)
+        if self._global_weather_animation_driver is None:
+            self._configure_shared_weather_animation_drivers(screen_index)
         
         # CRITICAL: Raise widgets AFTER start() so fade coordination completes first
         # This prevents widgets appearing before compositor is ready
@@ -2227,9 +2234,83 @@ class WidgetManager:
 
     def _teardown_weather_animation_drivers(self) -> None:
         """Stop and dispose all shared weather animation drivers."""
+        # Stop global cross-display driver first
+        if self._global_weather_animation_driver is not None:
+            try:
+                self._global_weather_animation_driver.stop()
+                self._global_weather_animation_driver.deleteLater()
+            except Exception:
+                logger.debug("[WEATHER][SHARED_ANIM] Failed to stop global driver", exc_info=True)
+            self._global_weather_animation_driver = None
+        # Stop per-screen drivers
         for screen_index in list(self._weather_animation_drivers.keys()):
             self._stop_weather_driver(screen_index)
         self._weather_animation_drivers.clear()
+    
+    def _configure_global_weather_animation_driver(self) -> None:
+        """Configure a single shared weather animation driver across ALL displays.
+        
+        This prevents duplicate QSvgRenderer animation drivers when weather widgets
+        exist on multiple displays. One master widget drives all others.
+        """
+        # Stop existing global driver
+        if self._global_weather_animation_driver is not None:
+            try:
+                self._global_weather_animation_driver.stop()
+                self._global_weather_animation_driver.deleteLater()
+            except Exception:
+                pass
+            self._global_weather_animation_driver = None
+        
+        # Collect all weather widgets across all displays
+        all_weather_widgets: List[WeatherWidget] = []
+        for widgets in self._weather_widgets_by_display.values():
+            for widget in widgets:
+                if widget is not None:
+                    try:
+                        if widget.shared_animation_driver_enabled():
+                            all_weather_widgets.append(widget)
+                    except Exception:
+                        pass
+        
+        if len(all_weather_widgets) < 2:
+            logger.debug(
+                "[WEATHER][SHARED_ANIM] Skipping global driver (widgets=%s)",
+                len(all_weather_widgets),
+            )
+            return
+        
+        # Reset sink mode on all widgets
+        for widget in all_weather_widgets:
+            try:
+                widget.disable_shared_animation_sink_mode()
+            except Exception:
+                pass
+        
+        # First widget is master, rest are sinks
+        master = all_weather_widgets[0]
+        sinks = all_weather_widgets[1:]
+        
+        driver = SharedWeatherAnimationDriver(
+            master_widget=master,
+            sink_widgets=sinks,
+            thread_manager=self._thread_manager,
+            stagger_ms=3,
+            parent=self._parent,
+        )
+        
+        if not driver.has_links():
+            driver.stop()
+            driver.deleteLater()
+            logger.debug("[WEATHER][SHARED_ANIM] Global driver aborted (no links)")
+            return
+        
+        self._global_weather_animation_driver = driver
+        logger.info(
+            "[WEATHER][SHARED_ANIM] Global cross-display driver active: master=%s sinks=%s",
+            getattr(master, "_overlay_name", "weather"),
+            len(sinks),
+        )
 
     def create_spotify_volume_widget(
         self,

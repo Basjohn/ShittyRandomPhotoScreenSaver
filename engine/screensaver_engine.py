@@ -64,6 +64,10 @@ from utils.image_prefetcher import ImagePrefetcher
 
 logger = get_logger(__name__)
 
+# Minimum time (ms) between transition completions before allowing the next transition.
+# This prevents back-to-back transitions from overloading the GPU/compositor.
+TRANSITION_GUARD_MS = 1000
+
 
 class EngineState(Enum):
     """Engine lifecycle states.
@@ -199,6 +203,11 @@ class ScreensaverEngine(QObject):
         
         # Phase 0.5: Store subscription IDs for cleanup
         self._subscription_ids: List[str] = []
+        
+        # Transition guard: enforce minimum time between transitions to avoid GPU overload
+        self._last_transition_complete_time: float = 0.0  # time.time() when last transition finished
+        self._transition_guard_pending: bool = False  # True if a transition is deferred
+        self._transition_guard_timer: Optional[QTimer] = None  # Timer for deferred transition
         
         logger.info("ScreensaverEngine created")
     
@@ -1653,6 +1662,9 @@ class ScreensaverEngine(QObject):
             self.display_manager.cycle_transition_requested.connect(self._on_cycle_transition)
             self.display_manager.settings_requested.connect(self._on_settings_requested)
             
+            # Connect transition_finished signal for guard timing
+            self.display_manager.transition_finished.connect(self._on_visual_transition_finished)
+            
             # Initialize displays
             display_count = self.display_manager.initialize_displays()
             logger.info(f"Display initialized with {display_count} screens")
@@ -1661,6 +1673,13 @@ class ScreensaverEngine(QObject):
             if self._process_supervisor and display_count > 0:
                 self.display_manager.set_process_supervisor(self._process_supervisor)
                 logger.debug("ProcessSupervisor wired to display manager")
+            
+            # Configure cross-display weather animation driver (shares single renderer)
+            if display_count > 1:
+                try:
+                    self.display_manager.configure_cross_display_weather_driver()
+                except Exception as e:
+                    logger.debug("[ENGINE] Cross-display weather driver setup failed: %s", e)
             
             # Set flag on success
             if display_count > 0:
@@ -2119,6 +2138,16 @@ class ScreensaverEngine(QObject):
             self.folder_sources.clear()
             self.rss_sources.clear()
             
+            # Cleanup transition guard timer
+            if self._transition_guard_timer is not None:
+                try:
+                    self._transition_guard_timer.stop()
+                    self._transition_guard_timer.deleteLater()
+                except Exception:
+                    pass
+                self._transition_guard_timer = None
+            self._transition_guard_pending = False
+            
             # Cleanup global shader program singletons
             try:
                 from rendering.gl_compositor import cleanup_global_shader_programs
@@ -2133,7 +2162,51 @@ class ScreensaverEngine(QObject):
             logger.exception(f"Cleanup failed: {e}")
     
     def _show_next_image(self) -> bool:
-        """Load and display next image from queue."""
+        """Load and display next image from queue.
+        
+        Includes a mandatory guard period (TRANSITION_GUARD_MS) between transitions
+        to prevent GPU/compositor overload. If called within the guard period,
+        the transition is deferred (not discarded).
+        
+        Guard triggers when:
+        1. A transition is already in progress (_loading_in_progress), OR
+        2. Less than TRANSITION_GUARD_MS since last transition completed
+        """
+        # Guard check 1: If a transition is already in progress, defer this request
+        with self._loading_lock:
+            if self._loading_in_progress:
+                if not self._transition_guard_pending:
+                    self._transition_guard_pending = True
+                    logger.debug("[TRANSITION_GUARD] Deferring transition (one already in progress)")
+                    # Schedule deferred transition after guard period
+                    if self.thread_manager:
+                        self.thread_manager.single_shot_ui(TRANSITION_GUARD_MS + 50, self._on_deferred_transition)
+                    else:
+                        if self._transition_guard_timer is None:
+                            self._transition_guard_timer = QTimer()
+                            self._transition_guard_timer.setSingleShot(True)
+                            self._transition_guard_timer.timeout.connect(self._on_deferred_transition)
+                        self._transition_guard_timer.start(TRANSITION_GUARD_MS + 50)
+                return False  # Deferred, not failed
+        
+        # Guard check 2: Ensure minimum time between transition completions
+        now = time.time()
+        elapsed_ms = (now - self._last_transition_complete_time) * 1000
+        if self._last_transition_complete_time > 0 and elapsed_ms < TRANSITION_GUARD_MS:
+            remaining_ms = int(TRANSITION_GUARD_MS - elapsed_ms)
+            if not self._transition_guard_pending:
+                self._transition_guard_pending = True
+                logger.debug("[TRANSITION_GUARD] Deferring transition for %dms (guard period)", remaining_ms)
+                if self.thread_manager:
+                    self.thread_manager.single_shot_ui(remaining_ms + 50, self._on_deferred_transition)
+                else:
+                    if self._transition_guard_timer is None:
+                        self._transition_guard_timer = QTimer()
+                        self._transition_guard_timer.setSingleShot(True)
+                        self._transition_guard_timer.timeout.connect(self._on_deferred_transition)
+                    self._transition_guard_timer.start(remaining_ms + 50)
+            return False  # Deferred, not failed
+        
         # If random transitions are enabled, prepare a new non-repeating choice for this change
         try:
             self._prepare_random_transition_if_needed()
@@ -2143,10 +2216,11 @@ class ScreensaverEngine(QObject):
             logger.warning("[FALLBACK] Queue or display not initialized")
             return False
         
-        # FIX: Atomic check-and-set for loading flag to prevent race condition
+        # Atomic check-and-set for loading flag to prevent race condition
         with self._loading_lock:
             if self._loading_in_progress:
-                logger.debug("Image load already in progress, skipping")
+                # This shouldn't happen given guard check 1, but handle it gracefully
+                logger.debug("[TRANSITION_GUARD] Race condition caught, skipping")
                 return False
             # Set flag inside lock to make check-and-set atomic
             self._loading_in_progress = True
@@ -2675,6 +2749,7 @@ class ScreensaverEngine(QObject):
                 
                 self._schedule_prefetch()
                 self._loading_in_progress = False
+                # NOTE: Guard timestamp is updated by _on_visual_transition_finished signal
                 
             except Exception as e:
                 logger.exception(f"[ASYNC] UI callback failed: {e}")
@@ -2769,12 +2844,29 @@ class ScreensaverEngine(QObject):
             self._schedule_prefetch()
             
             self._loading_in_progress = False
+            # NOTE: Guard timestamp is updated by _on_visual_transition_finished signal
             return True
         
         except Exception as e:
             logger.exception(f"Load and display failed: {e}")
             self._loading_in_progress = False
             return False
+    
+    def _on_deferred_transition(self) -> None:
+        """Handle deferred transition after guard period expires."""
+        self._transition_guard_pending = False
+        logger.debug("[TRANSITION_GUARD] Guard period expired, executing deferred transition")
+        self._show_next_image()
+    
+    def _on_visual_transition_finished(self) -> None:
+        """Handle visual transition completion - updates guard timestamp.
+        
+        Called when a DisplayWidget's visual transition animation completes,
+        NOT when the image is loaded. This ensures the 1000ms guard starts
+        from the END of the visual transition effect.
+        """
+        self._last_transition_complete_time = time.time()
+        logger.debug("[TRANSITION_GUARD] Visual transition finished, guard timer reset")
     
     def _on_rotation_timer(self) -> None:
         """Handle rotation timer timeout."""

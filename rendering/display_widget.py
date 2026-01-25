@@ -179,6 +179,7 @@ class DisplayWidget(QWidget):
     cycle_transition_requested = Signal()  # C key - cycle transition mode
     settings_requested = Signal()  # S key - open settings
     dimming_changed = Signal(bool, float)  # enabled, opacity - sync dimming across displays
+    transition_finished = Signal()  # Emitted when visual transition completes
     
     # Phase 5: Class-level state has been migrated to MultiMonitorCoordinator.
     # The following are kept as deprecated fallbacks for any external code that
@@ -1589,6 +1590,12 @@ class DisplayWidget(QWidget):
         self.current_image_path = image_path
         self.image_displayed.emit(image_path)
         self._pending_transition_finish_args = None
+        
+        # Emit transition_finished signal for guard tracking
+        try:
+            self.transition_finished.emit()
+        except Exception:
+            pass
 
     def _warm_transition_if_needed(
         self,

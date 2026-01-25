@@ -40,10 +40,12 @@ class GLCompositorBlindsTransition(BaseTransition):
         duration_ms: int = 1800,
         slat_rows: int = 5,
         slat_cols: int = 7,
+        feather: int = 2,
     ) -> None:
         super().__init__(duration_ms)
         self._rows = slat_rows
         self._cols = slat_cols
+        self._feather = max(0, min(10, feather))  # Clamp 0-10
         self._widget: Optional[QWidget] = None
         self._compositor: Optional[GLCompositorWidget] = None
         self._slats: List[_CompositorBlindSlat] = []
@@ -91,14 +93,14 @@ class GLCompositorBlindsTransition(BaseTransition):
             comp.setGeometry(0, 0, widget.width(), widget.height())
             comp.show()
             comp.raise_()
-        except Exception as e:
+        except Exception:
             logger.debug("[GL COMPOSITOR] Failed to configure compositor geometry/visibility (blinds)", exc_info=True)
 
         try:
             warm = getattr(comp, "warm_shader_textures", None)
             if callable(warm):
                 warm(old_pixmap, new_pixmap)
-        except Exception as e:
+        except Exception:
             logger.debug("[GL COMPOSITOR] Failed to warm blinds textures", exc_info=True)
 
         # Build slat grid matching the widget geometry.
@@ -148,7 +150,7 @@ class GLCompositorBlindsTransition(BaseTransition):
             try:
                 # Snap to final frame when cancelling mid-way to avoid pops.
                 self._compositor.cancel_current_transition(snap_to_new=True)
-            except Exception as e:
+            except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to cancel current blinds transition", exc_info=True)
 
         self._animation_id = None
@@ -164,7 +166,7 @@ class GLCompositorBlindsTransition(BaseTransition):
                 # Ensure compositor is no longer animating; do not force snap
                 # here, as DisplayWidget will already have updated its base.
                 self._compositor.cancel_current_transition(snap_to_new=True)
-            except Exception as e:
+            except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to cleanup blinds compositor", exc_info=True)
             self._compositor = None
 
@@ -221,7 +223,7 @@ class GLCompositorBlindsTransition(BaseTransition):
 
         try:
             self._compositor.set_blinds_region(region)
-        except Exception as e:
+        except Exception:
             logger.debug("[GL COMPOSITOR] Failed to update blinds region", exc_info=True)
 
         self._emit_progress(p)

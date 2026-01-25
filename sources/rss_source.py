@@ -576,6 +576,14 @@ class RSSSource(ImageProvider):
         # Use centralized rate limiter for Reddit feeds. If Reddit budget is exhausted,
         # skip the request entirely so we can continue processing non-Reddit sources
         # instead of blocking the UI/event loop.
+        #
+        # PHASE 2.5.1 NOTE: Reddit's anonymous API limit is 10 req/min. We enforce 8 req/min
+        # with 8s intervals for safety margin. Consequences of exceeding quota:
+        # - Feed health degrades (exponential backoff kicks in)
+        # - 2-minute effective cooldown before retry
+        # - Cascading failures if multiple feeds try simultaneously at startup
+        # The pre-flight check via wait_if_needed() prevents quota violations by deferring
+        # rather than blocking, allowing non-Reddit sources to continue processing.
         is_reddit = 'reddit.com' in request_url.lower()
         if is_reddit:
             try:

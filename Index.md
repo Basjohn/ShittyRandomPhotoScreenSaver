@@ -145,6 +145,43 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - `DisplayManager`/`TransitionController` wait for all displays to report ready via a lock-free SPSC queue before starting synchronized transitions, preventing large start spikes.
 - _NOT YET IMPLEMENTED_: surface `transitions.desync_guard_ms` + UI controls so operators can tune/disable stagger windows explicitly; document the guard in Spec once the setting lands.
 
+### Transition Guard (Jan 2026)
+- **Mandatory 1000ms guard** between transitions enforced in `engine/screensaver_engine.py`
+- `TRANSITION_GUARD_MS = 1000` constant defines minimum time between transition completions
+- `_show_next_image()` checks two conditions before allowing new transition:
+  1. If `_loading_in_progress` is True → defer (transition already running)
+  2. If less than 1000ms since `_last_transition_complete_time` → defer
+- If guard triggered, transition is **deferred** (not discarded) via `_on_deferred_transition()` callback
+- **Timestamp source:** `DisplayWidget.transition_finished` signal → `DisplayManager.transition_finished` → `ScreensaverEngine._on_visual_transition_finished()`
+- Timestamp updated when **visual transition animation ends** (not when image loads), ensuring 1000ms guard starts from END of visual effect
+- Prevents GPU/compositor overload from rapid X-key presses, short rotation intervals, or programmatic bursts
+
+### Cross-Display Weather Animation Driver (Jan 2026)
+- Configured in `DisplayManager.configure_cross_display_weather_driver()` after all displays created
+- Collects weather widgets from ALL `DisplayWidget` instances and shares single `QSvgRenderer`
+- Uses `SharedWeatherAnimationDriver` with master/sink pattern: master widget drives animation, sinks relay with 3ms stagger
+- Prevents duplicate animation drivers when weather widgets exist on multiple displays
+- Log marker: `[WEATHER][CROSS_DISPLAY] Shared driver active`
+
+### Media Widget Multi-Display Sync (Jan 2026)
+- Class-level shared media info cache in `widgets/media_widget.py` prevents desync across displays
+- `_shared_last_valid_info` / `_shared_last_valid_info_ts` cache most recent valid track info (5s TTL)
+- `_get_shared_valid_info()` checks cache and other widget instances before allowing hide
+- Fixes issue where one media widget hides due to GSMTC timing while another has valid data
+- Log marker: `[MEDIA_WIDGET] Using shared info from another display`
+
+### Image Cache Slider (Jan 2026 - Phase 4.1)
+- `cache.max_items` default raised from 24 to 30
+- UI slider in Display tab → Performance group: "Image Cache Size" (30-100 images)
+- Setting persisted via SettingsManager, loaded/saved in `ui/tabs/display_tab.py`
+- Affects `core/settings/models.py` → `CacheSettings.max_items`
+
+### Blinds Feather Control (Jan 2026 - Phase 4.1)
+- UI slider (0-10px) in Transitions tab → Blinds Settings group
+- Setting flows: `transitions_tab.py` → `transition_factory.py` → `GLCompositorBlindsTransition`
+- `feather` parameter controls edge softness of slat reveals (0 = sharp, 10 = soft)
+- Stored in `transitions.blinds.feather` setting
+
 ## Core Managers
 - core/threading/manager.py
   - ThreadManager, ThreadPoolType, TaskPriority

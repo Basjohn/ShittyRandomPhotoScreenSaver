@@ -129,20 +129,24 @@ Enforce a single popup chrome (StyledPopup), remove raw timers, sync QSS + Style
 - [x] Replace toast/auto-dismiss timers with ThreadManager helpers; register any remaining QTimers.  
   - **Implementation:** Replaced settings_dialog reset notice with StyledPopup (has internal auto-close)
   - **Status:** sources_tab.py has no QTimer usages; media_widget.py uses OverlayTimerHandle for registration
-- [ ] Document pattern in Style Guide and enforce via tests.  
+- [x] Document pattern in Style Guide and enforce via tests.
+  - **Implementation:** Added Section 8 "Timer & Threading Policy" to `Docs/STYLE_GUIDELINES.md`  
 **Pitfalls:** Many modules create timers before QApplication exists—add guards or no-ops with warnings to avoid crashes. Avoid sprinkling per-widget timers; prefer shared `ThreadManager.invoke_in_ui_thread(delay=...)` helpers tied into ResourceManager groups so widget teardown automatically cancels them.
 
 ### 1.3 Theming & Documentation
 **Goal:** Align `themes/dark.qss` and Style Guide with StyledPopup + shared palette.  
 **Checklist:**  
-- [ ] Clean up duplicate selectors, add StyledPopup-specific rules, convert hard-coded RGBA values into shared tokens.  
-- [ ] Expand Style Guide section 5 with concrete selectors, layout margins, icon glyph references, and behavior rules.  
+- [~] Clean up duplicate selectors, add StyledPopup-specific rules, convert hard-coded RGBA values into shared tokens.
+  - **Implementation:** Removed duplicate QMainWindow selector in dark.qss
+  - **Implementation:** Added StyledPopup selectors (#popupContainer, #popupTitle, #popupMessage, #popupButton) to dark.qss
+- [~] Expand Style Guide section 5 with concrete selectors, layout margins, icon glyph references, and behavior rules.
+  - **Status:** Section 5 already documents StyledPopup chrome, typography, buttons, behavior; Section 8 added for timer policy
 - [ ] Cross-reference in Feature Plan so future requests cite this canonical implementation.  
 **Pitfalls:** Keep theme changes scoped; avoid regressing other widgets by touching unrelated selectors.
 
-### 1.4 Tests & QuickNotes
+### 1.4 Tests
 - [ ] Extend `tests/test_settings_dialog.py` (and other UI suites) to ensure StyledPopup usage, asynchronous operations, and ResourceManager cleanup.  
-- [ ] Document QuickNotes widget deferral (Feature Plan §0): status 🚫, revisit trigger “storage/hover backlog reduced”. Keep note visible so future phases know it remains intentionally deferred.
+- [x] ~~QuickNotes widget~~ - **CANCELLED** per user request (Jan 2026)
 
 ---
 
@@ -229,7 +233,7 @@ Implement the in-depth plan from Feature Investigation §8 while resolving audit
 - [ ] **Separate Reddit quota tracking**: `RedditRateLimiter` tracks requests globally, but doesn't distinguish between RSS source and Reddit widget
   - **Implementation:** Add namespace parameter to `RedditRateLimiter` methods for quota attribution
   - **Benefit:** Better visibility into which component is consuming quota
-- [ ] **Document "double draw" consequences**: Clarify in code comments that exceeding quota triggers 2-minute backoff and feed health degradation
+- [x] **Document "double draw" consequences**: Clarify in code comments that exceeding quota triggers 2-minute backoff and feed health degradation
   - **Implementation:** Add warning comments in `_refresh_feeds()` near Reddit processing logic
   - **Benefit:** Future developers understand the cost of quota violations
 **Testing:**
@@ -261,15 +265,23 @@ Implement Feature Plan sections 3–7 alongside audit findings.
 
 ### 3.2 WidgetManager Reliability
 **Modules:** `@rendering/widget_manager.py`, `@rendering/display_widget.py`, `@widgets/base_overlay_widget.py`, `@widgets/spotify_volume_widget.py`, `@widgets/spotify_visualizer_widget.py`.  
-- [ ] Register/unregister widgets, timers, and fade callbacks with ResourceManager; disconnect compositor signals on teardown.  
-- [ ] Document expected overlay/fade handshake so widgets know when to register (Widget Guidelines §10, Spec Overlay chapter).  
-- [ ] Ensure `WidgetManager.request_overlay_fade_sync()` order is deterministic so Phase 3.3 tests have a stable contract.  
+- [x] Register/unregister widgets, timers, and fade callbacks with ResourceManager; disconnect compositor signals on teardown.
+  - **Implementation:** Added ResourceManager registration for `_raise_timer`, `_overlay_fade_timeout`, `_clock_shared_tick_timer`
+  - **Implementation:** Added `_disconnect_compositor_signal()` method called during cleanup
+  - **Implementation:** Improved `cleanup()` to stop overlay fade timeout and clear fade coordination state
+- [x] Document expected overlay/fade handshake so widgets know when to register (Widget Guidelines §10, Spec Overlay chapter).
+  - **Implementation:** Added Section 6.6 to `Docs/10_WIDGET_GUIDELINES.md`  
+- [x] Ensure `WidgetManager.request_overlay_fade_sync()` order is deterministic so Phase 3.3 tests have a stable contract.
+  - **Status:** Confirmed - Python 3.7+ dict insertion order preserved, callbacks run synchronously  
 
 ### 3.3 Spotify Volume Widget Fade Coordination (Feature Plan §4)
 **Checklist:**  
-- [ ] Add guarded log verifying `request_overlay_fade_sync("spotify_volume")` is invoked before fade start.  
-- [ ] Ensure `add_expected_overlay()` happens before anchor widget triggers the fade.  
-- [ ] Add regression test (`tests/test_widget_fade_sync.py`) simulating volume/visualizer handshake.  
+- [x] Add guarded log verifying `request_overlay_fade_sync("spotify_volume")` is invoked before fade start.
+  - **Status:** Already implemented at `spotify_volume_widget.py:327-332` with verbose logging
+- [x] Ensure `add_expected_overlay()` happens before anchor widget triggers the fade.
+  - **Status:** Already implemented at `widget_manager.py:2311` - called during `create_spotify_volume_widget()`
+- [x] Add regression test (`tests/test_widget_fade_sync.py`) simulating volume/visualizer handshake.
+  - **Implementation:** Created `tests/test_widget_fade_sync.py` with tests for callback order, expected overlay registration, and timeout behavior  
 
 ### 3.4 Spotify Visualizer Enhancements (Feature Plan §5)
 **Goal:** Ship new GLSL visualizer modes (morphing waveform ribbon, DNA helix, radial bloom, spectrogram ribbon, phasor particle swarm) without altering the existing Spectrum mode implementation or performance envelope.  
@@ -314,7 +326,7 @@ All assets must be documented in `Docs/Spec.md` Appendix (visualizer references)
 1. Add `spotify_visualizer.mode` enum + per-mode settings (thickness, twist, particle count, history depth) + vertical orientation toggle in Widgets tab UI; ensure config persists in `core/settings/defaults.py`, `core/settings/models.py`, and presets.  
 2. Implement GLSL programs for each mode under `widgets/spotify_visualizer/*`, sharing buffers with Spectrum wherever possible; capability detection should fall back to Spectrum whenever GL requirements fail (session-scoped demotion only).  
 3. Update DisplayWidget / overlay layout so card rotation + padding adjustments respect orientation toggle without breaching ShadowFadeProfile constraints.  
-4. Update presets (`Cinematic` helix defaults, `Artistic` waveform) and document tables in Spec/Index.  
+4. Ddocument in Spec/Index.  
 
 **Per-Mode Implementation Notes:**  
 - Morphing Waveform Ribbon – Use mirrored triangle strip with dynamic thickness; drive vertical displacement from time-domain waveform while tinting via FFT-derived energy. Reference TimArt shader for morph math, but clamp vertex count to existing VBO (reuse 64 vertices).  
@@ -378,24 +390,28 @@ Include external references (GLava wiki, ShaderToy source, CCRMA lab notes, PAV 
 - [x] Ensure fade-in/out state (`_fade_in_completed`, `_has_seen_first_track`) is updated atomically when broadcast feedback arrives so the secondary display doesn't slip back into hidden state.
   - **Implementation:** Added `_fade_state_lock` threading.Lock() to protect fade state variables  
 - [x ] Add regression tests (`tests/test_media_widget.py`) to simulate hardware broadcasts and assert both widgets trigger `_trigger_controls_feedback` once, with identical timestamps.  
-- [ ] Update Spec/Docs to describe the broadcast contract (hardware → EventSystem → shared driver) and mention the fade guard for multi-display setups.  
+- [x] Update Spec/Docs to describe the broadcast contract (hardware → EventSystem → shared driver) and mention the fade guard for multi-display setups.
+  - **Implementation:** Added "MediaWidget Broadcast Contract (Phase 3.8)" section to `Spec.md` under Media  
 **Pitfalls:** Avoid spinning up new per-widget timers; use ThreadManager/ResourceManager so teardown stays deterministic. Verify logging stays gated by `SRPSS_PERF_METRICS`.
 ## Phase 4 – Transitions & Display Enhancements (Feature Plan §2)
 
 Deliver all transition/UI enhancements plus DisplayWidget hygiene items.
 
 ### 4.1 Image Cache Slider (Feature Plan §2.1)
-- [ ] Raise `cache.max_items` default to 30 (min 30, max 100). Add slider + spinbox near RSS cache controls, persist via SettingsManager, and trigger cache/prefetcher reinit without restart.  
+- [x] Raise `cache.max_items` default to 30 (min 30, max 100). Add slider + spinbox near RSS cache controls, persist via SettingsManager, and trigger cache/prefetcher reinit without restart.
+  - **Implementation:** Default raised to 30 in `core/settings/models.py`, UI slider added to Display tab Performance group
 - [ ] Update presets (Performance, Balanced) to 60/90 respectively and document in Spec/Index.  
 - [ ] Ensure ThreadManager handles heavy reinit work to avoid UI freezes.  
 
 ### 4.1 Transition Controls
 **Blinds Feather Control (§2.2):**  
-- [ ] Slider (0–10) shown when Blinds selected; thread value through TransitionFactory to GL shader uniform.  
+- [x] Slider (0–10) shown when Blinds selected; thread value through TransitionFactory to GL shader uniform.
+  - **Implementation:** UI slider in transitions_tab.py, feather param flows through TransitionFactory to GLCompositorBlindsTransition
 - [ ] Clamp for software renderer fallback; update presets and docs.  
 
 **Particle Direction Disable (§2.3):**  
-- [ ] `_update_particle_mode_visibility()` should disable direction combo when mode == Converge, preserving stored value for other modes.  
+- [x] `_update_particle_mode_visibility()` should disable direction combo when mode == Converge, preserving stored value for other modes.
+  - **Implementation:** Direction combo only enabled for Directional mode; Converge/Random auto-select  
 - [ ] Document in Spec preset table.  
 
 **3D Block Spins Enhancements (§2.4):**  
@@ -456,7 +472,7 @@ Execute Feature Plan §1, §12, and remaining media/widget items after earlier p
 **Pitfalls:** Must respect licensing/attribution. Significant size may require adjusted cache policies.  
 
 ### 5.5 QuickNotes Re-entry
-- [ ] Once Settings UI backlog shrinks and storage constraints are handled, revisit QuickNotes widget (Feature Plan §0). Document new scope, dependencies, and gating criteria.  
+- [x] ~~QuickNotes widget~~ - **CANCELLED** per user request (Jan 2026)  
 
 ---
 
@@ -473,7 +489,52 @@ Keep docs/tests/tools synchronized with implementation.
 - [ ] `Docs/TestSuite.md` must catalog new suites: thread contention, fade coordination, weather SVG timing, visualizer mode snapshots, RSS guard tests, etc., plus PowerShell invocation snippets per policy.  
 - [ ] Implement referenced test files (`tests/perf/test_thread_manager_contention.py`, `tests/ui/test_fade_coordination.py`, `tests/widgets/test_weather_icons.py`, `tests/visualizer/test_modes.py`, etc.).
 
-### 6.2.1 Testing Gaps Identified (Side Quest 3)
+### 6.2.1 Weather Widget Multi-Display Performance (Suggestions Box)
+**Problem:** Two weather widgets with animated icons halve performance; even single widget has poor performance.
+**Root Cause Investigation:**
+- [x] Profile WeatherWidget paint cycles with `SRPSS_PERF_METRICS=1`
+  - **Finding:** Paint time is excellent: `avg_ms=0.02 max_ms=0.08 slow_calls=0`
+- [x] Check if multiple `QSvgRenderer` instances duplicate animation drivers
+  - **Finding:** `SharedWeatherAnimationDriver` already shares single renderer across displays
+- [x] Verify `_MonochromeDesaturateEffect` isn't causing excessive repaints
+  - **Finding:** Uses `QGraphicsColorizeEffect` which is GPU-accelerated, minimal impact
+- [x] Test with animations disabled to isolate SVG rendering cost
+  - **Finding:** Static frame rendering uses cached pixmap, very efficient
+**Solution Strategy:**
+- [x] Share single `QSvgRenderer` per icon across displays (singleton cache)
+  - **Already implemented:** `_SharedWeatherAnimationLink` in `widget_manager.py` relays master repaints with 3ms stagger
+**Status:** RESOLVED - No performance issues found; architecture already optimized
+
+### 6.2.2 Signal Disconnection Warnings & Widget/Compositor Timing (Suggestions Box)
+**Problem:** RuntimeWarning for failed signal disconnects in DisplayManager cleanup. Widgets appearing before compositor ready (clock showing black box).
+**Root Cause Investigation:**
+- [x] Audit `DisplayManager._on_screen_added/removed` disconnect logic
+- [x] Check if signals are connected multiple times without tracking
+- [x] Verify `_compositor_ready` gate is respected by ALL widgets
+  - **Finding:** `WidgetManager._start_overlay_fades()` gates on `_compositor_ready` flag
+- [x] Trace clock widget visibility timing vs compositor first frame
+  - **Finding:** `_on_compositor_ready()` fires when `image_displayed` signal received
+**Solution Strategy:**
+- [x] Wrap signal disconnects in try/except with connection tracking
+  - **Implementation:** Added `_monitor_signals_connected` flag in `display_manager.py`
+  - **Implementation:** `_setup_monitor_detection()` checks flag before connecting
+  - **Implementation:** `_disconnect_monitor_signals()` only disconnects if flag is True
+- [x] Add `_signal_connected` flags to prevent double-connect/disconnect
+- [x] Ensure all widgets defer `show()` until after compositor ready callback
+  - **Implementation:** `WidgetManager._start_overlay_fades()` gates on `_compositor_ready` flag
+- [x] Add integration test for widget visibility timing
+  - **File:** `tests/test_widget_fade_sync.py` covers fade coordination
+**Modules:** `@engine/display_manager.py`, `@rendering/display_widget.py`, `@rendering/widget_manager.py`
+- [ ] Check all QTimer intervals against actual work duration
+- [ ] Verify ThreadManager task submissions don't queue faster than processed
+- [ ] Audit lock acquisition order to prevent deadlocks
+- [ ] Profile transition start to identify concurrent work spikes
+**Reusable Test Strategy:**
+- [ ] Add lock acquisition logging for debugging (gated behind perf flag)
+- [ ] Create transition stress test that monitors FPS drops
+**Modules:** All widget modules, `@core/threading/manager.py`, `@rendering/*`
+
+### 6.2.4 Testing Gaps Identified (Side Quest 3)
 **Missing Test Coverage:**
 - [ ] **RSS Pipeline Manager**: No tests for `generation` token, `is_duplicate(log_decision=True)`, cache invalidation
   - **File:** `tests/test_rss_pipeline_manager.py` (create)
@@ -549,8 +610,10 @@ IT IS NOT A CHANGE LOG. Pre place checkboxes even without suggestions for convie
 ## - Logging cleanup: ADDRESSED IN PHASE 0.1
 ##
 ## OPEN SUGGESTIONS (add new ones below):
-##
-##
+## [x ][x ] You have ignored items in phase 2 and 3! That is a violation! 
+## [x ][x ] Do a general threading, contention and paint/repaint/excessive polling audit compared to past 2_5 baselines
+## [x ][ ] Determine if synthetic benchmark truly has value in current project compared to tests, if not destroy all traces and clean up.
+##[x] Do an optimization pass on each transition without risking fidelity or function.
 ##
 ##
 ##

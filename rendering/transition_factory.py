@@ -346,7 +346,7 @@ class TransitionFactory:
             return self._create_blockspin(settings, duration_ms, easing_str, use_compositor)
         
         if transition_type == 'Blinds':
-            return self._create_blinds(duration_ms, use_compositor)
+            return self._create_blinds(settings, duration_ms, use_compositor)
         
         if transition_type == 'Crumble':
             return self._create_crumble(settings, duration_ms, use_compositor)
@@ -435,9 +435,15 @@ class TransitionFactory:
             return GLCompositorBlockSpinTransition(duration_ms, easing_str, direction)
         return CrossfadeTransition(duration_ms, easing_str)
     
-    def _create_blinds(self, duration_ms: int, use_compositor: bool) -> BaseTransition:
+    def _create_blinds(self, settings: dict, duration_ms: int, use_compositor: bool) -> BaseTransition:
         if use_compositor:
-            return GLCompositorBlindsTransition(duration_ms)
+            # Get canonical defaults from defaults.py
+            from core.settings.defaults import get_default_settings
+            canonical = get_default_settings().get('transitions', {}).get('blinds', {})
+            
+            blinds_settings = settings.get('blinds', {}) if isinstance(settings.get('blinds', {}), dict) else {}
+            feather = self._safe_int(blinds_settings.get('feather', canonical.get('feather', 2)), 2)
+            return GLCompositorBlindsTransition(duration_ms, feather=feather)
         return CrossfadeTransition(duration_ms)
     
     def _create_crumble(self, settings: dict, duration_ms: int, use_compositor: bool) -> BaseTransition:

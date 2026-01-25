@@ -32,10 +32,30 @@ Single source of truth for architecture and key decisions.
 - **UI Thread Discipline**: Any new diagnostics or telemetry (tray icons, overlays, animations) must avoid blocking the UI thread. All polling belongs on ThreadManager pools with `invoke_in_ui_thread()` postings; even 100 ms sync calls (e.g. `psutil.cpu_percent(0.1)`) will surface as 100–160 ms dt spikes in transitions.
 
 ### Transition Desync Policy
-- `GLCompositorWidget` assigns each display a random desync delay (0–500 ms) via `_apply_desync_strategy()`, then compensates transition duration so every display finishes at the same visual progress even though GPU uploads are staggered. This prevents multi-display spikes and reduces the chance that CPU/GPU work overlaps precisely with transition start @rendering/gl_compositor.py#174-412.
+- `GLCompositorWidget` assigns each display a random desync delay (0–500 ms) via `_apply_desync_strategy()`, then compensates transition duration so every display finishes at the same visual progress even though GPU uploads are staggered. This prevents multi-display spikes and reduces the chance that CPU/GPU work overlaps precisely with transition start @rendering/gl_compositor.py#174-412.
 - `DisplayManager`/`TransitionController` stage a lock-free SPSC queue handshake before synchronized transitions begin so all displays are ready before animations run, further reducing desync risk @engine/display_manager.py#448-665.
 - Widgets must also honor the **Desync-safe scheduling** guidance in `Docs/10_WIDGET_GUIDELINES.md` §11 so overlay timers avoid heavy work during `transition.start()`.
 - _NOT YET IMPLEMENTED_: User-facing `transitions.desync_guard_ms` + UI controls to tune/disable stagger windows. Once implemented, document the setting here and in Index.md, and gate widget timers via this guard.
+
+### Transition Guard (Jan 2026)
+- **Mandatory 1000ms guard** between transitions enforced in `engine/screensaver_engine.py` via `TRANSITION_GUARD_MS` constant.
+- `_show_next_image()` checks two conditions before allowing new transition:
+  1. If `_loading_in_progress` is True → defer (another transition already running)
+  2. If less than 1000ms since `_last_transition_complete_time` → defer
+- If guard triggered, transition is **deferred** (not discarded) via `_on_deferred_transition()` callback scheduled through ThreadManager.
+- **Timestamp source:** `DisplayWidget.transition_finished` signal chains through `DisplayManager` to `ScreensaverEngine._on_visual_transition_finished()`.
+- Timestamp updated when **visual transition animation ends** (not when image loads), ensuring 1000ms guard starts from END of visual effect (e.g., after 7200ms Ripple animation completes).
+- Prevents GPU/compositor overload from rapid X-key presses, short rotation intervals, or programmatic transition bursts.
+
+### Cross-Display Weather Animation Driver (Jan 2026)
+- `DisplayManager.configure_cross_display_weather_driver()` collects weather widgets from all displays and configures shared `QSvgRenderer`.
+- Master/sink pattern: first widget drives animation, others receive relayed updates with 3ms stagger to prevent frame-aligned GPU spikes.
+- Configured after `initialize_displays()` completes in `ScreensaverEngine._initialize_display()`.
+
+### Media Widget Multi-Display Sync (Jan 2026)
+- Class-level `_shared_last_valid_info` cache (5s TTL) prevents one widget hiding while another has valid media data.
+- `_get_shared_valid_info()` checks shared cache and other visible widget instances before proceeding with hide sequence.
+- Fixes GSMTC timing desync where one poll returns None while another has valid track info.
 
 ## Phase E Status: Context Menu / Effect Cache Corruption ✅ MITIGATED
 - Symptom: overlay shadow/opacity corruption artifacts triggered by Reddit link clicks and context menus.
@@ -91,6 +111,18 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
 
 - Windows media polling uses `core/media/media_controller.py`.
 - GSMTC/WinRT calls are treated as potentially blocking IO and are executed via `ThreadManager` with a hard timeout so they cannot stall the UI thread or test runner.
+
+### MediaWidget Broadcast Contract (Phase 3.8)
+
+Multi-display MediaWidget clones synchronize via EventSystem broadcasts:
+
+1. **Hardware trigger**: `WM_APPCOMMAND` (play/pause/next/prev) captured by `nativeEventFilter` in `core/engine/input_hooks.py`.
+2. **Event publication**: `EventType.MEDIA_CONTROL_TRIGGERED` published with shared event ID and timestamp.
+3. **Shared animation driver**: All MediaWidget instances subscribe to this event. A class-level timer (`_class_feedback_timer`) drives the highlight fade animation, ensuring all clones animate in lockstep.
+4. **Atomic fade state**: `_fade_state_lock` (threading.Lock) protects `_fade_in_completed` and `_has_seen_first_track` across broadcasts so secondary displays don't regress to hidden state.
+5. **Repaint coordination**: `_controls_feedback` timestamps are keyed by event ID; clones reuse timestamps from the shared cache rather than creating per-widget timers.
+
+**Performance logging**: Synchronized delivery can be verified via `[PERF][MEDIA_FEEDBACK]` logs (gated by `SRPSS_PERF_METRICS=1`).
 
 
 ## Image Sources
@@ -156,7 +188,7 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
 | Wipe               | Yes         | Yes                    | Yes (mask shader)           | GLSL Wipe path implemented; remaining work is primarily perf/QA and parity checks. |
 | Diffuse            | Yes         | Yes                    | Yes (Rectangle/Membrane)    | GLSL Diffuse implemented for Rectangle/Membrane; CPU Diffuse remains the authoritative fallback. |
 | Block Puzzle Flip  | Yes         | Yes                    | Yes (blockflip shader)      | GLSL BlockFlip shader implemented on GLCompositorWidget with a directional, centre-biased block wave that mirrors the CPU Block Puzzle Flip timing; the existing QPainter/compositor path is retained as the authoritative fallback and for non-GL sessions. |
-| Blinds             | No CPU-only | Yes (`GLBlindsTransition`) | Yes (blinds shader)        | GL-only compositor path with a shader-backed renderer; requires hardware acceleration. |
+| Blinds             | No CPU-only | Yes (`GLBlindsTransition`) | Yes (blinds shader)        | GL-only compositor path with a shader-backed renderer; requires hardware acceleration. UI slider `transitions.blinds.feather` (0-10px) controls edge softness. |
 | Peel               | No CPU-only | Yes (`GLCompositorPeelTransition`) | Yes (peel shader)         | Strip-based compositor effect where thin bands of the old image peel away over a static new base using per-strip timing offsets and individual strip fading; the existing QPainter implementation remains the authoritative fallback when shaders are unavailable. |
 | 3D Block Spins     | N/A         | Yes                    | Yes (card-flip shader)      | Implemented via shared card-flip shader; legacy grid Block Puzzle settings removed. |
 | Ripple (legacy: Rain Drops) | Yes  | Yes (fallback path)    | Yes (ripple shader)         | Primary path is GLSL ripple; remaining work focuses on dt_max smoothing on 4K/multi-monitor. |
@@ -229,7 +261,7 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
 - `display.same_image_all_monitors`: bool
 - Cache:
   - `cache.prefetch_ahead` (default 5)
-  - `cache.max_items` (default 24)
+  - `cache.max_items` (default 30, UI slider 30-100 in Display tab)
   - `cache.max_memory_mb` (default 1024)
   - `cache.max_concurrent` (default 2)
  - Sources:
@@ -268,7 +300,7 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
 - **Visualizer Alternative Modes**: Additional OpenGL modes (waveform morph, DNA helix, ribbon arcs) will extend `widgets/spotify_visualizer_widget.py` + GLSL overlays while leaving Spectrum untouched.
 - **Reddit Widget Enhancements**: Option to copy link instead of launching browser plus richer click handling in `widgets/reddit_widget.py`.
 - **Imgur Widget Investigation**: Pending research into APIs/rate limiting for an Imgur overlay; implementation deferred but captured in `Docs/Feature_Investigation_Plan.md`.
-- **Cache Slider Default Increase**: Plan calls for raising `cache.max_items` to 30; keep existing value (24) until implementation lands and this Spec is updated accordingly.
+- **Cache Slider Default Increase**: ✓ Implemented - `cache.max_items` default raised to 30, UI slider added to Display tab (30-100 range).
   - `widgets.reddit.*`: Reddit overlay widget configuration (enabled flag, per-monitor selection via `monitor` ('ALL'|1|2|3), 9 position options (Top/Middle/Bottom × Left/Center/Right), subreddit slug, item limit (4-, 10-, or 20-item layouts for ultra-wide/large displays), font family/size, margin, text colour, optional background frame and border with opacity, background opacity). The widget fetches Reddit's unauthenticated JSON listing endpoints with a fixed candidate pool (up to 25 posts), then sorts all valid entries by `created_utc` so the newest posts appear at the top; each layout simply changes how many rows are rendered from that sorted list. The widget hides itself on fetch/parse failure and only responds to clicks in Ctrl-held / hard-exit interaction modes. Initial visibility is coordinated through the shared overlay fade-in system so Reddit, Weather and Media fade together per display.
     - **Display cadence**: Reddit now mirrors Weather's refresh discipline with a 10-minute display gate, pending payload queue, and deadline-bound consumption so paints only occur when (a) startup/fade sync needs first content, (b) the 10-minute deadline elapses, or (c) the signature meaningfully changes and the deadline flush executes. Cached startup posts call `_request_display_refresh()` to preserve fade sync, while progressive loading advances stages without violating the cadence gate. Weather retains its 30-minute cadence with identical pending payload mechanics.
     - **Benchmark coverage**: `tools/synthetic_widget_benchmark.py --cadence-mode {steady|stress}` configures widget refresh cadences to validate both normal and spammed update patterns before release. JSONL artefacts are written under `logs/synthetic/perf_*.jsonl` for CI diffing.
