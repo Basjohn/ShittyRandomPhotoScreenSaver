@@ -561,6 +561,12 @@ class ThreadManager:
         except Exception as e:
             logger.exception("run_on_ui_thread dispatch failed: %s", e)
 
+    # Alias for compatibility
+    @staticmethod
+    def invoke_in_ui_thread(func: Callable, *args, **kwargs) -> None:
+        """Alias for run_on_ui_thread for compatibility"""
+        ThreadManager.run_on_ui_thread(func, *args, **kwargs)
+
     @staticmethod
     def single_shot(delay_ms: int, func: Callable, *args, **kwargs) -> None:
         """Schedule a callable to run on the UI thread after a delay"""

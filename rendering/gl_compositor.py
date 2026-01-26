@@ -158,7 +158,7 @@ def _blockspin_spin_from_progress(p: float) -> float:
 # BlockFlipState, RaindropsState, BlockSpinState, PeelState, BlindsState,
 # DiffuseState, CrumbleState) are imported from rendering.transition_state
 
-# NOTE: Metrics dataclasses (_GLPipelineState, _AnimationRunMetrics, 
+# NOTE: Metrics dataclasses (_GLPipelineState, _AnimationRunMetrics,
 # _PaintMetrics, _RenderTimerMetrics) are imported from rendering.gl_compositor.metrics
 
 
@@ -212,14 +212,14 @@ class GLCompositorWidget(QOpenGLWidget):
         # updates from rendering - animation pushes timestamped samples, paintGL
         # interpolates to actual render time for smooth motion.
         self._frame_state: Optional[FrameState] = None
-        
+
         # VSYNC RENDERING: Uses timer-based rendering with VSync approximation.
         # True threaded VSync is not achievable with QOpenGLWidget.
         self._vsync_enabled: bool = False  # Feature flag - read from settings
         self._vsync_connected: bool = False  # Whether frameSwapped is connected
         self._render_timer_fps: int = 60  # Will be set from display refresh rate
         self._render_timer_metrics: Optional[_RenderTimerMetrics] = None
-        
+
         # Render strategy manager for timer-based rendering (fallback only)
         self._render_strategy_manager: Optional[RenderStrategyManager] = None
         self._paint_metrics: Optional[_PaintMetrics] = None
@@ -242,21 +242,21 @@ class GLCompositorWidget(QOpenGLWidget):
         self._gl_pipeline: Optional[_GLPipelineState] = None
         self._use_shaders: bool = False
         self._gl_disabled_for_session: bool = False
-        
+
         # Per-compositor geometry manager - VAOs are NOT shared between GL contexts
         # so each display's compositor needs its own geometry
         self._geometry_manager: Optional[GLGeometryManager] = None
-        
+
         # Centralized error handler for session-level fallback policy
         self._error_handler = get_gl_error_handler()
-        
+
         # Centralized GL state manager for robust state tracking
         self._gl_state = GLStateManager(f"compositor_{id(self)}")
-        
+
         # Per-compositor texture manager - textures are NOT shared between GL contexts
         # so each display's compositor needs its own texture manager
         self._texture_manager: Optional[GLTextureManager] = None
-        
+
         # Transition rendering delegated to centralized renderer
         self._transition_renderer = GLTransitionRenderer(
             compositor=self,
@@ -266,7 +266,7 @@ class GLCompositorWidget(QOpenGLWidget):
             get_viewport_size=self._get_viewport_size,
             get_render_progress=lambda fallback: self._get_render_progress(fallback=fallback),
         )
-        
+
         # DESYNC STRATEGY: Random delay (0-500ms) to spread transition start overhead
         # Each compositor gets a different delay to avoid simultaneous GPU uploads
         import random
@@ -308,7 +308,7 @@ class GLCompositorWidget(QOpenGLWidget):
         self._spotify_vis_fill_color: Optional[QColor] = None
         self._spotify_vis_border_color: Optional[QColor] = None
         self._spotify_vis_fade: float = 0.0
-        
+
         # GL-based dimming overlay. Rendered AFTER the wallpaper/transition
         # but BEFORE widgets (which are Qt siblings above the compositor).
         # This ensures proper compositing without Z-order issues.
@@ -334,7 +334,7 @@ class GLCompositorWidget(QOpenGLWidget):
     # ------------------------------------------------------------------
     # Public API used by DisplayWidget / transitions
     # ------------------------------------------------------------------
-    
+
     def set_dimming(self, enabled: bool, opacity: float = 0.3) -> None:
         """Enable or disable GL-based dimming overlay.
         
@@ -346,7 +346,7 @@ class GLCompositorWidget(QOpenGLWidget):
         old_opacity = getattr(self, "_dimming_opacity", 0.0)
         self._dimming_enabled = enabled
         self._dimming_opacity = max(0.0, min(1.0, opacity))
-        
+
         # Log if dimming state actually changed (helps debug brightness flicker)
         if old_enabled != enabled or abs(old_opacity - self._dimming_opacity) > 0.01:
             logger.info(
@@ -381,7 +381,7 @@ class GLCompositorWidget(QOpenGLWidget):
         if self._frame_state is not None:
             self._frame_state.mark_complete()
         self._frame_state = None
-    
+
     def _apply_desync_strategy(self, base_duration_ms: int) -> tuple[int, int]:
         """Apply desync strategy to spread transition start overhead.
         
@@ -402,15 +402,15 @@ class GLCompositorWidget(QOpenGLWidget):
         delay_ms = self._desync_delay_ms
         # Compensate duration: add delay so transition completes at same visual state
         compensated_duration_ms = base_duration_ms + delay_ms
-        
+
         if delay_ms > 0 and is_perf_metrics_enabled():
             logger.debug(
                 "[PERF] [DESYNC] Applying desync: delay=%dms, duration=%dms→%dms",
                 delay_ms, base_duration_ms, compensated_duration_ms
             )
-        
+
         return delay_ms, compensated_duration_ms
-    
+
     def set_vsync_enabled(self, enabled: bool) -> None:
         """Enable or disable VSync-driven rendering.
         
@@ -422,17 +422,17 @@ class GLCompositorWidget(QOpenGLWidget):
         """
         if self._vsync_enabled == enabled:
             return
-        
+
         self._vsync_enabled = enabled
         logger.info("[GL COMPOSITOR] VSync rendering %s", "enabled" if enabled else "disabled")
-        
+
         # If render strategy is active, restart with new setting
         if self._render_strategy_manager is not None:
             was_active = self._render_strategy_manager.get_current_strategy_type() is not None
             if was_active:
                 self._stop_render_strategy()
                 self._start_render_strategy()
-    
+
     def _get_display_refresh_rate(self) -> int:
         """Get the display refresh rate for this compositor's screen.
         
@@ -460,32 +460,39 @@ class GLCompositorWidget(QOpenGLWidget):
                 display_hz = int(screen.refreshRate())
                 if display_hz <= 0:
                     display_hz = 60
+                if is_perf_metrics_enabled():
+                    screen_name = screen.name() if hasattr(screen, 'name') else 'unknown'
+                    logger.debug("[PERF] [GL COMPOSITOR] Display refresh rate: %dHz (screen=%s)",
+                               display_hz, screen_name)
         except Exception:
             pass
         return display_hz
-    
+
     def _calculate_target_fps(self, display_hz: int) -> int:
         """Calculate target FPS based on display refresh rate.
         
-        Uses adaptive rate selection:
-        - 60Hz or below: target full refresh rate
-        - 61-120Hz: target half refresh rate (e.g., 120Hz → 60Hz)
-        - Above 120Hz: target third refresh rate (e.g., 165Hz → 55Hz)
+        REVISED: Target 60 FPS for all displays to ensure consistent performance
+        across multi-monitor setups. High refresh displays (120Hz+) are intentionally
+        capped at 60 FPS to maintain frame budget and prevent resource starvation
+        on lower refresh displays.
         
         Args:
             display_hz: Display refresh rate in Hz
             
         Returns:
-            Target FPS (minimum 30)
+            Target FPS (always 60 for consistency and frame budget management)
         """
-        if display_hz <= 60:
-            target_fps = display_hz
-        elif display_hz <= 120:
-            target_fps = display_hz // 2
-        else:
-            target_fps = display_hz // 3
-        return max(30, target_fps)
-    
+        # Target 60 FPS for all displays to ensure:
+        # 1. Consistent frame timing across all monitors
+        # 2. Predictable frame budget (16.67ms per frame)
+        # 3. No resource starvation on multi-monitor setups
+        # 4. Smooth transitions and animations
+        target_fps = 60
+        if is_perf_metrics_enabled():
+            logger.debug("[PERF] [GL COMPOSITOR] Target FPS: %d (display=%dHz, budget=%.2fms)",
+                       target_fps, display_hz, 1000.0 / target_fps)
+        return target_fps
+
     def _start_render_strategy(self) -> None:
         """Start the render strategy to drive repaints during transitions.
         
@@ -503,11 +510,11 @@ class GLCompositorWidget(QOpenGLWidget):
             if strategy_type is not None:
                 logger.debug("[GL COMPOSITOR] Render strategy already active (timer: %s)", strategy_type)
                 return
-        
+
         display_hz = self._get_display_refresh_rate()
         target_fps = self._calculate_target_fps(display_hz)
         self._render_timer_fps = target_fps
-        
+
         if is_perf_metrics_enabled():
             self._render_timer_metrics = _RenderTimerMetrics(
                 target_fps=target_fps,
@@ -515,17 +522,17 @@ class GLCompositorWidget(QOpenGLWidget):
             )
         else:
             self._render_timer_metrics = None
-        
+
         # Use VSync-driven rendering if enabled
         if self._vsync_enabled:
             success = self._start_vsync_driven(target_fps, display_hz)
             if success:
                 return
             logger.warning("[GL COMPOSITOR] VSync-driven rendering failed, falling back to timer")
-        
+
         # Fallback to timer-based rendering
         self._start_timer_fallback(target_fps, display_hz)
-    
+
     def _start_vsync_driven(self, target_fps: int, display_hz: int) -> bool:
         """Start VSync-driven rendering using frameSwapped signal.
         
@@ -540,7 +547,7 @@ class GLCompositorWidget(QOpenGLWidget):
             if not self._vsync_connected:
                 self.frameSwapped.connect(self._on_frame_swapped)
                 self._vsync_connected = True
-            
+
             logger.info(
                 "[GL COMPOSITOR] Starting render strategy (vsync_enabled=%s, display=%dHz, target=%dHz)",
                 self._vsync_enabled, display_hz, target_fps
@@ -549,15 +556,15 @@ class GLCompositorWidget(QOpenGLWidget):
                 "[GL COMPOSITOR] Render strategy details: vsync_connected=%s, strategy_manager=%s",
                 self._vsync_connected, self._render_strategy_manager is not None
             )
-            
+
             # Trigger first frame
             self.update()
             return True
-            
+
         except Exception as e:
             logger.error("[GL COMPOSITOR] VSync-driven rendering error: %s", e)
             return False
-    
+
     def _on_frame_swapped(self) -> None:
         """Called after swapBuffers completes (after VSync).
         
@@ -566,18 +573,18 @@ class GLCompositorWidget(QOpenGLWidget):
         the display's refresh rate.
         """
         self._record_render_timer_tick()
-        
+
         if self._frame_state is None or not self._frame_state.started or self._frame_state.completed:
             return
-        
+
         # Immediately request next frame - this gives us VSync-locked timing
         self.update()
-    
+
     def _start_timer_fallback(self, target_fps: int, display_hz: int) -> None:
         """Start timer-based rendering as fallback."""
         if self._render_strategy_manager is None:
             self._render_strategy_manager = RenderStrategyManager(self)
-        
+
         interval_ms = max(1.0, 1000.0 / target_fps)
         config = RenderStrategyConfig(
             target_fps=target_fps,
@@ -586,15 +593,15 @@ class GLCompositorWidget(QOpenGLWidget):
             min_frame_time_ms=interval_ms,
         )
         self._render_strategy_manager.configure(config)
-        
+
         from rendering.render_strategy import RenderStrategyType
         success = self._render_strategy_manager.start(RenderStrategyType.TIMER)
-        
+
         logger.info(
             "[GL COMPOSITOR] Timer fallback started: display=%dHz, target=%dHz, interval=%.2fms, success=%s",
             display_hz, target_fps, interval_ms, success
         )
-    
+
     def _stop_render_strategy(self) -> None:
         """Stop the render strategy."""
         # Stop VSync-driven rendering
@@ -604,28 +611,28 @@ class GLCompositorWidget(QOpenGLWidget):
             except Exception:
                 pass
             self._vsync_connected = False
-        
+
         # Stop timer fallback
         if self._render_strategy_manager is not None:
             self._render_strategy_manager.stop()
-        
+
         self._finalize_render_timer_metrics()
         logger.debug("[GL COMPOSITOR] Render strategy stopped")
-    
+
     def _start_render_timer(self) -> None:
         """Start the render timer to drive repaints during transitions.
         
         This is now a wrapper around _start_render_strategy() for backward compatibility.
         """
         self._start_render_strategy()
-    
+
     def _stop_render_timer(self) -> None:
         """Stop the render timer.
         
         This is now a wrapper around _stop_render_strategy() for backward compatibility.
         """
         self._stop_render_strategy()
-    
+
     def _on_render_tick(self) -> None:
         """Called by render strategy to trigger a repaint.
         
@@ -644,7 +651,7 @@ class GLCompositorWidget(QOpenGLWidget):
         This spreads the upload cost across idle time instead of blocking transitions.
         """
         self._base_pixmap = pixmap
-        
+
         # Pre-upload texture to GPU cache for future transitions
         # This happens during idle time, not during transition start
         if pixmap is not None and not pixmap.isNull():
@@ -656,7 +663,7 @@ class GLCompositorWidget(QOpenGLWidget):
                     tex_mgr.get_or_create_texture(pixmap)
             except Exception as e:
                 logger.debug("[GL COMPOSITOR] Texture pre-upload failed: %s", e)
-        
+
         # If no crossfade is active, repaint immediately.
         if self._crossfade is None:
             self.update()
@@ -827,15 +834,15 @@ class GLCompositorWidget(QOpenGLWidget):
         self._current_easing = easing
         self._cancel_current_animation()
         duration_sec = max(0.001, duration_ms / 1000.0)
-        
+
         # Create frame state but defer render strategy start
         self._frame_state = FrameState(duration=duration_sec)
-        
+
         # Defer metrics initialization - will be initialized on first frame update
         # Use list to allow mutation in closure (avoid dict overhead on every frame)
         initialized = [False]
         profiled_callback = [None]
-        
+
         # Wrap callback to initialize metrics on first call (lazy init)
         def lazy_init_callback(progress: float) -> None:
             if not initialized[0]:
@@ -856,7 +863,7 @@ class GLCompositorWidget(QOpenGLWidget):
             else:
                 # Use cached profiled callback (direct list access, no dict lookup)
                 profiled_callback[0](progress)
-        
+
         anim_id = animation_manager.animate_custom(
             duration=duration_sec,
             easing=easing,
@@ -1339,7 +1346,7 @@ class GLCompositorWidget(QOpenGLWidget):
 
         # Apply desync strategy: random delay with duration compensation
         delay_ms, compensated_duration = self._apply_desync_strategy(duration_ms)
-        
+
         if delay_ms > 0:
             # Use the exact pixmaps we were asked to transition between; do not mutate the
             # compositor base until the animation actually starts.
@@ -1360,7 +1367,7 @@ class GLCompositorWidget(QOpenGLWidget):
             return self._start_crossfade_impl(
                 old_pixmap, new_pixmap, compensated_duration, easing, animation_manager, on_finished
             )
-    
+
     def _start_crossfade_impl(
         self,
         old_pixmap: QPixmap,
@@ -2131,7 +2138,7 @@ class GLCompositorWidget(QOpenGLWidget):
 
                     # Record GL info in centralized error handler for session-level tracking
                     self._error_handler.record_gl_info(vendor or "", renderer or "", version_str or "")
-                    
+
                     # Check if error handler detected software GL and demoted capability
                     if self._error_handler.is_software_gl:
                         self._gl_disabled_for_session = True
@@ -2147,7 +2154,7 @@ class GLCompositorWidget(QOpenGLWidget):
             self._use_shaders = False
             self._gl_disabled_for_session = False
             self._init_gl_pipeline()
-            
+
             # Transition to READY state on success
             if self._gl_pipeline and self._gl_pipeline.initialized:
                 self._gl_state.transition(GLContextState.READY)
@@ -2172,7 +2179,7 @@ class GLCompositorWidget(QOpenGLWidget):
             self._gl_pipeline = _GLPipelineState()
         if self._gl_pipeline.initialized:
             return
-        
+
         _pipeline_start = time.time()
         try:
             _shader_start = time.time()
@@ -2203,7 +2210,7 @@ class GLCompositorWidget(QOpenGLWidget):
                 (GLProgramCache.CRUMBLE, "crumble_program", "crumble_uniforms"),
                 (GLProgramCache.PARTICLE, "particle_program", "particle_uniforms"),
             ]
-            
+
             for program_name, program_attr, uniforms_attr in programs_to_compile:
                 program_id = cache.get_program(program_name)
                 if program_id is None:
@@ -2225,14 +2232,14 @@ class GLCompositorWidget(QOpenGLWidget):
                 self._gl_disabled_for_session = True
                 self._use_shaders = False
                 return
-            
+
             # Copy geometry IDs to pipeline state for backward compatibility
             self._gl_pipeline.quad_vao = self._geometry_manager.quad_vao
             self._gl_pipeline.quad_vbo = self._geometry_manager.quad_vbo
             self._gl_pipeline.box_vao = self._geometry_manager.box_vao
             self._gl_pipeline.box_vbo = self._geometry_manager.box_vbo
             self._gl_pipeline.box_vertex_count = self._geometry_manager.box_vertex_count
-            
+
             # Initialize texture manager - each compositor needs its own textures since
             # OpenGL textures are NOT shared between GL contexts
             if self._texture_manager is None:
@@ -2342,18 +2349,18 @@ class GLCompositorWidget(QOpenGLWidget):
         finally:
             # Transition to DESTROYED state
             self._gl_state.transition(GLContextState.DESTROYED)
-    
+
     def is_gl_ready(self) -> bool:
         """Check if GL context is ready for rendering.
         
         Uses the centralized GLStateManager for robust state checking.
         """
         return self._gl_state.is_ready()
-    
+
     def get_gl_state(self) -> GLContextState:
         """Get current GL context state."""
         return self._gl_state.get_state()
-    
+
     def get_gl_error_info(self) -> tuple:
         """Get GL error information if in error state."""
         return self._gl_state.get_error_info()
@@ -2876,11 +2883,11 @@ void main() {
         conversions in the hot render path.
         """
         current_size = (self.width(), self.height())
-        
+
         # Return cached value if widget size hasn't changed
         if self._cached_viewport is not None and self._cached_widget_size == current_size:
             return self._cached_viewport
-        
+
         # Recalculate viewport size
         try:
             dpr = float(self.devicePixelRatioF())
@@ -2894,7 +2901,7 @@ void main() {
         # This prevents a 1px retained strip from the previous frame at the
         # top edge on certain DPI/size combinations.
         h = max(1, h + 1)
-        
+
         # Cache the result
         self._cached_viewport = (w, h)
         self._cached_widget_size = current_size
@@ -3186,7 +3193,7 @@ void main() {
 
     def paintGL(self) -> None:  # type: ignore[override]
         _paint_start = time.time()
-        
+
         # Phase 4: Disable GC during frame rendering to prevent GC pauses
         gc_controller = None
         _is_transition_active = self._frame_state is not None and self._frame_state.started and not self._frame_state.completed
@@ -3194,7 +3201,7 @@ void main() {
             from core.performance.frame_budget import get_gc_controller, get_frame_budget
             gc_controller = get_gc_controller()
             gc_controller.disable_gc()
-            
+
             # Track frame budget - only during active transitions to avoid false positives
             # from idle time between transitions (5+ second gaps are expected)
             frame_budget = get_frame_budget()
@@ -3203,13 +3210,13 @@ void main() {
                 frame_budget.begin_category(frame_budget.CATEGORY_GL_RENDER)
         except Exception as e:
             logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)  # Non-critical - continue without frame budget
-        
+
         try:
             self._paintGL_impl()
         finally:
             paint_elapsed = (time.time() - _paint_start) * 1000.0
             self._record_paint_metrics(paint_elapsed)
-            
+
             # End frame budget tracking and re-enable GC
             try:
                 if gc_controller:
@@ -3223,7 +3230,7 @@ void main() {
                             gc_controller.run_idle_gc(remaining)
             except Exception as e:
                 logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
-            
+
             if paint_elapsed > 50.0 and is_perf_metrics_enabled():
                 # Phase 8: Include GLStateManager transition history on dt_max spikes
                 history = self._gl_state.get_transition_history(limit=5)
@@ -3261,17 +3268,17 @@ void main() {
         # Phase 6: Prevent rendering until GL context is fully ready
         if not self._gl_state.is_ready():
             return
-        
+
         # Profile paintGL sections to identify bottlenecks
         _section_times = {}
         _last_time = time.perf_counter()
-        
+
         def _mark_section(name: str):
             nonlocal _last_time
             now = time.perf_counter()
             _section_times[name] = (now - _last_time) * 1000.0
             _last_time = now
-        
+
         target = self.rect()
         _mark_section("init")
 
@@ -3328,23 +3335,23 @@ void main() {
         try:
             painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
             target = self.rect()
-            
+
             # Try each transition type in priority order
             if self._peel is not None:
                 self._transition_renderer.render_peel_fallback(painter, target, self._peel)
                 return
-            
+
             if self._warp is not None:
                 self._transition_renderer.render_warp_fallback(painter, target, self._warp)
                 self._paint_spotify_visualizer(painter)
                 self._paint_debug_overlay(painter)
                 return
-            
+
             if self._blockspin is not None:
                 self._transition_renderer.render_blockspin_fallback(painter, target, self._blockspin)
                 self._paint_spotify_visualizer(painter)
                 return
-            
+
             # Region-based transitions (blockflip, blinds, diffuse)
             for st, paint_vis in [(self._blockflip, True), (self._blinds, False), (self._diffuse, False)]:
                 if st is not None:
@@ -3353,27 +3360,27 @@ void main() {
                         self._paint_spotify_visualizer(painter)
                     self._paint_debug_overlay(painter)
                     return
-            
+
             if self._wipe is not None:
                 self._transition_renderer.render_wipe_fallback(painter, target, self._wipe)
                 self._paint_spotify_visualizer(painter)
                 self._paint_debug_overlay(painter)
                 return
-            
+
             if self._slide is not None:
                 self._transition_renderer.render_slide_fallback(painter, target, self._slide)
                 self._paint_dimming(painter)
                 self._paint_spotify_visualizer(painter)
                 self._paint_debug_overlay(painter)
                 return
-            
+
             if self._crossfade is not None:
                 self._transition_renderer.render_crossfade_fallback(painter, target, self._crossfade)
                 self._paint_dimming(painter)
                 self._paint_spotify_visualizer(painter)
                 self._paint_debug_overlay(painter)
                 return
-            
+
             # No active transition -> draw base pixmap
             self._transition_renderer.render_base_image(painter, target, self._base_pixmap)
             self._paint_dimming(painter)
@@ -3382,7 +3389,7 @@ void main() {
         finally:
             painter.end()
             _mark_section("qpainter_fallback")
-            
+
         # Log section times if any section took >10ms
         if is_perf_metrics_enabled() and _section_times:
             total = sum(_section_times.values())
@@ -3398,12 +3405,12 @@ void main() {
             self._paint_spotify_visualizer(painter)
         finally:
             painter.end()
-    
+
     def _paint_dimming(self, painter: QPainter) -> None:
         """Paint the dimming overlay if enabled (QPainter fallback path)."""
         if not self._dimming_enabled or self._dimming_opacity <= 0.0:
             return
-        
+
         try:
             painter.save()
             painter.setOpacity(self._dimming_opacity)
@@ -3411,12 +3418,12 @@ void main() {
             painter.restore()
         except Exception as e:
             logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
-    
+
     def _paint_dimming_gl(self) -> None:
         """Paint dimming overlay using native GL blending (faster than QPainter)."""
         if not self._dimming_enabled or self._dimming_opacity <= 0.0:
             return
-        
+
         if gl is None:
             # Fallback to QPainter if GL not available
             painter = QPainter(self)
@@ -3425,15 +3432,15 @@ void main() {
             finally:
                 painter.end()
             return
-        
+
         try:
             # BUG FIX: Unbind shader before drawing dimming overlay
             gl.glUseProgram(0)
-            
+
             # Use native GL blending for dimming - much faster than QPainter
             gl.glEnable(gl.GL_BLEND)
             gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
-            
+
             # Draw a black quad with the dimming opacity
             gl.glColor4f(0.0, 0.0, 0.0, self._dimming_opacity)
             gl.glBegin(gl.GL_QUADS)
@@ -3442,7 +3449,7 @@ void main() {
             gl.glVertex2f(1.0, 1.0)
             gl.glVertex2f(-1.0, 1.0)
             gl.glEnd()
-            
+
             # Reset color to white for subsequent draws
             gl.glColor4f(1.0, 1.0, 1.0, 1.0)
         except Exception as e:

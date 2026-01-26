@@ -407,7 +407,7 @@ class TransitionsTab(QWidget):
         radius_row.addWidget(QLabel("Particle Size:"))
         self.particle_radius_spin = QSpinBox()
         self.particle_radius_spin.setRange(8, 64)
-        self.particle_radius_spin.setValue(24)
+        self.particle_radius_spin.setValue(10)  # Match default from defaults.py
         self.particle_radius_spin.setSuffix(" px")
         self.particle_radius_spin.valueChanged.connect(self._save_settings)
         radius_row.addWidget(self.particle_radius_spin)

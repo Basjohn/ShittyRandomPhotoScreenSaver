@@ -82,7 +82,7 @@ class MediaWidget(BaseOverlayWidget):
     """
 
     media_updated = Signal(dict)  # Emits dict(MediaTrackInfo) when refreshed
-    
+
     # Override defaults for media widget
     DEFAULT_FONT_SIZE = 20
     _instances: ClassVar["weakref.WeakSet[MediaWidget]"] = weakref.WeakSet()
@@ -90,7 +90,7 @@ class MediaWidget(BaseOverlayWidget):
     _shared_feedback_events: ClassVar[dict[str, dict[str, float]]] = {}
     _shared_feedback_timer: ClassVar[Optional[QTimer]] = None
     _shared_feedback_timer_interval_ms: ClassVar[int] = 16
-    
+
     # Shared media info cache - prevents one widget hiding when another has valid info
     # This fixes multi-display desync where one widget gets None from GSMTC while other has valid data
     _shared_last_valid_info: ClassVar[Optional["MediaTrackInfo"]] = None
@@ -109,7 +109,7 @@ class MediaWidget(BaseOverlayWidget):
         # Convert MediaPosition to OverlayPosition for base class
         overlay_pos = OverlayPosition(position.value)
         super().__init__(parent, position=overlay_pos, overlay_name="media")
-        
+
         # Defer visibility until fade sync triggers (unless tests expect immediate show)
         self._defer_visibility_for_fade_sync = True
         if _in_test_environment():
@@ -162,16 +162,16 @@ class MediaWidget(BaseOverlayWidget):
 
         # Central ResourceManager wiring
         self._last_info: Optional[MediaTrackInfo] = None
-        
+
         # Smart polling: diff gating to skip unnecessary updates
         self._last_track_identity: Optional[tuple] = None  # (title, artist, album, state)
-        
+
         # Smart polling: idle detection to stop polling when Spotify is closed
         self._consecutive_none_count: int = 0
         self._idle_threshold: int = 12  # ~30s at 2500ms interval before entering idle
         self._is_idle: bool = False
         self._idle_poll_interval: int = 5000  # Poll every 5s when idle to detect Spotify opening
-        
+
         # Adaptive poll interval: 1000ms → 2000ms → 2500ms
         # Faster initial detection, then slow down for efficiency
         self._poll_intervals: list[int] = [1000, 2000, 2500]
@@ -280,13 +280,13 @@ class MediaWidget(BaseOverlayWidget):
         2. At least one other visible widget has valid _last_info
         """
         now = time.monotonic()
-        
+
         # Check shared cache first (most recent valid info from any widget)
         if cls._shared_last_valid_info is not None:
             age = now - cls._shared_last_valid_info_ts
             if age < cls._shared_info_max_age_sec:
                 return cls._shared_last_valid_info
-        
+
         # Fallback: check other widget instances for valid info
         for instance in list(cls._instances):
             try:
@@ -299,7 +299,7 @@ class MediaWidget(BaseOverlayWidget):
                     return instance._last_info
             except Exception:
                 continue
-        
+
         return None
 
     def _handle_remote_media_action(self, action: str, timestamp: Optional[float], event_id: Optional[str]) -> None:
@@ -324,7 +324,7 @@ class MediaWidget(BaseOverlayWidget):
     def _setup_ui(self) -> None:
         # Use base class styling setup
         self._apply_base_styling()
-        
+
         # Align content to the top-left so the header/logo sit close to the
         # top edge rather than vertically centered in the card.
         self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
@@ -348,7 +348,7 @@ class MediaWidget(BaseOverlayWidget):
         # Tie the default minimum height to the configured artwork size so
         # the widget does not "jump" in height once artwork is decoded.
         self.setMinimumHeight(max(220, self._artwork_size + 60))
-    
+
     def _update_content(self) -> None:
         """Required by BaseOverlayWidget - refresh media display."""
         self._refresh()
@@ -356,23 +356,23 @@ class MediaWidget(BaseOverlayWidget):
     # -------------------------------------------------------------------------
     # Lifecycle Implementation Hooks
     # -------------------------------------------------------------------------
-    
+
     def _initialize_impl(self) -> None:
         """Initialize media resources (lifecycle hook)."""
         logger.debug("[LIFECYCLE] MediaWidget initialized")
-    
+
     def _activate_impl(self) -> None:
         """Activate media widget - start polling (lifecycle hook)."""
         if not self._ensure_thread_manager("MediaWidget._activate_impl"):
             raise RuntimeError("ThreadManager not available")
-        
+
         self._refresh()
         self._ensure_timer()
         if self._thread_manager is not None:
             self._refresh_async()
-        
+
         logger.debug("[LIFECYCLE] MediaWidget activated")
-    
+
     def _deactivate_impl(self) -> None:
         """Deactivate media widget - stop polling (lifecycle hook)."""
         if self._update_timer_handle is not None:
@@ -381,7 +381,7 @@ class MediaWidget(BaseOverlayWidget):
             except Exception as e:
                 logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             self._update_timer_handle = None
-        
+
         if self._update_timer is not None:
             try:
                 self._update_timer.stop()
@@ -389,9 +389,9 @@ class MediaWidget(BaseOverlayWidget):
             except RuntimeError:
                 pass
             self._update_timer = None
-        
+
         logger.debug("[LIFECYCLE] MediaWidget deactivated")
-    
+
     def _cleanup_impl(self) -> None:
         """Clean up media resources (lifecycle hook)."""
         self._deactivate_impl()
@@ -411,7 +411,7 @@ class MediaWidget(BaseOverlayWidget):
         except Exception:
             pass
         logger.debug("[LIFECYCLE] MediaWidget cleaned up")
-    
+
     # -------------------------------------------------------------------------
     # Legacy Start/Stop Methods (for backward compatibility)
     # -------------------------------------------------------------------------
@@ -490,11 +490,11 @@ class MediaWidget(BaseOverlayWidget):
 
     def set_widget_manager(self, widget_manager: "WidgetManager") -> None:
         self._widget_manager = widget_manager
-    
+
     # ------------------------------------------------------------------
     # Smart Polling Helpers
     # ------------------------------------------------------------------
-    
+
     def _compute_track_identity(self, info: MediaTrackInfo) -> tuple:
         """Compute a tuple representing the track's identity for diff gating.
         
@@ -513,7 +513,7 @@ class MediaWidget(BaseOverlayWidget):
             logger.debug("[MEDIA_WIDGET] Exception in _compute_track_identity: %s", e)
             # Return a unique tuple on error to force update
             return (id(info), None, None, None)
-    
+
     def wake_from_idle(self) -> None:
         """Wake the media widget from idle mode to resume polling.
         
@@ -551,39 +551,39 @@ class MediaWidget(BaseOverlayWidget):
             self._update_timer = None
         if is_perf_metrics_enabled():
             logger.debug("[PERF] Media widget timer started at %dms (stage %d)", interval, self._current_poll_stage)
-    
+
     def _advance_poll_stage(self) -> None:
         """Advance to next (slower) poll interval if not at max."""
         if self._current_poll_stage >= len(self._poll_intervals) - 1:
             return  # Already at slowest
-        
+
         self._current_poll_stage += 1
         self._polls_at_current_stage = 0
         new_interval = self._poll_intervals[self._current_poll_stage]
-        
+
         # Recreate timer with new interval
         self._stop_timer()
         self._ensure_timer()
-        
+
         if is_perf_metrics_enabled():
-            logger.debug("[PERF] Media widget advanced to poll stage %d (%dms)", 
+            logger.debug("[PERF] Media widget advanced to poll stage %d (%dms)",
                         self._current_poll_stage, new_interval)
-    
+
     def _reset_poll_stage(self) -> None:
         """Reset to fastest poll interval (used when resuming from idle)."""
         if self._current_poll_stage == 0:
             return  # Already at fastest
-        
+
         self._current_poll_stage = 0
         self._polls_at_current_stage = 0
-        
+
         # Recreate timer with fast interval
         self._stop_timer()
         self._ensure_timer()
-        
+
         if is_perf_metrics_enabled():
             logger.debug("[PERF] Media widget reset to fast poll (1000ms)")
-    
+
     def _stop_timer(self) -> None:
         """Stop the current poll timer."""
         if self._update_timer_handle is not None:
@@ -609,7 +609,7 @@ class MediaWidget(BaseOverlayWidget):
         if self.width() <= 0 or self.height() <= 0:
             QTimer.singleShot(16, self._update_position)
             return
-        
+
         # Sync MediaPosition to OverlayPosition for base class
         position_map = {
             MediaPosition.TOP_LEFT: OverlayPosition.TOP_LEFT,
@@ -622,10 +622,10 @@ class MediaWidget(BaseOverlayWidget):
             MediaPosition.BOTTOM_CENTER: OverlayPosition.BOTTOM_CENTER,
             MediaPosition.BOTTOM_RIGHT: OverlayPosition.BOTTOM_RIGHT,
         }
-        
+
         # Update base class position
         self._position = position_map.get(self._media_position, OverlayPosition.BOTTOM_LEFT)
-        
+
         # Delegate to base class for centralized margin/positioning logic
         super()._update_position()
 
@@ -642,7 +642,7 @@ class MediaWidget(BaseOverlayWidget):
                     parent._position_spotify_volume()
                 except Exception as e:
                     logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-    
+
     def _complete_hide_sequence(self) -> None:
         """Complete the hide sequence after fade out animation.
         
@@ -662,7 +662,7 @@ class MediaWidget(BaseOverlayWidget):
         # Notify parent to hide Spotify-related widgets
         self._notify_spotify_widgets_visibility()
         self._pending_first_show = True
-    
+
     def _notify_spotify_widgets_visibility(self) -> None:
         """Notify Spotify-related widgets to sync their visibility with this widget.
         
@@ -673,10 +673,10 @@ class MediaWidget(BaseOverlayWidget):
         parent = self.parent()
         if parent is None:
             return
-        
+
         # Gate FFT worker based on media widget visibility
         self._gate_fft_worker(self.isVisible())
-        
+
         # Notify visualizer
         vis = getattr(parent, "spotify_visualizer_widget", None)
         if vis is not None:
@@ -689,7 +689,7 @@ class MediaWidget(BaseOverlayWidget):
                     vis.handle_media_update({"state": state})
             except Exception as e:
                 logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-        
+
         # Notify volume widget
         vol = getattr(parent, "spotify_volume_widget", None)
         if vol is not None:
@@ -934,13 +934,13 @@ class MediaWidget(BaseOverlayWidget):
     def _refresh(self) -> None:
         if not self._enabled:
             return
-        
+
         # Smart polling: when idle, still poll but at slower rate to detect Spotify opening
         # This allows the widget to spawn when Spotify opens
         if self._is_idle:
             if is_perf_metrics_enabled():
                 logger.debug("[PERF] Media widget idle poll (detecting Spotify open)")
-        
+
         if self._thread_manager is not None:
             if is_perf_metrics_enabled():
                 interval = self._poll_intervals[self._current_poll_stage]
@@ -1050,14 +1050,14 @@ class MediaWidget(BaseOverlayWidget):
         prev_info = self._last_info
         self._last_info = info
         prev_identity = self._last_track_identity
-        
+
         # Smart polling: diff gating - compute track identity
         if info is not None:
             # Update shared cache with valid info for multi-display sync
             cls = type(self)
             cls._shared_last_valid_info = info
             cls._shared_last_valid_info_ts = time.monotonic()
-            
+
             current_identity = self._compute_track_identity(info)
             identity_changed = current_identity != prev_identity
 
@@ -1074,22 +1074,22 @@ class MediaWidget(BaseOverlayWidget):
                     # Update timer interval from idle (5s) to fast (1s)
                     self._stop_timer()
                     self._ensure_timer()
-            
+
             # Adaptive polling: advance to slower interval after 2 successful polls
             self._polls_at_current_stage += 1
             if self._polls_at_current_stage >= 2:
                 self._advance_poll_stage()
-            
+
             # Diff gating: skip update if track identity unchanged
             # Always process first track (when _last_track_identity is None)
             # Also process if we haven't completed fade-in yet (need 2 updates for fade-in)
             if (not identity_changed and
-                self._last_track_identity is not None and 
+                self._last_track_identity is not None and
                 self._fade_in_completed):
                 if is_perf_metrics_enabled():
                     logger.debug("[PERF] Media widget update skipped (diff gating - no change)")
                 return
-            
+
             # Track changed - update identity and proceed
             if identity_changed:
                 self._emit_track_change_feedback(prev_identity, current_identity)
@@ -1115,7 +1115,7 @@ class MediaWidget(BaseOverlayWidget):
                 # No shared info available - proceed with normal None handling
                 # Smart polling: idle detection - track consecutive None results
                 self._consecutive_none_count += 1
-                
+
                 # Enter idle mode after threshold consecutive None results (~30s)
                 if self._consecutive_none_count >= self._idle_threshold and not self._is_idle:
                     self._is_idle = True
@@ -1124,12 +1124,12 @@ class MediaWidget(BaseOverlayWidget):
                     if is_perf_metrics_enabled():
                         logger.debug("[PERF] Media widget entering idle mode (Spotify closed)")
                     else:
-                        logger.info("[MEDIA_WIDGET] Entering idle mode after %d consecutive empty polls", 
+                        logger.info("[MEDIA_WIDGET] Entering idle mode after %d consecutive empty polls",
                                    self._consecutive_none_count)
                     # Update timer interval from active (2.5s) to idle (5s)
                     self._stop_timer()
                     self._ensure_timer()
-                
+
                 # No active media session (e.g. Spotify not playing) – hide widget with graceful fade
                 last_vis = self._telemetry_last_visibility
                 if last_vis or last_vis is None:
@@ -1153,7 +1153,7 @@ class MediaWidget(BaseOverlayWidget):
                             self._complete_hide_sequence()
                 else:
                     self._complete_hide_sequence()
-                
+
                 self._telemetry_last_visibility = False
                 return
 
@@ -1252,23 +1252,21 @@ class MediaWidget(BaseOverlayWidget):
 
         # Lock the card height after the first track so that layout changes
         # (for example when titles wrap to multiple lines) do not cause the
-        # widget to move vertically on screen. The height cap is allowed to
-        # grow when a later track needs more space, but never shrinks.
-        try:
-            hint_h = self.sizeHint().height()
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-            hint_h = 0
-        base_min = self.minimumHeight()
-        control_padding = self._controls_row_min_height()
-        fixed_candidate = max(220, base_min, hint_h + control_padding)
-        if self._fixed_card_height is None or fixed_candidate > self._fixed_card_height:
-            self._fixed_card_height = fixed_candidate
+        # widget to move vertically on screen. The height NEVER grows after first track.
+        # Text eliding handles overflow instead of resizing.
+        if self._fixed_card_height is None:
+            try:
+                hint_h = self.sizeHint().height()
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+                hint_h = 0
+            base_min = self.minimumHeight()
+            control_padding = self._controls_row_min_height()
+            self._fixed_card_height = max(220, base_min, hint_h + control_padding)
 
-        if self._fixed_card_height is not None:
-            self.setMinimumHeight(self._fixed_card_height)
-            # Allow taller tracks to expand beyond the first snapshot while keeping a floor.
-            self.setMaximumHeight(16777215)
+        # Lock height permanently - never grow
+        self.setMinimumHeight(self._fixed_card_height)
+        self.setMaximumHeight(self._fixed_card_height)
 
         # CRITICAL: Decode artwork BEFORE the first-track early return so that
         # artwork is captured on the very first poll. Without this, the first
@@ -1453,7 +1451,7 @@ class MediaWidget(BaseOverlayWidget):
         if pm.width() <= 0 or pm.height() <= 0:
             return None
         return pm
-    
+
     def _gate_fft_worker(self, should_run: bool) -> None:
         """Start or stop the FFT worker based on media widget visibility.
         
@@ -1463,7 +1461,7 @@ class MediaWidget(BaseOverlayWidget):
         parent = self.parent()
         if parent is None:
             return
-        
+
         # Get ProcessSupervisor from parent chain
         supervisor = None
         try:
@@ -1476,15 +1474,15 @@ class MediaWidget(BaseOverlayWidget):
                     supervisor = getattr(wm, "_process_supervisor", None)
         except Exception as e:
             logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-        
+
         if supervisor is None:
             return
-        
+
         try:
             from core.process import WorkerType
-            
+
             is_running = supervisor.is_running(WorkerType.FFT)
-            
+
             if should_run and not is_running:
                 # Media visible - start FFT worker
                 if is_perf_metrics_enabled():
@@ -2542,7 +2540,7 @@ class MediaWidget(BaseOverlayWidget):
             self._update_position()
         except Exception as e:
             logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-        
+
         if duration_ms <= 0:
             try:
                 self.show()
@@ -2620,27 +2618,27 @@ class MediaWidget(BaseOverlayWidget):
             self._artwork_anim = None
 
         self._artwork_opacity = 0.0
-        
+
         # Use AnimationManager instead of QPropertyAnimation to avoid per-frame update() calls
         # This reduces paint calls from ~10Hz to only when needed
         try:
             from core.animation.animator import AnimationManager
             from core.animation.types import EasingCurve
-            
+
             anim_mgr = AnimationManager()
-            
+
             def _on_tick(progress: float) -> None:
                 try:
                     self._artwork_opacity = float(progress)
                     self.update()
                 except Exception as e:
                     logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-            
+
             def _on_finished() -> None:
                 self._artwork_anim = None
                 self._artwork_opacity = 1.0
                 self.update()
-            
+
             # AnimationManager uses seconds, not milliseconds
             anim_id = anim_mgr.animate_custom(
                 duration=0.85,  # 850ms

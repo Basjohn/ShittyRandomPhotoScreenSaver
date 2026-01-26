@@ -440,20 +440,58 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if rect.width() <= 0 or rect.height() <= 0:
             return
 
-        # Start from a clean transparent buffer each frame so that decaying
-        # bars do not leave ghost outlines or coloured speckles behind.
+        # Integrate with frame budget system for coordinated rendering
+        gc_controller = None
+        frame_budget = None
         try:
-            gl.glDisable(gl.GL_SCISSOR_TEST)
-            gl.glClearColor(0.0, 0.0, 0.0, 0.0)
-            gl.glClear(gl.GL_COLOR_BUFFER_BIT)
+            from core.performance.frame_budget import get_gc_controller, get_frame_budget
+            gc_controller = get_gc_controller()
+            frame_budget = get_frame_budget()
+            
+            # Disable GC during rendering to prevent mid-frame pauses
+            gc_controller.disable_gc()
+            
+            # Begin visualizer budget category
+            frame_budget.begin_category(frame_budget.CATEGORY_VISUALIZER)
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
-        # Prefer the shader path when available; fall back to QPainter when
-        # the GL program or buffers are not ready or fail at runtime.
-        used_shader = self._render_with_shader(rect, fade)
-        if not used_shader:
-            self._render_with_qpainter(rect, fade)
+        try:
+            # Start from a clean transparent buffer each frame so that decaying
+            # bars do not leave ghost outlines or coloured speckles behind.
+            try:
+                gl.glDisable(gl.GL_SCISSOR_TEST)
+                gl.glClearColor(0.0, 0.0, 0.0, 0.0)
+                gl.glClear(gl.GL_COLOR_BUFFER_BIT)
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+
+            # Prefer the shader path when available; fall back to QPainter when
+            # the GL program or buffers are not ready or fail at runtime.
+            used_shader = self._render_with_shader(rect, fade)
+            if not used_shader:
+                self._render_with_qpainter(rect, fade)
+        finally:
+            # End frame budget tracking and re-enable GC
+            try:
+                if frame_budget is not None:
+                    elapsed = frame_budget.end_category(frame_budget.CATEGORY_VISUALIZER)
+                    # Check if we're over budget
+                    if elapsed > 3.0 and is_perf_metrics_enabled():  # 3ms budget for visualizer
+                        logger.debug(
+                            "[PERF] [SPOTIFY_VIS] Visualizer overrun: %.1fms (budget: 3.0ms)",
+                            elapsed
+                        )
+                
+                if gc_controller is not None:
+                    gc_controller.enable_gc()
+                    # Run idle GC if we have time remaining
+                    if frame_budget is not None:
+                        remaining = frame_budget.get_frame_remaining()
+                        if remaining > 5.0:  # 5ms+ remaining
+                            gc_controller.run_idle_gc(remaining)
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
         if not getattr(self, "_debug_paint_logged", False):
             try:

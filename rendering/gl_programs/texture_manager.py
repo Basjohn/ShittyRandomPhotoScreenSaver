@@ -64,6 +64,7 @@ class GLTextureManager:
     
     # Cache configuration
     MAX_CACHED_TEXTURES = 12
+    MAX_CACHED_IMAGES = 8  # Cache converted ARGB32 images
     
     def __init__(self):
         self._initialized: bool = False
@@ -71,6 +72,11 @@ class GLTextureManager:
         # Texture cache: pixmap.cacheKey() -> texture_id
         self._texture_cache: Dict[int, int] = {}
         self._texture_lru: List[int] = []
+        
+        # Image conversion cache: pixmap.cacheKey() -> (QImage, bytes, width, height)
+        # Caches the expensive ARGB32 conversion to avoid repeating it
+        self._image_cache: Dict[int, tuple] = {}
+        self._image_lru: List[int] = []
         
         # Current transition textures
         self._old_tex_id: int = 0
@@ -109,37 +115,89 @@ class GLTextureManager:
         """Upload a QPixmap as a GL texture and return its ID.
         
         Returns 0 on failure. Uses PBO for async DMA transfer when available.
+        Caches converted ARGB32 images to avoid expensive CPU-side conversion.
         """
         if gl is None or pixmap is None or pixmap.isNull():
             return 0
         
         _upload_start = time.time()
         
-        # Convert to ARGB32 + GL_BGRA for correct channel ordering
-        image = pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
-        w = image.width()
-        h = image.height()
-        if w <= 0 or h <= 0:
-            logger.debug("[GL TEXTURE] Rejecting zero-sized pixmap (%dx%d)", w, h)
+        # Check image conversion cache first
+        cache_key = 0
+        try:
+            if hasattr(pixmap, "cacheKey"):
+                cache_key = int(pixmap.cacheKey())
+        except Exception as e:
+            logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
+        
+        image = None
+        data = None
+        w = 0
+        h = 0
+        
+        if cache_key > 0 and cache_key in self._image_cache:
+            # Use cached converted image
             try:
-                from rendering.gl_error_handler import GLErrorHandler
-
-                GLErrorHandler().record_texture_failure("Zero-sized pixmap")
+                image, data, w, h = self._image_cache[cache_key]
+                # Refresh LRU position
+                if cache_key in self._image_lru:
+                    self._image_lru.remove(cache_key)
+                self._image_lru.append(cache_key)
+                
+                if is_perf_metrics_enabled():
+                    logger.debug("[PERF] [GL TEXTURE] Using cached image conversion (%dx%d)", w, h)
             except Exception as e:
                 logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
-            return 0
+                image = None  # Fall through to conversion
         
-        # Get image data
-        try:
-            ptr = image.constBits()
-            if hasattr(ptr, "setsize"):
-                ptr.setsize(image.sizeInBytes())
-                data = bytes(ptr)
-            else:
-                data = ptr.tobytes()
-        except Exception:
-            logger.debug("[GL TEXTURE] Failed to access image bits", exc_info=True)
-            return 0
+        if image is None:
+            # Convert to ARGB32 + GL_BGRA for correct channel ordering
+            _convert_start = time.time()
+            image = pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
+            w = image.width()
+            h = image.height()
+            
+            if w <= 0 or h <= 0:
+                logger.debug("[GL TEXTURE] Rejecting zero-sized pixmap (%dx%d)", w, h)
+                try:
+                    from rendering.gl_error_handler import GLErrorHandler
+                    GLErrorHandler().record_texture_failure("Zero-sized pixmap")
+                except Exception as e:
+                    logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
+                return 0
+            
+            # Get image data
+            try:
+                ptr = image.constBits()
+                if hasattr(ptr, "setsize"):
+                    ptr.setsize(image.sizeInBytes())
+                    data = bytes(ptr)
+                else:
+                    data = ptr.tobytes()
+            except Exception:
+                logger.debug("[GL TEXTURE] Failed to access image bits", exc_info=True)
+                return 0
+            
+            _convert_elapsed = (time.time() - _convert_start) * 1000.0
+            if _convert_elapsed > 10.0 and is_perf_metrics_enabled():
+                logger.debug(
+                    "[PERF] [GL TEXTURE] Slow image conversion: %.2fms (%dx%d)",
+                    _convert_elapsed, w, h
+                )
+            
+            # Cache the converted image
+            if cache_key > 0:
+                try:
+                    self._image_cache[cache_key] = (image, data, w, h)
+                    self._image_lru.append(cache_key)
+                    
+                    # LRU eviction for image cache
+                    while len(self._image_lru) > self.MAX_CACHED_IMAGES:
+                        evict_key = self._image_lru.pop(0)
+                        if evict_key != cache_key:
+                            self._image_cache.pop(evict_key, None)
+                except Exception as e:
+                    logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
         
         data_size = len(data)
         tex = gl.glGenTextures(1)
@@ -407,8 +465,11 @@ class GLTextureManager:
         self._texture_lru.clear()
     
     def cleanup(self) -> None:
-        """Full cleanup - release all textures and PBOs."""
+        """Full cleanup - release all textures, PBOs, and image cache."""
         self.release_transition_textures()
         self.cleanup_cache()
         self._cleanup_pbo_pool()
+        # Clear image conversion cache
+        self._image_cache.clear()
+        self._image_lru.clear()
         self._initialized = False
