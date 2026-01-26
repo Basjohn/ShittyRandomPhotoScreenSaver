@@ -1067,6 +1067,38 @@ class WidgetsTab(QWidget):
         spotify_vis_enable_row.addWidget(self.spotify_vis_software_enabled)
         spotify_vis_layout.addLayout(spotify_vis_enable_row)
 
+        # Visualization Mode dropdown - only Spectrum is functional, others greyed out
+        spotify_vis_mode_row = QHBoxLayout()
+        spotify_vis_mode_row.addWidget(QLabel("Mode:"))
+        self.spotify_vis_mode = QComboBox()
+        self.spotify_vis_mode.setMinimumWidth(180)
+        # Add all modes - only Spectrum is enabled, others are greyed out (future implementation)
+        vis_modes = [
+            ("Spectrum", True),           # Classic bar spectrum analyzer - FUNCTIONAL
+            ("Waveform Ribbon", False),   # Morphing waveform ribbon - NOT IMPLEMENTED
+            ("DNA Helix", False),         # Dual helices with amplitude - NOT IMPLEMENTED
+            ("Radial Bloom", False),      # Polar coordinate FFT display - NOT IMPLEMENTED
+            ("Spectrogram", False),       # Scrolling history ribbon - NOT IMPLEMENTED
+            ("Phasor Swarm", False),      # Particle emitters on bar positions - NOT IMPLEMENTED
+        ]
+        for mode_name, is_enabled in vis_modes:
+            self.spotify_vis_mode.addItem(mode_name)
+            idx = self.spotify_vis_mode.count() - 1
+            if not is_enabled:
+                # Grey out non-functional modes
+                self.spotify_vis_mode.setItemData(
+                    idx,
+                    0,  # Disable the item
+                    Qt.ItemDataRole.UserRole - 1
+                )
+        self.spotify_vis_mode.setCurrentIndex(0)  # Default to Spectrum
+        self.spotify_vis_mode.setToolTip(
+            "Visualization mode. Only Spectrum is currently functional; other modes are planned for future releases."
+        )
+        self.spotify_vis_mode.currentIndexChanged.connect(self._save_settings)
+        spotify_vis_mode_row.addWidget(self.spotify_vis_mode)
+        spotify_vis_mode_row.addStretch()
+        spotify_vis_layout.addLayout(spotify_vis_mode_row)
 
         spotify_vis_bar_row = QHBoxLayout()
         spotify_vis_bar_row.addWidget(QLabel("Bar Count:"))

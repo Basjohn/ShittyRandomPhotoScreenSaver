@@ -69,7 +69,44 @@ def test_native_virtual_key_recognition(input_handler):
     # VK_VOLUME_MUTE = 0xAD (173)
     # Pass 0 as Qt key to force native check
     event = create_key_event(0, native_virtual_key=0xAD)
-    
+
     result = input_handler.handle_key_press(event)
     assert result is False, "Native Volume Mute should be ignored"
 
+
+class TestMediaKeyPassthrough:
+    """Tests verifying media keys are passed through to OS (not consumed)."""
+
+    def test_media_key_returns_false_for_passthrough(self, input_handler):
+        """Verify media keys return False so DisplayWidget calls event.ignore()."""
+        media_keys = [
+            Qt.Key.Key_MediaPlay,
+            Qt.Key.Key_MediaPause,
+            Qt.Key.Key_MediaTogglePlayPause,
+            Qt.Key.Key_MediaNext,
+            Qt.Key.Key_MediaPrevious,
+            Qt.Key.Key_VolumeUp,
+            Qt.Key.Key_VolumeDown,
+            Qt.Key.Key_VolumeMute,
+        ]
+        for key in media_keys:
+            event = create_key_event(key)
+            result = input_handler.handle_key_press(event)
+            assert result is False, f"{key} should return False for OS passthrough"
+
+    def test_media_key_does_not_trigger_exit(self, input_handler):
+        """Verify media keys do not trigger exit_requested signal."""
+        mock_slot = MagicMock()
+        input_handler.exit_requested.connect(mock_slot)
+
+        event = create_key_event(Qt.Key.Key_MediaTogglePlayPause)
+        input_handler.handle_key_press(event)
+
+        mock_slot.assert_not_called()
+
+    def test_media_key_does_not_set_exiting_flag(self, input_handler):
+        """Verify media keys do not set _exiting flag."""
+        event = create_key_event(Qt.Key.Key_VolumeUp)
+        input_handler.handle_key_press(event)
+
+        assert input_handler._exiting is False

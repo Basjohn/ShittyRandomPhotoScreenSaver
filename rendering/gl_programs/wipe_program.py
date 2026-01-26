@@ -53,6 +53,7 @@ uniform sampler2D uOldTex;
 uniform sampler2D uNewTex;
 uniform float u_progress;
 uniform int u_mode;  // 0=L2R, 1=R2L, 2=T2B, 3=B2T, 4=Diag TL-BR, 5=Diag TR-BL
+uniform float u_feather;  // Feather amount (0.0 = hard edge, 0.05 = soft)
 
 void main() {
     vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
@@ -80,8 +81,16 @@ void main() {
         axis = ((1.0 - uv.x) + uv.y) * 0.5;    // Diagonal TR-BL
     }
 
-    // Branchless blend using step
-    float m = step(axis, t);
+    // Blend with optional feathering
+    float feather = clamp(u_feather, 0.0, 0.2);
+    float m;
+    if (feather > 0.0001) {
+        // Soft edge using smoothstep
+        m = smoothstep(t - feather, t + feather, axis);
+    } else {
+        // Hard edge using step (default)
+        m = step(axis, t);
+    }
     FragColor = mix(oldColor, newColor, m);
 }
 """
@@ -95,6 +104,7 @@ void main() {
             "uOldTex": gl.glGetUniformLocation(program, "uOldTex"),
             "uNewTex": gl.glGetUniformLocation(program, "uNewTex"),
             "u_mode": gl.glGetUniformLocation(program, "u_mode"),
+            "u_feather": gl.glGetUniformLocation(program, "u_feather"),
         }
 
     def _direction_to_mode(self, direction: Any) -> int:
@@ -157,6 +167,10 @@ void main() {
 
             if uniforms.get("u_mode", -1) != -1:
                 gl.glUniform1i(uniforms["u_mode"], mode)
+
+            if uniforms.get("u_feather", -1) != -1:
+                feather = float(getattr(state, "feather", 0.0))
+                gl.glUniform1f(uniforms["u_feather"], feather)
 
             if uniforms.get("uOldTex", -1) != -1:
                 gl.glActiveTexture(gl.GL_TEXTURE0)

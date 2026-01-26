@@ -34,8 +34,16 @@ except Exception as e:
 
 
 class VisualizerMode(Enum):
-    """Visualization display modes for the Spotify visualizer."""
-    SPECTRUM = auto()  # Classic bar spectrum analyzer (only supported mode)
+    """Visualization display modes for the Spotify visualizer.
+
+    Only SPECTRUM is currently implemented. Other modes are planned for future releases.
+    """
+    SPECTRUM = auto()        # Classic bar spectrum analyzer - FUNCTIONAL
+    WAVEFORM_RIBBON = auto() # Morphing waveform ribbon - NOT IMPLEMENTED
+    DNA_HELIX = auto()       # Dual helices with amplitude - NOT IMPLEMENTED
+    RADIAL_BLOOM = auto()    # Polar coordinate FFT display - NOT IMPLEMENTED
+    SPECTROGRAM = auto()     # Scrolling history ribbon - NOT IMPLEMENTED
+    PHASOR_SWARM = auto()    # Particle emitters on bar positions - NOT IMPLEMENTED
 
 
 @dataclass

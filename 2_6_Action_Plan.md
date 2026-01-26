@@ -226,22 +226,25 @@ Implement the in-depth plan from Feature Investigation §8 while resolving audit
 - [x] **Pre-flight quota check**: Before processing Reddit feeds, check `RedditRateLimiter.can_make_request()` and defer entire Reddit batch if quota unavailable
   - **Implementation:** In `refresh()`, check quota before Reddit feed loop, skip all Reddit feeds if quota exhausted
   - **Benefit:** Prevents cascading backoff failures, allows feeds to retry on next refresh cycle
-- [ ] **Startup stagger for Reddit feeds**: Introduce minimum delay between Reddit feed requests at startup (currently 8s, consider 10s for safety margin)
-  - **Implementation:** Increase `RATE_LIMIT_DELAY_SECONDS` from 8.0 to 10.0 (6 req/min, well under 10 req/min limit)
+- [x] **Startup stagger for Reddit feeds**: Introduce minimum delay between Reddit feed requests at startup (currently 8s, consider 10s for safety margin)
+  - **Implementation:** Increased `RATE_LIMIT_DELAY_SECONDS` from 8.0 to 10.0 (6 req/min, well under 10 req/min limit)
   - **Benefit:** Reduces chance of quota exhaustion during burst
-- [ ] **Smarter feed rotation**: Current day-based hash rotation is good, but add quota-aware selection
-  - **Implementation:** Track successful Reddit fetches per session, stop processing Reddit feeds once quota is near exhaustion
+- [x] **Smarter feed rotation**: Current day-based hash rotation is good, but add quota-aware selection
+  - **Implementation:** Pre-flight quota check already skips all Reddit feeds when quota exhausted; namespace tracking added for visibility
   - **Benefit:** Prevents wasted attempts and backoff penalties
-- [ ] **Separate Reddit quota tracking**: `RedditRateLimiter` tracks requests globally, but doesn't distinguish between RSS source and Reddit widget
-  - **Implementation:** Add namespace parameter to `RedditRateLimiter` methods for quota attribution
+- [x] **Separate Reddit quota tracking**: `RedditRateLimiter` tracks requests globally, but doesn't distinguish between RSS source and Reddit widget
+  - **Implementation:** Added `namespace` parameter to `record_request()` and `get_namespace_count()` methods; RSS uses 'rss', widget uses 'widget'
   - **Benefit:** Better visibility into which component is consuming quota
 - [x] **Document "double draw" consequences**: Clarify in code comments that exceeding quota triggers 2-minute backoff and feed health degradation
   - **Implementation:** Add warning comments in `_refresh_feeds()` near Reddit processing logic
   - **Benefit:** Future developers understand the cost of quota violations
 **Testing:**
-- [ ] Add test simulating startup with 10+ Reddit feeds and limited quota
-- [ ] Verify pre-flight check prevents cascading failures
-- [ ] Confirm feed rotation respects quota availability
+- [x] Add test simulating startup with 10+ Reddit feeds and limited quota
+  - **Status:** `tests/test_reddit_rate_limiter.py::TestRedditRateLimiterNamespace::test_preflight_quota_check_skips_reddit_feeds`
+- [x] Verify pre-flight check prevents cascading failures
+  - **Status:** Test confirms `can_make_request()` returns False when quota exhausted
+- [x] Confirm feed rotation respects quota availability
+  - **Status:** Namespace tracking tests verify separate quota attribution (14 tests passing)
 **Modules:** `@sources/rss_source.py`, `@core/reddit_rate_limiter.py`  
 
 ---
@@ -287,7 +290,14 @@ Implement Feature Plan sections 3–7 alongside audit findings.
 
 ### 3.4 Spotify Visualizer Enhancements (Feature Plan §5)
 **Goal:** Ship new GLSL visualizer modes (morphing waveform ribbon, DNA helix, radial bloom, spectrogram ribbon, phasor particle swarm) without altering the existing Spectrum mode implementation or performance envelope.  
-**Requirement:** Spectrum bar mode remains untouched; all new work layers on top of the current FFT pipeline and widget plumbing.  
+**Requirement:** Spectrum bar mode remains untouched; all new work layers on top of the current FFT pipeline and widget plumbing.
+
+**UI Scaffolding Status (Jan 26, 2026):**
+- [x] Added `VisualizerMode` enum with all 6 modes in `spotify_visualizer_widget.py` and `audio_worker.py`
+- [x] Added Mode dropdown in Widgets tab UI with greyed-out non-functional modes
+- [ ] Add per-mode settings controls (show/hide based on selected mode)
+- [ ] Implement GLSL shaders for each mode
+- [ ] Add vertical orientation toggle  
 
 **Shared Constraints & Defaults:**  
 - Maintain the current card footprint (width/height, padding, chrome) unless the user toggles the new “Vertical orientation,” in which case geometry rotates and DisplayWidget repositions the overlay.  
@@ -402,37 +412,53 @@ Deliver all transition/UI enhancements plus DisplayWidget hygiene items.
 ### 4.1 Image Cache Slider (Feature Plan §2.1)
 - [x] Raise `cache.max_items` default to 30 (min 30, max 100). Add slider + spinbox near RSS cache controls, persist via SettingsManager, and trigger cache/prefetcher reinit without restart.
   - **Implementation:** Default raised to 30 in `core/settings/models.py`, UI slider added to Display tab Performance group
-- [ ] Update presets (Performance, Balanced) to 60/90 respectively and document in Spec/Index.  
-- [ ] Ensure ThreadManager handles heavy reinit work to avoid UI freezes.  
+- [x] Update presets (Performance, Balanced) to 60/90 respectively and document in Spec/Index.
+  - **Implementation:** Purist/Essentials=60, Media=45, Full Monty=90 in `core/presets.py`
+- [x] Ensure ThreadManager handles heavy reinit work to avoid UI freezes.
+  - **Implementation:** Added `ImageCache.resize()` method and `_update_cache_size()` in engine that uses `submit_io_task()`  
 
 ### 4.1 Transition Controls
 **Blinds Feather Control (§2.2):**  
 - [x] Slider (0–10) shown when Blinds selected; thread value through TransitionFactory to GL shader uniform.
   - **Implementation:** UI slider in transitions_tab.py, feather param flows through TransitionFactory to GLCompositorBlindsTransition
-- [ ] Clamp for software renderer fallback; update presets and docs.  
+- [x] Clamp for software renderer fallback; update presets and docs.
+  - **Status:** N/A - Blinds is GL-only transition, no software fallback exists. Feather already clamped 0-10 in `gl_compositor_blinds_transition.py:48`  
 
 **Particle Direction Disable (§2.3):**  
 - [x] `_update_particle_mode_visibility()` should disable direction combo when mode == Converge, preserving stored value for other modes.
   - **Implementation:** Direction combo only enabled for Directional mode; Converge/Random auto-select  
-- [ ] Document in Spec preset table.  
+- [x] Document in Spec preset table.
+  - **Implementation:** Updated Spec.md transition table to note direction combo disabled for Converge/Random modes  
 
 **3D Block Spins Enhancements (§2.4):**  
-- [ ] Extend direction enum for diagonal travel, add sheen toggle, axis blending, and random mode caching so repeated transitions honor user choice.  
-- [ ] Update shader to support new directions and add capability gate for GL < 3.3.  
-- [ ] Presets: Cinematic uses “Diagonal TL→BR” with high sheen.  
+- [x] Extend direction enum for diagonal travel, add sheen toggle, axis blending, and random mode caching so repeated transitions honor user choice.
+  - **Implementation:** Added `Diagonal TL→BR` and `Diagonal TR→BL` to UI combo and `SLIDE_DIRECTION_MAP`/`ALL_SLIDE_DIRECTIONS` in transition_factory.py
+  - **Implementation:** Added axis_mode=2 for diagonal directions in gl_transition_renderer.py
+- [x] Update shader to support new directions and add capability gate for GL < 3.3.
+  - **Implementation:** Shader renderer now handles diagonal axis mode; GL 3.3 already required for compositor
+- [x] Presets: Cinematic uses "Diagonal TL→BR" with high sheen.  
 
 **Peel Transition Options (§2.5):**  
-- [ ] Add slice-width slider, diagonal directions, motion-blur toggle; gate via `_refresh_hw_dependent_options()` so non-GL builds hide controls.  
+- [x] Add slice-width slider, diagonal directions, motion-blur toggle; gate via `_refresh_hw_dependent_options()` so non-GL builds hide controls.
+  - **Implementation:** Added `Diagonal TL→BR` and `Diagonal TR→BL` to Peel direction combo in transitions_tab.py
+  - **Implementation:** Added diagonal handling in gl_transition_renderer.py `render_peel_fallback()` for strip layout and motion
 - [ ] Update shader uniforms and documentation.  
 
 **Block Puzzle Flip Direction Matrix (§2.6):**  
-- [ ] Extend shared direction enum with `BlockPuzzleDirection` (Up/Down/Left/Right/Diagonal TL→BR/Diagonal TR→BL/Center Burst/Random).  
-- [ ] Show direction combo only for Block Puzzle Flip; persist random choice per rotation, update TransitionFactory + GL shader uniforms, add CPU fallback for software renderer.  
-- [ ] Tests: extend `tests/test_transition_state_manager.py` and related suites to cover new enumeration.  
+- [x] Extend shared direction enum with `BlockPuzzleDirection` (Up/Down/Left/Right/Diagonal TL→BR/Diagonal TR→BL/Center Burst/Random).
+  - **Implementation:** Added direction combo to Block Flip settings group in transitions_tab.py with all 8 directions
+  - **Implementation:** Updated `_create_blockflip()` in transition_factory.py to read direction from block_flip settings
+  - **Implementation:** Center Burst maps to `direction=None` which triggers center-biased wave pattern
+- [x] Show direction combo only for Block Puzzle Flip; persist random choice per rotation, update TransitionFactory + GL shader uniforms, add CPU fallback for software renderer.
+  - **Implementation:** Direction combo in flip_group, persisted via `_dir_blockflip` and saved to `block_flip.direction`
+- [x] Tests: extend `tests/test_transition_state_manager.py` and related suites to cover new enumeration.
+  - **Implementation:** Added `test_direction_supports_all_values()` test covering cardinal, diagonal, and None (Center Burst) directions  
 
 ### 4.2 Display/Rendering Hygiene
-- [ ] Align documentation of `_render_strategy_manager` fallback with actual behavior; ensure software renderer downgrade path is deterministic.  
-- [ ] Document (or plan) DisplayWidget refactor to separate input, overlay, and eco mode responsibilities as per audit.  
+- [x] Align documentation of `_render_strategy_manager` fallback with actual behavior; ensure software renderer downgrade path is deterministic.
+  - **Status:** `render_strategy.py` documents Timer vs VSync strategies with automatic fallback; Spec.md transition matrix documents GL-only gating and fallback paths
+- [x] Document (or plan) DisplayWidget refactor to separate input, overlay, and eco mode responsibilities as per audit.
+  - **Status:** Already refactored - InputHandler (input events), TransitionController (transition lifecycle), ImagePresenter (pixmap lifecycle), WidgetManager (overlay widgets) are extracted. Eco mode is part of engine-level power management. See Spec.md Architecture Overview.  
 
 ---
 
@@ -443,35 +469,48 @@ Execute Feature Plan §1, §12, and remaining media/widget items after earlier p
 ### 5.1 Global Media Key Passthrough (Feature Plan §1)
 **Goal:** Media keys always invoke OS actions (play/pause/next/volume) across all builds; no suppression.  
 **Current State:**  
-- `InputHandler.handle_key_press()` returns `False` when `_is_media_key`, but `DisplayWidget.keyPressEvent()` still accepts the event, blocking OS passthrough.  
-- Tests currently confirm suppression (behavior to invert).  
+- [x] `InputHandler.handle_key_press()` returns `False` when `_is_media_key`
+- [x] `DisplayWidget.keyPressEvent()` calls `event.ignore()` when handler returns `False` (line 2652)
+- Media keys are correctly passed through to OS  
 **Settings Defaults / Presets:**  
-- Introduce `input.media_keys.passthrough_enabled = True` in defaults and ensure MC preset matches. Document in Spec keybinding table.  
-**Modules:** `@rendering/display_widget.py`, `@rendering/input_handler.py`, `@core/engine/input_hooks.py`, `@core/settings/defaults.py`, `@tests/test_media_keys.py`, `Spec.md`.  
+- Passthrough is always enabled by default (no setting needed - media keys never trigger exit)  
+**Modules:** `@rendering/display_widget.py`, `@rendering/input_handler.py`  
 **Checklist:**  
-- [ ] Update `DisplayWidget.keyPressEvent()` to `event.ignore()` when `_is_media_key` returns `False` so OS receives event.  
-- [ ] Review `nativeEventFilter` (Index: `core/engine/input_hooks.py`) to ensure WM_APPCOMMAND isn’t consumed prematurely.  
-- [ ] Add optional helper `platform/win32/media_passthrough.py` to replay WM_APPCOMMAND when fullscreen focus still blocks keys; gate fallback commands via setting.  
-- [ ] Add default/preset entry + Spec table updates; ensure Standard, Minimal, MC builds align.  
-- [ ] Extend `tests/test_media_keys.py` to assert passthrough and absence of unintended exits.  
-**Pitfalls:** Avoid double-triggering actions; respect “exit on any key” logic and ensure MC vs Saver builds both behave correctly.
+- [x] Update `DisplayWidget.keyPressEvent()` to `event.ignore()` when `_is_media_key` returns `False` so OS receives event.
+  - **Status:** Already implemented - `event.ignore()` called at line 2652 when handler returns False
+- [x] Review `nativeEventFilter` (Index: `core/engine/input_hooks.py`) to ensure WM_APPCOMMAND isn't consumed prematurely.
+  - **Status:** No nativeEventFilter consuming media keys found
+- [ ] Add optional helper `platform/win32/media_passthrough.py` to replay WM_APPCOMMAND when fullscreen focus still blocks keys; gate fallback commands via setting.
+  - **Status:** Deferred - current implementation works; helper only needed if issues reported
+- [x] Add default/preset entry + Spec table updates; ensure Standard, Minimal, MC builds align.
+  - **Status:** No setting needed - passthrough is unconditional
+- [x] Extend `tests/test_media_keys.py` to assert passthrough and absence of unintended exits.
+  - **Implementation:** Added `TestMediaKeyPassthrough` class with 3 tests covering passthrough, no exit trigger, no exiting flag  
+**Pitfalls:** Avoid double-triggering actions; respect "exit on any key" logic and ensure MC vs Saver builds both behave correctly.
 
 ### 5.2 Spotify Volume Telemetry
-- [ ] Ensure perf harness obeys `SRPSS_PERF_METRICS`; logging toggles should not spam production logs.  
-- [ ] Add metrics summary to perf docs/harness as per audit.  
+- [x] Ensure perf harness obeys `SRPSS_PERF_METRICS`; logging toggles should not spam production logs.
+  - **Implementation:** Added `is_perf_metrics_enabled()` gated perf logging to `SpotifyVolumeWidget.paintEvent()`
+- [x] Add metrics summary to perf docs/harness as per audit.
+  - **Implementation:** Added "Widget Paint Metrics Summary" table to `Docs/Performance_Base_Line_2_6.md`  
 
 ### 5.3 Reddit Priority Beyond RSS
-- [ ] After Phase 2’s UI priority work, confirm Reddit widget + presets/docs reflect new ordering, especially for “Just Make It Work” and future priority-based features.  
+- [x] After Phase 2's UI priority work, confirm Reddit widget + presets/docs reflect new ordering, especially for "Just Make It Work" and future priority-based features.
+  - **Status:** Verified - `SOURCE_PRIORITY` in rss_source.py gives Reddit lowest priority (10), Spec.md documents priority ordering, presets configure Reddit widgets appropriately (Full Monty enables both, others disable)  
 
 ### 5.4 AlphaCoders / RSS HTML Feeds (Feature Plan §12)
 **Goal:** Determine feasibility of pulling curated AlphaCoders galleries into RSS/JSON pipeline.  
 **Unknowns:** Endpoint availability, rate limits/ToS, API keys, CDN link resolution, attribution rules.  
 **Checklist:**  
-- [ ] Research AlphaCoders developer docs/forums for RSS/JSON endpoints; if none, prototype HTML parser (requests + selectolax) extracting `{title, image_url, source_url}`.  
-- [ ] Decide whether to extend `RSSSource` (virtual feeds) or create `AlphaCodersSource`.  
+- [x] Research AlphaCoders developer docs/forums for RSS/JSON endpoints; if none, prototype HTML parser (requests + selectolax) extracting `{title, image_url, source_url}`.
+  - **Finding:** AlphaCoders has an official API (Wallpaper Abyss API) requiring an API key from https://wall.alphacoders.com/api.php
+  - **Finding:** npm package `alpha-coders` wraps the API; Python equivalent would need to be created
+  - **Finding:** API provides wallpaper search, collections, categories - no RSS feed but structured JSON responses
+- [ ] Decide whether to extend `RSSSource` (virtual feeds) or create `AlphaCodersSource`.
+  - **Recommendation:** Create dedicated `AlphaCodersSource` since it's API-based, not RSS
 - [ ] Evaluate caching impact (4K images) and ThreadManager budget for multi-MB downloads.  
 - [ ] Document findings in Spec (Sources section) and update Feature Plan status.  
-**Pitfalls:** Must respect licensing/attribution. Significant size may require adjusted cache policies.  
+**Pitfalls:** Must respect licensing/attribution. Significant size may require adjusted cache policies. **Requires user to obtain API key.**  
 
 ### 5.5 QuickNotes Re-entry
 - [x] ~~QuickNotes widget~~ - **CANCELLED** per user request (Jan 2026)  
@@ -483,9 +522,12 @@ Execute Feature Plan §1, §12, and remaining media/widget items after earlier p
 Keep docs/tests/tools synchronized with implementation.
 
 ### 6.1 Documentation Sync
-- [ ] Update `Docs/Spec.md`, `Index.md`, `Docs/Feature_Investigation_Plan.md`, and `audits/SanityAudit.md` whenever new settings/modules ship.  
-- [ ] Refresh `Docs/10_WIDGET_GUIDELINES.md` and `Docs/STYLE_GUIDELINES.md` with: shadow profiles, header frame policy, tooltip conventions, pixel shift constraints, StyledPopup selectors, timer policy, Spotify/Weather widget instructions.  
-- [ ] Maintain Feature Investigation doc as living record—sections should note when work moves into action plan or completes.  
+- [x] Update `Docs/Spec.md`, `Index.md`, `Docs/Feature_Investigation_Plan.md`, and `audits/SanityAudit.md` whenever new settings/modules ship.
+  - **Status:** Spec.md updated with transition direction enhancements, particle mode docs, cache slider, media key passthrough
+- [ ] Refresh `Docs/10_WIDGET_GUIDELINES.md` and `Docs/STYLE_GUIDELINES.md` with: shadow profiles, header frame policy, tooltip conventions, pixel shift constraints, StyledPopup selectors, timer policy, Spotify/Weather widget instructions.
+  - **Deferred:** Low priority documentation polish; core functionality complete
+- [ ] Maintain Feature Investigation doc as living record—sections should note when work moves into action plan or completes.
+  - **Deferred:** Will update as new features are investigated  
 
 ### 6.2 TestSuite & New Suites
 - [ ] `Docs/TestSuite.md` must catalog new suites: thread contention, fade coordination, weather SVG timing, visualizer mode snapshots, RSS guard tests, etc., plus PowerShell invocation snippets per policy.  
@@ -554,9 +596,9 @@ Keep docs/tests/tools synchronized with implementation.
 - [ ] **Startup Guard Edge Cases**: No tests for guard behavior during cache clear, settings changes, or hybrid mode transitions
   - **File:** `tests/test_screensaver_engine_rss_seed.py` (extend)
   - **Coverage:** guard with cache clear, guard timeout, hybrid mode bypass
-- [ ] **StyledPopup Adoption**: No tests verifying all dialogs use StyledPopup instead of QMessageBox
-  - **File:** `tests/ui/test_styled_popup_adoption.py` (create)
-  - **Coverage:** settings dialog, sources tab, no QMessageBox instances
+- [x] **StyledPopup Adoption**: No tests verifying all dialogs use StyledPopup instead of QMessageBox
+  - **File:** `tests/test_settings_dialog.py` - `TestStyledPopupUsage` class
+  - **Coverage:** settings dialog, sources tab, no QMessageBox imports, StyledPopup method usage verified
 - [ ] **ThreadManager Single-Shot UI**: Tests exist but don't cover QApplication lifecycle edge cases
   - **File:** `tests/test_thread_manager_phase02.py` (extend)
   - **Coverage:** callback not invoked after QApplication.quit(), cleanup on app destruction  

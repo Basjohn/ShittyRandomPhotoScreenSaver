@@ -49,6 +49,8 @@ SLIDE_DIRECTION_MAP = {
     'Right to Left': SlideDirection.RIGHT,
     'Top to Bottom': SlideDirection.DOWN,
     'Bottom to Top': SlideDirection.UP,
+    'Diagonal TL→BR': SlideDirection.DIAG_TL_BR,
+    'Diagonal TR→BL': SlideDirection.DIAG_TR_BL,
 }
 
 SLIDE_DIRECTION_REVERSE = {v: k for k, v in SLIDE_DIRECTION_MAP.items()}
@@ -67,15 +69,17 @@ ALL_SLIDE_DIRECTIONS = [
     SlideDirection.RIGHT,
     SlideDirection.UP,
     SlideDirection.DOWN,
+    SlideDirection.DIAG_TL_BR,
+    SlideDirection.DIAG_TR_BL,
 ]
 
 
 class TransitionFactory:
     """Factory for creating transition instances based on settings.
-    
+
     Extracted from DisplayWidget to reduce file size and improve testability.
     """
-    
+
     def __init__(
         self,
         settings_manager: SettingsManager,
@@ -84,7 +88,7 @@ class TransitionFactory:
         compositor_ensurer: Optional[Callable[[], None]] = None,
     ):
         """Initialize the factory.
-        
+
         Args:
             settings_manager: Settings manager for reading transition config
             resource_manager: Resource manager for transition lifecycle
@@ -95,14 +99,14 @@ class TransitionFactory:
         self._resources = resource_manager
         self._check_compositor = compositor_checker or (lambda: False)
         self._ensure_compositor = compositor_ensurer or (lambda: None)
-        
+
         # ProcessSupervisor for TransitionWorker integration
         self._process_supervisor: Optional[ProcessSupervisor] = None
         self._precompute_cache: dict = {}  # Cache precomputed transition data
-    
+
     def set_process_supervisor(self, supervisor: Optional[ProcessSupervisor]) -> None:
         """Set the ProcessSupervisor for TransitionWorker integration.
-        
+
         When set and TransitionWorker is running, transition precomputation
         is offloaded to a separate process for better startup performance.
         """
@@ -113,7 +117,7 @@ class TransitionFactory:
                     logger.info("[TRANSITION_FACTORY] TransitionWorker available for precomputation")
             except Exception as e:
                 logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)
-    
+
     def _precompute_via_worker(
         self,
         transition_type: str,
@@ -123,18 +127,18 @@ class TransitionFactory:
         timeout_ms: int = 100,
     ) -> Optional[dict]:
         """Precompute transition data using TransitionWorker.
-        
+
         Returns precomputed data if successful, None if worker unavailable or failed.
         """
         if not self._process_supervisor:
             return None
-        
+
         try:
             if not self._process_supervisor.is_running(WorkerType.TRANSITION):
                 return None
-            
+
             import time
-            
+
             payload = {
                 "transition_type": transition_type,
                 "params": {
@@ -144,23 +148,23 @@ class TransitionFactory:
                 },
                 "use_cache": True,
             }
-            
+
             correlation_id = self._process_supervisor.send_message(
                 WorkerType.TRANSITION,
                 MessageType.TRANSITION_PRECOMPUTE,
                 payload=payload,
             )
-            
+
             if not correlation_id:
                 return None
-            
+
             # Poll for response with short timeout
             start_time = time.time()
             timeout_s = timeout_ms / 1000.0
-            
+
             while (time.time() - start_time) < timeout_s:
                 responses = self._process_supervisor.poll_responses(WorkerType.TRANSITION, max_count=5)
-                
+
                 for response in responses:
                     if response.correlation_id == correlation_id:
                         if response.success:
@@ -175,18 +179,18 @@ class TransitionFactory:
                             return data
                         else:
                             return None
-                
+
                 time.sleep(0.005)
-            
+
             return None
-            
+
         except Exception as e:
             logger.debug("[TRANSITION_FACTORY] TransitionWorker precompute error: %s", e)
             return None
-    
+
     def create_transition(self) -> Optional[BaseTransition]:
         """Create the next transition based on current settings.
-        
+
         Returns:
             Configured transition instance, or None on error
         """
@@ -195,7 +199,7 @@ class TransitionFactory:
         except Exception as exc:
             logger.error("Failed to create transition: %s", exc, exc_info=True)
             return None
-    
+
     def _create_transition_impl(self) -> Optional[BaseTransition]:
         """Internal implementation of transition creation."""
         transitions_settings = self._settings.get('transitions', {})
@@ -205,34 +209,34 @@ class TransitionFactory:
         canonical_transitions = get_default_settings().get('transitions', {})
         if not isinstance(canonical_transitions, dict):
             canonical_transitions = {}
-        
+
         # Get transition type
         transition_type = transitions_settings.get('type') or canonical_transitions.get('type') or 'Crossfade'
         requested_type = transition_type
-        
+
         # Handle random mode
         random_mode, random_choice_value = self._get_random_mode(transitions_settings)
         if random_mode and random_choice_value:
             transition_type = random_choice_value
-        
+
         # Get duration
         duration_ms = self._get_duration(transitions_settings, transition_type)
-        
+
         # Get easing and hw_accel
         easing_str = transitions_settings.get('easing') or 'Auto'
         hw_accel = self._get_hw_accel()
-        
+
         # Create the appropriate transition
         transition = self._create_by_type(
             transition_type, transitions_settings, duration_ms, easing_str, hw_accel
         )
-        
+
         if transition:
             transition.set_resource_manager(self._resources)
             self._log_selection(requested_type, transition_type, random_mode, random_choice_value)
-        
+
         return transition
-    
+
     def _get_random_mode(self, settings: dict) -> tuple[bool, Optional[str]]:
         """Get random mode state and choice."""
         try:
@@ -241,14 +245,15 @@ class TransitionFactory:
             random_mode = bool(rnd)
             random_choice_value = None
             if random_mode:
-                chosen = self._settings.get('transitions.random_choice', None)
+                # Read from nested dict (engine now stores in nested dict)
+                chosen = settings.get('random_choice', None)
                 if isinstance(chosen, str) and chosen:
                     random_choice_value = chosen
             return random_mode, random_choice_value
         except Exception as e:
             logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)
             return False, None
-    
+
     def _get_duration(self, settings: dict, transition_type: str) -> int:
         """Get duration for the transition type."""
         canonical_transitions = get_default_settings().get('transitions', {})
@@ -261,7 +266,7 @@ class TransitionFactory:
         except Exception as e:
             logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)
             base_duration_ms = 1300
-        
+
         duration_ms = base_duration_ms
         try:
             durations_cfg = settings.get('durations', {})
@@ -281,9 +286,9 @@ class TransitionFactory:
                 duration_ms = int(per_type_raw)
         except Exception as e:
             logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)
-        
+
         return duration_ms
-    
+
     def _get_hw_accel(self) -> bool:
         """Check if hardware acceleration is enabled."""
         try:
@@ -292,7 +297,7 @@ class TransitionFactory:
             logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)
             hw_raw = True
         return SettingsManager.to_bool(hw_raw, True)
-    
+
     def _use_compositor(self, hw_accel: bool) -> bool:
         """Check if compositor should be used."""
         if not hw_accel:
@@ -302,7 +307,7 @@ class TransitionFactory:
         except Exception:
             logger.debug("[GL COMPOSITOR] Failed to ensure compositor", exc_info=True)
         return self._check_compositor()
-    
+
     def _create_by_type(
         self,
         transition_type: str,
@@ -313,144 +318,153 @@ class TransitionFactory:
     ) -> Optional[BaseTransition]:
         """Create transition by type name."""
         use_compositor = self._use_compositor(hw_accel)
-        
+
         if transition_type == 'Crossfade':
             return self._create_crossfade(duration_ms, easing_str, use_compositor)
-        
+
         if transition_type == 'Slide':
             return self._create_slide(settings, duration_ms, easing_str, use_compositor)
-        
+
         if transition_type == 'Wipe':
             return self._create_wipe(settings, duration_ms, easing_str, use_compositor)
-        
+
         if transition_type == 'Peel':
             return self._create_peel(settings, duration_ms, easing_str, use_compositor)
-        
+
         if transition_type in ('Shuffle', 'Claw Marks'):
             # Retired transitions map to Crossfade
             return CrossfadeTransition(duration_ms, easing_str)
-        
+
         if transition_type == 'Warp Dissolve':
             return self._create_warp(duration_ms, easing_str, use_compositor)
-        
+
         if transition_type == 'Diffuse':
             return self._create_diffuse(settings, duration_ms, easing_str, use_compositor)
-        
+
         if transition_type in ('Rain Drops', 'Ripple'):
             return self._create_raindrops(duration_ms, easing_str, use_compositor)
-        
+
         if transition_type == 'Block Puzzle Flip':
             return self._create_blockflip(settings, duration_ms, use_compositor)
-        
+
         if transition_type == '3D Block Spins':
             return self._create_blockspin(settings, duration_ms, easing_str, use_compositor)
-        
+
         if transition_type == 'Blinds':
             return self._create_blinds(settings, duration_ms, use_compositor)
-        
+
         if transition_type == 'Crumble':
             return self._create_crumble(settings, duration_ms, use_compositor)
-        
+
         if transition_type == 'Particle':
             return self._create_particle(settings, duration_ms, use_compositor)
-        
+
         # Unknown type - fallback to Crossfade
         logger.warning("Unknown transition type: %s, using Crossfade", transition_type)
         return CrossfadeTransition(duration_ms)
-    
+
     # Individual transition creators
-    
+
     def _create_crossfade(self, duration_ms: int, easing_str: str, use_compositor: bool) -> BaseTransition:
         if use_compositor:
             return GLCompositorCrossfadeTransition(duration_ms, easing_str)
         return CrossfadeTransition(duration_ms, easing_str)
-    
+
     def _create_slide(self, settings: dict, duration_ms: int, easing_str: str, use_compositor: bool) -> BaseTransition:
         slide_settings = settings.get('slide', {}) if isinstance(settings.get('slide', {}), dict) else {}
+        # Direction is now always read from nested dict (engine updates nested dict in random mode)
         direction = self._get_slide_direction(settings, slide_settings, 'slide')
-        
+
         if use_compositor:
             return GLCompositorSlideTransition(duration_ms, direction, easing_str)
         return SlideTransition(duration_ms, direction, easing_str)
-    
+
     def _create_wipe(self, settings: dict, duration_ms: int, easing_str: str, use_compositor: bool) -> BaseTransition:
         wipe_settings = settings.get('wipe', {}) if isinstance(settings.get('wipe', {}), dict) else {}
+        # Direction is now always read from nested dict (engine updates nested dict in random mode)
         direction = self._get_wipe_direction(settings, wipe_settings)
-        
+
         if use_compositor:
             return GLCompositorWipeTransition(duration_ms, direction, easing_str)
         return WipeTransition(duration_ms, direction, easing_str)
-    
+
     def _create_peel(self, settings: dict, duration_ms: int, easing_str: str, use_compositor: bool) -> BaseTransition:
         peel_settings = settings.get('peel', {}) if isinstance(settings.get('peel', {}), dict) else {}
         direction = self._get_slide_direction(settings, peel_settings, 'peel')
-        strips = 12
-        
+        strips = self._safe_int(peel_settings.get('strips', 12), 12)
+        strips = max(4, min(strips, 32))  # Clamp to reasonable range
+
         if use_compositor:
             return GLCompositorPeelTransition(duration_ms, direction, strips, easing_str)
         return CrossfadeTransition(duration_ms, easing_str)  # CPU fallback
-    
+
     def _create_warp(self, duration_ms: int, easing_str: str, use_compositor: bool) -> BaseTransition:
         if use_compositor:
             return GLCompositorWarpTransition(duration_ms, easing_str)
         return CrossfadeTransition(duration_ms, easing_str)
-    
+
     def _create_diffuse(self, settings: dict, duration_ms: int, easing_str: str, use_compositor: bool) -> BaseTransition:
         diffuse_settings = settings.get('diffuse', {}) if isinstance(settings.get('diffuse', {}), dict) else {}
         block_size = self._safe_int(diffuse_settings.get('block_size', 50), 50)
         shape = diffuse_settings.get('shape', 'Rectangle') or 'Rectangle'
-        
+
         if use_compositor:
             return GLCompositorDiffuseTransition(duration_ms, block_size, shape, easing_str)
         return DiffuseTransition(duration_ms, block_size, shape)
-    
+
     def _create_raindrops(self, duration_ms: int, easing_str: str, use_compositor: bool) -> BaseTransition:
         if use_compositor:
             return GLCompositorRainDropsTransition(duration_ms, easing_str)
         return CrossfadeTransition(duration_ms, easing_str)
-    
+
     def _create_blockflip(self, settings: dict, duration_ms: int, use_compositor: bool) -> BaseTransition:
         block_flip_settings = settings.get('block_flip', {}) if isinstance(settings.get('block_flip', {}), dict) else {}
         rows = self._safe_int(block_flip_settings.get('rows', 4), 4)
         cols = self._safe_int(block_flip_settings.get('cols', 6), 6)
-        
-        # Get direction from slide settings
-        slide_cfg = settings.get('slide', {}) if isinstance(settings.get('slide', {}), dict) else {}
-        direction = self._get_slide_direction(settings, slide_cfg, 'slide')
-        
+
+        # Get direction from block_flip settings
+        dir_str = block_flip_settings.get('direction', 'Center Burst') or 'Center Burst'
+
+        if dir_str == 'Random':
+            direction = random.choice(ALL_SLIDE_DIRECTIONS)
+        elif dir_str == 'Center Burst':
+            direction = None  # None signals center burst mode
+        else:
+            direction = SLIDE_DIRECTION_MAP.get(dir_str, None)
+
         if use_compositor:
             return GLCompositorBlockFlipTransition(duration_ms, rows, cols, flip_duration_ms=500, direction=direction)
         return BlockPuzzleFlipTransition(duration_ms, rows, cols, flip_duration_ms=500, direction=direction)
-    
+
     def _create_blockspin(self, settings: dict, duration_ms: int, easing_str: str, use_compositor: bool) -> BaseTransition:
         blockspin_settings = settings.get('blockspin', {}) if isinstance(settings.get('blockspin', {}), dict) else {}
         dir_str = blockspin_settings.get('direction', 'Random') or 'Random'
-        
+
         if dir_str == 'Random':
             direction = random.choice(ALL_SLIDE_DIRECTIONS)
         else:
             direction = SLIDE_DIRECTION_MAP.get(dir_str, SlideDirection.LEFT)
-        
+
         if use_compositor:
             return GLCompositorBlockSpinTransition(duration_ms, easing_str, direction)
         return CrossfadeTransition(duration_ms, easing_str)
-    
+
     def _create_blinds(self, settings: dict, duration_ms: int, use_compositor: bool) -> BaseTransition:
         if use_compositor:
             # Get canonical defaults from defaults.py
             from core.settings.defaults import get_default_settings
             canonical = get_default_settings().get('transitions', {}).get('blinds', {})
-            
+
             blinds_settings = settings.get('blinds', {}) if isinstance(settings.get('blinds', {}), dict) else {}
             feather = self._safe_int(blinds_settings.get('feather', canonical.get('feather', 2)), 2)
             return GLCompositorBlindsTransition(duration_ms, feather=feather)
         return CrossfadeTransition(duration_ms)
-    
+
     def _create_crumble(self, settings: dict, duration_ms: int, use_compositor: bool) -> BaseTransition:
         # Get canonical defaults from defaults.py
         from core.settings.defaults import get_default_settings
         canonical = get_default_settings().get('transitions', {}).get('crumble', {})
-        
+
         crumble_settings = settings.get('crumble', {}) if isinstance(settings.get('crumble', {}), dict) else {}
         piece_count = self._safe_int(crumble_settings.get('piece_count', canonical.get('piece_count', 14)), 14)
         crack_complexity = self._safe_float(crumble_settings.get('crack_complexity', canonical.get('crack_complexity', 1.0)), 1.0)
@@ -463,18 +477,18 @@ class TransitionFactory:
             'Age Weighted': 4.0,
         }
         weight_mode = weight_map.get(weight_str, 0.0)
-        
+
         if use_compositor:
             return GLCompositorCrumbleTransition(duration_ms, piece_count, crack_complexity, False, weight_mode)
         return CrossfadeTransition(duration_ms)
-    
+
     def _create_particle(self, settings: dict, duration_ms: int, use_compositor: bool) -> BaseTransition:
         # Get canonical defaults from defaults.py
         from core.settings.defaults import get_default_settings
         canonical = get_default_settings().get('transitions', {}).get('particle', {})
-        
+
         particle_settings = settings.get('particle', {}) if isinstance(settings.get('particle', {}), dict) else {}
-        
+
         mode_str = particle_settings.get('mode', canonical.get('mode', 'Converge'))
         mode_map = {
             'Directional': 0,
@@ -483,7 +497,7 @@ class TransitionFactory:
             'Random': 3,
         }
         mode = mode_map.get(mode_str, 0)
-        
+
         direction_str = particle_settings.get('direction', canonical.get('direction', 'Left to Right'))
         direction_map = {
             'Left to Right': 0,
@@ -498,7 +512,7 @@ class TransitionFactory:
             'Random Placement': 9,
         }
         direction = direction_map.get(direction_str, 0)
-        
+
         particle_radius = self._safe_float(particle_settings.get('particle_radius', canonical.get('particle_radius', 10.0)), 10.0)
         overlap = self._safe_float(particle_settings.get('overlap', canonical.get('overlap', 4.0)), 4.0)
         trail_length = self._safe_float(particle_settings.get('trail_length', canonical.get('trail_length', 0.15)), 0.15)
@@ -511,7 +525,7 @@ class TransitionFactory:
         gloss_size = self._safe_float(particle_settings.get('gloss_size', canonical.get('gloss_size', 72.0)), 72.0)
         light_direction = int(particle_settings.get('light_direction', canonical.get('light_direction', 0)))
         swirl_order = int(particle_settings.get('swirl_order', canonical.get('swirl_order', 0)))
-        
+
         if use_compositor:
             return GLCompositorParticleTransition(
                 duration_ms, mode, direction, particle_radius, overlap,
@@ -520,21 +534,20 @@ class TransitionFactory:
                 light_direction, swirl_order
             )
         return CrossfadeTransition(duration_ms)
-    
+
     # Direction helpers
-    
+
     def _get_slide_direction(self, settings: dict, type_settings: dict, settings_key: str) -> SlideDirection:
         """Get slide direction with non-repeating random support."""
         direction_str = type_settings.get('direction', 'Random') or 'Random'
-        rnd_always = SettingsManager.to_bool(settings.get('random_always', False), False)
-        
-        if direction_str == 'Random' and not rnd_always:
-            # Non-repeating random
+
+        # If direction is 'Random', always pick a random direction (non-repeating)
+        if direction_str == 'Random':
             last_dir = type_settings.get('last_direction')
             last_enum = SLIDE_DIRECTION_MAP.get(last_dir) if isinstance(last_dir, str) else None
             candidates = [d for d in ALL_SLIDE_DIRECTIONS if d != last_enum] if last_enum in ALL_SLIDE_DIRECTIONS else ALL_SLIDE_DIRECTIONS
             direction = random.choice(candidates) if candidates else random.choice(ALL_SLIDE_DIRECTIONS)
-            
+
             # Persist last direction
             try:
                 type_settings['last_direction'] = SLIDE_DIRECTION_REVERSE.get(direction, 'Left to Right')
@@ -542,26 +555,26 @@ class TransitionFactory:
                 self._settings.set('transitions', settings)
             except Exception as e:
                 logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)
-            
+
             return direction
-        
+
         return SLIDE_DIRECTION_MAP.get(direction_str, SlideDirection.LEFT)
-    
+
     def _get_wipe_direction(self, settings: dict, wipe_settings: dict) -> WipeDirection:
         """Get wipe direction with non-repeating random support."""
         wipe_dir_str = wipe_settings.get('direction', 'Random') or 'Random'
-        rnd_always = SettingsManager.to_bool(settings.get('random_always', False), False)
-        
-        if wipe_dir_str in WIPE_DIRECTION_MAP and not (wipe_dir_str == 'Random' and not rnd_always):
+
+        # If not 'Random', use the specified direction
+        if wipe_dir_str != 'Random' and wipe_dir_str in WIPE_DIRECTION_MAP:
             return WIPE_DIRECTION_MAP[wipe_dir_str]
-        
-        # Random selection
+
+        # Random selection (non-repeating)
         all_wipes = list(WIPE_DIRECTION_MAP.values())
         last_wipe = wipe_settings.get('last_direction')
         last_enum = WIPE_DIRECTION_MAP.get(last_wipe) if isinstance(last_wipe, str) else None
         candidates = [d for d in all_wipes if d != last_enum] if last_enum in all_wipes else all_wipes
         direction = random.choice(candidates) if candidates else random.choice(all_wipes)
-        
+
         # Persist last direction
         enum_to_str = {v: k for k, v in WIPE_DIRECTION_MAP.items()}
         try:
@@ -570,11 +583,11 @@ class TransitionFactory:
             self._settings.set('transitions', settings)
         except Exception as e:
             logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)
-        
+
         return direction
-    
+
     # Utility helpers
-    
+
     @staticmethod
     def _safe_int(value, default: int) -> int:
         try:
@@ -582,7 +595,7 @@ class TransitionFactory:
         except Exception as e:
             logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)
             return default
-    
+
     @staticmethod
     def _safe_float(value, default: float) -> float:
         try:
@@ -590,7 +603,7 @@ class TransitionFactory:
         except Exception as e:
             logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)
             return default
-    
+
     def _log_selection(self, requested: str, actual: str, random_mode: bool, random_choice: Optional[str]) -> None:
         """Log transition selection."""
         try:

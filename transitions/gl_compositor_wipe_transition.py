@@ -36,6 +36,7 @@ class GLCompositorWipeTransition(BaseTransition):
         duration_ms: int = 1000,
         direction: WipeDirection = WipeDirection.LEFT_TO_RIGHT,
         easing: str = "Auto",
+        feather: float = 0.0,
     ) -> None:
         super().__init__(duration_ms)
         self._widget: Optional[QWidget] = None
@@ -43,6 +44,7 @@ class GLCompositorWipeTransition(BaseTransition):
         self._animation_id: Optional[str] = None
         self._direction: WipeDirection = direction
         self._easing_str: str = easing
+        self._feather: float = max(0.0, min(0.2, feather))
 
     # ------------------------------------------------------------------
     # BaseTransition API
@@ -103,6 +105,7 @@ class GLCompositorWipeTransition(BaseTransition):
             easing=easing_curve,
             animation_manager=am,
             on_finished=_on_finished,
+            feather=self._feather,
         )
 
         self._set_state(TransitionState.RUNNING)

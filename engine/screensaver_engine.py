@@ -2929,7 +2929,11 @@ class ScreensaverEngine(QObject):
             # Avoid immediate repeats of transition type. Legacy "Shuffle"
             # selections are treated as "Crossfade" so the engine no longer
             # reintroduces Shuffle into the pool.
-            last_type = self.settings_manager.get('transitions.last_random_choice', None)
+            # Read last_random_choice from nested dict for consistency
+            transitions = self.settings_manager.get('transitions', {})
+            if not isinstance(transitions, dict):
+                transitions = {}
+            last_type = transitions.get('last_random_choice', None)
             if last_type == "Shuffle":
                 last_type = "Crossfade"
             candidates = [t for t in available if t != last_type] if last_type in available else available
@@ -2939,28 +2943,73 @@ class ScreensaverEngine(QObject):
             
             # Also choose random parameters for transitions that need them
             # This ensures all displays use the SAME random parameters
+            # IMPORTANT: Update the nested dict, not flat keys, to stay consistent with UI saves
+            transitions = self.settings_manager.get('transitions', {})
+            if not isinstance(transitions, dict):
+                transitions = {}
+            
             if choice == "Slide":
+                # Slide only uses cardinal directions (no diagonals - looks weird)
                 directions = ['Left to Right', 'Right to Left', 'Top to Bottom', 'Bottom to Top']
-                last_dir = self.settings_manager.get('transitions.slide.last_direction', None)
+                slide_cfg = transitions.get('slide', {}) if isinstance(transitions.get('slide', {}), dict) else {}
+                last_dir = slide_cfg.get('last_direction')
                 candidates = [d for d in directions if d != last_dir] if last_dir in directions else directions
                 direction = random.choice(candidates) if candidates else random.choice(directions)
-                # Persist under nested slide key (no diagonals)
-                self.settings_manager.set('transitions.slide.direction', direction)
-                self.settings_manager.set('transitions.slide.last_direction', direction)
+                # Update nested dict
+                slide_cfg['direction'] = direction
+                slide_cfg['last_direction'] = direction
+                transitions['slide'] = slide_cfg
+                logger.debug(f"[ENGINE] Random Slide direction: {direction}")
             elif choice == "Wipe":
-                # Choose a random wipe direction and persist it
                 wipe_directions = ['Left to Right', 'Right to Left', 'Top to Bottom', 'Bottom to Top', 
                                   'Diagonal TL-BR', 'Diagonal TR-BL']
-                last_wipe_dir = self.settings_manager.get('transitions.wipe.last_direction', None)
+                wipe_cfg = transitions.get('wipe', {}) if isinstance(transitions.get('wipe', {}), dict) else {}
+                last_wipe_dir = wipe_cfg.get('last_direction')
                 candidates = [d for d in wipe_directions if d != last_wipe_dir] if last_wipe_dir in wipe_directions else wipe_directions
                 wdir = random.choice(candidates) if candidates else random.choice(wipe_directions)
-                # Persist under nested wipe key
-                self.settings_manager.set('transitions.wipe.direction', wdir)
-                self.settings_manager.set('transitions.wipe.last_direction', wdir)
+                # Update nested dict
+                wipe_cfg['direction'] = wdir
+                wipe_cfg['last_direction'] = wdir
+                transitions['wipe'] = wipe_cfg
+                logger.debug(f"[ENGINE] Random Wipe direction: {wdir}")
+            elif choice == "Peel":
+                peel_directions = ['Left to Right', 'Right to Left', 'Top to Bottom', 'Bottom to Top',
+                                   'Diagonal TL→BR', 'Diagonal TR→BL']
+                peel_cfg = transitions.get('peel', {}) if isinstance(transitions.get('peel', {}), dict) else {}
+                last_peel_dir = peel_cfg.get('last_direction')
+                candidates = [d for d in peel_directions if d != last_peel_dir] if last_peel_dir in peel_directions else peel_directions
+                pdir = random.choice(candidates) if candidates else random.choice(peel_directions)
+                peel_cfg['direction'] = pdir
+                peel_cfg['last_direction'] = pdir
+                transitions['peel'] = peel_cfg
+                logger.debug(f"[ENGINE] Random Peel direction: {pdir}")
+            elif choice == "3D Block Spins":
+                blockspin_directions = ['Left to Right', 'Right to Left', 'Top to Bottom', 'Bottom to Top',
+                                        'Diagonal TL→BR', 'Diagonal TR→BL']
+                bs_cfg = transitions.get('blockspin', {}) if isinstance(transitions.get('blockspin', {}), dict) else {}
+                last_bs_dir = bs_cfg.get('last_direction')
+                candidates = [d for d in blockspin_directions if d != last_bs_dir] if last_bs_dir in blockspin_directions else blockspin_directions
+                bsdir = random.choice(candidates) if candidates else random.choice(blockspin_directions)
+                bs_cfg['direction'] = bsdir
+                bs_cfg['last_direction'] = bsdir
+                transitions['blockspin'] = bs_cfg
+                logger.debug(f"[ENGINE] Random 3D Block Spins direction: {bsdir}")
+            elif choice == "Block Puzzle Flip":
+                blockflip_directions = ['Center Burst', 'Left to Right', 'Right to Left', 'Top to Bottom', 'Bottom to Top',
+                                        'Diagonal TL→BR', 'Diagonal TR→BL']
+                bf_cfg = transitions.get('block_flip', {}) if isinstance(transitions.get('block_flip', {}), dict) else {}
+                last_bf_dir = bf_cfg.get('last_direction')
+                candidates = [d for d in blockflip_directions if d != last_bf_dir] if last_bf_dir in blockflip_directions else blockflip_directions
+                bfdir = random.choice(candidates) if candidates else random.choice(blockflip_directions)
+                bf_cfg['direction'] = bfdir
+                bf_cfg['last_direction'] = bfdir
+                transitions['block_flip'] = bf_cfg
+                logger.debug(f"[ENGINE] Random Block Puzzle Flip direction: {bfdir}")
             
             # Persist chosen type for this rotation so all displays share it
-            self.settings_manager.set('transitions.random_choice', choice)
-            self.settings_manager.set('transitions.last_random_choice', choice)
+            transitions['random_choice'] = choice
+            transitions['last_random_choice'] = choice
+            self.settings_manager.set('transitions', transitions)
             self.settings_manager.save()
             logger.info(f"Random transition choice for this rotation: {choice}")
         except Exception as e:
@@ -3222,6 +3271,8 @@ class ScreensaverEngine(QObject):
             self._update_shuffle_mode()
         elif setting_key.startswith('sources'):
             self._on_sources_changed()
+        elif setting_key == 'cache.max_items':
+            self._update_cache_size()
     
     def _on_monitors_changed(self, new_count: int) -> None:
         """Handle monitor configuration change."""
@@ -3266,7 +3317,24 @@ class ScreensaverEngine(QObject):
         shuffle = self.settings_manager.get('queue.shuffle', True)
         self.image_queue.set_shuffle_enabled(shuffle)
         logger.info(f"Shuffle mode updated: {shuffle}")
-    
+
+    def _update_cache_size(self) -> None:
+        """Update image cache size from settings.
+
+        Uses ThreadManager to avoid blocking UI during potential evictions.
+        """
+        if not self._image_cache:
+            return
+
+        new_size = int(self.settings_manager.get('cache.max_items', 30))
+        if self.thread_manager:
+            self.thread_manager.submit_io_task(
+                lambda: self._image_cache.resize(new_size)
+            )
+            logger.info(f"Cache resize queued: {new_size} items")
+        else:
+            self._image_cache.resize(new_size)
+
     def _on_sources_changed(self) -> None:
         """Handle source configuration changes.
         

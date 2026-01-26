@@ -28,39 +28,40 @@ class NoWheelSlider(QSlider):
 
 class TransitionsTab(QWidget):
     """Transitions configuration tab."""
-    
+
     # Signals
     transitions_changed = Signal()
-    
+
     def __init__(self, settings: SettingsManager, parent: Optional[QWidget] = None):
         """
         Initialize transitions tab.
-        
+
         Args:
             settings: Settings manager
             parent: Parent widget
         """
         super().__init__(parent)
-        
+
         self._settings = settings
         # Maintain per-transition direction selections in-memory (default: Random)
         self._dir_slide: str = "Random"
         self._dir_wipe: str = "Random"
         self._dir_peel: str = "Random"
         self._dir_blockspin: str = "Left to Right"
+        self._dir_blockflip: str = "Center Burst"
         # Per-transition pool membership for random/switch behaviour.
         self._pool_by_type = {}
         self._duration_by_type = {}
         self._setup_ui()
         self._load_settings()
-        
+
         logger.debug("TransitionsTab created")
-    
+
     def load_from_settings(self) -> None:
         """Reload all UI controls from settings manager (called after preset change)."""
         self._load_settings()
         logger.debug("[TRANSITIONS_TAB] Reloaded from settings")
-    
+
     def _setup_ui(self) -> None:
         """Setup tab UI with scroll area."""
         # Create scroll area
@@ -74,22 +75,22 @@ class TransitionsTab(QWidget):
             QScrollArea > QWidget > QWidget { background: transparent; }
             QScrollArea QWidget { background: transparent; }
         """)
-        
+
         # Create content widget
         content = QWidget()
         layout = QVBoxLayout(content)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
-        
+
         # Title
         title = QLabel("Transition Settings")
         title.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
         layout.addWidget(title)
-        
+
         # Transition type group
         type_group = QGroupBox("Transition Type")
         type_layout = QVBoxLayout(type_group)
-        
+
         type_row = QHBoxLayout()
         type_row.addWidget(QLabel("Transition:"))
         self.transition_combo = QComboBox()
@@ -130,9 +131,9 @@ class TransitionsTab(QWidget):
         pool_row.addWidget(self.pool_checkbox)
         pool_row.addStretch()
         type_layout.addLayout(pool_row)
-        
+
         layout.addWidget(type_group)
-        
+
         # Duration group (slider: short → long)
         duration_group = QGroupBox("Timing")
         duration_layout = QVBoxLayout(duration_group)
@@ -150,11 +151,11 @@ class TransitionsTab(QWidget):
         duration_row.addStretch()
         duration_layout.addLayout(duration_row)
         layout.addWidget(duration_group)
-        
+
         # Direction group (for directional transitions)
         self.direction_group = QGroupBox("Direction")
         direction_layout = QVBoxLayout(self.direction_group)
-        
+
         direction_row = QHBoxLayout()
         direction_row.addWidget(QLabel("Direction:"))
         self.direction_combo = QComboBox()
@@ -163,13 +164,13 @@ class TransitionsTab(QWidget):
         direction_row.addWidget(self.direction_combo)
         direction_row.addStretch()
         direction_layout.addLayout(direction_row)
-        
+
         layout.addWidget(self.direction_group)
-        
+
         # Easing group
         easing_group = QGroupBox("Easing Curve")
         easing_layout = QVBoxLayout(easing_group)
-        
+
         easing_row = QHBoxLayout()
         easing_row.addWidget(QLabel("Easing:"))
         self.easing_combo = QComboBox()
@@ -188,13 +189,13 @@ class TransitionsTab(QWidget):
         easing_row.addWidget(self.easing_combo)
         easing_row.addStretch()
         easing_layout.addLayout(easing_row)
-        
+
         layout.addWidget(easing_group)
-        
+
         # Block flip specific settings
         self.flip_group = QGroupBox("Block Flip Settings")
         flip_layout = QVBoxLayout(self.flip_group)
-        
+
         grid_row = QHBoxLayout()
         grid_row.addWidget(QLabel("Grid Size:"))
         self.grid_rows_spin = QSpinBox()
@@ -213,7 +214,26 @@ class TransitionsTab(QWidget):
         grid_row.addWidget(self.grid_cols_spin)
         grid_row.addStretch()
         flip_layout.addLayout(grid_row)
-        
+
+        # Block Puzzle Flip direction
+        flip_dir_row = QHBoxLayout()
+        flip_dir_row.addWidget(QLabel("Direction:"))
+        self.blockflip_direction_combo = QComboBox()
+        self.blockflip_direction_combo.addItems([
+            "Center Burst",
+            "Left to Right",
+            "Right to Left",
+            "Top to Bottom",
+            "Bottom to Top",
+            "Diagonal TL→BR",
+            "Diagonal TR→BL",
+            "Random",
+        ])
+        self.blockflip_direction_combo.currentTextChanged.connect(self._save_settings)
+        flip_dir_row.addWidget(self.blockflip_direction_combo)
+        flip_dir_row.addStretch()
+        flip_layout.addLayout(flip_dir_row)
+
         layout.addWidget(self.flip_group)
 
         # 3D Block Spins specific settings (single-slab only, no grid)
@@ -235,12 +255,16 @@ class TransitionsTab(QWidget):
         bs_row.addStretch()
         blockspin_layout.addLayout(bs_row)
 
+        # Experimental diagonal directions (currently disabled due to UV mapping issues)
+        # "Diagonal TL→BR",
+        # "Diagonal TR→BL",
+
         layout.addWidget(self.blockspin_group)
-        
+
         # Diffuse specific settings
         self.diffuse_group = QGroupBox("Diffuse Settings")
         diffuse_layout = QVBoxLayout(self.diffuse_group)
-        
+
         block_size_row = QHBoxLayout()
         block_size_row.addWidget(QLabel("Block Size (px):"))
         self.block_size_spin = QSpinBox()
@@ -251,7 +275,7 @@ class TransitionsTab(QWidget):
         block_size_row.addWidget(self.block_size_spin)
         block_size_row.addStretch()
         diffuse_layout.addLayout(block_size_row)
-        
+
         shape_row = QHBoxLayout()
         shape_row.addWidget(QLabel("Shape:"))
         self.diffuse_shape_combo = QComboBox()
@@ -263,13 +287,13 @@ class TransitionsTab(QWidget):
         shape_row.addWidget(self.diffuse_shape_combo)
         shape_row.addStretch()
         diffuse_layout.addLayout(shape_row)
-        
+
         layout.addWidget(self.diffuse_group)
-        
+
         # Crumble specific settings
         self.crumble_group = QGroupBox("Crumble Settings")
         crumble_layout = QVBoxLayout(self.crumble_group)
-        
+
         piece_count_row = QHBoxLayout()
         piece_count_row.addWidget(QLabel("Piece Count:"))
         self.crumble_piece_count_spin = QSpinBox()
@@ -280,7 +304,7 @@ class TransitionsTab(QWidget):
         piece_count_row.addWidget(self.crumble_piece_count_spin)
         piece_count_row.addStretch()
         crumble_layout.addLayout(piece_count_row)
-        
+
         complexity_row = QHBoxLayout()
         complexity_row.addWidget(QLabel("Crack Complexity:"))
         self.crumble_complexity_spin = QDoubleSpinBox()
@@ -307,13 +331,13 @@ class TransitionsTab(QWidget):
         weight_row.addWidget(self.crumble_weight_combo)
         weight_row.addStretch()
         crumble_layout.addLayout(weight_row)
-        
+
         layout.addWidget(self.crumble_group)
-        
+
         # Blinds specific settings (Phase 4.1)
         self.blinds_group = QGroupBox("Blinds Settings")
         blinds_layout = QVBoxLayout(self.blinds_group)
-        
+
         feather_row = QHBoxLayout()
         feather_row.addWidget(QLabel("Edge Feather:"))
         self.blinds_feather_spin = QSpinBox()
@@ -325,13 +349,30 @@ class TransitionsTab(QWidget):
         feather_row.addWidget(self.blinds_feather_spin)
         feather_row.addStretch()
         blinds_layout.addLayout(feather_row)
-        
+
         layout.addWidget(self.blinds_group)
-        
+
+        # Peel specific settings
+        self.peel_group = QGroupBox("Peel Settings")
+        peel_layout = QVBoxLayout(self.peel_group)
+
+        strips_row = QHBoxLayout()
+        strips_row.addWidget(QLabel("Strip Count:"))
+        self.peel_strips_spin = QSpinBox()
+        self.peel_strips_spin.setRange(4, 32)
+        self.peel_strips_spin.setValue(12)
+        self.peel_strips_spin.setToolTip("Number of strips in the peel effect (4-32)")
+        self.peel_strips_spin.valueChanged.connect(self._save_settings)
+        strips_row.addWidget(self.peel_strips_spin)
+        strips_row.addStretch()
+        peel_layout.addLayout(strips_row)
+
+        layout.addWidget(self.peel_group)
+
         # Particle specific settings
         self.particle_group = QGroupBox("Particle Settings")
         particle_layout = QVBoxLayout(self.particle_group)
-        
+
         mode_row = QHBoxLayout()
         mode_row.addWidget(QLabel("Mode:"))
         self.particle_mode_combo = QComboBox()
@@ -341,7 +382,7 @@ class TransitionsTab(QWidget):
         mode_row.addWidget(self.particle_mode_combo)
         mode_row.addStretch()
         particle_layout.addLayout(mode_row)
-        
+
         direction_row = QHBoxLayout()
         direction_row.addWidget(QLabel("Direction:"))
         self.particle_direction_combo = QComboBox()
@@ -361,7 +402,7 @@ class TransitionsTab(QWidget):
         direction_row.addWidget(self.particle_direction_combo)
         direction_row.addStretch()
         particle_layout.addLayout(direction_row)
-        
+
         radius_row = QHBoxLayout()
         radius_row.addWidget(QLabel("Particle Size:"))
         self.particle_radius_spin = QSpinBox()
@@ -372,7 +413,7 @@ class TransitionsTab(QWidget):
         radius_row.addWidget(self.particle_radius_spin)
         radius_row.addStretch()
         particle_layout.addLayout(radius_row)
-        
+
         trail_row = QHBoxLayout()
         self.particle_trail_check = QCheckBox("Motion Trail")
         self.particle_trail_check.setChecked(True)
@@ -380,7 +421,7 @@ class TransitionsTab(QWidget):
         trail_row.addWidget(self.particle_trail_check)
         trail_row.addStretch()
         particle_layout.addLayout(trail_row)
-        
+
         shading_row = QHBoxLayout()
         self.particle_3d_check = QCheckBox("3D Ball Shading")
         self.particle_3d_check.setChecked(True)
@@ -388,7 +429,7 @@ class TransitionsTab(QWidget):
         shading_row.addWidget(self.particle_3d_check)
         shading_row.addStretch()
         particle_layout.addLayout(shading_row)
-        
+
         texture_row = QHBoxLayout()
         self.particle_texture_check = QCheckBox("Map Image to Particles")
         self.particle_texture_check.setChecked(True)
@@ -396,7 +437,7 @@ class TransitionsTab(QWidget):
         texture_row.addWidget(self.particle_texture_check)
         texture_row.addStretch()
         particle_layout.addLayout(texture_row)
-        
+
         wobble_row = QHBoxLayout()
         self.particle_wobble_check = QCheckBox("Wobble on Arrival")
         self.particle_wobble_check.setChecked(False)
@@ -404,7 +445,7 @@ class TransitionsTab(QWidget):
         wobble_row.addWidget(self.particle_wobble_check)
         wobble_row.addStretch()
         particle_layout.addLayout(wobble_row)
-        
+
         # Gloss/specular settings
         gloss_row = QHBoxLayout()
         gloss_row.addWidget(QLabel("Gloss Sharpness:"))
@@ -416,7 +457,7 @@ class TransitionsTab(QWidget):
         gloss_row.addWidget(self.particle_gloss_spin)
         gloss_row.addStretch()
         particle_layout.addLayout(gloss_row)
-        
+
         light_row = QHBoxLayout()
         light_row.addWidget(QLabel("Light Direction:"))
         self.particle_light_combo = QComboBox()
@@ -431,7 +472,7 @@ class TransitionsTab(QWidget):
         light_row.addWidget(self.particle_light_combo)
         light_row.addStretch()
         particle_layout.addLayout(light_row)
-        
+
         # Swirl-specific settings
         swirl_turns_row = QHBoxLayout()
         swirl_turns_row.addWidget(QLabel("Swirl Turns:"))
@@ -443,7 +484,7 @@ class TransitionsTab(QWidget):
         swirl_turns_row.addWidget(self.particle_swirl_turns_spin)
         swirl_turns_row.addStretch()
         particle_layout.addLayout(swirl_turns_row)
-        
+
         swirl_order_row = QHBoxLayout()
         swirl_order_row.addWidget(QLabel("Build Order:"))
         self.particle_swirl_order_combo = QComboBox()
@@ -457,23 +498,23 @@ class TransitionsTab(QWidget):
         swirl_order_row.addWidget(self.particle_swirl_order_combo)
         swirl_order_row.addStretch()
         particle_layout.addLayout(swirl_order_row)
-        
+
         layout.addWidget(self.particle_group)
-        
+
         layout.addStretch()
-        
+
         # Set scroll area widget and add to main layout
         scroll.setWidget(content)
-        
+
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll)
-        
+
         # Update visibility based on default transition
         self._update_specific_settings()
         # Enforce GL-only availability on initial build
         self._refresh_hw_dependent_options()
-        
+
         # Improve +/- button clarity and feedback on spin boxes
         self.setStyleSheet(
             self.styleSheet() + """
@@ -536,7 +577,7 @@ class TransitionsTab(QWidget):
             }
             """
         )
-    
+
     def _load_settings(self) -> None:
         """Load settings from settings manager."""
         transitions_config = self._settings.get('transitions', {}) or {}
@@ -657,7 +698,7 @@ class TransitionsTab(QWidget):
             index = self.transition_combo.findText(transition_type)
             if index >= 0:
                 self.transition_combo.setCurrentIndex(index)
-            
+
             duration = self._duration_by_type.get(transition_type, default_duration)
             self.duration_slider.setValue(duration)
             self.duration_value_label.setText(f"{duration} ms")
@@ -668,23 +709,27 @@ class TransitionsTab(QWidget):
                 self.pool_checkbox.setChecked(bool(current_pool))
             except Exception as e:
                 logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
-            
+
             # Load per-transition directions (nested)
             slide_cfg = transitions_config.get('slide', {}) if isinstance(transitions_config.get('slide', {}), dict) else {}
             wipe_cfg = transitions_config.get('wipe', {}) if isinstance(transitions_config.get('wipe', {}), dict) else {}
             peel_cfg = transitions_config.get('peel', {}) if isinstance(transitions_config.get('peel', {}), dict) else {}
             blockspin_cfg = transitions_config.get('blockspin', {}) if isinstance(transitions_config.get('blockspin', {}), dict) else {}
 
+            blockflip_cfg = transitions_config.get('block_flip', {}) if isinstance(transitions_config.get('block_flip', {}), dict) else {}
+
             slide_dir = slide_cfg.get('direction', 'Random') or 'Random'
             wipe_dir = wipe_cfg.get('direction', 'Random') or 'Random'
             peel_dir = peel_cfg.get('direction', 'Random') or 'Random'
             blockspin_dir = blockspin_cfg.get('direction', 'Random') or 'Random'
+            blockflip_dir = blockflip_cfg.get('direction', 'Center Burst') or 'Center Burst'
 
             self._dir_slide = slide_dir
             self._dir_wipe = wipe_dir
             self._dir_peel = peel_dir
             self._dir_blockspin = blockspin_dir
-            
+            self._dir_blockflip = blockflip_dir
+
             # Load easing
             easing = transitions_config.get('easing', 'Auto')
             index = self.easing_combo.findText(easing)
@@ -697,12 +742,21 @@ class TransitionsTab(QWidget):
             self.random_checkbox.setChecked(rnd)
 
             # Note: GPU acceleration is controlled globally in Display tab
-            
+
             # Load block flip settings - use canonical defaults from defaults.py
             canonical_block_flip = canonical_transitions.get('block_flip', {})
             block_flip = transitions_config.get('block_flip', {})
             self.grid_rows_spin.setValue(block_flip.get('rows', canonical_block_flip.get('rows', 12)))
             self.grid_cols_spin.setValue(block_flip.get('cols', canonical_block_flip.get('cols', 24)))
+
+            # Load block flip direction
+            try:
+                idx = self.blockflip_direction_combo.findText(self._dir_blockflip)
+                if idx < 0:
+                    idx = 0
+                self.blockflip_direction_combo.setCurrentIndex(max(0, idx))
+            except Exception as e:
+                logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
 
             # Load 3D Block Spins settings
             try:
@@ -741,6 +795,11 @@ class TransitionsTab(QWidget):
             blinds = transitions_config.get('blinds', {})
             self.blinds_feather_spin.setValue(blinds.get('feather', canonical_blinds.get('feather', 2)))
 
+            # Load peel settings
+            canonical_peel = canonical_transitions.get('peel', {})
+            peel = transitions_config.get('peel', {})
+            self.peel_strips_spin.setValue(peel.get('strips', canonical_peel.get('strips', 12)))
+
             # Load particle settings - use canonical defaults from defaults.py
             canonical_particle = canonical_transitions.get('particle', {})
             particle = transitions_config.get('particle', {})
@@ -776,7 +835,7 @@ class TransitionsTab(QWidget):
                     w.blockSignals(False)
                 except Exception as e:
                     logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
-    
+
     def _on_transition_changed(self, transition: str) -> None:
         """Handle transition type change."""
         # If a GL-only transition was selected while HW is off, revert to Crossfade
@@ -804,7 +863,7 @@ class TransitionsTab(QWidget):
             self.pool_checkbox.blockSignals(False)
 
         self._save_settings()
-    
+
     def _update_specific_settings(self) -> None:
         """Update visibility of transition-specific settings."""
         transition = self.transition_combo.currentText()
@@ -850,12 +909,14 @@ class TransitionsTab(QWidget):
                         idx = self.direction_combo.findText("Random") if self._dir_wipe == "Random" else 0
                     self.direction_combo.setCurrentIndex(max(0, idx))
                 elif transition == "Peel":
-                    # Peel: same cardinal directions model as Slide
+                    # Peel: cardinal + diagonal directions
                     peel_items = [
                         "Left to Right",
                         "Right to Left",
                         "Top to Bottom",
                         "Bottom to Top",
+                        "Diagonal TL→BR",
+                        "Diagonal TR→BL",
                         "Random",
                     ]
                     self.direction_combo.addItems(peel_items)
@@ -868,19 +929,22 @@ class TransitionsTab(QWidget):
 
         # Show/hide block flip settings
         self.flip_group.setVisible(transition == "Block Puzzle Flip")
-        
+
         # Show/hide diffuse settings
         self.diffuse_group.setVisible(transition == "Diffuse")
 
         # Show/hide 3D Block Spins settings
         self.blockspin_group.setVisible(transition == "3D Block Spins")
-        
+
         # Show/hide Crumble settings
         self.crumble_group.setVisible(transition == "Crumble")
-        
+
         # Show/hide Blinds settings (Phase 4.1)
         self.blinds_group.setVisible(transition == "Blinds")
-        
+
+        # Show/hide Peel settings
+        self.peel_group.setVisible(transition == "Peel")
+
         # Show/hide Particle settings
         self.particle_group.setVisible(transition == "Particle")
         if transition == "Particle":
@@ -889,7 +953,7 @@ class TransitionsTab(QWidget):
     def _on_particle_mode_changed(self, index: int) -> None:
         """Handle particle mode change - show/hide direction vs swirl settings."""
         self._update_particle_mode_visibility()
-    
+
     def _update_particle_mode_visibility(self) -> None:
         """Update visibility of particle mode-specific settings."""
         mode = self.particle_mode_combo.currentText()
@@ -946,7 +1010,7 @@ class TransitionsTab(QWidget):
             if isinstance(cached_choice, str) and cached_choice in gl_only:
                 self._settings.remove('transitions.random_choice')
                 self._settings.remove('transitions.last_random_choice')
-    
+
     def _save_settings(self) -> None:
         """Save current settings."""
         cur_type = self.transition_combo.currentText()
@@ -963,6 +1027,12 @@ class TransitionsTab(QWidget):
         # choices from that group.
         try:
             self._dir_blockspin = self.blockspin_direction_combo.currentText() or "Left to Right"
+        except Exception as e:
+            logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
+
+        # Block Puzzle Flip direction
+        try:
+            self._dir_blockflip = self.blockflip_direction_combo.currentText() or "Center Burst"
         except Exception as e:
             logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
 
@@ -990,7 +1060,8 @@ class TransitionsTab(QWidget):
             'random_always': self.random_checkbox.isChecked(),
             'block_flip': {
                 'rows': self.grid_rows_spin.value(),
-                'cols': self.grid_cols_spin.value()
+                'cols': self.grid_cols_spin.value(),
+                'direction': self._dir_blockflip,
             },
             'diffuse': {
                 'block_size': self.block_size_spin.value(),
@@ -1031,12 +1102,13 @@ class TransitionsTab(QWidget):
             },
             'peel': {
                 'direction': self._dir_peel,
+                'strips': self.peel_strips_spin.value(),
             },
             'blockspin': {
                 'direction': self._dir_blockspin,
             },
         }
-        
+
         self._settings.set('transitions', config)
 
         if not config['random_always']:
@@ -1046,7 +1118,7 @@ class TransitionsTab(QWidget):
 
         self._settings.save()
         self.transitions_changed.emit()
-        
+
         logger.debug(f"Saved transition settings: {config['type']}")
 
     def _on_duration_changed(self, value: int) -> None:

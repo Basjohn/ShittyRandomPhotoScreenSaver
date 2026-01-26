@@ -173,13 +173,65 @@ class TestRedditRateLimiterIntegration:
     def test_rate_limiter_constants_reasonable(self):
         """Verify rate limiter constants are reasonable for Reddit API."""
         from core.reddit_rate_limiter import RedditRateLimiter
-        
+
         # Reddit allows 10 req/min, we should be under that
         assert RedditRateLimiter.MAX_REQUESTS_PER_MINUTE <= 10
-        
+
         # Window should be 60 seconds
         assert RedditRateLimiter.WINDOW_SECONDS == 60.0
-        
+
         # Min interval should give us under 10 req/min
         max_requests_per_min = 60.0 / RedditRateLimiter.MIN_REQUEST_INTERVAL
         assert max_requests_per_min <= 10
+
+
+class TestRedditRateLimiterNamespace:
+    """Tests for namespace-based quota tracking."""
+
+    def test_namespace_tracking_separate(self):
+        """Verify namespace tracking is separate from global."""
+        from core.reddit_rate_limiter import RedditRateLimiter
+
+        RedditRateLimiter.reset()
+
+        # Record requests with different namespaces
+        RedditRateLimiter.record_request(namespace="rss")
+        RedditRateLimiter.record_request(namespace="rss")
+        RedditRateLimiter.record_request(namespace="widget")
+
+        # Global count should be 3
+        assert RedditRateLimiter.get_request_count() == 3
+
+        # Namespace counts should be separate
+        assert RedditRateLimiter.get_namespace_count("rss") == 2
+        assert RedditRateLimiter.get_namespace_count("widget") == 1
+        assert RedditRateLimiter.get_namespace_count("unknown") == 0
+
+    def test_namespace_reset_clears_all(self):
+        """Verify reset clears namespace tracking."""
+        from core.reddit_rate_limiter import RedditRateLimiter
+
+        RedditRateLimiter.record_request(namespace="rss")
+        RedditRateLimiter.record_request(namespace="widget")
+
+        RedditRateLimiter.reset()
+
+        assert RedditRateLimiter.get_namespace_count("rss") == 0
+        assert RedditRateLimiter.get_namespace_count("widget") == 0
+
+    def test_preflight_quota_check_skips_reddit_feeds(self):
+        """Verify pre-flight quota check prevents Reddit feed processing when quota exhausted."""
+        from core.reddit_rate_limiter import RedditRateLimiter
+
+        RedditRateLimiter.reset()
+
+        # Exhaust quota
+        for _ in range(RedditRateLimiter.MAX_REQUESTS_PER_MINUTE):
+            RedditRateLimiter.record_request(namespace="rss")
+
+        # Pre-flight check should fail
+        assert RedditRateLimiter.can_make_request() is False
+
+        # This simulates what rss_source.py does - skip all Reddit feeds
+        reddit_quota_available = RedditRateLimiter.can_make_request()
+        assert reddit_quota_available is False

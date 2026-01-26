@@ -21,7 +21,7 @@ logger = get_logger(__name__)
 
 # Rate limiting constants - conservative to avoid triggering Reddit's rate limit
 # Reddit API limit: 10 requests per minute unauthenticated
-RATE_LIMIT_DELAY_SECONDS = 8.0  # Delay between feed requests (8s = 7.5 req/min, under 10 req/min limit)
+RATE_LIMIT_DELAY_SECONDS = 10.0  # Delay between feed requests (10s = 6 req/min, well under 10 req/min limit)
 RATE_LIMIT_RETRY_DELAY_SECONDS = 120  # Delay when rate limited (2 minutes)
 MAX_REDDIT_FEEDS_PER_STARTUP = 8  # Maximum Reddit feeds to process per startup (leaves 2 req/min buffer)
 MIN_CACHE_SIZE_BEFORE_CLEANUP = 20  # Don't cleanup until we have at least 20 images
@@ -608,7 +608,7 @@ class RSSSource(ImageProvider):
                         wait_time,
                     )
                     return
-                RedditRateLimiter.record_request()
+                RedditRateLimiter.record_request(namespace="rss")
             except ImportError:
                 logger.debug("[RSS] RedditRateLimiter not available, proceeding without coordination")
 

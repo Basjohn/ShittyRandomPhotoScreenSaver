@@ -72,6 +72,8 @@ PRESET_DEFINITIONS: Dict[str, PresetDefinition] = {
             "widgets.reddit2.enabled": False,
             "widgets.spotify_visualizer.enabled": False,
             "widgets.media.spotify_volume_enabled": False,
+            # Performance: Higher cache for smoother transitions
+            "cache.max_items": 60,
         }
     ),
     
@@ -97,6 +99,8 @@ PRESET_DEFINITIONS: Dict[str, PresetDefinition] = {
             "widgets.reddit2.enabled": False,
             "widgets.spotify_visualizer.enabled": False,
             "widgets.media.spotify_volume_enabled": False,
+            # Performance: Higher cache for smoother transitions
+            "cache.max_items": 60,
         }
     ),
     
@@ -126,6 +130,8 @@ PRESET_DEFINITIONS: Dict[str, PresetDefinition] = {
             # Reddit disabled
             "widgets.reddit.enabled": False,
             "widgets.reddit2.enabled": False,
+            # Balanced: Moderate cache size
+            "cache.max_items": 45,
         }
     ),
     
@@ -164,6 +170,8 @@ PRESET_DEFINITIONS: Dict[str, PresetDefinition] = {
             "widgets.reddit2.position": "Bottom Right",
             "widgets.reddit2.limit": 10,
             "widgets.reddit2.monitor": 1,
+            # Full: Maximum cache for all widgets
+            "cache.max_items": 90,
         }
     ),
     

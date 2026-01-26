@@ -128,6 +128,7 @@ class GLCompositorBlindsTransition(BaseTransition):
             on_finished=_on_finished,
             grid_cols=self._grid_cols or 0,
             grid_rows=self._grid_rows or 0,
+            feather=self._feather,
         )
 
         self._set_state(TransitionState.RUNNING)

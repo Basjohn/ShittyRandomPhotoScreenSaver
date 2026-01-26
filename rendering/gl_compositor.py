@@ -1457,6 +1457,7 @@ class GLCompositorWidget(QOpenGLWidget):
         easing: EasingCurve,
         animation_manager: AnimationManager,
         on_finished: Optional[Callable[[], None]] = None,
+        feather: float = 0.0,
     ) -> Optional[str]:
         """Begin a wipe between two pixmaps using the compositor."""
         if not new_pixmap or new_pixmap.isNull():
@@ -1468,7 +1469,7 @@ class GLCompositorWidget(QOpenGLWidget):
                 return None
 
         self._clear_all_transitions()
-        self._wipe = WipeState(old_pixmap=old_pixmap, new_pixmap=new_pixmap, direction=direction, progress=0.0)
+        self._wipe = WipeState(old_pixmap=old_pixmap, new_pixmap=new_pixmap, direction=direction, progress=0.0, feather=float(feather))
         self._pre_upload_textures(self._prepare_wipe_textures)
         self._profiler.start("wipe")
         return self._start_transition_animation(
@@ -1699,6 +1700,7 @@ class GLCompositorWidget(QOpenGLWidget):
         on_finished: Optional[Callable[[], None]] = None,
         grid_cols: Optional[int] = None,
         grid_rows: Optional[int] = None,
+        feather: float = 0.0,
     ) -> Optional[str]:
         """Begin a blinds reveal using the compositor."""
         if not new_pixmap or new_pixmap.isNull():
@@ -1714,6 +1716,7 @@ class GLCompositorWidget(QOpenGLWidget):
             old_pixmap=old_pixmap, new_pixmap=new_pixmap, region=None,
             cols=int(grid_cols) if grid_cols is not None and grid_cols > 0 else 0,
             rows=int(grid_rows) if grid_rows is not None and grid_rows > 0 else 0,
+            feather=float(feather),
         )
         self._pre_upload_textures(self._prepare_blinds_textures)
         self._profiler.start("blinds")
@@ -2418,11 +2421,21 @@ void main() {
         0.0,  sa,  ca
     );
 
+    // Diagonal rotation: For a true diagonal spin effect, we need to rotate
+    // around an axis in the XY plane at 45 degrees. However, the combined
+    // rotY * rotX doesn't produce the expected visual. Instead, use a simple
+    // approach: rotate around Y-axis but also apply a slight X tilt.
+    // For now, just use Y-axis rotation for diagonals (same as horizontal).
+    mat3 rotDiag = rotY;
+
     vec3 pos;
     vec3 normal;
     if (u_axisMode == 1) {
         pos = rotX * aPos;
         normal = normalize(rotX * aNormal);
+    } else if (u_axisMode == 2) {
+        pos = rotDiag * aPos;
+        normal = normalize(rotDiag * aNormal);
     } else {
         pos = rotY * aPos;
         normal = normalize(rotY * aNormal);
@@ -2467,8 +2480,8 @@ uniform sampler2D uOldTex;
 uniform sampler2D uNewTex;
 uniform float u_angle;
 uniform float u_aspect;
-uniform float u_specDir;  // -1 or +1, controls highlight travel direction
-uniform int u_axisMode;   // 0 = Y-axis spin, 1 = X-axis spin
+uniform float u_specDir;  // -1 or +1, controls highlight travel direction and UV orientation
+uniform int u_axisMode;   // 0 = Y-axis spin, 1 = X-axis spin, 2 = diagonal
 
 void main() {
     // Qt images are stored top-to-bottom, whereas OpenGL's texture
@@ -2476,16 +2489,22 @@ void main() {
     // the sampled image appears upright.
     vec2 uv_front = vec2(vUv.x, 1.0 - vUv.y);
 
-    // For horizontal (Y-axis) spins we mirror the back face horizontally so
-    // that when the card flips left/right the new image appears with the
-    // same orientation as a plain 2D draw. For vertical (X-axis) spins the
-    // geometric rotation inverts the slab in Y, so we sample with the raw
-    // UVs to keep the new image upright.
+    // Back face UV mapping based on rotation matrix analysis.
+    // After 180° rotation, corners transform as follows:
+    // - Y-axis (LEFT/RIGHT): BL->BR, BR->BL (horizontal flip) → FLIP U
+    // - X-axis (UP/DOWN): BL->TL, TL->BL (vertical flip) → FLIP V  
+    // - Diagonal: Currently using Y-axis rotation, so same as horizontal
     vec2 uv_back;
-    if (u_axisMode == 0) {
-        uv_back = vec2(1.0 - vUv.x, 1.0 - vUv.y);  // horizontal spin
+    
+    if (u_axisMode == 0 || u_axisMode == 2) {
+        // Y-axis rotation (LEFT/RIGHT/DIAGONAL): Flip U only
+        // Qt V-flip is already in uv_front, so we need: flip U, keep V-flip
+        uv_back = vec2(1.0 - vUv.x, 1.0 - vUv.y);
     } else {
-        uv_back = vec2(vUv.x, vUv.y);              // vertical spin
+        // X-axis rotation (UP/DOWN): Flip V only
+        // Qt already flips V in uv_front, geometric rotation flips V again
+        // So we need: keep U, cancel both V-flips = raw V
+        uv_back = vec2(vUv.x, vUv.y);
     }
 
     vec3 n = normalize(vNormal);

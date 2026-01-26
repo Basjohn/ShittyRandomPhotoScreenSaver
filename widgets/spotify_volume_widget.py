@@ -20,7 +20,7 @@ from PySide6.QtCore import Qt, QTimer, QPoint, QRect
 from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import QWidget
 
-from core.logging.logger import get_logger, is_verbose_logging
+from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.media.spotify_volume import SpotifyVolumeController
 from core.threading.manager import ThreadManager
 from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile, configure_overlay_widget_attributes
@@ -113,21 +113,21 @@ class SpotifyVolumeWidget(QWidget):
             self.update()
         except Exception as e:
             logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
-    
+
     def set_anchor_media_widget(self, widget: Optional[QWidget]) -> None:
         """Set the anchor media widget for visibility gating."""
         self._anchor_media = widget
-    
+
     def sync_visibility_with_anchor(self) -> None:
         """Show/hide based on anchor media widget visibility.
-        
+
         Called when the media widget visibility changes to keep the
         volume widget in sync.
         """
         anchor = self._anchor_media
         if anchor is None:
             return
-        
+
         try:
             anchor_visible = anchor.isVisible()
             if anchor_visible and not self.isVisible() and self._enabled:
@@ -146,7 +146,7 @@ class SpotifyVolumeWidget(QWidget):
     def _setup_ui(self) -> None:
         # Configure attributes to prevent flicker with GL compositor
         configure_overlay_widget_attributes(self)
-        
+
         self.setMinimumWidth(32)
         self.setMinimumHeight(180)
         try:
@@ -159,24 +159,24 @@ class SpotifyVolumeWidget(QWidget):
     # ------------------------------------------------------------------
     # Lifecycle Implementation Hooks
     # ------------------------------------------------------------------
-    
+
     def _initialize_impl(self) -> None:
         """Initialize volume widget resources (lifecycle hook)."""
         logger.debug("[LIFECYCLE] SpotifyVolumeWidget initialized")
-    
+
     def _activate_impl(self) -> None:
         """Activate volume widget (lifecycle hook)."""
         if not self._controller.is_available():
             logger.debug("[LIFECYCLE] SpotifyVolumeWidget controller unavailable")
             return
-        
+
         self._ensure_flush_timer()
-        
+
         # Read initial volume
         if self._thread_manager is not None:
             def _do_read():
                 return self._controller.get_volume()
-            
+
             def _on_result(result):
                 val = None
                 try:
@@ -186,7 +186,7 @@ class SpotifyVolumeWidget(QWidget):
                     logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
                 if isinstance(val, float):
                     ThreadManager.run_on_ui_thread(self._apply_volume, val)
-            
+
             try:
                 self._thread_manager.submit_io_task(_do_read, callback=_on_result)
             except Exception as e:
@@ -198,9 +198,9 @@ class SpotifyVolumeWidget(QWidget):
                     self._apply_volume(current)
             except Exception as e:
                 logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
-        
+
         logger.debug("[LIFECYCLE] SpotifyVolumeWidget activated")
-    
+
     def _deactivate_impl(self) -> None:
         """Deactivate volume widget (lifecycle hook)."""
         if self._flush_timer is not None:
@@ -210,7 +210,7 @@ class SpotifyVolumeWidget(QWidget):
                 logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
         self._pending_volume = None
         logger.debug("[LIFECYCLE] SpotifyVolumeWidget deactivated")
-    
+
     def _cleanup_impl(self) -> None:
         """Clean up volume widget resources (lifecycle hook)."""
         self._deactivate_impl()
@@ -244,7 +244,7 @@ class SpotifyVolumeWidget(QWidget):
             return
 
         self._ensure_flush_timer()
-        
+
         # Observe anchor visibility for diagnostics but do not bail; fade sync
         # coordination must proceed so WidgetManager can schedule us.
         anchor = self._anchor_media
@@ -400,6 +400,9 @@ class SpotifyVolumeWidget(QWidget):
     # ------------------------------------------------------------------
 
     def paintEvent(self, event: QPaintEvent) -> None:  # type: ignore[override]
+        import time
+        _paint_start = time.perf_counter() if is_perf_metrics_enabled() else 0.0
+
         super().paintEvent(event)
 
         painter = QPainter(self)
@@ -468,6 +471,12 @@ class SpotifyVolumeWidget(QWidget):
 
         painter.setBrush(self._fill_color)
         painter.drawRoundedRect(fill_rect, radius, radius)
+
+        # Log perf metrics if enabled
+        if is_perf_metrics_enabled():
+            import time
+            _paint_ms = (time.perf_counter() - _paint_start) * 1000.0
+            logger.debug("[PERF] SpotifyVolumeWidget.paintEvent: %.2f ms", _paint_ms)
 
     # ------------------------------------------------------------------
     # Internal helpers

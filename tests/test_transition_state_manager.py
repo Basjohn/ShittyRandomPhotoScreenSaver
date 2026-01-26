@@ -86,7 +86,7 @@ class TestSlideState:
 
 class TestBlockFlipState:
     """Tests for block flip transition state."""
-    
+
     def test_has_grid_fields(self):
         """Test block flip has grid configuration."""
         state = BlockFlipState()
@@ -94,6 +94,24 @@ class TestBlockFlipState:
         assert hasattr(state, 'rows')
         assert hasattr(state, 'region')
         assert hasattr(state, 'direction')
+
+    def test_direction_supports_all_values(self):
+        """Test block flip direction supports all direction values including diagonals."""
+        from transitions.slide_transition import SlideDirection
+
+        # Test all cardinal directions
+        for direction in [SlideDirection.LEFT, SlideDirection.RIGHT, SlideDirection.UP, SlideDirection.DOWN]:
+            state = BlockFlipState(direction=direction)
+            assert state.direction == direction
+
+        # Test diagonal directions
+        for direction in [SlideDirection.DIAG_TL_BR, SlideDirection.DIAG_TR_BL]:
+            state = BlockFlipState(direction=direction)
+            assert state.direction == direction
+
+        # Test None (Center Burst mode)
+        state = BlockFlipState(direction=None)
+        assert state.direction is None
 
 
 class TestDiffuseState:

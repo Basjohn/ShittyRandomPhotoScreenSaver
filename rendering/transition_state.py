@@ -65,6 +65,7 @@ class WipeState(TransitionStateBase):
     """State for a compositor-driven wipe transition."""
     region: Optional[QRegion] = None
     direction: int = 0  # WipeDirection enum value
+    feather: float = 0.0
 
 
 @dataclass
@@ -100,6 +101,7 @@ class BlindsState(TransitionStateBase):
     region: Optional[QRegion] = None
     cols: int = 0
     rows: int = 0
+    feather: float = 0.0
 
 
 @dataclass

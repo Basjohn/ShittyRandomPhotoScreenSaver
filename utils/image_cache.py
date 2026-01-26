@@ -16,7 +16,7 @@ logger = get_logger(__name__)
 class ImageCache:
     """
     LRU cache for QPixmap objects.
-    
+
     Features:
     - Automatic size management (evicts oldest entries when full)
     - Memory-efficient (stores references, not copies)
@@ -26,18 +26,18 @@ class ImageCache:
       ``"[PERF] ImageCache"`` summary logs in ``ScreensaverEngine.stop()``;
       grep for that tag to gate/strip profiling in production builds.
     """
-    
+
     def __init__(self, max_items: int = 10, max_memory_mb: int = 500):
         """
         Initialize image cache.
-        
+
         Args:
             max_items: Maximum number of images to cache
             max_memory_mb: Maximum memory to use (approximate, in MB)
         """
         self.max_items = max_items
         self.max_memory_bytes = max_memory_mb * 1024 * 1024
-        
+
         self._cache: OrderedDict[str, Union[QImage, QPixmap]] = OrderedDict()
         self._current_memory = 0
         # Lightweight telemetry counters for cache profiling.
@@ -45,17 +45,34 @@ class ImageCache:
         self._miss_count: int = 0
         self._evict_count: int = 0
         self._lock = threading.RLock()
-        
+
         logger.info(f"ImageCache initialized: max_items={max_items}, "
                    f"max_memory={max_memory_mb}MB")
-    
+
+    def resize(self, new_max_items: int) -> None:
+        """Resize the cache to a new maximum item count.
+
+        If the new size is smaller, evicts oldest entries until within limit.
+        Thread-safe operation.
+
+        Args:
+            new_max_items: New maximum number of items to cache.
+        """
+        with self._lock:
+            old_max = self.max_items
+            self.max_items = max(1, new_max_items)
+            # Evict if over new limit
+            while len(self._cache) > self.max_items:
+                self._evict_oldest_locked()
+            logger.info(f"ImageCache resized: {old_max} -> {self.max_items} items")
+
     def get(self, key: str) -> Optional[Union[QImage, QPixmap]]:
         """
         Get an image from cache.
-        
+
         Args:
             key: Cache key (usually file path)
-        
+
         Returns:
             QPixmap if found, None otherwise
         """
@@ -67,18 +84,18 @@ class ImageCache:
                 if is_verbose_logging():
                     logger.debug(f"Cache hit: {key}")
                 return self._cache[key]
-            
+
             self._miss_count += 1
             if is_verbose_logging():
                 logger.debug(f"Cache miss: {key}")
             return None
-    
+
     def put(self, key: str, image: Union[QImage, QPixmap]) -> None:
         """
         Add an image to cache.
-        
+
         If cache is full, evicts least recently used entries.
-        
+
         Args:
             key: Cache key (usually file path)
             pixmap: QPixmap to cache
@@ -88,41 +105,41 @@ class ImageCache:
             if key in self._cache:
                 old_img = self._cache.pop(key)
                 self._current_memory -= self._estimate_size(old_img)
-            
+
             # Add new entry
             self._cache[key] = image
             self._current_memory += self._estimate_size(image)
-            
+
             # Evict if necessary
             while self._should_evict_locked():
                 self._evict_oldest_locked()
-            
+
             if is_verbose_logging():
                 logger.debug(
                     f"Cached: {key} (size={len(self._cache)}/{self.max_items}, "
                     f"memory={self._current_memory / (1024*1024):.1f}MB)"
                 )
-    
+
     def contains(self, key: str) -> bool:
         """
         Check if key is in cache.
-        
+
         Args:
             key: Cache key
-        
+
         Returns:
             True if key is cached
         """
         with self._lock:
             return key in self._cache
-    
+
     def remove(self, key: str) -> bool:
         """
         Remove an entry from cache.
-        
+
         Args:
             key: Cache key
-        
+
         Returns:
             True if entry was removed, False if not found
         """
@@ -134,7 +151,7 @@ class ImageCache:
                     logger.debug(f"Removed from cache: {key}")
                 return True
             return False
-    
+
     def clear(self) -> None:
         """Clear all cached images."""
         with self._lock:
@@ -142,26 +159,26 @@ class ImageCache:
             self._cache.clear()
             self._current_memory = 0
             logger.info(f"Cache cleared: {count} images removed")
-    
+
     def size(self) -> int:
         """Get number of cached images."""
         with self._lock:
             return len(self._cache)
-    
+
     def memory_usage(self) -> int:
         """Get approximate memory usage in bytes."""
         with self._lock:
             return self._current_memory
-    
+
     def memory_usage_mb(self) -> float:
         """Get approximate memory usage in MB."""
         with self._lock:
             return self._current_memory / (1024 * 1024)
-    
+
     def get_stats(self) -> dict:
         """
         Get cache statistics.
-        
+
         Returns:
             Dictionary with cache stats
         """
@@ -183,12 +200,12 @@ class ImageCache:
                 'hit_rate_percent': hit_rate,
                 'evictions': self._evict_count,
             }
-    
+
     def _should_evict_locked(self) -> bool:
         """Check if eviction is needed (caller holds lock)."""
-        return (len(self._cache) > self.max_items or 
+        return (len(self._cache) > self.max_items or
                 self._current_memory > self.max_memory_bytes)
-    
+
     def _evict_oldest_locked(self) -> None:
         """Evict the least recently used entry (caller holds lock)."""
         if not self._cache:
@@ -198,35 +215,35 @@ class ImageCache:
         self._evict_count += 1
         if is_verbose_logging():
             logger.debug(f"Evicted from cache: {key}")
-    
+
     def _estimate_size(self, image: Union[QImage, QPixmap]) -> int:
         """
         Estimate memory size of a QPixmap.
-        
+
         Args:
             pixmap: QPixmap to estimate
-        
+
         Returns:
             Estimated size in bytes
         """
         # Handle null/invalid images
         if (isinstance(image, QPixmap) and image.isNull()) or (isinstance(image, QImage) and image.isNull()):
             return 0
-        
+
         # Estimate: width * height * bytes_per_pixel
         # Assume 4 bytes per pixel (RGBA)
         width = image.width()
         height = image.height()
         return width * height * 4
-    
+
     def __len__(self) -> int:
         """Get number of cached images."""
         return len(self._cache)
-    
+
     def __contains__(self, key: str) -> bool:
         """Check if key is in cache."""
         return key in self._cache
-    
+
     def __str__(self) -> str:
         """String representation."""
         return (f"ImageCache(items={len(self._cache)}/{self.max_items}, "

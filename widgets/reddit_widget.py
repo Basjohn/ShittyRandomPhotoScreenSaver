@@ -77,7 +77,7 @@ _TITLE_CASE_SMALL_WORDS = frozenset()
 
 def _smart_title_case(text: str) -> str:
     """Convert text to title case while preserving acronyms and handling exceptions.
-    
+
     - Preserves ALL CAPS words (likely acronyms: USA, NASA, AI, etc.)
     - Capitalizes every word (including short words like "a", "to", "with")
     - Preserves standalone "I"
@@ -85,40 +85,40 @@ def _smart_title_case(text: str) -> str:
     """
     if not text:
         return text
-    
+
     words = text.split()
     result = []
-    
-    for i, word in enumerate(words):
+
+    for _i, word in enumerate(words):
         # Preserve ALL CAPS words (2+ chars) - likely acronyms
         if len(word) >= 2 and word.isupper() and word.isalpha():
             result.append(word)
             continue
-        
+
         # Handle words with leading punctuation (e.g., quotes, brackets)
         leading = ""
         trailing = ""
         core = word
-        
+
         # Strip leading punctuation
         while core and not core[0].isalnum():
             leading += core[0]
             core = core[1:]
-        
+
         # Strip trailing punctuation
         while core and not core[-1].isalnum():
             trailing = core[-1] + trailing
             core = core[:-1]
-        
+
         if not core:
             result.append(word)
             continue
-        
+
         # Preserve ALL CAPS core (acronyms)
         if len(core) >= 2 and core.isupper() and core.isalpha():
             result.append(word)
             continue
-        
+
         # Preserve "I" as uppercase
         if core.lower() == "i":
             result.append(leading + "I" + trailing)
@@ -126,7 +126,7 @@ def _smart_title_case(text: str) -> str:
 
         # Title case the core word (capitalize first character of every word)
         result.append(leading + core[:1].upper() + core[1:] + trailing)
-    
+
     return " ".join(result)
 
 
@@ -146,7 +146,7 @@ class RedditWidget(BaseOverlayWidget):
     - Non-interactive at the widget level; click handling is delegated
       to DisplayWidget during Ctrl-held / hard-exit interaction mode.
     """
-    
+
     # Override defaults for reddit widget
     DEFAULT_FONT_SIZE = 18
 
@@ -159,7 +159,7 @@ class RedditWidget(BaseOverlayWidget):
         # Convert RedditPosition to OverlayPosition for base class
         overlay_pos = OverlayPosition(position.value)
         super().__init__(parent, position=overlay_pos, overlay_name="reddit")
-        
+
         # CRITICAL: Defer visibility until fade sync triggers
         # This prevents the widget from flashing before the compositor is ready
         self._defer_visibility_for_fade_sync = True
@@ -194,10 +194,10 @@ class RedditWidget(BaseOverlayWidget):
         self._row_hit_rects: List[tuple[QRect, str, str]] = []
         self._has_displayed_valid_data: bool = False
         self._has_seen_first_sample: bool = False
-        
+
         # Cache key for persistent storage (set by factory, fallback to subreddit)
         self._cache_key: str = self._subreddit
-        
+
         # Paint caching: only repaint when data changes (every 10 min)
         self._cached_content_pixmap: Optional[QPixmap] = None
         self._cache_invalidated: bool = True  # Start invalidated to force first paint
@@ -233,7 +233,7 @@ class RedditWidget(BaseOverlayWidget):
         """Initialise widget appearance and layout."""
         # Use base class styling setup
         self._apply_base_styling()
-        
+
         self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         try:
             # Non-interactive; DisplayWidget owns input routing.
@@ -256,7 +256,7 @@ class RedditWidget(BaseOverlayWidget):
             self.move(10000, 10000)
         except Exception as e:
             logger.debug("[REDDIT] Exception suppressed: %s", e)
-    
+
     def _update_content(self) -> None:
         """Required by BaseOverlayWidget - refresh reddit display."""
         self._fetch_feed()
@@ -264,20 +264,20 @@ class RedditWidget(BaseOverlayWidget):
     # -------------------------------------------------------------------------
     # Lifecycle Implementation Hooks
     # -------------------------------------------------------------------------
-    
+
     def _initialize_impl(self) -> None:
         """Initialize reddit resources (lifecycle hook)."""
         logger.debug("[LIFECYCLE] RedditWidget initialized")
-    
+
     def _activate_impl(self) -> None:
         """Activate reddit widget - start fetching (lifecycle hook)."""
         if not self._ensure_thread_manager("RedditWidget._activate_impl"):
             raise RuntimeError("ThreadManager not available")
-        
+
         self._schedule_timer()
         self._fetch_feed()
         logger.debug("[LIFECYCLE] RedditWidget activated")
-    
+
     def _deactivate_impl(self) -> None:
         """Deactivate reddit widget - stop fetching (lifecycle hook)."""
         if self._update_timer_handle is not None:
@@ -286,7 +286,7 @@ class RedditWidget(BaseOverlayWidget):
             except Exception as e:
                 logger.debug("[REDDIT] Exception suppressed: %s", e)
             self._update_timer_handle = None
-        
+
         if self._update_timer is not None:
             try:
                 self._update_timer.stop()
@@ -294,11 +294,11 @@ class RedditWidget(BaseOverlayWidget):
             except Exception as e:
                 logger.debug("[REDDIT] Exception suppressed: %s", e)
             self._update_timer = None
-        
+
         self._posts.clear()
         self._row_hit_rects.clear()
         logger.debug("[LIFECYCLE] RedditWidget deactivated")
-    
+
     def _cleanup_impl(self) -> None:
         """Clean up reddit resources (lifecycle hook)."""
         self._deactivate_impl()
@@ -310,7 +310,7 @@ class RedditWidget(BaseOverlayWidget):
                 logger.debug("[REDDIT] Exception suppressed: %s", e)
             self._hover_timer = None
         logger.debug("[LIFECYCLE] RedditWidget cleaned up")
-    
+
     # -------------------------------------------------------------------------
     # Legacy Start/Stop Methods (for backward compatibility)
     # -------------------------------------------------------------------------
@@ -324,17 +324,17 @@ class RedditWidget(BaseOverlayWidget):
             return
 
         self._enabled = True
-        
+
         # CRITICAL: Hide widget immediately - it will be shown by fade sync
         self.hide()
-        
+
         # Setup progressive loading stages based on target limit
         self._setup_progressive_stages()
-        
+
         # Load cached posts for data preparation (widget stays hidden)
         cached_posts = self._load_cached_posts()
         if cached_posts:
-            logger.info("[REDDIT] Loaded %d cached posts (cache_key=%s)", 
+            logger.info("[REDDIT] Loaded %d cached posts (cache_key=%s)",
                        len(cached_posts), self._cache_key)
             self._all_fetched_posts = cached_posts
             self._progressive_stage = self._get_stage_for_post_count(len(cached_posts))
@@ -342,7 +342,7 @@ class RedditWidget(BaseOverlayWidget):
             self._prepare_posts_for_display(cached_posts, force_refresh=True)
         else:
             logger.info("[REDDIT] No cached posts found (cache_key=%s)", self._cache_key)
-        
+
         self._schedule_timer()
         self._fetch_feed()
 
@@ -441,7 +441,7 @@ class RedditWidget(BaseOverlayWidget):
 
     def _setup_progressive_stages(self) -> None:
         """Setup progressive loading stages based on target limit.
-        
+
         Progressive loading allows widgets to display partial data immediately
         while respecting rate limits. Stages: 4 → 10 → target (if > 10).
         """
@@ -451,7 +451,7 @@ class RedditWidget(BaseOverlayWidget):
         if self._target_limit > 10:
             self._progressive_stages.append(self._target_limit)
         self._progressive_stage = 0
-        logger.debug("[REDDIT] Progressive stages setup: %s (target=%d)", 
+        logger.debug("[REDDIT] Progressive stages setup: %s (target=%d)",
                     self._progressive_stages, self._target_limit)
 
     def _get_stage_for_post_count(self, post_count: int) -> int:
@@ -469,13 +469,13 @@ class RedditWidget(BaseOverlayWidget):
 
     def _display_progressive_posts(self, fade: bool = False) -> None:
         """Display posts up to current progressive stage limit.
-        
+
         Args:
             fade: If True, fade in the widget after size change (for stage transitions)
         """
         stage_limit = self._get_current_stage_limit()
         posts_to_show = self._all_fetched_posts[:stage_limit]
-        
+
         if not posts_to_show:
             return
 
@@ -540,12 +540,12 @@ class RedditWidget(BaseOverlayWidget):
 
     def _advance_progressive_stage(self) -> bool:
         """Advance to next progressive stage if possible.
-        
+
         Returns True if advanced, False if already at final stage.
         """
         if self._progressive_stage >= len(self._progressive_stages) - 1:
             return False
-        
+
         self._progressive_stage += 1
         # Fade in when advancing stages to avoid flash
         self._display_progressive_posts(fade=True)
@@ -675,7 +675,7 @@ class RedditWidget(BaseOverlayWidget):
         def _do_fetch(subreddit: str, sort: str, limit: int) -> List[Dict[str, Any]]:
             import time
             start_time = time.perf_counter()
-            
+
             # Use centralized rate limiter to coordinate with RSS source
             try:
                 from core.reddit_rate_limiter import RedditRateLimiter
@@ -683,10 +683,10 @@ class RedditWidget(BaseOverlayWidget):
                 if wait_time > 0:
                     logger.info(f"[RATE_LIMIT] Reddit widget waiting {wait_time:.1f}s for rate limit")
                     time.sleep(wait_time)
-                RedditRateLimiter.record_request()
+                RedditRateLimiter.record_request(namespace="widget")
             except ImportError:
                 logger.debug("[REDDIT] RedditRateLimiter not available")
-            
+
             url = f"https://www.reddit.com/r/{subreddit}/{sort}.json"
             headers = {
                 "User-Agent": "ShittyRandomPhotoScreenSaver/1.0 (+https://github.com/Basjohn/ShittyRandomPhotoScreenSaver)",
@@ -717,7 +717,7 @@ class RedditWidget(BaseOverlayWidget):
             resp = requests.get(url, headers=headers, params=params, timeout=10)
             resp.raise_for_status()
             payload = resp.json()
-            
+
             if is_perf_metrics_enabled():
                 elapsed_ms = (time.perf_counter() - start_time) * 1000
                 logger.debug(
@@ -791,7 +791,7 @@ class RedditWidget(BaseOverlayWidget):
         # Guard against callback arriving after widget destruction
         if not shiboken_isValid(self):
             return
-        
+
         if not posts_data:
             logger.warning("[REDDIT] Empty listing for subreddit %s", self._subreddit)
             if not self._has_displayed_valid_data:
@@ -830,10 +830,10 @@ class RedditWidget(BaseOverlayWidget):
                     created_utc=created_utc,
                 )
             )
-        
+
         # Store all fetched posts for progressive loading
         self._all_fetched_posts = posts
-        
+
         # Save full post list to cache for next startup
         self._save_cached_posts(posts[:self._target_limit])
 
@@ -855,20 +855,20 @@ class RedditWidget(BaseOverlayWidget):
         new_stage = self._get_stage_for_post_count(len(posts))
         stage_changed = new_stage != self._progressive_stage
         self._progressive_stage = new_stage
-        
+
         # Display posts progressively, with fade if stage changed
         self._display_progressive_posts(fade=stage_changed)
 
     def _update_posts_internal(self, posts: List[RedditPost], fade: bool = False) -> None:
         """Internal method to update displayed posts (used by progressive loading).
-        
+
         Args:
             posts: Posts to display
             fade: If True, fade in after update (for stage transitions)
         """
         if not posts:
             return
-        
+
         first_sample = not self._has_seen_first_sample
 
         # Order posts so that the newest entries appear at the top of the
@@ -888,7 +888,7 @@ class RedditWidget(BaseOverlayWidget):
 
         self._posts = posts
         self._row_hit_rects.clear()
-        
+
         # Invalidate paint cache since data changed
         self._invalidate_paint_cache()
 
@@ -904,7 +904,7 @@ class RedditWidget(BaseOverlayWidget):
         # large empty regions while still leaving enough headroom for the
         # chosen limit and current font metrics.
         self._update_card_height_from_content(len(self._posts))
-        
+
         if self.parent():
             self._update_position()
             # Notify parent to recalculate stacking after height change
@@ -913,11 +913,11 @@ class RedditWidget(BaseOverlayWidget):
                     self.parent().recalculate_stacking()
                 except Exception as e:
                     logger.debug("[REDDIT] Exception suppressed: %s", e)
-        
+
         # Trigger repaint if widget is visible
         if self.isVisible():
             self.update()
-        
+
         if first_sample:
             self._has_seen_first_sample = True
             parent = self.parent()
@@ -952,7 +952,7 @@ class RedditWidget(BaseOverlayWidget):
         # Guard against callback arriving after widget destruction
         if not shiboken_isValid(self):
             return
-        
+
         if is_verbose_logging():
             logger.warning("[REDDIT] Fetch error: %s", error)
 
@@ -970,7 +970,7 @@ class RedditWidget(BaseOverlayWidget):
 
     def paintEvent(self, event) -> None:  # type: ignore[override]
         """Paint background via QLabel then overlay header and posts.
-        
+
         Uses paint caching: content is rendered to a pixmap only when data
         changes (every 10 minutes). Subsequent paints just blit the cached
         pixmap, reducing paint time from ~6ms to <0.5ms.
@@ -982,12 +982,12 @@ class RedditWidget(BaseOverlayWidget):
         """Paint using cached pixmap, regenerating only when invalidated."""
         # Let QLabel paint its background
         super().paintEvent(event)
-        
+
         if not self._posts:
             return
-        
+
         widget_size = self.size()
-        
+
         # Check if cache needs regeneration (compare logical sizes accounting for DPR)
         cache_valid = False
         if self._cached_content_pixmap is not None and not self._cached_content_pixmap.isNull():
@@ -995,13 +995,13 @@ class RedditWidget(BaseOverlayWidget):
                 cached_dpr = self._cached_content_pixmap.devicePixelRatio()
                 cached_logical_w = int(self._cached_content_pixmap.width() / cached_dpr)
                 cached_logical_h = int(self._cached_content_pixmap.height() / cached_dpr)
-                cache_valid = (cached_logical_w == widget_size.width() and 
+                cache_valid = (cached_logical_w == widget_size.width() and
                               cached_logical_h == widget_size.height())
             except Exception:
                 cache_valid = False
-        
+
         needs_regen = self._cache_invalidated or not cache_valid
-        
+
         if needs_regen:
             # Regenerate the cached pixmap
             if is_perf_metrics_enabled():
@@ -1009,7 +1009,7 @@ class RedditWidget(BaseOverlayWidget):
                            self._cache_invalidated, cache_valid)
             self._regenerate_cache(widget_size)
             self._cache_invalidated = False
-        
+
         # Blit cached content
         if self._cached_content_pixmap is not None and not self._cached_content_pixmap.isNull():
             painter = QPainter(self)
@@ -1017,19 +1017,19 @@ class RedditWidget(BaseOverlayWidget):
                 painter.drawPixmap(0, 0, self._cached_content_pixmap)
             finally:
                 painter.end()
-    
+
     def _regenerate_cache(self, size) -> None:
         """Regenerate the cached content pixmap."""
         try:
             dpr = self.devicePixelRatioF()
         except Exception:
             dpr = 1.0
-        
+
         # Create pixmap with proper DPI scaling
         pixmap = QPixmap(int(size.width() * dpr), int(size.height() * dpr))
         pixmap.setDevicePixelRatio(dpr)
         pixmap.fill(Qt.GlobalColor.transparent)
-        
+
         painter = QPainter(pixmap)
         try:
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -1037,13 +1037,13 @@ class RedditWidget(BaseOverlayWidget):
             self._paint_content_to_painter(painter)
         finally:
             painter.end()
-        
+
         self._cached_content_pixmap = pixmap
-    
+
     def _invalidate_paint_cache(self) -> None:
         """Mark the paint cache as needing regeneration."""
         self._cache_invalidated = True
-    
+
     def _paint_content_to_painter(self, painter: QPainter) -> None:
         """Paint the actual content to a painter (used for caching)."""
         if not self._posts:
@@ -1058,7 +1058,7 @@ class RedditWidget(BaseOverlayWidget):
         )
         if rect.width() <= 0 or rect.height() <= 0:
             return
-        
+
         # Header: Reddit logo + r/<subreddit>
         self._header_hit_rect = None
         header_font = QFont(self._font_family, self._header_font_pt, QFont.Weight.Bold)
@@ -1308,7 +1308,7 @@ class RedditWidget(BaseOverlayWidget):
 
         # Use consistent small spacing between rows
         self._row_vertical_spacing = 4 if rows > 1 else 0
-        
+
         # Get content margins
         try:
             margins = self.contentsMargins()
@@ -1326,7 +1326,7 @@ class RedditWidget(BaseOverlayWidget):
             + (max(0, rows - 1) * self._row_vertical_spacing)
             + card_padding
         )
-        
+
         # Add margins and a small safety buffer
         target = content_height + margin_top + margin_bottom + 4
 
@@ -1592,13 +1592,13 @@ class RedditWidget(BaseOverlayWidget):
 
     def _update_position(self) -> None:
         """Update widget position using centralized base class logic.
-        
+
         Delegates to BaseOverlayWidget._update_position() which handles:
         - Margin-based positioning for all 9 anchor positions
         - Visual padding offsets (when background is disabled)
         - Pixel shift and stack offset application
         - Bounds clamping to prevent off-screen drift
-        
+
         This ensures consistent margin alignment across all overlay widgets.
         """
         # Sync RedditPosition to OverlayPosition for base class
@@ -1613,10 +1613,10 @@ class RedditWidget(BaseOverlayWidget):
             RedditPosition.BOTTOM_CENTER: OverlayPosition.BOTTOM_CENTER,
             RedditPosition.BOTTOM_RIGHT: OverlayPosition.BOTTOM_RIGHT,
         }
-        
+
         # Update base class position
         self._position = position_map.get(self._reddit_position, OverlayPosition.TOP_RIGHT)
-        
+
         # Delegate to base class for centralized margin/positioning logic
         super()._update_position()
 
@@ -1646,7 +1646,7 @@ class RedditWidget(BaseOverlayWidget):
         cache_dir = Path(__file__).resolve().parent.parent / "cache" / "reddit"
         cache_dir.mkdir(parents=True, exist_ok=True)
         return cache_dir / f"{self._cache_key}_posts.json"
-    
+
     def _save_cached_posts(self, posts: List[RedditPost]) -> None:
         """Save posts to cache for next startup."""
         try:
@@ -1657,17 +1657,17 @@ class RedditWidget(BaseOverlayWidget):
             logger.debug("[REDDIT] Saved %d posts to cache: %s", len(posts), cache_path)
         except Exception as e:
             logger.debug("[REDDIT] Failed to save post cache: %s", e)
-    
+
     def _load_cached_posts(self) -> List[RedditPost]:
         """Load cached posts from previous session."""
         try:
             cache_path = self._get_cache_file_path()
             if not cache_path.exists():
                 return []
-            
+
             with open(cache_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            
+
             posts = [RedditPost(**item) for item in data]
             logger.debug("[REDDIT] Loaded %d posts from cache: %s", len(posts), cache_path)
             return posts

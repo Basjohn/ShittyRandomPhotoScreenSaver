@@ -27,8 +27,21 @@ from utils.profiler import profile
 
 
 class VisualizerMode(Enum):
-    """Visualization display modes for the Spotify visualizer."""
-    SPECTRUM = auto()  # Classic bar spectrum analyzer (only supported mode)
+    """Visualization display modes for the Spotify visualizer.
+
+    Only SPECTRUM is currently implemented. Other modes are planned for future releases:
+    - WAVEFORM_RIBBON: Morphing waveform that mirrors in place (TimArt/3DAudioVisualizers)
+    - DNA_HELIX: Dual helices twisting with amplitude (ShaderToy dtl3Dr)
+    - RADIAL_BLOOM: Polar coordinate FFT display (GLava radial module)
+    - SPECTROGRAM: Scrolling history of FFT frames (Stanford CCRMA)
+    - PHASOR_SWARM: Particle emitters on bar positions (PAV Phasor)
+    """
+    SPECTRUM = auto()        # Classic bar spectrum analyzer - FUNCTIONAL
+    WAVEFORM_RIBBON = auto() # Morphing waveform ribbon - NOT IMPLEMENTED
+    DNA_HELIX = auto()       # Dual helices with amplitude - NOT IMPLEMENTED
+    RADIAL_BLOOM = auto()    # Polar coordinate FFT display - NOT IMPLEMENTED
+    SPECTROGRAM = auto()     # Scrolling history ribbon - NOT IMPLEMENTED
+    PHASOR_SWARM = auto()    # Particle emitters on bar positions - NOT IMPLEMENTED
 
 logger = get_logger(__name__)
 

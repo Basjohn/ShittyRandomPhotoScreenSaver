@@ -53,6 +53,7 @@ uniform sampler2D uNewTex;
 uniform float u_progress;
 uniform vec2 u_resolution;
 uniform vec2 u_grid;        // (cols, rows)
+uniform float u_feather;    // Feather amount (0.0 = hard edge, 0.08 = default soft)
 
 void main() {
     // Flip V to match Qt's top-left image origin.
@@ -80,8 +81,8 @@ void main() {
     float left = 0.5 - half;
     float right = 0.5 + half;
 
-    // Soft edges so the band does not appear as a harsh 1px stripe.
-    float feather = 0.08;
+    // Soft edges controlled by u_feather uniform (0.0 = hard edge)
+    float feather = clamp(u_feather, 0.0, 0.2);
     float edgeL = smoothstep(left - feather, left, uvLocal.x);
     float edgeR = 1.0 - smoothstep(right, right + feather, uvLocal.x);
     float bandMask = clamp(edgeL * edgeR, 0.0, 1.0);
@@ -100,11 +101,12 @@ void main() {
         if gl is None:
             return {}
         return {
-            "u_progress": gl.glGetUniformLocation(program, "u_progress"),
-            "u_resolution": gl.glGetUniformLocation(program, "u_resolution"),
-            "uOldTex": gl.glGetUniformLocation(program, "uOldTex"),
-            "uNewTex": gl.glGetUniformLocation(program, "uNewTex"),
-            "u_grid": gl.glGetUniformLocation(program, "u_grid"),
+            'uOldTex': gl.glGetUniformLocation(program, 'uOldTex'),
+            'uNewTex': gl.glGetUniformLocation(program, 'uNewTex'),
+            'u_progress': gl.glGetUniformLocation(program, 'u_progress'),
+            'u_resolution': gl.glGetUniformLocation(program, 'u_resolution'),
+            'u_grid': gl.glGetUniformLocation(program, 'u_grid'),
+            'u_feather': gl.glGetUniformLocation(program, 'u_feather'),
         }
 
     def render(
@@ -139,6 +141,10 @@ void main() {
                 cols = float(max(1, int(getattr(state, "cols", 1))))
                 rows = float(max(1, int(getattr(state, "rows", 1))))
                 gl.glUniform2f(uniforms["u_grid"], cols, rows)
+
+            if uniforms.get("u_feather", -1) != -1:
+                feather = float(getattr(state, "feather", 0.0))
+                gl.glUniform1f(uniforms["u_feather"], feather)
 
             if uniforms.get("uOldTex", -1) != -1:
                 gl.glActiveTexture(gl.GL_TEXTURE0)

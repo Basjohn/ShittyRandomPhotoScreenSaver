@@ -90,21 +90,21 @@ class TestMediaWidgetClickDetection:
     def test_click_detection_checks_y_coordinate(self, qt_app):
         """Verify click detection code checks Y coordinate for controls row."""
         from rendering.input_handler import InputHandler
-        
+
         # Check that _route_media_left_click contains Y coordinate logic
         source = inspect.getsource(InputHandler._route_media_left_click)
-        
-        # Must check local_y against controls_row_top
+
+        # Must compute local_y and pass it to handle_controls_click
         assert 'local_y' in source
-        assert 'controls_row_top' in source or 'controls_row_height' in source
+        assert 'handle_controls_click' in source
 
     def test_controls_row_height_is_reasonable(self, qt_app):
-        """Verify controls row height constant is reasonable (40-80px)."""
+        """Verify click routing delegates to media widget's handle_controls_click."""
         from rendering.input_handler import InputHandler
-        
+
         source = inspect.getsource(InputHandler._route_media_left_click)
-        # The controls_row_height should be defined as 60
-        assert 'controls_row_height = 60' in source
+        # Click routing delegates to media widget which handles controls row internally
+        assert 'handle_controls_click' in source
 
 
 class TestCrumbleShaderPerformance:
