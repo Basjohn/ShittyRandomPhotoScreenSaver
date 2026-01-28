@@ -32,10 +32,14 @@ class RedditRateLimiter:
     Reddit's unauthenticated API limit is 10 requests per minute per IP.
     We enforce 8 requests per minute (-2 safety margin) with 8s minimum interval.
     This ensures we stay well under the limit even with multiple concurrent sources.
+    
+    Quota tracking is namespaced to distinguish between RSS source and Reddit widget.
     """
     
     _lock = threading.Lock()
     _request_times: List[float] = []
+    # Namespace tracking: {namespace: [timestamps]}
+    _namespace_requests: dict = {}
     
     # Conservative limit: 8 requests per minute (Reddit allows 10 unauthenticated)
     # This is -2 from the actual limit for safety margin
@@ -62,16 +66,25 @@ class RedditRateLimiter:
             return len(cls._request_times) < cls.MAX_REQUESTS_PER_MINUTE
     
     @classmethod
-    def record_request(cls) -> None:
-        """Record that a Reddit API request was made."""
+    def record_request(cls, namespace: str = "global") -> None:
+        """Record that a Reddit API request was made.
+        
+        Args:
+            namespace: Source of the request (e.g., 'rss', 'widget') for quota attribution.
+        """
         with cls._lock:
             now = time.time()
             cls._request_times.append(now)
             cls._last_request_time = now
             # Cleanup old entries
             cls._request_times = [t for t in cls._request_times if now - t < cls.WINDOW_SECONDS]
-            logger.debug("[RATE_LIMIT] Reddit request recorded, %d requests in last minute", 
-                        len(cls._request_times))
+            # Track by namespace
+            if namespace not in cls._namespace_requests:
+                cls._namespace_requests[namespace] = []
+            cls._namespace_requests[namespace].append(now)
+            cls._namespace_requests[namespace] = [t for t in cls._namespace_requests[namespace] if now - t < cls.WINDOW_SECONDS]
+            logger.debug("[RATE_LIMIT] Reddit request recorded (ns=%s), %d requests in last minute (global), %d (ns)", 
+                        namespace, len(cls._request_times), len(cls._namespace_requests[namespace]))
     
     @classmethod
     def wait_if_needed(cls) -> float:
@@ -121,8 +134,19 @@ class RedditRateLimiter:
             return len(cls._request_times)
     
     @classmethod
+    def get_namespace_count(cls, namespace: str) -> int:
+        """Get current number of requests in the rate limit window for a namespace."""
+        with cls._lock:
+            now = time.time()
+            if namespace not in cls._namespace_requests:
+                return 0
+            cls._namespace_requests[namespace] = [t for t in cls._namespace_requests[namespace] if now - t < cls.WINDOW_SECONDS]
+            return len(cls._namespace_requests[namespace])
+    
+    @classmethod
     def reset(cls) -> None:
         """Reset the rate limiter (for testing)."""
         with cls._lock:
             cls._request_times = []
             cls._last_request_time = 0.0
+            cls._namespace_requests = {}

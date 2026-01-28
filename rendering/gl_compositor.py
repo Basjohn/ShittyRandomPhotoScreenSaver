@@ -465,30 +465,47 @@ class GLCompositorWidget(QOpenGLWidget):
         return display_hz
     
     def _calculate_target_fps(self, display_hz: int) -> int:
-        """Calculate target FPS based on display refresh rate.
-        
-        Uses adaptive rate selection:
-        - 60Hz or below: target full refresh rate
-        - 61-120Hz: target half refresh rate (e.g., 120Hz → 60Hz)
-        - Above 120Hz: target third refresh rate (e.g., 165Hz → 55Hz)
-        
-        Args:
-            display_hz: Display refresh rate in Hz
-            
-        Returns:
-            Target FPS (minimum 30)
-        """
+        """Mirror DisplayWidget's adaptive ladder."""
+
+        parent = self.parent()
+        from rendering.display_widget import DisplayWidget  # local import to avoid cycle
+        if isinstance(parent, DisplayWidget):
+            target = getattr(parent, "_target_fps", 60)
+            if target > 0:
+                return target
+
+        if display_hz <= 0:
+            display_hz = 60
         if display_hz <= 60:
-            target_fps = display_hz
+            target = display_hz
         elif display_hz <= 120:
-            target_fps = display_hz // 2
+            target = max(30, display_hz // 2)
         else:
-            target_fps = display_hz // 3
-        return max(30, target_fps)
-    
+            target = max(30, display_hz // 3)
+
+        if is_perf_metrics_enabled():
+            logger.debug(
+                "[PERF] [GL COMPOSITOR] Target FPS fallback ladder -> %d (display=%dHz)",
+                target,
+                display_hz,
+            )
+        return target
+
+    def _reset_render_timer_metrics(self, target_fps: int) -> None:
+        """Initialize or clear render timer metrics based on PERF flag."""
+
+        if is_perf_metrics_enabled():
+            interval = max(1, int(round(1000.0 / max(1, target_fps))))
+            self._render_timer_metrics = _RenderTimerMetrics(
+                target_fps=target_fps,
+                interval_ms=interval,
+            )
+        else:
+            self._render_timer_metrics = None
+
     def _start_render_strategy(self) -> None:
         """Start the render strategy to drive repaints during transitions.
-        
+
         Uses VSync-driven rendering when enabled:
         - Connects to frameSwapped signal for VSync timing
         - Each frame swap triggers the next update() call
@@ -507,14 +524,7 @@ class GLCompositorWidget(QOpenGLWidget):
         display_hz = self._get_display_refresh_rate()
         target_fps = self._calculate_target_fps(display_hz)
         self._render_timer_fps = target_fps
-        
-        if is_perf_metrics_enabled():
-            self._render_timer_metrics = _RenderTimerMetrics(
-                target_fps=target_fps,
-                interval_ms=max(1, 1000 // target_fps),
-            )
-        else:
-            self._render_timer_metrics = None
+        self._reset_render_timer_metrics(target_fps)
         
         # Use VSync-driven rendering if enabled
         if self._vsync_enabled:

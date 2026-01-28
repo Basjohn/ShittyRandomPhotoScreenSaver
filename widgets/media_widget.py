@@ -10,10 +10,12 @@ mode remains non-interactive.
 """
 from __future__ import annotations
 
+import time
+import weakref
 from dataclasses import asdict
 from enum import Enum
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, ClassVar
 
 from PySide6.QtWidgets import QWidget
 from PySide6.QtCore import QTimer, Qt, Signal, QVariantAnimation, QRect
@@ -70,6 +72,17 @@ class MediaWidget(BaseOverlayWidget):
     
     # Override defaults for media widget
     DEFAULT_FONT_SIZE = 20
+    
+    # Class-level shared state for feedback synchronization
+    _instances: ClassVar[weakref.WeakSet] = weakref.WeakSet()
+    _shared_feedback_events: ClassVar[dict] = {}
+    _shared_feedback_timer: ClassVar[Optional[QTimer]] = None
+    _shared_feedback_timer_interval_ms: ClassVar[int] = 16
+    
+    # Shared media info cache - prevents multi-display desync
+    _shared_last_valid_info: ClassVar[Optional[MediaTrackInfo]] = None
+    _shared_last_valid_info_ts: ClassVar[float] = 0.0
+    _shared_info_max_age_sec: ClassVar[float] = 5.0
 
     def __init__(
         self,
@@ -163,6 +176,22 @@ class MediaWidget(BaseOverlayWidget):
         self._telemetry_logged_missing_tm = False
         self._telemetry_last_visibility: Optional[bool] = None
         self._telemetry_logged_fade_request = False
+        
+        # Artwork vertical bias for dynamic positioning
+        self._artwork_vertical_bias: float = 0.4
+        
+        # Control feedback state (for visual feedback on button press)
+        self._controls_feedback: dict = {}
+        self._controls_feedback_progress: dict = {}
+        self._controls_feedback_anim_ids: dict = {}
+        self._feedback_anim_mgr: Optional[object] = None  # AnimationManager
+        self._controls_feedback_duration: float = 1.35
+        self._feedback_deadlines: dict[str, float] = {}
+        self._active_feedback_events: dict[str, str] = {}
+        self._last_manual_control: Optional[tuple[str, float, str]] = None
+        
+        # Register this instance for shared feedback
+        type(self)._instances.add(self)
 
         self._setup_ui()
 
@@ -864,6 +893,12 @@ class MediaWidget(BaseOverlayWidget):
         prev_info = self._last_info
         self._last_info = info
         
+        # Update shared cache when we have valid info
+        if info is not None:
+            cls = type(self)
+            cls._shared_last_valid_info = info
+            cls._shared_last_valid_info_ts = time.monotonic()
+        
         # Smart polling: diff gating - compute track identity
         if info is not None:
             current_identity = self._compute_track_identity(info)
@@ -902,6 +937,19 @@ class MediaWidget(BaseOverlayWidget):
             if is_perf_metrics_enabled():
                 logger.debug("[PERF] Media widget update applied (track changed)")
 
+        if info is None:
+            # MULTI-DISPLAY FIX: Check if other widgets have valid info
+            cls = type(self)
+            shared_info = cls._get_shared_valid_info()
+            if shared_info is not None:
+                logger.debug("[MEDIA_WIDGET] Using shared info from another display")
+                info = shared_info
+                self._last_info = info
+                # Don't count this as None - fall through to display shared info
+            else:
+                # No shared info - proceed with normal None handling
+                pass
+        
         if info is None:
             # Smart polling: idle detection - track consecutive None results
             self._consecutive_none_count += 1
@@ -950,24 +998,19 @@ class MediaWidget(BaseOverlayWidget):
         title = smart_title_case((info.title or "").strip())
         artist = smart_title_case((info.artist or "").strip())
 
-        # Snapshot of current visibility, used at the end of the update to
-        # decide whether to run a one-shot fade-in or just keep the card
-        # visible. Track changes themselves no longer trigger extra fades.
-        was_visible = self.isVisible()
-
         # Typography: header is slightly larger than the base font, the song
         # title is emphasised, and the artist is a touch smaller but still
         # strong enough to read at a glance.
         base_font = max(6, self._font_size)
         header_font = max(6, int(base_font * 1.2))
-
+        
         # Start from comfortable defaults and then downscale when titles get
         # very long so they do not wrap so aggressively that they collide
         # with the controls row. Artist text follows the title but with a
         # smaller adjustment so hierarchy between the two is preserved.
         title_font_base = max(6, base_font + 3)
         artist_font_base = max(6, base_font - 2)
-
+        
         title_len = len(title)
         scale_title = 1.0
         if title_len > 40:
@@ -1001,6 +1044,7 @@ class MediaWidget(BaseOverlayWidget):
             body_html = (
                 f"<div style='font-size:{base_font}pt; font-weight:500;'>(no metadata)</div>"
             )
+            metadata_complexity = 0
         else:
             body_lines_html = []
             if title:
@@ -1012,6 +1056,7 @@ class MediaWidget(BaseOverlayWidget):
                     f"<div style='margin-top:4px; font-size:{artist_font}pt; font-weight:{artist_weight}; opacity:0.95;'>{artist}</div>"
                 )
             body_html = "".join(body_lines_html)
+            metadata_complexity = len(title.strip()) + len(artist.strip())
 
         header_html = (
             f"<div style='font-size:{header_font}pt; font-weight:{header_weight}; "
@@ -1028,24 +1073,34 @@ class MediaWidget(BaseOverlayWidget):
 
         self.setTextFormat(Qt.TextFormat.RichText)
         self.setText(html)
+        
+        # Adjust artwork vertical bias so shorter metadata keeps the frame closer to center.
+        if metadata_complexity <= 0:
+            self._artwork_vertical_bias = 0.58
+        elif metadata_complexity <= 40:
+            self._artwork_vertical_bias = 0.55
+        elif metadata_complexity <= 80:
+            self._artwork_vertical_bias = 0.45
+        else:
+            self._artwork_vertical_bias = 0.32
 
         # Lock the card height after the first track so that layout changes
         # (for example when titles wrap to multiple lines) do not cause the
-        # widget to move vertically on screen. The height cap is allowed to
-        # grow when a later track needs more space, but never shrinks.
-        try:
-            hint_h = self.sizeHint().height()
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-            hint_h = 0
-        base_min = self.minimumHeight()
-        fixed_candidate = max(220, base_min, hint_h)
-        if self._fixed_card_height is None or fixed_candidate > self._fixed_card_height:
-            self._fixed_card_height = fixed_candidate
+        # widget to move vertically on screen. The height NEVER grows after first track.
+        # Text eliding handles overflow instead of resizing.
+        if self._fixed_card_height is None:
+            try:
+                hint_h = self.sizeHint().height()
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+                hint_h = 0
+            base_min = self.minimumHeight()
+            control_padding = self._controls_row_min_height()
+            self._fixed_card_height = max(220, base_min, hint_h + control_padding)
 
-        if self._fixed_card_height is not None:
-            self.setMinimumHeight(self._fixed_card_height)
-            self.setMaximumHeight(self._fixed_card_height)
+        # Lock height permanently - never grow
+        self.setMinimumHeight(self._fixed_card_height)
+        self.setMaximumHeight(self._fixed_card_height)
 
         # CRITICAL: Decode artwork BEFORE the first-track early return so that
         # artwork is captured on the very first poll. Without this, the first
@@ -1061,7 +1116,8 @@ class MediaWidget(BaseOverlayWidget):
         # that the text layout accounts for artwork space. Without this, the
         # text wraps as if there's no artwork, causing overlap on startup.
         right_margin = max(self._artwork_size + 40, 60)
-        self.setContentsMargins(29, 12, right_margin, 40)
+        # Reduce bottom margin so controls sit closer to the card edge.
+        self.setContentsMargins(29, 12, right_margin, self._controls_row_margin())
 
         # On the very first non-empty track update we use this call purely
         # to establish a stable layout and fixed height, but keep the widget
@@ -1167,58 +1223,541 @@ class MediaWidget(BaseOverlayWidget):
         if pm.width() <= 0 or pm.height() <= 0:
             return None
         return pm
+    
+    def _controls_row_min_height(self) -> int:
+        """Return the minimum vertical footprint required for the controls row."""
+        controls_font_pt = max(8, self._font_size - 2)
+        font = QFont(self._font_family, controls_font_pt, QFont.Weight.Medium)
+        fm = QFontMetrics(font)
+        # Inner padding mirrors _compute_controls_layout to keep visuals consistent.
+        return max(28, fm.height() + 14)
+    
+    def _controls_row_margin(self) -> int:
+        """Bottom margin that keeps controls breathing room above the card edge."""
+        return max(12, int(self._controls_row_min_height() * 0.4))
+    
+    def _compute_controls_layout(self):
+        """Compute geometry for the transport controls row."""
+        if not self._show_controls:
+            return None
 
-        # Reserve space for artwork plus breathing room on the right even
-        # when artwork is missing so the widget size stays stable. Text stays
-        # anchored on the left side.
-        right_margin = max(self._artwork_size + 40, 60)
-        # Extra bottom margin so the painted controls row has breathing
-        # room above the card edge while keeping text clear of the glyphs.
-        self.setContentsMargins(29, 12, right_margin, 40)
+        width = self.width()
+        height = self.height()
+        if width <= 0 or height <= 0:
+            return None
 
-        # After adjusting margins, recompute the widget's anchored position
-        # once so we do not "jump" after the fade completes.
-        if self.parent():
-            self._update_position()
+        margins = self.contentsMargins()
+        content_left = margins.left()
+        content_right = width - margins.right()
+        content_width = content_right - content_left
+        if content_width <= 60:
+            return None
 
-        # For the very first time the widget becomes visible we use a
-        # simple fade-in coordinated with other overlays (weather/Reddit)
-        # via the DisplayWidget so they appear together. Subsequent track
-        # changes update in-place so the card and controls do not move.
-        if not was_visible:
-            parent = self.parent()
+        controls_font_pt = max(8, self._font_size - 2)
+        font = QFont(self._font_family, controls_font_pt, QFont.Weight.Medium)
+        fm = QFontMetrics(font)
+        row_height = max(self._controls_row_min_height(), fm.height() + 10)
 
-            def _starter() -> None:
-                # Guard against widget being deleted before deferred callback runs
-                if not Shiboken.isValid(self):
-                    return
-                self._start_widget_fade_in(1500)
-                # Notify Spotify widgets to show now that media is visible
-                self._notify_spotify_widgets_visibility()
-                self._telemetry_last_visibility = True
+        try:
+            header_font_pt = int(self._header_font_pt) if self._header_font_pt > 0 else self._font_size
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+            header_font_pt = self._font_size
 
-            if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
-                try:
-                    if is_verbose_logging() or not self._telemetry_logged_fade_request:
-                        logger.info("[MEDIA_WIDGET] Requesting coordinated fade sync")
-                        self._telemetry_logged_fade_request = True
-                    parent.request_overlay_fade_sync("media", _starter)
-                except Exception as e:
-                    logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-                    _starter()
-            else:
-                _starter()
+        header_metrics = QFontMetrics(QFont(self._font_family, header_font_pt, QFont.Weight.Bold))
+        header_height = header_metrics.height()
+
+        base_row_top = height - margins.bottom() - row_height
+        min_row_top = margins.top() + header_height + 6
+        row_top = max(min_row_top, base_row_top)
+        if row_top + row_height > height - margins.bottom():
+            row_top = max(margins.top(), height - margins.bottom() - row_height)
+        if row_top < margins.top():
+            row_top = margins.top()
+
+        row_rect = QRect(
+            int(content_left),
+            int(row_top),
+            int(content_width),
+            int(row_height),
+        )
+
+        slot_width = content_width / 3.0
+        inner_pad_x = max(6.0, slot_width * 0.08)
+        inner_pad_y = max(3.0, row_height * 0.2)
+        hit_slop = max(6, int(row_height * 0.2))
+
+        button_rects = {}
+        hit_rects = {}
+        for index, key in enumerate(("prev", "play", "next")):
+            slot_left = content_left + slot_width * index
+            rect = QRect(
+                int(slot_left + inner_pad_x),
+                int(row_top + inner_pad_y),
+                int(slot_width - inner_pad_x * 2),
+                int(row_height - inner_pad_y * 2),
+            )
+            button_rects[key] = rect
+            hit_rects[key] = rect.adjusted(-hit_slop, -hit_slop, hit_slop, hit_slop)
+
+        return {
+            "font": font,
+            "row_rect": row_rect,
+            "button_rects": button_rects,
+            "hit_rects": hit_rects,
+        }
+    
+    def _paint_controls_row(self, painter: QPainter) -> None:
+        """Paint transport controls aligned with the click hit regions."""
+        layout = self._compute_controls_layout()
+        if layout is None:
+            return
+
+        font: QFont = layout["font"]
+        row_rect: QRect = layout["row_rect"]
+        button_rects: dict = layout["button_rects"]
+
+        painter.save()
+        try:
+            bg = QColor(self._bg_color)
+            bg.setAlpha(int(min(255, max(0, bg.alpha()) * 0.7)) or 140)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(bg)
+            painter.drawRoundedRect(row_rect, 6, 6)  # 6px radius for sub-element
+
+            divider_color = QColor(255, 255, 255, 35)
+            painter.setPen(divider_color)
+            for i in range(1, 3):
+                x = row_rect.left() + int(row_rect.width() * i / 3.0)
+                painter.drawLine(x, row_rect.top() + 6, x, row_rect.bottom() - 6)
+
+            painter.setFont(font)
+            painter.setPen(QColor(255, 255, 255, 225))
+            for key, rect in button_rects.items():
+                self._draw_control_icon(painter, rect, key)
+
+            # Click feedback overlay
+            if self._controls_feedback:
+                painter.setPen(Qt.PenStyle.NoPen)
+                for key, rect in button_rects.items():
+                    intensity = max(0.0, min(1.0, self._controls_feedback_progress.get(key, 0.0)))
+                    if intensity <= 0.0:
+                        continue
+                    inset_x = max(2, min(rect.width() // 2, int(rect.width() * 0.2)))
+                    inset_y = max(2, min(rect.height() // 2, int(rect.height() * 0.2)))
+                    halo_rect = rect.adjusted(inset_x, inset_y, -inset_x, -inset_y)
+                    if halo_rect.width() <= 0 or halo_rect.height() <= 0:
+                        halo_rect = rect
+                    opacity = int(200 * intensity)
+                    radius = max(3, int(min(halo_rect.width(), halo_rect.height()) * 0.25))
+                    painter.setBrush(QColor(255, 255, 255, opacity))
+                    painter.drawRoundedRect(halo_rect, radius, radius)
+        finally:
+            painter.restore()
+    
+    def _draw_control_icon(self, painter: QPainter, rect: QRect, key: str) -> None:
+        """Draw a single control icon (prev/play/next)."""
+        state = MediaPlaybackState.UNKNOWN
+        if self._last_info:
+            state = self._last_info.state
+
+        prev_sym = "\u2190"  # LEFTWARDS ARROW
+        next_sym = "\u2192"  # RIGHTWARDS ARROW
+        if state == MediaPlaybackState.PLAYING:
+            centre_sym = "||"  # pause
         else:
-            # Widget already visible - just ensure it's shown (no-op if already visible)
-            # Don't call show() repeatedly as it can trigger shadow reapplication
-            if not self.isVisible():
-                try:
-                    self.show()
-                except Exception as e:
-                    logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-            # Notify Spotify widgets in case they need to sync visibility
-            self._notify_spotify_widgets_visibility()
-            self._telemetry_last_visibility = True
+            centre_sym = "\u25b6"  # play
+
+        inactive_color = QColor(200, 200, 200, 230)
+        active_color = QColor(255, 255, 255, 255)
+
+        if key == "prev":
+            painter.setPen(inactive_color)
+            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, prev_sym)
+        elif key == "next":
+            painter.setPen(inactive_color)
+            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, next_sym)
+        elif key == "play":
+            # Centre play/pause gets heavier weight
+            pause_font_size = self._font_size - 4 if centre_sym == "||" else self._font_size - 2
+            font_centre = QFont(self._font_family, pause_font_size, QFont.Weight.Bold)
+            painter.setFont(font_centre)
+            painter.setPen(active_color)
+            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, centre_sym)
+    
+    def _complete_hide_sequence(self) -> None:
+        """Complete the hide sequence after fade out."""
+        try:
+            self.hide()
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+        # Clear artwork to free memory
+        self._artwork_pixmap = None
+        self._scaled_artwork_cache = None
+        self._scaled_artwork_cache_key = None
+        # Notify Spotify widgets
+        self._notify_spotify_widgets_visibility()
+    
+    def _notify_spotify_widgets_visibility(self) -> None:
+        """Notify Spotify visualizer/volume widgets of media widget visibility."""
+        # This is a placeholder - actual implementation would notify other widgets
+        pass
+    
+    def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:
+        """Fade the entire widget in."""
+        try:
+            from widgets.shadow_utils import ShadowFadeProfile
+            ShadowFadeProfile.start_fade_in(
+                self,
+                duration_ms=duration_ms,
+                on_complete=lambda: self._handle_fade_in_complete()
+            )
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Fade in failed, showing instantly: %s", e)
+            self.show()
+            self._handle_fade_in_complete()
+    
+    def _handle_fade_in_complete(self) -> None:
+        """Mark fade-in complete."""
+        self._fade_in_completed = True
+    
+    def _start_artwork_fade_in(self) -> None:
+        """Fade in artwork with animation."""
+        # Cancel any existing artwork animation
+        if self._artwork_anim is not None:
+            try:
+                self._artwork_anim.stop()
+                self._artwork_anim.deleteLater()
+            except Exception:
+                pass
+            self._artwork_anim = None
+        
+        self._artwork_opacity = 0.0
+        
+        # Simple fade using QVariantAnimation
+        try:
+            anim = QVariantAnimation(self)
+            anim.setDuration(850)
+            anim.setStartValue(0.0)
+            anim.setEndValue(1.0)
+            anim.valueChanged.connect(lambda val: self._on_artwork_fade_tick(val))
+            anim.finished.connect(lambda: self._on_artwork_fade_complete())
+            self._artwork_anim = anim
+            anim.start()
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Artwork fade failed: %s", e)
+            self._artwork_opacity = 1.0
+            self.update()
+    
+    def _on_artwork_fade_tick(self, value: float) -> None:
+        """Update artwork opacity during fade."""
+        self._artwork_opacity = float(value)
+        self.update()
+    
+    def _on_artwork_fade_complete(self) -> None:
+        """Clean up after artwork fade."""
+        self._artwork_anim = None
+        self._artwork_opacity = 1.0
+        self.update()
+    
+    def _compute_track_identity(self, info: MediaTrackInfo) -> tuple:
+        """Compute track identity for diff gating."""
+        return (
+            (info.title or "").strip(),
+            (info.artist or "").strip(),
+            (info.album or "").strip(),
+            info.state
+        )
+    
+    def _reset_poll_stage(self) -> None:
+        """Reset polling to fastest interval."""
+        self._current_poll_stage = 0
+        self._polls_at_current_stage = 0
+    
+    def _advance_poll_stage(self) -> None:
+        """Advance to next slower polling interval."""
+        if self._current_poll_stage < len(self._poll_intervals) - 1:
+            self._current_poll_stage += 1
+            self._polls_at_current_stage = 0
+            if is_perf_metrics_enabled():
+                interval = self._poll_intervals[self._current_poll_stage]
+                logger.debug("[PERF] Media widget advanced to %dms poll interval", interval)
+    
+    def _stop_timer(self) -> None:
+        """Stop the update timer."""
+        if self._update_timer_handle is not None:
+            try:
+                self._update_timer_handle.stop()
+            except Exception:
+                pass
+            self._update_timer_handle = None
+        
+        if self._update_timer is not None:
+            try:
+                self._update_timer.stop()
+                self._update_timer.deleteLater()
+            except Exception:
+                pass
+            self._update_timer = None
+
+    def _ensure_timer(self) -> None:
+        """Ensure update timer is running at correct interval."""
+        # Determine interval based on idle state
+        if self._is_idle:
+            interval = self._idle_poll_interval
+        else:
+            interval = self._poll_intervals[self._current_poll_stage]
+        
+        # If timer exists with wrong interval, recreate it
+        if self._update_timer is not None:
+            current_interval = self._update_timer.interval()
+            if current_interval != interval:
+                self._stop_timer()
+        
+        # Create timer if needed
+        if self._update_timer is None:
+            try:
+                self._update_timer, self._update_timer_handle = create_overlay_timer(
+                    self,
+                    interval,
+                    self._refresh,
+                    timer_type=Qt.TimerType.PreciseTimer
+                )
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Failed to create timer: %s", e)
+    
+    def _maybe_emit_state_feedback(self, prev_info: Optional[MediaTrackInfo], info: MediaTrackInfo) -> None:
+        """Emit state feedback if playback state changed."""
+        # Placeholder for state feedback logic
+        pass
+    
+    @classmethod
+    def _get_shared_valid_info(cls) -> Optional[MediaTrackInfo]:
+        """Get shared media info if another widget has valid data.
+        
+        Prevents multi-display desync where one widget gets None from GSMTC
+        while another still has valid media info.
+        """
+        now = time.monotonic()
+        
+        # Check shared cache first
+        if cls._shared_last_valid_info is not None:
+            age = now - cls._shared_last_valid_info_ts
+            if age < cls._shared_info_max_age_sec:
+                return cls._shared_last_valid_info
+        
+        # Fallback: check other widget instances
+        for instance in list(cls._instances):
+            try:
+                if not Shiboken.isValid(instance):
+                    continue
+                if instance._last_info is not None and instance.isVisible():
+                    cls._shared_last_valid_info = instance._last_info
+                    cls._shared_last_valid_info_ts = now
+                    return instance._last_info
+            except Exception:
+                continue
+        
+        return None
+    
+    # ------------------------------------------------------------------
+    # Shared Feedback System (Class Methods)
+    # ------------------------------------------------------------------
+    
+    @classmethod
+    def _ensure_shared_feedback_timer(cls) -> None:
+        """Ensure shared feedback timer is running."""
+        timer = cls._shared_feedback_timer
+        if timer is None:
+            timer = QTimer()
+            timer.setTimerType(Qt.TimerType.PreciseTimer)
+            timer.setInterval(cls._shared_feedback_timer_interval_ms)
+            timer.timeout.connect(cls._on_shared_feedback_tick)
+            cls._shared_feedback_timer = timer
+        if not timer.isActive():
+            timer.start()
+            if is_perf_metrics_enabled():
+                logger.debug("[PERF] Started shared feedback timer")
+    
+    @classmethod
+    def _maybe_stop_shared_feedback_timer(cls) -> None:
+        """Stop timer if no active feedback (FIXED VERSION)."""
+        timer = cls._shared_feedback_timer
+        if timer is None or not timer.isActive():
+            return
+        
+        # Check if ANY instance has active feedback
+        has_feedback = False
+        for instance in list(cls._instances):
+            try:
+                if not Shiboken.isValid(instance):
+                    continue
+            except Exception:
+                continue
+            # Check both local feedback AND shared events
+            if instance._controls_feedback:
+                has_feedback = True
+                break
+        
+        # Also check shared events dict
+        if not has_feedback and cls._shared_feedback_events:
+            has_feedback = True
+        
+        # Stop timer only if NO feedback anywhere
+        if not has_feedback:
+            timer.stop()
+            if is_perf_metrics_enabled():
+                logger.debug("[PERF] Stopped shared feedback timer (no active feedback)")
+    
+    @classmethod
+    def _on_shared_feedback_tick(cls) -> None:
+        """Process feedback tick for all instances."""
+        now = time.monotonic()
+        
+        # Process each instance
+        for instance in list(cls._instances):
+            try:
+                if not Shiboken.isValid(instance):
+                    continue
+            except Exception:
+                continue
+            instance._process_feedback_tick(now)
+        
+        # Expire old shared events
+        expired_ids = []
+        for event_id, meta in list(cls._shared_feedback_events.items()):
+            duration = meta.get("duration", 0.0) or 0.0
+            timestamp = meta.get("timestamp", now)
+            if (now - timestamp) >= duration:
+                expired_ids.append(event_id)
+        for event_id in expired_ids:
+            cls._shared_feedback_events.pop(event_id, None)
+        
+        # Stop timer if no more feedback
+        cls._maybe_stop_shared_feedback_timer()
+    
+    # ------------------------------------------------------------------
+    # Instance Feedback Methods
+    # ------------------------------------------------------------------
+    
+    def _process_feedback_tick(self, now: float) -> bool:
+        """Process feedback for this instance. Returns True if active."""
+        expired_keys: list[str] = []
+        for key, deadline in list(self._feedback_deadlines.items()):
+            if now >= deadline:
+                expired_keys.append(key)
+
+        for key in expired_keys:
+            self._feedback_deadlines.pop(key, None)
+            self._finalize_feedback_key(key)
+
+        return bool(self._controls_feedback)
+    
+    def _trigger_controls_feedback(self, key: str, source: str = "manual") -> None:
+        """Trigger control feedback animation."""
+        if key not in ("prev", "play", "next"):
+            return
+        
+        cls = type(self)
+        now = time.monotonic()
+        event_id = f"{key}_{int(now * 1000)}"
+        
+        # Expire all existing feedback
+        self._expire_all_feedback()
+        
+        # Start new feedback
+        self._controls_feedback[key] = (now, event_id)
+        self._feedback_deadlines[key] = now + self._controls_feedback_duration
+        self._active_feedback_events[key] = event_id
+        self._log_feedback_metric(
+            phase="trigger",
+            key=key,
+            source=source,
+            event_id=event_id,
+        )
+        self._start_feedback_animation(key)
+        
+        # Register in shared events
+        cls._shared_feedback_events[event_id] = {
+            "key": key,
+            "timestamp": now,
+            "source": source,
+            "duration": self._controls_feedback_duration,
+        }
+        
+        # Ensure timer is running
+        cls._ensure_shared_feedback_timer()
+        self.update()
+    
+    def _start_feedback_animation(self, key: str) -> None:
+        """Start fade animation for feedback."""
+        try:
+            from core.animation.animator import AnimationManager
+            from core.animation.types import EasingCurve
+            
+            if self._feedback_anim_mgr is None:
+                self._feedback_anim_mgr = AnimationManager()
+            
+            mgr = self._feedback_anim_mgr
+            self._controls_feedback_progress[key] = 1.0
+            
+            def _on_update(progress: float) -> None:
+                eased = max(0.0, 1.0 - progress)
+                value = eased * eased
+                self._controls_feedback_progress[key] = value
+                self.update()
+            
+            def _on_complete() -> None:
+                self._finalize_feedback_key(key)
+            
+            anim_id = mgr.animate_custom(
+                duration=max(0.01, self._controls_feedback_duration),
+                update_callback=_on_update,
+                easing=EasingCurve.CUBIC_OUT,
+                on_complete=_on_complete,
+            )
+            self._controls_feedback_anim_ids[key] = anim_id
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Feedback animation failed: %s", e)
+            # Fallback: just set progress and let timer expire it
+            self._controls_feedback_progress[key] = 1.0
+    
+    def _expire_all_feedback(self) -> None:
+        """Expire all active feedback."""
+        for key in list(self._controls_feedback.keys()):
+            self._finalize_feedback_key(key)
+
+    def _finalize_feedback_key(self, key: str) -> None:
+        """Clean up feedback for a key."""
+        anim_id = self._controls_feedback_anim_ids.pop(key, None)
+        if anim_id and self._feedback_anim_mgr:
+            try:
+                self._feedback_anim_mgr.cancel_animation(anim_id)
+            except Exception:
+                pass
+
+        self._controls_feedback_progress.pop(key, None)
+        entry = self._controls_feedback.pop(key, None)
+        if entry:
+            _, event_id = entry
+            type(self)._shared_feedback_events.pop(event_id, None)
+
+        deadline = self._feedback_deadlines.pop(key, None)
+        active_id = self._active_feedback_events.pop(key, None)
+        if active_id and is_perf_metrics_enabled():
+            self._log_feedback_metric(
+                phase="expire",
+                key=key,
+                source="local",
+                event_id=active_id,
+                deadline=f"{deadline:.3f}" if deadline else "n/a",
+            )
+
+        # Stop timer if no more feedback
+        if not self._controls_feedback and not self._feedback_deadlines:
+            type(self)._maybe_stop_shared_feedback_timer()
+
+        self.update()
     
     def _gate_fft_worker(self, should_run: bool) -> None:
         """Start or stop the FFT worker based on media widget visibility.

@@ -196,8 +196,13 @@ class DisplayTab(QWidget):
 
         self.refresh_sync_check = QCheckBox("Sync animations to display refresh rate")
         self.refresh_sync_check.setChecked(True)
-        self.refresh_sync_check.stateChanged.connect(self._save_settings)
+        self.refresh_sync_check.stateChanged.connect(self._on_refresh_sync_toggled)
         perf_layout.addWidget(self.refresh_sync_check)
+
+        self.refresh_adaptive_check = QCheckBox("Adaptive ratios (1× / 1⁄2 / 1⁄3)")
+        self.refresh_adaptive_check.setChecked(True)
+        self.refresh_adaptive_check.stateChanged.connect(self._save_settings)
+        perf_layout.addWidget(self.refresh_adaptive_check)
 
         layout.addWidget(perf_group)
 
@@ -302,6 +307,7 @@ class DisplayTab(QWidget):
         self.sharpen_check.blockSignals(True)
         # Also block performance toggles to avoid saving defaults while loading
         self.refresh_sync_check.blockSignals(True)
+        self.refresh_adaptive_check.blockSignals(True)
         self.backend_combo.blockSignals(True)
         # Block input toggles
         self.hard_exit_check.blockSignals(True)
@@ -380,6 +386,10 @@ class DisplayTab(QWidget):
             refresh_sync = self._settings.get_bool('display.refresh_sync', True)
             self.refresh_sync_check.setChecked(refresh_sync)
 
+            refresh_adaptive = self._settings.get_bool('display.refresh_adaptive', True)
+            self.refresh_adaptive_check.setChecked(refresh_adaptive)
+            self._update_adaptive_checkbox_state()
+
             # Input / Hard Exit
             hard_exit_raw = self._settings.get('input.hard_exit', False)
             hard_exit = SettingsManager.to_bool(hard_exit_raw, False)
@@ -406,6 +416,7 @@ class DisplayTab(QWidget):
             self.shuffle_check.blockSignals(False)
             self.sharpen_check.blockSignals(False)
             self.refresh_sync_check.blockSignals(False)
+            self.refresh_adaptive_check.blockSignals(False)
             self.backend_combo.blockSignals(False)
             self.hard_exit_check.blockSignals(False)
             self._loading = False
@@ -448,6 +459,7 @@ class DisplayTab(QWidget):
         
         # Performance
         self._settings.set('display.refresh_sync', self.refresh_sync_check.isChecked())
+        self._settings.set('display.refresh_adaptive', self.refresh_adaptive_check.isChecked())
 
         # Input / Exit
         self._settings.set('input.hard_exit', self.hard_exit_check.isChecked())
@@ -465,6 +477,14 @@ class DisplayTab(QWidget):
             f"sharpen={sharpen}, "
             f"same_image={self.same_image_check.isChecked()}"
         )
+
+    def _on_refresh_sync_toggled(self) -> None:
+        self._update_adaptive_checkbox_state()
+        self._save_settings()
+
+    def _update_adaptive_checkbox_state(self) -> None:
+        enabled = self.refresh_sync_check.isChecked()
+        self.refresh_adaptive_check.setEnabled(enabled)
 
     def _on_show_on_changed(self) -> None:
         """Handle changes to the monitor "Show On" checkboxes."""

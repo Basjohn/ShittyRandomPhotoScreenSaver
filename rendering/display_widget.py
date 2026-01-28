@@ -506,6 +506,22 @@ class DisplayWidget(QWidget):
             self.destroyed.connect(self._on_destroyed)
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+
+    def _resolve_display_target_fps(self, detected_hz: int, *, adaptive: bool = True) -> int:
+        """Resolve per-display target FPS with optional adaptive ladder."""
+
+        if detected_hz <= 0:
+            detected_hz = 60
+        if adaptive:
+            if detected_hz <= 60:
+                target = detected_hz
+            elif detected_hz <= 120:
+                target = max(30, detected_hz // 2)
+            else:
+                target = max(30, detected_hz // 3)
+        else:
+            target = detected_hz
+        return min(240, max(30, target))
     
     def show_on_screen(self) -> None:
         """Show widget fullscreen on assigned screen."""
@@ -850,22 +866,38 @@ class DisplayWidget(QWidget):
                 raw = True
             refresh_sync_enabled = SettingsManager.to_bool(raw, True)
         
+        refresh_adaptive_enabled = True
+        if self.settings_manager:
+            try:
+                raw_adaptive = self.settings_manager.get('display.refresh_adaptive', True)
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+                raw_adaptive = True
+            refresh_adaptive_enabled = SettingsManager.to_bool(raw_adaptive, True)
+
+        detected = int(round(self._detect_refresh_rate()))
         if not refresh_sync_enabled:
-            # Use fixed 60 FPS when sync is disabled
-            self._target_fps = 60
-            logger.info("Refresh rate sync disabled, using fixed 60 FPS")
+            # Disable VSync but keep timer at the panel's full refresh rate.
+            self._target_fps = self._resolve_display_target_fps(detected, adaptive=False)
+            logger.info(
+                "Refresh rate sync disabled, timer target FPS: %d (detected=%d)",
+                self._target_fps,
+                detected,
+            )
+        elif refresh_adaptive_enabled:
+            self._target_fps = self._resolve_display_target_fps(detected, adaptive=True)
+            logger.info(
+                "Detected refresh rate: %d Hz, adaptive target FPS: %d",
+                detected,
+                self._target_fps,
+            )
         else:
-            detected = int(round(self._detect_refresh_rate()))
-            # Apply adaptive rate selection to prevent judder on high-Hz displays:
-            # - 60Hz or below: full refresh rate
-            # - Above 60Hz: half refresh rate (e.g., 120Hz → 60Hz, 165Hz → 82Hz)
-            if detected <= 60:
-                target = detected
-            else:
-                target = max(1, detected // 2)
-            target = max(30, min(240, target))  # Clamp to reasonable range
-            self._target_fps = target
-            logger.info(f"Detected refresh rate: {detected} Hz, adaptive target FPS: {self._target_fps}")
+            self._target_fps = self._resolve_display_target_fps(detected, adaptive=False)
+            logger.info(
+                "Detected refresh rate: %d Hz, full-rate target FPS: %d",
+                detected,
+                self._target_fps,
+            )
         
         try:
             am = getattr(self, "_animation_manager", None)
