@@ -17,7 +17,7 @@ from PySide6.QtCore import Signal, Qt
 
 from core.settings.settings_manager import SettingsManager
 from utils.monitors import get_screen_count
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_verbose_logging
 
 logger = get_logger(__name__)
 
@@ -43,8 +43,19 @@ class DisplayTab(QWidget):
         self._loading: bool = False
         self._setup_ui()
         self._load_settings()
-        
+
         logger.debug("DisplayTab created")
+
+    def _log_refresh_settings(self, source: str) -> None:
+        """Verbose helper to trace refresh toggle persistence."""
+        if not is_verbose_logging():
+            return
+        logger.debug(
+            "[DISPLAY_TAB] %s refresh_sync=%s refresh_adaptive=%s",
+            source,
+            self.refresh_sync_check.isChecked(),
+            self.refresh_adaptive_check.isChecked(),
+        )
     
     def load_from_settings(self) -> None:
         """Reload all UI controls from settings manager (called after preset change)."""
@@ -53,6 +64,7 @@ class DisplayTab(QWidget):
             self._load_settings()
         finally:
             self._loading = False
+            self._log_refresh_settings("load")
         logger.debug("[DISPLAY_TAB] Reloaded from settings")
     
     def _setup_ui(self) -> None:
@@ -471,7 +483,8 @@ class DisplayTab(QWidget):
 
         self._settings.save()
         self.display_changed.emit()
-        
+        self._log_refresh_settings("save")
+
         logger.info(
             f"Saved display settings: mode={mode_map.get(mode_index, 'fill')}, "
             f"sharpen={sharpen}, "
@@ -480,6 +493,7 @@ class DisplayTab(QWidget):
 
     def _on_refresh_sync_toggled(self) -> None:
         self._update_adaptive_checkbox_state()
+        self._log_refresh_settings("toggle")
         self._save_settings()
 
     def _update_adaptive_checkbox_state(self) -> None:

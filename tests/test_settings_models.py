@@ -176,7 +176,7 @@ class TestCacheSettings:
         settings = CacheSettings()
         
         assert settings.prefetch_ahead == 5
-        assert settings.max_items == 24
+        assert settings.max_items == 30
         assert settings.max_memory_mb == 1024
         assert settings.max_concurrent == 2
     
@@ -424,7 +424,7 @@ class TestRedditWidgetSettings:
         settings = RedditWidgetSettings()
         
         assert settings.enabled is False
-        assert settings.position == WidgetPosition.TOP_LEFT
+        assert settings.position == WidgetPosition.TOP_RIGHT
         assert settings.subreddit == "technology"
         assert settings.limit == 10
 

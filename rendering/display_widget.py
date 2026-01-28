@@ -215,6 +215,7 @@ class DisplayWidget(QWidget):
         self._transition_fallback_type: str = "Crossfade"
         self._transition_random_enabled: bool = False
         self._settings_listener_connected: bool = False
+        self._settings_refresh_handler_ids: set[str] = set()
         self.current_pixmap: Optional[QPixmap] = None
         self.current_image_path: Optional[str] = None
         self.previous_pixmap: Optional[QPixmap] = None
@@ -346,6 +347,7 @@ class DisplayWidget(QWidget):
                 self._settings_listener_connected = True
             except Exception as e:
                 logger.debug("[DISPLAY_WIDGET] Failed to connect settings listener: %s", e)
+            self._register_refresh_listeners()
         
         # EcoModeManager for MC builds (v2.1 integration)
         self._eco_mode_manager: Optional[EcoModeManager] = None
@@ -765,13 +767,50 @@ class DisplayWidget(QWidget):
     def _on_settings_value_changed(self, key: str, value) -> None:
         """Respond to SettingsManager updates."""
         try:
-            if key != "transitions":
+            if key == "transitions":
+                menu_name, random_enabled = self._refresh_transition_state_from_settings()
+                if self._context_menu is not None:
+                    self._context_menu.update_transition_state(menu_name, random_enabled)
                 return
-            menu_name, random_enabled = self._refresh_transition_state_from_settings()
-            if self._context_menu is not None:
-                self._context_menu.update_transition_state(menu_name, random_enabled)
+
+            if key in {
+                "display.refresh_sync",
+                "display.refresh_adaptive",
+                "display.hw_accel",
+                "display.render_backend_mode",
+            }:
+                if is_verbose_logging():
+                    logger.debug(
+                        "[DISPLAY] Settings change detected key=%s value=%s",
+                        key,
+                        value,
+                    )
+                if key in {"display.refresh_sync", "display.refresh_adaptive"}:
+                    self._configure_refresh_rate_sync()
+                if key in {"display.hw_accel", "display.render_backend_mode"}:
+                    self._ensure_gl_compositor()
         except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Failed to handle transitions change: %s", e, exc_info=True)
+            logger.debug("[DISPLAY_WIDGET] Failed to handle settings change: %s", e, exc_info=True)
+
+    def _register_refresh_listeners(self) -> None:
+        if not self.settings_manager:
+            return
+        try:
+            handler_ids = {
+                "display.refresh_sync",
+                "display.refresh_adaptive",
+                "display.hw_accel",
+                "display.render_backend_mode",
+            }
+            for key in handler_ids:
+                self.settings_manager.on_changed(key, self._on_specific_setting_changed)
+            self._settings_refresh_handler_ids = handler_ids
+        except Exception:
+            logger.debug("[DISPLAY_WIDGET] Failed to register refresh listeners", exc_info=True)
+
+    def _on_specific_setting_changed(self, new_value, old_value) -> None:
+        # Placeholder required by on_changed signature; actual handling occurs via settings_changed signal.
+        pass
 
     def _mark_all_overlays_ready(self, overlays: Iterable[str], stage: str) -> None:
         """Mark overlays as ready when running without GL support."""

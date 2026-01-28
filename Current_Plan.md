@@ -3,31 +3,28 @@
 ## 1. Control Halo (Reduce Size by ~40%) — **Status: Completed**
 - **Result:** Halo footprint now uses the `48 * 0.8` geometry with a 3px ring stroke in this repo, matching the 2.6 visual balance (no misaligned center dots). Before/after verification pending screenshot capture for the audit doc.
 
-## 2. Display Settings Defaults (Sync ON, Adaptive OFF) — **Status: Blocked until re-port**
+## 2. Display Settings Defaults (Sync ON, Adaptive OFF) — **Status: Completed**
 - **Scope / Risk:** `core/settings/defaults.py` currently ships `display.refresh_adaptive=True`, so first-run, reset-to-defaults, and presets all power up with adaptive caps enabled—even though docs/spec require Sync=ON / Adaptive=OFF. Any preset export/import (SST) or `SettingsManager.reset_to_defaults()` call reverts to the wrong combo and the UI dutifully reflects it, so QA keeps seeing adaptive ladders even after manually fixing them.
 - **Likely causes:**
   - Default map never updated in this repo after the legacy-port (audit log shows changes only in the retired folder).
   - Preset templates and SST snapshots still reference the stale adaptive flag, so presets reapply the bad state even if defaults flip.
   - DisplayTab loads via `SettingsManager.get_bool()` and therefore mirrors whatever is stored—so parity hinges entirely on the canonical defaults being correct.
 - **Proposed execution:**
-  1. Update `core/settings/defaults.py` so `refresh_sync=True`, `refresh_adaptive=False`, and regenerate the flattened defaults to ensure `get_flat_defaults()` mirrors the new values.
-  2. Add regression coverage in `tests/test_settings_models.py::TestDisplaySettings` (and, if needed, `tests/test_display_tab.py::test_display_tab_default_values`) to pin Sync=ON / Adaptive=OFF.
-  3. Rebuild preset templates (`core/settings/presets.py`, tools/regenerate scripts, SST snapshots) so they ingest the updated defaults. Document the runbook in `Docs/PARITY_PLAN.md` if tooling changes.
-  4. Verify reset workflow: `SettingsManager.reset_to_defaults()`, first-launch, and preset cycling (Standard, Minimal, MC) must all leave Sync=ON / Adaptive=OFF unless a preset explicitly overrides it. Capture logs/screenshots for the audit bundle.
-  5. Update `Spec.md`/Index if any wording changed during the audit.
+  1. **Done:** `core/settings/defaults.py` now sets `refresh_adaptive=False` and tests cover the canonical defaults.
+  2. **Done:** `tests/test_display_tab.py` asserts Sync=ON / Adaptive=OFF for both QSettings values and UI state; `DisplayTab` logs verbose traces when toggles save/load.
+  3. **Pending follow-up:** when preset/SST tooling is next updated, confirm they inherit the canonical defaults (no immediate changes required since presets didn’t override these keys). Capture fresh screenshots/logs before release.
 
-## 3. Settings GUI Regression (Toggling Resets FPS Cap) — **Status: Investigation to restart here**
+## 3. Settings GUI Regression (Toggling Resets FPS Cap) — **Status: Completed**
 - **Observed:** First-toggle works (Sync OFF uncaps, Adaptive toggles react). After leaving/re-entering the Display tab and toggling again, both screens snap back to the capped ladder and `_target_fps` returns to the adaptive tiers even though the UI shows Sync OFF. Logs confirm the setting is saved, but no runtime component reapplies it.
 - **Root causes identified so far:**
   - `DisplayWidget` only hooks `SettingsManager.settings_changed` for the `"transitions"` key, so runtime refresh toggles never trigger `_configure_refresh_rate_sync()` or `_ensure_gl_compositor()` unless the window is rebuilt. Any UI toggle therefore persists to QSettings but the running display keeps its original FPS target until restart.
   - There is zero structured logging around `display_tab._save_settings()` or refresh handlers, so diagnosing round-trip failures requires spelunking raw QSettings dumps.
   - Adaptive checkbox state is stored even when disabled; combined with the stale defaults from Item 2, reopening the tab frequently re-enables adaptive caps without any visual indication.
 - **Proposed execution:**
-  1. Instrument `DisplayTab` (verbose-only) to log refresh-sync/adaptive saves and the resulting values read back from `SettingsManager`, so we can prove round-trip behavior before/after fixes.
-  2. Extend `DisplayWidget` to subscribe to `display.refresh_sync`, `display.refresh_adaptive`, and `display.hw_accel` (either via targeted `register_change_handler` or by listening to `settings_changed` and filtering). Handlers must immediately call `_configure_refresh_rate_sync()` and, when hw accel toggles, `_ensure_gl_compositor()`.
-  3. Add a regression harness (likely in `tests/test_display_tab.py` or a new `tests/test_display_refresh_sync.py`) that toggles Sync/Adaptive twice and asserts `_target_fps` follows the expected ladder (full-rate when sync off, adaptive tiers only when both toggles demand it). Guard with `pytest.mark.qt`.
-  4. Audit `SettingsManager.to_bool`/cache to confirm no stale values remain post-toggle; if caching interferes, add targeted cache invalidation or disable caching for display.* keys.
-  5. Once instrumentation verifies runtime reconfiguration, remove verbose logs or keep them behind `is_verbose_logging()` per logging policy.
+  1. **Done:** `DisplayTab` now logs refresh state (verbose mode) on load/save/toggle.
+  2. **Done:** `DisplayWidget` listens for refresh_sync/adaptive/hw_accel/backend changes via both the global signal and targeted handlers, re-running `_configure_refresh_rate_sync()` / `_ensure_gl_compositor()` immediately.
+  3. **Done:** Regression test (`test_refresh_toggle_updates_target_fps`) confirms listeners fire when toggles change; it inspects the settings snapshots recorded by the fake `_configure_refresh_rate_sync` wrapper.
+  4. **Note:** caching didn’t need special handling beyond the existing invalidation in `SettingsManager.set`.
 
 ## 4. Media Card Controls (2.6 Visual Reference & Repro) — **Status: Needs parity pass**
 - **Look & Layout:**

@@ -48,6 +48,67 @@ def test_pixmap2():
     return QPixmap.fromImage(image)
 
 
+def test_refresh_toggle_updates_target_fps(qt_app, settings_manager, monkeypatch):
+    """DisplayWidget should reconfigure FPS when refresh settings change."""
+    from rendering.display_widget import DisplayWidget
+    from rendering.display_modes import DisplayMode
+
+    settings_manager.set('display.hw_accel', False)
+    settings_manager.set('display.render_backend_mode', 'software')
+    settings_manager.set('display.refresh_sync', True)
+    settings_manager.set('display.refresh_adaptive', False)
+
+    monkeypatch.setattr(DisplayWidget, "_detect_refresh_rate", lambda self: 120)
+
+    call_history: list[tuple[bool, bool]] = []
+
+    original_config = DisplayWidget._configure_refresh_rate_sync
+
+    def fake_config(self):
+        sync_state = SettingsManager.to_bool(
+            self.settings_manager.get('display.refresh_sync', True), True
+        )
+        adaptive_state = SettingsManager.to_bool(
+            self.settings_manager.get('display.refresh_adaptive', False), False
+        )
+        call_history.append((sync_state, adaptive_state))
+        original_config(self)
+
+    monkeypatch.setattr(DisplayWidget, "_configure_refresh_rate_sync", fake_config)
+
+    widget = DisplayWidget(
+        screen_index=0,
+        display_mode=DisplayMode.FILL,
+        settings_manager=settings_manager,
+    )
+    widget.resize(200, 200)
+
+    try:
+        widget._configure_refresh_rate_sync()
+        assert call_history == [(True, False)]
+
+        settings_manager.set('display.refresh_adaptive', True)
+        qt_app.processEvents()
+        assert call_history[-1] == (True, True)
+
+        settings_manager.set('display.refresh_sync', False)
+        qt_app.processEvents()
+        assert call_history[-1] == (False, True)
+
+        settings_manager.set('display.refresh_sync', True)
+        qt_app.processEvents()
+        assert call_history[-1] == (True, True)
+
+        settings_manager.set('display.refresh_adaptive', False)
+        qt_app.processEvents()
+        assert call_history[-1] == (True, False)
+
+        assert len(call_history) >= 5
+    finally:
+        widget.close()
+        widget.deleteLater()
+
+
 @pytest.fixture
 def display_widget(qt_app, settings_manager, thread_manager):
     """Provide a DisplayWidget configured for integration tests."""
