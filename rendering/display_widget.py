@@ -245,6 +245,9 @@ class DisplayWidget(QWidget):
         self._initial_mouse_pos = None  # Track mouse movement for exit
         self._mouse_move_threshold = 10  # Pixels of movement before exit
         self._target_fps = 60  # Target FPS derived from screen refresh rate
+        self._refresh_diag_last_snapshot: Optional[tuple[int, int, int, int]] = None
+        self._refresh_diag_last_log_ts: float = 0.0
+        self._refresh_diag_last_source: Optional[str] = None
         self._pre_raise_log_emitted = False
         self._base_fallback_paint_logged = False
         self._seed_pixmap: Optional[QPixmap] = None
@@ -786,7 +789,7 @@ class DisplayWidget(QWidget):
                         value,
                     )
                 if key in {"display.refresh_sync", "display.refresh_adaptive"}:
-                    self._configure_refresh_rate_sync()
+                    self._configure_refresh_rate_sync(source=f"settings:{key}")
                 if key in {"display.hw_accel", "display.render_backend_mode"}:
                     self._ensure_gl_compositor()
         except Exception as e:
@@ -854,7 +857,7 @@ class DisplayWidget(QWidget):
             logger.debug("[SCREEN] Failed to apply screen geometry", exc_info=True)
 
         try:
-            self._configure_refresh_rate_sync()
+            self._configure_refresh_rate_sync(source="screen_change")
         except Exception:
             logger.debug("[SCREEN] Refresh rate sync configuration failed", exc_info=True)
 
@@ -894,7 +897,7 @@ class DisplayWidget(QWidget):
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             return 60.0
 
-    def _configure_refresh_rate_sync(self) -> None:
+    def _configure_refresh_rate_sync(self, source: str = "runtime") -> None:
         # Check if refresh rate sync is enabled
         refresh_sync_enabled = True
         if self.settings_manager:
@@ -944,6 +947,63 @@ class DisplayWidget(QWidget):
                 am.set_target_fps(self._target_fps)
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+
+        snapshot = (
+            int(refresh_sync_enabled),
+            int(refresh_adaptive_enabled),
+            int(detected),
+            int(self._target_fps),
+        )
+        state_changed = snapshot != self._refresh_diag_last_snapshot
+        if state_changed:
+            self._refresh_diag_last_snapshot = snapshot
+            self._refresh_diag_last_source = source
+        self._log_refresh_decision(
+            source=source,
+            refresh_sync=refresh_sync_enabled,
+            refresh_adaptive=refresh_adaptive_enabled,
+            detected_hz=detected,
+            target_fps=self._target_fps,
+            force=state_changed,
+        )
+        if state_changed:
+            self._restart_render_strategy(source)
+
+    def _restart_render_strategy(self, source: str) -> None:
+        comp = getattr(self, "_gl_compositor", None)
+        if not isinstance(comp, GLCompositorWidget):
+            return
+        try:
+            comp.restart_render_strategy(reason=source)
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Failed to restart render strategy: %s", e)
+
+    def _log_refresh_decision(
+        self,
+        *,
+        source: str,
+        refresh_sync: bool,
+        refresh_adaptive: bool,
+        detected_hz: int,
+        target_fps: int,
+        force: bool = False,
+    ) -> None:
+        if not is_perf_metrics_enabled():
+            return
+        now = time.monotonic()
+        should_emit = force or ((now - self._refresh_diag_last_log_ts) >= 5.0)
+        if not should_emit:
+            return
+        self._refresh_diag_last_log_ts = now
+        logger.info(
+            "[REFRESH_DIAG] source=%s screen=%s refresh_sync=%s refresh_adaptive=%s detected_hz=%s target_fps=%s",
+            source,
+            self.screen_index,
+            refresh_sync,
+            refresh_adaptive,
+            detected_hz,
+            target_fps,
+        )
 
     def _setup_dimming(self) -> None:
         """Setup background dimming via GL compositor.

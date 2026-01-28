@@ -41,6 +41,7 @@ class DisplayTab(QWidget):
         self._settings = settings
         self.settings_manager = settings  # Also expose as property for tests
         self._loading: bool = False
+        self._last_saved_refresh_sync: Optional[bool] = None
         self._setup_ui()
         self._load_settings()
 
@@ -397,6 +398,7 @@ class DisplayTab(QWidget):
             # Refresh rate sync
             refresh_sync = self._settings.get_bool('display.refresh_sync', True)
             self.refresh_sync_check.setChecked(refresh_sync)
+            self._last_saved_refresh_sync = bool(refresh_sync)
 
             refresh_adaptive = self._settings.get_bool('display.refresh_adaptive', True)
             self.refresh_adaptive_check.setChecked(refresh_adaptive)
@@ -433,7 +435,7 @@ class DisplayTab(QWidget):
             self.hard_exit_check.blockSignals(False)
             self._loading = False
     
-    def _save_settings(self) -> None:
+    def _save_settings(self, *_, source: str = "auto") -> None:
         """Save current settings to settings manager."""
         if getattr(self, "_loading", False):
             return
@@ -470,7 +472,15 @@ class DisplayTab(QWidget):
         self._settings.set('display.sharpen_downscale', sharpen)
         
         # Performance
-        self._settings.set('display.refresh_sync', self.refresh_sync_check.isChecked())
+        refresh_sync_value = bool(self.refresh_sync_check.isChecked())
+        if self._last_saved_refresh_sync is None or self._last_saved_refresh_sync != refresh_sync_value:
+            logger.info(
+                "[DISPLAY_TAB] Persist refresh_sync=%s (source=%s)",
+                refresh_sync_value,
+                source,
+            )
+            self._last_saved_refresh_sync = refresh_sync_value
+        self._settings.set('display.refresh_sync', refresh_sync_value)
         self._settings.set('display.refresh_adaptive', self.refresh_adaptive_check.isChecked())
 
         # Input / Exit
@@ -492,9 +502,11 @@ class DisplayTab(QWidget):
         )
 
     def _on_refresh_sync_toggled(self) -> None:
+        if getattr(self, "_loading", False):
+            return
         self._update_adaptive_checkbox_state()
         self._log_refresh_settings("toggle")
-        self._save_settings()
+        self._save_settings(source="refresh_sync_toggle")
 
     def _update_adaptive_checkbox_state(self) -> None:
         enabled = self.refresh_sync_check.isChecked()

@@ -210,6 +210,37 @@ def build_surface_format(
     return fmt, prefs
 
 
+def configure_global_surface_format(
+    settings_manager: Optional["SettingsManager"] = None,
+    *,
+    reason: str = "global",
+) -> Tuple[QSurfaceFormat, SurfacePreferences]:
+    """Build and apply a global QSurfaceFormat honoring user settings."""
+
+    fmt, prefs = build_surface_format(settings_manager, reason=reason)
+    try:
+        QSurfaceFormat.setDefaultFormat(fmt)
+    except Exception as exc:  # pragma: no cover - defensive guard
+        logger.warning(
+            "[GL FORMAT] Failed to apply global surface format (reason=%s): %s",
+            reason or "global",
+            exc,
+            exc_info=True,
+        )
+        return fmt, prefs
+
+    logger.info(
+        "[REFRESH_DIAG] Applied global surface format reason=%s refresh_sync=%s swap_interval=%s depth=%s stencil=%s triple_pref=%s",
+        reason or "global",
+        prefs.refresh_sync,
+        fmt.swapInterval(),
+        fmt.depthBufferSize(),
+        fmt.stencilBufferSize(),
+        prefs.prefer_triple_buffer,
+    )
+    return fmt, prefs
+
+
 def apply_widget_surface_format(
     widget,
     settings_manager: Optional["SettingsManager"] = None,

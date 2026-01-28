@@ -24,7 +24,7 @@ from core.settings.settings_manager import SettingsManager
 from core.animation import AnimationManager
 from engine.screensaver_engine import ScreensaverEngine
 from ui.settings_dialog import SettingsDialog
-from rendering.gl_format import build_surface_format
+from rendering.gl_format import configure_global_surface_format
 from ui.system_tray import ScreensaverTrayIcon
 from versioning import APP_VERSION, APP_EXE_NAME
 
@@ -430,14 +430,14 @@ def main():
         QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_UseDesktopOpenGL, True)
         QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts, True)
 
-        fmt, prefs = build_surface_format(reason="startup")
-        QSurfaceFormat.setDefaultFormat(fmt)
+        fmt, prefs = configure_global_surface_format(reason="startup")
         logger.info(
-            "Global QSurfaceFormat configured (swap=%s, interval=%s, depth=%s, stencil=%s)",
+            "Global QSurfaceFormat configured (swap=%s, interval=%s, depth=%s, stencil=%s refresh_sync=%s)",
             fmt.swapBehavior(),
             fmt.swapInterval(),
             fmt.depthBufferSize(),
             fmt.stencilBufferSize(),
+            prefs.refresh_sync,
         )
     except Exception as e:
         logger.warning(f"Failed to configure global OpenGL format: {e}")

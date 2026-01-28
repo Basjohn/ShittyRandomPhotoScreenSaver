@@ -412,7 +412,7 @@ class RenderStrategyManager:
         with self._lock:
             self._config = config
     
-    def start(self, strategy_type: Optional[RenderStrategyType] = None) -> bool:
+    def start(self, strategy_type: Optional[RenderStrategyType] = None, *, reason: str = "runtime") -> bool:
         """Start rendering with specified or default strategy."""
         with self._lock:
             if self._current_strategy is not None:
@@ -431,7 +431,13 @@ class RenderStrategyManager:
                 self._current_strategy = VSyncRenderStrategy(self._compositor, self._config)
             else:
                 self._current_strategy = TimerRenderStrategy(self._compositor, self._config)
-            
+            logger.info(
+                "[RENDER] Starting %s strategy (reason=%s target_fps=%s)",
+                strategy_type.value,
+                reason,
+                self._config.target_fps,
+            )
+
             return self._current_strategy.start()
     
     def stop(self) -> None:

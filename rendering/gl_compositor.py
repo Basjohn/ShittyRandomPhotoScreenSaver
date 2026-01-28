@@ -219,6 +219,7 @@ class GLCompositorWidget(QOpenGLWidget):
         self._vsync_connected: bool = False  # Whether frameSwapped is connected
         self._render_timer_fps: int = 60  # Will be set from display refresh rate
         self._render_timer_metrics: Optional[_RenderTimerMetrics] = None
+        self._refresh_diag_last_frame_log: float = 0.0
         
         # Render strategy manager for timer-based rendering (fallback only)
         self._render_strategy_manager: Optional[RenderStrategyManager] = None
@@ -372,7 +373,7 @@ class GLCompositorWidget(QOpenGLWidget):
         Also starts the render timer to drive repaints at display refresh rate.
         """
         self._frame_state = FrameState(duration=duration_sec)
-        self._start_render_timer()
+        self._start_render_timer(reason="frame_pacing")
         return self._frame_state
 
     def _stop_frame_pacing(self) -> None:
@@ -431,7 +432,42 @@ class GLCompositorWidget(QOpenGLWidget):
             was_active = self._render_strategy_manager.get_current_strategy_type() is not None
             if was_active:
                 self._stop_render_strategy()
-                self._start_render_strategy()
+                self._start_render_strategy(reason="vsync_toggle")
+
+    def restart_render_strategy(self, reason: str = "external") -> None:
+        """Restart or prime the render strategy when refresh settings change."""
+        display_hz = self._get_display_refresh_rate()
+        target_fps = self._calculate_target_fps(display_hz)
+        self._render_timer_fps = target_fps
+        self._reset_render_timer_metrics(target_fps)
+
+        is_running = self._vsync_connected
+        if not is_running and self._render_strategy_manager is not None:
+            current = self._render_strategy_manager.get_current_strategy_type()
+            is_running = current is not None
+
+        if not is_running:
+            if not self._vsync_enabled:
+                interval_ms = self._configure_timer_strategy(target_fps)
+                logger.info(
+                    "[GL COMPOSITOR] Timer strategy primed (reason=%s display=%dHz target=%dHz interval=%.2fms)",
+                    reason,
+                    display_hz,
+                    target_fps,
+                    interval_ms,
+                )
+            else:
+                logger.info(
+                    "[GL COMPOSITOR] VSync strategy primed (reason=%s display=%dHz target=%dHz)",
+                    reason,
+                    display_hz,
+                    target_fps,
+                )
+            return
+
+        logger.info("[GL COMPOSITOR] Restarting render strategy (reason=%s)", reason)
+        self._stop_render_strategy()
+        self._start_render_strategy(reason=f"restart:{reason}")
     
     def _get_display_refresh_rate(self) -> int:
         """Get the display refresh rate for this compositor's screen.
@@ -503,7 +539,7 @@ class GLCompositorWidget(QOpenGLWidget):
         else:
             self._render_timer_metrics = None
 
-    def _start_render_strategy(self) -> None:
+    def _start_render_strategy(self, reason: str = "frame_pacing") -> None:
         """Start the render strategy to drive repaints during transitions.
 
         Uses VSync-driven rendering when enabled:
@@ -528,15 +564,15 @@ class GLCompositorWidget(QOpenGLWidget):
         
         # Use VSync-driven rendering if enabled
         if self._vsync_enabled:
-            success = self._start_vsync_driven(target_fps, display_hz)
+            success = self._start_vsync_driven(target_fps, display_hz, reason)
             if success:
                 return
             logger.warning("[GL COMPOSITOR] VSync-driven rendering failed, falling back to timer")
         
         # Fallback to timer-based rendering
-        self._start_timer_fallback(target_fps, display_hz)
+        self._start_timer_fallback(target_fps, display_hz, reason)
     
-    def _start_vsync_driven(self, target_fps: int, display_hz: int) -> bool:
+    def _start_vsync_driven(self, target_fps: int, display_hz: int, reason: str) -> bool:
         """Start VSync-driven rendering using frameSwapped signal.
         
         This connects to Qt's frameSwapped signal which is emitted after
@@ -552,8 +588,11 @@ class GLCompositorWidget(QOpenGLWidget):
                 self._vsync_connected = True
             
             logger.info(
-                "[GL COMPOSITOR] Starting render strategy (vsync_enabled=%s, display=%dHz, target=%dHz)",
-                self._vsync_enabled, display_hz, target_fps
+                "[GL COMPOSITOR] Starting render strategy (reason=%s vsync_enabled=%s, display=%dHz, target=%dHz)",
+                reason,
+                self._vsync_enabled,
+                display_hz,
+                target_fps,
             )
             logger.debug(
                 "[GL COMPOSITOR] Render strategy details: vsync_connected=%s, strategy_manager=%s",
@@ -583,27 +622,36 @@ class GLCompositorWidget(QOpenGLWidget):
         # Immediately request next frame - this gives us VSync-locked timing
         self.update()
     
-    def _start_timer_fallback(self, target_fps: int, display_hz: int) -> None:
+    def _start_timer_fallback(self, target_fps: int, display_hz: int, reason: str) -> None:
         """Start timer-based rendering as fallback."""
+        interval_ms = self._configure_timer_strategy(target_fps)
+
+        from rendering.render_strategy import RenderStrategyType
+        success = self._render_strategy_manager.start(RenderStrategyType.TIMER, reason=reason)
+        
+        logger.info(
+            "[GL COMPOSITOR] Timer fallback started: reason=%s display=%dHz, target=%dHz, interval=%.2fms, success=%s",
+            reason,
+            display_hz,
+            target_fps,
+            interval_ms,
+            success,
+        )
+
+    def _configure_timer_strategy(self, target_fps: int) -> float:
+        """Configure the timer render strategy without starting it."""
         if self._render_strategy_manager is None:
             self._render_strategy_manager = RenderStrategyManager(self)
-        
-        interval_ms = max(1.0, 1000.0 / target_fps)
+
+        interval_ms = max(1.0, 1000.0 / max(1, target_fps))
         config = RenderStrategyConfig(
             target_fps=target_fps,
-            vsync_enabled=False,  # Timer mode
+            vsync_enabled=False,
             fallback_on_failure=True,
             min_frame_time_ms=interval_ms,
         )
         self._render_strategy_manager.configure(config)
-        
-        from rendering.render_strategy import RenderStrategyType
-        success = self._render_strategy_manager.start(RenderStrategyType.TIMER)
-        
-        logger.info(
-            "[GL COMPOSITOR] Timer fallback started: display=%dHz, target=%dHz, interval=%.2fms, success=%s",
-            display_hz, target_fps, interval_ms, success
-        )
+        return interval_ms
     
     def _stop_render_strategy(self) -> None:
         """Stop the render strategy."""
@@ -622,12 +670,12 @@ class GLCompositorWidget(QOpenGLWidget):
         self._finalize_render_timer_metrics()
         logger.debug("[GL COMPOSITOR] Render strategy stopped")
     
-    def _start_render_timer(self) -> None:
+    def _start_render_timer(self, reason: str = "transition") -> None:
         """Start the render timer to drive repaints during transitions.
         
         This is now a wrapper around _start_render_strategy() for backward compatibility.
         """
-        self._start_render_strategy()
+        self._start_render_strategy(reason=reason)
     
     def _stop_render_timer(self) -> None:
         """Stop the render timer.
@@ -1027,8 +1075,40 @@ class GLCompositorWidget(QOpenGLWidget):
         dt = metrics.record_tick()
         if dt is None:
             return
+        self._emit_refresh_frame_sample(dt, metrics)
         if metrics.should_log_stall(dt):
             self._log_render_timer_stall(dt, metrics)
+
+    def _emit_refresh_frame_sample(self, dt_seconds: float, metrics: _RenderTimerMetrics) -> None:
+        """Occasionally log per-display frame cadence samples."""
+        if dt_seconds <= 0.0:
+            return
+        now = time.monotonic()
+        if now - self._refresh_diag_last_frame_log < 1.0:
+            return
+        self._refresh_diag_last_frame_log = now
+
+        parent = self.parent()
+        screen_idx = getattr(parent, "screen_index", None)
+        if screen_idx is None:
+            screen_idx = getattr(parent, "_screen_index", "?")
+
+        fps = 1.0 / dt_seconds if dt_seconds > 0 else 0.0
+        strategy_label = "vsync" if self._vsync_connected else "timer"
+        if self._render_strategy_manager is not None:
+            current = self._render_strategy_manager.get_current_strategy_type()
+            if current is not None:
+                strategy_label = current.value
+
+        logger.info(
+            "[REFRESH_DIAG] frame_sample screen=%s dt_ms=%.2f fps=%.2f target_fps=%s vsync_render=%s strategy=%s",
+            screen_idx,
+            dt_seconds * 1000.0,
+            fps,
+            metrics.target_fps,
+            self._vsync_enabled,
+            strategy_label,
+        )
 
     def _log_render_timer_stall(self, dt_seconds: float, metrics: _RenderTimerMetrics) -> None:
         """Emit a warning when render timer stalls exceed thresholds."""
@@ -2100,13 +2180,30 @@ class GLCompositorWidget(QOpenGLWidget):
             ctx = self.context()
             if ctx is not None:
                 fmt = ctx.format()
+                swap_interval = fmt.swapInterval()
                 logger.info(
                     "[GL COMPOSITOR] Context initialized: version=%s.%s, swap=%s, interval=%s",
                     fmt.majorVersion(),
                     fmt.minorVersion(),
                     fmt.swapBehavior(),
-                    fmt.swapInterval(),
+                    swap_interval,
                 )
+
+                parent = self.parent()
+                screen_idx = getattr(parent, "screen_index", None)
+                if screen_idx is None:
+                    screen_idx = getattr(parent, "_screen_index", "?")
+
+                if is_perf_metrics_enabled():
+                    logger.info(
+                        "[REFRESH_DIAG] screen=%s swap_interval=%s vsync_render=%s"
+                        " detected_refresh=%s target_fps=%s",
+                        screen_idx,
+                        swap_interval,
+                        self._vsync_enabled,
+                        self._get_display_refresh_rate(),
+                        self._render_timer_fps,
+                    )
 
             # Log adapter information and detect obvious software GL drivers so
             # shader-backed paths can be disabled proactively. QPainter-based
