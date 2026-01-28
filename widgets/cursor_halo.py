@@ -14,9 +14,10 @@ Mouse events are forwarded to the parent widget so context menus and clicks
 still work. The mouse cursor is hidden when the halo is visible.
 """
 from typing import Optional
-from PySide6.QtWidgets import QWidget, QApplication
+
 from PySide6.QtCore import Qt, QPointF
 from PySide6.QtGui import QPainter, QColor, QPaintEvent, QMouseEvent, QWheelEvent
+from PySide6.QtWidgets import QApplication, QWidget
 from shiboken6 import Shiboken
 
 from core.animation.animator import AnimationManager
@@ -25,6 +26,11 @@ from core.logging.logger import get_logger
 from rendering.multi_monitor_coordinator import get_coordinator
 
 logger = get_logger(__name__)
+
+
+HALO_BASE_DIAMETER = 48
+HALO_SCALE = 0.8
+HALO_DIAMETER = int(round(HALO_BASE_DIAMETER * HALO_SCALE))
 
 
 class CursorHaloWidget(QWidget):
@@ -57,7 +63,8 @@ class CursorHaloWidget(QWidget):
         self.setAutoFillBackground(False)
         # Hide mouse cursor over halo - the halo IS the cursor
         self.setCursor(Qt.CursorShape.BlankCursor)
-        self.resize(48, 48)  # 20% smaller than original 60x60
+        # Match the 2.6 reference footprint (48px * 0.8 scale).
+        self.resize(HALO_DIAMETER, HALO_DIAMETER)
         self._opacity = 1.0
         self._animation_id: Optional[str] = None
         self._animation_manager = AnimationManager()
@@ -123,7 +130,7 @@ class CursorHaloWidget(QWidget):
 
         # Draw main outer ring
         pen.setColor(color)
-        pen.setWidth(4)
+        pen.setWidth(3)
         painter.setPen(pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawEllipse(4, 4, r, r)
