@@ -33,7 +33,6 @@ _logged_reasons: set[str] = set()
 
 @dataclass(frozen=True)
 class SurfacePreferences:
-    refresh_sync: bool
     prefer_triple_buffer: bool
     depth_bits: int = 24
     stencil_bits: int = 8
@@ -90,14 +89,12 @@ def read_surface_preferences(
     application: str = _DEFAULT_APP,
 ) -> SurfacePreferences:
     """Resolve GL surface preferences from settings or persisted storage."""
-    refresh_sync_default = True
     triple_default = True
     depth_default = 24
     stencil_default = 8
 
     if settings_manager is not None:
         try:
-            refresh_sync_value = settings_manager.get("display.refresh_sync", refresh_sync_default)
             triple_value = settings_manager.get("display.prefer_triple_buffer", triple_default)
             depth_value = settings_manager.get("display.gl_depth_bits", depth_default)
             stencil_value = settings_manager.get("display.gl_stencil_bits", stencil_default)
@@ -107,19 +104,16 @@ def read_surface_preferences(
                 e,
                 exc_info=True,
             )
-            refresh_sync_value = refresh_sync_default
             triple_value = triple_default
             depth_value = depth_default
             stencil_value = stencil_default
     else:
         qsettings = QSettings(organization, application)
-        refresh_sync_value = qsettings.value("display.refresh_sync", refresh_sync_default)
         triple_value = qsettings.value("display.prefer_triple_buffer", triple_default)
         depth_value = qsettings.value("display.gl_depth_bits", depth_default)
         stencil_value = qsettings.value("display.gl_stencil_bits", stencil_default)
 
     preferences = SurfacePreferences(
-        refresh_sync=_coerce_bool(refresh_sync_value, refresh_sync_default),
         prefer_triple_buffer=_coerce_bool(triple_value, triple_default),
         depth_bits=_coerce_int(depth_value, depth_default),
         stencil_bits=_coerce_int(stencil_value, stencil_default),
@@ -172,11 +166,11 @@ def build_surface_format(
         logger.debug("[GL FORMAT] Failed to set requested swap behaviour %s: %s", requested_swap, e, exc_info=True)
         fmt.setSwapBehavior(QSurfaceFormat.SwapBehavior.DefaultSwapBehavior)
 
-    swap_interval = 1 if prefs.refresh_sync else 0
+    swap_interval = 0
     try:
         fmt.setSwapInterval(swap_interval)
     except Exception as e:
-        logger.debug("[GL FORMAT] Failed to set swap interval %s: %s", swap_interval, e, exc_info=True)
+        logger.debug("[GL FORMAT] Failed to set swap interval 0: %s", e, exc_info=True)
 
     try:
         fmt.setDepthBufferSize(prefs.depth_bits)
@@ -197,12 +191,11 @@ def build_surface_format(
 
     if should_log:
         logger.debug(
-            "[GL FORMAT] Requested swap=%s interval=%s depth=%s stencil=%s (refresh_sync=%s, prefer_triple=%s)%s",
+            "[GL FORMAT] Requested swap=%s interval=%s depth=%s stencil=%s (prefer_triple=%s)%s",
             requested_swap,
             swap_interval,
             prefs.depth_bits,
             prefs.stencil_bits,
-            prefs.refresh_sync,
             prefs.prefer_triple_buffer,
             f" reason={reason}" if reason else "",
         )

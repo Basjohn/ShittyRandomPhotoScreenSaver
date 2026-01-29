@@ -774,8 +774,6 @@ class DisplayWidget(QWidget):
                 return
 
             if key in {
-                "display.refresh_sync",
-                "display.refresh_adaptive",
                 "display.hw_accel",
                 "display.render_backend_mode",
             }:
@@ -785,10 +783,7 @@ class DisplayWidget(QWidget):
                         key,
                         value,
                     )
-                if key in {"display.refresh_sync", "display.refresh_adaptive"}:
-                    self._configure_refresh_rate_sync()
-                if key in {"display.hw_accel", "display.render_backend_mode"}:
-                    self._ensure_gl_compositor()
+                self._ensure_gl_compositor()
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Failed to handle settings change: %s", e, exc_info=True)
 
@@ -797,8 +792,6 @@ class DisplayWidget(QWidget):
             return
         try:
             handler_ids = {
-                "display.refresh_sync",
-                "display.refresh_adaptive",
                 "display.hw_accel",
                 "display.render_backend_mode",
             }
@@ -895,49 +888,14 @@ class DisplayWidget(QWidget):
             return 60.0
 
     def _configure_refresh_rate_sync(self) -> None:
-        # Check if refresh rate sync is enabled
-        refresh_sync_enabled = True
-        if self.settings_manager:
-            try:
-                raw = self.settings_manager.get('display.refresh_sync', True)
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                raw = True
-            refresh_sync_enabled = SettingsManager.to_bool(raw, True)
-        
-        refresh_adaptive_enabled = True
-        if self.settings_manager:
-            try:
-                raw_adaptive = self.settings_manager.get('display.refresh_adaptive', True)
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                raw_adaptive = True
-            refresh_adaptive_enabled = SettingsManager.to_bool(raw_adaptive, True)
-
         detected = int(round(self._detect_refresh_rate()))
-        if not refresh_sync_enabled:
-            # Disable VSync but keep timer at the panel's full refresh rate.
-            self._target_fps = self._resolve_display_target_fps(detected, adaptive=False)
-            logger.info(
-                "Refresh rate sync disabled, timer target FPS: %d (detected=%d)",
-                self._target_fps,
-                detected,
-            )
-        elif refresh_adaptive_enabled:
-            self._target_fps = self._resolve_display_target_fps(detected, adaptive=True)
-            logger.info(
-                "Detected refresh rate: %d Hz, adaptive target FPS: %d",
-                detected,
-                self._target_fps,
-            )
-        else:
-            self._target_fps = self._resolve_display_target_fps(detected, adaptive=False)
-            logger.info(
-                "Detected refresh rate: %d Hz, full-rate target FPS: %d",
-                detected,
-                self._target_fps,
-            )
-        
+        self._target_fps = self._resolve_display_target_fps(detected, adaptive=False)
+        logger.info(
+            "Refresh rate sync disabled globally, timer target FPS: %d (detected=%d)",
+            self._target_fps,
+            detected,
+        )
+
         try:
             am = getattr(self, "_animation_manager", None)
             if am is not None and hasattr(am, 'set_target_fps'):
@@ -1949,14 +1907,10 @@ class DisplayWidget(QWidget):
             hide_backend_fallback_overlay(self)
 
     def _build_surface_descriptor(self) -> SurfaceDescriptor:
-        vsync_enabled = True
+        # Timer-only policy: never request driver vsync; rely on timer FPS cap.
+        vsync_enabled = False
         prefer_triple = True
         if self.settings_manager:
-            refresh_sync = self.settings_manager.get('display.refresh_sync', True)
-            if isinstance(refresh_sync, str):
-                refresh_sync = refresh_sync.lower() in ('true', '1', 'yes')
-            vsync_enabled = bool(refresh_sync)
-
             prefer_triple = self.settings_manager.get('display.prefer_triple_buffer', True)
             if isinstance(prefer_triple, str):
                 prefer_triple = prefer_triple.lower() in ('true', '1', 'yes')

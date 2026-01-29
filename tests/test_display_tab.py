@@ -183,15 +183,6 @@ class TestDisplayTab:
         interval = fresh_settings.get('timing.interval', 5)
         assert interval == 45
 
-        refresh_sync = fresh_settings.get_bool('display.refresh_sync', False)
-        assert refresh_sync is True
-
-        refresh_adaptive = fresh_settings.get_bool('display.refresh_adaptive', True)
-        assert refresh_adaptive is False
-
-        assert tab.refresh_sync_check.isChecked() is True
-        assert tab.refresh_adaptive_check.isChecked() is False
-        
         tab.deleteLater()
 
     

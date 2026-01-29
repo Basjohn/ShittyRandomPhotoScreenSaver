@@ -69,48 +69,53 @@ class TestDisplaySettings:
         """Test default values."""
         settings = DisplaySettings()
         
-        assert settings.refresh_sync is True
         assert settings.hw_accel is True
         assert settings.mode == DisplayMode.FILL
         assert settings.same_image_all_monitors is False
         assert settings.rotation_interval == 45
+        assert settings.vsync_enabled is True
+        assert settings.fps_cap == 60
     
     def test_from_settings(self):
         """Test loading from SettingsManager."""
         mock_settings = MagicMock()
         mock_settings.get.side_effect = lambda key, default: {
-            "display.refresh_sync": False,
             "display.hw_accel": True,
             "display.mode": "fit",
             "display.same_image_all_monitors": True,
             "timing.interval": 60,
+            "display.vsync_enabled": False,
+            "display.fps_cap": 165,
         }.get(key, default)
         
         settings = DisplaySettings.from_settings(mock_settings)
         
-        assert settings.refresh_sync is False
         assert settings.hw_accel is True
         assert settings.mode == DisplayMode.FIT
         assert settings.same_image_all_monitors is True
         assert settings.rotation_interval == 60
+        assert settings.vsync_enabled is False
+        assert settings.fps_cap == 165
     
     def test_to_dict(self):
         """Test dictionary serialization."""
         settings = DisplaySettings(
-            refresh_sync=False,
             hw_accel=True,
             mode=DisplayMode.SHRINK,
             same_image_all_monitors=True,
             rotation_interval=30,
+            vsync_enabled=False,
+            fps_cap=144,
         )
         
         result = settings.to_dict()
         
-        assert result["display.refresh_sync"] is False
         assert result["display.hw_accel"] is True
         assert result["display.mode"] == "shrink"
         assert result["display.same_image_all_monitors"] is True
         assert result["timing.interval"] == 30
+        assert result["display.vsync_enabled"] is False
+        assert result["display.fps_cap"] == 144
     
     def test_invalid_mode_fallback(self):
         """Test fallback for invalid mode."""

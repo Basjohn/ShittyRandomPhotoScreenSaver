@@ -1,25 +1,12 @@
 # Current Plan (Forward-Looking)
 
-## 1. Verify Sync vs Uncapped Rendering End-to-End — **Status: In Progress**
-- **Observed Behavior:** Even with `display.refresh_sync=False` and `display.refresh_adaptive=False`, Display 1 remains pinned at ~59–61 FPS (per latest debug run with `SRPSS_PERF_METRICS=1`). Driver configuration already delegates control to the application, so the cap is likely internal.
-- **Hypotheses to validate:**
-  1. **Timer ladder not honoring settings** – `rendering.render_strategy` may still select the 60 Hz ladder when `SettingsManager` reports stale values or when adaptive toggles are disabled but cached timers stay alive.
-  2. **GL compositor fallback lock** – `_gl_compositor` timer fallback might clamp to the last known safe interval (16 ms) if `_ensure_gl_compositor()` doesn’t rebuild after toggles.
-  3. **Per-display overrides** – Multi-monitor coordinator could be forcing 60 Hz on screen 0 if it detects mismatched DPIs/refresh -> need to confirm `_resolve_display_target_fps()` receives the right `detected_hz` every time.
-  4. **External clamps** – Windows desktop window manager or NVIDIA driver might still VSync despite app intent; cross-check with software backend and a forced 120 Hz monitor to isolate.
-- **Verification plan:**
-  1. **Instrumentation:**
-     - Add temporary verbose logs around `_configure_refresh_rate_sync()` capturing `(screen_index, refresh_sync, adaptive, detected_hz, target_fps, timer_interval_ms)`.
-     - Emit a log from `rendering.render_strategy` every time the timer restarts, noting `strategy`, `interval`, `target_hz`, and whether it was triggered by a settings change.
-     - Capture GL compositor fallback decisions (target vs actual) alongside any rejection reasons.
-  2. **Test matrix:**
-     - Single-display 144 Hz monitor: run through Sync ON/OFF × Adaptive ON/OFF and record FPS from both logs and on-screen counters.
-     - Dual-display mismatch (165 Hz + 60 Hz): verify each DisplayWidget independently reaches its expected target after toggles.
-     - Software backend fallback: confirm timers still honor uncapped mode when OpenGL is bypassed (ensures issue isn’t GL-only).
-  3. **Automation hooks:** Extend `tests/test_display_integration.py` with a harness that spies on `_render_strategy.start_timer()` to ensure the computed intervals match expectations for each toggle combo.
-  4. **Deliverables:**
-     - Log samples demonstrating successful uncapping (target ~165 Hz) and successful re-sync to 60 Hz.
-     - Checklist covering driver settings, in-app steps (UI toggles, CLI flags), and instrumentation removal plan once validated.
+## 1. Timer-Only Rendering Rollout — **Status: Completed**
+- **Outcome:** Refresh-sync/adaptive toggles, settings keys, and tests have been removed. `DisplayWidget` now always derives `_target_fps` from detected Hz, and all GL surface descriptors request `swapInterval=0`.
+- **Verification:**
+  - `rendering/display_widget.py` hard-caps FPS via `_resolve_display_target_fps()` (adaptive ladder disabled).
+  - `rendering/gl_format.py` and backend descriptors never re-enable driver VSync.
+  - UI/tests/specs updated to remove references to the deprecated settings.
+- **Next Steps:** Monitor logs for any regressions; if future telemetry demands expose VSync again, design a new strategy from scratch rather than resurrecting the legacy flags.
 
 ## 2. Comprehensive Settings Hygiene & Audit — **Status: Planned**
 - **Goal:** Establish a single, authoritative settings pipeline (defaults → SettingsManager → dataclasses → UI → presets/tests/docs) and eliminate drift. The recent test failures (cache max_items, Reddit position) show multiple layers fall out of sync when defaults change.
@@ -52,13 +39,21 @@
 - **Why it matters:** The Spotify/Media card in current builds still drifts from the 2.6 reference (layout, control feedback, positioning). QA relies on the card for interaction cues, so we need pixel + behavior parity before pushing any refreshed UI.
 - **Reference capture:**
   - Pull historical assets from the Git history (tag/branch `v2_6` in `Basjohn/ShittyRandomPhotoScreenSaver`) for `widgets/media_widget.py`, relevant QML/QSS, and transitional overlays. Document the canonical geometry, colors, and interaction timing.
-  - Grab screenshots or recorded gifs from the 2.6 branch to lock in target styling/feedback/positioning. Store them under `/docs/parity/spotify_card/` for future audits.
+  - When visual capture is impractical, rely on code diffs (layout constants, gradients, animations) to drive parity decisions.
 - **Work items:**
-  1. **Layout + styling:** Ensure the card anchors Bottom Left (OverlayPosition.BOTTOM_LEFT) with the exact paddings and rounded rectangle metrics from 2.6. Reapply the matte glass gradient + divider treatment, matching font sizes/weights.
-  2. **Control feedback:** Re-implement the button feedback (bright rounded highlight, ~10 % scale pulse) and ensure both mouse clicks and media-key events trigger the effect. Reference 2.6 commit diffs for `_controls_feedback` timing constants.
-  3. **Positioning rules:** Audit how the current widget selects monitor/position. Preserve cross-monitor behavior from 2.6 (respect monitor affinity, context menu overrides). Add regression tests that instantiate the widget with each `WidgetPosition` and verify geometry calculations.
+  1. **Layout + styling**
+     - [ ] Anchor the card Bottom Left (`OverlayPosition.BOTTOM_LEFT`) using the exact paddings and rounded-rectangle metrics from 2.6.
+     - [ ] Reapply the matte glass gradient + divider treatment, matching font families/sizes/weights.
+     - [ ] Verify background color/opacity constants match the reference implementation.
+  2. **Control feedback**
+     - [ ] Re-implement the bright rounded highlight and ~10 % scale pulse used in 2.6.
+     - [ ] Ensure both mouse clicks and media-key events trigger the feedback path.
+     - [ ] Cross-check `_controls_feedback` timing constants against the 2.6 commit history.
+  3. **Positioning rules**
+     - [ ] Audit monitor selection logic; preserve 2.6 cross-monitor behavior (affinity + context-menu overrides).
+     - [ ] Add regression tests that instantiate the widget for every `WidgetPosition` and assert geometry calculations.
   4. **QA checklist:**
-     - Compare current vs 2.6 screenshot overlays.
+     - Compare current vs 2.6 behavior by diffing code-derived layout metrics and logging control events (no screenshots required).
      - Exercise control clicks + media keys while logging `[MEDIA] play_pause` outputs to confirm event propagation.
      - Validate theming across light/dark backgrounds and with both GL/software backends.
 - **Deliverables:** Updated widget code/stylesheets and a short write-up summarizing differences vs 2.6 and how they were resolved (include git commit references for traceability).

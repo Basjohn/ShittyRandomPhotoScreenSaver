@@ -17,7 +17,7 @@ from PySide6.QtCore import Signal, Qt
 
 from core.settings.settings_manager import SettingsManager
 from utils.monitors import get_screen_count
-from core.logging.logger import get_logger, is_verbose_logging
+from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -46,17 +46,6 @@ class DisplayTab(QWidget):
 
         logger.debug("DisplayTab created")
 
-    def _log_refresh_settings(self, source: str) -> None:
-        """Verbose helper to trace refresh toggle persistence."""
-        if not is_verbose_logging():
-            return
-        logger.debug(
-            "[DISPLAY_TAB] %s refresh_sync=%s refresh_adaptive=%s",
-            source,
-            self.refresh_sync_check.isChecked(),
-            self.refresh_adaptive_check.isChecked(),
-        )
-    
     def load_from_settings(self) -> None:
         """Reload all UI controls from settings manager (called after preset change)."""
         self._loading = True
@@ -64,7 +53,6 @@ class DisplayTab(QWidget):
             self._load_settings()
         finally:
             self._loading = False
-            self._log_refresh_settings("load")
         logger.debug("[DISPLAY_TAB] Reloaded from settings")
     
     def _setup_ui(self) -> None:
@@ -201,23 +189,6 @@ class DisplayTab(QWidget):
         backend_layout.addWidget(backend_hint)
 
         layout.addWidget(backend_group)
-
-        # Performance group
-        perf_group = QGroupBox("Performance")
-        perf_layout = QVBoxLayout(perf_group)
-
-        self.refresh_sync_check = QCheckBox("Sync animations to display refresh rate")
-        self.refresh_sync_check.setChecked(True)
-        self.refresh_sync_check.stateChanged.connect(self._on_refresh_sync_toggled)
-        perf_layout.addWidget(self.refresh_sync_check)
-
-        self.refresh_adaptive_check = QCheckBox("Adaptive ratios (1× / 1⁄2 / 1⁄3)")
-        self.refresh_adaptive_check.setChecked(True)
-        self.refresh_adaptive_check.stateChanged.connect(self._save_settings)
-        perf_layout.addWidget(self.refresh_adaptive_check)
-
-        layout.addWidget(perf_group)
-
         # Input & Exit group
         input_group = QGroupBox("Input && Exit")
         input_layout = QVBoxLayout(input_group)
@@ -317,9 +288,6 @@ class DisplayTab(QWidget):
         self.interval_spin.blockSignals(True)
         self.shuffle_check.blockSignals(True)
         self.sharpen_check.blockSignals(True)
-        # Also block performance toggles to avoid saving defaults while loading
-        self.refresh_sync_check.blockSignals(True)
-        self.refresh_adaptive_check.blockSignals(True)
         self.backend_combo.blockSignals(True)
         # Block input toggles
         self.hard_exit_check.blockSignals(True)
@@ -393,14 +361,6 @@ class DisplayTab(QWidget):
             sharpen_raw = self._settings.get('display.sharpen_downscale', False)
             sharpen = SettingsManager.to_bool(sharpen_raw, False)
             self.sharpen_check.setChecked(sharpen)
-            
-            # Refresh rate sync
-            refresh_sync = self._settings.get_bool('display.refresh_sync', True)
-            self.refresh_sync_check.setChecked(refresh_sync)
-
-            refresh_adaptive = self._settings.get_bool('display.refresh_adaptive', True)
-            self.refresh_adaptive_check.setChecked(refresh_adaptive)
-            self._update_adaptive_checkbox_state()
 
             # Input / Hard Exit
             hard_exit_raw = self._settings.get('input.hard_exit', False)
@@ -427,8 +387,6 @@ class DisplayTab(QWidget):
             self.interval_spin.blockSignals(False)
             self.shuffle_check.blockSignals(False)
             self.sharpen_check.blockSignals(False)
-            self.refresh_sync_check.blockSignals(False)
-            self.refresh_adaptive_check.blockSignals(False)
             self.backend_combo.blockSignals(False)
             self.hard_exit_check.blockSignals(False)
             self._loading = False
@@ -468,10 +426,6 @@ class DisplayTab(QWidget):
         # Quality (only sharpen is user-configurable)
         sharpen = self.sharpen_check.isChecked()
         self._settings.set('display.sharpen_downscale', sharpen)
-        
-        # Performance
-        self._settings.set('display.refresh_sync', self.refresh_sync_check.isChecked())
-        self._settings.set('display.refresh_adaptive', self.refresh_adaptive_check.isChecked())
 
         # Input / Exit
         self._settings.set('input.hard_exit', self.hard_exit_check.isChecked())
@@ -483,22 +437,12 @@ class DisplayTab(QWidget):
 
         self._settings.save()
         self.display_changed.emit()
-        self._log_refresh_settings("save")
 
         logger.info(
             f"Saved display settings: mode={mode_map.get(mode_index, 'fill')}, "
             f"sharpen={sharpen}, "
             f"same_image={self.same_image_check.isChecked()}"
         )
-
-    def _on_refresh_sync_toggled(self) -> None:
-        self._update_adaptive_checkbox_state()
-        self._log_refresh_settings("toggle")
-        self._save_settings()
-
-    def _update_adaptive_checkbox_state(self) -> None:
-        enabled = self.refresh_sync_check.isChecked()
-        self.refresh_adaptive_check.setEnabled(enabled)
 
     def _on_show_on_changed(self) -> None:
         """Handle changes to the monitor "Show On" checkboxes."""

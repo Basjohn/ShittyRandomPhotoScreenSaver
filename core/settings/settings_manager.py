@@ -359,7 +359,6 @@ class SettingsManager(QObject):
         dotted = str(key) if key is not None else ""
         bool_keys = {
             "display.hw_accel",
-            "display.refresh_sync",
             "display.sharpen_downscale",
             "display.pan_and_scan",
             "display.pan_auto_speed",

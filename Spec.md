@@ -196,7 +196,7 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
  - If spikes persist, further expand compute-pool pre-scale-to-screen (including DPR-specific variants) as a future enhancement.
 
 ## Settings
-- `display.refresh_sync`: bool
+- Timer-only rendering: DisplayWidget always derives `_target_fps` from the detected panel refresh rate (adaptive ladder disabled) and GL surfaces request `swapInterval=0`, so no user-facing refresh-sync toggle exists.
 - `display.hw_accel`: bool
 - `display.mode`: fill|fit|shrink
 - `input.hard_exit`: bool (when true, mouse movement/clicks do not exit; only ESC/Q and hotkeys remain active). Additionally, while the Ctrl key is held, `DisplayWidget` temporarily suppresses mouse-move and left-click exit even when `input.hard_exit` is false, allowing interaction with widgets without persisting a hard-exit setting change. MC builds default this setting to true at startup in their own QSettings profile, while the normal screensaver build respects the saved value.

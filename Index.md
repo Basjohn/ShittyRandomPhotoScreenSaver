@@ -674,10 +674,10 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - sources.rss_refresh_minutes: int (default 10) - background RSS refresh interval
 
 ### Display
-- display.refresh_sync: bool
 - display.hw_accel: bool
 - display.mode: fill|fit|shrink
 - display.same_image_all_monitors: bool (default false) - same or different images per display
+- Timer-only rendering: `_target_fps` always follows the detected panel refresh rate (adaptive ladder disabled) and GL surfaces request `swapInterval=0`; no user-facing refresh sync toggle exists.
 
 ### Transitions
 - transitions.type: str (Crossfade, Slide, Wipe, Diffuse, Block Puzzle Flip, Blinds, Peel, 3D Block Spins, Ripple (legacy: Rain Drops), Warp Dissolve, Crumble, Particle)
