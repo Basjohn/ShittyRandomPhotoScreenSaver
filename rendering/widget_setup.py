@@ -148,5 +148,12 @@ def compute_expected_overlays(
         )
         if spotify_vis_enabled:
             expected.add("spotify_visualizer")
+
+        # Spotify volume slider (inherits media monitor selection)
+        spotify_volume_enabled = SettingsManager.to_bool(
+            media_settings.get('spotify_volume_enabled', True), True
+        )
+        if spotify_volume_enabled:
+            expected.add("spotify_volume")
     
     return expected

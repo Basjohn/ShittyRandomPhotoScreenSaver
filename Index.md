@@ -4,6 +4,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 
 **Documentation Cross-References:**
 - **Canonical Specification**: `Spec.md`
+- **JSON Settings Migration Guide**: `Docs/SETTINGS_MIGRATION.md`
 - **Detailed Module Docs**: See the sections below (condensed from the former `Docs/INDEX.md`)
 - **Test Documentation**: `Docs/TestSuite.md`
 - **Active Audits & Roadmaps**:
@@ -149,11 +150,12 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - get_frame_budget(), get_gc_controller(): Global singleton accessors
 - core/settings/settings_manager.py
   - SettingsManager (get/set, dot-notation, section helpers, JSON SST snapshot import/export)
-  - Maps application name "Screensaver" to "Screensaver_MC" when running under the MC executable (e.g. `SRPSS MC`, `SRPSS_MC`, `main_mc.py`) so QSettings are isolated between the normal screensaver and MC profiles.
+  - Uses `core/settings/json_store.JsonSettingsStore` for persistence under `%APPDATA%/SRPSS/settings_v2.json` (or `%APPDATA%/SRPSS_MC/` for MC) with atomic save/load and structured sections (`widgets`, `transitions`, `custom_preset_backup`).
+  - Performs one-shot QSettings migration on first run when no JSON snapshot exists, emits a backup under `%APPDATA%/SRPSS/backups/qsettings_snapshot_YYYYMMDD_HHMMSS.json`, and stamps metadata (`migrated_from`, profile, timestamp) inside the JSON.
+  - Maps application name "Screensaver" to "Screensaver_MC" when running under the MC executable so JSON profiles remain isolated between the normal screensaver and MC builds.
   - `validate_and_repair()`: Validates settings types and repairs corrupted values (lists, ranges, enums)
   - `backup_settings(path)`: Creates timestamped JSON backup of all settings
   - `_get_default_image_folders()`: Dynamic default folders (user's Pictures) instead of hardcoded paths
-  - Normalizes QSettings nested Mapping values to plain dicts on read to prevent type confusion
   - Preserves user-specific keys (sources folders, RSS feeds, weather location/geo) during reset_to_defaults
 - core/settings/defaults.py
   - **Single source of truth** for all default settings values

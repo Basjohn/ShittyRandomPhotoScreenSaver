@@ -1,13 +1,21 @@
 # Test Suite Documentation
 
 **Purpose**: Canonical reference for all test modules, test cases, and testing procedures.  
-**Last Updated**: Jan 10, 2026 – Phase 1-2 implementation tests added  
+**Last Updated**: Jan 29, 2026 – JSON settings migration + preset workflow refresh  
 **Test Count**: 1,348 collected tests across 90+ modules (per Jan 5 full-suite audit; grows as modules are added)  
 **Pass Rate**: 100% on Jan 10 run (Phase 1-2 tests passing)  
 
 ## Current Status: STABLE 
 
 The test suite is now stable and can be relied upon for regression testing. All critical tests pass.
+
+### Jan 29, 2026 – JSON Settings Workflow Refresh
+
+- `tests/test_presets.py` now uses a `_make_manager(tmp_path)` helper that instantiates `SettingsManager` with a per-test JSON storage root, exercising real `JsonSettingsStore` persistence (apply preset, custom backup, MC adjustments) without touching the registry.
+- `tests/conftest.py::settings_manager` fixture now boots `SettingsManager` against a tmp_path-backed JSON profile so every test gets isolated `settings_v2.json` files and associated metadata.
+- `tests/test_settings.py` + `tests/test_settings_manager.py` keep their full round-trip coverage but now assert dotted key lookups and `get_all_keys()` enumerate structured sections (`widgets`, `transitions`).
+- SST export/import tests run entirely through the JSON schema, including legacy `.sst` ingestion → canonical dict → JsonSettingsStore application.
+- Manual verification + scripting steps for the migration live in `Docs/SETTINGS_MIGRATION.md`; reference that doc before updating installers or QA instructions.
 
 ### Jan 10, 2026 – Phase 1-2 Implementation Tests
 
@@ -179,9 +187,9 @@ Get-Content logs\pytest_output.log -Tail 80
   - Does not quit to avoid pytest issues
 
 - **`settings_manager`** (function scope)
-  - Creates test SettingsManager instance
-  - Organization: "Test", Application: "ScreensaverTest"
-  - Auto-cleanup: Clears settings after test
+  - Creates a `SettingsManager` bound to a per-test JSON storage root under `tmp_path` (no registry writes). Organization/Application remain `BasJohnTest` / `ScreensaverTest` for metadata clarity.
+  - Exposes `storage_base_dir` so tests can inspect the generated `settings_v2.json` or patch MC mode detection.
+  - Auto-cleanup: Clears the JSON files after each test.
 
 - **`thread_manager`** (function scope)
   - Creates ThreadManager instance
@@ -276,7 +284,7 @@ Get-Content logs\pytest_output.log -Tail 80
 
 ### 4. `tests/test_settings.py` - SettingsManager Tests
 
-**Module Purpose**: Verify settings persistence and change notifications.
+**Module Purpose**: Verify JsonSettingsStore-backed persistence, dotted lookups, and change notifications.
 
 **Test Count**: 6 tests  
 **Status**: All passing  
@@ -285,8 +293,7 @@ Get-Content logs\pytest_output.log -Tail 80
 #### Tests:
 
 **`test_settings_manager_initialization(qt_app)`**
-- Verifies SettingsManager initializes
-- Uses QSettings backend
+- Verifies SettingsManager initializes against tmp_path JSON storage
 - **Asserts**: Manager created successfully
 
 **`test_get_set_setting(qt_app)`**
@@ -310,8 +317,15 @@ Get-Content logs\pytest_output.log -Tail 80
 - **Asserts**: Value returns to default ("folders")
 
 **`test_get_all_keys(qt_app)`**
-- Tests retrieving all setting keys
-- **Asserts**: Keys list is populated, contains expected keys
+- Tests retrieving all setting keys including synthesized dotted entries for structured sections
+- **Asserts**: Keys list is populated, contains expected keys and nested `widgets.*` entries even though only the `widgets` root exists on disk
+
+#### Related: `tests/test_presets.py` – Preset/SST Regression Suite
+
+- Exercises every preset (Purist, Essentials, Media, Full Monty, Custom) against the JSON-backed manager.
+- Validates `_save_custom_backup()` / `_restore_custom_backup()` by persisting nested widgets/transitions snapshots through actual file writes.
+- Forces MC mode via monkeypatch to confirm `adjust_settings_for_mc_mode()` edits nested widget maps rather than flat registry keys.
+- Replays SST exports/imports to ensure legacy `.sst` payloads hydrate into the JsonSettingsStore without dropping nested structures.
 
 ---
 

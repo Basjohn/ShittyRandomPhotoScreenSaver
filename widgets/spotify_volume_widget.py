@@ -116,6 +116,11 @@ class SpotifyVolumeWidget(QWidget):
     def set_anchor_media_widget(self, widget: Optional[QWidget]) -> None:
         """Set the anchor media widget for visibility gating."""
         self._anchor_media = widget
+        if widget is not None:
+            try:
+                self.sync_visibility_with_anchor()
+            except Exception as e:
+                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
     
     def sync_visibility_with_anchor(self) -> None:
         """Show/hide based on anchor media widget visibility.
@@ -131,9 +136,13 @@ class SpotifyVolumeWidget(QWidget):
             anchor_visible = anchor.isVisible()
             if anchor_visible and not self.isVisible() and self._enabled:
                 # Media widget became visible - show volume widget
+                if is_verbose_logging():
+                    logger.debug("[SPOTIFY_VOL] Anchor visible, requesting fade-in")
                 self._start_widget_fade_in(1500)
             elif not anchor_visible and self.isVisible():
                 # Media widget hidden - hide volume widget
+                if is_verbose_logging():
+                    logger.debug("[SPOTIFY_VOL] Anchor hidden, hiding volume widget")
                 self.hide()
         except Exception as e:
             logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
@@ -256,7 +265,13 @@ class SpotifyVolumeWidget(QWidget):
         
         if not anchor_visible:
             # Media widget not visible - don't show volume widget yet
+            if is_verbose_logging():
+                logger.debug("[SPOTIFY_VOL] Anchor not visible during start; deferring fade-in")
             return
+
+        # Align visibility with the anchor before we attempt to fade in so any
+        # delayed media fade requests have the correct starting state.
+        self.sync_visibility_with_anchor()
 
         if self._thread_manager is None:
             try:

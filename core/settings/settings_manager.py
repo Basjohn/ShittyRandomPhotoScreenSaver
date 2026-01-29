@@ -1,34 +1,39 @@
 """
 Settings manager implementation for screensaver.
 
-Uses QSettings for persistent storage. Simplified from SPQDocker reusable modules.
+Persists to a JSON store (see :mod:`core.settings.json_store`) with a one-shot
+migration path from the legacy QSettings profiles.
 """
 from typing import Any, Callable, Dict, List, Mapping, Optional
 from copy import deepcopy
 import threading
 import sys
 import json
+from datetime import datetime
 from pathlib import Path
 from PySide6.QtCore import QSettings, QObject, Signal
 from core.logging.logger import get_logger, is_verbose_logging
+from core.settings.json_store import JsonSettingsStore, determine_storage_path
 from core.settings.models import SpotifyVisualizerSettings
 
 logger = get_logger('SettingsManager')
 
 
 class SettingsManager(QObject):
-    """
-    Centralized settings management for the screensaver.
-    
-    Uses QSettings for persistent storage with organization/application name.
-    Thread-safe with change notifications.
-    """
+    """Centralized settings management backed by a JSON snapshot."""
     
     # Signal emitted when settings change
     settings_changed = Signal(str, object)  # key, new_value
+    _STRUCTURED_ROOTS = frozenset({"widgets", "transitions"})
+    _MISSING = object()
     
-    def __init__(self, organization: str = "ShittyRandomPhotoScreenSaver", 
-                 application: str = "Screensaver"):
+    def __init__(
+        self,
+        organization: str = "ShittyRandomPhotoScreenSaver",
+        application: str = "Screensaver",
+        *,
+        storage_base_dir: Optional[Path] = None,
+    ):
         """
         Initialize the settings manager.
         
@@ -50,12 +55,15 @@ class SettingsManager(QObject):
                     or "main_mc.py" in exe_name
                 ):
                     app_name = "Screensaver_MC"
-        except Exception as e:
-            logger.debug("[SETTINGS] Exception suppressed: %s", e)
+        except Exception as exc:
+            logger.debug("[SETTINGS] Exception suppressed: %s", exc, exc_info=True)
 
-        self._settings = QSettings(organization, app_name)
+        storage_path = determine_storage_path(app_name, base_dir=storage_base_dir)
+        self._settings = JsonSettingsStore(storage_path=storage_path, profile=app_name)
         self._organization = organization
         self._application = app_name
+        self._storage_path = storage_path
+        self._storage_base_dir = storage_base_dir
         self._lock = threading.RLock()
         self._change_handlers: Dict[str, List[Callable]] = {}
         
@@ -63,12 +71,27 @@ class SettingsManager(QObject):
         self._cache: Dict[str, Any] = {}
         self._cache_enabled = True
 
+        if not self._settings.exists():
+            try:
+                migrated = self._migrate_from_qsettings(organization, app_name)
+                if migrated:
+                    logger.info(
+                        "Migrated legacy QSettings profile '%s/%s' into %s",
+                        organization,
+                        app_name,
+                        storage_path,
+                    )
+                else:
+                    logger.info("No legacy QSettings data detected; starting fresh JSON store")
+            except Exception:
+                logger.exception("Failed to migrate legacy QSettings; falling back to defaults")
+
         # Initialize defaults
         self._set_defaults()
 
         try:
             self.validate_and_repair()
-        except Exception as e:
+        except Exception:
             logger.debug("Settings validation failed", exc_info=True)
 
         # Diagnostic snapshot so widget enable/monitor issues can be traced
@@ -90,11 +113,66 @@ class SettingsManager(QObject):
                     logger.debug(
                         "Widgets snapshot on init: type=%s", type(widgets_snapshot).__name__
                     )
-        except Exception as e:
+        except Exception:
             logger.debug("Failed to read widgets snapshot on init", exc_info=True)
 
         logger.info("SettingsManager initialized")
-    
+
+    # ------------------------------------------------------------------
+    # Legacy QSettings migration
+    # ------------------------------------------------------------------
+
+    def _migrate_from_qsettings(self, organization: str, app_name: str) -> bool:
+        """Import legacy QSettings data into the JSON store.
+
+        Returns True when data was migrated.
+        """
+
+        legacy = QSettings(organization, app_name)
+        try:
+            keys = list(legacy.allKeys())
+            has_data = bool(keys)
+            if not has_data:
+                has_data = bool(getattr(legacy, "childGroups", lambda: [])())
+            if not has_data:
+                return False
+        except Exception:
+            logger.exception("Failed to probe legacy QSettings for migration")
+            return False
+
+        flat: Dict[str, Any] = {}
+        for key in keys:
+            try:
+                flat[str(key)] = self._to_plain_value(legacy.value(key))
+            except Exception:
+                logger.debug("[MIGRATE] Failed to read legacy key %s", key, exc_info=True)
+
+        self._settings.replace_all(flat)
+        self._settings.update_metadata(
+            migrated_from="qsettings",
+            migrated_at=datetime.utcnow().isoformat() + "Z",
+            legacy_profile=app_name,
+        )
+        self._settings.sync()
+        self._write_migration_backup(flat)
+        return True
+
+    def _write_migration_backup(self, data: Mapping[str, Any]) -> None:
+        try:
+            backup_dir = (self._storage_path.parent / "backups").resolve()
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            backup_path = backup_dir / f"qsettings_snapshot_{timestamp}.json"
+            backup_payload = {
+                "profile": self._application,
+                "organization": self._organization,
+                "created_at": datetime.utcnow().isoformat() + "Z",
+                "data": data,
+            }
+            backup_path.write_text(json.dumps(backup_payload, indent=2, sort_keys=True), encoding="utf-8")
+        except Exception:
+            logger.debug("Failed to write migration backup", exc_info=True)
+
     def _get_default_image_folders(self) -> List[str]:
         """Get default image folders based on system.
         
@@ -108,9 +186,9 @@ class SettingsManager(QObject):
             pictures = QStandardPaths.writableLocation(QStandardPaths.PicturesLocation)
             if pictures and Path(pictures).exists():
                 folders.append(pictures)
-        except Exception as e:
-            logger.debug("[SETTINGS] Exception suppressed: %s", e)
-        
+        except Exception as exc:
+            logger.debug("[SETTINGS] Exception suppressed: %s", exc, exc_info=True)
+
         # Fallback: try common Windows paths
         if not folders:
             try:
@@ -120,8 +198,8 @@ class SettingsManager(QObject):
                     pictures_path = Path(user_profile) / 'Pictures'
                     if pictures_path.exists():
                         folders.append(str(pictures_path))
-            except Exception as e:
-                logger.debug("[SETTINGS] Exception suppressed: %s", e)
+            except Exception as exc:
+                logger.debug("[SETTINGS] Exception suppressed: %s", exc, exc_info=True)
         
         return folders
     
@@ -266,8 +344,12 @@ class SettingsManager(QObject):
             cache_key = f"{key}:{id(default)}"
             if self._cache_enabled and cache_key in self._cache:
                 return self._cache[cache_key]
-            
-            value = self._settings.value(key, default)
+
+            structured_value = self._get_structured_value_locked(key)
+            if structured_value is not self._MISSING:
+                value = structured_value
+            else:
+                value = self._settings.value(key, default)
 
         def to_plain(obj: Any) -> Any:
             if isinstance(obj, Mapping):
@@ -286,12 +368,9 @@ class SettingsManager(QObject):
             coerced: list[Any] = []
             for item in value:
                 try:
-                    if isinstance(item, bool):
-                        coerced.append(int(item))
-                    else:
-                        coerced.append(int(item))
-                except Exception as e:
-                    logger.debug("[SETTINGS] Exception suppressed: %s", e)
+                    coerced.append(int(item))
+                except Exception as exc:
+                    logger.debug("[SETTINGS] Exception suppressed: %s", exc, exc_info=True)
                     coerced.append(item)
             # Cache the coerced value
             if self._cache_enabled:
@@ -334,20 +413,20 @@ class SettingsManager(QObject):
         return self.to_bool(raw, default)
 
     def get_application_name(self) -> str:
-        """Return the QSettings application name for this manager."""
-        try:
-            return getattr(self, "_application", self._settings.applicationName())
-        except Exception as e:
-            logger.debug("[SETTINGS] Exception suppressed: %s", e)
-            return "Screensaver"
+        """Return the application profile name for this manager."""
+        return getattr(self, "_application", "Screensaver")
 
     def get_organization_name(self) -> str:
-        """Return the QSettings organization name for this manager."""
-        try:
-            return getattr(self, "_organization", self._settings.organizationName())
-        except Exception as e:
-            logger.debug("[SETTINGS] Exception suppressed: %s", e)
-            return "ShittyRandomPhotoScreenSaver"
+        """Return the organization name for this manager."""
+        return getattr(self, "_organization", "ShittyRandomPhotoScreenSaver")
+
+    @staticmethod
+    def _to_plain_value(value: Any) -> Any:
+        if isinstance(value, Mapping):
+            return {k: SettingsManager._to_plain_value(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [SettingsManager._to_plain_value(v) for v in value]
+        return value
 
     def _coerce_import_value(self, key: str, value: Any) -> Any:
         """Best-effort type coercion for SST imports.
@@ -386,7 +465,7 @@ class SettingsManager(QObject):
                     # bool is a subclass of int; preserve intent.
                     return int(value)
                 return int(value)
-        except Exception as e:
+        except Exception:
             logger.debug("Failed to coerce SST value for %s=%r", dotted, value, exc_info=True)
             return value
 
@@ -410,31 +489,38 @@ class SettingsManager(QObject):
             value: Value to set
         """
         with self._lock:
-            old_value = self._settings.value(key)
-            self._settings.setValue(key, value)
-            
+            handled, old_value = self._set_structured_value_locked(key, value)
+            if not handled:
+                old_value = self._settings.value(key)
+                self._settings.setValue(key, value)
+
             # Invalidate cache entries for this key (P2 optimization)
             if self._cache_enabled:
-                keys_to_remove = [k for k in self._cache if k.startswith(f"{key}:")]
-                for k in keys_to_remove:
-                    del self._cache[k]
-            
+                prefixes = {key}
+                root_key = key.split('.')[0] if '.' in key else key
+                prefixes.add(root_key)
+                keys_to_remove = [
+                    cache_k for cache_k in self._cache
+                    if any(cache_k.startswith(f"{prefix}:") for prefix in prefixes)
+                ]
+                for cache_k in keys_to_remove:
+                    del self._cache[cache_k]
+
             # Immediate sync for critical settings to prevent data loss
-            # QSettings on Windows uses registry and may delay writes
             root_key = key.split('.')[0] if '.' in key else key
             if root_key in self._CRITICAL_KEYS or key in self._CRITICAL_KEYS:
                 self._settings.sync()
-            
+
             # Emit change signal
             self.settings_changed.emit(key, value)
-            
+
             # Call registered handlers
             if key in self._change_handlers:
                 for handler in self._change_handlers[key]:
                     try:
                         handler(value, old_value)
-                    except Exception as e:
-                        logger.error(f"Error in change handler for {key}: {e}")
+                    except Exception:
+                        logger.error("Error in change handler for %s", key, exc_info=True)
 
         # Compact logging by default so large nested maps (e.g. 'widgets')
         # do not flood the log. When verbose logging is enabled we still
@@ -466,9 +552,9 @@ class SettingsManager(QObject):
     
     def load(self) -> None:
         """Load settings from persistent storage."""
-        # QSettings loads automatically, but we can force sync
         with self._lock:
-            self._settings.sync()
+            self._settings.load()
+            self._cache.clear()
         logger.debug("Settings loaded")
     
     def validate_and_repair(self) -> Dict[str, str]:
@@ -610,8 +696,8 @@ class SettingsManager(QObject):
                         self._settings.setValue('widgets', dict(canonical_widgets))
                     else:
                         self._settings.setValue('widgets', {})
-                except Exception as e:
-                    logger.debug("[SETTINGS] Exception suppressed: %s", e)
+                except Exception as exc:
+                    logger.debug("[SETTINGS] Exception suppressed: %s", exc, exc_info=True)
                     self._settings.setValue('widgets', {})
                 repairs['widgets'] = f"Invalid type: {type(widgets).__name__}"
             
@@ -626,8 +712,8 @@ class SettingsManager(QObject):
                         self._settings.setValue('transitions', dict(canonical_transitions))
                     else:
                         self._settings.setValue('transitions', {})
-                except Exception as e:
-                    logger.debug("[SETTINGS] Exception suppressed: %s", e)
+                except Exception as exc:
+                    logger.debug("[SETTINGS] Exception suppressed: %s", exc, exc_info=True)
                     self._settings.setValue('transitions', {})
                 repairs['transitions'] = f"Invalid type: {type(transitions).__name__}"
             
@@ -651,8 +737,7 @@ class SettingsManager(QObject):
         try:
             if backup_path is None:
                 # Default to settings directory with timestamp
-                import datetime
-                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
                 settings_dir = Path(self._settings.fileName()).parent
                 backup_path = settings_dir / f"settings_backup_{timestamp}.json"
             
@@ -669,8 +754,8 @@ class SettingsManager(QObject):
             logger.info(f"Settings backed up to: {backup_path}")
             return backup_path
             
-        except Exception as e:
-            logger.error(f"Failed to backup settings: {e}")
+        except Exception:
+            logger.error("Failed to backup settings", exc_info=True)
             return None
     
     def on_changed(self, key: str, handler: Callable[[Any, Any], None]) -> None:
@@ -786,17 +871,45 @@ class SettingsManager(QObject):
     def get_all_keys(self) -> List[str]:
         """Get all setting keys."""
         with self._lock:
-            return self._settings.allKeys()
+            base_keys = list(self._settings.allKeys())
+            seen = set(base_keys)
+            for root in self._STRUCTURED_ROOTS:
+                root_value = self._get_structured_root_locked(root)
+                if not root_value:
+                    continue
+                for dotted in self._iter_structured_keys(root, root_value):
+                    if dotted not in seen:
+                        base_keys.append(dotted)
+                        seen.add(dotted)
+            return base_keys
     
     def contains(self, key: str) -> bool:
         """Check if a setting key exists."""
         with self._lock:
+            structured = self._contains_structured_key_locked(key)
+            if structured is not None:
+                return structured
             return self._settings.contains(key)
     
     def remove(self, key: str) -> None:
         """Remove a setting key."""
         with self._lock:
-            self._settings.remove(key)
+            removed = self._remove_structured_key_locked(key)
+            if not removed:
+                self._settings.remove(key)
+
+            if self._cache_enabled:
+                prefixes = {key}
+                root_key = key.split('.')[0] if isinstance(key, str) and '.' in key else key
+                if root_key:
+                    prefixes.add(root_key)
+                keys_to_remove = [
+                    cache_k for cache_k in self._cache
+                    if any(cache_k.startswith(f"{prefix}:") for prefix in prefixes if prefix)
+                ]
+                for cache_k in keys_to_remove:
+                    del self._cache[cache_k]
+
         logger.debug(f"Removed setting: {key}")
     
     def clear(self) -> None:
@@ -808,6 +921,129 @@ class SettingsManager(QObject):
     # ------------------------------------------------------------------
     # QoL helpers for structured access and SST-style snapshots
     # ------------------------------------------------------------------
+
+    def _get_structured_root_locked(self, root: str) -> Mapping[str, Any] | None:
+        if root not in self._STRUCTURED_ROOTS:
+            return None
+        value = self._settings.value(root)
+        return value if isinstance(value, Mapping) else None
+
+    def _split_structured_key(self, key: str) -> tuple[str, List[str]] | None:
+        if not isinstance(key, str) or '.' not in key:
+            return None
+        root, tail = key.split('.', 1)
+        if root not in self._STRUCTURED_ROOTS:
+            return None
+        parts = [segment for segment in tail.split('.') if segment]
+        if not parts:
+            return None
+        return root, parts
+
+    def _traverse_structured(self, mapping: Mapping[str, Any], parts: List[str]) -> Any:
+        current: Any = mapping
+        for part in parts:
+            if not isinstance(current, Mapping):
+                return self._MISSING
+            current = current.get(part, self._MISSING)
+            if current is self._MISSING:
+                return self._MISSING
+        return current
+
+    def _get_structured_value_locked(self, key: str) -> Any:
+        split = self._split_structured_key(key)
+        if split is None:
+            return self._MISSING
+        root, parts = split
+        mapping = self._get_structured_root_locked(root)
+        if mapping is None:
+            return self._MISSING
+        return self._traverse_structured(mapping, parts)
+
+    def _set_structured_value_locked(self, key: str, value: Any) -> tuple[bool, Any]:
+        split = self._split_structured_key(key)
+        if split is None:
+            return False, self._MISSING
+        root, parts = split
+        mapping = self._get_structured_root_locked(root)
+        if mapping is None:
+            mapping = {}
+        else:
+            mapping = dict(mapping)
+
+        current = mapping
+        for part in parts[:-1]:
+            node = current.get(part)
+            if not isinstance(node, Mapping):
+                node = {}
+                current[part] = node
+            else:
+                node = dict(node)
+                current[part] = node
+            current = node
+        old_value = current.get(parts[-1]) if isinstance(current, Mapping) else self._MISSING
+        if isinstance(current, Mapping):
+            current[parts[-1]] = value
+        else:
+            return False, self._MISSING
+
+        self._settings.setValue(root, mapping)
+        return True, old_value
+
+    def _contains_structured_key_locked(self, key: str) -> Optional[bool]:
+        split = self._split_structured_key(key)
+        if split is None:
+            return None
+        root, parts = split
+        mapping = self._get_structured_root_locked(root)
+        if mapping is None:
+            return False
+        result = self._traverse_structured(mapping, parts)
+        return result is not self._MISSING
+
+    def _remove_structured_key_locked(self, key: str) -> bool:
+        split = self._split_structured_key(key)
+        if split is None:
+            return False
+        root, parts = split
+        mapping = self._get_structured_root_locked(root)
+        if mapping is None:
+            return False
+        mapping = dict(mapping)
+        stack: List[tuple[Mapping[str, Any], str]] = []
+        current: Any = mapping
+        for part in parts[:-1]:
+            if not isinstance(current, Mapping) or part not in current:
+                return False
+            next_node = current[part]
+            if not isinstance(next_node, Mapping):
+                return False
+            stack.append((current, part))
+            next_node = dict(next_node)
+            current[part] = next_node
+            current = next_node
+
+        if not isinstance(current, Mapping) or parts[-1] not in current:
+            return False
+        del current[parts[-1]]
+
+        # Clean up empty dictionaries
+        while stack:
+            parent, part = stack.pop()
+            child = parent[part]
+            if isinstance(child, Mapping) and child:
+                break
+            del parent[part]
+        self._settings.setValue(root, mapping)
+        return True
+
+    def _iter_structured_keys(self, prefix: str, mapping: Mapping[str, Any]) -> List[str]:
+        dotted_keys: List[str] = []
+        for key, value in mapping.items():
+            dotted = f"{prefix}.{key}" if prefix else key
+            dotted_keys.append(dotted)
+            if isinstance(value, Mapping):
+                dotted_keys.extend(self._iter_structured_keys(dotted, value))
+        return dotted_keys
 
     def get_section(self, section: str, default: Any = None) -> Any:
         """Return a whole section value (e.g. 'widgets', 'transitions').
@@ -912,12 +1148,7 @@ class SettingsManager(QObject):
                         # Rare top-level scalars (if any) are kept as-is.
                         snapshot[key] = value
 
-            app_name = None
-            try:
-                app_name = getattr(self, "_application", None) or self._settings.applicationName()
-            except Exception as e:
-                logger.debug("[SETTINGS] Exception suppressed: %s", e)
-                app_name = "Screensaver"
+            app_name = getattr(self, "_application", "Screensaver")
 
             payload: Dict[str, Any] = {
                 'settings_version': 1,
@@ -929,7 +1160,7 @@ class SettingsManager(QObject):
             target.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding='utf-8')
             logger.info("Exported settings snapshot to %s", target)
             return True
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to export settings snapshot to %s", path)
             return False
 
@@ -945,7 +1176,7 @@ class SettingsManager(QObject):
         try:
             raw = Path(path).read_text(encoding='utf-8')
             loaded = json.loads(raw)
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to read settings snapshot from %s", path)
             return False
 
@@ -971,11 +1202,7 @@ class SettingsManager(QObject):
                 )
 
         if isinstance(sst_application, str):
-            try:
-                current_app = self.get_application_name()
-            except Exception as e:
-                logger.debug("[SETTINGS] Exception suppressed: %s", e)
-                current_app = None
+            current_app = self.get_application_name()
             if current_app and sst_application != current_app:
                 logger.info(
                     "Importing settings snapshot for application '%s' into '%s'",
@@ -1045,6 +1272,17 @@ class SettingsManager(QObject):
                         flat: Mapping[str, Any] = section_value
                         for subkey, subval in flat.items():
                             dotted = f"{section_key}.{subkey}"
+                            if dotted in {
+                                "display.refresh_sync",
+                                "display.refresh_adaptive",
+                                "display.render_backend_mode",
+                                "display.hw_accel",
+                            }:
+                                logger.info(
+                                    "Skipping legacy display key from SST import: %s",
+                                    dotted,
+                                )
+                                continue
                             coerced = self._coerce_import_value(dotted, subval)
                             self._settings.setValue(dotted, coerced)
                     else:
@@ -1060,7 +1298,7 @@ class SettingsManager(QObject):
             self.settings_changed.emit('*', None)
             logger.info("Imported settings snapshot from %s", path)
             return True
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to apply settings snapshot from %s", path)
             return False
 
@@ -1075,7 +1313,7 @@ class SettingsManager(QObject):
         try:
             raw = Path(path).read_text(encoding='utf-8')
             loaded = json.loads(raw)
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to read settings snapshot for preview from %s", path)
             return {}
 
@@ -1160,6 +1398,6 @@ class SettingsManager(QObject):
                             diffs[section_key] = (old_val, new_val)
 
             return diffs
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to compute settings snapshot preview from %s", path)
             return {}

@@ -735,7 +735,14 @@ class WidgetFactoryRegistry:
         self.register(RedditWidgetFactory(self._settings, self._thread_manager))
         self.register(SpotifyVisualizerFactory(self._settings, self._thread_manager))
         self.register(SpotifyVolumeFactory(self._settings, self._thread_manager))
-    
+
+    def set_thread_manager(self, thread_manager: Optional["ThreadManager"]) -> None:
+        """Update thread manager on the registry and all factories."""
+        self._thread_manager = thread_manager
+        for factory in self._factories.values():
+            if hasattr(factory, "_thread_manager"):
+                factory._thread_manager = thread_manager
+
     def register(self, factory: WidgetFactory) -> None:
         """
         Register a widget factory.

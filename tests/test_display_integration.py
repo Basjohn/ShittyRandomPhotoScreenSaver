@@ -26,6 +26,8 @@ from ui.tabs.sources_tab import SourcesTab
 from ui.tabs.widgets_tab import WidgetsTab
 from widgets.clock_widget import ClockWidget
 from widgets.weather_widget import WeatherWidget, WeatherPosition
+from widgets.media_widget import MediaWidget
+from core.media import media_controller as mc
 
 
 # ---------------------------------------------------------------------------
@@ -60,6 +62,46 @@ def display_widget(qt_app, settings_manager, thread_manager):
     yield widget
     widget.close()
     widget.deleteLater()
+
+
+def _bootstrap_spotify_display(
+    qt_app,
+    qtbot,
+    settings_manager: SettingsManager,
+    thread_manager,
+) -> DisplayWidget:
+    """Create a DisplayWidget with Spotify media widgets enabled."""
+
+    settings_manager.set("widgets.media.enabled", True)
+    settings_manager.set("widgets.media.monitor", "ALL")
+    settings_manager.set("widgets.media.spotify_volume_enabled", True)
+    settings_manager.set("widgets.spotify_visualizer.enabled", True)
+    settings_manager.set("widgets.spotify_visualizer.monitor", "ALL")
+
+    widget = DisplayWidget(
+        screen_index=0,
+        display_mode=DisplayMode.FILL,
+        settings_manager=settings_manager,
+        thread_manager=thread_manager,
+    )
+    widget.resize(640, 360)
+    qtbot.addWidget(widget)
+    qt_app.processEvents()
+
+    widget._setup_widgets()
+    widget.show()
+    qt_app.processEvents()
+
+    def _spotify_ready() -> bool:
+        qt_app.processEvents()
+        return (
+            isinstance(getattr(widget, "media_widget", None), MediaWidget)
+            and getattr(widget, "spotify_visualizer_widget", None) is not None
+            and getattr(widget, "spotify_volume_widget", None) is not None
+        )
+
+    qtbot.waitUntil(_spotify_ready, timeout=5000)
+    return widget
 
 
 # ---------------------------------------------------------------------------
@@ -389,6 +431,91 @@ class TestDisplayManagerSync:
         manager._on_display_transition_ready(0)
         manager._on_display_transition_ready(1)
         assert manager.wait_for_all_displays_ready(timeout_sec=0.5) is True
+
+
+# ---------------------------------------------------------------------------
+# Spotify widget lifecycle integration
+# ---------------------------------------------------------------------------
+
+
+class TestSpotifyWidgetIntegration:
+    """Regression tests for Spotify visualizer/volume wiring."""
+
+    @pytest.mark.qt
+    def test_spotify_widgets_bind_to_display_widget(
+        self,
+        qt_app,
+        qtbot,
+        settings_manager,
+        thread_manager,
+    ):
+        display = _bootstrap_spotify_display(qt_app, qtbot, settings_manager, thread_manager)
+
+        media = display.media_widget
+        vis = display.spotify_visualizer_widget
+        vol = display.spotify_volume_widget
+
+        try:
+            assert isinstance(media, MediaWidget)
+            assert vis is not None
+            assert vol is not None
+            assert display.spotify_visualizer_widget is vis
+            assert display.spotify_volume_widget is vol
+            assert getattr(vis, "_anchor_media", None) is media
+            assert getattr(vol, "_anchor_media", None) is media
+        finally:
+            display.close()
+
+    @pytest.mark.qt
+    def test_spotify_widgets_follow_media_visibility_without_interaction(
+        self,
+        qt_app,
+        qtbot,
+        settings_manager,
+        thread_manager,
+        monkeypatch,
+    ):
+        display = _bootstrap_spotify_display(qt_app, qtbot, settings_manager, thread_manager)
+        media = display.media_widget
+        vis = display.spotify_visualizer_widget
+        vol = display.spotify_volume_widget
+
+        try:
+            assert media is not None and vis is not None and vol is not None
+            pre_vis = vis.isVisible()
+            pre_vol = vol.isVisible()
+
+            vis_fades: list[int] = []
+            vol_fades: list[int] = []
+
+            monkeypatch.setattr(
+                vis,
+                "_start_widget_fade_in",
+                lambda duration=1500: (vis_fades.append(duration), vis.show()),
+            )
+            monkeypatch.setattr(
+                vol,
+                "_start_widget_fade_in",
+                lambda duration=1500: (vol_fades.append(duration), vol.show()),
+            )
+
+            media.show()
+            qt_app.processEvents()
+            monkeypatch.setattr(media, "isVisible", lambda: True, raising=False)
+            media._notify_spotify_widgets_visibility()
+
+            if not pre_vis:
+                qtbot.waitUntil(lambda: vis.isVisible(), timeout=2000)
+                assert vis_fades == [1500]
+            if not pre_vol:
+                qtbot.waitUntil(lambda: vol.isVisible(), timeout=2000)
+                assert vol_fades == [1500]
+
+            media.media_updated.emit({"state": mc.MediaPlaybackState.PLAYING.value})
+            qt_app.processEvents()
+            assert getattr(vis, "_spotify_playing", False) is True
+        finally:
+            display.close()
 
 
 # ---------------------------------------------------------------------------
@@ -731,10 +858,6 @@ class TestClockWidgetIntegration:
         size = display_widget.clock_widget.size()
         assert size.width() > 0
 
-
-# ---------------------------------------------------------------------------
-# Widgets tab -> DisplayWidget routing
-# ---------------------------------------------------------------------------
 
 class TestWidgetRouting:
     """WidgetsTab persistence + per-monitor routing."""

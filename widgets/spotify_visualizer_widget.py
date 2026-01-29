@@ -1805,6 +1805,11 @@ class SpotifyVisualizerWidget(QWidget):
 
     def set_anchor_media_widget(self, widget: QWidget) -> None:
         self._anchor_media = widget
+        if widget is not None:
+            try:
+                self.sync_visibility_with_anchor()
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
     def handle_media_update(self, payload: dict) -> None:
         """Receive Spotify media state from MediaWidget.

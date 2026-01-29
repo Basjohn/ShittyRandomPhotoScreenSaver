@@ -354,6 +354,34 @@ def test_media_widget_decodes_artwork_and_adjusts_margins(qt_app, qtbot, thread_
 
 
 @pytest.mark.qt
+def test_media_widget_emits_signal_on_first_track(qt_app, qtbot, thread_manager):
+    """First snapshot should emit media_updated even before fade-in occurs."""
+
+    info = mc.MediaTrackInfo(
+        title="Signal Test",
+        artist="Artist",
+        album="Album",
+        state=mc.MediaPlaybackState.PLAYING,
+    )
+    ctrl = _DummyController(info=info)
+    widget = MediaWidget(parent=None, controller=ctrl)
+    widget.set_thread_manager(thread_manager)
+    qtbot.addWidget(widget)
+
+    widget.start()
+    qt_app.processEvents()
+
+    # First refresh should emit the signal even though the widget remains hidden.
+    with qtbot.waitSignal(widget.media_updated, timeout=2000) as blocker:
+        _run_refresh_cycles(qtbot, widget, cycles=1)
+        qt_app.processEvents()
+
+    payload = blocker.args[0]
+    assert payload["title"] == "Signal Test"
+    assert payload["state"] == mc.MediaPlaybackState.PLAYING.value
+    assert not widget.isVisible()
+
+
 def test_media_widget_warns_when_thread_manager_missing(qt_app, qtbot, caplog):
     """MediaWidget should log an error and stay disabled without a ThreadManager."""
 

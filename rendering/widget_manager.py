@@ -12,7 +12,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, TYPE_CHECKING, Mapp
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QWidget, QGraphicsDropShadowEffect, QGraphicsOpacityEffect
 
-from core.logging.logger import get_logger, is_verbose_logging
+from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.resources.manager import ResourceManager
 from core.settings.settings_manager import SettingsManager
 from rendering.widget_setup import parse_color_to_qcolor, compute_expected_overlays
@@ -88,6 +88,7 @@ class WidgetManager:
         self._overlay_fade_started: bool = False
         self._overlay_fade_timeout: Optional[QTimer] = None
         self._spotify_secondary_fade_starters: List[Callable[[], None]] = []
+        self._pending_spotify_visibility_sync = False
         
         # Wait for compositor first frame before starting widget fades
         self._compositor_ready: bool = False
@@ -103,6 +104,16 @@ class WidgetManager:
         self._settings_manager: Optional[SettingsManager] = None
         
         logger.debug("[WIDGET_MANAGER] Initialized")
+
+    def _bind_parent_attribute(self, attr_name: str, widget: Optional[QWidget]) -> None:
+        """Expose newly created widgets on the parent DisplayWidget immediately."""
+        parent = self._parent
+        if parent is None:
+            return
+        try:
+            setattr(parent, attr_name, widget)
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Failed to bind %s on parent: %s", attr_name, e)
     
     def _connect_compositor_ready_signal(self) -> None:
         """Connect to parent's image_displayed signal to know when compositor is ready."""
@@ -739,6 +750,14 @@ class WidgetManager:
             
             vis_widget.setGeometry(x, y, width, height)
             vis_widget.raise_()
+            if is_perf_metrics_enabled():
+                logger.info(
+                    "[SPOTIFY_VIS] Positioned visualizer widget geom=(%d,%d,%d,%d)",
+                    x,
+                    y,
+                    width,
+                    height,
+                )
             
             # Keep pixel-shift drift baseline aligned with the media card so the
             # GL overlay inherits the same reference frame as the QWidget card.
@@ -783,6 +802,14 @@ class WidgetManager:
             vol_widget.setGeometry(x, y, width, height)
             if vol_widget.isVisible():
                 vol_widget.raise_()
+            if is_perf_metrics_enabled():
+                logger.info(
+                    "[SPOTIFY_VOL] Positioned volume widget geom=(%d,%d,%d,%d)",
+                    x,
+                    y,
+                    width,
+                    height,
+                )
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
@@ -1574,6 +1601,106 @@ class WidgetManager:
 
         self._spotify_secondary_fade_starters.append(starter)
 
+    def _queue_spotify_visibility_sync(self, media_widget: Optional[MediaWidget]) -> None:
+        if not media_widget or self._pending_spotify_visibility_sync:
+            return
+
+        notify = getattr(media_widget, "_notify_spotify_widgets_visibility", None)
+        if not callable(notify):
+            return
+
+        self._pending_spotify_visibility_sync = True
+
+        if is_perf_metrics_enabled():
+            logger.info(
+                "[SPOTIFY_DIAG] scheduling media visibility sync (screen=%s)",
+                getattr(self._parent, "screen_index", "?"),
+            )
+
+        def _run() -> None:
+            try:
+                if is_perf_metrics_enabled():
+                    logger.info(
+                        "[SPOTIFY_DIAG] running media visibility sync (visible=%s)",
+                        media_widget.isVisible(),
+                    )
+                notify()
+            except Exception as exc:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", exc)
+            finally:
+                self._pending_spotify_visibility_sync = False
+
+        try:
+            QTimer.singleShot(0, _run)
+        except Exception:
+            _run()
+
+    def _register_spotify_secondary_fade(self, widget: Optional[QWidget]) -> None:
+        if widget is None:
+            return
+        parent = self._parent
+        if parent is None:
+            return
+        register = getattr(parent, "register_spotify_secondary_fade", None)
+        if not callable(register):
+            return
+
+        anchor = getattr(widget, "_anchor_media", None)
+        max_deferrals = 20
+
+        def _run_sync() -> None:
+            try:
+                sync = getattr(widget, "sync_visibility_with_anchor", None)
+                if callable(sync):
+                    sync()
+            except Exception as exc:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", exc)
+
+        def _starter(attempt: int = 0) -> None:
+            try:
+                anchor_visible = True
+                if anchor is not None and hasattr(anchor, "isVisible"):
+                    anchor_visible = bool(anchor.isVisible())
+            except Exception as exc:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", exc)
+                anchor_visible = True
+
+            if not anchor_visible and attempt < max_deferrals:
+                delay_ms = min(1000, 200 + attempt * 100)
+                if is_perf_metrics_enabled():
+                    logger.info(
+                        "[SPOTIFY_DIAG] deferring secondary fade for %s (anchor hidden, attempt=%s, delay=%sms)",
+                        widget.objectName() or type(widget).__name__,
+                        attempt + 1,
+                        delay_ms,
+                    )
+                QTimer.singleShot(delay_ms, lambda: _starter(attempt + 1))
+                return
+
+            if not anchor_visible and is_perf_metrics_enabled():
+                logger.info(
+                    "[SPOTIFY_DIAG] anchor still hidden after deferrals, forcing fade for %s",
+                    widget.objectName() or type(widget).__name__,
+                )
+
+            if is_perf_metrics_enabled():
+                logger.info(
+                    "[SPOTIFY_DIAG] secondary fade starter running for %s",
+                    widget.objectName() or type(widget).__name__,
+                )
+            _run_sync()
+
+        if is_perf_metrics_enabled():
+            logger.info(
+                "[SPOTIFY_DIAG] registering secondary fade for %s (screen=%s)",
+                widget.objectName() or type(widget).__name__,
+                getattr(self._parent, "screen_index", "?"),
+            )
+        try:
+            register(_starter)
+        except Exception as exc:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", exc)
+
     # =========================================================================
     # Widget Factory Methods (Phase 2 - Jan 2026)
     # Legacy create_*_widget methods removed - now using WidgetFactoryRegistry
@@ -1618,6 +1745,11 @@ class WidgetManager:
         # Initialize factory registry if not already done
         if self._factory_registry is None:
             self.set_factory_registry(settings_manager, thread_manager)
+        else:
+            try:
+                self._factory_registry.set_thread_manager(thread_manager)
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Failed to update factory registry thread manager: %s", e)
 
         logger.debug("Setting up overlay widgets for screen %d via factory registry", screen_index)
 
@@ -1678,6 +1810,7 @@ class WidgetManager:
                 if widget:
                     self.register_widget(settings_key, widget)
                     created[attr_name] = widget
+                    self._bind_parent_attribute(attr_name, widget)
 
         # Create weather widget via factory
         weather_settings = widgets_config.get('weather', {})
@@ -1694,6 +1827,7 @@ class WidgetManager:
                 if widget:
                     self.register_widget("weather", widget)
                     created['weather_widget'] = widget
+                    self._bind_parent_attribute('weather_widget', widget)
 
         # Create media widget via factory
         media_settings = widgets_config.get('media', {})
@@ -1710,6 +1844,7 @@ class WidgetManager:
                 if media_widget:
                     self.register_widget("media", media_widget)
                     created['media_widget'] = media_widget
+                    self._bind_parent_attribute('media_widget', media_widget)
 
         # Create reddit widgets via factory (reddit2 inherits styling from reddit1)
         for settings_key, attr_name in [('reddit', 'reddit_widget'), ('reddit2', 'reddit2_widget')]:
@@ -1731,6 +1866,7 @@ class WidgetManager:
                 if widget:
                     self.register_widget(settings_key, widget)
                     created[attr_name] = widget
+                    self._bind_parent_attribute(attr_name, widget)
 
         # Gmail widget archived - see archive/gmail_feature/
 
@@ -1744,6 +1880,7 @@ class WidgetManager:
             )
             if vol_widget:
                 created['spotify_volume_widget'] = vol_widget
+                self._register_spotify_secondary_fade(vol_widget)
             
             # Spotify visualizer widget
             vis_widget = self.create_spotify_visualizer_widget(
@@ -1751,6 +1888,9 @@ class WidgetManager:
             )
             if vis_widget:
                 created['spotify_visualizer_widget'] = vis_widget
+                self._register_spotify_secondary_fade(vis_widget)
+
+            self._queue_spotify_visibility_sync(media_widget)
 
         # NOW start all widgets - this ensures fade sync has complete expected overlay set
         # All widgets are created and their expected overlays are registered before any
@@ -1858,6 +1998,13 @@ class WidgetManager:
             self.register_widget("spotify_volume", vol)
             # Add to expected overlays so it participates in coordinated fade
             self.add_expected_overlay("spotify_volume")
+            self._bind_parent_attribute("spotify_volume_widget", vol)
+            if is_perf_metrics_enabled():
+                logger.info(
+                    "[SPOTIFY_VOL] Created volume widget (screen=%s, monitor=%s)",
+                    screen_index,
+                    media_monitor_sel,
+                )
             # Note: start() and raise_() will be called in setup_all_widgets() loop
             logger.debug("Spotify volume widget created, will start with coordinated fade")
             return vol
@@ -1899,6 +2046,13 @@ class WidgetManager:
             vis = SpotifyVisualizerWidget(self._parent, bar_count=bar_count)
 
             self._log_spotify_vis_config("create", spotify_vis_settings)
+            if is_perf_metrics_enabled():
+                logger.info(
+                    "[SPOTIFY_VIS] Created visualizer widget (screen=%s, bar_count=%s, monitor=%s)",
+                    screen_index,
+                    bar_count,
+                    media_monitor_sel,
+                )
             
             # Preferred audio block size (0=auto)
             try:
@@ -2035,6 +2189,7 @@ class WidgetManager:
             self.register_widget("spotify_visualizer", vis)
             # Note: start() and raise_() will be called in setup_all_widgets() loop
             logger.debug("Spotify visualizer widget created: %d bars, will start with coordinated fade", bar_count)
+            self._bind_parent_attribute("spotify_visualizer_widget", vis)
             return vis
         except Exception as e:
             logger.error("Failed to create Spotify visualizer widget: %s", e, exc_info=True)

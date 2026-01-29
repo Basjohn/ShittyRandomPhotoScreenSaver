@@ -8,32 +8,44 @@
   - UI/tests/specs updated to remove references to the deprecated settings.
 - **Next Steps:** Monitor logs for any regressions; if future telemetry demands expose VSync again, design a new strategy from scratch rather than resurrecting the legacy flags.
 
-## 2. Comprehensive Settings Hygiene & Audit — **Status: Planned**
-- **Goal:** Establish a single, authoritative settings pipeline (defaults → SettingsManager → dataclasses → UI → presets/tests/docs) and eliminate drift. The recent test failures (cache max_items, Reddit position) show multiple layers fall out of sync when defaults change.
-- **Audit scope & actions:**
-  1. **Canonical defaults alignment:**
-     - Enumerate every key in `core/settings/defaults.py` and emit a structured dump (JSON) sorted alphabetically.
-     - Cross-compare with dataclass defaults in `core/settings/models.py`; raise warnings for mismatches (type, value, or missing fields).
-     - Verify `SettingsManager._set_defaults()` writes the same values to QSettings (include nested dict flattening) and that `reset_to_defaults()` truly wipes overrides.
-  2. **Flats & caching:**
-     - Inspect `SettingsManager.get_flat_defaults()` and any cached dictionaries used by presets/import/export. Ensure nested keys (e.g., `display.refresh_sync`) are preserved verbatim and not duplicated under legacy aliases.
-     - Add unit tests exercising `get_flat_defaults()` vs dataclasses to guard against regressions.
-  3. **UI bindings:**
-     - Audit all tabs (Display, Widgets, Sources, etc.) for direct key references. Document which controls rely on `SettingsManager.get_bool` vs manual parsing, and ensure they handle missing keys gracefully.
-     - Confirm each UI save path updates both canonical keys and any legacy mirrors (if required), then emits `settings_changed` events.
-  4. **Presets & SST artifacts:**
-     - Review `core/settings/presets.py`, sample SST bundles, and any onboarding JSON to ensure they either (a) explicitly override keys or (b) intentionally inherit canonical defaults. Remove stale overrides that fight the defaults.
-     - Provide a regeneration script to re-export presets after defaults change.
-  5. **Testing strategy:**
-     - Expand `tests/test_settings_models.py` to cover every dataclass default, plus a round-trip test that instantiates a `SettingsManager`, calls `reset_to_defaults()`, and compares the resulting flat map to the dataclasses.
-     - Add snapshot-style tests for presets/SST to ensure they stay aligned with defaults (fail if canonical values drift).
-  6. **Documentation:**
-     - Update `Spec.md` and `Index.md` with the canonical defaults plus notes on derived/legacy keys.
-     - Outline the governance process: whenever a default changes, required steps include updating defaults map, dataclasses, UI help text, tests, docs, and preset regeneration.
-- **Success criteria:**
-  - Single source of truth documented and enforced by automated tests.
-  - No failing tests due to drift when defaults change.
-  - Clear runbook for future settings modifications (who updates what, in what order).
+## 2. JSON Settings Migration & Compatibility Harness — **Status: In Progress**
+- **Goal:** Replace the Windows-registry QSettings store with neat JSON profiles under `%APPDATA%/SRPSS/` (and `%APPDATA%/SRPSS_MC/` for the MC build), ensure one-shot migration for existing installs, and keep SST import/export + presets fully functional. Existing `.sst` bundles such as `F:/Programming/Apps/ShittyRandomPhotoScreenSaver2_5/2_5_SRPSS_Settings_Screensaver.sst` must import cleanly after the migration, while future exports use the new schema.
+- **Progress snapshot (Jan 29):**
+  - JSON schema + storage layout defined; `core/settings/json_store.py` implements atomic reads/writes, metadata, and structured sections.
+  - SettingsManager now instantiates the JSON store, runs one-shot QSettings migration (with `.bak` backup + metadata), and exposes `storage_base_dir` for tests/tools.
+  - Preset + SST flows now operate purely on the JSON snapshot: structured key helpers in `SettingsManager` keep `widgets`/`transitions` dotted access working, `_save_custom_backup()` captures nested JSON payloads, and MC adjustments mutate widget maps instead of flat keys. Legacy `display.refresh_sync`, `display.refresh_adaptive`, `display.render_backend_mode`, and `display.hw_accel` keys are now dropped during SST imports and preset/custom restores so old bundles can’t reintroduce timer caps.
+  - `tests/test_presets.py` refactored to use per-test JSON storage roots; suite now passes (`python -m pytest tests/test_presets.py -q`).
+  - `Spec.md`, `Index.md`, and `Docs/TestSuite.md` updated with the JSON workflow, and a new `Docs/SETTINGS_MIGRATION.md` spells out the migration + verification steps.
+
+- **Planned execution (remaining work bolded):**
+  1. **Schema + storage layout**
+     - Define `settings_v2.json` structure (top-level `{version, preset, snapshot}`) with nested sections mirroring `core/settings/defaults.py` and typed dataclasses.
+     - Reserve sibling files for `custom_preset_backup.json` and optional audit snapshots; document both SRPSS and SRPSS_MC paths.
+  2. **Migration pipeline**
+     - Build a migration helper that reads legacy QSettings, canonicalizes/normalizes values (coercions from `SettingsManager.to_bool`, enum fallbacks, removal of retired keys), and writes JSON + a `.bak` of the original registry blob.
+     - On first run post-update, detect if JSON exists; if not, run migration, log summary, and mark completion flag.
+  3. **JSON-backed SettingsManager** *(done)*
+     - New JSON pipeline is live; focus now is on integrating presets/SST workflows with the JSON snapshot (no leftover registry reads).
+  4. **SST + preset compatibility**
+     - Update SST import to accept both legacy `.sst` (QSettings snapshot) and new JSON exports. For legacy files, parse into the canonical dict then reuse the new manager’s `set_many` path.
+     - Update export to emit the JSON schema, retaining `settings_version` metadata so old builds can refuse gracefully.
+     - Review `core/presets.py` to ensure preset application, custom backup, and MC adjustments operate on the JSON manager without flattening hacks. *(Done: presets/custom restore now skip legacy display backend/sync keys so toggles never regress timer-only mode.)*
+  5. **Tooling & automation**
+     - Provide CLI scripts: `python tools/migrate_settings.py --dry-run` (reports would-be changes) and `tools/export_settings.py` (forces JSON snapshot), plus an AppData cleanup helper for QA.
+     - Add a guard that detects missing/invalid JSON and rehydrates from defaults instead of silently crashing.
+  6. **Tests + validation**
+     - JSON manager round-trip tests now cover get/set/cache/save/load. **New:** presets suite refreshed for JsonSettingsStore + MC-adjustment helpers (`python -m pytest tests/test_presets.py -q`).
+     - Next: add migration + SST regression tests (include provided `.sst` sample) and refresh integration suites once presets/SST paths land.
+     - Integration test that starts the app with a legacy QSettings store, runs migration, and asserts the resulting JSON matches expectations (widget counts, preserved folders, etc.).
+     - **Continue running/refreshing suites** after each major step and prune redundant QSettings assumptions.
+  7. **Docs + rollout notes**
+     - Document the new storage layout in `Spec.md`, `Index.md`, `Docs/TestSuite.md`, and `/Docs/SETTINGS_MIGRATION.md` (steps, paths, troubleshooting).
+     - Update Current_Plan once the JSON path is live and ensure release notes highlight the one-time reset behavior (legacy installs fall back to defaults where keys no longer exist).
+
+- **Success criteria (unchanged):**
+  - JSON files become the single source of truth with versioned schema + migration flag.
+  - Legacy QSettings installs transparently migrate once; MC builds isolate their own file.
+  - SST import/export, presets, and UI bindings operate against the new manager without manual registry access.
 
 ## 3. Media Card Controls (2.6 Parity) — **Status: Needs parity pass**
 - **Why it matters:** The Spotify/Media card in current builds still drifts from the 2.6 reference (layout, control feedback, positioning). QA relies on the card for interaction cues, so we need pixel + behavior parity before pushing any refreshed UI.
@@ -58,15 +70,15 @@
      - Validate theming across light/dark backgrounds and with both GL/software backends.
 - **Deliverables:** Updated widget code/stylesheets and a short write-up summarizing differences vs 2.6 and how they were resolved (include git commit references for traceability).
 
-## 4. Spotify Visualizer Responsiveness — **Status: Pending implementation**
-- **Issue:** On cold start the visualizer often stays idle until multiple polls complete. Users expect an immediate response when pressing transport controls or media keys; we need deterministic wake-up without resorting to high-frequency polling.
-- **Planned improvements:**
-  1. **Event-driven refresh:** Subscribe `SpotifyVisualizerWidget` (or a helper manager) to `EventSystem` topics such as `MEDIA_CONTROL_TRIGGERED` and `MEDIA_TRACK_CHANGED`. When events fire and the visualizer is idle, trigger a one-shot refresh path.
-  2. **Widget API:** Add `request_refresh(reason: str)` that checks whether FFT worker state, spectra, and textures are ready. If stale, kick the FFT worker via `ThreadManager.single_shot` and repaint overlays once data arrives. Keep calls idempotent.
-  3. **Resource readiness:** Ensure FFT worker initialization is awaited before we declare the widget live. If the worker is still spinning up, buffer the event and replay once ready.
-  4. **Telemetry & logging:** Log refresh requests under `widgets.spotify_visualizer` (gated behind `is_perf_metrics_enabled()` to avoid spam) noting reason, latency, and success, so QA can confirm responsiveness from logs.
-  5. **QA checklist:** Press play/pause/next via keyboard/mouse immediately after launch and confirm the visualizer animates within one polling interval (<1 s). Test both GL and software backends, plus MC builds.
-- **Deliverables:** Updated widget/worker code, log samples demonstrating <1 s wake-up, and regression tests (where feasible) that simulate `request_refresh` to ensure no-ops when already active.
+## 4. Spotify Visualizer & Volume Visibility — **Status: Active root-cause audit**
+- **Issue:** Live runs still never instantiate the Spotify widgets—logs show “Widget setup complete: 5 widgets” with no `[SPOTIFY_*] Created …` lines, so visibility fixes never run. The saved config pins the media card to monitor `2` while the active media card renders on Display 0/1, so WidgetManager skips Spotify creation entirely. Need to audit the whole pipeline (settings → WidgetManager filters → fade sync) for additional blockers.
+- **Audit / resolution plan:**
+  1. Dump current runtime settings + `settings_v2.json` to confirm monitor selections, and trace WidgetManager’s `_show_on_this_monitor` checks versus actual `screen_index`. Force Spotify creation even when monitor IDs drift (e.g., treat “monitor” mismatches as warnings and fall back to `ALL`).
+  2. Once creation is guaranteed, ensure the visibility replay + secondary fade registration we added actually runs in live builds (add verbose logs or perf counters on `_queue_spotify_visibility_sync`, `_register_spotify_secondary_fade`).
+  3. If legacy/dead settings still gate Spotify (e.g., hidden `software_visualizer_enabled`, pixel-shift prefs), document and remove them from the runtime path.
+  4. Update integration tests to cover monitor-specific scenarios (DisplayWidget on screen 0 while media monitor=2) so we detect this regression earlier.
+  5. After fixes, rerun both `python -m pytest tests/test_display_integration.py -k spotify` and the perf cycle (`$env:SRPSS_PERF_METRICS=1; python main.py --debug`) to capture logs proving Spotify widgets instantiate + fade automatically.
+- **Deliverables:** Audited settings notes, code fixes for monitor selection + creation, expanded tests/logging, and live-run logs showing `[SPOTIFY_VIS]/[SPOTIFY_VOL] Created …` plus successful fades.
 
 ---
 **Execution Notes:** Revise this plan whenever ≥50 % of items are delivered so it always reflects current priorities. Attach instrumentation/scripts created for Item 1 to the audit repo once validated, then prune temporary logs to keep production builds lean.

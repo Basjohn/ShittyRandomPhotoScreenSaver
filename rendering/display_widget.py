@@ -74,7 +74,7 @@ from transitions.overlay_manager import (
     SW_OVERLAY_KEYS,
 )
 from core.events import EventSystem
-from core.eco_mode import is_mc_build, EcoModeManager, EcoModeConfig
+from core.mc import is_mc_build
 from rendering.backends import BackendSelectionResult, create_backend_from_settings
 from rendering.backends.base import RendererBackend, RenderSurface, SurfaceDescriptor
 
@@ -349,38 +349,6 @@ class DisplayWidget(QWidget):
                 logger.debug("[DISPLAY_WIDGET] Failed to connect settings listener: %s", e)
             self._register_refresh_listeners()
         
-        # EcoModeManager for MC builds (v2.1 integration)
-        self._eco_mode_manager: Optional[EcoModeManager] = None
-        if is_mc_build():
-            try:
-                # Get eco mode settings from SettingsManager with canonical defaults
-                eco_enabled = True
-                eco_threshold = 0.95
-                eco_check_interval = 1000
-                eco_recovery_delay = 100
-                if self.settings_manager:
-                    eco_cfg = self.settings_manager.get('mc.eco_mode', {})
-                    if isinstance(eco_cfg, dict):
-                        eco_enabled = SettingsManager.to_bool(eco_cfg.get('enabled', True), True)
-                        eco_threshold = float(eco_cfg.get('threshold', 0.95))
-                        eco_check_interval = int(eco_cfg.get('check_interval', 1000))
-                        eco_recovery_delay = int(eco_cfg.get('recovery_delay', 100))
-                
-                eco_config = EcoModeConfig(
-                    enabled=eco_enabled,
-                    occlusion_threshold=eco_threshold,
-                    check_interval_ms=eco_check_interval,
-                    recovery_delay_ms=eco_recovery_delay,
-                    pause_transitions=True,
-                    pause_visualizer=True,
-                )
-                self._eco_mode_manager = EcoModeManager(eco_config)
-                self._eco_mode_manager.set_display_widget(self)
-                if self._transition_controller:
-                    self._eco_mode_manager.set_transition_controller(self._transition_controller)
-                logger.info("[DISPLAY_WIDGET] EcoModeManager initialized for MC build")
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Failed to create EcoModeManager: %s", e, exc_info=True)
         
         # ImagePresenter for centralized pixmap lifecycle (Phase 4 refactor)
         self._image_presenter: Optional[ImagePresenter] = None
@@ -890,11 +858,13 @@ class DisplayWidget(QWidget):
     def _configure_refresh_rate_sync(self) -> None:
         detected = int(round(self._detect_refresh_rate()))
         self._target_fps = self._resolve_display_target_fps(detected, adaptive=False)
-        logger.info(
-            "Refresh rate sync disabled globally, timer target FPS: %d (detected=%d)",
-            self._target_fps,
-            detected,
-        )
+        if is_perf_metrics_enabled():
+            logger.info(
+                "[REFRESH_DIAG] source=settings:display.refresh_sync screen=%s detected_hz=%d target_fps=%d",
+                self.screen_index,
+                detected,
+                self._target_fps,
+            )
 
         try:
             am = getattr(self, "_animation_manager", None)
@@ -939,13 +909,6 @@ class DisplayWidget(QWidget):
                 self._position_spotify_visualizer()
             except Exception as e:
                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            
-            # Wire up EcoModeManager to visualizer (MC builds only)
-            if self._eco_mode_manager is not None:
-                try:
-                    self._eco_mode_manager.set_visualizer(self.spotify_visualizer_widget)
-                except Exception:
-                    logger.debug("[DISPLAY_WIDGET] Failed to set visualizer on EcoModeManager", exc_info=True)
         
         # Position Spotify volume if created
         if self.spotify_volume_widget is not None:
@@ -954,12 +917,6 @@ class DisplayWidget(QWidget):
             except Exception as e:
                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         
-        # Start EcoModeManager monitoring (MC builds only)
-        if self._eco_mode_manager is not None:
-            try:
-                self._eco_mode_manager.start_monitoring()
-            except Exception:
-                logger.debug("[DISPLAY_WIDGET] Failed to start EcoModeManager monitoring", exc_info=True)
 
     def _setup_pixel_shift(self) -> None:
         """Setup pixel shift manager for burn-in prevention.
@@ -2660,13 +2617,6 @@ class DisplayWidget(QWidget):
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         
-        # Stop EcoModeManager monitoring (MC builds only)
-        if self._eco_mode_manager is not None:
-            try:
-                self._eco_mode_manager.stop_monitoring()
-                logger.debug("[LIFECYCLE] EcoModeManager stopped")
-            except Exception:
-                logger.debug("[LIFECYCLE] EcoModeManager stop failed", exc_info=True)
         
         # Cleanup widgets via lifecycle system (Dec 2025)
         if self._widget_manager is not None:
@@ -3232,13 +3182,6 @@ class DisplayWidget(QWidget):
                 self.settings_manager.set("mc.always_on_top", on_top)
                 self.settings_manager.save()
             
-            # Notify EcoModeManager of always-on-top state change
-            if self._eco_mode_manager is not None:
-                try:
-                    self._eco_mode_manager.set_always_on_top(on_top)
-                    logger.debug("[MC] EcoModeManager notified: always_on_top=%s", on_top)
-                except Exception:
-                    logger.debug("[MC] Failed to notify EcoModeManager of always-on-top change", exc_info=True)
             
             logger.info("[MC] Context menu: always on top set to %s", on_top)
         except Exception:

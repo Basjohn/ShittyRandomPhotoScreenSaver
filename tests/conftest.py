@@ -18,13 +18,16 @@ def qt_app():
 
 
 @pytest.fixture
-def settings_manager():
+def settings_manager(tmp_path):
     """Create SettingsManager instance for testing."""
     from core.settings import SettingsManager
-    manager = SettingsManager(organization="Test", application=f"ScreensaverTest_{uuid.uuid4().hex}")
+    storage_base = tmp_path / "settings"
+    manager = SettingsManager(
+        organization="Test",
+        application=f"ScreensaverTest_{uuid.uuid4().hex}",
+        storage_base_dir=storage_base,
+    )
     yield manager
-    # Intentionally do not clear QSettings on Windows. Rapid create/clear cycles
-    # against the same registry key can trigger "marked for deletion" errors.
 
 
 @pytest.fixture

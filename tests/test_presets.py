@@ -1,25 +1,31 @@
-"""
-Comprehensive tests for the presets system.
+"""Comprehensive tests for the presets system."""
 
-Tests cover:
-- Preset application and settings updates
-- Nested setting paths
-- Custom preset backup/restore
-- MC mode adjustments
-- Preset validation
-- Auto-switch to custom
-"""
+import uuid
+
 import pytest
 
 from core.presets import (
-    apply_preset,
-    get_ordered_presets,
-    get_current_preset_info,
-    check_and_switch_to_custom,
-    adjust_settings_for_mc_mode,
     PRESET_DEFINITIONS,
+    adjust_settings_for_mc_mode,
+    apply_preset,
+    check_and_switch_to_custom,
+    get_current_preset_info,
+    get_ordered_presets,
 )
 from core.settings.settings_manager import SettingsManager
+
+
+def _make_manager(tmp_path, base_name=None, app_name=None) -> SettingsManager:
+    """Create a SettingsManager backed by a per-test JSON root."""
+
+    storage_root = tmp_path / (base_name or uuid.uuid4().hex)
+    storage_root.mkdir(parents=True, exist_ok=True)
+    application = app_name or f"ScreensaverTest_{uuid.uuid4().hex}"
+    return SettingsManager(
+        organization="Test",
+        application=application,
+        storage_base_dir=storage_root,
+    )
 
 
 class TestPresetDefinitions:
@@ -111,12 +117,15 @@ class TestApplyPreset:
         result = apply_preset(settings_manager, 'nonexistent')
         assert result is False
     
-    def test_apply_preset_saves_to_disk(self, settings_manager: SettingsManager):
+    def test_apply_preset_saves_to_disk(self, qt_app, tmp_path):
         """Test that apply_preset persists changes to disk."""
-        apply_preset(settings_manager, 'purist')
-        
-        # Create new settings manager instance to verify persistence
-        new_settings = SettingsManager()
+        app_name = f"PresetDisk_{uuid.uuid4().hex}"
+        base_name = "apply_preset_saves"
+        manager = _make_manager(tmp_path, base_name=base_name, app_name=app_name)
+
+        apply_preset(manager, 'purist')
+
+        new_settings = _make_manager(tmp_path, base_name=base_name, app_name=app_name)
         assert new_settings.get('preset') == 'purist'
 
 
@@ -196,8 +205,9 @@ class TestCustomPresetBackup:
 class TestMCModeAdjustments:
     """Test MC mode monitor adjustments."""
     
-    def test_mc_mode_adjusts_monitor_1_to_2(self):
+    def test_mc_mode_adjusts_monitor_1_to_2(self, monkeypatch):
         """Test that MC mode changes monitor 1 to monitor 2."""
+        monkeypatch.setattr("core.presets.is_mc_mode", lambda: True)
         settings = {
             'widgets': {
                 'clock': {'monitor': 1},
@@ -210,8 +220,9 @@ class TestMCModeAdjustments:
         assert adjusted['widgets']['clock']['monitor'] == 2
         assert adjusted['widgets']['weather']['monitor'] == 2
     
-    def test_mc_mode_adjusts_all_to_2(self):
+    def test_mc_mode_adjusts_all_to_2(self, monkeypatch):
         """Test that MC mode changes 'ALL' to monitor 2."""
+        monkeypatch.setattr("core.presets.is_mc_mode", lambda: True)
         settings = {
             'widgets': {
                 'clock': {'monitor': 'ALL'},
@@ -326,7 +337,7 @@ class TestCheckAndSwitchToCustom:
         # Don't change anything
         
         # Check should not switch
-        switched = check_and_switch_to_custom(settings_manager)
+        check_and_switch_to_custom(settings_manager)
         
         # Should remain on purist
         assert settings_manager.get('preset') == 'purist'
@@ -335,28 +346,30 @@ class TestCheckAndSwitchToCustom:
 class TestPresetPersistence:
     """Test preset persistence across sessions."""
     
-    def test_preset_persists_across_instances(self, settings_manager: SettingsManager):
+    def test_preset_persists_across_instances(self, qt_app, tmp_path):
         """Test that preset selection persists."""
-        apply_preset(settings_manager, 'media')
-        
-        # Create new instance
-        new_settings = SettingsManager()
-        
+        app_name = f"PresetPersist_{uuid.uuid4().hex}"
+        base_name = "preset_persist"
+        manager = _make_manager(tmp_path, base_name=base_name, app_name=app_name)
+
+        apply_preset(manager, 'media')
+
+        new_settings = _make_manager(tmp_path, base_name=base_name, app_name=app_name)
         assert new_settings.get('preset') == 'media'
     
-    def test_custom_backup_persists(self, settings_manager: SettingsManager):
+    def test_custom_backup_persists(self, qt_app, tmp_path):
         """Test that custom backup persists across sessions."""
-        # Set custom and modify
-        settings_manager.set('preset', 'custom')
-        settings_manager.set('widgets.clock.font_size', 85)
-        
-        # Switch away to trigger backup
-        apply_preset(settings_manager, 'purist')
-        
-        # Create new instance
-        new_settings = SettingsManager()
-        
-        # Backup should exist
+        app_name = f"CustomBackup_{uuid.uuid4().hex}"
+        base_name = "custom_backup"
+        manager = _make_manager(tmp_path, base_name=base_name, app_name=app_name)
+
+        manager.set('preset', 'custom')
+        manager.set('widgets.clock.font_size', 85)
+
+        apply_preset(manager, 'purist')
+
+        new_settings = _make_manager(tmp_path, base_name=base_name, app_name=app_name)
+
         backup = new_settings.get('custom_preset_backup')
         assert backup is not None
 

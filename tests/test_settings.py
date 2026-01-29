@@ -1,25 +1,34 @@
 """Tests for SettingsManager."""
 import json
 import uuid
+from pathlib import Path
+
 from core.settings import SettingsManager
 
 
-def _make_manager() -> SettingsManager:
-    # Use a unique application key per test to avoid registry key reuse issues
-    # on Windows.
-    return SettingsManager(organization="Test", application=f"ScreensaverTest_{uuid.uuid4().hex}")
+def _make_manager(tmp_path: Path, *, base_name: str | None = None, app_name: str | None = None) -> SettingsManager:
+    """Create a SettingsManager backed by a per-test JSON root."""
+
+    storage_root = tmp_path / (base_name or uuid.uuid4().hex)
+    storage_root.mkdir(parents=True, exist_ok=True)
+    application = app_name or f"ScreensaverTest_{uuid.uuid4().hex}"
+    return SettingsManager(
+        organization="Test",
+        application=application,
+        storage_base_dir=storage_root,
+    )
 
 
-def test_settings_manager_initialization(qt_app):
+def test_settings_manager_initialization(qt_app, tmp_path):
     """Test SettingsManager initialization."""
-    manager = _make_manager()
+    manager = _make_manager(tmp_path)
     
     assert manager is not None
 
 
-def test_get_set_setting(qt_app):
+def test_get_set_setting(qt_app, tmp_path):
     """Test getting and setting values."""
-    manager = _make_manager()
+    manager = _make_manager(tmp_path)
     
     # Set a value
     manager.set("test.key", "test value")
@@ -29,9 +38,9 @@ def test_get_set_setting(qt_app):
     assert value == "test value"
 
 
-def test_default_values(qt_app):
+def test_default_values(qt_app, tmp_path):
     """Test default values are set."""
-    manager = _make_manager()
+    manager = _make_manager(tmp_path)
     
     # Check some defaults exist
     assert manager.contains("sources.mode")
@@ -39,13 +48,13 @@ def test_default_values(qt_app):
     assert manager.contains("transitions")
 
 
-def test_widget_defaults_helper_matches_schema(qt_app):
+def test_widget_defaults_helper_matches_schema(qt_app, tmp_path):
     """get_widget_defaults sections should mirror the widgets schema in _set_defaults.
 
     This is a light invariant test to catch accidental drift between the
     canonical defaults map and the helper used by UI code.
     """
-    manager = _make_manager()
+    manager = _make_manager(tmp_path)
 
     # Force canonical defaults to be present in the underlying QSettings.
     manager.reset_to_defaults()
@@ -68,9 +77,9 @@ def test_widget_defaults_helper_matches_schema(qt_app):
             assert type(schema_val) is type(helper_val)
 
 
-def test_on_changed_handler(qt_app):
+def test_on_changed_handler(qt_app, tmp_path):
     """Test change notification handler."""
-    manager = _make_manager()
+    manager = _make_manager(tmp_path)
     
     changed_values = []
     
@@ -86,9 +95,9 @@ def test_on_changed_handler(qt_app):
     assert len(changed_values) >= 1
 
 
-def test_reset_to_defaults(qt_app):
+def test_reset_to_defaults(qt_app, tmp_path):
     """Test resetting to defaults."""
-    manager = _make_manager()
+    manager = _make_manager(tmp_path)
     
     # Change a value
     manager.set("sources.mode", "custom_value")
@@ -101,9 +110,9 @@ def test_reset_to_defaults(qt_app):
     assert manager.get("sources.mode") == "folders"
 
 
-def test_get_all_keys(qt_app):
+def test_get_all_keys(qt_app, tmp_path):
     """Test getting all keys."""
-    manager = _make_manager()
+    manager = _make_manager(tmp_path)
     
     keys = manager.get_all_keys()
     
@@ -114,7 +123,8 @@ def test_get_all_keys(qt_app):
 
 def test_sst_round_trip_defaults(qt_app, tmp_path):
     """Exporting and re-importing defaults should restore canonical values."""
-    manager = _make_manager()
+    base_name = "sst_round_trip"
+    manager = _make_manager(tmp_path, base_name=base_name, app_name="SSTDefaults")
 
     # Start from a clean canonical state and export it.
     manager.reset_to_defaults()
@@ -152,7 +162,8 @@ def test_sst_round_trip_defaults(qt_app, tmp_path):
 def test_sst_merge_and_type_coercion_and_preview(qt_app, tmp_path):
     """SST import should merge sections, coerce basic types, and be previewable."""
 
-    manager = _make_manager()
+    base_name = "sst_merge"
+    manager = _make_manager(tmp_path, base_name=base_name, app_name="SSTMerge")
     manager.reset_to_defaults()
 
     # Add an extra widget entry that should survive a merge-based import.

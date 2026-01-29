@@ -12,7 +12,14 @@ Single source of truth for architecture and key decisions.
 - DisplayWidget is the fullscreen presenter; transitions are created per-settings.
 - ThreadManager provides IO and compute pools; all business threading goes through it.
 - ResourceManager tracks Qt objects for deterministic cleanup; includes QPixmap/QImage pooling to reduce GC pressure.
-- SettingsManager provides dot-notation access, persisted across runs.
+- SettingsManager provides dot-notation access, persisted to a JSON snapshot under
+  `%APPDATA%/SRPSS/settings_v2.json` (or `%APPDATA%/SRPSS_MC/` for MC). Legacy
+  QSettings profiles are migrated once at startup and future writes stay in
+  the JSON store so backups and profile copies are simple file operations. The
+  backing store (`core/settings/json_store.py`) performs atomic load/save with
+  metadata (`version`, `profile`, `migrated_from`, timestamps) and treats
+  structured roots (`widgets`, `transitions`, `custom_preset_backup`) as nested
+  documents while exposing the dotted-key API expected by the rest of the app.
 - WidgetManager (extracted from DisplayWidget) handles overlay widget lifecycle, Z-order, rate-limited raises, and QGraphicsEffect invalidation.
 - WidgetFactoryRegistry (`rendering/widget_factories.py`) provides centralized widget creation via factory pattern (ClockWidgetFactory, WeatherWidgetFactory, MediaWidgetFactory, RedditWidgetFactory, SpotifyVisualizerFactory, SpotifyVolumeFactory).
 - InputHandler (extracted from DisplayWidget) handles all user input including mouse/keyboard events, context menu triggers, exit gestures, **global media key passthrough**, and **double-click next image navigation** (which respects interaction gating).
@@ -50,10 +57,10 @@ Single source of truth for architecture and key decisions.
 ## Runtime Variants
 - Normal screensaver build:
   - Entry: `main.py`, deployed as `SRPSS.scr` / `SRPSS.exe`.
-  - Uses QSettings organization `ShittyRandomPhotoScreenSaver` and application `Screensaver`.
+  - Uses the `ShittyRandomPhotoScreenSaver/Screensaver` profile name for legacy migration only; the canonical runtime store is `%APPDATA%/SRPSS/settings_v2.json`.
 - Manual Controller (MC) build:
   - Entry: `main_mc.py`, deployed as `SRPSS_Media_Center.exe` (Nuitka onedir) or legacy `SRPSS MC.exe` (PyInstaller onefile).
-  - Uses the same organization but a separate QSettings application name `Screensaver_MC` so MC configuration is isolated from the normal screensaver profile. Detection now includes the renamed executable stems (`srpss_media_center.exe`) so MC settings stay isolated regardless of the build artifact name.
+  - Uses the same organization but stores settings in `%APPDATA%/SRPSS_MC/settings_v2.json`, keeping MC configuration isolated from the normal screensaver profile. Detection now includes the renamed executable stems (`srpss_media_center.exe`) so MC settings stay isolated regardless of the build artifact name and JSON directory.
   - At startup, forces `input.hard_exit=True` in the MC profile so mouse movement/clicks do not exit unless the user explicitly relaxes this in MC settings.
   - The historical `SetThreadExecutionState()` call that suppressed the OS screensaver/display sleep during MC runs has been removed to reduce Defender heuristics; MC simply runs like any other fullscreen app and relies on the user to leave Windows power management as-is.
   - MC builds keep their fullscreen DisplayWidget windows out of the taskbar/Alt+Tab list by applying `Qt.Tool` (mirroring the historical behaviour) while a guarded toggle (`rendering.display_widget.MC_USE_SPLASH_FLAGS`) allows splash-style flags when we need to experiment. A dedicated regression test (`tests/test_mc_window_flags.py`) pins this behaviour so any deviation (e.g., accidental SplashScreen flip) is caught immediately.
@@ -240,6 +247,15 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
   - Spotify visualizer sensitivity naming:
     - UI label is **Recommended**.
     - Stored settings key remains `widgets.spotify_visualizer.adaptive_sensitivity` for backward compatibility.
+
+### JSON store + migration details
+
+- **Atomic JSON snapshot** – The canonical store lives at `%APPDATA%/SRPSS/settings_v2.json` (or `%APPDATA%/SRPSS_MC/settings_v2.json`). `core/settings/json_store.py` maintains a flat in-memory map for all dotted keys, persists `{version, profile, metadata, snapshot}` documents atomically via `*.tmp` swap, and treats `widgets`, `transitions`, and `custom_preset_backup` as structured roots so large maps stay nested on disk.
+- **Structured key helpers** – `SettingsManager` exposes transparent dotted access for structured roots. Calls like `get("widgets.clock.enabled")`, `set("transitions.Ripple.enabled", False)`, `contains(...)`, and `get_all_keys()` all operate on the nested JSON without flattening hacks, keeping presets/SST/import/export logic identical to the legacy QSettings APIs.
+- **One-shot migration** – On first run without `settings_v2.json`, SettingsManager reads the legacy QSettings profile, normalizes via `_to_plain_value`, populates the JSON store, stamps metadata (`migrated_from`, `legacy_profile`, `migrated_at`), and writes a human-readable backup under `%APPDATA%/SRPSS/backups/qsettings_snapshot_YYYYMMDD_HHMMSS.json`. Subsequent runs skip QSettings entirely; deleting the JSON file forces a re-migration or a defaults reset when no registry data exists.
+- **Preset backup parity** – `_save_custom_backup()` now captures nested sections (widgets, transitions, display, accessibility, sources) into a JSON-friendly payload kept under `custom_preset_backup`. `_restore_custom_backup()` replays that snapshot via dotted setters so Custom behaves identically between legacy and JSON stores, and MC adjustments operate directly on the nested `widgets` map.
+- **Legacy display toggles ignored** – Import paths (SST, preset application, custom restore) drop `display.refresh_sync`, `display.refresh_adaptive`, `display.render_backend_mode`, and `display.hw_accel` keys so historical bundles cannot resurrect driver-vsync or software-backend toggles. Timer-only rendering remains authoritative regardless of imported payloads.
+- **SST compatibility** – `export_to_sst()` mirrors the JSON snapshot (including structured sections) and tags the payload with `settings_version`. `import_from_sst()` and `preview_import_from_sst()` coerce values through `_coerce_import_value`, merge structured sections when requested, and remain tolerant of older `.sst` files by flattening their legacy layout into the new schema before writing.
   - `widgets.reddit.*`: Reddit overlay widget configuration (enabled flag, per-monitor selection via `monitor` ('ALL'|1|2|3), 9 position options (Top/Middle/Bottom × Left/Center/Right), subreddit slug, item limit (4-, 10-, or 20-item layouts for ultra-wide/large displays), font family/size, margin, text colour, optional background frame and border with opacity, background opacity). The widget fetches Reddit's unauthenticated JSON listing endpoints with a fixed candidate pool (up to 25 posts), then sorts all valid entries by `created_utc` so the newest posts appear at the top; each layout simply changes how many rows are rendered from that sorted list. The widget hides itself on fetch/parse failure and only responds to clicks in Ctrl-held / hard-exit interaction modes. Initial visibility is coordinated through the shared overlay fade-in system so Reddit, Weather and Media fade together per display.
   - `widgets.reddit2.*`: Second Reddit widget configuration (enabled flag, per-monitor selection via `monitor`, 9 position options, subreddit slug, item limit). Inherits all styling (font, colors, background, border, opacity) from `widgets.reddit.*` to allow showing two different subreddits simultaneously.
  - `widgets.shadows.*`: global drop-shadow configuration shared by all overlay widgets (enabled flag, colour, offset, blur radius, text/frame opacity multipliers). Individual widgets perform a two-stage startup animation: first a coordinated card opacity fade-in (driven by the overlay fade synchronizer), then a shadow fade where the drop shadow grows smoothly from transparent to its configured opacity using the same global duration/easing. Shadows are slightly enlarged/softened via a shared blur-radius multiplier so all widgets share a consistent halo.

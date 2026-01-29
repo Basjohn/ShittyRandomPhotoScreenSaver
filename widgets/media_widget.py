@@ -809,7 +809,13 @@ class MediaWidget(BaseOverlayWidget):
             return
         tm = self._thread_manager
         if tm is None:
-            return
+            try:
+                self._inherit_thread_manager_from_parent(self.parent())
+            except Exception as exc:
+                logger.debug("[MEDIA_WIDGET] Failed to inherit ThreadManager: %s", exc)
+            tm = self._thread_manager
+            if tm is None:
+                return
 
         self._refresh_in_flight = True
         if is_verbose_logging():
@@ -824,42 +830,38 @@ class MediaWidget(BaseOverlayWidget):
                     logger.debug("[MEDIA] get_current_track failed", exc_info=True)
                 return None
 
-        def _on_result(task_result) -> None:
-            def _apply(info) -> None:
-                self._refresh_in_flight = False
+        def _handle_result(task_result):
+            def _consume_result() -> None:
                 try:
-                    if info is None:
-                        if is_verbose_logging():
-                            logger.debug("[MEDIA_WIDGET] No track info in async result; hiding")
-                    else:
-                        try:
-                            state = getattr(info, "state", None)
-                            state_val = state.value if hasattr(state, "value") else str(state)
-                        except Exception as e:
-                            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-                            state_val = "?"
-                        if is_verbose_logging():
-                            logger.debug(
-                                "[MEDIA_WIDGET] Applying track: state=%s, title=%r, artist=%r, album=%r",
-                                state_val,
-                                getattr(info, "title", None),
-                                getattr(info, "artist", None),
-                                getattr(info, "album", None),
-                            )
-                except Exception:
-                    logger.debug("[MEDIA_WIDGET] Failed to log async apply", exc_info=True)
-                self._update_display(info)
+                    if not Shiboken.isValid(self):
+                        return
+                    info = task_result.result if getattr(task_result, "success", False) else None
+                    self._update_display(info)
+                except Exception as exc:
+                    logger.debug("[MEDIA_WIDGET] Exception during async refresh consume: %s", exc)
+                finally:
+                    self._refresh_in_flight = False
 
-            info = None
-            if getattr(task_result, "success", False):
-                info = getattr(task_result, "result", None)
-            ThreadManager.run_on_ui_thread(_apply, info)
+            try:
+                ThreadManager.run_on_ui_thread(_consume_result)
+            except Exception as exc:
+                logger.debug("[MEDIA_WIDGET] Failed to marshal async refresh to UI thread: %s", exc)
+                self._refresh_in_flight = False
 
         try:
-            tm.submit_io_task(_do_query, callback=_on_result)
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+            tm.submit_io_task(_do_query, callback=_handle_result)
+        except Exception as exc:
+            logger.debug("[MEDIA_WIDGET] Failed to submit async refresh: %s", exc)
             self._refresh_in_flight = False
+
+    def _emit_media_update(self, info: MediaTrackInfo) -> None:
+        """Emit the current media metadata/state to interested observers."""
+        try:
+            payload = asdict(info)
+            payload["state"] = info.state.value
+            self.media_updated.emit(payload)
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Failed to emit media update: %s", e)
 
     def _update_display(self, info: Optional[MediaTrackInfo]) -> None:
         # Lifetime guard: async callbacks may fire after the widget has been
@@ -1119,30 +1121,28 @@ class MediaWidget(BaseOverlayWidget):
         # Reduce bottom margin so controls sit closer to the card edge.
         self.setContentsMargins(29, 12, right_margin, self._controls_row_margin())
 
-        # On the very first non-empty track update we use this call purely
-        # to establish a stable layout and fixed height, but keep the widget
-        # hidden. The next update with the same track will then perform the
-        # actual fade-in so you never see the intermediate size.
+        # On the very first non-empty track update we use this call to
+        # establish a stable layout (card stays hidden until fade sync), but we
+        # still need to propagate media state to dependent widgets so they can
+        # react immediately (visualizer wake-up, volume visibility, etc.).
         if not self._has_seen_first_track:
             self._has_seen_first_track = True
+            self._emit_media_update(info)
             try:
                 self.hide()
             except Exception as e:
                 logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             if not self._telemetry_logged_fade_request:
                 logger.info("[MEDIA_WIDGET] First track snapshot captured; waiting for coordinated fade-in")
-            # Even though we keep the widget hidden for the very first
-            # snapshot to establish layout, we still need to seed the fade
-            # machinery so a second update with the same track can actually
-            # show the card. If no coordinator exists, schedule a one-shot
-            # fade immediately so we do not remain hidden forever.
             parent = self.parent()
+
             def _starter() -> None:
                 if not Shiboken.isValid(self):
                     return
                 self._start_widget_fade_in(1500)
                 self._notify_spotify_widgets_visibility()
                 self._telemetry_last_visibility = True
+
             if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
                 try:
                     parent.request_overlay_fade_sync("media", _starter)
@@ -1153,13 +1153,7 @@ class MediaWidget(BaseOverlayWidget):
                 _starter()
             return
 
-        try:
-            payload = asdict(info)
-            payload["state"] = info.state.value
-            self.media_updated.emit(payload)
-        except Exception:
-            # Failing to emit rich diagnostics should not break the widget.
-            pass
+        self._emit_media_update(info)
 
         # Decode optional artwork bytes (for subsequent updates after first track)
         prev_pm = self._artwork_pixmap
@@ -1397,11 +1391,6 @@ class MediaWidget(BaseOverlayWidget):
         self._scaled_artwork_cache_key = None
         # Notify Spotify widgets
         self._notify_spotify_widgets_visibility()
-    
-    def _notify_spotify_widgets_visibility(self) -> None:
-        """Notify Spotify visualizer/volume widgets of media widget visibility."""
-        # This is a placeholder - actual implementation would notify other widgets
-        pass
     
     def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:
         """Fade the entire widget in."""

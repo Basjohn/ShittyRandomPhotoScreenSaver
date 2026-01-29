@@ -40,6 +40,19 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+_LEGACY_DISPLAY_KEYS = {
+    "display.refresh_sync",
+    "display.refresh_adaptive",
+    "display.render_backend_mode",
+    "display.hw_accel",
+}
+
+
+def _is_legacy_display_key(key: str) -> bool:
+    if not isinstance(key, str):
+        return False
+    return key.strip().lower() in _LEGACY_DISPLAY_KEYS
+
 
 @dataclass
 class PresetDefinition:
@@ -231,26 +244,26 @@ def adjust_settings_for_mc_mode(settings: Dict[str, Any]) -> Dict[str, Any]:
         return settings
     
     adjusted = deepcopy(settings)
-    
-    # Keys that specify monitor placement
-    monitor_keys = [
-        "widgets.clock.monitor",
-        "widgets.clock2.monitor",
-        "widgets.clock3.monitor",
-        "widgets.weather.monitor",
-        "widgets.media.monitor",
-        "widgets.reddit.monitor",
-        "widgets.reddit2.monitor",
-        "widgets.spotify_visualizer.monitor",
-    ]
-    
-    for key in monitor_keys:
-        if key in adjusted:
-            value = adjusted[key]
-            # Convert "ALL" or 1 to 2 for MC mode
-            if value == "ALL" or value == 1:
-                adjusted[key] = 2
-    
+
+    widgets = adjusted.get("widgets")
+    if isinstance(widgets, dict):
+        for widget_key in (
+            "clock",
+            "clock2",
+            "clock3",
+            "weather",
+            "media",
+            "reddit",
+            "reddit2",
+            "spotify_visualizer",
+        ):
+            section = widgets.get(widget_key)
+            if not isinstance(section, dict):
+                continue
+            monitor_value = section.get("monitor")
+            if monitor_value == "ALL" or monitor_value == 1:
+                section["monitor"] = 2
+
     return adjusted
 
 
@@ -283,6 +296,9 @@ def apply_preset(settings_manager: "SettingsManager", preset_key: str) -> bool:
         # Apply preset settings
         preset_settings = adjust_settings_for_mc_mode(preset.settings)
         for key, value in preset_settings.items():
+            if _is_legacy_display_key(key):
+                logger.debug("[PRESETS] Skipping legacy display key for preset %s: %s", preset_key, key)
+                continue
             _set_nested_setting(settings_manager, key, value)
     
     # Save the selected preset
@@ -301,50 +317,113 @@ def apply_preset(settings_manager: "SettingsManager", preset_key: str) -> bool:
 def _save_custom_backup(settings_manager: "SettingsManager") -> None:
     """Save current settings to custom backup.
     
-    Saves all major setting categories:
-    - widgets (all widget configurations)
-    - display (interval, transition_duration, fit_mode, etc.)
-    - transitions (enabled, random, selected effects)
-    - accessibility (high_contrast, reduce_motion, etc.)
-    - sources (image directories, RSS feeds, etc.)
+    Captures all major categories as nested JSON-friendly snapshots so the
+    resulting payload can be written directly by :class:`JsonSettingsStore`.
     """
-    backup = {}
-    
-    # Categories to backup
+
     categories = ["widgets", "display", "transitions", "accessibility", "sources"]
-    
+    structured_sections = {"widgets", "transitions"}
+    backup: Dict[str, Any] = {}
+
+    # Widgets / transitions already live as structured sections; copy directly.
+    for section in structured_sections:
+        value = settings_manager.get(section, {})
+        if isinstance(value, dict) and value:
+            backup[section] = deepcopy(value)
+
+    # Remaining sections are stored as dotted keys; reconstruct nested maps.
+    all_keys = settings_manager.get_all_keys()
     for category in categories:
-        category_data = settings_manager.get(category, {})
-        if isinstance(category_data, dict):
-            # For nested categories like widgets
-            for section, section_data in category_data.items():
-                if isinstance(section_data, dict):
-                    for key, value in section_data.items():
-                        backup[f"{category}.{section}.{key}"] = deepcopy(value)
-                else:
-                    # For simple key-value pairs
-                    backup[f"{category}.{section}"] = deepcopy(section_data)
-        else:
-            # For non-dict categories, save the whole value
-            backup[category] = deepcopy(category_data)
-    
+        if category in structured_sections:
+            continue
+        snapshot = _collect_category_snapshot(settings_manager, all_keys, category)
+        if snapshot:
+            backup[category] = snapshot
+
     settings_manager.set("custom_preset_backup", backup)
-    logger.debug("[PRESETS] Saved custom backup with %d settings across %d categories", 
-                len(backup), len(categories))
+    logger.debug(
+        "[PRESETS] Saved custom backup with %d sections", len(backup)
+    )
 
 
 def _restore_custom_backup(settings_manager: "SettingsManager") -> None:
-    """Restore widget settings from custom backup."""
+    """Restore settings from the nested custom backup payload."""
+
     backup = settings_manager.get("custom_preset_backup", {})
-    
+
     if not isinstance(backup, dict) or not backup:
         logger.debug("[PRESETS] No custom backup to restore")
         return
-    
-    for key, value in backup.items():
-        _set_nested_setting(settings_manager, key, value)
-    
-    logger.debug("[PRESETS] Restored custom backup with %d settings", len(backup))
+
+    # Widgets and transitions can be restored as structured sections.
+    widgets_snapshot = backup.get("widgets")
+    if isinstance(widgets_snapshot, dict):
+        for dotted, value in _iter_flattened_entries("widgets", widgets_snapshot):
+            _set_nested_setting(settings_manager, dotted, deepcopy(value))
+
+    transitions_snapshot = backup.get("transitions")
+    if isinstance(transitions_snapshot, dict):
+        settings_manager.set("transitions", deepcopy(transitions_snapshot))
+
+    for category, payload in backup.items():
+        if category in {"widgets", "transitions"}:
+            continue
+        if isinstance(payload, dict):
+            for dotted, value in _iter_flattened_entries(category, payload):
+                if _is_legacy_display_key(dotted):
+                    logger.debug("[PRESETS] Skipping legacy display key in custom backup restore: %s", dotted)
+                    continue
+                settings_manager.set(dotted, deepcopy(value))
+        else:
+            settings_manager.set(category, deepcopy(payload))
+
+    logger.debug(
+        "[PRESETS] Restored custom backup with %d sections", len(backup)
+    )
+
+
+def _collect_category_snapshot(
+    settings_manager: "SettingsManager", all_keys: List[str], category: str
+) -> Dict[str, Any]:
+    """Reconstruct nested data for dotted sections like display/sources."""
+
+    prefix = f"{category}."
+    snapshot: Dict[str, Any] = {}
+
+    for key in all_keys:
+        if not key.startswith(prefix):
+            continue
+        tail = key[len(prefix):]
+        value = settings_manager.get(key)
+        if value is None:
+            continue
+        _assign_nested_value(snapshot, tail.split("."), deepcopy(value))
+
+    return snapshot
+
+
+def _assign_nested_value(target: Dict[str, Any], parts: List[str], value: Any) -> None:
+    """Assign *value* into *target* following *parts* path."""
+
+    current = target
+    for part in parts[:-1]:
+        node = current.get(part)
+        if not isinstance(node, dict):
+            node = {}
+            current[part] = node
+        current = node
+    current[parts[-1]] = value
+
+
+def _iter_flattened_entries(prefix: str, payload: Dict[str, Any]):
+    """Yield dotted keys for nested data under *prefix*."""
+
+    for key, value in payload.items():
+        dotted = f"{prefix}.{key}" if prefix else key
+        if isinstance(value, dict):
+            yield from _iter_flattened_entries(dotted, value)
+        else:
+            yield dotted, value
 
 
 def _set_nested_setting(settings_manager: "SettingsManager", dotted_key: str, value: Any) -> None:
