@@ -172,8 +172,9 @@ class InputHandler(QObject):
         if key == Qt.Key.Key_Control:
             return False  # Let DisplayWidget handle Ctrl
         
-        # Media keys should never cause exit
+        # Media keys should never cause exit, but we still mirror feedback
         if self._is_media_key(event):
+            self._handle_media_key_feedback(event)
             logger.debug("Media key pressed - ignoring (passthrough) (key=%s)", key)
             return False
         
@@ -680,17 +681,17 @@ class InputHandler(QObject):
                     if button == _Qt.MouseButton.LeftButton:
                         handled = self._route_media_left_click(mw, pos)
                     elif button == _Qt.MouseButton.RightButton:
-                        try:
-                            mw.next_track()
-                            handled = True
-                        except Exception as e:
-                            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
+                        handled = self._invoke_media_command(
+                            mw,
+                            "next",
+                            source="mouse:right",
+                        )
                     elif button == _Qt.MouseButton.MiddleButton:
-                        try:
-                            mw.previous_track()
-                            handled = True
-                        except Exception as e:
-                            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
+                        handled = self._invoke_media_command(
+                            mw,
+                            "prev",
+                            source="mouse:middle",
+                        )
             except Exception as e:
                 logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
         
@@ -752,35 +753,93 @@ class InputHandler(QObject):
         """Route left click to media widget transport controls."""
         try:
             geom = mw.geometry()
-            local_x = pos.x() - geom.x()
-            local_y = pos.y() - geom.y()
-            height = max(1, mw.height())
-            width = max(1, mw.width())
-            
-            # Controls row is in the bottom 60px
-            controls_row_height = 60
-            controls_row_top = height - controls_row_height
-            
-            if local_y >= controls_row_top:
-                margins = mw.contentsMargins()
-                content_left = margins.left()
-                content_right = width - margins.right()
-                content_width = max(1, content_right - content_left)
-                x_in_content = max(0, min(content_width, local_x - content_left))
-                third = content_width / 3.0
-                
-                if x_in_content < third:
-                    mw.previous_track()
-                    return True
-                elif x_in_content < 2.0 * third:
-                    mw.play_pause()
-                    return True
-                else:
-                    mw.next_track()
-                    return True
+            local_point = QPoint(pos.x() - geom.x(), pos.y() - geom.y())
+            resolver = getattr(mw, "resolve_control_hit", None)
+            if resolver is None:
+                return False
+            key = resolver(local_point)
+            if key is None:
+                return False
+            return self._invoke_media_command(
+                mw,
+                key,
+                source="mouse:left",
+            )
         except Exception as e:
             logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
         return False
+
+    def _invoke_media_command(
+        self,
+        media_widget,
+        key: str,
+        *,
+        source: str,
+        execute: bool = True,
+    ) -> bool:
+        if media_widget is None or not hasattr(media_widget, "handle_transport_command"):
+            return False
+        try:
+            return bool(
+                media_widget.handle_transport_command(
+                    key,
+                    source=source,
+                    execute=execute,
+                )
+            )
+        except Exception:
+            logger.debug("[INPUT_HANDLER] Media command dispatch failed", exc_info=True)
+            return False
+
+    def _handle_media_key_feedback(self, event: QKeyEvent) -> None:
+        key = event.key()
+        command = None
+        source = "media_key"
+
+        if key in (
+            Qt.Key.Key_MediaPlay,
+            Qt.Key.Key_MediaPause,
+            Qt.Key.Key_MediaTogglePlayPause,
+            Qt.Key.Key_MediaStop,
+        ):
+            command = "play"
+        elif key == Qt.Key.Key_MediaNext:
+            command = "next"
+        elif key == Qt.Key.Key_MediaPrevious:
+            command = "prev"
+
+        if command is None:
+            try:
+                if hasattr(event, "nativeVirtualKey"):
+                    native_vk = int(event.nativeVirtualKey() or 0)
+                else:
+                    native_vk = 0
+            except Exception as exc:
+                logger.debug("[INPUT_HANDLER] Exception suppressed: %s", exc)
+                native_vk = 0
+
+            native_map = {
+                0xB3: "play",  # VK_MEDIA_PLAY_PAUSE
+                0xB0: "next",
+                0xB1: "prev",
+            }
+            command = native_map.get(native_vk)
+            source = f"media_key_vk:{native_vk}" if native_vk else source
+        else:
+            source = f"media_key:{int(key)}"
+
+        if command is None:
+            return
+
+        media_widget = getattr(self._parent, "media_widget", None)
+        handled = self._invoke_media_command(
+            media_widget,
+            command,
+            source=source,
+            execute=False,
+        )
+        if not handled:
+            logger.debug("[INPUT_HANDLER] Media key %s ignored (no media widget)", command)
 
     def route_volume_drag(self, pos: QPoint, spotify_volume_widget) -> bool:
         """Route drag events to Spotify volume widget."""

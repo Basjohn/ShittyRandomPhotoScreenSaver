@@ -87,24 +87,21 @@ class TestCtrlHaloAttributes:
 class TestMediaWidgetClickDetection:
     """Test media widget click detection respects Y coordinates."""
 
-    def test_click_detection_checks_y_coordinate(self, qt_app):
-        """Verify click detection code checks Y coordinate for controls row."""
+    def test_click_detection_uses_widget_resolver(self, qt_app):
+        """Verify click routing defers to MediaWidget.resolve_control_hit."""
         from rendering.input_handler import InputHandler
         
-        # Check that _route_media_left_click contains Y coordinate logic
         source = inspect.getsource(InputHandler._route_media_left_click)
-        
-        # Must check local_y against controls_row_top
-        assert 'local_y' in source
-        assert 'controls_row_top' in source or 'controls_row_height' in source
+        assert 'resolve_control_hit' in source
+        assert 'local_point' in source
 
-    def test_controls_row_height_is_reasonable(self, qt_app):
-        """Verify controls row height constant is reasonable (40-80px)."""
+    def test_click_routing_invokes_media_command(self, qt_app):
+        """Verify resolver output flows into media command invocation."""
         from rendering.input_handler import InputHandler
-        
+
         source = inspect.getsource(InputHandler._route_media_left_click)
-        # The controls_row_height should be defined as 60
-        assert 'controls_row_height = 60' in source
+        assert '_invoke_media_command' in source
+        assert 'key' in source and 'mouse:left' in source
 
 
 class TestCrumbleShaderPerformance:

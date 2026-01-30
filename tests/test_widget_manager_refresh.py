@@ -400,6 +400,35 @@ def test_media_widget_creation_handles_prefixed_positions():
     assert widget.started is True
 
 
+def test_existing_media_widget_rebinds_thread_manager():
+    """Reused media widgets should inherit the display's ThreadManager."""
+
+    old_tm = object()
+    new_tm = object()
+
+    existing = _StubMediaWidget(parent=None, position=MediaPosition.BOTTOM_LEFT)
+    existing.thread_manager = old_tm
+
+    parent = SimpleNamespace(
+        media_widget=existing,
+        _thread_manager=new_tm,
+        screen_index=0,
+    )
+
+    manager = WidgetManager(parent, ResourceManager())
+    settings = _StubSettingsManager({
+        "media": {
+            "enabled": True,
+            "monitor": "ALL",
+        }
+    })
+
+    created = manager.setup_all_widgets(settings, screen_index=0, thread_manager=None)
+
+    assert created["media_widget"] is existing
+    assert existing.thread_manager is new_tm
+
+
 def test_clock_widget_creation_handles_prefixed_positions():
     widgets_config = {
         "clock": {

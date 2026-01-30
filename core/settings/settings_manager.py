@@ -1,9 +1,4 @@
-"""
-Settings manager implementation for screensaver.
-
-Persists to a JSON store (see :mod:`core.settings.json_store`) with a one-shot
-migration path from the legacy QSettings profiles.
-"""
+"""Settings manager implementation for screensaver."""
 from typing import Any, Callable, Dict, List, Mapping, Optional
 from copy import deepcopy
 import threading
@@ -13,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from PySide6.QtCore import QSettings, QObject, Signal
 from core.logging.logger import get_logger, is_verbose_logging
-from core.settings.json_store import JsonSettingsStore, determine_storage_path
+from core.settings.json_store import JsonSettingsStore, determine_storage_path, SNAPSHOT_VERSION
 from core.settings.models import SpotifyVisualizerSettings
 
 logger = get_logger('SettingsManager')
@@ -72,19 +67,16 @@ class SettingsManager(QObject):
         self._cache_enabled = True
 
         if not self._settings.exists():
-            try:
-                migrated = self._migrate_from_qsettings(organization, app_name)
-                if migrated:
-                    logger.info(
-                        "Migrated legacy QSettings profile '%s/%s' into %s",
-                        organization,
-                        app_name,
-                        storage_path,
-                    )
-                else:
-                    logger.info("No legacy QSettings data detected; starting fresh JSON store")
-            except Exception:
-                logger.exception("Failed to migrate legacy QSettings; falling back to defaults")
+            self._run_initial_migration(organization, app_name, storage_path)
+        elif self._settings.had_load_failure():
+            error_code = self._settings.last_load_error()
+            logger.warning(
+                "Settings JSON load failure (code=%s) at %s – regenerating defaults",
+                error_code,
+                storage_path,
+            )
+            self.reset_to_defaults()
+            self._settings.clear_load_failure_flag()
 
         # Initialize defaults
         self._set_defaults()
@@ -121,6 +113,31 @@ class SettingsManager(QObject):
     # ------------------------------------------------------------------
     # Legacy QSettings migration
     # ------------------------------------------------------------------
+
+    def _run_initial_migration(self, organization: str, app_name: str, storage_path: Path) -> None:
+        """Perform first-run migration + logging."""
+
+        try:
+            migrated = self._migrate_from_qsettings(organization, app_name)
+            if migrated:
+                logger.info(
+                    "Migrated legacy QSettings profile '%s/%s' into %s",
+                    organization,
+                    app_name,
+                    storage_path,
+                )
+            else:
+                logger.info(
+                    "No legacy QSettings data detected for '%s/%s'; starting fresh JSON store",
+                    organization,
+                    app_name,
+                )
+            self._settings.update_metadata(last_migration_completed=datetime.utcnow().isoformat() + "Z")
+            self._settings.sync()
+        except Exception:
+            logger.exception("Failed to migrate legacy QSettings; falling back to defaults")
+            self._settings.clear()
+            self._settings.sync()
 
     def _migrate_from_qsettings(self, organization: str, app_name: str) -> bool:
         """Import legacy QSettings data into the JSON store.
@@ -550,13 +567,17 @@ class SettingsManager(QObject):
             self._settings.sync()
         logger.debug("Settings saved")
     
-    def load(self) -> None:
         """Load settings from persistent storage."""
         with self._lock:
-            self._settings.load()
-            self._cache.clear()
+            try:
+                self._settings.load()
+                self._cache.clear()
+            except Exception as exc:
+                logger.error("Failed to load settings: %s", exc, exc_info=True)
+                # Reset to defaults if loading fails
+                self.reset_to_defaults()
         logger.debug("Settings loaded")
-    
+
     def validate_and_repair(self) -> Dict[str, str]:
         """Validate settings and repair corrupted values.
         
@@ -1134,6 +1155,12 @@ class SettingsManager(QObject):
                         else:
                             snapshot['transitions'] = value
                         continue
+                    if key == 'custom_preset_backup':
+                        if isinstance(value, Mapping):
+                            snapshot['custom_preset_backup'] = dict(value)
+                        else:
+                            snapshot['custom_preset_backup'] = value
+                        continue
 
                     # Dotted keys (e.g. 'display.mode', 'input.hard_exit')
                     # become nested sections in the SST snapshot.
@@ -1151,8 +1178,11 @@ class SettingsManager(QObject):
             app_name = getattr(self, "_application", "Screensaver")
 
             payload: Dict[str, Any] = {
-                'settings_version': 1,
+                'settings_version': 2,
                 'application': app_name,
+                'profile': app_name,
+                'snapshot_version': SNAPSHOT_VERSION,
+                'metadata': self._settings.metadata(),
                 'snapshot': snapshot,
             }
 
@@ -1220,9 +1250,11 @@ class SettingsManager(QObject):
             logger.warning("Settings snapshot root is not a mapping: %r", type(root))
             return False
 
+        normalized_root = self._normalize_sst_snapshot(root)
+
         try:
             with self._lock:
-                for section_key, section_value in root.items():
+                for section_key, section_value in normalized_root.items():
                     # Widgets: treat as a single mapping-backed section.
                     if section_key == 'widgets':
                         widgets_map: Any = section_value
@@ -1256,6 +1288,14 @@ class SettingsManager(QObject):
                                 transitions_dict = merged_t
 
                         self._settings.setValue('transitions', transitions_dict)
+                        continue
+
+                    if section_key == 'custom_preset_backup':
+                        cpb_map: Any = section_value
+                        if isinstance(cpb_map, Mapping):
+                            self._settings.setValue('custom_preset_backup', dict(cpb_map))
+                        else:
+                            self._settings.setValue('custom_preset_backup', cpb_map)
                         continue
 
                     # Known mapping-backed sections must be dict-like.
@@ -1327,11 +1367,13 @@ class SettingsManager(QObject):
             logger.warning("Settings snapshot root is not a mapping for preview: %r", type(root))
             return {}
 
+        normalized_root = self._normalize_sst_snapshot(root)
+
         diffs: Dict[str, Any] = {}
 
         try:
             with self._lock:
-                for section_key, section_value in root.items():
+                for section_key, section_value in normalized_root.items():
                     if section_key == 'widgets':
                         widgets_map: Any = section_value
                         if not isinstance(widgets_map, Mapping):
@@ -1397,7 +1439,35 @@ class SettingsManager(QObject):
                         if old_val != new_val:
                             diffs[section_key] = (old_val, new_val)
 
-            return diffs
+                return diffs
         except Exception:
             logger.exception("Failed to compute settings snapshot preview from %s", path)
             return {}
+
+    def _normalize_sst_snapshot(self, snapshot: Mapping[str, Any]) -> Dict[str, Any]:
+        """Coerce legacy flat SST snapshots into the canonical nested form."""
+
+        normalized: Dict[str, Any] = {}
+
+        def assign(section: str, subkey: str, value: Any) -> None:
+            container = normalized.get(section)
+            if not isinstance(container, dict):
+                container = {}
+                normalized[section] = container
+            container[subkey] = value
+
+        for key, value in snapshot.items():
+            if key in {'widgets', 'transitions', 'custom_preset_backup'}:
+                if isinstance(value, Mapping):
+                    normalized[key] = dict(value)
+                else:
+                    normalized[key] = value
+                continue
+
+            if '.' in key:
+                section, subkey = key.split('.', 1)
+                assign(section, subkey, value)
+            else:
+                normalized[key] = value
+
+        return normalized

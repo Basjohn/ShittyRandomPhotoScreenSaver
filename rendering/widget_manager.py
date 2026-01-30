@@ -17,9 +17,6 @@ from core.resources.manager import ResourceManager
 from core.settings.settings_manager import SettingsManager
 from rendering.widget_setup import parse_color_to_qcolor, compute_expected_overlays
 from widgets.shadow_utils import apply_widget_shadow as _apply_widget_shadow
-
-# Re-export for tests that monkeypatch rendering.widget_manager.apply_widget_shadow.
-apply_widget_shadow = _apply_widget_shadow
 from widgets.media_widget import MediaWidget
 # Gmail widget archived - see archive/gmail_feature/RESTORE_GMAIL.md
 # from widgets.gmail_widget import GmailWidget, GmailPosition
@@ -32,6 +29,9 @@ from rendering.widget_factories import WidgetFactoryRegistry
 if TYPE_CHECKING:
     from rendering.display_widget import DisplayWidget
     from core.threading.manager import ThreadManager
+
+# Re-export for tests that monkeypatch rendering.widget_manager.apply_widget_shadow.
+apply_widget_shadow = _apply_widget_shadow
 
 logger = get_logger(__name__)
 win_diag_logger = logging.getLogger("win_diag")
@@ -214,11 +214,25 @@ class WidgetManager:
             widget: The widget to manage
         """
         self._widgets[name] = widget
-        if widget is not None and hasattr(widget, "set_widget_manager"):
-            try:
-                widget.set_widget_manager(self)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+        if widget is not None:
+            if hasattr(widget, "set_widget_manager"):
+                try:
+                    widget.set_widget_manager(self)
+                except Exception as e:
+                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+
+            # Ensure widgets inherit the ThreadManager from the display if they expose a setter
+            parent_tm = getattr(self._parent, "_thread_manager", None)
+            if parent_tm is not None and hasattr(widget, "set_thread_manager"):
+                try:
+                    current_tm = getattr(widget, "_thread_manager", None)
+                except Exception:
+                    current_tm = None
+                if current_tm is None:
+                    try:
+                        widget.set_thread_manager(parent_tm)
+                    except Exception as e:
+                        logger.debug("[WIDGET_MANAGER] Failed to inject ThreadManager into %s: %s", name, e)
         if self._resource_manager:
             try:
                 self._resource_manager.register_qt(widget, description=f"Widget: {name}")
@@ -1764,7 +1778,7 @@ class WidgetManager:
         # Reset fade coordination
         self.reset_fade_coordination()
 
-        created = {}
+        created: Dict[str, QWidget] = {}
 
         # Helper to check monitor selection
         def _show_on_this_monitor(monitor_sel) -> bool:
@@ -1779,6 +1793,45 @@ class WidgetManager:
         weather_factory = self._factory_registry.get_factory("weather")
         media_factory = self._factory_registry.get_factory("media")
         reddit_factory = self._factory_registry.get_factory("reddit")
+
+        # Helper to (re)register widgets created in prior sessions (settings toggled off/on).
+        def _reuse_existing_widget(attr_name: str, registry_name: str) -> Optional[QWidget]:
+            parent = self._parent
+            if parent is None:
+                return None
+
+            try:
+                existing = getattr(parent, attr_name, None)
+            except Exception as exc:
+                logger.debug("[WIDGET_MANAGER] Failed to read %s for reuse: %s", attr_name, exc)
+                existing = None
+
+            if existing is None:
+                return None
+
+            logger.debug("[WIDGET_MANAGER] Reusing existing %s for %s", attr_name, registry_name)
+            self.register_widget(registry_name, existing)
+            self._bind_parent_attribute(attr_name, existing)
+            created[attr_name] = existing
+            return existing
+
+        def _ensure_thread_manager(widget: QWidget, widget_name: str) -> None:
+            if widget is None or not hasattr(widget, "set_thread_manager"):
+                return
+            parent_tm = getattr(self._parent, "_thread_manager", None)
+            if parent_tm is None:
+                return
+            try:
+                current = getattr(widget, "_thread_manager", None)
+            except Exception:
+                current = None
+            if current is parent_tm and current is not None:
+                return
+            try:
+                widget.set_thread_manager(parent_tm)
+                logger.debug("[WIDGET_MANAGER] ThreadManager injected into reused %s", widget_name)
+            except Exception as exc:
+                logger.debug("[WIDGET_MANAGER] Failed to inject ThreadManager into %s: %s", widget_name, exc)
 
         # Create clock widgets via factory
         for settings_key, attr_name, default_pos, default_size in [
@@ -1799,7 +1852,8 @@ class WidgetManager:
             clock_settings['_default_position'] = default_pos
             clock_settings['_default_font_size'] = default_size
             
-            if clock_factory:
+            widget = _reuse_existing_widget(attr_name, settings_key)
+            if widget is None and clock_factory:
                 widget = clock_factory.create(
                     self._parent, clock_settings,
                     settings_key=settings_key,
@@ -1812,6 +1866,9 @@ class WidgetManager:
                     created[attr_name] = widget
                     self._bind_parent_attribute(attr_name, widget)
 
+            if widget is not None:
+                _ensure_thread_manager(widget, settings_key)
+
         # Create weather widget via factory
         weather_settings = widgets_config.get('weather', {})
         monitor_sel = weather_settings.get('monitor', 'ALL')
@@ -1819,7 +1876,8 @@ class WidgetManager:
             if SettingsManager.to_bool(weather_settings.get('enabled', False), False):
                 self.add_expected_overlay("weather")
             
-            if weather_factory:
+            widget = _reuse_existing_widget('weather_widget', 'weather')
+            if widget is None and weather_factory:
                 widget = weather_factory.create(
                     self._parent, weather_settings,
                     shadows_config=shadows_config,
@@ -1829,6 +1887,9 @@ class WidgetManager:
                     created['weather_widget'] = widget
                     self._bind_parent_attribute('weather_widget', widget)
 
+            if widget is not None:
+                _ensure_thread_manager(widget, 'weather')
+
         # Create media widget via factory
         media_settings = widgets_config.get('media', {})
         monitor_sel = media_settings.get('monitor', 'ALL')
@@ -1836,7 +1897,8 @@ class WidgetManager:
             if SettingsManager.to_bool(media_settings.get('enabled', False), False):
                 self.add_expected_overlay("media")
             
-            if media_factory:
+            media_widget = _reuse_existing_widget('media_widget', 'media')
+            if media_widget is None and media_factory:
                 media_widget = media_factory.create(
                     self._parent, media_settings,
                     shadows_config=shadows_config,
@@ -1845,6 +1907,9 @@ class WidgetManager:
                     self.register_widget("media", media_widget)
                     created['media_widget'] = media_widget
                     self._bind_parent_attribute('media_widget', media_widget)
+
+            if media_widget is not None:
+                _ensure_thread_manager(media_widget, 'media')
 
         # Create reddit widgets via factory (reddit2 inherits styling from reddit1)
         for settings_key, attr_name in [('reddit', 'reddit_widget'), ('reddit2', 'reddit2_widget')]:
@@ -1856,7 +1921,8 @@ class WidgetManager:
             if SettingsManager.to_bool(reddit_settings.get('enabled', False), False):
                 self.add_expected_overlay(settings_key)
             
-            if reddit_factory:
+            widget = _reuse_existing_widget(attr_name, settings_key)
+            if widget is None and reddit_factory:
                 widget = reddit_factory.create(
                     self._parent, reddit_settings,
                     settings_key=settings_key,
@@ -1867,6 +1933,9 @@ class WidgetManager:
                     self.register_widget(settings_key, widget)
                     created[attr_name] = widget
                     self._bind_parent_attribute(attr_name, widget)
+
+            if widget is not None:
+                _ensure_thread_manager(widget, settings_key)
 
         # Gmail widget archived - see archive/gmail_feature/
 
@@ -1899,7 +1968,26 @@ class WidgetManager:
                      len(created), sorted(self._overlay_fade_expected))
         
         for attr_name, widget in created.items():
-            if widget is not None and hasattr(widget, 'start'):
+            if widget is None:
+                continue
+
+            started = False
+            # Prefer lifecycle-aware initialization/activation when available
+            if hasattr(widget, "initialize") and callable(getattr(widget, "initialize")):
+                try:
+                    initialized = widget.initialize()
+                    started = started or bool(initialized)
+                except Exception as e:
+                    logger.debug("[LIFECYCLE] Failed to initialize %s: %s", attr_name, e)
+
+            if hasattr(widget, "activate") and callable(getattr(widget, "activate")):
+                try:
+                    activated = widget.activate()
+                    started = started or bool(activated)
+                except Exception as e:
+                    logger.debug("[LIFECYCLE] Failed to activate %s: %s", attr_name, e)
+
+            if not started and hasattr(widget, 'start') and callable(getattr(widget, 'start')):
                 try:
                     widget.start()
                 except Exception as e:

@@ -22,6 +22,10 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 from PySide6.QtCore import QPoint, QRect, QSize, Signal
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import QLabel, QWidget
+try:
+    from shiboken6 import Shiboken  # type: ignore
+except ImportError:  # pragma: no cover - optional dependency for validity checks
+    Shiboken = None  # type: ignore
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.resources.manager import ResourceManager
@@ -525,7 +529,29 @@ class BaseOverlayWidget(QLabel):
         """Verify a ThreadManager is present, logging if missing."""
         if self._thread_manager is not None:
             return True
-        self._inherit_thread_manager_from_parent(self.parent())
+
+        if Shiboken is not None:
+            try:
+                if not Shiboken.isValid(self):
+                    logger.warning(
+                        "[THREAD_MANAGER] %s skipped (%s) because widget was already destroyed",
+                        getattr(self, "_overlay_name", self.__class__.__name__),
+                        context,
+                    )
+                    return False
+            except Exception:
+                pass
+
+        parent = None
+        try:
+            parent = self.parent()
+            if Shiboken is not None and parent is not None and not Shiboken.isValid(parent):
+                parent = None
+        except Exception as exc:
+            logger.debug("[THREAD_MANAGER] Failed to access parent during %s: %s", context, exc)
+            parent = None
+
+        self._inherit_thread_manager_from_parent(parent)
         if self._thread_manager is not None:
             return True
         overlay_name = getattr(self, "_overlay_name", self.objectName() or self.__class__.__name__)
@@ -540,6 +566,12 @@ class BaseOverlayWidget(QLabel):
         """Best-effort inheritance of ThreadManager from the parent widget."""
         if self._thread_manager is not None or parent is None:
             return
+        if Shiboken is not None:
+            try:
+                if not Shiboken.isValid(parent):
+                    return
+            except Exception:
+                return
         try:
             inherited = getattr(parent, "_thread_manager", None)
         except Exception as e:

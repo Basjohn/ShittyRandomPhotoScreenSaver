@@ -3,6 +3,8 @@ import json
 import uuid
 from pathlib import Path
 
+from PySide6.QtCore import QSettings
+
 from core.settings import SettingsManager
 
 
@@ -212,3 +214,76 @@ def test_sst_merge_and_type_coercion_and_preview(qt_app, tmp_path):
     interval_val = manager.get("timing.interval")
     assert isinstance(interval_val, int)
     assert interval_val == 99
+
+
+def test_import_legacy_flat_sst_snapshot(qt_app, tmp_path):
+    """Legacy flat SST snapshots (dotted keys) should normalize correctly."""
+
+    manager = _make_manager(tmp_path, base_name="sst_flat")
+    manager.reset_to_defaults()
+
+    legacy_snapshot = {
+        "display.hw_accel": False,
+        "timing.interval": 77,
+        "widgets": {
+            "media": {"enabled": True, "monitor": 2},
+        },
+        "custom_preset_backup": {
+            "widgets": {"media": {"enabled": True}},
+        },
+    }
+
+    snapshot_path = tmp_path / "legacy_flat.sst"
+    snapshot_path.write_text(json.dumps(legacy_snapshot, indent=2), encoding="utf-8")
+
+    assert manager.import_from_sst(str(snapshot_path), merge=True)
+
+    assert manager.get_bool("display.hw_accel") is False
+    assert manager.get("timing.interval") == 77
+
+    widgets = manager.get("widgets", {})
+    assert widgets["media"]["monitor"] == 2
+
+    cpb = manager.get("custom_preset_backup")
+    assert isinstance(cpb, dict)
+    assert cpb["widgets"]["media"]["enabled"] is True
+
+
+def test_legacy_qsettings_profile_migrates_once(qt_app, tmp_path):
+    """Legacy QSettings data should migrate into JSON with metadata."""
+
+    organization = "LegacyTestOrg"
+    application = f"ScreensaverLegacy_{uuid.uuid4().hex}"
+
+    legacy = QSettings(organization, application)
+    legacy.clear()
+    legacy.setValue("display.mode", "fit")
+    legacy.setValue("widgets.media.enabled", True)
+    legacy.sync()
+
+    storage_root = tmp_path / "legacy_migration"
+    manager = SettingsManager(
+        organization=organization,
+        application=application,
+        storage_base_dir=storage_root,
+    )
+
+    assert manager.get("display.mode") == "fit"
+
+    metadata = manager._settings.metadata()
+    assert metadata.get("migrated_from") == "qsettings"
+    assert metadata.get("legacy_profile") == application
+    assert "last_migration_completed" in metadata
+
+    json_path = Path(manager._settings.fileName())
+    assert json_path.exists()
+
+    # Ensure subsequent instantiations do not rerun migration when JSON exists.
+    manager_again = SettingsManager(
+        organization=organization,
+        application=application,
+        storage_base_dir=storage_root,
+    )
+    assert manager_again.get("display.mode") == "fit"
+
+    legacy.clear()

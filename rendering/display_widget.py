@@ -950,11 +950,15 @@ class DisplayWidget(QWidget):
         for attr_name in (
             "clock_widget", "clock2_widget", "clock3_widget",
             "weather_widget", "media_widget", "spotify_visualizer_widget",
-            "spotify_volume_widget", "reddit_widget", "reddit2_widget",
+            "reddit_widget", "reddit2_widget",
         ):
             widget = getattr(self, attr_name, None)
             if widget is not None:
                 self._pixel_shift_manager.register_widget(widget)
+
+        # The Spotify volume widget remains anchored to the media card edge; allowing
+        # pixel shift to move it independently causes visible desync. It intentionally
+        # opts out of pixel shifting until we support grouped offsets.
         
         if pixel_shift_enabled:
             self._pixel_shift_manager.set_enabled(True)
@@ -3547,6 +3551,10 @@ class DisplayWidget(QWidget):
             lparam,
         )
 
+        handled = self._dispatch_appcommand(command, command_name)
+        if handled:
+            return True, 0
+
         if _USER32 is not None and hwnd:
             try:
                 result = int(_USER32.DefWindowProcW(hwnd, WM_APPCOMMAND, wparam, lparam))
@@ -3556,6 +3564,36 @@ class DisplayWidget(QWidget):
                 target_logger.debug("[WIN_APPCOMMAND] DefWindowProcW failed", exc_info=True)
 
         return False, 0
+
+    def _dispatch_appcommand(self, command: int, command_name: str) -> bool:
+        media_widget = getattr(self, "media_widget", None)
+        if media_widget is None:
+            return False
+
+        mapping = {
+            0x0005: "next",  # APPCOMMAND_MEDIA_NEXTTRACK
+            0x0006: "prev",  # APPCOMMAND_MEDIA_PREVIOUS
+            0x0007: "play",  # treat stop as play/pause toggle for feedback
+            0x000E: "play",  # APPCOMMAND_MEDIA_PLAY_PAUSE
+            0x0008: "play",
+            0x0009: "play",
+        }
+        key = mapping.get(command)
+        if key is None:
+            return False
+
+        source = f"appcommand:{command_name}"
+        try:
+            return bool(
+                media_widget.handle_transport_command(
+                    key,
+                    source=source,
+                    execute=False,
+                )
+            )
+        except Exception:
+            logger.debug("[DISPLAY_WIDGET] Appcommand dispatch failed", exc_info=True)
+            return False
 
     def eventFilter(self, watched, event):  # type: ignore[override]
         """Global event filter to keep the Ctrl halo responsive over children."""

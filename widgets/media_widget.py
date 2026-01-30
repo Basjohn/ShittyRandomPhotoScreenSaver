@@ -10,6 +10,7 @@ mode remains non-interactive.
 """
 from __future__ import annotations
 
+import hashlib
 import time
 import weakref
 from dataclasses import asdict
@@ -18,8 +19,16 @@ from pathlib import Path
 from typing import Optional, TYPE_CHECKING, ClassVar
 
 from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import QTimer, Qt, Signal, QVariantAnimation, QRect
-from PySide6.QtGui import QFont, QColor, QPixmap, QPainter, QPainterPath, QFontMetrics
+from PySide6.QtCore import QTimer, Qt, Signal, QVariantAnimation, QRect, QRectF, QPoint
+from PySide6.QtGui import (
+    QFont,
+    QColor,
+    QPixmap,
+    QPainter,
+    QPainterPath,
+    QFontMetrics,
+    QLinearGradient,
+)
 from shiboken6 import Shiboken
 
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
@@ -189,6 +198,14 @@ class MediaWidget(BaseOverlayWidget):
         self._feedback_deadlines: dict[str, float] = {}
         self._active_feedback_events: dict[str, str] = {}
         self._last_manual_control: Optional[tuple[str, float, str]] = None
+        self._controls_feedback_scale_boost: float = 0.12
+        self._controls_row_radius: float = 12.0
+        self._controls_row_shadow_alpha: int = 60
+        self._controls_row_outline_alpha: int = 65
+        self._controls_layout_cache: Optional[dict[str, object]] = None
+        self._last_display_update_ts: float = 0.0
+        self._skipped_identity_updates: int = 0
+        self._max_identity_skip: int = 4
         
         # Register this instance for shared feedback
         type(self)._instances.add(self)
@@ -241,8 +258,14 @@ class MediaWidget(BaseOverlayWidget):
     
     def _activate_impl(self) -> None:
         """Activate media widget - start polling (lifecycle hook)."""
+        invalidate = getattr(self, "_invalidate_controls_layout", None)
+        if callable(invalidate):
+            invalidate()
         if not self._ensure_thread_manager("MediaWidget._activate_impl"):
-            raise RuntimeError("ThreadManager not available")
+            # Fall back to a best-effort synchronous refresh so metadata at least appears once.
+            logger.error("[MEDIA_WIDGET] ThreadManager missing during activation; performing synchronous refresh")
+            self._refresh()
+            return
         
         self._refresh()
         self._ensure_timer()
@@ -342,12 +365,35 @@ class MediaWidget(BaseOverlayWidget):
         self.stop()
 
     def set_thread_manager(self, thread_manager) -> None:
+        previous = self._thread_manager
         self._thread_manager = thread_manager
+        invalidate = getattr(self, "_invalidate_controls_layout", None)
+        if callable(invalidate):
+            invalidate()
+        if self._enabled and thread_manager is not None:
+            self._ensure_timer(force=True)
+            if previous is None:
+                self._refresh_async()
         if is_verbose_logging():
             logger.debug("[MEDIA_WIDGET] ThreadManager injected: %s", type(thread_manager).__name__ if thread_manager else None)
 
     def set_widget_manager(self, widget_manager: "WidgetManager") -> None:
         self._widget_manager = widget_manager
+
+    def _safe_update(self) -> None:
+        """Best-effort call to QWidget.update() that tolerates deleted objects."""
+        if Shiboken is not None:
+            try:
+                if not Shiboken.isValid(self):
+                    return
+            except Exception:
+                pass
+        try:
+            self.update()
+        except RuntimeError:
+            pass
+        except Exception as exc:
+            logger.debug("[MEDIA_WIDGET] update() suppressed: %s", exc)
     
     # ------------------------------------------------------------------
     # Smart Polling Helpers
@@ -387,27 +433,6 @@ class MediaWidget(BaseOverlayWidget):
             if self._enabled and self._thread_manager is not None:
                 self._refresh_async()
 
-    # ------------------------------------------------------------------
-    # Position & layout
-    # ------------------------------------------------------------------
-    def _ensure_timer(self) -> None:
-        if self._update_timer_handle is not None:
-            return
-        if not self._ensure_thread_manager("MediaWidget._ensure_timer"):
-            return
-        # Adaptive polling: start at 1000ms, progress to 2000ms, then 2500ms
-        # When idle, use slower 5s interval to detect Spotify opening
-        interval = self._idle_poll_interval if self._is_idle else self._poll_intervals[self._current_poll_stage]
-        handle = create_overlay_timer(self, interval, self._refresh, description="MediaWidget smart poll")
-        self._update_timer_handle = handle
-        try:
-            self._update_timer = getattr(handle, "_timer", None)
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-            self._update_timer = None
-        if is_perf_metrics_enabled():
-            logger.debug("[PERF] Media widget timer started at %dms (stage %d)", interval, self._current_poll_stage)
-    
     def _advance_poll_stage(self) -> None:
         """Advance to next (slower) poll interval if not at max."""
         if self._current_poll_stage >= len(self._poll_intervals) - 1:
@@ -418,8 +443,7 @@ class MediaWidget(BaseOverlayWidget):
         new_interval = self._poll_intervals[self._current_poll_stage]
         
         # Recreate timer with new interval
-        self._stop_timer()
-        self._ensure_timer()
+        self._ensure_timer(force=True)
         
         if is_perf_metrics_enabled():
             logger.debug("[PERF] Media widget advanced to poll stage %d (%dms)", 
@@ -434,8 +458,7 @@ class MediaWidget(BaseOverlayWidget):
         self._polls_at_current_stage = 0
         
         # Recreate timer with fast interval
-        self._stop_timer()
-        self._ensure_timer()
+        self._ensure_timer(force=True)
         
         if is_perf_metrics_enabled():
             logger.debug("[PERF] Media widget reset to fast poll (1000ms)")
@@ -447,8 +470,8 @@ class MediaWidget(BaseOverlayWidget):
                 self._update_timer_handle.stop()
             except Exception as e:
                 logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-            self._update_timer_handle = None
-            self._update_timer = None
+        self._update_timer_handle = None
+        self._update_timer = None
 
     def _update_position(self) -> None:
         """Update widget position using centralized base class logic.
@@ -601,35 +624,42 @@ class MediaWidget(BaseOverlayWidget):
                 self._update_display(self._last_info)
             except Exception as e:
                 logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-                self.update()
+                self._safe_update()
 
     def set_rounded_artwork_border(self, rounded: bool) -> None:
         """Enable or disable rounded borders around the album artwork."""
 
         self._rounded_artwork_border = bool(rounded)
-        self.update()
+        self._safe_update()
 
     def set_show_header_frame(self, show: bool) -> None:
         """Enable or disable the header subcontainer frame around logo+title."""
 
         self._show_header_frame = bool(show)
-        self.update()
+        self._safe_update()
 
     def set_show_controls(self, show: bool) -> None:
         """Show or hide the transport controls row."""
 
         self._show_controls = bool(show)
+        invalidate = getattr(self, "_invalidate_controls_layout", None)
+        if callable(invalidate):
+            invalidate()
         if self._last_info is not None:
             try:
                 self._update_display(self._last_info)
             except Exception as e:
                 logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-                self.update()
+                self._safe_update()
+
+    def _invalidate_controls_layout(self) -> None:
+        """Clear cached transport controls geometry."""
+        self._controls_layout_cache = None
 
     # ------------------------------------------------------------------
     # Transport controls (delegated to controller)
     # ------------------------------------------------------------------
-    def play_pause(self) -> None:
+    def play_pause(self, source: str = "manual", execute: bool = True) -> None:
         """Toggle play/pause when supported.
 
         This is best-effort and never raises; failures are logged by the
@@ -637,59 +667,68 @@ class MediaWidget(BaseOverlayWidget):
         currently playing.
         """
 
-        try:
-            self._controller.play_pause()
-        except Exception:
-            logger.debug("[MEDIA] play_pause delegation failed", exc_info=True)
-            return
-
-        # Optimistically flip the last known playback state so the controls
-        # row and any listeners (e.g. the Spotify visualizer) respond
-        # immediately while the GSMTC query catches up.
-        optimistic = None
-        new_state = None
-        try:
-            info = self._last_info
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-            info = None
-        if isinstance(info, MediaTrackInfo):
+        control_executed = not execute
+        refresh_requested = False
+        if execute:
             try:
-                current_state = info.state
+                self._controller.play_pause()
+                control_executed = True
+            except Exception:
+                logger.debug("[MEDIA] play_pause delegation failed", exc_info=True)
+
+        if control_executed:
+            # Optimistically flip the last known playback state so the controls
+            # row and any listeners (e.g. the Spotify visualizer) respond
+            # immediately while the GSMTC query catches up.
+            optimistic = None
+            new_state = None
+            try:
+                info = self._last_info
             except Exception as e:
                 logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-                current_state = MediaPlaybackState.UNKNOWN
-            if current_state in (MediaPlaybackState.PLAYING, MediaPlaybackState.PAUSED):
-                new_state = (
-                    MediaPlaybackState.PAUSED
-                    if current_state == MediaPlaybackState.PLAYING
-                    else MediaPlaybackState.PLAYING
-                )
+                info = None
+            if isinstance(info, MediaTrackInfo):
                 try:
-                    optimistic = MediaTrackInfo(
-                        title=info.title,
-                        artist=info.artist,
-                        album=info.album,
-                        album_artist=info.album_artist,
-                        state=new_state,
-                        can_play_pause=info.can_play_pause,
-                        can_next=info.can_next,
-                        can_previous=info.can_previous,
-                        artwork=info.artwork,
-                    )
+                    current_state = info.state
                 except Exception as e:
                     logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-                    optimistic = None
-        if optimistic is not None:
-            try:
-                self._update_display(optimistic)
-            except Exception:
-                logger.debug("[MEDIA] play_pause optimistic update failed", exc_info=True)
-            try:
-                if new_state is not None:
-                    self._apply_pending_state_override(new_state)
-            except Exception:
-                logger.debug("[MEDIA] play_pause optimistic override failed", exc_info=True)
+                    current_state = MediaPlaybackState.UNKNOWN
+                if current_state in (MediaPlaybackState.PLAYING, MediaPlaybackState.PAUSED):
+                    new_state = (
+                        MediaPlaybackState.PAUSED
+                        if current_state == MediaPlaybackState.PLAYING
+                        else MediaPlaybackState.PLAYING
+                    )
+                    try:
+                        optimistic = MediaTrackInfo(
+                            title=info.title,
+                            artist=info.artist,
+                            album=info.album,
+                            album_artist=info.album_artist,
+                            state=new_state,
+                            can_play_pause=info.can_play_pause,
+                            can_next=info.can_next,
+                            can_previous=info.can_previous,
+                            artwork=info.artwork,
+                        )
+                    except Exception as e:
+                        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+                        optimistic = None
+            if optimistic is not None:
+                try:
+                    self._update_display(optimistic)
+                except Exception:
+                    logger.debug("[MEDIA] play_pause optimistic update failed", exc_info=True)
+                try:
+                    if new_state is not None:
+                        self._apply_pending_state_override(new_state)
+                        refresh_requested = True
+                except Exception:
+                    logger.debug("[MEDIA] play_pause optimistic override failed", exc_info=True)
+            else:
+                refresh_requested = self._request_refresh_after_control()
+
+        self._handle_control_feedback("play", source, force_refresh=not refresh_requested)
 
     def _apply_pending_state_override(self, state: MediaPlaybackState) -> None:
         timer = self._pending_state_timer
@@ -704,7 +743,7 @@ class MediaWidget(BaseOverlayWidget):
         self._pending_state_override = state
 
         try:
-            self.update()
+            self._safe_update()
         except Exception as e:
             logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
 
@@ -726,50 +765,118 @@ class MediaWidget(BaseOverlayWidget):
                         self._refresh()
             except Exception:
                 logger.debug("[MEDIA] pending state refresh failed", exc_info=True)
-            try:
-                self.update()
-            except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+            self._safe_update()
 
         timer.timeout.connect(_on_timeout)
         self._pending_state_timer = timer
         timer.start()
 
-    def next_track(self) -> None:
+    def next_track(self, source: str = "manual", execute: bool = True) -> None:
         """Skip to next track when supported (best-effort)."""
 
-        try:
-            self._controller.next()
-        except Exception:
-            logger.debug("[MEDIA] next delegation failed", exc_info=True)
+        control_executed = not execute
+        if execute:
+            try:
+                self._controller.next()
+                control_executed = True
+            except Exception:
+                logger.debug("[MEDIA] next delegation failed", exc_info=True)
+
+        refresh_requested = False
+        if control_executed:
+            refresh_requested = self._request_refresh_after_control()
+
+        self._handle_control_feedback(
+            "next",
+            source,
+            force_refresh=not refresh_requested,
+        )
+
+    def previous_track(self, source: str = "manual", execute: bool = True) -> None:
+        """Go to previous track when supported (best-effort)."""
+
+        control_executed = not execute
+        if execute:
+            try:
+                self._controller.previous()
+                control_executed = True
+            except Exception:
+                logger.debug("[MEDIA] previous delegation failed", exc_info=True)
+
+        refresh_requested = False
+        if control_executed:
+            refresh_requested = self._request_refresh_after_control()
+
+        self._handle_control_feedback(
+            "prev",
+            source,
+            force_refresh=not refresh_requested,
+        )
+
+    def handle_transport_command(
+        self,
+        key: str,
+        *,
+        source: str = "manual",
+        execute: bool = True,
+    ) -> bool:
+        """Normalize and dispatch a transport command.
+
+        Args:
+            key: One of ("prev", "previous", "play", "pause", "next").
+            source: Diagnostic identifier for logging/metrics.
+            execute: When False, skips controller calls but still triggers
+                feedback + refresh. Used for external hardware keys that the
+                OS already handled.
+        Returns:
+            True when the command was recognized, False otherwise.
+        """
+
+        normalized = self._normalize_control_key(key)
+        if normalized is None:
+            return False
+
+        if normalized == "play":
+            self.play_pause(source=source, execute=execute)
+        elif normalized == "next":
+            self.next_track(source=source, execute=execute)
+        else:
+            self.previous_track(source=source, execute=execute)
+        return True
+
+    @staticmethod
+    def _normalize_control_key(key: str | None) -> Optional[str]:
+        if not key:
+            return None
+        key_lower = key.lower()
+        if key_lower in ("prev", "previous", "back"):
+            return "prev"
+        if key_lower in ("play", "pause", "toggle", "play_pause"):
+            return "play"
+        if key_lower in ("next", "forward"):
+            return "next"
+        return None
+
+    def _handle_control_feedback(self, key: str, source: str, *, force_refresh: bool) -> None:
+        if key not in ("prev", "play", "next"):
             return
+        self._last_manual_control = (key, time.monotonic(), source)
+        self._trigger_controls_feedback(key, source=source)
+        if force_refresh:
+            self._request_refresh_after_control()
 
+    def _request_refresh_after_control(self) -> bool:
+        if not self._enabled:
+            return False
         try:
-            if self._enabled:
-                if self._thread_manager is not None:
-                    self._refresh_async()
-                else:
-                    self._refresh()
+            if self._thread_manager is not None:
+                self._refresh_async()
+            else:
+                self._refresh()
+            return True
         except Exception:
-            logger.debug("[MEDIA] next post-refresh failed", exc_info=True)
-
-    def previous_track(self) -> None:
-        """Skip to previous track when supported (best-effort)."""
-
-        try:
-            self._controller.previous()
-        except Exception:
-            logger.debug("[MEDIA] previous delegation failed", exc_info=True)
-            return
-
-        try:
-            if self._enabled:
-                if self._thread_manager is not None:
-                    self._refresh_async()
-                else:
-                    self._refresh()
-        except Exception:
-            logger.debug("[MEDIA] previous post-refresh failed", exc_info=True)
+            logger.debug("[MEDIA] post-control refresh failed", exc_info=True)
+            return False
 
     # ------------------------------------------------------------------
     # Polling and display
@@ -916,8 +1023,7 @@ class MediaWidget(BaseOverlayWidget):
                 if was_idle:
                     self._reset_poll_stage()
                     # Update timer interval from idle (5s) to fast (1s)
-                    self._stop_timer()
-                    self._ensure_timer()
+                    self._ensure_timer(force=True)
             
             # Adaptive polling: advance to slower interval after 2 successful polls
             self._polls_at_current_stage += 1
@@ -927,15 +1033,27 @@ class MediaWidget(BaseOverlayWidget):
             # Diff gating: skip update if track identity unchanged
             # Always process first track (when _last_track_identity is None)
             # Also process if we haven't completed fade-in yet (need 2 updates for fade-in)
-            if (current_identity == self._last_track_identity and 
-                self._last_track_identity is not None and 
-                self._fade_in_completed):
+            if (
+                current_identity == self._last_track_identity
+                and self._last_track_identity is not None
+                and self._fade_in_completed
+            ):
+                self._skipped_identity_updates += 1
+                if self._skipped_identity_updates <= self._max_identity_skip:
+                    if is_perf_metrics_enabled():
+                        logger.debug(
+                            "[PERF] Media widget update skipped (diff gating - %d/%d)",
+                            self._skipped_identity_updates,
+                            self._max_identity_skip,
+                        )
+                    return
                 if is_perf_metrics_enabled():
-                    logger.debug("[PERF] Media widget update skipped (diff gating - no change)")
-                return
-            
+                    logger.debug("[PERF] Forcing metadata refresh after repeated skips")
+
             # Track changed - update identity and proceed
             self._last_track_identity = current_identity
+            self._skipped_identity_updates = 0
+            self._last_display_update_ts = time.monotonic()
             if is_perf_metrics_enabled():
                 logger.debug("[PERF] Media widget update applied (track changed)")
 
@@ -966,8 +1084,7 @@ class MediaWidget(BaseOverlayWidget):
                     logger.info("[MEDIA_WIDGET] Entering idle mode after %d consecutive empty polls", 
                                self._consecutive_none_count)
                 # Update timer interval from active (2.5s) to idle (5s)
-                self._stop_timer()
-                self._ensure_timer()
+                self._ensure_timer(force=True)
             
             # No active media session (e.g. Spotify not playing) – hide widget with graceful fade
             last_vis = self._telemetry_last_visibility
@@ -1220,24 +1337,27 @@ class MediaWidget(BaseOverlayWidget):
     
     def _controls_row_min_height(self) -> int:
         """Return the minimum vertical footprint required for the controls row."""
-        controls_font_pt = max(8, self._font_size - 2)
+        controls_font_pt = max(8, int((self._font_size - 2) * 0.9))
         font = QFont(self._font_family, controls_font_pt, QFont.Weight.Medium)
         fm = QFontMetrics(font)
         # Inner padding mirrors _compute_controls_layout to keep visuals consistent.
-        return max(28, fm.height() + 14)
+        min_height = max(24, fm.height() + 12)
+        return max(20, int(min_height * 0.82))
     
     def _controls_row_margin(self) -> int:
         """Bottom margin that keeps controls breathing room above the card edge."""
-        return max(12, int(self._controls_row_min_height() * 0.4))
+        return max(10, int(self._controls_row_min_height() * 0.35))
     
     def _compute_controls_layout(self):
         """Compute geometry for the transport controls row."""
         if not self._show_controls:
+            self._controls_layout_cache = None
             return None
 
         width = self.width()
         height = self.height()
         if width <= 0 or height <= 0:
+            self._controls_layout_cache = None
             return None
 
         margins = self.contentsMargins()
@@ -1245,18 +1365,33 @@ class MediaWidget(BaseOverlayWidget):
         content_right = width - margins.right()
         content_width = content_right - content_left
         if content_width <= 60:
+            self._controls_layout_cache = None
             return None
 
-        controls_font_pt = max(8, self._font_size - 2)
+        controls_font_pt = max(8, int((self._font_size - 2) * 0.9))
         font = QFont(self._font_family, controls_font_pt, QFont.Weight.Medium)
         fm = QFontMetrics(font)
-        row_height = max(self._controls_row_min_height(), fm.height() + 10)
+        row_height = max(self._controls_row_min_height(), int((fm.height() + 10) * 0.85))
 
         try:
             header_font_pt = int(self._header_font_pt) if self._header_font_pt > 0 else self._font_size
         except Exception as e:
             logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             header_font_pt = self._font_size
+
+        cache_key = (
+            width,
+            height,
+            margins.left(),
+            margins.top(),
+            margins.right(),
+            margins.bottom(),
+            controls_font_pt,
+            header_font_pt,
+        )
+        cached = self._controls_layout_cache
+        if cached is not None and cached.get("_cache_key") == cache_key:
+            return cached
 
         header_metrics = QFontMetrics(QFont(self._font_family, header_font_pt, QFont.Weight.Bold))
         header_height = header_metrics.height()
@@ -1277,9 +1412,9 @@ class MediaWidget(BaseOverlayWidget):
         )
 
         slot_width = content_width / 3.0
-        inner_pad_x = max(6.0, slot_width * 0.08)
-        inner_pad_y = max(3.0, row_height * 0.2)
-        hit_slop = max(6, int(row_height * 0.2))
+        inner_pad_x = max(5.0, slot_width * 0.07)
+        inner_pad_y = max(2.0, row_height * 0.16)
+        hit_slop = max(8, int(row_height * 0.28))
 
         button_rects = {}
         hit_rects = {}
@@ -1294,12 +1429,27 @@ class MediaWidget(BaseOverlayWidget):
             button_rects[key] = rect
             hit_rects[key] = rect.adjusted(-hit_slop, -hit_slop, hit_slop, hit_slop)
 
-        return {
+        layout = {
             "font": font,
             "row_rect": row_rect,
             "button_rects": button_rects,
             "hit_rects": hit_rects,
         }
+        layout["_cache_key"] = cache_key
+        self._controls_layout_cache = layout
+        return layout
+
+    def resolve_control_hit(self, point: QPoint) -> Optional[str]:
+        """Return the control key for a local point, if any."""
+
+        layout = self._compute_controls_layout()
+        if layout is None:
+            return None
+        hit_rects = layout.get("hit_rects") or {}
+        for key, rect in hit_rects.items():
+            if rect.contains(point):
+                return key
+        return None
     
     def _paint_controls_row(self, painter: QPainter) -> None:
         """Paint transport controls aligned with the click hit regions."""
@@ -1313,17 +1463,42 @@ class MediaWidget(BaseOverlayWidget):
 
         painter.save()
         try:
-            bg = QColor(self._bg_color)
-            bg.setAlpha(int(min(255, max(0, bg.alpha()) * 0.7)) or 140)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(bg)
-            painter.drawRoundedRect(row_rect, 6, 6)  # 6px radius for sub-element
+            base_color = QColor(self._bg_color)
+            matte_top = QColor(base_color)
+            matte_bottom = QColor(base_color)
+            matte_top.setAlpha(min(255, int(base_color.alpha() * 0.95) + 30))
+            matte_bottom.setAlpha(min(255, int(base_color.alpha() * 0.85)))
 
-            divider_color = QColor(255, 255, 255, 35)
+            gradient = QLinearGradient(row_rect.topLeft(), row_rect.bottomLeft())
+            gradient.setColorAt(0.0, matte_top)
+            gradient.setColorAt(1.0, matte_bottom)
+
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(gradient)
+            painter.drawRoundedRect(row_rect, self._controls_row_radius, self._controls_row_radius)
+
+            # Inner matte outline
+            outline = QColor(255, 255, 255, self._controls_row_outline_alpha)
+            painter.setPen(QColor(0, 0, 0, self._controls_row_shadow_alpha))
+            painter.drawRoundedRect(
+                row_rect.adjusted(1, 1, -1, -1),
+                self._controls_row_radius - 1,
+                self._controls_row_radius - 1,
+            )
+            painter.setPen(outline)
+            painter.drawRoundedRect(
+                row_rect.adjusted(0, 0, 0, 0),
+                self._controls_row_radius,
+                self._controls_row_radius,
+            )
+
+            divider_color = QColor(255, 255, 255, 55)
             painter.setPen(divider_color)
+            top_divider = row_rect.top() + int(row_rect.height() * 0.15)
+            bottom_divider = row_rect.bottom() - int(row_rect.height() * 0.15)
             for i in range(1, 3):
                 x = row_rect.left() + int(row_rect.width() * i / 3.0)
-                painter.drawLine(x, row_rect.top() + 6, x, row_rect.bottom() - 6)
+                painter.drawLine(x, top_divider, x, bottom_divider)
 
             painter.setFont(font)
             painter.setPen(QColor(255, 255, 255, 225))
@@ -1337,15 +1512,34 @@ class MediaWidget(BaseOverlayWidget):
                     intensity = max(0.0, min(1.0, self._controls_feedback_progress.get(key, 0.0)))
                     if intensity <= 0.0:
                         continue
-                    inset_x = max(2, min(rect.width() // 2, int(rect.width() * 0.2)))
-                    inset_y = max(2, min(rect.height() // 2, int(rect.height() * 0.2)))
-                    halo_rect = rect.adjusted(inset_x, inset_y, -inset_x, -inset_y)
-                    if halo_rect.width() <= 0 or halo_rect.height() <= 0:
-                        halo_rect = rect
-                    opacity = int(200 * intensity)
-                    radius = max(3, int(min(halo_rect.width(), halo_rect.height()) * 0.25))
-                    painter.setBrush(QColor(255, 255, 255, opacity))
-                    painter.drawRoundedRect(halo_rect, radius, radius)
+
+                    base_rect = QRectF(rect)
+                    scale = 1.0 + self._controls_feedback_scale_boost * intensity
+                    if scale > 1.0:
+                        delta_w = base_rect.width() * (scale - 1.0) * 0.5
+                        delta_h = base_rect.height() * (scale - 1.0) * 0.5
+                        highlight_rect = base_rect.adjusted(-delta_w, -delta_h, delta_w, delta_h)
+                    else:
+                        highlight_rect = base_rect
+
+                    radius = max(4.0, min(highlight_rect.width(), highlight_rect.height()) * 0.3)
+                    glow_expand = max(2.0, min(highlight_rect.width(), highlight_rect.height()) * 0.12)
+
+                    # Soft outer glow
+                    glow_rect = highlight_rect.adjusted(-glow_expand, -glow_expand, glow_expand, glow_expand)
+                    glow_color = QColor(255, 255, 255, int(90 * intensity))
+                    painter.setBrush(glow_color)
+                    painter.drawRoundedRect(glow_rect, radius + glow_expand, radius + glow_expand)
+
+                    # Bright gradient core
+                    gradient = QLinearGradient(
+                        highlight_rect.topLeft(), highlight_rect.bottomLeft()
+                    )
+                    gradient.setColorAt(0.0, QColor(255, 255, 255, int(255 * intensity)))
+                    gradient.setColorAt(0.6, QColor(255, 255, 255, int(215 * intensity)))
+                    gradient.setColorAt(1.0, QColor(255, 255, 255, int(170 * intensity)))
+                    painter.setBrush(gradient)
+                    painter.drawRoundedRect(highlight_rect, radius, radius)
         finally:
             painter.restore()
     
@@ -1435,19 +1629,20 @@ class MediaWidget(BaseOverlayWidget):
             anim.start()
         except Exception as e:
             logger.debug("[MEDIA_WIDGET] Artwork fade failed: %s", e)
+            # Fallback: just set progress and let timer expire it
             self._artwork_opacity = 1.0
-            self.update()
+            self._safe_update()
     
     def _on_artwork_fade_tick(self, value: float) -> None:
         """Update artwork opacity during fade."""
         self._artwork_opacity = float(value)
-        self.update()
+        self._safe_update()
     
     def _on_artwork_fade_complete(self) -> None:
         """Clean up after artwork fade."""
         self._artwork_anim = None
         self._artwork_opacity = 1.0
-        self.update()
+        self._safe_update()
     
     def _compute_track_identity(self, info: MediaTrackInfo) -> tuple:
         """Compute track identity for diff gating."""
@@ -1455,8 +1650,23 @@ class MediaWidget(BaseOverlayWidget):
             (info.title or "").strip(),
             (info.artist or "").strip(),
             (info.album or "").strip(),
-            info.state
+            info.state,
+            self._compute_artwork_key(info),
         )
+
+    def _compute_artwork_key(self, info: MediaTrackInfo) -> tuple:
+        payload = getattr(info, "artwork", None)
+        if not payload:
+            return (0, "")
+        try:
+            data = bytes(payload)
+            length = len(data)
+            sample = data[:4096]
+            digest = hashlib.sha1(sample).hexdigest()
+            return (length, digest)
+        except Exception as exc:
+            logger.debug("[MEDIA_WIDGET] Failed to compute artwork key: %s", exc)
+            return (0, "")
     
     def _reset_poll_stage(self) -> None:
         """Reset polling to fastest interval."""
@@ -1477,48 +1687,44 @@ class MediaWidget(BaseOverlayWidget):
         if self._update_timer_handle is not None:
             try:
                 self._update_timer_handle.stop()
-            except Exception:
-                pass
-            self._update_timer_handle = None
-        
-        if self._update_timer is not None:
-            try:
-                self._update_timer.stop()
-                self._update_timer.deleteLater()
-            except Exception:
-                pass
-            self._update_timer = None
-
-    def _ensure_timer(self) -> None:
-        """Ensure update timer is running at correct interval."""
-        # Determine interval based on idle state
-        if self._is_idle:
-            interval = self._idle_poll_interval
-        else:
-            interval = self._poll_intervals[self._current_poll_stage]
-        
-        # If timer exists with wrong interval, recreate it
-        if self._update_timer is not None:
-            current_interval = self._update_timer.interval()
-            if current_interval != interval:
-                self._stop_timer()
-        
-        # Create timer if needed
-        if self._update_timer is None:
-            try:
-                self._update_timer, self._update_timer_handle = create_overlay_timer(
-                    self,
-                    interval,
-                    self._refresh,
-                    timer_type=Qt.TimerType.PreciseTimer
-                )
             except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Failed to create timer: %s", e)
-    
-    def _maybe_emit_state_feedback(self, prev_info: Optional[MediaTrackInfo], info: MediaTrackInfo) -> None:
-        """Emit state feedback if playback state changed."""
-        # Placeholder for state feedback logic
-        pass
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+        self._update_timer_handle = None
+        self._update_timer = None
+
+    def _ensure_timer(self, *, force: bool = False) -> None:
+        """Ensure update timer is running at correct interval."""
+        if self._update_timer_handle is not None and not force:
+            timer = getattr(self._update_timer_handle, "_timer", None)
+            try:
+                if timer is not None and timer.isActive():
+                    return
+            except Exception:
+                force = True
+        if force:
+            self._stop_timer()
+
+        if not self._ensure_thread_manager("MediaWidget._ensure_timer"):
+            if not self._telemetry_logged_missing_tm:
+                logger.warning("[MEDIA_WIDGET][TIMER] ThreadManager unavailable; media polling paused")
+                self._telemetry_logged_missing_tm = True
+            return
+
+        self._telemetry_logged_missing_tm = False
+        interval = self._idle_poll_interval if self._is_idle else self._poll_intervals[self._current_poll_stage]
+        try:
+            handle = create_overlay_timer(self, interval, self._refresh, description="MediaWidget smart poll")
+        except RuntimeError as exc:
+            logger.warning("[MEDIA_WIDGET][TIMER] Failed to schedule poll timer: %s", exc)
+            return
+        self._update_timer_handle = handle
+        try:
+            self._update_timer = getattr(handle, "_timer", None)
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+            self._update_timer = None
+        if is_perf_metrics_enabled():
+            logger.debug("[PERF] Media widget timer started/restarted at %dms (stage %d)", interval, self._current_poll_stage)
     
     @classmethod
     def _get_shared_valid_info(cls) -> Optional[MediaTrackInfo]:
@@ -1676,7 +1882,23 @@ class MediaWidget(BaseOverlayWidget):
         
         # Ensure timer is running
         cls._ensure_shared_feedback_timer()
-        self.update()
+        self._safe_update()
+
+    def _log_feedback_metric(self, *, phase: str, key: str, source: str, event_id: str) -> None:
+        """Emit structured logs for control feedback when diagnostics enabled."""
+        if not (is_perf_metrics_enabled() or is_verbose_logging()):
+            return
+
+        overlay = getattr(self, "_overlay_name", "media")
+        message = (
+            "[MEDIA_WIDGET][FEEDBACK] overlay=%s phase=%s key=%s source=%s event=%s"
+            % (overlay, phase, key, source, event_id)
+        )
+
+        if is_perf_metrics_enabled():
+            logger.info(message)
+        else:
+            logger.debug(message)
     
     def _start_feedback_animation(self, key: str) -> None:
         """Start fade animation for feedback."""
@@ -1694,7 +1916,7 @@ class MediaWidget(BaseOverlayWidget):
                 eased = max(0.0, 1.0 - progress)
                 value = eased * eased
                 self._controls_feedback_progress[key] = value
-                self.update()
+                self._safe_update()
             
             def _on_complete() -> None:
                 self._finalize_feedback_key(key)
@@ -1746,7 +1968,7 @@ class MediaWidget(BaseOverlayWidget):
         if not self._controls_feedback and not self._feedback_deadlines:
             type(self)._maybe_stop_shared_feedback_timer()
 
-        self.update()
+        self._safe_update()
     
     def _gate_fft_worker(self, should_run: bool) -> None:
         """Start or stop the FFT worker based on media widget visibility.
@@ -2155,126 +2377,6 @@ class MediaWidget(BaseOverlayWidget):
         finally:
             painter.restore()
 
-    def _paint_controls_row(self, painter: QPainter) -> None:
-        """Paint a static transport controls row along the bottom.
-
-        The controls are always aligned to the thirds of the text content
-        width (between contentsMargins.left/right) so they visually match
-        the click routing implemented in DisplayWidget.mousePressEvent.
-        """
-
-        if not self._show_controls:
-            return
-
-        info = self._last_info
-        if info is None and self._pending_state_override is None:
-            return
-
-        try:
-            base_state = info.state if info is not None else MediaPlaybackState.UNKNOWN
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-            base_state = MediaPlaybackState.UNKNOWN
-
-        state = self._pending_state_override or base_state
-
-        width = self.width()
-        height = self.height()
-        if width <= 0 or height <= 0:
-            return
-
-        margins = self.contentsMargins()
-        content_left = margins.left()
-        content_right = width - margins.right()
-        if content_right <= content_left:
-            return
-
-        content_width = content_right - content_left
-        third = content_width / 3.0
-
-        controls_font = max(6, self._font_size - 3)
-        font = QFont(self._font_family, controls_font, QFont.Weight.Medium)
-
-        painter.save()
-        try:
-            painter.setFont(font)
-            fm = QFontMetrics(font)
-
-            row_height = fm.height() + 4
-
-            # Previous anchoring kept the row just above the text bottom
-            # margin. To free up more vertical space for long titles while
-            # keeping the widget's geometry unchanged, we move the controls
-            # down by roughly one SPOTIFY header height and then clamp the
-            # result inside the card bounds.
-            prev_row_top = height - margins.bottom() - row_height - 4
-
-            try:
-                header_font_pt = int(self._header_font_pt) if self._header_font_pt > 0 else self._font_size
-            except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-                header_font_pt = self._font_size
-
-            header_fm = QFontMetrics(QFont(self._font_family, header_font_pt, QFont.Weight.Bold))
-            header_h = header_fm.height()
-
-            # Target position: one header height lower than the previous
-            # value, but never so low that the glyphs touch the card edge.
-            bottom_pad = 8
-            bottom_limit = height - row_height - bottom_pad
-            target_row_top = prev_row_top + header_h
-            row_top = max(margins.top(), min(bottom_limit, target_row_top))
-
-            from PySide6.QtCore import QRect as _QRect
-
-            left_rect = _QRect(
-                int(content_left),
-                int(row_top),
-                int(third),
-                int(row_height),
-            )
-            centre_rect = _QRect(
-                int(content_left + third),
-                int(row_top),
-                int(third),
-                int(row_height),
-            )
-            right_rect = _QRect(
-                int(content_left + 2 * third),
-                int(row_top),
-                int(third),
-                int(row_height),
-            )
-
-            prev_sym = "\u2190"  # LEFTWARDS ARROW
-            next_sym = "\u2192"  # RIGHTWARDS ARROW
-            if state == MediaPlaybackState.PLAYING:
-                centre_sym = "||"  # pause
-            else:
-                centre_sym = "\u25b6"  # play
-
-            inactive_color = QColor(200, 200, 200, 230)
-            active_color = QColor(255, 255, 255, 255)
-
-            # Side arrows
-            pen = painter.pen()
-            pen.setColor(inactive_color)
-            painter.setPen(pen)
-            painter.drawText(left_rect, Qt.AlignmentFlag.AlignCenter, prev_sym)
-            painter.drawText(right_rect, Qt.AlignmentFlag.AlignCenter, next_sym)
-
-            # Centre play/pause gets a slightly heavier weight and full white
-            # to stand out just enough without drifting in position.
-            # Use smaller font for pause "||" since it's two characters vs one for play
-            pause_font_size = controls_font - 2 if centre_sym == "||" else controls_font
-            font_centre = QFont(self._font_family, pause_font_size, QFont.Weight.Bold)
-            painter.setFont(font_centre)
-            pen.setColor(active_color)
-            painter.setPen(pen)
-            painter.drawText(centre_rect, Qt.AlignmentFlag.AlignCenter, centre_sym)
-        finally:
-            painter.restore()
-
     def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:
         """Fade the entire widget in, then attach the global drop shadow."""
         # Reset fade completion flag so re-entrancy (wake from idle) reapplies the shadow.
@@ -2362,14 +2464,14 @@ class MediaWidget(BaseOverlayWidget):
             def _on_tick(progress: float) -> None:
                 try:
                     self._artwork_opacity = float(progress)
-                    self.update()
+                    self._safe_update()
                 except Exception as e:
                     logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             
             def _on_finished() -> None:
                 self._artwork_anim = None
                 self._artwork_opacity = 1.0
-                self.update()
+                self._safe_update()
             
             # AnimationManager uses seconds, not milliseconds
             anim_id = anim_mgr.animate_custom(
@@ -2383,4 +2485,4 @@ class MediaWidget(BaseOverlayWidget):
             logger.debug("[MEDIA] Failed to start artwork fade via AnimationManager", exc_info=True)
             # Fallback: just set opacity to 1.0 immediately
             self._artwork_opacity = 1.0
-            self.update()
+            self._safe_update()
