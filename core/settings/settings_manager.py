@@ -86,6 +86,12 @@ class SettingsManager(QObject):
         except Exception:
             logger.debug("Settings validation failed", exc_info=True)
 
+        # Clean up obsolete settings for hygiene
+        try:
+            self.cleanup_obsolete_settings()
+        except Exception:
+            logger.debug("Settings cleanup failed", exc_info=True)
+
         # Diagnostic snapshot so widget enable/monitor issues can be traced
         # without guessing what QSettings returned on this machine. The
         # full widgets map can be large, so we only dump it in verbose
@@ -487,6 +493,33 @@ class SettingsManager(QObject):
             return value
 
         return value
+
+    # Obsolete settings that should be removed from JSON for hygiene
+    _OBSOLETE_KEYS = frozenset({
+        'display.vsync_enabled',
+        'display.fps_cap',
+    })
+
+    def cleanup_obsolete_settings(self) -> List[str]:
+        """Remove obsolete/invalid settings from the JSON store.
+        
+        This is basic settings hygiene - removes keys that are no longer
+        part of the architecture to prevent stale settings from persisting.
+        
+        Returns:
+            List of removed keys
+        """
+        removed = []
+        with self._lock:
+            for key in self._OBSOLETE_KEYS:
+                if self._settings.contains(key):
+                    self._settings.remove(key)
+                    removed.append(key)
+                    logger.debug("Removed obsolete setting: %s", key)
+            if removed:
+                self._settings.sync()
+                logger.info("Cleaned up %d obsolete settings: %s", len(removed), removed)
+        return removed
 
     # Keys that require immediate sync to prevent data loss on crash/exit
     _CRITICAL_KEYS = frozenset({

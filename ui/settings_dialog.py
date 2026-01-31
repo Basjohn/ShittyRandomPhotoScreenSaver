@@ -1652,8 +1652,8 @@ class SettingsDialog(QDialog):
     def _open_settings_folder(self) -> None:
         """Open the settings folder in file explorer."""
         try:
-            # QSettings stores in AppData/Local or similar
-            settings_path = Path.home() / "AppData" / "Local" / "SRPSS"
+            # Get the actual JSON settings path from SettingsManager
+            settings_path = Path(self._settings._settings.fileName()).parent
             if not settings_path.exists():
                 # Fallback to current directory
                 settings_path = Path.cwd()
