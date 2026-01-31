@@ -127,12 +127,19 @@ def compute_expected_overlays(
     if weather_enabled and resolve_monitor_visibility(weather_monitor, screen_index):
         expected.add("weather")
     
-    # Reddit
+    # Reddit (primary)
     reddit_settings = widgets_map.get('reddit', {})
     reddit_enabled = SettingsManager.to_bool(reddit_settings.get('enabled', False), False)
     reddit_monitor = reddit_settings.get('monitor', 'ALL')
     if reddit_enabled and resolve_monitor_visibility(reddit_monitor, screen_index):
         expected.add("reddit")
+
+    # Reddit 2 (inherits styling but still needs fade sync per display)
+    reddit2_settings = widgets_map.get('reddit2', {})
+    reddit2_enabled = SettingsManager.to_bool(reddit2_settings.get('enabled', False), False)
+    reddit2_monitor = reddit2_settings.get('monitor', 'ALL')
+    if reddit2_enabled and resolve_monitor_visibility(reddit2_monitor, screen_index):
+        expected.add("reddit2")
     
     # Media
     media_settings = widgets_map.get('media', {})

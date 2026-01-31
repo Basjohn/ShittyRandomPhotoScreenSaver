@@ -675,6 +675,9 @@ class MediaWidget(BaseOverlayWidget):
                 control_executed = True
             except Exception:
                 logger.debug("[MEDIA] play_pause delegation failed", exc_info=True)
+        else:
+            # Media keys already executed the command; still mirror optimistic UI
+            control_executed = True
 
         if control_executed:
             # Optimistically flip the last known playback state so the controls

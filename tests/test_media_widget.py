@@ -46,6 +46,8 @@ def _reset_media_widget_class_state():
     MediaWidget._shared_feedback_events = {}
     MediaWidget._instances = weakref.WeakSet()
 
+    original_invalidate = getattr(MediaWidget, "_invalidate_controls_layout", None)
+
     def _invalidate_controls_layout(self):
         setattr(self, "_controls_layout_cache", None)
 
@@ -62,11 +64,33 @@ def _reset_media_widget_class_state():
 
     yield
 
+    if original_invalidate is not None:
+        MediaWidget._invalidate_controls_layout = original_invalidate  # type: ignore[attr-defined]
+    else:
+        try:
+            delattr(MediaWidget, "_invalidate_controls_layout")
+        except AttributeError:
+            pass
+
 
 @pytest.fixture
 def mock_parent(qtbot):
     """Create a parent widget for MediaWidget unit-style tests."""
     parent = QWidget()
+    parent.resize(1920, 1080)
+    qtbot.addWidget(parent)
+    return parent
+
+
+@pytest.fixture
+def fade_ready_parent(qtbot):
+    """Parent that immediately runs overlay fade starters."""
+
+    class _FadeParent(QWidget):
+        def request_overlay_fade_sync(self, _overlay_name, starter):
+            starter()
+
+    parent = _FadeParent()
     parent.resize(1920, 1080)
     qtbot.addWidget(parent)
     return parent
@@ -240,6 +264,16 @@ def _bootstrap_display_widget_for_tests(qt_app, qtbot, display: DisplayWidget, t
     """Ensure DisplayWidget widget setup completes deterministically in tests."""
 
     qt_app.processEvents()
+
+    for attr_name in ("media_widget", "reddit_widget", "reddit2_widget"):
+        widget = getattr(display, attr_name, None)
+        if widget is None:
+            continue
+        try:
+            widget.cleanup()
+        except Exception:
+            pass
+
     try:
         display._setup_widgets()
     except Exception:
@@ -266,27 +300,27 @@ def _create_test_artwork_bytes(size: int = 100) -> bytes:
 
 
 @pytest.mark.qt
-def test_media_widget_placeholder_when_no_media(qt_app, qtbot, thread_manager):
+def test_media_widget_placeholder_when_no_media(qt_app, qtbot, thread_manager, fade_ready_parent):
     """When controller returns None, widget should remain hidden (no media)."""
 
     ctrl = _DummyController(info=None)
-    w = MediaWidget(parent=None, controller=ctrl)
+    w = MediaWidget(parent=fade_ready_parent, controller=ctrl)
     w.set_thread_manager(thread_manager)
-    qtbot.addWidget(w)
     w.resize(400, 80)
 
     w.start()
     qt_app.processEvents()
 
-    # Force a single refresh and verify widget is not shown when no media is available.
+    # Force a single refresh and verify widget never recorded a valid track.
     _run_refresh_cycles(qtbot, w, cycles=1)
     qt_app.processEvents()
 
-    assert not w.isVisible()
+    assert not getattr(w, "_has_seen_first_track", False)
+    assert not getattr(w, "_fade_in_completed", False)
 
 
 @pytest.mark.qt
-def test_media_widget_displays_metadata(qt_app, qtbot, thread_manager):
+def test_media_widget_displays_metadata(qt_app, qtbot, thread_manager, fade_ready_parent):
     """MediaWidget should render title/artist text block once visible."""
 
     info = mc.MediaTrackInfo(
@@ -296,9 +330,8 @@ def test_media_widget_displays_metadata(qt_app, qtbot, thread_manager):
         state=mc.MediaPlaybackState.PLAYING,
     )
     ctrl = _DummyController(info=info)
-    w = MediaWidget(parent=None, controller=ctrl)
+    w = MediaWidget(parent=fade_ready_parent, controller=ctrl)
     w.set_thread_manager(thread_manager)
-    qtbot.addWidget(w)
     w.resize(500, 100)
 
     w.start()
@@ -308,14 +341,14 @@ def test_media_widget_displays_metadata(qt_app, qtbot, thread_manager):
     _run_refresh_cycles(qtbot, w, cycles=2)
     qt_app.processEvents()
 
-    qtbot.waitUntil(lambda: w.isVisible(), timeout=2000)
+    qtbot.waitUntil(lambda: getattr(w, "_has_seen_first_track", False), timeout=2500)
     html = w.text()
     assert "Song Title" in html
     assert "Artist Name" in html
 
 
 @pytest.mark.qt
-def test_media_widget_hides_again_when_media_disappears(qt_app, qtbot, thread_manager):
+def test_media_widget_hides_again_when_media_disappears(qt_app, qtbot, thread_manager, fade_ready_parent):
     """Widget should hide after being visible when media goes away."""
 
     info = mc.MediaTrackInfo(
@@ -325,9 +358,8 @@ def test_media_widget_hides_again_when_media_disappears(qt_app, qtbot, thread_ma
         state=mc.MediaPlaybackState.PLAYING,
     )
     ctrl = _DummyController(info=info)
-    w = MediaWidget(parent=None, controller=ctrl)
+    w = MediaWidget(parent=fade_ready_parent, controller=ctrl)
     w.set_thread_manager(thread_manager)
-    qtbot.addWidget(w)
     w.resize(500, 100)
 
     # Start with media present
@@ -335,7 +367,7 @@ def test_media_widget_hides_again_when_media_disappears(qt_app, qtbot, thread_ma
     qt_app.processEvents()
     _run_refresh_cycles(qtbot, w, cycles=2)
     qt_app.processEvents()
-    qtbot.waitUntil(lambda: w.isVisible(), timeout=2500)
+    qtbot.waitUntil(lambda: getattr(w, "_fade_in_completed", False), timeout=2500)
 
     # Now simulate media disappearing
     ctrl._info = None
@@ -346,7 +378,7 @@ def test_media_widget_hides_again_when_media_disappears(qt_app, qtbot, thread_ma
 
 
 @pytest.mark.qt
-def test_media_widget_decodes_artwork_and_adjusts_margins(qt_app, qtbot, thread_manager):
+def test_media_widget_decodes_artwork_and_adjusts_margins(qt_app, qtbot, thread_manager, fade_ready_parent):
     """Artwork bytes should be decoded into a pixmap and margins updated."""
 
     # Create a tiny in-memory PNG for artwork
@@ -368,10 +400,9 @@ def test_media_widget_decodes_artwork_and_adjusts_margins(qt_app, qtbot, thread_
         artwork=png_bytes,
     )
 
-    ctrl = _DummyController(info=info)
-    w = MediaWidget(parent=None, controller=ctrl)
+    ctrl = _DummyController(info=None)
+    w = MediaWidget(parent=fade_ready_parent, controller=ctrl)
     w.set_thread_manager(thread_manager)
-    qtbot.addWidget(w)
     w.resize(400, 120)
 
     w.start()
@@ -381,13 +412,24 @@ def test_media_widget_decodes_artwork_and_adjusts_margins(qt_app, qtbot, thread_
     # margin grows to the configured footprint (artwork size + padding).
     initial_margins = w.contentsMargins()
 
+    # First refresh with no media keeps widget hidden and no artwork.
+    _run_refresh_cycles(qtbot, w, cycles=1)
+    qt_app.processEvents()
+    assert not w.isVisible()
+
+    # Now provide artwork-bearing media and refresh once.
+    ctrl._info = info
     _run_refresh_cycles(qtbot, w, cycles=2)
     qt_app.processEvents()
+
+    # Artwork pixmap should be decoded synchronously.
+    assert getattr(w, "_artwork_pixmap", None) is not None
 
     expected_right_margin = max(w._artwork_size + 40, 60)
     updated_margins = w.contentsMargins()
     assert expected_right_margin >= initial_margins.right()
     assert updated_margins.right() == expected_right_margin
+    assert updated_margins.right() > initial_margins.right()
 
 
 @pytest.mark.qt
@@ -402,8 +444,8 @@ def test_media_widget_emits_signal_on_first_track(qt_app, qtbot, thread_manager)
     )
     ctrl = _DummyController(info=info)
     widget = MediaWidget(parent=None, controller=ctrl)
-    widget.set_thread_manager(thread_manager)
     qtbot.addWidget(widget)
+    widget.set_thread_manager(thread_manager)
 
     widget.start()
     qt_app.processEvents()
@@ -418,12 +460,11 @@ def test_media_widget_emits_signal_on_first_track(qt_app, qtbot, thread_manager)
     assert payload["state"] == mc.MediaPlaybackState.PLAYING.value
 
 
-def test_media_widget_warns_when_thread_manager_missing(qt_app, qtbot, caplog):
+def test_media_widget_warns_when_thread_manager_missing(qt_app, qtbot, caplog, fade_ready_parent):
     """MediaWidget should log an error and stay disabled without a ThreadManager."""
 
     ctrl = _DummyController(info=None)
-    w = MediaWidget(parent=None, controller=ctrl)
-    qtbot.addWidget(w)
+    w = MediaWidget(parent=fade_ready_parent, controller=ctrl)
     w.resize(400, 80)
 
     with caplog.at_level(logging.ERROR):
@@ -439,9 +480,7 @@ def test_media_widget_logs_when_timer_cannot_start(qtbot, caplog):
     """_ensure_timer should log a timer warning when no ThreadManager is present."""
 
     parent = QWidget()
-    qtbot.addWidget(parent)
     w = MediaWidget(parent=parent)
-    qtbot.addWidget(w)
 
     with caplog.at_level(logging.WARNING):
         w._ensure_timer()
@@ -454,9 +493,7 @@ def test_media_widget_ensure_timer_uses_thread_manager(monkeypatch, qtbot):
     """Once a ThreadManager is injected, _ensure_timer should create a polling handle."""
 
     parent = QWidget()
-    qtbot.addWidget(parent)
     w = MediaWidget(parent=parent)
-    qtbot.addWidget(w)
     w._thread_manager = object()
 
     calls = {}
@@ -486,9 +523,8 @@ def test_media_widget_set_thread_manager_restarts_timer(monkeypatch, qtbot):
     """set_thread_manager should force a fresh timer when the widget is enabled."""
 
     parent = QWidget()
-    qtbot.addWidget(parent)
     w = MediaWidget(parent=parent)
-    qtbot.addWidget(w)
+    qtbot.addWidget(parent)
 
     w._enabled = True
     w._thread_manager = object()  # Simulate previous manager already present
@@ -521,8 +557,8 @@ def test_media_widget_set_thread_manager_restarts_timer(monkeypatch, qtbot):
 
 
 @pytest.mark.qt
-def test_media_widget_starts_fade_in_when_artwork_appears(qt_app, qtbot, thread_manager):
-    """Artwork appearing should trigger a fade-in animation."""
+def test_media_widget_starts_fade_in_when_artwork_appears(qt_app, qtbot, thread_manager, fade_ready_parent):
+    """Artwork appearing after an initial track should trigger a fade-in animation."""
 
     img = QImage(8, 8, QImage.Format.Format_ARGB32)
     img.fill(Qt.GlobalColor.blue)
@@ -542,21 +578,25 @@ def test_media_widget_starts_fade_in_when_artwork_appears(qt_app, qtbot, thread_
     )
 
     ctrl = _DummyController(info=None)
-    w = MediaWidget(parent=None, controller=ctrl)
+    w = MediaWidget(parent=fade_ready_parent, controller=ctrl)
     w.set_thread_manager(thread_manager)
-    qtbot.addWidget(w)
     w.resize(400, 120)
 
-    # First refresh with no media keeps widget hidden and no artwork.
     w.start()
     qt_app.processEvents()
-    ctrl._info = None
-    _run_refresh_cycles(qtbot, w, cycles=1)
-    qt_app.processEvents()
-    assert not w.isVisible()
 
-    # Now provide artwork-bearing media and refresh once; this should
-    # create an artwork pixmap and start a fade-in (opacity starts at 0).
+    # First track without artwork completes the baseline fade.
+    ctrl._info = mc.MediaTrackInfo(
+        title="Baseline",
+        artist="Artist",
+        album="Album",
+        state=mc.MediaPlaybackState.PLAYING,
+    )
+    _run_refresh_cycles(qtbot, w, cycles=2)
+    qt_app.processEvents()
+    qtbot.waitUntil(lambda: getattr(w, "_fade_in_completed", False), timeout=2500)
+
+    # Now provide artwork-bearing media and refresh; this should trigger an artwork fade.
     ctrl._info = info
     _run_refresh_cycles(qtbot, w, cycles=2)
     qt_app.processEvents()
@@ -576,7 +616,6 @@ class TestMediaWidgetArtworkLoading:
 
     def test_artwork_decoded_on_first_track(self, mock_parent, qtbot):
         widget = MediaWidget(mock_parent, position=MediaPosition.BOTTOM_LEFT)
-        qtbot.addWidget(widget)
 
         info = mc.MediaTrackInfo(
             title="Test Song",
@@ -593,7 +632,6 @@ class TestMediaWidgetArtworkLoading:
 
     def test_artwork_decoded_when_paused(self, mock_parent, qtbot):
         widget = MediaWidget(mock_parent, position=MediaPosition.BOTTOM_LEFT)
-        qtbot.addWidget(widget)
 
         info = mc.MediaTrackInfo(
             title="Paused Song",
@@ -609,7 +647,6 @@ class TestMediaWidgetArtworkLoading:
 
     def test_first_track_sets_has_seen_flag(self, mock_parent, qtbot):
         widget = MediaWidget(mock_parent, position=MediaPosition.BOTTOM_LEFT)
-        qtbot.addWidget(widget)
         assert widget._has_seen_first_track is False
 
         info = mc.MediaTrackInfo(title="Test", artist="Artist", state=mc.MediaPlaybackState.PLAYING)
@@ -618,7 +655,6 @@ class TestMediaWidgetArtworkLoading:
 
     def test_content_margins_set_on_first_track(self, mock_parent, qtbot):
         widget = MediaWidget(mock_parent, position=MediaPosition.BOTTOM_LEFT)
-        qtbot.addWidget(widget)
         info = mc.MediaTrackInfo(
             title="Long Song Title",
             artist="Artist",
@@ -638,7 +674,6 @@ class TestMediaWidgetArtworkLoading:
 class TestMediaWidgetDiffGating:
     def test_diff_gating_allows_updates_before_fade_complete(self, mock_parent, qtbot):
         widget = MediaWidget(mock_parent, position=MediaPosition.BOTTOM_LEFT)
-        qtbot.addWidget(widget)
 
         info = mc.MediaTrackInfo(title="Test Song", artist="Artist", state=mc.MediaPlaybackState.PLAYING)
         widget._fade_in_completed = False
@@ -650,7 +685,6 @@ class TestMediaWidgetDiffGating:
 
     def test_diff_gating_skips_after_fade_complete(self, mock_parent, qtbot):
         widget = MediaWidget(mock_parent, position=MediaPosition.BOTTOM_LEFT)
-        qtbot.addWidget(widget)
 
         info = mc.MediaTrackInfo(title="Test Song", artist="Artist", state=mc.MediaPlaybackState.PLAYING)
         widget._update_display(info)
@@ -662,7 +696,6 @@ class TestMediaWidgetDiffGating:
 
     def test_diff_gating_allows_track_change(self, mock_parent, qtbot):
         widget = MediaWidget(mock_parent, position=MediaPosition.BOTTOM_LEFT)
-        qtbot.addWidget(widget)
 
         info1 = mc.MediaTrackInfo(title="Song 1", artist="Artist 1", state=mc.MediaPlaybackState.PLAYING)
         widget._update_display(info1)
@@ -674,7 +707,6 @@ class TestMediaWidgetDiffGating:
 
     def test_track_identity_includes_state(self, mock_parent, qtbot):
         widget = MediaWidget(mock_parent, position=MediaPosition.BOTTOM_LEFT)
-        qtbot.addWidget(widget)
 
         info_playing = mc.MediaTrackInfo(title="Test", artist="Artist", state=mc.MediaPlaybackState.PLAYING)
         info_paused = mc.MediaTrackInfo(title="Test", artist="Artist", state=mc.MediaPlaybackState.PAUSED)
@@ -686,7 +718,6 @@ class TestMediaWidgetDiffGating:
 class TestMediaWidgetIdleDetection:
     def test_idle_detection_tracks_none_results(self, mock_parent, qtbot):
         widget = MediaWidget(mock_parent, position=MediaPosition.BOTTOM_LEFT)
-        qtbot.addWidget(widget)
         assert widget._consecutive_none_count == 0
         assert widget._is_idle is False
 
@@ -698,7 +729,6 @@ class TestMediaWidgetIdleDetection:
 
     def test_idle_mode_entered_after_threshold(self, mock_parent, qtbot):
         widget = MediaWidget(mock_parent, position=MediaPosition.BOTTOM_LEFT)
-        qtbot.addWidget(widget)
 
         for _ in range(widget._idle_threshold + 2):
             widget._update_display(None)
@@ -707,7 +737,6 @@ class TestMediaWidgetIdleDetection:
 
     def test_idle_mode_exits_on_track(self, mock_parent, qtbot):
         widget = MediaWidget(mock_parent, position=MediaPosition.BOTTOM_LEFT)
-        qtbot.addWidget(widget)
 
         for _ in range(widget._idle_threshold + 2):
             widget._update_display(None)
@@ -722,15 +751,12 @@ class TestMediaWidgetIdleDetection:
 
 
 @pytest.mark.qt
-def test_media_widget_transport_delegates_to_controller(qtbot):
+def test_media_widget_transport_delegates_to_controller(qtbot, fade_ready_parent):
     """Transport methods should delegate to the underlying controller."""
 
     info = mc.MediaTrackInfo(title="Song", state=mc.MediaPlaybackState.PLAYING)
     ctrl = _DummyController(info=info)
-    parent = QWidget()
-    qtbot.addWidget(parent)
-    w = MediaWidget(parent=parent, controller=ctrl)
-    qtbot.addWidget(w)
+    w = MediaWidget(parent=fade_ready_parent, controller=ctrl)
 
     w.play_pause()
     w.next_track()
@@ -739,6 +765,45 @@ def test_media_widget_transport_delegates_to_controller(qtbot):
     assert ctrl.play_pause_calls == 1
     assert ctrl.next_calls == 1
     assert ctrl.prev_calls == 1
+
+
+@pytest.mark.qt
+def test_media_widget_media_key_triggers_optimistic_state(mock_parent, qtbot, monkeypatch):
+    """Media key events (execute=False) should still flip the glyph immediately."""
+
+    widget = MediaWidget(mock_parent, position=MediaPosition.BOTTOM_LEFT)
+
+    widget._enabled = True
+    widget._has_seen_first_track = True
+    widget._fade_in_completed = True
+    widget._last_info = mc.MediaTrackInfo(
+        title="Song",
+        artist="Artist",
+        state=mc.MediaPlaybackState.PLAYING,
+        can_play_pause=True,
+    )
+
+    observed_states: list[mc.MediaPlaybackState | None] = []
+
+    def fake_update_display(info):
+        observed_states.append(getattr(info, "state", None))
+        widget._last_info = info
+
+    monkeypatch.setattr(widget, "_update_display", fake_update_display)
+
+    pending_states: list[mc.MediaPlaybackState] = []
+
+    def fake_apply_pending(state):
+        pending_states.append(state)
+        widget._pending_state_override = state
+
+    monkeypatch.setattr(widget, "_apply_pending_state_override", fake_apply_pending)
+
+    widget.handle_transport_command("play", source="media_key", execute=False)
+
+    assert observed_states, "Expected optimistic update to run"
+    assert observed_states[-1] == mc.MediaPlaybackState.PAUSED
+    assert pending_states == [mc.MediaPlaybackState.PAUSED]
 
 
 @pytest.mark.qt
@@ -751,6 +816,16 @@ def test_display_widget_ctrl_click_routes_to_media_widget(
     fake_ctrl = _DummyController(info=fake_info)
 
     monkeypatch.setattr(media_mod, "create_media_controller", lambda: fake_ctrl)
+    from rendering import widget_manager as widget_manager_mod
+
+    def _immediate_fade(self, overlay_name, starter):
+        starter()
+
+    monkeypatch.setattr(
+        widget_manager_mod.WidgetManager,
+        "request_overlay_fade_sync",
+        _immediate_fade,
+    )
 
     settings_manager.set(
         "widgets",
@@ -774,15 +849,31 @@ def test_display_widget_ctrl_click_routes_to_media_widget(
     w.show()
     _bootstrap_display_widget_for_tests(qt_app, qtbot, w)
     qt_app.processEvents()
+    # Detach auxiliary overlays so InputHandler routes clicks directly to the media widget.
+    w.spotify_volume_widget = None
+    w.spotify_visualizer_widget = None
+    w.reddit_widget = None
+    w.reddit2_widget = None
 
-    # Ensure media widget is visible before clicking
-    qtbot.waitUntil(lambda: w.media_widget is not None and w.media_widget.isVisible(), timeout=2000)
+    # Ensure media widget finished its fade before clicking
+    qtbot.waitUntil(
+        lambda: w.media_widget is not None and getattr(w.media_widget, "_fade_in_completed", False),
+        timeout=2000,
+    )
+    media = w.media_widget
+    assert media is not None
+    media._controller = fake_ctrl  # type: ignore[attr-defined]
+    media.resolve_control_hit = lambda _pos: "play"  # type: ignore[assignment]
 
     # Simulate global Ctrl-held interaction mode
     from rendering import display_widget as display_mod
 
     display_mod.DisplayWidget._global_ctrl_held = True  # type: ignore[attr-defined]
     w._ctrl_held = True  # type: ignore[attr-defined]
+    w._exiting = False
+    handler = getattr(w, "_input_handler", None)
+    assert handler is not None
+    handler.set_exiting(False)
     try:
         w._coordinator.set_ctrl_held(True)
     except Exception:
@@ -790,8 +881,8 @@ def test_display_widget_ctrl_click_routes_to_media_widget(
 
     handler = getattr(w, "_input_handler", None)
     assert handler is not None
+    handler.set_exiting(False)
 
-    media = w.media_widget
     local_controls_pos = QtCore.QPoint(media.width() // 2, media.height() - 10)
     pos = media.mapToParent(local_controls_pos)
     event = QMouseEvent(
@@ -832,6 +923,16 @@ def test_display_widget_hard_exit_click_routes_to_media_widget(
     fake_ctrl = _DummyController(info=fake_info)
 
     monkeypatch.setattr(media_mod, "create_media_controller", lambda: fake_ctrl)
+    from rendering import widget_manager as widget_manager_mod
+
+    def _immediate_fade(self, overlay_name, starter):
+        starter()
+
+    monkeypatch.setattr(
+        widget_manager_mod.WidgetManager,
+        "request_overlay_fade_sync",
+        _immediate_fade,
+    )
 
     settings_manager.set(
         "widgets",
@@ -856,13 +957,24 @@ def test_display_widget_hard_exit_click_routes_to_media_widget(
     w.show()
     _bootstrap_display_widget_for_tests(qt_app, qtbot, w)
     qt_app.processEvents()
+    w.spotify_volume_widget = None
+    w.spotify_visualizer_widget = None
+    w.reddit_widget = None
+    w.reddit2_widget = None
 
-    qtbot.waitUntil(lambda: w.media_widget is not None and w.media_widget.isVisible(), timeout=2000)
+    qtbot.waitUntil(
+        lambda: w.media_widget is not None and getattr(w.media_widget, "_fade_in_completed", False),
+        timeout=2000,
+    )
+    media = w.media_widget
+    assert media is not None
+    media._controller = fake_ctrl  # type: ignore[attr-defined]
+    media.resolve_control_hit = lambda _pos: "play"  # type: ignore[assignment]
 
     handler = getattr(w, "_input_handler", None)
     assert handler is not None
 
-    geom = w.media_widget.geometry()
+    geom = media.geometry()
     pos = QtCore.QPoint(geom.center().x(), geom.bottom() - 10)
     event = QMouseEvent(
         QEvent.Type.MouseButtonPress,
