@@ -719,7 +719,19 @@ class MediaWidget(BaseOverlayWidget):
                         optimistic = None
             if optimistic is not None:
                 try:
-                    self._update_display(optimistic)
+                    # CRITICAL: Force update even if diff gating would skip
+                    # Update _last_info first so _draw_control_icon sees new state
+                    self._last_info = optimistic
+                    # Update track identity to prevent diff gating from skipping next poll
+                    self._last_track_identity = self._compute_track_identity(optimistic)
+                    # Emit media update for visualizer and other listeners
+                    self._emit_media_update(optimistic)
+                    # Only repaint controls if they're visible and state changed
+                    if self._show_controls and self.isVisible():
+                        self._invalidate_controls_layout()
+                        # Use repaint() for immediate feedback on media key (rare event)
+                        self.repaint()
+                    logger.info("[MEDIA_WIDGET] Optimistic play/pause applied: state=%s", optimistic.state)
                 except Exception:
                     logger.debug("[MEDIA] play_pause optimistic update failed", exc_info=True)
                 try:

@@ -832,14 +832,27 @@ class InputHandler(QObject):
             return
 
         media_widget = getattr(self._parent, "media_widget", None)
+        if media_widget is None:
+            logger.debug("[INPUT_HANDLER] Media key %s ignored (no media widget)", command)
+            return
+        
+        logger.info("[INPUT_HANDLER] Media key %s detected, routing to widget", command)
+        
+        # For media keys, the OS already executed the command.
+        # We just need to trigger optimistic UI updates and feedback.
+        # Use handle_transport_command with execute=False to avoid double-execution
+        # but still get the optimistic UI updates and feedback animation.
         handled = self._invoke_media_command(
             media_widget,
             command,
             source=source,
-            execute=False,
+            execute=False,  # OS already handled it
         )
-        if not handled:
-            logger.debug("[INPUT_HANDLER] Media key %s ignored (no media widget)", command)
+        
+        if handled:
+            logger.info("[INPUT_HANDLER] Media key %s handled successfully", command)
+        else:
+            logger.debug("[INPUT_HANDLER] Media key %s not handled by media widget", command)
 
     def route_volume_drag(self, pos: QPoint, spotify_volume_widget) -> bool:
         """Route drag events to Spotify volume widget."""

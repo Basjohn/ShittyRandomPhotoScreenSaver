@@ -17,6 +17,7 @@ from core.resources.manager import ResourceManager
 from core.settings.settings_manager import SettingsManager
 from rendering.widget_setup import parse_color_to_qcolor, compute_expected_overlays
 from widgets.shadow_utils import apply_widget_shadow as _apply_widget_shadow
+from utils.lockfree import SPSCQueue, TripleBuffer
 from widgets.media_widget import MediaWidget
 # Gmail widget archived - see archive/gmail_feature/RESTORE_GMAIL.md
 # from widgets.gmail_widget import GmailWidget, GmailPosition
@@ -82,7 +83,16 @@ class WidgetManager:
         # Fade coordination
         self._fade_callbacks: Dict[str, Callable] = {}
         
-        # Overlay fade synchronization state (Phase E: centralized coordination)
+        # Overlay fade synchronization state (Phase E: lock-free coordination)
+        # Lock-free state: All fade state changes go through SPSCQueue, processed on UI thread
+        # CRITICAL: Queue size must be large enough for all widgets (clock x3, weather, media, reddit x2, spotify x2 = ~10)
+        self._fade_request_q: SPSCQueue[tuple] = SPSCQueue(256)  # (overlay_name, starter) tuples - increased from 64
+        self._fade_state_tb: TripleBuffer[dict] = TripleBuffer()  # Atomic state: expected, started, compositor_ready
+        self._fade_state_cache: dict = {'expected': set(), 'started': False, 'compositor_ready': False}
+        self._fade_drain_timer: Optional[QTimer] = None
+        self._fade_sync_timeout_ms: int = 5000  # Increased from 2500 to allow Reddit widgets time to register
+        
+        # Legacy state (for compatibility during transition - remove after lock-free migration complete)
         self._overlay_fade_expected: Set[str] = set()
         self._overlay_fade_pending: Dict[str, Callable[[], None]] = {}
         self._overlay_fade_started: bool = False
@@ -136,11 +146,18 @@ class WidgetManager:
     
     def _on_compositor_ready(self, image_path: str) -> None:
         """Called when compositor displays first image."""
+        screen_idx = getattr(self._parent, "screen_index", "?")
         if self._compositor_ready:
+            logger.debug("[FADE_SYNC] Compositor already ready on screen=%s, ignoring duplicate signal", screen_idx)
             return  # Already marked ready
         
         self._compositor_ready = True
-        logger.debug("[FADE_SYNC] Compositor ready (first image displayed)")
+        # Update atomic state
+        self._update_fade_state_atomic(compositor_ready=True)
+        
+        logger.info("[FADE_SYNC] Compositor ready on screen=%s (first image: %s)", screen_idx, image_path)
+        logger.info("[FADE_SYNC] Screen=%s pending=%s started=%s", 
+                    screen_idx, sorted(self._overlay_fade_pending.keys()), self._overlay_fade_started)
         
         # Disconnect signal to avoid repeated calls
         try:
@@ -151,7 +168,11 @@ class WidgetManager:
         
         # If we have pending fades waiting for compositor, start them now
         if self._overlay_fade_pending and not self._overlay_fade_started:
+            logger.info("[FADE_SYNC] Starting pending fades on screen=%s", screen_idx)
             self._start_overlay_fades(force=False)
+        else:
+            logger.info("[FADE_SYNC] No pending fades to start on screen=%s (pending=%s, started=%s)",
+                        screen_idx, bool(self._overlay_fade_pending), self._overlay_fade_started)
     
     def set_factory_registry(
         self, 
@@ -1411,6 +1432,7 @@ class WidgetManager:
 
     def reset_fade_coordination(self) -> None:
         """Reset fade coordination state for a new widget setup cycle."""
+        # Legacy state reset
         self._overlay_fade_expected = set()
         self._overlay_fade_pending = {}
         self._overlay_fade_started = False
@@ -1422,81 +1444,160 @@ class WidgetManager:
                 logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             self._overlay_fade_timeout = None
         self._spotify_secondary_fade_starters = []
+        
+        # Lock-free state reset
+        self._fade_state_cache = {'expected': set(), 'started': False, 'compositor_ready': False}
+        self._fade_state_tb.publish(self._fade_state_cache)
+        # Note: SPSCQueue doesn't need reset - items will be drained or dropped
 
     def set_expected_overlays(self, expected: Set[str]) -> None:
         """Set the overlays expected to participate in coordinated fade.
+        
+        Thread-safe: Updates atomic state via TripleBuffer.
         
         Args:
             expected: Set of overlay names (e.g., {"weather", "media", "reddit"})
         """
         self._overlay_fade_expected = set(expected)
+        self._update_fade_state_atomic(expected=set(expected))
 
     def add_expected_overlay(self, name: str) -> None:
-        """Add an overlay to the expected set."""
+        """Add an overlay to the expected set (thread-safe via TripleBuffer)."""
         self._overlay_fade_expected.add(name)
+        expected = self._fade_state_cache.get('expected', set())
+        expected.add(name)
+        self._update_fade_state_atomic(expected=expected)
 
     def request_overlay_fade_sync(self, overlay_name: str, starter: Callable[[], None]) -> None:
         """Register an overlay's initial fade so all widgets can fade together.
 
-        Overlays call this when they are ready to start their first fade-in.
-        We buffer the starter callbacks until either all expected overlays have
-        registered or a short timeout elapses, then run them together.
-        
+        Lock-free: pushes request to SPSCQueue, processed by UI thread timer.
+        Safe to call from any thread without marshaling.
+
         Args:
             overlay_name: Name of the overlay requesting fade
             starter: Callback to start the fade animation
         """
-        expected = self._overlay_fade_expected
-        started = self._overlay_fade_started
-
-        if is_verbose_logging():
-            screen_idx = getattr(self._parent, "screen_index", "?")
-            logger.debug(
-                "[OVERLAY_FADE] request_overlay_fade_sync: screen=%s overlay=%s expected=%s started=%s",
-                screen_idx, overlay_name, sorted(expected) if expected else [], started,
+        # Lock-free push to queue (drops oldest if full)
+        # Check queue size before push to detect overflow
+        queue_size_before = self._fade_request_q.size()
+        self._fade_request_q.push_drop_oldest(('register', overlay_name, starter))
+        queue_size_after = self._fade_request_q.size()
+        
+        screen_idx = getattr(self._parent, "screen_index", "?")
+        
+        # Detect overflow: if size didn't increase, an item was dropped
+        if queue_size_after <= queue_size_before and queue_size_before > 0:
+            logger.warning(
+                "[OVERLAY_FADE] Queue overflow detected! screen=%s overlay=%s queue_size=%d -> %d",
+                screen_idx, overlay_name, queue_size_before, queue_size_after
             )
+        else:
+            logger.info(
+                "[OVERLAY_FADE] Queued: screen=%s overlay=%s queue_size=%d",
+                screen_idx, overlay_name, queue_size_after
+            )
+        
+        # Schedule drain on UI thread
+        self._schedule_fade_drain()
 
-        # If coordination is not active or fades already kicked off, run now.
-        if not expected or started:
-            if is_verbose_logging():
-                logger.debug(
-                    "[OVERLAY_FADE] %s running starter immediately (expected=%s, started=%s)",
-                    overlay_name, sorted(expected) if expected else [], started,
-                )
+    def _schedule_fade_drain(self, delay_ms: int = 0) -> None:
+        """Schedule the fade queue drain on UI thread via ResourceManager."""
+        if self._fade_drain_timer is None:
+            self._fade_drain_timer = QTimer()
+            self._fade_drain_timer.setSingleShot(True)
+            self._fade_drain_timer.timeout.connect(self._drain_fade_requests)
+            # Register with ResourceManager for proper cleanup
+            if self._resource_manager:
+                self._resource_manager.register_qt(self._fade_drain_timer, description="fade_drain_timer")
+        if not self._fade_drain_timer.isActive():
+            self._fade_drain_timer.start(max(0, delay_ms))
+
+    def _drain_fade_requests(self) -> None:
+        """Process all pending fade requests on UI thread (lock-free consumer)."""
+        # Read latest atomic state from TripleBuffer
+        state = self._fade_state_tb.consume_latest()
+        if state is not None:
+            self._fade_state_cache = state
+
+        expected = self._fade_state_cache.get('expected', set())
+        started = self._fade_state_cache.get('started', False)
+        screen_idx = getattr(self._parent, "screen_index", "?")
+
+        # Collect all pending fade requests from queue
+        pending: Dict[str, Callable[[], None]] = {}
+        while True:
+            ok, item = self._fade_request_q.try_pop()
+            if not ok:
+                break
             try:
-                starter()
+                kind, overlay_name, starter = item
+                if kind == 'register':
+                    pending[overlay_name] = starter
             except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+                logger.debug("[WIDGET_MANAGER] Invalid fade request: %s", e)
+
+        if not pending:
             return
 
-        self._overlay_fade_pending[overlay_name] = starter
-
-        remaining = [name for name in expected if name not in self._overlay_fade_pending]
-        if is_verbose_logging():
-            logger.debug(
-                "[OVERLAY_FADE] %s registered (pending=%s, remaining=%s)",
-                overlay_name, sorted(self._overlay_fade_pending.keys()), sorted(remaining),
+        # Process pending fades
+        for overlay_name, starter in pending.items():
+            logger.info(
+                "[OVERLAY_FADE] Processing: screen=%s overlay=%s expected=%s started=%s",
+                screen_idx, overlay_name, sorted(expected) if expected else [], started
             )
 
-        if not remaining:
-            try:
-                QTimer.singleShot(0, lambda: self._start_overlay_fades(force=False))
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+            # If no coordination expected, run immediately
+            if not expected:
+                logger.info("[OVERLAY_FADE] %s running immediately (no coordination)", overlay_name)
+                try:
+                    starter()
+                except Exception as e:
+                    logger.debug("[WIDGET_MANAGER] Starter failed: %s", e)
+                continue
+
+            # If coordination already started, late widgets fade with delay (don't pop in instantly)
+            if started:
+                logger.info("[OVERLAY_FADE] %s starting late (coordination already started)", overlay_name)
+                try:
+                    # If this widget was expected, use secondary fade timing (500ms) for coordinated look
+                    # This makes it appear as part of a secondary wave, not instant pop-in
+                    delay_ms = 500 if overlay_name in expected else 100
+                    logger.info("[OVERLAY_FADE] %s using %dms delay for coordinated late fade", overlay_name, delay_ms)
+                    QTimer.singleShot(delay_ms, starter)
+                except Exception as e:
+                    logger.debug("[WIDGET_MANAGER] Starter failed: %s", e)
+                continue
+
+            # Add to pending dict for coordination logic
+            if overlay_name in self._overlay_fade_pending:
+                logger.warning("[OVERLAY_FADE] %s already pending, overwriting", overlay_name)
+            self._overlay_fade_pending[overlay_name] = starter
+
+        # Check if all expected overlays are now pending
+        if expected and not started:
+            remaining = [name for name in expected if name not in self._overlay_fade_pending]
+            logger.info(
+                "[OVERLAY_FADE] screen=%s pending=%s remaining=%s",
+                screen_idx, sorted(self._overlay_fade_pending.keys()), sorted(remaining)
+            )
+            if not remaining:
                 self._start_overlay_fades(force=False)
-            return
+            elif self._overlay_fade_timeout is None:
+                # Arm timeout with ResourceManager registration
+                self._overlay_fade_timeout = QTimer()
+                self._overlay_fade_timeout.setSingleShot(True)
+                self._overlay_fade_timeout.timeout.connect(lambda: self._start_overlay_fades(force=True))
+                if self._resource_manager:
+                    self._resource_manager.register_qt(self._overlay_fade_timeout, description="fade_sync_timeout")
+                self._overlay_fade_timeout.start(self._fade_sync_timeout_ms)
 
-        # Arm a timeout so a misbehaving overlay cannot block all fades.
-        if self._overlay_fade_timeout is None:
-            try:
-                timeout = QTimer()
-                timeout.setSingleShot(True)
-                timeout.timeout.connect(lambda: self._start_overlay_fades(force=True))
-                timeout.start(2500)
-                self._overlay_fade_timeout = timeout
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-                self._start_overlay_fades(force=True)
+    def _update_fade_state_atomic(self, **updates) -> None:
+        """Update fade state atomically via TripleBuffer."""
+        new_state = self._fade_state_cache.copy()
+        new_state.update(updates)
+        self._fade_state_tb.publish(new_state)
+        self._fade_state_cache = new_state
 
     def _start_overlay_fades(self, force: bool = False) -> None:
         """Kick off any pending overlay fade callbacks."""
@@ -1508,7 +1609,20 @@ class WidgetManager:
             logger.debug("[FADE_SYNC] Waiting for compositor to be ready before starting fades")
             return  # Will be called again when compositor is ready
         
+        # CRITICAL: Wait for ALL expected overlays to register before starting
+        # This ensures widgets like Reddit that register late still coordinate properly
+        expected = self._fade_state_cache.get('expected', set())
+        pending_keys = set(self._overlay_fade_pending.keys())
+        missing = expected - pending_keys
+        
+        if missing and not force:
+            logger.info("[FADE_SYNC] Waiting for overlays: %s", sorted(missing))
+            return  # Will be called again when more overlays register
+        
         self._overlay_fade_started = True
+        # Update atomic state
+        self._update_fade_state_atomic(started=True, compositor_ready=self._compositor_ready)
+        
         logger.debug("[FADE_SYNC] _start_overlay_fades called (force=%s, compositor_ready=%s)", 
                     force, self._compositor_ready)
 
@@ -1816,22 +1930,25 @@ class WidgetManager:
             return existing
 
         def _ensure_thread_manager(widget: QWidget, widget_name: str) -> None:
+            """Ensure widget has ThreadManager injected, with logging for diagnostics."""
             if widget is None or not hasattr(widget, "set_thread_manager"):
                 return
             parent_tm = getattr(self._parent, "_thread_manager", None)
             if parent_tm is None:
+                logger.debug("[WIDGET_MANAGER] No parent ThreadManager available for %s", widget_name)
                 return
             try:
                 current = getattr(widget, "_thread_manager", None)
             except Exception:
                 current = None
             if current is parent_tm and current is not None:
+                logger.debug("[WIDGET_MANAGER] %s already has correct ThreadManager", widget_name)
                 return
             try:
                 widget.set_thread_manager(parent_tm)
-                logger.debug("[WIDGET_MANAGER] ThreadManager injected into reused %s", widget_name)
+                logger.info("[WIDGET_MANAGER] ThreadManager injected into %s (was: %s)", widget_name, current)
             except Exception as exc:
-                logger.debug("[WIDGET_MANAGER] Failed to inject ThreadManager into %s: %s", widget_name, exc)
+                logger.warning("[WIDGET_MANAGER] Failed to inject ThreadManager into %s: %s", widget_name, exc)
 
         # Create clock widgets via factory
         for settings_key, attr_name, default_pos, default_size in [
