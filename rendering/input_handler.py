@@ -168,12 +168,16 @@ class InputHandler(QObject):
             logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
             native_vk = 0
         
+        # Log ALL key presses for diagnostics
+        logger.debug("[INPUT_HANDLER] Key press: key=%s text=%s native_vk=%s", key, key_text, native_vk)
+        
         # Ctrl key handling is done by DisplayWidget for halo management
         if key == Qt.Key.Key_Control:
             return False  # Let DisplayWidget handle Ctrl
         
         # Media keys should never cause exit, but we still mirror feedback
         if self._is_media_key(event):
+            logger.info("[INPUT_HANDLER] Media key detected, routing for feedback")
             self._handle_media_key_feedback(event)
             logger.debug("Media key pressed - ignoring (passthrough) (key=%s)", key)
             return False
@@ -777,22 +781,27 @@ class InputHandler(QObject):
         source: str,
         execute: bool = True,
     ) -> bool:
+        logger.debug("[INPUT_HANDLER] _invoke_media_command ENTRY: key=%s source=%s execute=%s", key, source, execute)
         if media_widget is None or not hasattr(media_widget, "handle_transport_command"):
+            logger.debug("[INPUT_HANDLER] _invoke_media_command: no widget or method")
             return False
         try:
-            return bool(
+            result = bool(
                 media_widget.handle_transport_command(
                     key,
                     source=source,
                     execute=execute,
                 )
             )
+            logger.debug("[INPUT_HANDLER] _invoke_media_command EXIT: result=%s", result)
+            return result
         except Exception:
             logger.debug("[INPUT_HANDLER] Media command dispatch failed", exc_info=True)
             return False
 
     def _handle_media_key_feedback(self, event: QKeyEvent) -> None:
         key = event.key()
+        logger.debug("[INPUT_HANDLER] _handle_media_key_feedback: key=%s", key)
         command = None
         source = "media_key"
 
@@ -829,14 +838,33 @@ class InputHandler(QObject):
             source = f"media_key:{int(key)}"
 
         if command is None:
+            logger.info("[INPUT_HANDLER] Media key: command is None (key=%s), skipping", key)
             return
 
-        media_widget = getattr(self._parent, "media_widget", None)
+        # Try to get media widget from widget_manager first, then fall back to parent
+        media_widget = None
+        if self._widget_manager is not None:
+            media_widget = self._widget_manager.get_widget("media") or self._widget_manager.get_widget("media_widget")
+        if media_widget is None:
+            media_widget = getattr(self._parent, "media_widget", None)
+        # If still not found, search across all DisplayWidgets (multi-monitor setup)
+        if media_widget is None:
+            try:
+                from rendering.display_widget import DisplayWidget
+                for w in QApplication.topLevelWidgets():
+                    if isinstance(w, DisplayWidget):
+                        mw = getattr(w, "media_widget", None)
+                        if mw is not None:
+                            media_widget = mw
+                            break
+            except Exception as e:
+                logger.debug("[INPUT_HANDLER] Exception searching for media widget: %s", e)
+        logger.debug("[INPUT_HANDLER] Media widget lookup: widget=%s", media_widget)
         if media_widget is None:
             logger.debug("[INPUT_HANDLER] Media key %s ignored (no media widget)", command)
             return
         
-        logger.info("[INPUT_HANDLER] Media key %s detected, routing to widget", command)
+        logger.debug("[INPUT_HANDLER] Media key %s detected, routing to widget", command)
         
         # For media keys, the OS already executed the command.
         # We just need to trigger optimistic UI updates and feedback.

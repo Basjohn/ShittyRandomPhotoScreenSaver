@@ -203,6 +203,7 @@ class MediaWidget(BaseOverlayWidget):
         self._controls_row_shadow_alpha: int = 60
         self._controls_row_outline_alpha: int = 65
         self._controls_layout_cache: Optional[dict[str, object]] = None
+        self._slab_effect_enabled: bool = False  # Slab Effect - Experimental
         self._last_display_update_ts: float = 0.0
         self._skipped_identity_updates: int = 0
         self._max_identity_skip: int = 4
@@ -652,6 +653,11 @@ class MediaWidget(BaseOverlayWidget):
                 logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
                 self._safe_update()
 
+    def set_slab_effect_enabled(self, enabled: bool) -> None:
+        """Enable or disable the 3D slab effect on the controls row."""
+        self._slab_effect_enabled = bool(enabled)
+        self._safe_update()
+
     def _invalidate_controls_layout(self) -> None:
         """Clear cached transport controls geometry."""
         self._controls_layout_cache = None
@@ -874,8 +880,10 @@ class MediaWidget(BaseOverlayWidget):
 
     def _handle_control_feedback(self, key: str, source: str, *, force_refresh: bool) -> None:
         if key not in ("prev", "play", "next"):
+            logger.debug("[MEDIA_WIDGET][FEEDBACK] Invalid key: %s", key)
             return
         self._last_manual_control = (key, time.monotonic(), source)
+        logger.debug("[MEDIA_WIDGET][FEEDBACK] Triggering feedback for %s from %s", key, source)
         self._trigger_controls_feedback(key, source=source)
         if force_refresh:
             self._request_refresh_after_control()
@@ -1411,7 +1419,7 @@ class MediaWidget(BaseOverlayWidget):
         header_metrics = QFontMetrics(QFont(self._font_family, header_font_pt, QFont.Weight.Bold))
         header_height = header_metrics.height()
 
-        base_row_top = height - margins.bottom() - row_height
+        base_row_top = height - margins.bottom() - row_height - 5  # Shift up 5px for 3D depth effect
         min_row_top = margins.top() + header_height + 6
         row_top = max(min_row_top, base_row_top)
         if row_top + row_height > height - margins.bottom():
@@ -1484,6 +1492,37 @@ class MediaWidget(BaseOverlayWidget):
             matte_top.setAlpha(min(255, int(base_color.alpha() * 0.95) + 30))
             matte_bottom.setAlpha(min(255, int(base_color.alpha() * 0.85)))
 
+            # 3D slab effect: filled darker border 4px right/4px down, with light shadow
+            if self._slab_effect_enabled:
+                shadow_offset_x = 4
+                shadow_offset_y = 4
+                slab_rect = row_rect.adjusted(shadow_offset_x, shadow_offset_y, shadow_offset_x, shadow_offset_y)
+                
+                # Slab fill: same gradient as control bar but darker
+                slab_matte_top = QColor(matte_top).darker(115)
+                slab_matte_bottom = QColor(matte_bottom).darker(115)
+                
+                # Light shadow around the slab (drawn first, behind slab)
+                shadow_color = QColor(0, 0, 0, 40)  # Very light shadow
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(shadow_color)
+                shadow_rect = slab_rect.adjusted(-2, -2, 2, 2)
+                painter.drawRoundedRect(shadow_rect, self._controls_row_radius + 1, self._controls_row_radius + 1)
+                
+                # Draw the filled slab underneath with matching gradient
+                slab_gradient = QLinearGradient(slab_rect.topLeft(), slab_rect.bottomLeft())
+                slab_gradient.setColorAt(0.0, slab_matte_top)
+                slab_gradient.setColorAt(1.0, slab_matte_bottom)
+                painter.setBrush(slab_gradient)
+                painter.drawRoundedRect(slab_rect, self._controls_row_radius, self._controls_row_radius)
+                
+                # Slab outline: white 10% darker than control bar outline
+                slab_outline = QColor(255, 255, 255, self._controls_row_outline_alpha).darker(110)
+                painter.setPen(slab_outline)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawRoundedRect(slab_rect, self._controls_row_radius, self._controls_row_radius)
+
+            # Main gradient fill (drawn on top of shadow)
             gradient = QLinearGradient(row_rect.topLeft(), row_rect.bottomLeft())
             gradient.setColorAt(0.0, matte_top)
             gradient.setColorAt(1.0, matte_bottom)
@@ -1492,14 +1531,16 @@ class MediaWidget(BaseOverlayWidget):
             painter.setBrush(gradient)
             painter.drawRoundedRect(row_rect, self._controls_row_radius, self._controls_row_radius)
 
-            # Inner matte outline
+            # Inner matte outline (2px thicker outer border)
             outline = QColor(255, 255, 255, self._controls_row_outline_alpha)
+            # Outer shadow edge (bottom/right of row rect)
             painter.setPen(QColor(0, 0, 0, self._controls_row_shadow_alpha))
             painter.drawRoundedRect(
-                row_rect.adjusted(1, 1, -1, -1),
+                row_rect.adjusted(2, 2, -2, -2),
                 self._controls_row_radius - 1,
                 self._controls_row_radius - 1,
             )
+            # Inner highlight edge (top/left of row rect)
             painter.setPen(outline)
             painter.drawRoundedRect(
                 row_rect.adjusted(0, 0, 0, 0),
@@ -1507,6 +1548,7 @@ class MediaWidget(BaseOverlayWidget):
                 self._controls_row_radius,
             )
 
+            # Divider lines (relative to row_rect)
             divider_color = QColor(255, 255, 255, 55)
             painter.setPen(divider_color)
             top_divider = row_rect.top() + int(row_rect.height() * 0.15)
@@ -1866,7 +1908,10 @@ class MediaWidget(BaseOverlayWidget):
     def _trigger_controls_feedback(self, key: str, source: str = "manual") -> None:
         """Trigger control feedback animation."""
         if key not in ("prev", "play", "next"):
+            logger.debug("[MEDIA_WIDGET][FEEDBACK] Invalid feedback key: %s", key)
             return
+        
+        logger.debug("[MEDIA_WIDGET][FEEDBACK] Starting feedback animation for %s", key)
         
         cls = type(self)
         now = time.monotonic()
@@ -1879,12 +1924,6 @@ class MediaWidget(BaseOverlayWidget):
         self._controls_feedback[key] = (now, event_id)
         self._feedback_deadlines[key] = now + self._controls_feedback_duration
         self._active_feedback_events[key] = event_id
-        self._log_feedback_metric(
-            phase="trigger",
-            key=key,
-            source=source,
-            event_id=event_id,
-        )
         self._start_feedback_animation(key)
         
         # Register in shared events
@@ -1898,6 +1937,7 @@ class MediaWidget(BaseOverlayWidget):
         # Ensure timer is running
         cls._ensure_shared_feedback_timer()
         self._safe_update()
+        logger.debug("[MEDIA_WIDGET][FEEDBACK] Feedback animation started for %s", key)
 
     def _log_feedback_metric(self, *, phase: str, key: str, source: str, event_id: str) -> None:
         """Emit structured logs for control feedback when diagnostics enabled."""
@@ -1968,7 +2008,7 @@ class MediaWidget(BaseOverlayWidget):
             _, event_id = entry
             type(self)._shared_feedback_events.pop(event_id, None)
 
-        deadline = self._feedback_deadlines.pop(key, None)
+        self._feedback_deadlines.pop(key, None)
         active_id = self._active_feedback_events.pop(key, None)
         if active_id and is_perf_metrics_enabled():
             self._log_feedback_metric(
@@ -1976,7 +2016,6 @@ class MediaWidget(BaseOverlayWidget):
                 key=key,
                 source="local",
                 event_id=active_id,
-                deadline=f"{deadline:.3f}" if deadline else "n/a",
             )
 
         # Stop timer if no more feedback

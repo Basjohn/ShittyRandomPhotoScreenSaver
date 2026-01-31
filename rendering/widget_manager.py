@@ -118,10 +118,13 @@ class WidgetManager:
     def _bind_parent_attribute(self, attr_name: str, widget: Optional[QWidget]) -> None:
         """Expose newly created widgets on the parent DisplayWidget immediately."""
         parent = self._parent
+        logger.debug("[WIDGET_MANAGER] Binding %s to parent=%s widget=%s", attr_name, parent, widget)
         if parent is None:
+            logger.debug("[WIDGET_MANAGER] Cannot bind %s - parent is None", attr_name)
             return
         try:
             setattr(parent, attr_name, widget)
+            logger.debug("[WIDGET_MANAGER] Successfully bound %s to parent", attr_name)
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Failed to bind %s on parent: %s", attr_name, e)
     

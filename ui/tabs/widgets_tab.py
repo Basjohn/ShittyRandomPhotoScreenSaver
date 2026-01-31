@@ -990,6 +990,17 @@ class WidgetsTab(QWidget):
         self.media_show_controls.stateChanged.connect(self._save_settings)
         media_layout.addWidget(self.media_show_controls)
 
+        # Slab Effect - Experimental
+        self.media_slab_effect = QCheckBox("Slab Effect - Experimental")
+        self.media_slab_effect.setChecked(
+            self._default_bool('media', 'slab_effect_enabled', True)
+        )
+        self.media_slab_effect.setToolTip(
+            "Adds a 3D depth effect to the transport controls row with a subtle shadow."
+        )
+        self.media_slab_effect.stateChanged.connect(self._save_settings)
+        media_layout.addWidget(self.media_slab_effect)
+
         # Spotify-only vertical volume slider (paired with the Spotify card).
         self.media_spotify_volume_enabled = QCheckBox("Enable Spotify Volume Slider")
         self.media_spotify_volume_enabled.setToolTip(
@@ -1930,6 +1941,8 @@ class WidgetsTab(QWidget):
 
             self.media_show_controls.setChecked(self._config_bool('media', media_config, 'show_controls', True))
 
+            self.media_slab_effect.setChecked(self._config_bool('media', media_config, 'slab_effect_enabled', False))
+
             self.media_spotify_volume_enabled.setChecked(
                 self._config_bool('media', media_config, 'spotify_volume_enabled', True)
             )
@@ -2384,6 +2397,7 @@ class WidgetsTab(QWidget):
             'rounded_artwork_border': self.media_rounded_artwork.isChecked(),
             'show_header_frame': self.media_show_header_frame.isChecked(),
             'show_controls': self.media_show_controls.isChecked(),
+            'slab_effect_enabled': self.media_slab_effect.isChecked(),
             'spotify_volume_enabled': self.media_spotify_volume_enabled.isChecked(),
         }
         mmon_text = self.media_monitor_combo.currentText()

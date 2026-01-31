@@ -435,6 +435,26 @@ This is a **low-priority enhancement** that could be added post-v1.2 if users re
 
 ## v2.0 Architecture Updates (Jan 2026)
 
+### Fade Coordination & Media Key Updates (Jan 31, 2026)
+- **Lock-free fade coordination** (`rendering/widget_manager.py`):
+  - Uses `SPSCQueue` (256 capacity) and `TripleBuffer` for atomic fade state exchange
+  - WidgetManager waits for ALL expected overlays before starting fades (prevents Reddit desync)
+  - Fade sync timeout increased to 5000ms for late-registering widgets
+  - Late widgets use 500ms secondary fade timing for coordinated appearance
+- **Media key instant glyph update** (`widgets/media_widget.py`):
+  - `play_pause()` bypasses diff gating for optimistic state updates
+  - Uses `repaint()` (not `update()`) for immediate feedback
+  - Performance-guarded: only repaints if `_show_controls` and `isVisible()`
+  - Visualizer already updates instantly; now play/pause glyph matches
+- **Media control bar visual improvements** (`widgets/media_widget.py`):
+  - Shifted up 5px for better positioning within card
+  - Outer border increased from 1px to 2px for better visibility
+  - 3D lift/depth effect: filled slab 4px right/4px down
+  - Slab uses same gradient as control bar but 15% darker
+  - Slab outline: white 10% darker than control bar outline
+  - Light shadow (alpha 40) behind slab for depth
+  - **Slab Effect - Experimental** setting added to toggle the 3D effect
+
 ### GL State Management Refactoring
 - **GLStateManager** (`rendering/gl_state_manager.py`) provides centralized GL context state management with validated state transitions.
 - **ResourceManager GL Hooks** (`core/resources/manager.py`): Added `register_gl_handle()`, `register_gl_vao()`, `register_gl_vbo()`, `register_gl_program()`, `register_gl_texture()` for VRAM leak prevention.
@@ -450,4 +470,4 @@ This is a **low-priority enhancement** that could be added post-v1.2 if users re
 - Key test files: `test_integration_full_workflow.py` (19 tests), `test_spotify_visualizer_widget.py` (13 tests), `test_gl_texture_streaming.py` (18 tests).
 
 **Version**: 2.0.0-dev  
-**Last Updated**: Jan 05, 2026 - v2.0 Roadmap Phase 4-6 in progress: GL State Management Phases 1-4 complete, integration tests added, settings validation enhanced, 307 tests passing.
+**Last Updated**: Jan 31, 2026 - Fade coordination and media key fixes complete.

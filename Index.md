@@ -107,6 +107,19 @@ A living map of modules, purposes, and key classes. Keep this up to date.
   - **Phase 5.3**: Performance optimization tests complete (GL texture streaming, memory pooling)
   - **Settings Validation**: Auto-repair for corrupted sensitivity values in `validate_and_repair()`
   - **Widget Margin Alignment** (Jan 5, 2026): Centralized positioning for all overlay widgets
+  - **Jan 31, 2026**: Fade coordination fixes
+    - Lock-free fade coordination using SPSCQueue (256 capacity) and TripleBuffer for atomic state
+    - WidgetManager waits for ALL expected overlays before starting fades (prevents Reddit desync)
+    - Increased fade sync timeout to 5000ms for late-registering widgets
+    - Late widgets use 500ms secondary fade timing for coordinated appearance
+  - **Jan 31, 2026**: Media control bar visual improvements
+    - Shifted up 5px for better positioning
+    - Outer border increased from 1px to 2px for better visibility
+    - 3D lift/depth effect: filled slab 4px right/4px down
+    - Slab uses same gradient as control bar but 15% darker
+    - Slab outline: white 10% darker than control bar outline
+    - Light shadow (alpha 40) behind slab for depth
+    - **Slab Effect - Experimental** setting to toggle 3D effect on/off
     - Fixed BaseOverlayWidget MIDDLE_LEFT/MIDDLE_RIGHT positioning
     - Refactored RedditWidget, MediaWidget, ClockWidget to delegate to BaseOverlayWidget._update_position()
     - Fixed ClockWidget recursion bug (set_visual_padding calling _update_position)
