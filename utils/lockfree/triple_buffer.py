@@ -39,3 +39,8 @@ class TripleBuffer(Generic[T]):
         val = self._slots[r]
         self._read = r
         return val
+
+    def has_pending(self) -> bool:
+        """Check if there's new data that hasn't been consumed yet."""
+        r = self._ready
+        return r >= 0 and r != self._read

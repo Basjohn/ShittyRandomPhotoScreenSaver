@@ -159,7 +159,7 @@ class WidgetManager:
         self._update_fade_state_atomic(compositor_ready=True)
         
         logger.info("[FADE_SYNC] Compositor ready on screen=%s (first image: %s)", screen_idx, image_path)
-        logger.info("[FADE_SYNC] Screen=%s pending=%s started=%s", 
+        logger.debug("[FADE_SYNC] Screen=%s pending=%s started=%s", 
                     screen_idx, sorted(self._overlay_fade_pending.keys()), self._overlay_fade_started)
         
         # Disconnect signal to avoid repeated calls
@@ -174,7 +174,7 @@ class WidgetManager:
             logger.info("[FADE_SYNC] Starting pending fades on screen=%s", screen_idx)
             self._start_overlay_fades(force=False)
         else:
-            logger.info("[FADE_SYNC] No pending fades to start on screen=%s (pending=%s, started=%s)",
+            logger.debug("[FADE_SYNC] No pending fades to start on screen=%s (pending=%s, started=%s)",
                         screen_idx, bool(self._overlay_fade_pending), self._overlay_fade_started)
     
     def set_factory_registry(
@@ -1742,19 +1742,12 @@ class WidgetManager:
 
         self._pending_spotify_visibility_sync = True
 
-        if is_perf_metrics_enabled():
-            logger.info(
-                "[SPOTIFY_DIAG] scheduling media visibility sync (screen=%s)",
-                getattr(self._parent, "screen_index", "?"),
-            )
-
         def _run() -> None:
             try:
-                if is_perf_metrics_enabled():
-                    logger.info(
-                        "[SPOTIFY_DIAG] running media visibility sync (visible=%s)",
-                        media_widget.isVisible(),
-                    )
+                logger.debug(
+                    "[SPOTIFY_DIAG] running media visibility sync (visible=%s)",
+                    media_widget.isVisible(),
+                )
                 notify()
             except Exception as exc:
                 logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", exc)
@@ -1799,7 +1792,7 @@ class WidgetManager:
             if not anchor_visible and attempt < max_deferrals:
                 delay_ms = min(1000, 200 + attempt * 100)
                 if is_perf_metrics_enabled():
-                    logger.info(
+                    logger.debug(
                         "[SPOTIFY_DIAG] deferring secondary fade for %s (anchor hidden, attempt=%s, delay=%sms)",
                         widget.objectName() or type(widget).__name__,
                         attempt + 1,
@@ -1809,20 +1802,20 @@ class WidgetManager:
                 return
 
             if not anchor_visible and is_perf_metrics_enabled():
-                logger.info(
+                logger.debug(
                     "[SPOTIFY_DIAG] anchor still hidden after deferrals, forcing fade for %s",
                     widget.objectName() or type(widget).__name__,
                 )
 
             if is_perf_metrics_enabled():
-                logger.info(
+                logger.debug(
                     "[SPOTIFY_DIAG] secondary fade starter running for %s",
                     widget.objectName() or type(widget).__name__,
                 )
             _run_sync()
 
         if is_perf_metrics_enabled():
-            logger.info(
+            logger.debug(
                 "[SPOTIFY_DIAG] registering secondary fade for %s (screen=%s)",
                 widget.objectName() or type(widget).__name__,
                 getattr(self._parent, "screen_index", "?"),

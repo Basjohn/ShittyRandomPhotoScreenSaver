@@ -38,7 +38,9 @@ from core.threading import ThreadManager
 from core.settings import SettingsManager
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.animation import AnimationManager
-from core.process import ProcessSupervisor, WorkerType, MessageType
+from core.process.types import WorkerMessage, WorkerResponse, WorkerType, MessageType
+from queue import Empty as QueueEmpty
+from core.process.supervisor import ProcessSupervisor
 from core.process.workers import (
     image_worker_main,
     rss_worker_main,
@@ -1881,15 +1883,22 @@ class ScreensaverEngine(QObject):
                 logger.debug(f"{TAG_WORKER} Failed to send message to ImageWorker")
                 return None
             
-            # Poll for response with timeout
+            # Wait for response with blocking get - more efficient than busy-polling
             start_time = time.time()
             timeout_s = timeout_ms / 1000.0
+            correlation_id_set = {correlation_id}  # Fast lookup
             
             while (time.time() - start_time) < timeout_s:
-                responses = self._process_supervisor.poll_responses(WorkerType.IMAGE, max_count=10)
-                
-                for response in responses:
-                    # Skip WORKER_BUSY/IDLE messages - they're handled internally
+                # Use blocking get with short timeout - worker wakes us when response arrives
+                try:
+                    resp_queue = self._process_supervisor._response_queues.get(WorkerType.IMAGE)
+                    if not resp_queue:
+                        return None
+                    # Blocking get with 50ms timeout - efficient waiting
+                    data = resp_queue.get(timeout=0.05)
+                    response = WorkerResponse.from_dict(data)
+                    
+                    # Handle internal messages (heartbeat, busy/idle)
                     if response.msg_type in (MessageType.WORKER_BUSY, MessageType.WORKER_IDLE, MessageType.HEARTBEAT_ACK):
                         continue
                     
@@ -1949,9 +1958,13 @@ class ScreensaverEngine(QObject):
                             error = response.error or "Unknown error"
                             logger.warning(f"{TAG_WORKER} ImageWorker failed: %s", error)
                             return None
-                
-                # Brief sleep to avoid busy-waiting
-                time.sleep(0.005)
+                        
+                except QueueEmpty:
+                    # Timeout on blocking get - check if we've exceeded total timeout
+                    continue
+                except Exception as e:
+                    logger.debug(f"{TAG_WORKER} Error waiting for response: %s", e)
+                    return None
             
             logger.warning(f"{TAG_WORKER} ImageWorker timeout after %dms", timeout_ms)
             return None

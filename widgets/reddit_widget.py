@@ -1425,7 +1425,8 @@ class RedditWidget(BaseOverlayWidget):
             return
 
         rect = QRect(left, top, total_w, total_h)
-        radius = min(rect.width(), rect.height()) / 2.5
+        # Match widget border radius + 1px for subtle visual hierarchy
+        radius = min(self._bg_corner_radius + 1, min(rect.width(), rect.height()) / 2)
 
         # Use shadow helper for border with drop shadow
         draw_rounded_rect_with_shadow(

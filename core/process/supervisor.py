@@ -14,6 +14,7 @@ import threading
 import time
 import uuid
 from multiprocessing import Queue
+from queue import Empty as QueueEmpty
 from typing import Any, Callable, Dict, Optional
 
 from core.constants.timing import (
@@ -236,11 +237,12 @@ class ProcessSupervisor:
                 )
                 
                 req_queue = self._request_queues.get(worker_type)
-                if req_queue:
-                    try:
-                        req_queue.put_nowait(shutdown_msg.to_dict())
-                    except Exception as e:
-                        logger.debug("[WORKER] Exception suppressed: %s", e)
+                if req_queue is None:
+                    return False
+                try:
+                    req_queue.put_nowait(shutdown_msg.to_dict())
+                except Exception:
+                    pass
                 
                 # Wait for graceful shutdown
                 process.join(timeout=timeout)
@@ -366,8 +368,7 @@ class ProcessSupervisor:
                     req_queue.put_nowait(message.to_dict())
                     logger.debug("Dropped oldest message for %s worker", worker_type.value)
                     return corr_id
-                except Exception as e:
-                    logger.debug("[WORKER] Exception suppressed: %s", e)
+                except Exception:
                     return None
     
     def poll_responses(
@@ -419,8 +420,12 @@ class ProcessSupervisor:
                         self._health[worker_type].set_busy(False)
                         self._health[worker_type].record_heartbeat()  # Reset heartbeat on idle
                         
+            except QueueEmpty:
+                # Normal condition - queue is empty, stop polling
+                break
             except Exception as e:
-                logger.debug("[WORKER] Exception suppressed: %s", e)
+                # Only log actual errors, not empty queue
+                logger.debug("[WORKER] Error polling response: %s", e)
                 break
         
         return responses

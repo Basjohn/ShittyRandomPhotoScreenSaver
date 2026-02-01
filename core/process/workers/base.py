@@ -119,6 +119,8 @@ class BaseWorker:
         Polls for messages, handles them, and sends responses.
         Continues until shutdown message received.
         """
+        from queue import Empty as QueueEmpty
+        
         self._logger = setup_worker_logging(self.worker_type)
         self._logger.info(
             "Worker %s started (PID: %d)",
@@ -129,17 +131,12 @@ class BaseWorker:
         try:
             while not self._shutdown:
                 try:
-                    # Poll for message with timeout
-                    if self._request_queue.empty():
-                        time.sleep(self.POLL_TIMEOUT_S)
-                        continue
-                    
-                    # Get message (non-blocking since we checked empty)
+                    # Use blocking get with timeout instead of polling loop
+                    # This avoids race condition between empty() check and get_nowait()
                     try:
-                        msg_data = self._request_queue.get_nowait()
-                    except Exception as e:
-                        if self._logger:
-                            self._logger.debug("[MISC] Exception suppressed: %s", e)
+                        msg_data = self._request_queue.get(timeout=self.POLL_TIMEOUT_S)
+                    except QueueEmpty:
+                        # Normal - no messages, continue polling
                         continue
                     
                     # Parse message

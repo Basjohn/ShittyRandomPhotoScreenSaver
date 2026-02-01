@@ -19,7 +19,7 @@ from enum import Enum
 from PySide6.QtWidgets import QApplication, QMessageBox
 from PySide6.QtCore import Qt, QCoreApplication
 from PySide6.QtGui import QSurfaceFormat, QImageReader, QIcon
-from core.logging.logger import setup_logging, get_logger, get_log_dir
+from core.logging.logger import setup_logging, get_logger, get_log_dir, is_viz_logging_enabled
 from core.settings.settings_manager import SettingsManager
 from core.animation import AnimationManager
 from engine.screensaver_engine import ScreensaverEngine
@@ -99,12 +99,13 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     
     Debug flags (ignored here, handled earlier):
     - --debug, -d - Enable debug logging
+    - --viz - Enable visualizer logging
     
     Returns:
         tuple: (ScreensaverMode, preview_window_handle)
     """
-    # Filter out debug flags
-    args = [arg for arg in sys.argv if arg not in ('--debug', '-d')]
+    # Filter out debug/viz flags
+    args = [arg for arg in sys.argv if arg not in ('--debug', '-d', '--viz')]
     
     logger.debug(f"Command-line arguments: {sys.argv}")
     logger.debug(f"Filtered arguments: {args}")
@@ -379,7 +380,8 @@ def main():
     # Setup logging first
     debug_mode = '--debug' in sys.argv or '-d' in sys.argv
     verbose_mode = '--verbose' in sys.argv or '-v' in sys.argv
-    setup_logging(debug=debug_mode, verbose=verbose_mode)
+    viz_mode = '--viz' in sys.argv
+    setup_logging(debug=debug_mode, verbose=verbose_mode, viz=viz_mode)
     
     # GC tracking for performance debugging
     if os.environ.get('SRPSS_PERF_METRICS') == '1':

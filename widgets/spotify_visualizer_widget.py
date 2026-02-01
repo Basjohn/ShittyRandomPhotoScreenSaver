@@ -15,7 +15,7 @@ from PySide6.QtGui import QColor, QPainter, QPaintEvent
 from PySide6.QtWidgets import QWidget
 from shiboken6 import Shiboken
 
-from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
+from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled, is_viz_logging_enabled
 from core.threading.manager import ThreadManager
 from core.process import ProcessSupervisor, WorkerType, MessageType
 from utils.lockfree import TripleBuffer
@@ -221,7 +221,7 @@ class SpotifyVisualizerAudioWorker(QObject):
         if supervisor is not None:
             try:
                 self._fft_worker_available = supervisor.is_running(WorkerType.FFT)
-                if self._fft_worker_available:
+                if self._fft_worker_available and is_viz_logging_enabled():
                     logger.info("[SPOTIFY_VIS] FFTWorker available for audio processing")
             except Exception as e:
                 logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
@@ -312,7 +312,8 @@ class SpotifyVisualizerAudioWorker(QObject):
         try:
             import numpy as np
         except ImportError as exc:
-            logger.info("[SPOTIFY_VIS] numpy not available: %s", exc)
+            if is_viz_logging_enabled():
+                logger.info("[SPOTIFY_VIS] numpy not available: %s", exc)
             return
         self._np = np
 
@@ -322,7 +323,8 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._backend = create_audio_capture(config)
         
         if self._backend is None:
-            logger.info("[SPOTIFY_VIS] No audio capture backend available")
+            if is_viz_logging_enabled():
+                logger.info("[SPOTIFY_VIS] No audio capture backend available")
             return
 
         # Define callback to process audio samples
@@ -369,7 +371,8 @@ class SpotifyVisualizerAudioWorker(QObject):
                     peak = float(np_mod.max(np_mod.abs(mono))) if mono.size else 0.0
                     self._frame_debug_counter += 1
                     if self._frame_debug_counter % 60 == 1:
-                        logger.debug("[SPOTIFY_VIS][VERBOSE] loopback frame: samples=%d peak=%.4f", mono.size, peak)
+                        if is_viz_logging_enabled():
+                            logger.debug("[SPOTIFY_VIS][VERBOSE] loopback frame: samples=%d peak=%.4f", mono.size, peak)
             except Exception as e:
                 logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                 if is_verbose_logging():
@@ -378,14 +381,16 @@ class SpotifyVisualizerAudioWorker(QObject):
         # Start capture
         if self._backend.start(_on_audio_samples):
             self._running = True
-            logger.info(
-                "[SPOTIFY_VIS] Audio worker started (%s, %dHz, %d channels)",
-                self._backend.__class__.__name__,
-                self._backend.sample_rate,
-                self._backend.channels,
-            )
+            if is_viz_logging_enabled():
+                logger.info(
+                    "[SPOTIFY_VIS] Audio worker started (%s, %dHz, %d channels)",
+                    self._backend.__class__.__name__,
+                    self._backend.sample_rate,
+                    self._backend.channels,
+                )
         else:
-            logger.info("[SPOTIFY_VIS] Failed to start audio capture")
+            if is_viz_logging_enabled():
+                logger.info("[SPOTIFY_VIS] Failed to start audio capture")
             self._backend = None
 
     def stop(self) -> None:
@@ -399,7 +404,8 @@ class SpotifyVisualizerAudioWorker(QObject):
             except Exception as e:
                 logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             self._backend = None
-        logger.info("[SPOTIFY_VIS] Audio worker stopped")
+        if is_viz_logging_enabled():
+            logger.info("[SPOTIFY_VIS] Audio worker stopped")
 
     # ------------------------------------------------------------------
     # FFT Processing
@@ -2414,13 +2420,11 @@ class SpotifyVisualizerWidget(QWidget):
 
     def _resolve_max_fps(self, transition_ctx: Dict[str, Any]) -> float:
         """Determine the FPS cap based on transition activity."""
-        max_fps = self._base_max_fps
+        max_fps = self._base_max_fps  # 90Hz default
         if transition_ctx.get("running"):
-            elapsed = float(transition_ctx.get("elapsed") or 0.0)
-            if elapsed <= self._transition_spinup_window:
-                max_fps = self._transition_hot_start_fps
-            else:
-                max_fps = self._transition_max_fps
+            # PERFORMANCE: Throttle to 60Hz during transitions to reduce UI thread contention
+            # while maintaining smooth visual feel (don't go below 60)
+            max_fps = 60.0
         else:
             idle_age = transition_ctx.get("idle_age")
             if idle_age is not None and idle_age >= self._idle_fps_boost_delay:
@@ -2591,9 +2595,7 @@ class SpotifyVisualizerWidget(QWidget):
                     if lag_ms > self._perf_audio_lag_max_ms:
                         self._perf_audio_lag_max_ms = lag_ms
             
-            # Get pre-smoothed bars (no computation on UI thread!)
-            # The engine handles decay naturally via exponential smoothing -
-            # when audio stops, raw bars go to zero and smoothed bars decay.
+            # Get pre-smoothed bars from engine (smoothing done on COMPUTE pool)
             smoothed = engine.get_smoothed_bars()
 
             # Always drive the bars from audio to avoid Spotify bridge flakiness.
@@ -2616,10 +2618,6 @@ class SpotifyVisualizerWidget(QWidget):
                 if new_val > 0.0:
                     any_nonzero = True
                 display_bars[i] = new_val
-            
-            # Apply visual smoothing (UI/local) for calmer motion
-            if self._apply_visual_smoothing(display_bars, now_ts):
-                changed = True
             
             # Force update during decay (when bars are non-zero but Spotify stopped)
             if any_nonzero and not self._spotify_playing:

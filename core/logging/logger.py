@@ -51,6 +51,9 @@ _VERBOSE: bool = False
 # PERF metrics default to False for production builds. Script mode (development)
 # can enable via SRPSS_PERF_METRICS=1 env var; Nuitka builds use .perf.cfg files.
 _PERF_METRICS_ENABLED: bool = False
+# Visualizer logging defaults to False (opt-in via --viz or SRPSS_VIZ_LOGGING=1).
+# When enabled, logs [SPOTIFY_VIS] and [SPOTIFY_VOL] detailed metrics.
+_VIZ_LOGGING_ENABLED: bool = False
 # Logging defaults to disabled for frozen builds unless explicitly enabled via
 # env vars or .logging.cfg files next to the executable.
 _LOGGING_DISABLED: bool = _IS_FROZEN
@@ -91,6 +94,17 @@ if _env_perf is not None:
             _PERF_METRICS_ENABLED = False
         elif str(_env_perf).strip().lower() in ("1", "true", "on", "yes"):
             _PERF_METRICS_ENABLED = True
+    except Exception:
+        pass  # Keep default (False) on parse failure
+
+# Parse visualizer logging flag from environment
+_env_viz = os.getenv("SRPSS_VIZ_LOGGING")
+if _env_viz is not None:
+    try:
+        if str(_env_viz).strip().lower() in ("0", "false", "off", "no"):
+            _VIZ_LOGGING_ENABLED = False
+        elif str(_env_viz).strip().lower() in ("1", "true", "on", "yes"):
+            _VIZ_LOGGING_ENABLED = True
     except Exception:
         pass  # Keep default (False) on parse failure
 
@@ -603,7 +617,7 @@ def _select_log_dir(
     return fallback
 
 
-def setup_logging(debug: bool = False, verbose: bool = False) -> None:
+def setup_logging(debug: bool = False, verbose: bool = False, viz: bool = False) -> None:
     """
     Configure application logging with file rotation.
     
@@ -612,8 +626,10 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
         verbose: When True, enables additional high-volume debug logs in
             selected modules (media widget polling, raw settings dumps,
             etc.). Verbose mode also implies debug-level logging.
+        viz: When True, enables visualizer-specific logging ([SPOTIFY_VIS],
+            [SPOTIFY_VOL]). High-volume, only useful for visualizer debugging.
     """
-    global _VERBOSE, _PERF_METRICS_ENABLED, _BASE_DIR, _FORCED_LOG_DIR, _ACTIVE_LOG_DIR
+    global _VERBOSE, _PERF_METRICS_ENABLED, _VIZ_LOGGING_ENABLED, _BASE_DIR, _FORCED_LOG_DIR, _ACTIVE_LOG_DIR
 
     debug_enabled = debug or verbose
     # Create logs directory. In frozen builds (Nuitka/PyInstaller) we prefer
@@ -645,6 +661,15 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
                 except Exception:
                     # On any failure, keep existing _PERF_METRICS_ENABLED value.
                     pass
+                # Check for visualizer logging config
+                try:
+                    viz_cfg_name = exe_path_valid.stem + ".viz.cfg"
+                    viz_cfg_path = exe_path_valid.parent / viz_cfg_name
+                    viz_cfg_value = _read_bool_flag_file(viz_cfg_path)
+                    if viz_cfg_value is not None:
+                        _VIZ_LOGGING_ENABLED = viz_cfg_value
+                except Exception:
+                    pass
                 try:
                     if forced_dir is None:
                         log_cfg_name = exe_path_valid.stem + ".logdir.cfg"
@@ -662,6 +687,10 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
             exe_path_valid = None
     except Exception:
         exe_path_valid = None
+
+    # Command-line flag overrides config file
+    if viz:
+        _VIZ_LOGGING_ENABLED = True
 
     logging_disabled = _determine_logging_disabled(exe_path_valid)
     global _LOGGING_DISABLED
@@ -1067,3 +1096,13 @@ def is_perf_metrics_enabled() -> bool:
     """Return True when PERF metrics/telemetry are enabled globally."""
 
     return _PERF_METRICS_ENABLED
+
+
+def is_viz_logging_enabled() -> bool:
+    """Return True when visualizer logging is enabled globally.
+    
+    Visualizer logs ([SPOTIFY_VIS], [SPOTIFY_VOL]) are high-volume and
+    only useful when debugging visualizer issues. Use --viz flag or
+    SRPSS_VIZ_LOGGING=1 to enable.
+    """
+    return _VIZ_LOGGING_ENABLED

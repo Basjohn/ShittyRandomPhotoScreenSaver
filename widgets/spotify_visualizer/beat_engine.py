@@ -15,7 +15,7 @@ import math
 
 from PySide6.QtCore import QObject
 
-from core.logging.logger import get_logger, is_verbose_logging
+from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.threading.manager import ThreadManager
 from core.process import ProcessSupervisor
 from utils.lockfree import TripleBuffer
@@ -265,6 +265,12 @@ class _SpotifyBeatEngine(QObject):
 
         now_ts = time.time()
         frame = self._audio_buffer.consume_latest()
+        
+        # AUDIO LAG DETECTION: Check if more data pending after consume
+        if self._audio_buffer.has_pending():
+            if is_perf_metrics_enabled():
+                logger.warning("[PERF] [SPOTIFY_VIS] Audio buffer has pending data - compute task is lagging")
+        
         if frame is not None:
             samples = getattr(frame, "samples", None)
             if samples is not None:
