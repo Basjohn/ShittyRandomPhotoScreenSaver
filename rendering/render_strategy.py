@@ -1,14 +1,7 @@
-"""Render strategy abstraction for switchable rendering approaches.
+"""Render strategy abstraction for timer-based rendering.
 
-This module provides a strategy pattern for rendering, allowing runtime
-switching between:
-- TimerRenderStrategy: Current QTimer-based rendering (default)
-- VSyncRenderStrategy: VSync-driven rendering via dedicated thread
-
-The strategy pattern enables:
-1. Gradual migration from timer to VSync without breaking changes
-2. Feature flag control for VSync enablement
-3. Automatic fallback on render thread failure
+This module provides timer-based rendering for the compositor.
+VSync is completely disabled - we use timer for maximum performance.
 """
 
 from __future__ import annotations
@@ -16,13 +9,15 @@ from __future__ import annotations
 import threading
 import time
 from abc import ABC, abstractmethod
+from concurrent.futures import Future
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Optional
 
-from PySide6.QtCore import QTimer, Qt
-
-from core.logging.logger import get_logger, is_perf_metrics_enabled
+from core.logging.logger import get_logger
+from core.threading.manager import ThreadManager, ThreadPoolType
+from core.resources.manager import ResourceManager
+from utils.lockfree.spsc_queue import SPSCQueue
 
 if TYPE_CHECKING:
     from rendering.gl_compositor import GLCompositorWidget
@@ -32,15 +27,13 @@ logger = get_logger(__name__)
 
 class RenderStrategyType(Enum):
     """Available render strategy types."""
-    TIMER = "timer"      # QTimer-based (current default)
-    VSYNC = "vsync"      # VSync-driven via render thread
+    TIMER = "timer"      # QTimer-based (only strategy, VSync disabled)
 
 
 @dataclass
 class RenderStrategyConfig:
     """Configuration for render strategies."""
     target_fps: int = 60
-    vsync_enabled: bool = False
     fallback_on_failure: bool = True
     min_frame_time_ms: float = 8.0  # Minimum time between frames
 
@@ -130,265 +123,167 @@ class RenderStrategy(ABC):
 
 
 class TimerRenderStrategy(RenderStrategy):
-    """QTimer-based rendering strategy (current default).
+    """Timer-based rendering using ThreadManager with lock-free coordination.
     
-    Uses QTimer.PreciseTimer to trigger repaints at target FPS.
-    This is the existing approach and serves as the safe fallback.
+    Uses ThreadManager COMPUTE pool for timing thread, SPSCQueue for
+    frame request coalescing, and atomic Event for stop signaling.
+    Integrates with ResourceManager for proper lifecycle tracking.
     """
     
     def __init__(self, compositor: "GLCompositorWidget", config: RenderStrategyConfig):
         super().__init__(compositor, config)
-        self._timer: Optional[QTimer] = None
+        self._stop_event = threading.Event()
+        self._frame_queue: SPSCQueue[bool] = SPSCQueue(4)
+        self._task_future: Optional[Future] = None
+        self._thread_manager: Optional[ThreadManager] = None
+        self._resource_manager: Optional[ResourceManager] = None
+        self._timer_resource_id: Optional[str] = None
+        
+        # Try to get managers from compositor's context
+        try:
+            parent = getattr(compositor, 'parent', lambda: None)()
+            if parent is not None:
+                self._thread_manager = getattr(parent, '_thread_manager', None)
+                self._resource_manager = getattr(parent, '_resource_manager', None)
+        except Exception:
+            pass
     
     @property
     def strategy_type(self) -> RenderStrategyType:
         return RenderStrategyType.TIMER
     
     def start(self) -> bool:
-        """Start timer-based rendering."""
+        """Start timer-based rendering using ThreadManager."""
         with self._lock:
             if self._active:
                 return True
+            
+            if self._thread_manager is None:
+                logger.error("[RENDER] Cannot start: ThreadManager not available")
+                return False
             
             try:
                 interval_ms = max(1, 1000 // self._config.target_fps)
-                self._timer = QTimer(self._compositor)
-                self._timer.setTimerType(Qt.TimerType.PreciseTimer)
-                self._timer.timeout.connect(self._on_tick)
-                self._timer.start(interval_ms)
+                self._stop_event.clear()
+                self._frame_queue.clear()
+                
+                # Submit timing loop to ThreadManager COMPUTE pool
+                self._task_future = self._thread_manager.submit_task(
+                    ThreadPoolType.COMPUTE,
+                    self._timer_loop,
+                    interval_ms,
+                    task_id=f"timer_{id(self)}"
+                )
+                
+                # Register with ResourceManager for cleanup tracking
+                # NOTE: No cleanup_handler - stop() manages lifecycle to avoid circular calls
+                if self._resource_manager is not None:
+                    try:
+                        from core.resources.types import ResourceType
+                        self._timer_resource_id = self._resource_manager.register(
+                            self,
+                            ResourceType.TIMER,
+                            f"Render timer (interval={interval_ms}ms)",
+                        )
+                    except Exception as e:
+                        logger.debug("[RENDER] Could not register timer with ResourceManager: %s", e)
+                
                 self._active = True
                 self._metrics = RenderMetrics(strategy_type=self.strategy_type)
-                logger.info("[RENDER] Timer strategy started (interval=%dms, target=%dHz)",
+                logger.info("[RENDER] Timer started (interval=%dms, target=%dHz, tm=True)",
                            interval_ms, self._config.target_fps)
                 return True
+                
             except Exception as e:
-                logger.error("[RENDER] Failed to start timer strategy: %s", e)
+                logger.error("[RENDER] Failed to start timer: %s", e)
                 return False
     
-    def stop(self) -> None:
-        """Stop timer-based rendering."""
-        with self._lock:
-            if self._timer is not None:
-                try:
-                    self._timer.stop()
-                    self._timer.deleteLater()
-                except Exception as e:
-                    logger.debug("[RENDER] Timer cleanup error: %s", e)
-                self._timer = None
-            self._active = False
-            self._log_final_metrics()
-    
-    def request_frame(self) -> None:
-        """Request immediate frame (timer handles regular cadence)."""
-        if self._compositor is not None:
-            try:
-                self._compositor.update()
-            except Exception as e:
-                logger.debug("[RENDER] Frame request error: %s", e)
-    
-    def _on_tick(self) -> None:
-        """Timer tick handler."""
-        with self._lock:
-            self._metrics.record_frame()
+    def _timer_loop(self, interval_ms: int) -> None:
+        """High-precision timing loop running in ThreadManager pool."""
+        target_interval = interval_ms / 1000.0
+        sleep_threshold = 0.002
         
-        if self._compositor is not None:
-            try:
-                self._compositor.update()
-            except Exception as e:
-                logger.debug("[RENDER] Timer tick error: %s", e)
-    
-    def _log_final_metrics(self) -> None:
-        """Log final metrics when stopping."""
-        if not is_perf_metrics_enabled():
-            return
-        m = self._metrics
-        logger.info(
-            "[PERF] [RENDER] Timer strategy stopped: frames=%d, avg_fps=%.1f, "
-            "dt_min=%.1fms, dt_max=%.1fms",
-            m.frame_count, m.get_avg_fps(), m.min_dt_ms, m.max_dt_ms
-        )
-
-
-class VSyncRenderStrategy(RenderStrategy):
-    """VSync-driven rendering strategy via dedicated thread.
-    
-    Uses a dedicated render thread that synchronizes with display VSync
-    for smoother frame pacing. Requires GL context sharing setup.
-    
-    This strategy:
-    1. Creates a render thread with shared GL context
-    2. Waits for VSync signal via swapBuffers
-    3. Updates compositor state atomically
-    4. Triggers repaint on UI thread
-    
-    Falls back to TimerRenderStrategy on failure if configured.
-    """
-    
-    def __init__(self, compositor: "GLCompositorWidget", config: RenderStrategyConfig):
-        super().__init__(compositor, config)
-        self._thread: Optional[threading.Thread] = None
-        self._stop_event = threading.Event()
-        self._fallback_strategy: Optional[TimerRenderStrategy] = None
-        self._using_fallback = False
-    
-    @property
-    def strategy_type(self) -> RenderStrategyType:
-        return RenderStrategyType.VSYNC
-    
-    def start(self) -> bool:
-        """Start VSync-driven rendering."""
-        with self._lock:
-            if self._active:
-                return True
-            
-            try:
-                self._stop_event.clear()
-                self._thread = threading.Thread(
-                    target=self._render_loop,
-                    name="VSyncRenderThread",
-                    daemon=True,
-                )
-                self._thread.start()
-                self._active = True
-                self._metrics = RenderMetrics(strategy_type=self.strategy_type)
-                logger.info("[RENDER] VSync strategy started")
-                return True
-            except Exception as e:
-                logger.error("[RENDER] Failed to start VSync strategy: %s", e)
-                return self._try_fallback()
-    
-    def stop(self) -> None:
-        """Stop VSync-driven rendering."""
-        with self._lock:
-            self._stop_event.set()
-            if self._thread is not None:
-                try:
-                    self._thread.join(timeout=1.0)
-                except Exception as e:
-                    logger.debug("[RENDER] Thread join error: %s", e)
-                self._thread = None
-            
-            if self._fallback_strategy is not None:
-                self._fallback_strategy.stop()
-                self._fallback_strategy = None
-            
-            self._active = False
-            self._using_fallback = False
-            self._log_final_metrics()
-    
-    def request_frame(self) -> None:
-        """Request immediate frame."""
-        if self._using_fallback and self._fallback_strategy is not None:
-            self._fallback_strategy.request_frame()
-        elif self._compositor is not None:
-            try:
-                self._compositor.update()
-            except Exception as e:
-                logger.debug("[RENDER] Frame request error: %s", e)
-    
-    def _render_loop(self) -> None:
-        """Main render loop running in dedicated thread.
-        
-        This loop uses a high-precision busy-wait approach for the final
-        portion of each frame to minimize jitter. The strategy:
-        1. Sleep for most of the frame time (saves CPU)
-        2. Busy-wait for the final ~2ms (reduces jitter)
-        3. Signal UI thread to repaint at precise intervals
-        """
-        logger.debug("[RENDER] VSync render loop started (target=%dHz)", self._config.target_fps)
-        
-        target_frame_time = 1.0 / self._config.target_fps
-        # Sleep threshold: sleep until this much time remains, then busy-wait
-        sleep_threshold = 0.002  # 2ms - busy-wait for final portion
-        
-        # Track frame timing for drift correction
-        next_frame_time = time.perf_counter()
+        logger.debug("[RENDER] Timer loop started: target=%.2fms", interval_ms)
         
         while not self._stop_event.is_set():
             try:
-                # Calculate time until next frame
-                now = time.perf_counter()
-                sleep_time = next_frame_time - now
+                # Check for immediate frame requests (coalesced)
+                has_request = False
+                while True:
+                    ok, _ = self._frame_queue.try_pop()
+                    if not ok:
+                        break
+                    has_request = True
                 
-                # Sleep for most of the wait time (if > threshold)
-                if sleep_time > sleep_threshold:
-                    time.sleep(sleep_time - sleep_threshold)
+                if has_request:
+                    self._signal_frame()
+                    continue
                 
-                # Busy-wait for precise timing (reduces jitter significantly)
-                while time.perf_counter() < next_frame_time:
-                    pass  # Spin-wait for precise timing
+                # Precise timing
+                start_ts = time.perf_counter()
                 
-                # Record metrics
-                with self._lock:
-                    self._metrics.record_frame()
+                # Sleep for most of interval
+                if target_interval > sleep_threshold:
+                    time.sleep(target_interval - sleep_threshold)
                 
-                # Signal UI thread to repaint
-                if self._compositor is not None:
-                    try:
-                        from PySide6.QtCore import QMetaObject, Qt as QtCore
-                        QMetaObject.invokeMethod(
-                            self._compositor,
-                            "update",
-                            QtCore.ConnectionType.QueuedConnection,
-                        )
-                    except Exception:
-                        pass  # Suppress update errors
+                # Busy-wait for precision
+                while time.perf_counter() - start_ts < target_interval:
+                    if self._stop_event.is_set():
+                        break
+                    pass
                 
-                # Schedule next frame - use fixed intervals to prevent drift
-                next_frame_time += target_frame_time
-                
-                # If we've fallen behind, reset to now + one frame
-                # This prevents trying to "catch up" which causes stutter
-                if next_frame_time < time.perf_counter():
-                    next_frame_time = time.perf_counter() + target_frame_time
+                if not self._stop_event.is_set():
+                    self._signal_frame()
                     
             except Exception as e:
-                logger.error("[RENDER] VSync loop error: %s", e)
-                if self._config.fallback_on_failure:
-                    self._trigger_fallback()
-                    break
+                logger.error("[RENDER] Timer loop error: %s", e)
+                break
         
-        logger.debug("[RENDER] VSync render loop stopped")
+        logger.debug("[RENDER] Timer loop stopped")
     
-    def _try_fallback(self) -> bool:
-        """Try to fall back to timer strategy."""
-        if not self._config.fallback_on_failure:
-            return False
-        
-        logger.warning("[RENDER] Falling back to timer strategy")
-        self._fallback_strategy = TimerRenderStrategy(self._compositor, self._config)
-        if self._fallback_strategy.start():
-            self._using_fallback = True
-            self._metrics.fallback_count += 1
-            return True
-        return False
+    def _signal_frame(self) -> None:
+        """Signal UI thread to render using ThreadManager."""
+        if self._compositor is not None:
+            try:
+                ThreadManager.run_on_ui_thread(
+                    self._compositor.update
+                )
+            except Exception:
+                pass
     
-    def _trigger_fallback(self) -> None:
-        """Trigger fallback from render thread."""
+    def stop(self) -> None:
+        """Stop timer and cleanup - non-blocking to avoid deadlocks."""
         with self._lock:
-            if not self._using_fallback and self._config.fallback_on_failure:
-                # Schedule fallback on UI thread
-                if self._compositor is not None:
-                    try:
-                        from PySide6.QtCore import QMetaObject, Qt as QtCore
-                        QMetaObject.invokeMethod(
-                            self._compositor,
-                            lambda: self._try_fallback(),
-                            QtCore.ConnectionType.QueuedConnection,
-                        )
-                    except Exception as e:
-                        logger.debug("[RENDER] Fallback trigger error: %s", e)
+            # Signal stop first
+            self._stop_event.set()
+            
+            # Clear task reference without blocking wait
+            # Thread will exit naturally when it checks _stop_event
+            self._task_future = None
+            
+            # Unregister from ResourceManager
+            if self._timer_resource_id and self._resource_manager:
+                try:
+                    self._resource_manager.unregister(self._timer_resource_id)
+                except Exception:
+                    pass
+                self._timer_resource_id = None
+            
+            self._active = False
+            self._log_final_metrics()
     
     def _log_final_metrics(self) -> None:
         """Log final metrics when stopping."""
-        if not is_perf_metrics_enabled():
-            return
         m = self._metrics
         logger.info(
-            "[PERF] [RENDER] VSync strategy stopped: frames=%d, avg_fps=%.1f, "
-            "dt_min=%.1fms, dt_max=%.1fms, fallbacks=%d",
-            m.frame_count, m.get_avg_fps(), m.min_dt_ms, m.max_dt_ms, m.fallback_count
+            "[PERF] [RENDER] Timer stopped: frames=%d, avg_fps=%.1f, "
+            "dt_min=%.1fms, dt_max=%.1fms",
+            m.frame_count, m.get_avg_fps(), m.min_dt_ms, m.max_dt_ms
         )
+    
+    def request_frame(self) -> None:
+        """Queue immediate frame request (coalesced)."""
+        self._frame_queue.push_drop_oldest(True)
 
 
 class RenderStrategyManager:
@@ -413,24 +308,17 @@ class RenderStrategyManager:
             self._config = config
     
     def start(self, strategy_type: Optional[RenderStrategyType] = None) -> bool:
-        """Start rendering with specified or default strategy."""
+        """Start rendering with timer strategy (only option, VSync disabled)."""
         with self._lock:
             if self._current_strategy is not None:
                 self._current_strategy.stop()
             
-            # Determine strategy type
+            # Always use timer strategy (VSync completely disabled)
             if strategy_type is None:
-                strategy_type = (
-                    RenderStrategyType.VSYNC 
-                    if self._config.vsync_enabled 
-                    else RenderStrategyType.TIMER
-                )
+                strategy_type = RenderStrategyType.TIMER
             
-            # Create and start strategy
-            if strategy_type == RenderStrategyType.VSYNC:
-                self._current_strategy = VSyncRenderStrategy(self._compositor, self._config)
-            else:
-                self._current_strategy = TimerRenderStrategy(self._compositor, self._config)
+            # Create and start timer strategy
+            self._current_strategy = TimerRenderStrategy(self._compositor, self._config)
             
             return self._current_strategy.start()
     
@@ -452,6 +340,13 @@ class RenderStrategyManager:
         with self._lock:
             if self._current_strategy is not None:
                 self._current_strategy.request_frame()
+    
+    def is_running(self) -> bool:
+        """Check if a strategy is currently active and running."""
+        with self._lock:
+            if self._current_strategy is not None:
+                return self._current_strategy.is_active()
+            return False
     
     def get_current_strategy_type(self) -> Optional[RenderStrategyType]:
         """Get the current strategy type."""

@@ -381,13 +381,6 @@ def main():
     verbose_mode = '--verbose' in sys.argv or '-v' in sys.argv
     setup_logging(debug=debug_mode, verbose=verbose_mode)
     
-    # VSync render strategy override via command-line or environment
-    # --vsync-render or SRPSS_VSYNC_RENDER=1 enables VSync-driven rendering
-    vsync_render = '--vsync-render' in sys.argv or os.environ.get('SRPSS_VSYNC_RENDER') == '1'
-    if vsync_render:
-        os.environ['SRPSS_VSYNC_RENDER'] = '1'
-        logger.info("[RENDER] VSync render strategy enabled via command-line/environment")
-    
     # GC tracking for performance debugging
     if os.environ.get('SRPSS_PERF_METRICS') == '1':
         _gc_start_time = [0.0]

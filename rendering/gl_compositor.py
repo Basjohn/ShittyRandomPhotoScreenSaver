@@ -28,6 +28,10 @@ from rendering.render_strategy import (
     RenderStrategyManager,
     RenderStrategyConfig,
 )
+from rendering.adaptive_timer import (
+    AdaptiveRenderStrategyManager,
+    AdaptiveTimerConfig,
+)
 
 from PySide6.QtCore import Qt, QPoint, QRect
 from PySide6.QtGui import QPainter, QPixmap, QRegion, QImage, QColor
@@ -213,15 +217,14 @@ class GLCompositorWidget(QOpenGLWidget):
         # interpolates to actual render time for smooth motion.
         self._frame_state: Optional[FrameState] = None
         
-        # VSYNC RENDERING: Uses timer-based rendering with VSync approximation.
-        # True threaded VSync is not achievable with QOpenGLWidget.
-        self._vsync_enabled: bool = False  # Feature flag - read from settings
-        self._vsync_connected: bool = False  # Whether frameSwapped is connected
+        # TIMER-BASED RENDERING: Pure timer strategy capped at display refresh rate.
+        # VSync is completely disabled - we use timer for maximum performance.
         self._render_timer_fps: int = 60  # Will be set from display refresh rate
         self._render_timer_metrics: Optional[_RenderTimerMetrics] = None
         
-        # Render strategy manager for timer-based rendering (fallback only)
-        self._render_strategy_manager: Optional[RenderStrategyManager] = None
+        # Render strategy manager for timer-based rendering (primary method)
+        # Using adaptive timer for optimal performance
+        self._render_strategy_manager: Optional[AdaptiveRenderStrategyManager] = None
         self._paint_metrics: Optional[_PaintMetrics] = None
         self._paint_slow_threshold_ms: float = 24.0
         self._paint_warning_last_ts: float = 0.0
@@ -377,7 +380,7 @@ class GLCompositorWidget(QOpenGLWidget):
 
     def _stop_frame_pacing(self) -> None:
         """Clear the frame state when a transition completes."""
-        self._stop_render_timer()
+        self._pause_render_timer()  # Pause (don't stop) for quick resume
         if self._frame_state is not None:
             self._frame_state.mark_complete()
         self._frame_state = None
@@ -410,29 +413,7 @@ class GLCompositorWidget(QOpenGLWidget):
             )
         
         return delay_ms, compensated_duration_ms
-    
-    def set_vsync_enabled(self, enabled: bool) -> None:
-        """Enable or disable VSync-driven rendering.
-        
-        When enabled, uses a dedicated render thread synchronized with display VSync.
-        When disabled, uses QTimer-based rendering (default).
-        
-        Args:
-            enabled: True to enable VSync rendering, False for timer-based
-        """
-        if self._vsync_enabled == enabled:
-            return
-        
-        self._vsync_enabled = enabled
-        logger.info("[GL COMPOSITOR] VSync rendering %s", "enabled" if enabled else "disabled")
-        
-        # If render strategy is active, restart with new setting
-        if self._render_strategy_manager is not None:
-            was_active = self._render_strategy_manager.get_current_strategy_type() is not None
-            if was_active:
-                self._stop_render_strategy()
-                self._start_render_strategy()
-    
+
     def _get_display_refresh_rate(self) -> int:
         """Get the display refresh rate for this compositor's screen.
         
@@ -506,19 +487,15 @@ class GLCompositorWidget(QOpenGLWidget):
     def _start_render_strategy(self) -> None:
         """Start the render strategy to drive repaints during transitions.
 
-        Uses VSync-driven rendering when enabled:
-        - Connects to frameSwapped signal for VSync timing
-        - Each frame swap triggers the next update() call
-        - Falls back to timer-based if VSync is disabled
+        Uses adaptive timer for optimal performance with state management.
+        VSync is completely disabled for maximum performance.
         """
         # Check if already running
-        if self._vsync_connected:
-            logger.debug("[GL COMPOSITOR] Render strategy already active (VSync)")
-            return
         if self._render_strategy_manager is not None:
-            strategy_type = self._render_strategy_manager.get_current_strategy_type()
-            if strategy_type is not None:
-                logger.debug("[GL COMPOSITOR] Render strategy already active (timer: %s)", strategy_type)
+            if self._render_strategy_manager.is_running():
+                # Already running - just resume
+                self._render_strategy_manager.resume()
+                logger.debug("[GL COMPOSITOR] Render strategy resumed")
                 return
         
         display_hz = self._get_display_refresh_rate()
@@ -526,96 +503,42 @@ class GLCompositorWidget(QOpenGLWidget):
         self._render_timer_fps = target_fps
         self._reset_render_timer_metrics(target_fps)
         
-        # Use VSync-driven rendering if enabled
-        if self._vsync_enabled:
-            success = self._start_vsync_driven(target_fps, display_hz)
-            if success:
-                return
-            logger.warning("[GL COMPOSITOR] VSync-driven rendering failed, falling back to timer")
+        # Start adaptive timer-based rendering
+        self._start_adaptive_timer_render(target_fps, display_hz)
+
+    def _start_adaptive_timer_render(self, target_fps: int, display_hz: int) -> None:
+        """Start adaptive timer-based rendering (primary method).
         
-        # Fallback to timer-based rendering
-        self._start_timer_fallback(target_fps, display_hz)
-    
-    def _start_vsync_driven(self, target_fps: int, display_hz: int) -> bool:
-        """Start VSync-driven rendering using frameSwapped signal.
-        
-        This connects to Qt's frameSwapped signal which is emitted after
-        swapBuffers completes (i.e., after VSync). We immediately request
-        the next frame for smooth VSync-locked animation.
-        
-        Returns:
-            True if started successfully, False otherwise
+        This is the ONLY rendering method - VSync is completely disabled.
+        Timer uses adaptive state machine for optimal performance.
         """
-        try:
-            if not self._vsync_connected:
-                self.frameSwapped.connect(self._on_frame_swapped)
-                self._vsync_connected = True
-            
-            logger.info(
-                "[GL COMPOSITOR] Starting render strategy (vsync_enabled=%s, display=%dHz, target=%dHz)",
-                self._vsync_enabled, display_hz, target_fps
-            )
-            logger.debug(
-                "[GL COMPOSITOR] Render strategy details: vsync_connected=%s, strategy_manager=%s",
-                self._vsync_connected, self._render_strategy_manager is not None
-            )
-            
-            # Trigger first frame
-            self.update()
-            return True
-            
-        except Exception as e:
-            logger.error("[GL COMPOSITOR] VSync-driven rendering error: %s", e)
-            return False
-    
-    def _on_frame_swapped(self) -> None:
-        """Called after swapBuffers completes (after VSync).
-        
-        This is the key to VSync-driven rendering - we immediately request
-        the next frame after VSync, ensuring smooth animation locked to
-        the display's refresh rate.
-        """
-        self._record_render_timer_tick()
-        
-        if self._frame_state is None or not self._frame_state.started or self._frame_state.completed:
-            return
-        
-        # Immediately request next frame - this gives us VSync-locked timing
-        self.update()
-    
-    def _start_timer_fallback(self, target_fps: int, display_hz: int) -> None:
-        """Start timer-based rendering as fallback."""
         if self._render_strategy_manager is None:
-            self._render_strategy_manager = RenderStrategyManager(self)
+            self._render_strategy_manager = AdaptiveRenderStrategyManager(self)
         
         interval_ms = max(1.0, 1000.0 / target_fps)
-        config = RenderStrategyConfig(
+        config = AdaptiveTimerConfig(
             target_fps=target_fps,
-            vsync_enabled=False,  # Timer mode
-            fallback_on_failure=True,
+            idle_timeout_sec=5.0,  # Go idle after 5s of no transitions
+            max_deep_sleep_sec=60.0,
             min_frame_time_ms=interval_ms,
         )
         self._render_strategy_manager.configure(config)
         
-        from rendering.render_strategy import RenderStrategyType
-        success = self._render_strategy_manager.start(RenderStrategyType.TIMER)
+        success = self._render_strategy_manager.start()
         
         logger.info(
-            "[GL COMPOSITOR] Timer fallback started: display=%dHz, target=%dHz, interval=%.2fms, success=%s",
+            "[GL COMPOSITOR] Adaptive timer render started: display=%dHz, target=%dHz, interval=%.2fms, success=%s",
             display_hz, target_fps, interval_ms, success
         )
     
+    def _pause_render_strategy(self) -> None:
+        """Pause render strategy after transition ends (enter low-power mode)."""
+        if self._render_strategy_manager is not None:
+            self._render_strategy_manager.pause()
+            logger.debug("[GL COMPOSITOR] Render strategy paused")
+    
     def _stop_render_strategy(self) -> None:
         """Stop the render strategy."""
-        # Stop VSync-driven rendering
-        if self._vsync_connected:
-            try:
-                self.frameSwapped.disconnect(self._on_frame_swapped)
-            except Exception:
-                pass
-            self._vsync_connected = False
-        
-        # Stop timer fallback
         if self._render_strategy_manager is not None:
             self._render_strategy_manager.stop()
         
@@ -628,6 +551,13 @@ class GLCompositorWidget(QOpenGLWidget):
         This is now a wrapper around _start_render_strategy() for backward compatibility.
         """
         self._start_render_strategy()
+    
+    def _pause_render_timer(self) -> None:
+        """Pause the render timer (enter low-power mode between transitions).
+        
+        This keeps the timer thread alive for quick resume.
+        """
+        self._pause_render_strategy()
     
     def _stop_render_timer(self) -> None:
         """Stop the render timer.
@@ -850,9 +780,8 @@ class GLCompositorWidget(QOpenGLWidget):
         def lazy_init_callback(progress: float) -> None:
             if not initialized[0]:
                 initialized[0] = True
-                # Start render strategy on first frame (not at transition start)
-                self._start_render_timer()
-                # Initialize metrics on first frame
+                # Initialize metrics FIRST before starting timer
+                # to avoid race where timer triggers callback before we're ready
                 self._begin_paint_metrics(transition_label or "transition")
                 metrics = self._begin_animation_metrics(
                     transition_label or "transition",
@@ -861,11 +790,18 @@ class GLCompositorWidget(QOpenGLWidget):
                 )
                 # Wrap the original callback with metrics
                 profiled_callback[0] = self._wrap_animation_update(update_callback, metrics)
+                # Start render strategy AFTER callback is ready
+                self._start_render_timer()
                 # Call it for this first frame
                 profiled_callback[0](progress)
             else:
                 # Use cached profiled callback (direct list access, no dict lookup)
-                profiled_callback[0](progress)
+                # Safety check in case initialization failed
+                if profiled_callback[0] is not None:
+                    profiled_callback[0](progress)
+                else:
+                    # Fallback to original callback if profiled not ready
+                    update_callback(progress)
         
         anim_id = animation_manager.animate_custom(
             duration=duration_sec,
@@ -2340,6 +2276,9 @@ class GLCompositorWidget(QOpenGLWidget):
 
     def cleanup(self) -> None:
         """Clean up GL resources and transition to DESTROYED state."""
+        # Stop render strategy first to prevent timer callbacks during cleanup
+        self._stop_render_strategy()
+        
         # Transition to DESTROYING state
         self._gl_state.transition(GLContextState.DESTROYING)
         try:

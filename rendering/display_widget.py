@@ -2,7 +2,6 @@
 from collections import defaultdict
 from typing import Optional, Iterable, Tuple, Callable, Dict, Any, List, Set
 import logging
-import os
 import time
 import weakref
 import sys
@@ -1944,18 +1943,8 @@ class DisplayWidget(QWidget):
                 comp.setGeometry(0, 0, self.width(), self.height())
                 comp.hide()
                 
-                # Configure VSync render strategy from settings or environment override
-                vsync_render_enabled = False
-                # Environment override takes precedence (for testing)
-                if os.environ.get('SRPSS_VSYNC_RENDER') == '1':
-                    vsync_render_enabled = True
-                elif self.settings_manager is not None:
-                    try:
-                        raw = self.settings_manager.get("display.vsync_render", False)
-                        vsync_render_enabled = SettingsManager.to_bool(raw, False)
-                    except Exception:
-                        pass
-                comp.set_vsync_enabled(vsync_render_enabled)
+                # Timer-based rendering is always used (VSync disabled)
+                # Per-screen refresh rate is detected automatically
                 
                 if self._resource_manager is not None:
                     try:
@@ -1966,8 +1955,8 @@ class DisplayWidget(QWidget):
                     except Exception:
                         logger.debug("[GL COMPOSITOR] Failed to register compositor with ResourceManager", exc_info=True)
                 self._gl_compositor = comp
-                logger.info("[GL COMPOSITOR] Created shared compositor for screen %s (vsync_render=%s)", 
-                           self.screen_index, vsync_render_enabled)
+                logger.info("[GL COMPOSITOR] Created shared compositor for screen %s (timer_render=True)", 
+                           self.screen_index)
             except Exception as exc:
                 logger.warning("[GL COMPOSITOR] Failed to create compositor: %s", exc)
                 self._gl_compositor = None

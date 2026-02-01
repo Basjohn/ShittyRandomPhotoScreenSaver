@@ -1,11 +1,11 @@
 """
-Utilities for constructing QSurfaceFormat instances that respect user settings.
+Utilities for constructing QSurfaceFormat instances with VSync disabled.
 
-Centralizes GL surface configuration so we consistently honour refresh sync
-(vsync) while preferring a simple double-buffered swap behaviour. Any
-"prefer triple buffer" setting is now treated as a legacy hint and does not
-change the requested swap behaviour; modern drivers control true triple
-buffering at their own layer.
+Centralizes GL surface configuration with VSync completely disabled
+to enable timer-based rendering at display refresh rate for maximum
+performance. Any "prefer triple buffer" setting is now treated as a
+legacy hint and does not change the requested swap behaviour; modern
+drivers control true triple buffering at their own layer.
 """
 from __future__ import annotations
 

@@ -1600,6 +1600,17 @@ class ScreensaverEngine(QObject):
                 except Exception as e:
                     logger.warning("ProcessSupervisor shutdown failed: %s", e, exc_info=True)
             
+            # Shutdown ThreadManager to stop all IO/compute threads
+            if exit_app and self.thread_manager:
+                logger.info("Shutting down ThreadManager...")
+                try:
+                    # Use wait=False to avoid hanging on stuck threads
+                    # Threads will exit on their own when they check _stop_event
+                    self.thread_manager.shutdown(wait=False)
+                    logger.info("ThreadManager shutdown complete")
+                except Exception as e:
+                    logger.warning("ThreadManager shutdown failed: %s", e, exc_info=True)
+            
             self.stopped.emit()
             logger.info("Screensaver engine stopped")
 
